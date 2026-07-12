@@ -3,6 +3,7 @@
 
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { sweepOrphanedPromoterContainers } from "@/lib/self-upgrade/promoter-sweep";
 
 /**
  * Logs a deprecation notice when HIVE_CONTRIBUTION_TOKEN is set in the
@@ -897,6 +898,9 @@ export async function register() {
     setInterval(
       () => {
         void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
+        // Backstop: force-remove any promoter container orphaned by a portal
+        // restart that killed runPromoter's own timeout timer (BI-3EC7FDB0).
+        void sweepOrphanedPromoterContainers({ maxAgeMs: 30 * 60 * 1000 });
       },
       20 * 60 * 1000,
     );

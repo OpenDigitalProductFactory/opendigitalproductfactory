@@ -3,6 +3,9 @@ import {
   buildPromoterCommand,
   isJitBuildablePromoterImage,
   PROMOTER_JIT_BUILD_SCRIPT,
+  PROMOTER_TIMEOUT_EXIT_CODE,
+  resolvePromoterTimeoutMs,
+  runProcessWithBudget,
 } from "./promoter";
 
 const BASE = {
@@ -52,6 +55,16 @@ describe("buildPromoterCommand", () => {
     const { args } = buildPromoterCommand({ ...BASE, promoterImage: "ghcr.io/x/dpf-promoter:v1" });
     expect(args).toContain("ghcr.io/x/dpf-promoter:v1");
     expect(args).not.toContain("dpf-promoter");
+  });
+
+  it("names the container deterministically only when a name is provided", () => {
+    // Without a name docker assigns a random one and a stalled build can't be
+    // force-removed by the timeout path / watchdog (SUR-756751D1).
+    expect(buildPromoterCommand(BASE).args).not.toContain("--name");
+    const named = buildPromoterCommand({ ...BASE, containerName: "dpf-promoter-SUR-1" });
+    const i = named.args.indexOf("--name");
+    expect(i).toBeGreaterThan(-1);
+    expect(named.args[i + 1]).toBe("dpf-promoter-SUR-1");
   });
 
   it("appends --dry-run only when requested", () => {
@@ -129,5 +142,55 @@ describe("PROMOTER_JIT_BUILD_SCRIPT", () => {
   it("is a fixed constant with no interpolation (safe under sh -c)", () => {
     expect(PROMOTER_JIT_BUILD_SCRIPT).not.toContain("${");
     expect(PROMOTER_JIT_BUILD_SCRIPT).not.toContain("`");
+  });
+});
+
+describe("resolvePromoterTimeoutMs", () => {
+  const CLEAN = { ...BASE };
+  it("prefers an explicit param, then env, then the 25-min default", () => {
+    expect(resolvePromoterTimeoutMs({ ...CLEAN, timeoutMs: 1234 })).toBe(1234);
+    const prev = process.env.DPF_PROMOTER_TIMEOUT_MS;
+    try {
+      process.env.DPF_PROMOTER_TIMEOUT_MS = "600000";
+      expect(resolvePromoterTimeoutMs(CLEAN)).toBe(600000);
+      delete process.env.DPF_PROMOTER_TIMEOUT_MS;
+      expect(resolvePromoterTimeoutMs(CLEAN)).toBe(25 * 60 * 1000);
+    } finally {
+      if (prev === undefined) delete process.env.DPF_PROMOTER_TIMEOUT_MS;
+      else process.env.DPF_PROMOTER_TIMEOUT_MS = prev;
+    }
+  });
+
+  it("ignores a non-positive or non-numeric budget and falls through", () => {
+    expect(resolvePromoterTimeoutMs({ ...CLEAN, timeoutMs: 0 })).toBe(25 * 60 * 1000);
+    expect(resolvePromoterTimeoutMs({ ...CLEAN, timeoutMs: -5 })).toBe(25 * 60 * 1000);
+  });
+});
+
+describe("runProcessWithBudget (the runPromoter timeout path)", () => {
+  it("kills a hung process at the budget and resolves with a promoter-timeout marker", async () => {
+    // Stand in for a stalled `docker build` that never closes.
+    const started = Date.now();
+    const result = await runProcessWithBudget("sh", ["-c", "sleep 30"], { timeoutMs: 150 });
+    expect(Date.now() - started).toBeLessThan(5000); // did NOT wait 30s
+    expect(result.exitCode).toBe(PROMOTER_TIMEOUT_EXIT_CODE);
+    expect(result.stderr).toContain("[promoter-timeout]");
+  });
+
+  it("returns the real exit code + output when the process finishes within budget", async () => {
+    const result = await runProcessWithBudget(
+      "sh",
+      ["-c", "echo built; exit 0"],
+      { timeoutMs: 10_000 },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("built");
+    expect(result.stderr).not.toContain("[promoter-timeout]");
+  });
+
+  it("propagates a nonzero exit unchanged (real build failure, not a timeout)", async () => {
+    const result = await runProcessWithBudget("sh", ["-c", "exit 3"], { timeoutMs: 10_000 });
+    expect(result.exitCode).toBe(3);
+    expect(result.stderr).not.toContain("[promoter-timeout]");
   });
 });

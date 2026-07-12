@@ -638,6 +638,18 @@ export function shouldNudge(params: {
    */
   isSetupTourTurn?: boolean;
   allowFirstTurnTextOnlyReply?: boolean;
+  /**
+   * True when this turn is on a conversational (non-/build) coworker route. On
+   * such routes there is no ideate→plan→build→review→ship phase-transition
+   * contract, so the permission-seeking nudge — which exists to push a BUILD
+   * agent past a mid-phase "should I proceed?" stall — does not apply. A
+   * substantive answer that merely ends with a helpful offer ("…would you like
+   * me to…?") is a COMPLETE conversational reply, not a stall. Without this,
+   * such an answer was nudged away after tools had run and (paired with the
+   * local-spinning guard) surfaced the misleading "not strong enough"
+   * diagnostic while a correct answer was already in hand. See BI-C145F650.
+   */
+  isConversationalRoute?: boolean;
 }): boolean {
   // One nudge maximum. Extra nudges multiply cost — if the model doesn't respond
   // to one targeted nudge, it won't respond to more and will just burn tokens.
@@ -661,6 +673,22 @@ export function shouldNudge(params: {
     && params.isSetupTourTurn === true
   ) {
     return false;
+  }
+
+  // Conversational (non-/build) route: a substantive answer is FINAL even if it
+  // ends with a helpful offer ("…would you like me to…?"). The permission-seeking
+  // and narration nudges below enforce the BUILD phase-transition contract, which
+  // has no analogue on a conversational coworker turn — so nudging a complete
+  // answer there discards it and, with the local-spinning guard, surfaces the
+  // misleading "not strong enough" diagnostic. This lifts the iteration-0
+  // substantive-reply rule (below) to every iteration on conversational routes.
+  // See BI-C145F650.
+  if (params.isConversationalRoute) {
+    const text = params.responseText?.trim() ?? "";
+    const isSubstantiveReply = text.length >= 100
+      && !COMPLETION_CLAIM_PATTERN.test(text)
+      && !NARRATION_PATTERN.test(text);
+    if (isSubstantiveReply) return false;
   }
 
   // First iteration with no tools called — nudge UNLESS the response is a
@@ -975,15 +1003,20 @@ function truncateMessageContent(content: string, maxChars: number, label: string
 }
 
 
-function compactAgenticMessages(messages: ChatMessage[], maxContextTokens?: number | null): ChatMessage[] {
+function compactAgenticMessages(
+  messages: ChatMessage[],
+  maxContextTokens?: number | null,
+  zone?: import("./context-pressure").ContextPressureZone,
+): ChatMessage[] {
   // BI-9679EB1A: size the caps from the real model window when known, never
   // below today's floor. Unknown window (incl. iteration 0) -> floor exactly,
   // so the unknown-window path is byte-for-byte identical to before.
+  // BI-3C8220ED: a live overload `zone` tightens the trim (never below floor).
   const caps = deriveCompactionCaps(maxContextTokens, {
     maxHistory: MAX_AGENTIC_HISTORY_MESSAGES,
     toolCap: MAX_TOOL_RESULT_CHARS,
     textCap: MAX_TEXT_MESSAGE_CHARS,
-  });
+  }, zone);
   let scopedMessages: ChatMessage[];
   if (messages.length <= caps.maxHistory) {
     scopedMessages = messages;
@@ -1050,6 +1083,13 @@ export async function runAgenticLoop(params: {
   agentId: string;
   threadId: string;
   taskType?: string;
+  /**
+   * EP-27FD96BC · P1 (BI-DA26BF90). The unified per-turn effort warrant. When
+   * present, its `maxIterations` bounds the loop and its `maxDurationMs` sets the
+   * conversation-phase duration baseline (heavy tool phases still win via max).
+   * Absent = today's exact behavior (MAX_ITERATIONS / MAX_DURATION_MS).
+   */
+  effortWarrant?: import("./effort-warrant").EffortWarrant;
   modelRequirements?: Record<string, unknown>;
   /** @deprecated V2 routing is handled internally by routeAndCall. Ignored. */
   routeDecision?: unknown;
@@ -1148,6 +1188,7 @@ export async function runAgenticLoop(params: {
     agentId,
     threadId,
     taskType,
+    effortWarrant,
     modelRequirements,
     onProgress,
     requireTools,
@@ -1196,6 +1237,35 @@ export async function runAgenticLoop(params: {
     agentModelConfig,
     modelRequirements,
   });
+
+  // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
+  // per turn and, when it is near the budget, bias the routing budget class
+  // toward cost so the router picks a cheaper (still capability-floor-respecting)
+  // model — instead of only logging the warning until the 100% hard-reject.
+  // Advisory: any failure leaves the class untouched and never blocks the turn.
+  try {
+    const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
+    const { spendAwareBudgetClass } = await import("@/lib/inference/spend-aware-routing");
+    const budget = await checkAgentBudgetFromRegistry(agentId);
+    const nearBudget = budget.status === "warning_80" || budget.status === "warning_95";
+    const biased = spendAwareBudgetClass(effectiveConfig.budgetClass, budget.status);
+    if (nearBudget && biased !== effectiveConfig.budgetClass) {
+      console.log(
+        `[budget-gate] spend-aware downgrade agent=${JSON.stringify(agentId)} ` +
+          `status=${budget.status} ratio=${budget.ratioPercent}% ` +
+          `${effectiveConfig.budgetClass} -> ${biased}`,
+      );
+      void writeBudgetEvent({
+        agentId,
+        eventKind: "downgrade",
+        actualTokens: budget.actualTokens,
+        limitTokens: budget.limitTokens,
+      });
+      effectiveConfig.budgetClass = biased;
+    }
+  } catch {
+    // Budget gate is advisory — never block a turn on it.
+  }
 
   // Build routeAndCall options once (reused every iteration)
   const routeOptions = {
@@ -1339,7 +1409,21 @@ export async function runAgenticLoop(params: {
     });
   };
 
-  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+  // EP-27FD96BC · P1 — the unified warrant bounds iterations for this turn.
+  // Clamped to the hard MAX_ITERATIONS safety ceiling; absent warrant = 200.
+  const iterationCeiling = Math.min(
+    MAX_ITERATIONS,
+    effortWarrant?.maxIterations ?? MAX_ITERATIONS,
+  );
+  if (effortWarrant) {
+    console.log(
+      `[agentic-loop] effort-warrant level=${effortWarrant.level} ` +
+        `iterations=${iterationCeiling} durationBaselineMs=${effortWarrant.maxDurationMs} ` +
+        `toolBudgetTarget=${effortWarrant.toolBudgetTarget} signals=${effortWarrant.signals.join(",")}`,
+    );
+  }
+
+  for (let iteration = 0; iteration < iterationCeiling; iteration++) {
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
       agentEventBus.clearCancel(threadId);
@@ -1438,12 +1522,17 @@ export async function runAgenticLoop(params: {
       t.name === "deploy_feature" || t.name === "execute_promotion" ||
       t.name === "register_digital_product_from_build" || t.name === "schedule_promotion"
     );
+    // EP-27FD96BC · P1 — the effort warrant sets the conversation-phase baseline:
+    // a trivial turn earns less wall-clock, an effortful reasoning turn earns more
+    // even with no heavy tools. A tool-revealed heavy phase (build/ship/plan/
+    // review) still takes its own ceiling. Absent warrant = the prior 120s.
+    const conversationDurationBaseline = effortWarrant?.maxDurationMs ?? MAX_DURATION_MS;
     const durationLimit = hasBuildTools ? MAX_DURATION_BUILD_MS
       : hasShipTools ? MAX_DURATION_SHIP_MS
       : hasPlanTools ? MAX_DURATION_PLAN_MS
       : hasReviewTools ? MAX_DURATION_REVIEW_MS
       : hasIdeateTools ? MAX_DURATION_PLAN_MS
-      : MAX_DURATION_MS;
+      : conversationDurationBaseline;
     if (Date.now() - startTime > durationLimit) {
       console.warn(`[agentic-loop] hit MAX_DURATION (${durationLimit}ms). executedTools=${executedTools.length}.`);
       break;
@@ -1457,12 +1546,17 @@ export async function runAgenticLoop(params: {
     // converge and return a diagnostic rather than burning the full 200
     // iterations. See FB-71FB3A53 thread, 2026-05-22.
     if (lastResult?.providerId === "local" && executedTools.length >= 8) {
+      // Defect-B safety net (BI-C145F650): a correct answer captured before a
+      // nudge is returned rather than discarded for the canned diagnostic.
       console.warn(
-        `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging on a text answer. ` +
-        `Exiting early with diagnostic. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
+        `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging` +
+        (bestPreNudgeContent.length > 0
+          ? `; recovering preserved pre-nudge answer (${bestPreNudgeContent.length} chars).`
+          : ` on a text answer. Exiting early with diagnostic.`) +
+        ` agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
       );
       return {
-        content: buildLocalToolCallFailureMessage(lastResult),
+        content: bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult),
         providerId: lastResult.providerId,
         modelId: lastResult.modelId,
         downgraded: lastResult.downgraded,
@@ -1531,14 +1625,24 @@ export async function runAgenticLoop(params: {
     // only — the array is sent unchanged; this just makes context fill visible
     // per dispatch (the autonomous loop is the run most likely to drift into
     // the dumb zone). See ./context-pressure.
-    const assembledMessages = withPlanReminder(compactAgenticMessages(messages, resolvedMaxContextTokens));
+    // BI-3C8220ED — overload→trim. Measure the pressure BEFORE compaction and
+    // feed the zone into the trim, so a turn already in the warning/dumb zone
+    // compacts harder instead of only being logged after the fact.
+    const preCompactionZone = classifyContextPressure(
+      estimateContextTokens(messages, systemPrompt),
+      resolvedMaxContextTokens,
+    ).zone;
+    const assembledMessages = withPlanReminder(
+      compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone),
+    );
     const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt), resolvedMaxContextTokens);
     if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
     if (ctxPressure.zone !== "sharp") {
       console.log(
         sanitizeForLog(
           `[context-pressure] thread=${JSON.stringify(threadId)} iteration=${iteration} ` +
-            `estTokens=${ctxPressure.estimatedTokens} zone=${ctxPressure.zone} messages=${assembledMessages.length}`,
+            `preZone=${preCompactionZone} postZone=${ctxPressure.zone} ` +
+            `estTokens=${ctxPressure.estimatedTokens} messages=${assembledMessages.length}`,
         ),
       );
     }
@@ -1931,7 +2035,7 @@ export async function runAgenticLoop(params: {
       const shouldNudgeNow = result.toolsStripped ? false : shouldNudge({
         continuationNudges,
         iteration,
-        maxIterations: MAX_ITERATIONS,
+        maxIterations: iterationCeiling,
         hasTools: !!(toolsForProvider && toolsForProvider.length > 0) || planEnabled,
         executedToolCount: executedTools.length,
         responseLength: trimmed.length,
@@ -1942,6 +2046,7 @@ export async function runAgenticLoop(params: {
           ),
         ),
         isSetupTourTurn: isSetupTourTurn(messages),
+        isConversationalRoute: !BUILD_ROUTE_PATTERN.test(routeContext ?? ""),
         allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
           routeContext,
           taskType,
@@ -2381,7 +2486,9 @@ export async function runAgenticLoop(params: {
 
   // Safety limit reached — log it so we can tune if needed
   console.warn(
-    `[agentic-loop] hit MAX_ITERATIONS (${MAX_ITERATIONS}). executedTools=${executedTools.length}. ` +
+    `[agentic-loop] hit iteration ceiling (${iterationCeiling}` +
+    `${iterationCeiling !== MAX_ITERATIONS ? `, warranted level=${effortWarrant?.level}` : ""}). ` +
+    `executedTools=${executedTools.length}. ` +
     `This may indicate the model needs more room or is stuck in a loop.`,
   );
   const fallbackContent = lastResult?.content?.trim() ?? "";
@@ -2425,7 +2532,9 @@ export async function runAgenticLoop(params: {
               executedTools,
               routeContext,
             }))
-      : (lastResult?.content?.trim() ? lastResult.content : exhaustedMessage),
+      // Defect-B safety net (BI-C145F650): before the canned exhausted message,
+      // prefer a correct answer preserved before a nudge over discarding it.
+      : (lastResult?.content?.trim() ? lastResult.content : (bestPreNudgeContent || exhaustedMessage)),
     providerId: lastResult?.providerId ?? "unknown",
     modelId: lastResult?.modelId ?? "unknown",
     downgraded: lastResult?.downgraded ?? false,

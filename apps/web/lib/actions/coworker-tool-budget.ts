@@ -22,6 +22,7 @@
 import type { ToolDefinition } from "@/lib/mcp-tools";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
+import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/tak/context-economy-metrics";
 
 /**
  * Default ceiling on the NON-essential (role/core/breadth) tool schemas attached
@@ -50,26 +51,46 @@ export const COWORKER_NON_TOOL_RESERVE_TOKENS = 12_000;
 export const MIN_COWORKER_ATTACHED_TOOLS = 12;
 
 /**
+ * A small local model's tool-SELECTION accuracy collapses once it is handed more
+ * than ~15 tools (`LOCAL_TOOL_SELECTION_CLIFF`) — a soft quality cliff that the
+ * window-fit math alone doesn't see (a 24,576 window fits ~38 schemas, well past
+ * the cliff). Below this served-context line the model is the cliff-prone small
+ * local class, so the attachment cap is bounded by the cliff, not just the window.
+ * At/above it the model is capable enough to select from the full window-fit set.
+ */
+export const ACCURACY_CLIFF_PRONE_MAX_CONTEXT = 32_768;
+
+/**
  * Derive the per-turn tool-attachment cap from the served context window of the
- * model that will run the turn. The hardcoded 48 was sized for a ~32k window;
- * on a VRAM-constrained local model served at 24,576 tokens, 48 tool schemas
- * (~16k tokens) plus a long conversation overflow `exceed_context_size_error`.
- * This scales the cap down so the tool block always leaves room for the prompt,
- * history, and reply — and back up to the 48 ceiling once the window is large.
+ * model that will run the turn. Two ceilings apply, whichever is smaller:
+ *   1. WINDOW-FIT — the hardcoded 48 was sized for a ~32k window; on a
+ *      VRAM-constrained local model served at 24,576 tokens, 48 tool schemas
+ *      (~16k tokens) plus a long conversation overflow `exceed_context_size_error`.
+ *   2. ACCURACY-CLIFF (BI-2B2F59EB) — for a cliff-prone small local window
+ *      (< 32k), bound the cap at the ~15-tool selection cliff so a small model
+ *      isn't handed a surface it can't select from. Deferred tools stay
+ *      authorized and loadable via load_tools, so this caps accuracy cost, never
+ *      capability.
  *
  * It binds on the LOCAL model's served context even when a cloud provider is
  * preferred, because the cloud→local FALLBACK path is exactly where these
- * overflows happen; the cost on a cloud turn is only a few extra load_tools
- * round-trips, never a failure. `null`/unknown (no small-context local model)
- * → the full 48.
+ * overflows/cliffs happen; the cost on a cloud turn is only a few extra
+ * load_tools round-trips, never a failure. `null`/unknown (no small-context
+ * local model) → the full 48.
  *
- *   32_768 → 48 (ceiling; unchanged)   24_576 → 38   16_000 → 12 (floor)   null → 48
+ *   32_768 → 48 (capable; ceiling)   24_576 → 15 (accuracy cliff)   16_000 → 12 (floor)   null → 48
  */
 export function deriveCoworkerToolCap(servedContextTokens: number | null | undefined): number {
   if (!servedContextTokens || servedContextTokens <= 0) return MAX_COWORKER_ATTACHED_TOOLS;
   const toolBudgetTokens = servedContextTokens - COWORKER_NON_TOOL_RESERVE_TOKENS;
   const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
-  return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(MAX_COWORKER_ATTACHED_TOOLS, fitted));
+  // A cliff-prone small local model also caps at the selection cliff, not just
+  // the window fit. Larger/capable windows keep the full window-fit ceiling.
+  const ceiling =
+    servedContextTokens < ACCURACY_CLIFF_PRONE_MAX_CONTEXT
+      ? Math.min(MAX_COWORKER_ATTACHED_TOOLS, LOCAL_TOOL_SELECTION_CLIFF)
+      : MAX_COWORKER_ATTACHED_TOOLS;
+  return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(ceiling, fitted));
 }
 
 /** Name of the meta-tool that lets a coworker pull deferred tools back on demand. */
@@ -125,6 +146,43 @@ export interface ToolBudgetResult {
   deferred: ToolDefinition[];
 }
 
+// EP-27FD96BC · P3 (BI-ACE1EBA4) — cheap task-intent relevance for tool ranking.
+// Token overlap between the turn and a tool's name+description; no embedding call
+// on the hot path. Used only to order tools WITHIN a priority tier so the cap
+// keeps the most relevant ones.
+
+const INTENT_STOPWORDS: ReadonlySet<string> = new Set([
+  "the", "and", "for", "you", "your", "with", "this", "that", "can", "will",
+  "please", "how", "what", "when", "get", "let", "are", "from", "about", "need",
+  "want", "help", "into", "have",
+]);
+
+export function tokenizeIntent(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 3 && !INTENT_STOPWORDS.has(t)),
+  );
+}
+
+/** Distinct intent tokens found in the tool's name + description. Pure. */
+export function scoreToolIntentRelevance(
+  tool: ToolDefinition,
+  intentTokens: ReadonlySet<string>,
+): number {
+  if (intentTokens.size === 0) return 0;
+  const haystack = new Set(
+    `${tool.name} ${tool.description ?? ""}`
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean),
+  );
+  let score = 0;
+  for (const token of intentTokens) if (haystack.has(token)) score += 1;
+  return score;
+}
+
 /**
  * Right-size the per-turn attachment without touching authority.
  *
@@ -148,6 +206,11 @@ export function selectCoworkerToolBudget(params: {
   /** Extra names to force into tier 0 (e.g. load_tools). */
   alwaysIncludeNames?: ReadonlySet<string>;
   cap?: number;
+  /** EP-27FD96BC · P3 (BI-ACE1EBA4). The current turn's intent (the user
+   *  message). When present, tools are ranked by relevance to it WITHIN their
+   *  priority tier, so the cap keeps the most task-relevant tools instead of
+   *  whichever happened to come first. Omitted → today's stable order. */
+  intentQuery?: string;
 }): ToolBudgetResult {
   const cap = params.cap ?? MAX_COWORKER_ATTACHED_TOOLS;
   const pageActions = params.pageActionNames ?? new Set<string>();
@@ -161,9 +224,16 @@ export function selectCoworkerToolBudget(params: {
     return 3;
   };
 
+  const intentTokens = params.intentQuery ? tokenizeIntent(params.intentQuery) : null;
+  const scoreOf = (t: ToolDefinition): number =>
+    intentTokens ? scoreToolIntentRelevance(t, intentTokens) : 0;
+
+  // tier ASC (priority), then intent-relevance DESC within tier, then stable
+  // original index. Absent an intent query every score is 0, so this reduces to
+  // the prior `tier, index` order exactly.
   const ranked = params.tools
-    .map((t, i) => ({ t, i, tier: tierOf(t) }))
-    .sort((a, b) => a.tier - b.tier || a.i - b.i);
+    .map((t, i) => ({ t, i, tier: tierOf(t), score: scoreOf(t) }))
+    .sort((a, b) => a.tier - b.tier || b.score - a.score || a.i - b.i);
 
   const attached: Array<{ t: ToolDefinition; i: number }> = [];
   const deferred: Array<{ t: ToolDefinition; i: number }> = [];

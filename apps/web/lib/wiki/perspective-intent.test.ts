@@ -82,7 +82,7 @@ describe("extractPageTopic", () => {
   });
 
   it("falls back to a humanised route segment", () => {
-    expect(extractPageTopic(null, "/wiki/perspectives/mark-dpf-platform")).toBe("mark dpf platform");
+    expect(extractPageTopic(null, "/coworker-decisions/perspectives/mark-dpf-platform")).toBe("mark dpf platform");
     expect(extractPageTopic("   ", "/build/[buildId]?tab=plan")).toBe("buildId");
   });
 

@@ -4,6 +4,8 @@ import {
   selectCoworkerToolBudget,
   selectLoadableTools,
   deriveCoworkerToolCap,
+  scoreToolIntentRelevance,
+  tokenizeIntent,
   LOAD_TOOLS_TOOL,
   LOAD_TOOLS_TOOL_NAME,
   MAX_COWORKER_ATTACHED_TOOLS,
@@ -11,17 +13,16 @@ import {
 } from "./coworker-tool-budget";
 
 describe("deriveCoworkerToolCap", () => {
-  it("keeps the full 48 ceiling at a 32k window (unchanged behavior)", () => {
+  it("keeps the full 48 ceiling at a 32k window (capable-model line)", () => {
     expect(deriveCoworkerToolCap(32_768)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
   });
 
-  it("shrinks the cap on a VRAM-constrained 24,576 window so a long thread fits", () => {
-    // (24576 - 12000 reserve) / 330 ≈ 38 — below 48, leaving room for prompt+history+reply.
+  it("caps a cliff-prone 24,576 window at the 15-tool accuracy cliff (BI-2B2F59EB)", () => {
+    // Window-fit alone would allow ~38 tools ((24576-12000)/330), well past the
+    // ~15-tool cliff where a small local model's selection accuracy collapses.
     const cap = deriveCoworkerToolCap(24_576);
-    expect(cap).toBeLessThan(MAX_COWORKER_ATTACHED_TOOLS);
-    expect(cap).toBe(38);
-    // The observed overflow (49 tools → 24,730 prompt) now fits: 38 tools is ~3.6k
-    // fewer tokens, dropping the prompt well under the 24,576 window.
+    expect(cap).toBe(15);
+    // Still well within the window (prompt+history+reply fit comfortably).
     expect(cap * 330).toBeLessThan(24_576 - 8_000);
   });
 
@@ -38,6 +39,13 @@ describe("deriveCoworkerToolCap", () => {
 
   it("never exceeds the 48 ceiling even for a huge cloud window", () => {
     expect(deriveCoworkerToolCap(200_000)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  });
+
+  it("applies the accuracy-cliff ceiling only below the capable-model line", () => {
+    // Just below 32k: cliff-prone → bounded at 15 despite window-fit allowing more.
+    expect(deriveCoworkerToolCap(31_999)).toBe(15);
+    // At/above 32k: capable → full window-fit ceiling.
+    expect(deriveCoworkerToolCap(32_768)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
   });
 
   it("is monotonic — a larger window never yields fewer tools", () => {
@@ -154,5 +162,53 @@ describe("LOAD_TOOLS_TOOL definition", () => {
     expect(LOAD_TOOLS_TOOL.name).toBe(LOAD_TOOLS_TOOL_NAME);
     expect(LOAD_TOOLS_TOOL.requiredCapability).toBeNull();
     expect(LOAD_TOOLS_TOOL.sideEffect).toBe(false);
+  });
+});
+
+describe("task-intent tool prioritization (BI-ACE1EBA4)", () => {
+  it("scores a tool by intent-token overlap with its name + description", () => {
+    const t = tool("create_invoice", "draft and send a customer invoice");
+    const tokens = tokenizeIntent("please draft an invoice for the customer");
+    expect(scoreToolIntentRelevance(t, tokens)).toBeGreaterThanOrEqual(2); // invoice + customer
+    expect(scoreToolIntentRelevance(t, tokenizeIntent("check the weather"))).toBe(0);
+  });
+
+  it("keeps the intent-relevant tools within a tier when the cap forces deferral", () => {
+    // All three are tier-3 breadth tools; the cap (1) can keep only one.
+    const tools = [
+      tool("weather_lookup", "forecast the weather"),
+      tool("invoice_search", "search invoices and billing records"),
+      tool("song_lyrics", "fetch song lyrics"),
+    ];
+    const { attached, deferred } = selectCoworkerToolBudget({
+      tools,
+      roleGrants: [], // none are role tools → all tier 3
+      cap: 1,
+      intentQuery: "find an invoice for billing",
+    });
+    expect(attached.map((t) => t.name)).toEqual(["invoice_search"]);
+    expect(deferred.map((t) => t.name).sort()).toEqual(["song_lyrics", "weather_lookup"]);
+  });
+
+  it("never lets intent relevance override tier priority", () => {
+    // A highly-relevant breadth tool must still lose to a role tool under the cap.
+    const tools = [
+      tool("invoice_search", "search invoices billing invoice invoice"), // tier 3, very relevant
+      tool("create_backlog_item", "file a backlog item"), // tier 1 (role)
+    ];
+    const { attached } = selectCoworkerToolBudget({
+      tools,
+      roleGrants: ["backlog_write"],
+      cap: 1,
+      intentQuery: "invoice invoice invoice billing",
+    });
+    // The role tool (tier 1) is kept even though the breadth tool scores higher.
+    expect(attached.map((t) => t.name)).toEqual(["create_backlog_item"]);
+  });
+
+  it("is identical to the prior stable order when no intent query is given", () => {
+    const tools = [tool("a_tool"), tool("b_tool"), tool("c_tool")];
+    const withNoIntent = selectCoworkerToolBudget({ tools, roleGrants: [], cap: 2 });
+    expect(withNoIntent.attached.map((t) => t.name)).toEqual(["a_tool", "b_tool"]);
   });
 });

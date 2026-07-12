@@ -7,22 +7,34 @@ import type { PlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-lo
 type PlatformWorkspaceHomeProps = {
   data: Omit<PlatformWorkspaceHomeData, "storefrontConfig">;
   heading?: string;
+  /**
+   * BI-655418A7: Simple (worker) mode keeps attention + day agenda and hides the
+   * dense multi-area launcher that made Simple feel like a no-op on the home.
+   */
+  density?: "simple" | "full";
 };
 
-export function PlatformWorkspaceHome({ data, heading = "Workspace" }: PlatformWorkspaceHomeProps) {
+export function PlatformWorkspaceHome({
+  data,
+  heading = "Workspace",
+  density = "full",
+}: PlatformWorkspaceHomeProps) {
   const {
     workspaceSections,
     workspaceCommandCenter,
     calendarEvents,
     feedItems,
   } = data;
+  const simple = density === "simple";
 
   return (
-    <div>
+    <div data-workspace-density={density}>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[var(--dpf-text)]">{heading}</h1>
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-          Your day at a glance — what needs doing now and next.
+          {simple
+            ? "Simple view — focus on what needs you now. Switch to Full in the rail for every area."
+            : "Your day at a glance — what needs doing now and next."}
         </p>
       </div>
 
@@ -38,10 +50,12 @@ export function PlatformWorkspaceHome({ data, heading = "Workspace" }: PlatformW
         </div>
       </div>
 
-      <WorkspaceAreaLauncher
-        sections={workspaceSections}
-        tileStatus={workspaceCommandCenter.tileStatus}
-      />
+      {!simple && (
+        <WorkspaceAreaLauncher
+          sections={workspaceSections}
+          tileStatus={workspaceCommandCenter.tileStatus}
+        />
+      )}
     </div>
   );
 }

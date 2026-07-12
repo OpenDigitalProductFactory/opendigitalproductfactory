@@ -39,7 +39,62 @@ export const AGENT_IDENTITY_OVERRIDES: Record<string, { displayName?: string; ki
   "architecture-agent": { displayName: "Solution Architect" },
   "AGT-WS-ADMIN": { displayName: "Platform Admin", kind: "coordinator" },
   "admin-assistant": { displayName: "Platform Admin", kind: "coordinator" },
+  // Onboarding COO must Title-Case COO consistently (not "Onboarding Coo").
+  "AGT-WS-ONBOARD": { displayName: "Onboarding COO" },
+  "onboarding-coo": { displayName: "Onboarding COO" },
+  // Two distinct registry agents both derived to "Portfolio Backlog" after
+  // noise-suffix strip — keep them legibly distinct on the roster (BI-74FD6420).
+  "AGT-102": { displayName: "Portfolio Backlog Manager" },
+  "AGT-S2P-PFB": { displayName: "Portfolio Backlog Specialist" },
 };
+
+/**
+ * Coworker slug handles (legacy seed `agentId` / `slugId`) → canonical registry
+ * `agentId` (AGT-*). Dual seed paths create BOTH rows, so the AI Workforce
+ * roster would show two COO / Build Lead / Platform Admin / etc. while
+ * naming-health still reads clean (same displayName on both). BI-74FD6420.
+ *
+ * IMPORTANT: slug agentId rows remain first-class seed identities — many FK
+ * consumers key `Agent.agentId` by slug (`CoworkerService.providerAgentId`,
+ * hive-scout scheduled task, agent-model-defaults, skill assignTo). Do NOT
+ * retire slug rows in seed until those consumers are remapped. Roster display
+ * collapses dual-seed pairs via `dropDualSeedAliasAgents` (prefer AGT-*).
+ */
+export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string>> = {
+  coo: "AGT-ORCH-000",
+  "build-specialist": "AGT-WS-BUILD",
+  "admin-assistant": "AGT-WS-ADMIN",
+  "portfolio-advisor": "AGT-WS-PORTFOLIO",
+  "external-catalog-scout": "AGT-WS-SCOUT",
+  "inventory-specialist": "AGT-WS-INVENTORY",
+  "ea-architect": "AGT-WS-EA",
+  "hr-specialist": "AGT-WS-HR",
+  "customer-advisor": "AGT-WS-CUSTOMER",
+  "marketing-specialist": "AGT-WS-MARKETING",
+  "ops-coordinator": "AGT-WS-OPS",
+  "platform-engineer": "AGT-WS-PLATFORM",
+  "onboarding-coo": "AGT-WS-ONBOARD",
+};
+
+/** Reverse map: canonical AGT-* → preferred slug handle. */
+export const CANONICAL_AGENT_ID_TO_COWORKER_SLUG: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(
+    Object.entries(COWORKER_SLUG_TO_CANONICAL_AGENT_ID).map(([slug, canonical]) => [canonical, slug]),
+  ),
+);
+
+/**
+ * Resolve a slug or agentId to the canonical registry agentId when known.
+ * Use for roster/display collapse — not as a substitute for seed FK remapping.
+ */
+export function resolveCanonicalAgentId(agentIdOrSlug: string): string {
+  return COWORKER_SLUG_TO_CANONICAL_AGENT_ID[agentIdOrSlug] ?? agentIdOrSlug;
+}
+
+/** True when the id is a registry-style AGT-* identifier. */
+export function isCanonicalRegistryAgentId(agentId: string): boolean {
+  return /^AGT[-_]/i.test(agentId);
+}
 
 function titleCaseToken(tok: string): string {
   const lower = tok.toLowerCase();

@@ -23,10 +23,17 @@ const TERMINAL_BUILD_TOOLS = new Set<string>([
  *
  * Advise mode is the default for non-/build routes. It strips side-effect
  * tools so the coworker cannot act on the outside world without explicit
- * "act" intent. Tools flagged as `coworkerArtifact` persist the coworker's
- * own recommendation as an internal artifact (e.g. `save_marketing_review`)
- * and stay available — saving the advice the user explicitly asked for is
- * part of the advisory workflow, not an external action.
+ * "act" intent. Two classes of side-effect tool are exempt because they are
+ * not actions ON the outside world:
+ *   - `coworkerArtifact` persists the coworker's own recommendation as an
+ *     internal artifact (e.g. `save_marketing_review`) — saving the advice the
+ *     user explicitly asked for is part of the advisory workflow.
+ *   - `adviseCoordination` hands a scoped sub-task to a NAMED peer coworker
+ *     (`request_coworker` / `summon_coworker`) — routing work to the right
+ *     teammate is coordination, not an external action, and is exactly how an
+ *     advisor gets the user a better answer. Without this exemption an
+ *     advise-mode coworker can name the right peer but the delegation is
+ *     muzzled, dead-ending the sub-task back to the human (BI-7EB4AE2C).
  *
  * Build-phase filtering only applies inside an active build. Terminal builds
  * keep only navigation/inspection tools so the coworker can help the operator
@@ -40,7 +47,13 @@ export function filterToolsForCoworkerRuntime(
   input: { coworkerMode?: "advise" | "act"; activeBuildPhase: string | null },
 ): ToolDefinition[] {
   return tools.filter((tool) => {
-    if (input.coworkerMode === "advise" && tool.sideEffect && !tool.coworkerArtifact) return false;
+    if (
+      input.coworkerMode === "advise" &&
+      tool.sideEffect &&
+      !tool.coworkerArtifact &&
+      !tool.adviseCoordination
+    )
+      return false;
     if (input.activeBuildPhase) {
       if (TERMINAL_BUILD_PHASES.has(input.activeBuildPhase)) {
         return TERMINAL_BUILD_TOOLS.has(tool.name);
@@ -55,9 +68,12 @@ export function filterToolsForCoworkerRuntime(
 
 /**
  * The tools that Advise mode holds back — the exact set `filterToolsForCoworkerRuntime`
- * removes for its `coworkerMode === "advise"` rule (side-effecting, non-artifact).
- * The coworker HOLDS authority for these (they passed grant + capability gating to
- * reach the merged set); advise mode is disabling them, not a missing permission.
+ * removes for its `coworkerMode === "advise"` rule (side-effecting, non-artifact,
+ * non-coordination). The coworker HOLDS authority for these (they passed grant +
+ * capability gating to reach the merged set); advise mode is disabling them, not a
+ * missing permission. Must mirror the filter's exemptions exactly — otherwise the
+ * prompt would tell the user "switch to Act mode and I can delegate" when delegation
+ * (`adviseCoordination`) already works in advise mode.
  *
  * Surfaced into the coworker's prompt so it can name the specific enabler ("switch
  * me to Act mode and I can …") per the limitation-response contract, instead of
@@ -66,5 +82,7 @@ export function filterToolsForCoworkerRuntime(
  * Pass the FULL merged (authorized) tool set — not the already-filtered set.
  */
 export function adviseHeldBackTools(mergedTools: ToolDefinition[]): ToolDefinition[] {
-  return mergedTools.filter((tool) => tool.sideEffect && !tool.coworkerArtifact);
+  return mergedTools.filter(
+    (tool) => tool.sideEffect && !tool.coworkerArtifact && !tool.adviseCoordination,
+  );
 }

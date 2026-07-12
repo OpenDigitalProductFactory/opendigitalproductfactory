@@ -2,7 +2,6 @@ import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { handleUpdateBacklogItem } from "./mcp-handlers/update-backlog-item";
-import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
 // Static import: executeTool is a hot path; dynamic import per call would hurt throughput.
 import { evaluateExecution } from "@/lib/kernel/runtime-gate";
 import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-principles";
@@ -31,19 +30,10 @@ import {
   recordMarketingKpiCheckpoint,
   recordMarketingStrategistReview,
 } from "@/lib/marketing";
-import {
-  DELIBERATION_ARTIFACT_TYPES,
-  DELIBERATION_STRATEGY_PROFILES,
-  DELIBERATION_TRIGGER_SOURCES,
-} from "@/lib/deliberation/types";
 // BI-ARCH-TOOLPACKS: deliberation + SIEM are fully owned by the first scoped tool
 // pack — their definitions compose into PLATFORM_TOOLS and their handlers dispatch
 // through the registry (no per-tool handler imports or switch cases here anymore).
 import { TOOL_PACK_REGISTRY } from "@/lib/mcp/pack-registry";
-import {
-  createLicenseReadinessIssue,
-  saveLicensingInvestigationFinding,
-} from "@/lib/actions/licensing-compliance";
 import type { ReviewBranchInput } from "@/lib/integrate/build-reviewers";
 import { triggerDesignReviewAutoRepair, triggerPlanReviewAutoRepair } from "@/lib/integrate/pre-build-review-auto-repair";
 import {
@@ -154,6 +144,21 @@ export type ToolDefinition = {
    * memory; this flag only exempts it from the advise-mode runtime filter.
    */
   coworkerArtifact?: boolean;
+  /**
+   * Tool hands a scoped sub-task to a NAMED peer coworker (delegation /
+   * summon). Like `coworkerArtifact`, this is an advise-safe exemption: it
+   * remains `sideEffect: true` for MCP annotations and tool-execution memory,
+   * but is NOT stripped by the advise-mode runtime filter. Rationale
+   * (BI-7EB4AE2C): naming the right peer and handing off a scoped sub-task —
+   * with a visible handoff card the user sees inline — is COORDINATION, not an
+   * irreversible action on the outside world. The advise/act line guards
+   * against acting externally; routing work to a teammate is how an advisor
+   * gets the user a better answer. Without this flag an advise-mode coworker
+   * can NAME the right peer but the delegation is muzzled, so the sub-task
+   * dead-ends back to the human. Genuinely destructive writes stay
+   * `sideEffect: true` WITHOUT this flag and remain stripped in advise mode.
+   */
+  adviseCoordination?: boolean;
   /** When set, tool is only available during these build phases.
    *  Null/undefined = available in all phases (non-build tools). */
   buildPhases?: BuildPhaseTag[] | null;
@@ -970,140 +975,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
-  },
-  {
-    name: "list_customer_accounts",
-    description: "List customer accounts in the CRM (name, status, industry, and open-opportunity count). Use this on the Customer workspace to see who the accounts/prospects are before qualifying opportunities or drafting a quote.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        status: { type: "string", description: "Optional status filter, e.g. prospect, active, at_risk, closed." },
-        limit: { type: "number", description: "Max rows (default 25, max 100)." },
-      },
-      required: [],
-    },
-    requiredCapability: "view_customer",
-    sideEffect: false,
-  },
-  {
-    name: "list_opportunities",
-    description: "List sales-pipeline opportunities (title, stage, probability, expected value, account). Use this to review the pipeline and find the strongest candidates to qualify. Stages: qualification, discovery, proposal, negotiation, closed_won, closed_lost.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        stage: { type: "string", description: "Optional stage filter." },
-        accountId: { type: "string", description: "Filter to one account (CustomerAccount.id)." },
-        includeDormant: { type: "boolean", description: "Include dormant opportunities (default false)." },
-        limit: { type: "number", description: "Max rows (default 25, max 100)." },
-      },
-      required: [],
-    },
-    requiredCapability: "view_customer",
-    sideEffect: false,
-  },
-  {
-    name: "get_opportunity",
-    description: "Get one opportunity with its account, contact, and existing quotes. Use this to confirm an opportunity's details and its id before drafting a quote against it.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        opportunityId: { type: "string", description: "Opportunity.id or the OPP-… opportunityId." },
-      },
-      required: ["opportunityId"],
-    },
-    requiredCapability: "view_customer",
-    sideEffect: false,
-  },
-  {
-    name: "list_quotes",
-    description: "List quotes (number, status, total, account, opportunity). Use this to see existing quotes before drafting a new one. Quote statuses: draft, sent, accepted, rejected, expired, superseded.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        status: { type: "string", description: "Optional status filter, e.g. draft, sent, accepted." },
-        opportunityId: { type: "string", description: "Filter to one opportunity (Opportunity.id)." },
-        limit: { type: "number", description: "Max rows (default 25, max 100)." },
-      },
-      required: [],
-    },
-    requiredCapability: "view_customer",
-    sideEffect: false,
-  },
-  {
-    name: "create_customer_account",
-    description: "Create a customer account (a company or prospect) in the CRM. ONLY `name` is required — do not ask the user for website/industry/notes; include them only when already known. The tool checks for duplicates before creating (normalized + fuzzy name, web domain): when likely matches exist it returns error `duplicates_found` with scored candidates instead of creating. Then either reuse the existing account (its id is in the candidates — just use it as accountId downstream, or pass duplicateResolution `use-existing:<id>`), or — only when the user confirms it is genuinely a different company — retry with duplicateResolution `confirm-new` plus a short duplicateReason. Never create a second account for a company that already exists under a slightly different spelling. Creates an internal record only; nothing is sent to the customer.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Company / account name. The ONLY required field." },
-        website: { type: "string", description: "Optional website URL — include when known; it strengthens duplicate detection." },
-        industry: { type: "string", description: "Optional industry." },
-        status: { type: "string", description: "Optional: prospect (default) | active | at_risk | closed." },
-        notes: { type: "string", description: "Optional free-text notes." },
-        duplicateResolution: { type: "string", description: "Optional duplicate decision after a duplicates_found response: `use-existing:<accountId>` to reuse that account, or `confirm-new` to create anyway once the user confirms it is a different company." },
-        duplicateReason: { type: "string", description: "Required with duplicateResolution `confirm-new`: one line on why this is not a duplicate (audited)." },
-      },
-      required: ["name"],
-    },
-    requiredCapability: "operate_customer",
-    sideEffect: true,
-    coworkerArtifact: true,
-  },
-  {
-    name: "create_opportunity",
-    description: "Create (propose) a sales-pipeline opportunity against an existing account. Use this to turn a qualified lead into a tracked opportunity. Defaults to the 'qualification' stage. Creates an internal record for human review; nothing is sent externally.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        title: { type: "string", description: "Short opportunity title." },
-        accountId: { type: "string", description: "CustomerAccount.id this opportunity belongs to (from list_customer_accounts)." },
-        stage: { type: "string", description: "qualification (default) | discovery | proposal | negotiation." },
-        expectedValue: { type: "number", description: "Estimated deal value." },
-        currency: { type: "string", description: "ISO currency code, default USD." },
-        expectedClose: { type: "string", description: "ISO date the deal is expected to close." },
-        notes: { type: "string", description: "Optional qualification notes." },
-      },
-      required: ["title", "accountId"],
-    },
-    requiredCapability: "operate_customer",
-    sideEffect: true,
-    coworkerArtifact: true,
-  },
-  {
-    name: "create_quote",
-    description: "Draft a quote against an existing opportunity with one or more line items. Line totals, subtotal, discount, tax, and grand total are computed automatically and the quote is saved in 'draft' status — it is NOT sent to the customer. Get the opportunity id from list_opportunities / get_opportunity first.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        opportunityId: { type: "string", description: "Opportunity.id the quote is for (from list_opportunities)." },
-        validUntil: { type: "string", description: "ISO date the quote is valid until, e.g. 2026-07-31." },
-        lineItems: {
-          type: "array",
-          description: "One or more quote line items.",
-          items: {
-            type: "object",
-            properties: {
-              description: { type: "string", description: "Line description." },
-              quantity: { type: "number", description: "Quantity (default 1)." },
-              unitPrice: { type: "number", description: "Unit price." },
-              discountPercent: { type: "number", description: "Optional per-line discount %." },
-              taxPercent: { type: "number", description: "Optional per-line tax %." },
-              productId: { type: "string", description: "Optional DigitalProduct id." },
-            },
-            required: ["description", "quantity", "unitPrice"],
-          },
-        },
-        currency: { type: "string", description: "ISO currency code, default USD." },
-        discountType: { type: "string", description: "percentage (default) | fixed — header-level discount." },
-        discountValue: { type: "number", description: "Header discount amount (percent or fixed per discountType)." },
-        terms: { type: "string", description: "Optional terms text." },
-        notes: { type: "string", description: "Optional notes." },
-      },
-      required: ["opportunityId", "validUntil", "lineItems"],
-    },
-    requiredCapability: "operate_customer",
-    sideEffect: true,
-    coworkerArtifact: true,
   },
   {
     name: "get_finance_period_summary",
@@ -2481,46 +2352,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "create_scheduled_agent_task",
-    description: "Create a recurring agent task that runs in the coordination plane (TaskRun/thread/tools/evidence) on a 5-field UTC cron. Owned by the calling user; the supported way for an agent to schedule recurring work instead of a client-local cron.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        agentId: { type: "string", description: "Coworker agent id that runs the task (e.g. AGT-... or a role id like platform-engineer)." },
-        title: { type: "string", description: "Short human title for the task." },
-        prompt: { type: "string", description: "The instruction the agent runs each tick." },
-        schedule: { type: "string", description: "5-field cron expression in UTC, e.g. '0 9 1 * *' = 1st of each month at 09:00 UTC." },
-        routeContext: { type: "string", description: "Route context the task runs under (optional, default /platform)." },
-      },
-      required: ["agentId", "title", "prompt", "schedule"],
-    },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
-    name: "list_scheduled_agent_tasks",
-    description: "List the recurring agent tasks owned by the calling user (id, title, schedule, active state, next/last run, last status).",
-    inputSchema: { type: "object", properties: {}, required: [] },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "cancel_scheduled_agent_task",
-    description: "Deactivate a recurring agent task by id. Only the owning user may cancel it.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        taskId: { type: "string", description: "The scheduled agent task id (agent-task-xxxxxxxx)." },
-      },
-      required: ["taskId"],
-    },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
     name: "get_release_status",
     description: "Get the current status of a release bundle or promotion, including deployment window availability and gate check results.",
     inputSchema: {
@@ -2566,14 +2397,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     autoApproveWhen: async () => {
       return false;
     },
-  },
-  {
-    name: "apply_platform_update",
-    description: "Merge the new platform version into your customised source. Returns a clean merge or a list of conflicts for the AI coworker to resolve with you.",
-    inputSchema: { type: "object", properties: {} },
-    requiredCapability: "manage_platform",
-    executionMode: "immediate",
-    sideEffect: true,
   },
   {
     name: "evaluate_page",
@@ -2876,20 +2699,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "grok_signin_start",
-    description: "Begin Grok (xAI) device-code OAuth sign-in for the build sandbox — the 'sign in with Google' alternative to an xAI API key. Runs `grok login --device-auth` in the sandbox and returns a verification URL + user code. Relay these to a human to authorize in their browser (Google / X / Apple), then call grok_signin_status to detect completion.",
-    inputSchema: { type: "object", properties: {} },
-    requiredCapability: "manage_provider_connections",
-    sideEffect: true,
-  },
-  {
-    name: "grok_signin_status",
-    description: "Check whether the Grok device-code sign-in started by grok_signin_start has been authorized. Returns status 'ok' (credential captured + xAI provider activated), 'pending' (still waiting for the human to authorize), or 'failed'.",
-    inputSchema: { type: "object", properties: {} },
-    requiredCapability: "manage_provider_connections",
-    sideEffect: true,
-  },
-  {
     name: "analyze_brand_document",
     description: "Analyze an uploaded brand guidelines document (PDF or image) and extract brand assets: logo, colors, and fonts",
     inputSchema: {
@@ -3104,58 +2913,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         },
       },
       required: ["filePath"],
-    },
-    requiredCapability: null,
-    executionMode: "proposal",
-    sideEffect: true,
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-  },
-  // ─── EP-WIKI-001 coworker-UX: review pending overlay drafts ────────────────
-  {
-    name: "list_wiki_overlay_drafts",
-    description:
-      "List every wiki page in the current org's overlay that is still in draft status. Returns each page's slug, kind, abstract, body length + 800-char preview, kernel-override pointer, and the slug list of cited raw sources. Use this when the user asks 'what wiki drafts are pending review' or before walking them through a batch publish — the structured result feeds the review-wiki-drafts skill.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-    requiredCapability: null,
-    executionMode: "immediate",
-    sideEffect: false,
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-  },
-  // ─── EP-WIKI-001 coworker-UX: batch publish overlay drafts ─────────────────
-  {
-    name: "publish_wiki_overlay_pages",
-    description:
-      "Flip status on a batch of org-overlay wiki pages (default target: 'published'). Each flipped page gets a manual revision row attributed to the calling user. Kernel pages, cross-org pages, missing pages, and pages already at the target status are filtered out and reported in rejected[]. Use after walking the user through pending drafts via list_wiki_overlay_drafts — pass the ids the user said to keep.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        pageIds: {
-          type: "array",
-          items: { type: "string" },
-          description: "WikiPage row ids to flip.",
-        },
-        targetStatus: {
-          type: "string",
-          enum: ["draft", "published", "review-needed", "archived"],
-          description: "Status to flip to (default 'published').",
-        },
-        changeSummary: {
-          type: "string",
-          description: "Optional summary written to the revision log for every flipped page.",
-        },
-      },
-      required: ["pageIds"],
     },
     requiredCapability: null,
     executionMode: "proposal",
@@ -3436,47 +3193,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "save_licensing_investigation",
-    description: "Persist the current licensing investigation posture for the business without requiring every field to be re-entered. Use this to save whether the business is existing, new, or expanding, plus jurisdiction and research-confidence updates discovered during the coworker conversation.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        setupStatus: { type: "string", enum: ["draft", "investigating", "ready", "blocked"] },
-        investigationMode: { type: "string", enum: ["unknown", "existing", "new_business", "expanding"] },
-        homeCountryCode: { type: "string", description: "Two-letter country code when known" },
-        primaryRegionCode: { type: "string", description: "Primary state, province, or region code when known" },
-        operatingFootprintSummary: { type: "string", description: "Short summary of where the business operates or delivers regulated work" },
-        legalActivityConfidence: { type: "string", enum: ["low", "medium", "high"] },
-        researchCoverageStatus: { type: "string", enum: ["draft", "partial", "covered", "stale"] },
-        notes: { type: "string", description: "Investigation notes, official-source findings, or unresolved caveats" },
-        appendNotes: { type: "boolean", description: "When true, append notes to the existing profile notes instead of replacing them" },
-      },
-      required: [],
-    },
-    requiredCapability: "manage_compliance",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
-    name: "create_licensing_readiness_issue",
-    description: "Create a factual licensing readiness issue for a missing authority, unresolved legality question, missing staff credential, fee blocker, or display/posting gap discovered during investigation.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        issueType: { type: "string", description: "Short machine-readable issue type such as missing_jurisdiction_research or missing_person_credential" },
-        severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
-        title: { type: "string", description: "Human-readable issue title" },
-        details: { type: "string", description: "Factual description of the gap, blocker, or unresolved question" },
-        organizationLicenseRecordId: { type: "string", description: "Optional linked organization-held license record id" },
-        personLicenseRecordId: { type: "string", description: "Optional linked person-held credential record id" },
-      },
-      required: ["issueType", "title"],
-    },
-    requiredCapability: "manage_compliance",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
     name: "evaluate_tool",
     description: "Initiate a tool evaluation pipeline for an external tool, MCP server, or dependency. Creates a ToolEvaluation record for multi-agent security, architecture, compliance, and integration review.",
     inputSchema: {
@@ -3576,6 +3292,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
+    // Delegation is advise-safe coordination — an advisor may route a scoped
+    // sub-task to a named peer with a visible handoff without leaving advise
+    // mode. Kept sideEffect:true for annotations; adviseCoordination exempts it
+    // from the advise-mode runtime filter (BI-7EB4AE2C).
+    adviseCoordination: true,
   },
   {
     name: "summon_coworker",
@@ -3592,114 +3313,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
-  },
-  // ─── Deliberation Pattern Framework Tools (spec §6.8) ──────────────────────
-  {
-    name: "start_deliberation",
-    description:
-      "Start a multi-branch deliberation run (peer review or debate) over an artifact. The activation resolver decides which pattern fires based on stage, risk, and the caller's explicit request. Stage-default and risk-escalated invocations are pre-authorized; explicit invocations require proposal review. Returns the new deliberationRunId synchronously; branches dispatch asynchronously via the Inngest runner.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        patternSlug: {
-          type: "string",
-          description:
-            "Explicit deliberation pattern slug (e.g. 'review', 'debate'). Used as explicitPatternSlug in the activation resolver — may be strengthened by stage/risk policy.",
-        },
-        taskRunId: {
-          type: "string",
-          description: "Optional parent TaskRun (external id). When omitted, the orchestrator bootstraps one.",
-        },
-        artifactType: {
-          type: "string",
-          enum: [...DELIBERATION_ARTIFACT_TYPES],
-          description: "The kind of artifact being deliberated.",
-        },
-        strategyProfile: {
-          type: "string",
-          enum: [...DELIBERATION_STRATEGY_PROFILES],
-          description: "Optional override for the cost/quality trade-off profile. Defaults to the pattern's declared hint.",
-        },
-        maxBranches: {
-          type: "number",
-          description: "Upper bound on branch count. Defaults to the pattern's required role count capped at 4.",
-        },
-        budgetUsd: {
-          type: "number",
-          description: "Upper bound on total USD spend across the run. Null = unbounded.",
-        },
-        stage: {
-          type: "string",
-          enum: ["ideate", "plan", "build", "review", "ship"],
-          description: "Build Studio stage the deliberation runs under. Drives stage-default activation.",
-        },
-        riskLevel: {
-          type: "string",
-          enum: ["low", "medium", "high", "critical"],
-          description: "Risk level of the work. Medium+ escalates activation.",
-        },
-        triggerSource: {
-          type: "string",
-          enum: [...DELIBERATION_TRIGGER_SOURCES],
-          description:
-            "Caller's intent signal for the activation layer. Used by autoApproveWhen to decide whether the call skips proposal review.",
-        },
-        routeContext: {
-          type: "string",
-          description: "Optional route / screen context (e.g. '/build') for telemetry and downstream routing.",
-        },
-      },
-      required: ["patternSlug", "artifactType"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "proposal",
-    sideEffect: true,
-    // Pre-authorize stage-default and risk-escalated invocations per activation
-    // policy (spec §7). Explicit invocations still go through proposal review.
-    // Memory: "Proposal-mode tools stall autonomous runs" — predicates inspect
-    // caller-supplied params so the check runs before the run row exists.
-    autoApproveWhen: async (ctx: unknown) => {
-      const params =
-        (ctx as { params?: Record<string, unknown> } | undefined)?.params ?? {};
-      const raw = params["triggerSource"];
-      return raw === "stage" || raw === "risk";
-    },
-  },
-  {
-    name: "get_deliberation_status",
-    description:
-      "Read-only snapshot of a deliberation run — consensus state, branch counts (total/completed/failed/pending), evidence coverage (source-backed/mixed/needs-more-evidence), and budget/diversity degradation flags.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        deliberationRunId: {
-          type: "string",
-          description: "The DeliberationRun id returned from start_deliberation.",
-        },
-      },
-      required: ["deliberationRunId"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "get_deliberation_outcome",
-    description:
-      "Read-only full outcome for a deliberation run — merged recommendation, rationale, confidence, unresolved risks, issue set, and compact claim + evidence-bundle references. Returns null outcome when synthesis has not yet completed.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        deliberationRunId: {
-          type: "string",
-          description: "The DeliberationRun id returned from start_deliberation.",
-        },
-      },
-      required: ["deliberationRunId"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
+    // Bringing a named peer into the conversation is advise-safe coordination —
+    // the advisor decides which teammate to pull in; the handoff is visible and
+    // reversible. Kept sideEffect:true for annotations; adviseCoordination
+    // exempts it from the advise-mode runtime filter (BI-7EB4AE2C).
+    adviseCoordination: true,
   },
   {
     name: "trigger_contributor_inventory_sync",
@@ -3717,32 +3335,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
-  },
-  {
-    name: "summarize_upgrade_impact",
-    description:
-      "On-demand, install-tailored \"What's in this update?\" summary. Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        refresh: {
-          type: "boolean",
-          description: "Bypass the per-process cache and recompute. Default false.",
-        },
-        topN: {
-          type: "number",
-          description: "Cap on items in the headline list (default 8). The full list is always returned alongside.",
-        },
-        skipPhrasing: {
-          type: "boolean",
-          description: "Return only the deterministic shape (no LLM phrasing). Default false. Useful when an external client wants to render its own copy.",
-        },
-      },
-      required: [],
-    },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: false,
   },
 ];
 
@@ -5605,6 +5197,29 @@ export async function executeTool(
         );
       }
 
+      // Bind the evidence record to the capsule the capture just resolved so it
+      // rolls up onto the capsule timeline with producer identity
+      // (EP-WORK-CONVERGENCE Phase 1 / BI-D6FA8641). The record was written
+      // before capture (order preserved for back-compat); patch it here.
+      // Best-effort — a link failure must never fail the evidence write.
+      if (capturedCapsuleId) {
+        try {
+          await prisma.externalEvidenceRecord.update({
+            where: { id: evidence.id },
+            data: {
+              workCapsuleId: capturedCapsuleId,
+              executorKind: provider,
+              ...(context?.agentId ? { recordedByAgentId: context.agentId } : {}),
+            },
+          });
+        } catch (linkError) {
+          console.warn(
+            "[record_external_development_evidence] capsule link failed:",
+            getErrorMessage(linkError),
+          );
+        }
+      }
+
       return {
         success: true,
         entityId: evidence.id,
@@ -5866,6 +5481,7 @@ export async function executeTool(
           title: true,
           status: true,
           priority: true,
+          demandScore: true,
           effortSize: true,
           triageOutcome: true,
           activeBuildId: true,
@@ -5888,6 +5504,7 @@ export async function executeTool(
           title: i.title,
           status: i.status,
           priority: i.priority,
+          demandScore: i.demandScore,
           effortSize: i.effortSize,
           triageOutcome: i.triageOutcome,
           hasActiveBuild: i.activeBuildId != null,
@@ -11213,39 +10830,6 @@ export async function executeTool(
       };
     }
 
-    case "grok_signin_start": {
-      const { grokDeviceLoginStart } = await import("@/lib/integrate/grok-device-login-core");
-      const result = await grokDeviceLoginStart();
-      if ("error" in result) {
-        return { success: false, error: "device_login_failed", message: result.error };
-      }
-      return {
-        success: true,
-        message: `Grok sign-in started. Ask the operator to open ${result.verificationUrl}${result.userCode ? ` and confirm the code ${result.userCode}` : ""}, then call grok_signin_status to detect completion.`,
-        data: { verificationUrl: result.verificationUrl, userCode: result.userCode },
-      };
-    }
-
-    case "grok_signin_status": {
-      const { grokDeviceLoginComplete } = await import("@/lib/integrate/grok-device-login-core");
-      const result = await grokDeviceLoginComplete();
-      if (result.status === "ok") {
-        return {
-          success: true,
-          entityId: "xai",
-          message: "Grok is connected — the xAI credential was captured and the provider activated. Build Studio can now dispatch to the grok engine via OAuth.",
-          data: { status: "ok" },
-        };
-      }
-      if (result.status === "pending") {
-        return {
-          success: true,
-          message: "Still waiting for the operator to authorize the Grok sign-in. Poll grok_signin_status again shortly.",
-          data: { status: "pending" },
-        };
-      }
-      return { success: false, error: "device_login_failed", message: `Grok sign-in failed: ${result.detail}`, data: { status: "failed" } };
-    }
 
     case "analyze_brand_document": {
       const { fileName, fileType } = params as { fileName: string; fileContent: string; fileType: string };
@@ -11962,106 +11546,6 @@ export async function executeTool(
       }
     }
 
-    case "list_wiki_overlay_drafts": {
-      // Feeds the review-wiki-drafts skill. Read-only; safe in immediate mode.
-      const { listOverlayDrafts } = await import("@/lib/actions/wiki-publish");
-      try {
-        const drafts = await listOverlayDrafts();
-        if (drafts.length === 0) {
-          return {
-            success: true,
-            message: "No pending drafts in this org's overlay.",
-            data: { drafts: [] },
-          };
-        }
-        const summary = drafts
-          .map((d, i) => {
-            const sourceTag =
-              d.sourceSlugs.length > 0
-                ? ` · cites ${d.sourceSlugs.slice(0, 2).join(", ")}${d.sourceSlugs.length > 2 ? `, +${d.sourceSlugs.length - 2}` : ""}`
-                : "";
-            const overrideTag = d.kernelPageId ? " · overrides kernel" : "";
-            return `${i + 1}. ${d.slug} (${d.pageKind}, ${d.bodyLength} bytes${overrideTag}${sourceTag})`;
-          })
-          .join("\n");
-        return {
-          success: true,
-          message: `${drafts.length} draft(s) pending:\n${summary}`,
-          data: { drafts },
-        };
-      } catch (err) {
-        return {
-          success: false,
-          message: `list_wiki_overlay_drafts failed: ${(err as Error).message ?? String(err)}`,
-          error: (err as Error).message ?? String(err),
-        };
-      }
-    }
-
-    case "publish_wiki_overlay_pages": {
-      const pageIds = Array.isArray(params["pageIds"]) ? params["pageIds"] : null;
-      if (!pageIds || pageIds.length === 0) {
-        return {
-          success: false,
-          message: "publish_wiki_overlay_pages requires a non-empty pageIds array.",
-          error: "Empty pageIds",
-        };
-      }
-      const targetStatusParam = params["targetStatus"];
-      const targetStatus =
-        typeof targetStatusParam === "string" &&
-        ["draft", "published", "review-needed", "archived"].includes(
-          targetStatusParam,
-        )
-          ? (targetStatusParam as "draft" | "published" | "review-needed" | "archived")
-          : "published";
-      const changeSummary =
-        typeof params["changeSummary"] === "string"
-          ? (params["changeSummary"] as string)
-          : undefined;
-
-      const { publishWikiOverlayPages } = await import(
-        "@/lib/actions/wiki-publish"
-      );
-      const result = await publishWikiOverlayPages({
-        pageIds: pageIds.map((id) => String(id)),
-        targetStatus,
-        ...(changeSummary ? { changeSummary } : {}),
-      });
-      if (!result.ok) {
-        return {
-          success: false,
-          message: result.error,
-          error: result.error,
-        };
-      }
-      const publishedTag =
-        result.published.length === 0
-          ? "0 published"
-          : `Published ${result.published.length}: ${result.published
-              .map((p) => p.slug)
-              .slice(0, 6)
-              .join(", ")}${result.published.length > 6 ? `, +${result.published.length - 6}` : ""}`;
-      const rejectedTag =
-        result.rejected.length === 0
-          ? ""
-          : ` · Rejected ${result.rejected.length} (` +
-            Object.entries(
-              result.rejected.reduce<Record<string, number>>((acc, r) => {
-                acc[r.reason] = (acc[r.reason] ?? 0) + 1;
-                return acc;
-              }, {}),
-            )
-              .map(([reason, n]) => `${reason}=${n}`)
-              .join(", ") +
-            ")";
-      return {
-        success: true,
-        message: `${publishedTag}${rejectedTag}`,
-        data: result,
-      };
-    }
-
     case "run_endpoint_tests": {
       const { runEndpointTests } = await import("@/lib/endpoint-test-runner");
       const request = buildEndpointTestRunRequest(params, context);
@@ -12374,60 +11858,6 @@ export async function executeTool(
       };
     }
 
-    case "save_licensing_investigation": {
-      const result = await saveLicensingInvestigationFinding({
-        setupStatus: typeof params["setupStatus"] === "string" ? params["setupStatus"] : undefined,
-        investigationMode: typeof params["investigationMode"] === "string" ? params["investigationMode"] : undefined,
-        homeCountryCode: typeof params["homeCountryCode"] === "string" ? params["homeCountryCode"] : undefined,
-        primaryRegionCode: typeof params["primaryRegionCode"] === "string" ? params["primaryRegionCode"] : undefined,
-        operatingFootprintSummary:
-          typeof params["operatingFootprintSummary"] === "string"
-            ? params["operatingFootprintSummary"]
-            : undefined,
-        legalActivityConfidence:
-          typeof params["legalActivityConfidence"] === "string"
-            ? params["legalActivityConfidence"]
-            : undefined,
-        researchCoverageStatus:
-          typeof params["researchCoverageStatus"] === "string"
-            ? params["researchCoverageStatus"]
-            : undefined,
-        notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
-        appendNotes: typeof params["appendNotes"] === "boolean" ? params["appendNotes"] : undefined,
-      });
-
-      return {
-        success: result.ok,
-        entityId: result.id,
-        message: result.message,
-        ...(result.ok ? {} : { error: result.message }),
-      };
-    }
-
-    case "create_licensing_readiness_issue": {
-      const result = await createLicenseReadinessIssue({
-        issueType: String(params["issueType"] ?? ""),
-        severity: typeof params["severity"] === "string" ? params["severity"] : undefined,
-        title: String(params["title"] ?? ""),
-        details: typeof params["details"] === "string" ? params["details"] : undefined,
-        organizationLicenseRecordId:
-          typeof params["organizationLicenseRecordId"] === "string"
-            ? params["organizationLicenseRecordId"]
-            : undefined,
-        personLicenseRecordId:
-          typeof params["personLicenseRecordId"] === "string"
-            ? params["personLicenseRecordId"]
-            : undefined,
-      });
-
-      return {
-        success: result.ok,
-        entityId: result.id,
-        message: result.message,
-        ...(result.ok ? {} : { error: result.message }),
-      };
-    }
-
     case "evaluate_tool": {
       const { createToolEvaluation } = await import("./tool-evaluation-data");
       const evalId = await createToolEvaluation({
@@ -12462,290 +11892,6 @@ export async function executeTool(
           findings: findings.slice(0, 50),
         },
       };
-    }
-
-    case "create_scheduled_agent_task": {
-      const { scheduleAgentTaskFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
-      const result = await scheduleAgentTaskFor(userId, {
-        agentId: String(params.agentId ?? ""),
-        title: String(params.title ?? ""),
-        prompt: String(params.prompt ?? ""),
-        routeContext: typeof params.routeContext === "string" ? params.routeContext : "/platform",
-        schedule: String(params.schedule ?? ""),
-        timezone: typeof params.timezone === "string" ? params.timezone : undefined,
-      });
-      return result.success
-        ? { success: true, entityId: result.taskId, message: `Scheduled agent task ${result.taskId} created${result.note ? ` (${result.note})` : ""}.` }
-        : { success: false, error: result.error, message: result.error };
-    }
-
-    case "list_scheduled_agent_tasks": {
-      const { getScheduledAgentTasksFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
-      const tasks = await getScheduledAgentTasksFor(userId);
-      // Bound each prompt so a few long tasks can't blow the local context window
-      // (the MCP-route result cap is the backstop).
-      const compact = tasks.map((t) => ({ ...t, prompt: t.prompt.length > 200 ? `${t.prompt.slice(0, 200)}…` : t.prompt }));
-      return { success: true, message: `${tasks.length} scheduled agent task(s).`, data: { tasks: compact } };
-    }
-
-    case "cancel_scheduled_agent_task": {
-      const { cancelAgentTaskFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
-      const taskId = String(params.taskId ?? "");
-      if (!taskId) return { success: false, error: "taskId is required.", message: "Provide a scheduled agent task id." };
-      const result = await cancelAgentTaskFor(userId, taskId);
-      return result.success
-        ? { success: true, entityId: taskId, message: `Scheduled agent task ${taskId} cancelled.` }
-        : { success: false, error: result.error, message: result.error ?? "Cancel failed." };
-    }
-
-
-    case "apply_platform_update": {
-      // Delegates to the shared server action in lib/actions/platform-dev-config.ts.
-      // The same code path backs the in-portal Apply Update UI added in
-      // BI-9B77E247, so both surfaces produce identical merge behavior and
-      // identical structured results — single source of truth.
-      const { applyPlatformUpdate } = await import("@/lib/actions/platform-dev-config");
-      const result = await applyPlatformUpdate();
-
-      switch (result.kind) {
-        case "engine-retired":
-          // BI-5B6C1C35: the /workspace merge engine is retired; the install
-          // advances only via the Self-Upgrade pipeline (governed-upgrade §5.0).
-          return { success: false, message: result.message, error: "Engine retired — use Self-Upgrade" };
-        case "no-update-pending":
-          return { success: false, message: result.message, error: "No update pending" };
-        case "invalid-version":
-          return { success: false, message: result.message, error: "Invalid version" };
-        case "conflicts":
-          return {
-            success: true,
-            message: result.message,
-            data: {
-              clean: false,
-              resumedMerge: result.resumedMerge,
-              conflicts: result.conflicts,
-              version: result.version,
-            } as unknown as Record<string, unknown>,
-          };
-        case "clean-merge":
-          return {
-            success: true,
-            message: result.message,
-            data: {
-              clean: true,
-              filesUpdated: result.filesUpdated,
-              version: result.version,
-            },
-          };
-        case "error":
-          return { success: false, message: result.message, error: result.message };
-      }
-    }
-
-    case "list_customer_accounts": {
-      const status = typeof params["status"] === "string" ? params["status"].trim() : undefined;
-      const take = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
-      const accounts = await prisma.customerAccount.findMany({
-        // Default reads exclude merge tombstones (superseded rows).
-        where: status ? { status } : EXCLUDE_TOMBSTONED,
-        orderBy: { createdAt: "desc" },
-        take,
-        select: {
-          id: true, accountId: true, name: true, status: true, industry: true,
-          _count: { select: { opportunities: true, quotes: true } },
-        },
-      });
-      if (accounts.length === 0) {
-        return { success: true, message: "No customer accounts yet. Use create_customer_account to add the first one.", data: { accounts: [] } };
-      }
-      const lines = accounts.map((a) =>
-        `${a.name} (${a.accountId}) — ${a.status}${a.industry ? `, ${a.industry}` : ""} · ${a._count.opportunities} opp / ${a._count.quotes} quote`);
-      return { success: true, message: `${accounts.length} account(s):\n${lines.join("\n")}`, data: { accounts } };
-    }
-
-    case "list_opportunities": {
-      const stage = typeof params["stage"] === "string" ? params["stage"].trim() : undefined;
-      const accountId = typeof params["accountId"] === "string" ? params["accountId"].trim() : undefined;
-      const includeDormant = params["includeDormant"] === true;
-      const take = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
-      const opportunities = await prisma.opportunity.findMany({
-        where: {
-          ...(stage ? { stage } : {}),
-          ...(accountId ? { accountId } : {}),
-          ...(includeDormant ? {} : { isDormant: false }),
-        },
-        orderBy: { stageChangedAt: "desc" },
-        take,
-        select: {
-          id: true, opportunityId: true, title: true, stage: true, probability: true,
-          expectedValue: true, currency: true, expectedClose: true,
-          account: { select: { name: true } },
-        },
-      });
-      if (opportunities.length === 0) {
-        return { success: true, message: "No opportunities in the pipeline yet. Use create_opportunity to add one against an account.", data: { opportunities: [] } };
-      }
-      const lines = opportunities.map((o) =>
-        `${o.title} (${o.opportunityId}) — ${o.stage} ${o.probability}% · ${o.account.name}${o.expectedValue != null ? ` · ${o.currency} ${Number(o.expectedValue).toLocaleString()}` : ""}`);
-      return { success: true, message: `${opportunities.length} opportunit${opportunities.length === 1 ? "y" : "ies"}:\n${lines.join("\n")}`, data: { opportunities } };
-    }
-
-    case "get_opportunity": {
-      const idRaw = typeof params["opportunityId"] === "string" ? params["opportunityId"].trim() : "";
-      if (!idRaw) return { success: false, error: "missing_opportunityId", message: "opportunityId is required." };
-      const opp = await prisma.opportunity.findFirst({
-        where: { OR: [{ id: idRaw }, { opportunityId: idRaw }] },
-        include: {
-          account: { select: { id: true, accountId: true, name: true } },
-          quotes: { select: { quoteNumber: true, status: true, totalAmount: true, currency: true } },
-        },
-      });
-      if (!opp) return { success: false, error: "not_found", message: `Opportunity ${idRaw} not found.` };
-      const quoteLine = opp.quotes.length
-        ? `\nQuotes: ${opp.quotes.map((q) => `${q.quoteNumber} (${q.status}, ${q.currency} ${Number(q.totalAmount).toLocaleString()})`).join("; ")}`
-        : "\nQuotes: none yet";
-      return {
-        success: true,
-        message: `${opp.title} (${opp.opportunityId}) — ${opp.stage} ${opp.probability}% · account ${opp.account.name} (id ${opp.account.id})${opp.expectedValue != null ? ` · ${opp.currency} ${Number(opp.expectedValue).toLocaleString()}` : ""}${quoteLine}`,
-        data: { opportunity: opp },
-      };
-    }
-
-    case "list_quotes": {
-      const status = typeof params["status"] === "string" ? params["status"].trim() : undefined;
-      const opportunityId = typeof params["opportunityId"] === "string" ? params["opportunityId"].trim() : undefined;
-      const take = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
-      const quotes = await prisma.quote.findMany({
-        where: { ...(status ? { status } : {}), ...(opportunityId ? { opportunityId } : {}) },
-        orderBy: { createdAt: "desc" },
-        take,
-        select: {
-          quoteId: true, quoteNumber: true, status: true, totalAmount: true, currency: true, version: true,
-          account: { select: { name: true } },
-          opportunity: { select: { title: true } },
-        },
-      });
-      if (quotes.length === 0) {
-        return { success: true, message: "No quotes yet. Use create_quote to draft one against an opportunity.", data: { quotes: [] } };
-      }
-      const lines = quotes.map((q) =>
-        `${q.quoteNumber} v${q.version} — ${q.status} · ${q.currency} ${Number(q.totalAmount).toLocaleString()} · ${q.account.name} / ${q.opportunity.title}`);
-      return { success: true, message: `${quotes.length} quote(s):\n${lines.join("\n")}`, data: { quotes } };
-    }
-
-    case "create_customer_account": {
-      const name = typeof params["name"] === "string" ? params["name"].trim() : "";
-      if (!name) return { success: false, error: "missing_name", message: "name is required to create a customer account." };
-      const { createCustomerAccount } = await import("@/lib/actions/crm");
-      const rawResolution = typeof params["duplicateResolution"] === "string" ? params["duplicateResolution"].trim() : "";
-      const duplicateReason = typeof params["duplicateReason"] === "string" ? params["duplicateReason"].trim() : "";
-      let dedup: import("@/lib/mdm/dedup-gate").DedupResolution | undefined;
-      if (rawResolution.startsWith("use-existing:")) {
-        dedup = { kind: "use-existing", existingId: rawResolution.slice("use-existing:".length).trim() };
-      } else if (rawResolution === "confirm-new") {
-        if (!duplicateReason) {
-          return { success: false, error: "missing_duplicate_reason", message: "duplicateReason is required with duplicateResolution 'confirm-new' — state in one line why this is a different company." };
-        }
-        dedup = { kind: "confirm-new", reason: duplicateReason };
-      }
-      try {
-        const result = await createCustomerAccount({
-          name,
-          website: typeof params["website"] === "string" ? params["website"] : undefined,
-          industry: typeof params["industry"] === "string" ? params["industry"] : undefined,
-          status: typeof params["status"] === "string" ? params["status"] : undefined,
-          notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
-        }, dedup);
-        if (result.outcome === "duplicates-found") {
-          const candidates = result.check.candidates.slice(0, 5).map((c) => ({
-            accountId: c.id,
-            name: c.label,
-            status: c.detail,
-            score: c.score,
-            matchedOn: c.reasons.map((r) => r.attribute).join("+"),
-          }));
-          return {
-            success: false,
-            error: "duplicates_found",
-            message: `Not created — ${candidates.length} existing account(s) look like "${name}": ${candidates.map((c) => `${c.name} (${c.accountId}, score ${c.score}, ${c.matchedOn})`).join("; ")}. If one of these is the same company, use its accountId directly (or pass duplicateResolution "use-existing:<accountId>"). Only pass duplicateResolution "confirm-new" + duplicateReason if the user confirms it is a different company.`,
-            data: { candidates },
-          };
-        }
-        const account = result.account;
-        if (result.outcome === "existing") {
-          return { success: true, message: `Reused existing customer account "${account.name}" (${account.accountId}) instead of creating a duplicate. Use its id ${account.id} as accountId downstream.`, data: { accountId: account.id, accountRef: account.accountId, reusedExisting: true } };
-        }
-        return { success: true, message: `Created customer account "${account.name}" (${account.accountId}). Use its id ${account.id} as accountId when creating an opportunity.`, data: { accountId: account.id, accountRef: account.accountId } };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return { success: false, error: "create_failed", message: `create_customer_account failed: ${msg}` };
-      }
-    }
-
-    case "create_opportunity": {
-      const title = typeof params["title"] === "string" ? params["title"].trim() : "";
-      const accountId = typeof params["accountId"] === "string" ? params["accountId"].trim() : "";
-      if (!title || !accountId) {
-        return { success: false, error: "missing_fields", message: "title and accountId are required. Use list_customer_accounts to find the accountId." };
-      }
-      const { createOpportunity } = await import("@/lib/actions/crm");
-      try {
-        const opp = await createOpportunity({
-          title,
-          accountId,
-          stage: typeof params["stage"] === "string" ? params["stage"] : undefined,
-          expectedValue: typeof params["expectedValue"] === "number" ? params["expectedValue"] : undefined,
-          currency: typeof params["currency"] === "string" ? params["currency"] : undefined,
-          expectedClose: typeof params["expectedClose"] === "string" ? params["expectedClose"] : undefined,
-          notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
-          userId,
-        });
-        return { success: true, message: `Created opportunity "${opp.title}" (${opp.opportunityId}) in ${opp.stage} for ${opp.account.name}. Use its id ${opp.id} as opportunityId when drafting a quote.`, data: { opportunityId: opp.id, opportunityRef: opp.opportunityId } };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return { success: false, error: "create_failed", message: `create_opportunity failed: ${msg}` };
-      }
-    }
-
-    case "create_quote": {
-      const opportunityId = typeof params["opportunityId"] === "string" ? params["opportunityId"].trim() : "";
-      const validUntil = typeof params["validUntil"] === "string" ? params["validUntil"].trim() : "";
-      const rawLines = Array.isArray(params["lineItems"]) ? params["lineItems"] : [];
-      if (!opportunityId || !validUntil || rawLines.length === 0) {
-        return { success: false, error: "missing_fields", message: "opportunityId, validUntil, and at least one lineItem are required." };
-      }
-      const lineItems = rawLines.map((li) => {
-        const o = (li ?? {}) as Record<string, unknown>;
-        return {
-          description: typeof o["description"] === "string" ? o["description"] : "",
-          quantity: typeof o["quantity"] === "number" ? o["quantity"] : 1,
-          unitPrice: typeof o["unitPrice"] === "number" ? o["unitPrice"] : 0,
-          discountPercent: typeof o["discountPercent"] === "number" ? o["discountPercent"] : undefined,
-          taxPercent: typeof o["taxPercent"] === "number" ? o["taxPercent"] : undefined,
-          productId: typeof o["productId"] === "string" ? o["productId"] : undefined,
-        };
-      });
-      if (lineItems.some((l) => !l.description)) {
-        return { success: false, error: "invalid_line", message: "every lineItem needs a description." };
-      }
-      const { createQuote } = await import("@/lib/actions/crm");
-      try {
-        const quote = await createQuote({
-          opportunityId,
-          validUntil,
-          lineItems,
-          discountType: typeof params["discountType"] === "string" ? params["discountType"] : undefined,
-          discountValue: typeof params["discountValue"] === "number" ? params["discountValue"] : undefined,
-          currency: typeof params["currency"] === "string" ? params["currency"] : undefined,
-          terms: typeof params["terms"] === "string" ? params["terms"] : undefined,
-          notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
-          userId,
-        });
-        return { success: true, message: `Drafted quote ${quote.quoteNumber} — ${quote.currency} ${Number(quote.totalAmount).toLocaleString()} (status ${quote.status}). It is a draft and has not been sent to the customer.`, data: { quoteId: quote.quoteId, quoteNumber: quote.quoteNumber, totalAmount: Number(quote.totalAmount) } };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return { success: false, error: "create_failed", message: `create_quote failed: ${msg}` };
-      }
     }
 
     case "get_finance_period_summary": {
@@ -13593,95 +12739,6 @@ export async function executeTool(
       }
     }
 
-    case "start_deliberation": {
-      const { startDeliberation } = await import("@/lib/actions/deliberation");
-      try {
-        const result = await startDeliberation({
-          userId,
-          patternSlug: String(params["patternSlug"] ?? ""),
-          taskRunId: typeof params["taskRunId"] === "string" ? params["taskRunId"] : undefined,
-          artifactType: params["artifactType"] as import("@/lib/deliberation/types").DeliberationArtifactType,
-          strategyProfile:
-            typeof params["strategyProfile"] === "string"
-              ? (params["strategyProfile"] as import("@/lib/deliberation/types").DeliberationStrategyProfile)
-              : undefined,
-          maxBranches:
-            typeof params["maxBranches"] === "number" ? params["maxBranches"] : undefined,
-          budgetUsd:
-            typeof params["budgetUsd"] === "number" ? params["budgetUsd"] : undefined,
-          stage:
-            typeof params["stage"] === "string"
-              ? (params["stage"] as "ideate" | "plan" | "build" | "review" | "ship")
-              : undefined,
-          riskLevel:
-            typeof params["riskLevel"] === "string"
-              ? (params["riskLevel"] as "low" | "medium" | "high" | "critical")
-              : undefined,
-          routeContext:
-            typeof params["routeContext"] === "string"
-              ? params["routeContext"]
-              : context?.routeContext,
-          threadId: context?.threadId,
-        });
-        return {
-          success: true,
-          entityId: result.deliberationRunId,
-          message: result.reason,
-          data: {
-            deliberationRunId: result.deliberationRunId,
-            triggerSource: result.triggerSource,
-            reason: result.reason,
-          },
-        };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        // CodeQL #52 (js/tainted-format-string): the error message ended up
-        // being used as a format string downstream. Keep the diagnostic in
-        // `error:` (raw value) and use a constant `message:` so downstream
-        // log/format consumers see no user-controlled format specifiers.
-        return { success: false, error: msg, message: "start_deliberation failed" };
-      }
-    }
-
-    case "get_deliberation_status": {
-      const { getDeliberationStatus } = await import("@/lib/actions/deliberation");
-      try {
-        const result = await getDeliberationStatus({
-          deliberationRunId: String(params["deliberationRunId"] ?? ""),
-          userId,
-        });
-        return {
-          success: true,
-          entityId: result.deliberationRunId,
-          message: `Deliberation ${result.deliberationRunId} — ${result.consensusState}`,
-          data: result as unknown as Record<string, unknown>,
-        };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return { success: false, error: msg, message: `get_deliberation_status failed: ${msg}` };
-      }
-    }
-
-    case "get_deliberation_outcome": {
-      const { getDeliberationOutcome } = await import("@/lib/actions/deliberation");
-      try {
-        const result = await getDeliberationOutcome({
-          deliberationRunId: String(params["deliberationRunId"] ?? ""),
-          userId,
-        });
-        return {
-          success: true,
-          message: result.outcome
-            ? `Outcome ready — ${result.claims.length} claim(s), ${result.evidenceBundles.length} bundle(s).`
-            : "Outcome not yet synthesized.",
-          data: result as unknown as Record<string, unknown>,
-        };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return { success: false, error: msg, message: `get_deliberation_outcome failed: ${msg}` };
-      }
-    }
-
     case "trigger_contributor_inventory_sync": {
       // BI-063BDF1B Phase 5 — admin-scope handle for agents to dispatch the
       // on-demand Inngest event. The runner is contributorInventorySyncOnDemand
@@ -13704,42 +12761,6 @@ export async function executeTool(
           success: false,
           error: msg,
           message: `trigger_contributor_inventory_sync failed: ${msg}`,
-        };
-      }
-    }
-
-    case "summarize_upgrade_impact": {
-      // BI-C26F7EE1 — on-demand install-tailored upgrade impact summary.
-      // Read-only, advisory; does not queue or apply anything.
-      const refresh = params["refresh"] === true;
-      const skipPhrasing = params["skipPhrasing"] === true;
-      const topNRaw = params["topN"];
-      const topN =
-        typeof topNRaw === "number" && Number.isFinite(topNRaw) && topNRaw > 0
-          ? Math.floor(topNRaw)
-          : undefined;
-      try {
-        const { summarizeUpgradeImpact } = await import("@/lib/self-upgrade/impact");
-        const result = await summarizeUpgradeImpact({ refresh, skipPhrasing, topN });
-        if (!result.ok) {
-          return {
-            success: true,
-            message: result.detail,
-            data: { ok: false, reason: result.reason, detail: result.detail },
-          };
-        }
-        return {
-          success: true,
-          message: result.summary.phrased?.headline
-            ?? `Upgrade impact summary: ${result.summary.counts.total} commit(s) since the last lineage marker.`,
-          data: result.summary as unknown as Record<string, unknown>,
-        };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return {
-          success: false,
-          error: msg,
-          message: `summarize_upgrade_impact failed: ${msg}`,
         };
       }
     }

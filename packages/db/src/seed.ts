@@ -140,6 +140,8 @@ interface RegistryAgent {
   delegates_to?: string[];
   escalates_to?: string;
   it4it_sections?: string[];
+  /** Optional slug aliases from agent_registry.json (first becomes Agent.slugId). */
+  aliases?: string[];
   config_profile?: {
     model_binding?: {
       model_id?: string;
@@ -204,6 +206,11 @@ async function seedAgents(): Promise<void> {
       kind: a.kind,
     });
 
+    // BI-74FD6420: do NOT attach coworker slug handles onto AGT-* rows here.
+    // COWORKER_AGENT_SEEDS still creates parallel slug agentId rows that many
+    // FK consumers reference (coworkerServiceCatalog, hive-scout task,
+    // agent-model-defaults). Collapsing those into AGT-* breaks seed. Roster
+    // display collapses dual-seed pairs via dropDualSeedAliasAgents instead.
     const unifiedFields = {
       name: a.agent_name,
       displayName: identity.displayName,
@@ -1030,6 +1037,11 @@ async function seedCoworkerAgents(): Promise<void> {
   const revokedGrants = await loadRevokedGrantSet(); // BI-4FA040D5
   let grantCount = 0;
   for (const cw of COWORKER_AGENT_SEEDS) {
+    // Keep slug agentId rows as first-class seed identities. Many surfaces FK
+    // Agent.agentId by slug (CoworkerService.providerAgentId, hive scout task,
+    // agent-model-defaults). Dual-seed AGT-* twins from seedAgents() remain;
+    // AI Workforce roster display collapses them via dropDualSeedAliasAgents
+    // (BI-74FD6420) until a full FK migration lands.
     const { agentId, slugId, ...rest } = cw;
     const identity = resolveAgentIdentity({ agentId, name: rest.name, slugId, displayName: rest.name });
     const agent = await prisma.agent.upsert({
@@ -1043,6 +1055,10 @@ async function seedCoworkerAgents(): Promise<void> {
         description: rest.description,
         valueStream: rest.valueStream,
         sensitivity: rest.sensitivity,
+        // Un-retire if a prior broken seed pass archived the slug twin.
+        archived: false,
+        status: "active",
+        lifecycleStage: "production",
       },
     });
 

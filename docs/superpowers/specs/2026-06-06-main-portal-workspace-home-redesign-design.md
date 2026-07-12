@@ -230,3 +230,41 @@ No new epic. This is the default-home slice of the existing workspace-home work.
 4. Confirm empty-state behavior with a freshly-seeded install (no bookings/invoices) renders setup/positive-empty states, not fabricated rows.
 5. Confirm report-kit composition by source inspection and the unit-test assertions in §10.
 6. Capture the dynamic-analysis report and turn it over to the founder for assurance.
+
+## 13. Addendum — Outside-In Operator Cockpit consolidation (BI-8C3EB52C, BI-2651043B, BI-D35DE119)
+
+A live operator dogfood found the `/workspace` home still stacking **three competing
+"what to do now" framings**: the "Needs you" attention band, the `VerticalWorkspaceHome`
+archetype card block (static NOW / NEEDS REVIEW / COWORKER BRIEFING slots + numbered TOP
+CONCERNS), and the command-center "Needs attention" strip. The operator had to reconcile
+three mental models before acting — and the surfaces contradicted each other: the band
+read "NEEDS YOU 16" while the strip read "Nothing needs your attention right now" (**F2**).
+Worse, the ranking put a 12-day-old ideate item above a just-now build-blocking outage
+because it ordered by age/volume, not customer-impact (**F7**).
+
+**Consolidation to ONE surface.** A single `OperatorCockpit`
+(`apps/web/components/workspace-home/OperatorCockpit.tsx`) now owns "what needs you now",
+replacing the old `NeedsYouBand` (deleted). It renders the attention residue through one
+count and one ranking. The command-center strip is relabeled **"Platform posture"** — a
+clearly-secondary watch, so it never competes as an attention claim (its empty state now
+reads "Platform posture is clear.", not "Nothing needs your attention"). The archetype
+`VerticalWorkspaceHome` collapses to a slim **identity banner** (label, operating question,
+"Covers"/"Watches for" context) and defers all live "what needs you" to the cockpit; its
+static zone cards and numbered concern list are gone.
+
+**Organizing principle — OUTSIDE-IN (BI-8C3EB52C).** The cockpit organizes the four
+canonical Portfolios (`packages/db/data/portfolio_registry.json`) **from the customer
+inward**: (1) Products & Services Sold (customer-facing, PRIMARY), (2) For Employees /
+Workforce (PRIMARY), (3) Manufacturing & Delivery (secondary), (4) Foundational (deepest
+inside, secondary). Inner-portfolio items enter the PRIMARY attention surface **only when
+flagged as blocking a customer/business outcome** — a blocker jumps the queue. The ranking
+key is customer-impact / outside-in depth, **not recency or volume** (the F7 fix).
+
+**Pure, testable core.** Ranking + grouping live in
+`apps/web/lib/attention/outside-in.ts` (`buildOutsideInCockpit`, `compareOutsideIn`,
+`entersPrimaryQueue`, `blocksBusinessOutcome`, `portfolioForSource`), consuming an optional
+`AttentionItem.portfolio` tag with a source-level default. No fabricated composite score —
+the tiered rule (blocking → outside-in depth → the existing objective triage) inherits the
+integrity discipline of `triage.ts`. The single `count` is the primary-queue length, so the
+surface can never show a phantom or contradictory number (the F2 fix). Unit-tested in
+`outside-in.test.ts` and `OperatorCockpit.test.tsx`.

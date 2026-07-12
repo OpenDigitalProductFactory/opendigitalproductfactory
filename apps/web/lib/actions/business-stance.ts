@@ -10,8 +10,12 @@
 
 import { revalidatePath } from "next/cache";
 
+import { prisma } from "@dpf/db";
 import { saveWikiOverlayEdit } from "@/lib/actions/wiki-edit";
+import { promoteStanceMaterial } from "@/lib/decision-perspective/stance-promotion";
+import { storeWikiPage } from "@/lib/wiki/embeddings";
 import {
+  decisionAreaToDomainClass,
   validateBusinessStance,
   type BusinessStanceInput,
 } from "@/lib/wiki/business-stance";
@@ -47,7 +51,86 @@ export async function saveBusinessStance(
     return { ok: false, error: result.error };
   }
 
-  revalidatePath("/wiki/stance");
-  revalidatePath("/wiki");
+  revalidatePath("/coworker-decisions/stance");
+  revalidatePath("/coworker-decisions");
   return { ok: true, slug: result.slug, status: result.status };
+}
+
+export type PublishBusinessStanceResult =
+  | { ok: true; slug: string; gateLive: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Publish a WWWD business stance and make it GATE-LIVE (BI-002DEB85).
+ *
+ * Until this existed, an authored stance stayed a draft page forever — a
+ * policy document no decision path enforced. Publishing (a) publishes the
+ * org-overlay page, (b) embeds it so coworkers retrieve it as WWWD context,
+ * and (c) promotes an owner-confirmed (A/0.9) PerspectiveMaterial in the
+ * decision area the owner picked, which is what actually changes what
+ * evaluate_org_business_decision allows.
+ */
+export async function publishBusinessStance(
+  input: BusinessStanceInput & { decisionArea: string },
+): Promise<PublishBusinessStanceResult> {
+  const validated = validateBusinessStance(input);
+  if (!validated.ok) {
+    return { ok: false, error: validated.error };
+  }
+  const domainClass = decisionAreaToDomainClass(input.decisionArea);
+  if (!domainClass) {
+    return { ok: false, error: "Pick the kind of decisions this stance guides." };
+  }
+
+  const result = await saveWikiOverlayEdit({
+    slug: validated.slug,
+    pageKind: "stance",
+    title: validated.title,
+    body: validated.body,
+    status: "published",
+    abstract: validated.summary,
+    changeSummary: "Business stance published via the WWWD editor",
+  });
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  const org = await prisma.organization.findFirst({ select: { id: true } });
+  if (!org) {
+    return { ok: false, error: "No organization is configured for this install." };
+  }
+
+  // Deliberation layer (best-effort): the gate-live material below is the
+  // enforcement; a failed embed only weakens retrieval context.
+  try {
+    await storeWikiPage({
+      pageId: result.pageId,
+      slug: validated.slug,
+      title: validated.title,
+      body: validated.body,
+      abstract: validated.summary,
+      pageKind: "stance",
+      status: "published",
+      isKernel: false,
+      kernelVersion: null,
+      organizationId: org.id,
+      kernelPageId: null,
+    });
+  } catch {
+    // best-effort; enforcement continues below
+  }
+
+  const promoted = await promoteStanceMaterial({
+    db: prisma,
+    organizationId: org.id,
+    wikiPageId: result.pageId,
+    slug: validated.slug,
+    summary: validated.summary ?? validated.title,
+    domainClasses: [domainClass],
+    tier: "confirmed",
+  });
+
+  revalidatePath("/coworker-decisions/stance");
+  revalidatePath("/coworker-decisions");
+  return { ok: true, slug: result.slug, gateLive: promoted.ok };
 }

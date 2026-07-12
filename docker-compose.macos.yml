@@ -70,6 +70,16 @@ services:
       DPF_TTS_URL: ${DPF_TTS_URL:-http://host.docker.internal:8771}
       DPF_TTS_REFERENCE_HOST_ROOT: ${DPF_TTS_REFERENCE_HOST_ROOT:-}
 
+  sandbox:
+    environment:
+      # Same host-native TTS wiring as the portal (BI-7988DAD8): the sandbox
+      # exports the dpf_voice_tts_* gauges too, and without this it probes the
+      # base compose's dpf-tts:8000 default — a service macOS installs never
+      # run — so VoiceServiceDown{job="sandbox"} fired forever on a healthy
+      # install.
+      TTS_PROVIDER: ${TTS_PROVIDER:-mlx}
+      DPF_TTS_URL: ${DPF_TTS_URL:-http://host.docker.internal:8771}
+
   browser-use:
     environment:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}

@@ -186,11 +186,11 @@ export function WikiPageViewer({ page }: Props): ReactNode {
   return (
     <article className="max-w-3xl mx-auto py-6 px-4">
       <nav className="mb-3 text-xs text-[var(--dpf-muted)] flex items-center justify-between">
-        <Link href="/wiki" className="hover:underline">
+        <Link href="/coworker-decisions" className="hover:underline">
           ← Wiki
         </Link>
         <Link
-          href={`/wiki/edit/${page.slug}`}
+          href={`/coworker-decisions/edit/${page.slug}`}
           className="rounded border border-[var(--dpf-border)] px-2 py-1 hover:bg-[var(--dpf-surface-2)]"
           aria-label={
             page.isKernel

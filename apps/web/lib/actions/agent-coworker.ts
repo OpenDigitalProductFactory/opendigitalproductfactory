@@ -47,6 +47,7 @@ import {
   getSkillsForAgent,
   toSkillSummariesForPrompt,
 } from "@/lib/skills/runtime";
+import { rankSkillsByRelevance } from "@/lib/skills/skill-relevance";
 import { recordSkillUsageEvents } from "@/lib/skills/usage-events";
 import { recallWikiContext } from "@/lib/wiki/recall";
 import { recordCoverageGap } from "@/lib/wiki/coverage-gap";
@@ -70,6 +71,7 @@ import {
   executeAutonomousAgenticLoop,
   findCurrentAutonomousWorkRun,
 } from "@/lib/tak/autonomous-work-run";
+import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
 import { applyLocalDegradationCaveat } from "@/lib/tak/local-degradation-caveat";
 import {
   isConversationalExpansionRequest,
@@ -938,7 +940,10 @@ export async function sendMessage(input: {
     // each eligible skill (and again as `loaded` once the skills block is
     // included in the composed prompt). Telemetry failures are swallowed
     // inside recordSkillUsageEvents — they must never break the response.
-    const coworkerSkills = await getSkillsForAgent(agent.agentId);
+    const coworkerSkills = rankSkillsByRelevance(
+      await getSkillsForAgent(agent.agentId),
+      trimmedContent,
+    );
     const skillSummaries = toSkillSummariesForPrompt(coworkerSkills);
     const eligibleSkillIds = skillSummaries.map((s) => s.skillId);
     if (eligibleSkillIds.length > 0) {
@@ -1188,7 +1193,10 @@ export async function sendMessage(input: {
     // skills (dpf-decision-via-kernel, dpf-retrieve-decision-context,
     // dpf-record-decision-outcome) the governance block above tells the coworker
     // to run. Telemetry mirrors the unified path so eligibility is observable.
-    const legacyCoworkerSkills = await getSkillsForAgent(agent.agentId);
+    const legacyCoworkerSkills = rankSkillsByRelevance(
+      await getSkillsForAgent(agent.agentId),
+      trimmedContent,
+    );
     const legacySkillSummaries = toSkillSummariesForPrompt(legacyCoworkerSkills);
     if (legacySkillSummaries.length > 0) {
       let skillsBlock = "Available coworker skills:";
@@ -1336,6 +1344,9 @@ export async function sendMessage(input: {
     pageActionNames: new Set(pageActions.map((t) => t.name)),
     alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
     cap: toolCap,
+    // BI-ACE1EBA4 — when the cap forces deferral, keep the tools most relevant to
+    // this turn's intent within each priority tier.
+    intentQuery: trimmedContent,
   });
   // Advertise the load_tools meta-tool only when something was actually deferred.
   const attachedTools = deferredTools.length > 0 ? [LOAD_TOOLS_TOOL, ...budgetedTools] : budgetedTools;
@@ -1850,6 +1861,47 @@ export async function sendMessage(input: {
     // (enabled:false), so behavior elsewhere is unchanged. A failure that
     // survives all retries falls through to the persist-time sanitizer below and
     // the "Retry the AI call" affordance.
+    // EP-27FD96BC · P1 — the unified per-turn effort warrant. Derived once here
+    // from the same task classification that seeds the model path, the attached
+    // tool surface, and the prompt length; the loop co-tunes iterations and
+    // duration from it (and later pillars read its toolBudgetTarget/contextTier).
+    const effortWarrant = deriveEffortWarrant({
+      taskType: taskTypeId,
+      availableToolNames: attachedTools.map((t) => t.name),
+      messageChars: trimmedContent.length,
+    });
+
+    // EP-27FD96BC · P4 (BI-8167C9CD) — delegation & altitude decision layer. Map
+    // the turn's altitude (from the warrant) and the agent's human-oversight tier
+    // (hitlTierDefault) to a recommended mode and surface it as guidance, so the
+    // coworker escalates high-stakes work / considers delegating big work instead
+    // of flailing inline. capabilityGap / decomposable are the model's judgment,
+    // so it gets the primitive menu rather than a forced choice.
+    try {
+      const agentRow = await prisma.agent
+        .findUnique({ where: { agentId: agent.agentId }, select: { hitlTierDefault: true } })
+        .catch(() => null);
+      const { decideDelegation, renderDelegationGuidance } = await import("@/lib/tak/delegation-policy");
+      const delegation = decideDelegation({
+        effortLevel: effortWarrant.level,
+        hitlTier: agentRow?.hitlTierDefault ?? 2,
+        capabilityGap: false,
+        decomposable: false,
+        delegationDepth: 0,
+      });
+      const guidance = renderDelegationGuidance(delegation);
+      if (guidance) {
+        populatedPrompt = `${populatedPrompt}\n\n${guidance}`;
+      } else if (effortWarrant.level === "high") {
+        populatedPrompt =
+          `${populatedPrompt}\n\nDELEGATION: this is high-effort work. If it needs a ` +
+          `capability you lack, call \`request_coworker\`; if it splits into independent ` +
+          `parallel parts, call \`spawn_work_thread\`; otherwise proceed inline.`;
+      }
+    } catch {
+      // Delegation guidance is advisory — never block the turn on it.
+    }
+
     const { runWithTransientInferenceRetry } = await import("@/lib/build/inference-retry");
     const agenticResult = await runWithTransientInferenceRetry(
       () => executeAutonomousAgenticLoop({
@@ -1864,6 +1916,7 @@ export async function sendMessage(input: {
         agentId: agent.agentId,
         threadId: input.threadId,
         taskType: taskTypeId,
+        effortWarrant,
         agentDisplayName: agent.agentName,
         buildPhase: activeBuild?.phase ?? null,
         featureBuildId: activeBuild?.id ?? null,

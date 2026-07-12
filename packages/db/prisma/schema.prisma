@@ -659,6 +659,9 @@ model Portfolio {
   createdAt                     DateTime                       @default(now())
   updatedAt                     DateTime                       @updatedAt
   budgetKUsd                    Int?
+  // Target investment-bucket allocation (EP-DEMAND-MGMT Phase 3), e.g.
+  // { "run": 70, "grow": 20, "transform": 10 }. null = use the default split.
+  bucketTargets                 Json?
   agents                        Agent[]
   products                      DigitalProduct[]
   coworkerServices              CoworkerService[]              @relation("CoworkerServicePortfolio")
@@ -1331,6 +1334,10 @@ model BacklogItem {
   demandScore             Float?
   demandScoreFramework    String?
   demandScoreComputedAt   DateTime?
+  // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform. The
+  // strategic-balance dimension so demand is prioritized against a target
+  // allocation, not a flat list. Default derived from workType. §8.
+  investmentBucket        String?
   activeBuildId           String?                       @unique
   activeEpicId            String?                       @unique
   duplicateOfId           String?
@@ -1433,6 +1440,10 @@ model WorkCapsule {
   leaseHolderPrincipalId  String?
   leaseExpiresAt          DateTime?
   createdByPrincipalId    String?
+  // EP-WORK-CONVERGENCE (BI-B24F96D0): first-class Requester — the principal who
+  // commissioned the work, distinct from the creator/executor. Nullable; the
+  // stable human-quotable key already exists as capsuleId (WC-*).
+  requestedByPrincipalId  String?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   lastSyncedAt            DateTime?
@@ -1440,6 +1451,7 @@ model WorkCapsule {
   activities              WorkCapsuleActivity[]
   runtimeTargets          RuntimeTarget[]
   runtimeVerifications    RuntimeVerification[]
+  externalEvidence        ExternalEvidenceRecord[]
 
   @@index([status, updatedAt])
   @@index([backlogItemId])
@@ -1454,6 +1466,7 @@ model WorkCapsule {
   @@index([headBranch])
   @@index([sandboxId])
   @@index([leaseExpiresAt])
+  @@index([requestedByPrincipalId])
 }
 
 model WorkCapsuleActivity {
@@ -1548,6 +1561,8 @@ model Epic {
   description              String?
   status                   String                   @default("open")
   priority                 Int?
+  // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform.
+  investmentBucket         String?
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
   submittedById            String?
@@ -4529,6 +4544,10 @@ model UserFact {
   // the memory-scope classifier.
   scope                             String     @default("user")
   sensitivity                       String     @default("normal")
+  // BI-BC37727B (EP-27FD96BC P5): set by the nightly memory→corpus promoter when
+  // a durable org-scoped fact has been enriched into the WWWD corpus. NULL = not
+  // yet promoted; a superseded fact's replacement row starts NULL and re-promotes.
+  corpusPromotedAt                  DateTime?
   createdAt                         DateTime   @default(now())
   updatedAt                         DateTime   @updatedAt
   user                              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -5294,24 +5313,35 @@ model ImprovementSignal {
 }
 
 model ExternalEvidenceRecord {
-  id            String   @id @default(cuid())
-  actorUserId   String
-  routeContext  String
-  operationType String
-  target        String
-  provider      String
-  resultSummary String
-  details       Json?
-  buildId       String?
-  taskRunId     String?
-  createdAt     DateTime @default(now())
-  actorUser     User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  id                    String       @id @default(cuid())
+  actorUserId           String
+  routeContext          String
+  operationType         String
+  target                String
+  provider              String
+  resultSummary         String
+  details               Json?
+  buildId               String?
+  taskRunId             String?
+  // EP-WORK-CONVERGENCE Phase 1 (BI-D6FA8641): bind external evidence to the
+  // durable WorkCapsule with producer identity, so external Claude/Codex/Grok
+  // work rolls up onto the capsule timeline. All nullable — additive, no
+  // backfill required to migrate. executorKind mirrors WorkCapsule.executorKind;
+  // recordedBy* mirror WorkCapsuleActivity's producer-identity fields.
+  workCapsuleId         String?
+  executorKind          String?
+  recordedByPrincipalId String?
+  recordedByAgentId     String?
+  createdAt             DateTime     @default(now())
+  actorUser             User         @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  workCapsule           WorkCapsule? @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
 
   @@index([actorUserId, createdAt])
   @@index([routeContext, operationType])
   @@index([operationType, createdAt])
   @@index([buildId, createdAt])
   @@index([taskRunId, createdAt])
+  @@index([workCapsuleId, createdAt])
 }
 
 model NonProductionEnvironmentLease {
@@ -6407,6 +6437,14 @@ model PlatformDevConfig {
   forkVerifiedAt            DateTime?
   backlogTeeUpDailyCap      Int       @default(3)
   governedBacklogEnabled    Boolean   @default(false)
+  // Demand-management policy (EP-DEMAND-MGMT Phase 4): the operator-owned,
+  // audited scoring policy the demand engine reads instead of a hardcoded
+  // default. demandFramework = active scoring framework (rice|wsjf|value_effort|
+  // weighted); demandBucketTargets = org-wide default investment allocation,
+  // e.g. { "run": 70, "grow": 20, "transform": 10 }. null = built-in defaults
+  // (rice, 70/20/10). §11.
+  demandFramework           String?
+  demandBucketTargets       Json?
   // Hive Contributions consent (spec §6.1). Device-fingerprint contribution is
   // opt-in, DEFAULTED ON because outbound fingerprints are PII-free
   // (redactFingerprintEvidence, fail-closed). The master pause halts ALL

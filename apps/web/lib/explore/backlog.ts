@@ -37,6 +37,14 @@ export type BacklogItemWithRelations = {
   updatedAt: Date;
   upstreamIssueNumber: number | null;
   upstreamIssueUrl: string | null;
+  // Operator-triage inputs (BI-9952EA9E). All existing BacklogItem columns —
+  // optional here so existing fixtures/callers that don't select them still
+  // typecheck; the /ops loaders select them for the triage lens.
+  claimStatus?: string | null;
+  stalenessDetectedAt?: Date | null;
+  riskOpportunity?: number | null;
+  businessValue?: number | null;
+  timeCriticality?: number | null;
 };
 
 export type DigitalProductSelect = {
@@ -174,6 +182,13 @@ export type DemandStage = (typeof DEMAND_STAGE_VALUES)[number];
 // in apps/web/lib/mcp-tools.ts in the same commit.
 export const DEMAND_SCORE_FRAMEWORKS = ["rice", "wsjf", "value_effort", "weighted"] as const;
 export type DemandScoreFramework = (typeof DEMAND_SCORE_FRAMEWORKS)[number];
+
+// Investment buckets (EP-DEMAND-MGMT Phase 3): the strategic-balance axis so
+// demand is prioritized against a target allocation (Run/Grow/Transform, aka
+// McKinsey 3 Horizons). WWMD-confirmed label set (ledger DI-8E489A791375).
+// Adding a value requires updating this enum AND the mirror in mcp-tools.ts.
+export const INVESTMENT_BUCKET_VALUES = ["run", "grow", "transform"] as const;
+export type InvestmentBucket = (typeof INVESTMENT_BUCKET_VALUES)[number];
 
 /** Returns null if valid, or an error message if invalid. */
 export function validateEpicInput(input: EpicInput): string | null {

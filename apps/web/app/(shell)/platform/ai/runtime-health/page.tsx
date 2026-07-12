@@ -18,6 +18,7 @@ import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
 import { QueueHealthSection } from "@/components/queue/QueueHealthSection";
 import { readQueueSnapshots } from "@/lib/queue/queue-snapshot-service";
+import { PhaseRemediationActions } from "@/components/platform/PhaseRemediationActions";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -262,7 +263,10 @@ export default async function RuntimeHealthPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 22 }}>
               {overview.flags.map((f, i) => {
                 const s = SEVERITY_STYLE[f.severity];
-                const phaseLabel = overview!.phases.find((p) => p.phase === f.phase)?.label ?? f.phase;
+                const phase = overview!.phases.find((p) => p.phase === f.phase);
+                const phaseLabel = phase?.label ?? f.phase;
+                const candidates =
+                  f.code === "no-eligible-endpoint" ? phase?.enableCandidates ?? [] : [];
                 return (
                   <div
                     key={`${f.code}-${i}`}
@@ -283,6 +287,7 @@ export default async function RuntimeHealthPage() {
                     <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
                       → {f.remediation}
                     </div>
+                    {candidates.length > 0 && <PhaseRemediationActions candidates={candidates} />}
                   </div>
                 );
               })}

@@ -10,9 +10,15 @@ import {
 } from "./tool-script";
 
 describe("parseProgrammaticToolCallingConfig", () => {
-  it("defaults to disabled with safe caps when no row", () => {
+  it("defaults to enabled (BI-9893614D) with safe caps when no row", () => {
     expect(parseProgrammaticToolCallingConfig(null)).toEqual(PROGRAMMATIC_TOOL_CALLING_DEFAULTS);
-    expect(PROGRAMMATIC_TOOL_CALLING_DEFAULTS.enabled).toBe(false);
+    // The feature is reachable by default; the per-agent tool_script_exec grant is
+    // the real gate. An operator can still force it off via the PlatformConfig row.
+    expect(PROGRAMMATIC_TOOL_CALLING_DEFAULTS.enabled).toBe(true);
+  });
+
+  it("lets an operator force the feature off via an explicit row", () => {
+    expect(parseProgrammaticToolCallingConfig({ enabled: false }).enabled).toBe(false);
   });
 
   it("honors explicit enabled + caps", () => {
@@ -22,7 +28,7 @@ describe("parseProgrammaticToolCallingConfig", () => {
 
   it("clamps absurd caps and ignores invalid types", () => {
     const cfg = parseProgrammaticToolCallingConfig({ enabled: "yes", maxOutputChars: 9_000_000, timeoutMs: -5 });
-    expect(cfg.enabled).toBe(false); // non-boolean → default
+    expect(cfg.enabled).toBe(true); // non-boolean → default (now enabled)
     expect(cfg.maxOutputChars).toBe(50_000); // clamped
     expect(cfg.timeoutMs).toBe(PROGRAMMATIC_TOOL_CALLING_DEFAULTS.timeoutMs); // invalid → default
   });

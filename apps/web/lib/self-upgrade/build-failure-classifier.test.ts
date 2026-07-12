@@ -39,6 +39,27 @@ Error: Turbopack build failed with 2 errors:
 ./packages/integration-shared/src/oauth-refresh.ts:1:1
 Module not found: Can't resolve 'undici'`;
 
+// Reconstructed from self-upgrade run SUR-BCFB72BB (2026-07-11, BI-062CFB41).
+// Structurally IDENTICAL to BUNDLE_BOUNDARY_UNEXPECTED_NFT_LOG — a Turbopack NFT
+// "whole project traced unintentionally" WARNING whose trace fingerprints the
+// host-only self-upgrade barrel, printed ABOVE the fatal — EXCEPT the fatal is a
+// relative path escaping to a repo-root dir (config/), not a bare specifier.
+// That single difference must flip the class to the build-context miss, so this
+// asserts the fatal marker wins over the NFT warning above it.
+const DOCKER_CONTEXT_MISS_LOG = `#30 [build 7/8] RUN pnpm --filter web build
+#30 12.40   ▲ Next.js 15.3.0 (Turbopack)
+#30 40.10 ./apps/web/next.config.mjs
+#30 40.11 Encountered unexpected file in NFT list
+#30 40.11 A file was traced that indicates that the whole project was traced unintentionally.
+#30 40.12 Import trace:
+#30 40.12     ./apps/web/lib/self-upgrade/promoter.ts
+#30 40.12     ./apps/web/lib/actions/promotions.ts
+#30 52.73  ⨯ Build error occurred
+#30 52.73 Error: Module not found: Can't resolve '../../../../config/seed-content-paths.json'
+#30 52.73     at lib/integrate/seed-contribution-fit.ts:4:1
+#30 52.90 Next.js build worker exited with code: 1
+#30 ERROR: process "/bin/sh -c pnpm --filter web build" did not complete successfully: exit code: 1`;
+
 const UNKNOWN_LOG = `error: connect ECONNREFUSED 127.0.0.1:5432
 prisma migrate failed`;
 
@@ -91,6 +112,30 @@ describe("classifyBuildFailure", () => {
     expect(c.isMainDefectVsEnvironment).toBe("main-defect");
   });
 
+  it("prioritizes the fatal Module-not-found over an NFT warning above it (SUR-BCFB72BB)", () => {
+    const c = classifyBuildFailure({ log: DOCKER_CONTEXT_MISS_LOG });
+    // The escaping relative-path fatal wins — NOT bundle-boundary, even though a
+    // "whole project traced unintentionally" warning fingerprinting the
+    // self-upgrade barrel (the exact BUNDLE_BOUNDARY_UNEXPECTED_NFT signature)
+    // sits above it. This is the mislabel BI-062CFB41 was filed against.
+    expect(c.class).toBe("docker-build-context-missing-path");
+    expect(c.class).not.toBe("bundle-boundary-static-import");
+    expect(c.summary).toContain("config/");
+    expect(c.summary).toContain("#2786");
+    expect(c.playbookLink).toMatch(/dockerfile-build-context\.guard\.test\.ts/);
+    expect(c.failingTrace).toContain(
+      "Can't resolve '../../../../config/seed-content-paths.json'",
+    );
+    expect(c.isMainDefectVsEnvironment).toBe("main-defect");
+  });
+
+  it("keeps a bare-specifier miss with an NFT host-only trace on bundle-boundary, not build-context", () => {
+    // Guards the discriminator: 'undici' is a bare specifier, not a relative
+    // escape, so the existing bundle-boundary heuristic must still own it.
+    const c = classifyBuildFailure({ log: BUNDLE_BOUNDARY_UNEXPECTED_NFT_LOG });
+    expect(c.class).toBe("bundle-boundary-static-import");
+  });
+
   it("classifies the SUR-73668D5C bare RUN-line install failure as retryable environment", () => {
     const c = classifyBuildFailure({ log: PNPM_INSTALL_RUNLINE_LOG });
     expect(c.class).toBe("pnpm-install-failure");
@@ -113,6 +158,19 @@ describe("classifyBuildFailure", () => {
     expect(c.summary).toContain("lockfile");
   });
 
+  it("classifies a promoter timeout as retryable environment, superseding earlier build noise", () => {
+    // The kill happened because nothing completed, so a half-emitted NFT trace
+    // above the marker is noise — the timeout must win.
+    const log = `#30 [build 66/105] RUN apk add --no-cache docker-cli curl nmap
+#30 40.11 (12/27) Installing docker-cli (29.5.3-r0)
+[promoter-timeout] promoter did not finish within 25m — killed and container force-removed.`;
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("promoter-timeout");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.summary).toContain("Retry the upgrade");
+    expect(c.failingTrace).toContain("[promoter-timeout]");
+  });
+
   it("keeps a non-pnpm ECONNREFUSED (e.g. prisma → postgres) unclassified", () => {
     const c = classifyBuildFailure({ log: UNKNOWN_LOG });
     expect(c.class).toBe("unknown");
@@ -126,7 +184,7 @@ describe("classifyBuildFailure", () => {
   });
 
   it("is total — every input yields a populated summary and playbook", () => {
-    for (const log of [HOIST_LOG, NFT_LOG, BUNDLE_BOUNDARY_LOG, UNKNOWN_LOG, ""]) {
+    for (const log of [HOIST_LOG, NFT_LOG, BUNDLE_BOUNDARY_LOG, DOCKER_CONTEXT_MISS_LOG, UNKNOWN_LOG, ""]) {
       const c = classifyBuildFailure({ log });
       expect(c.summary.length).toBeGreaterThan(0);
       expect(c.playbookLink.length).toBeGreaterThan(0);

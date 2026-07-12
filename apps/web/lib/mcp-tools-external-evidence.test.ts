@@ -11,6 +11,11 @@ const mockPrisma = {
   },
   externalEvidenceRecord: {
     create: vi.fn(),
+    update: vi.fn(),
+  },
+  workCapsule: {
+    findMany: vi.fn(async () => []),
+    findFirst: vi.fn(async () => null),
   },
 };
 

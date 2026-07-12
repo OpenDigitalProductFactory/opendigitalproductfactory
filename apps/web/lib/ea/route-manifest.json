@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 544,
+  "routeCount": 545,
   "routes": [
     {
       "routePath": "/",
@@ -3471,6 +3471,140 @@
       "file": "apps/web/app/(shell)/compliance/submissions/[id]/page.tsx"
     },
     {
+      "routePath": "/coworker-decisions",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/coworker-decisions/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/[...slug]",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "[...slug]"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(shell)/coworker-decisions/[...slug]/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/craft",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "craft"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/coworker-decisions/craft/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/craft/[professionKey]",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "craft",
+        "[professionKey]"
+      ],
+      "dynamicParams": [
+        "professionKey"
+      ],
+      "file": "apps/web/app/(shell)/coworker-decisions/craft/[professionKey]/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/decisions",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "decisions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/coworker-decisions/decisions/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/decisions/[interactionId]",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "decisions",
+        "[interactionId]"
+      ],
+      "dynamicParams": [
+        "interactionId"
+      ],
+      "file": "apps/web/app/(shell)/coworker-decisions/decisions/[interactionId]/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/edit/[...slug]",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "edit",
+        "[...slug]"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(shell)/coworker-decisions/edit/[...slug]/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/matrix",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "matrix"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/coworker-decisions/matrix/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/perspectives",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "perspectives"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/coworker-decisions/perspectives/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/perspectives/[profileId]/voice",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "perspectives",
+        "[profileId]",
+        "voice"
+      ],
+      "dynamicParams": [
+        "profileId"
+      ],
+      "file": "apps/web/app/(shell)/coworker-decisions/perspectives/[profileId]/voice/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/review",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "review"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/coworker-decisions/review/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/stance",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "stance"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/coworker-decisions/stance/page.tsx"
+    },
+    {
       "routePath": "/customer",
       "kind": "page",
       "segments": [
@@ -4474,6 +4608,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/changes/page.tsx"
+    },
+    {
+      "routePath": "/ops/demand",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "demand"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/demand/page.tsx"
     },
     {
       "routePath": "/ops/dev-loop",
@@ -6144,140 +6288,6 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/welcome/page.tsx"
-    },
-    {
-      "routePath": "/wiki",
-      "kind": "page",
-      "segments": [
-        "wiki"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/(shell)/wiki/page.tsx"
-    },
-    {
-      "routePath": "/wiki/[...slug]",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "[...slug]"
-      ],
-      "dynamicParams": [
-        "slug"
-      ],
-      "file": "apps/web/app/(shell)/wiki/[...slug]/page.tsx"
-    },
-    {
-      "routePath": "/wiki/craft",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "craft"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/(shell)/wiki/craft/page.tsx"
-    },
-    {
-      "routePath": "/wiki/craft/[professionKey]",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "craft",
-        "[professionKey]"
-      ],
-      "dynamicParams": [
-        "professionKey"
-      ],
-      "file": "apps/web/app/(shell)/wiki/craft/[professionKey]/page.tsx"
-    },
-    {
-      "routePath": "/wiki/decisions",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "decisions"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/(shell)/wiki/decisions/page.tsx"
-    },
-    {
-      "routePath": "/wiki/decisions/[interactionId]",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "decisions",
-        "[interactionId]"
-      ],
-      "dynamicParams": [
-        "interactionId"
-      ],
-      "file": "apps/web/app/(shell)/wiki/decisions/[interactionId]/page.tsx"
-    },
-    {
-      "routePath": "/wiki/edit/[...slug]",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "edit",
-        "[...slug]"
-      ],
-      "dynamicParams": [
-        "slug"
-      ],
-      "file": "apps/web/app/(shell)/wiki/edit/[...slug]/page.tsx"
-    },
-    {
-      "routePath": "/wiki/matrix",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "matrix"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/(shell)/wiki/matrix/page.tsx"
-    },
-    {
-      "routePath": "/wiki/perspectives",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "perspectives"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/(shell)/wiki/perspectives/page.tsx"
-    },
-    {
-      "routePath": "/wiki/perspectives/[profileId]/voice",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "perspectives",
-        "[profileId]",
-        "voice"
-      ],
-      "dynamicParams": [
-        "profileId"
-      ],
-      "file": "apps/web/app/(shell)/wiki/perspectives/[profileId]/voice/page.tsx"
-    },
-    {
-      "routePath": "/wiki/review",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "review"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/(shell)/wiki/review/page.tsx"
-    },
-    {
-      "routePath": "/wiki/stance",
-      "kind": "page",
-      "segments": [
-        "wiki",
-        "stance"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/(shell)/wiki/stance/page.tsx"
     },
     {
       "routePath": "/workbooks",

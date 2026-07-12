@@ -26,7 +26,7 @@ const fixtureView: WorkspaceCommandCenterView = {
       label: "AI workforce",
       href: "/platform/ai/operations-map",
       cells: [
-        { key: "context", label: "Context", description: "Evidence and operating knowledge", state: "good", reason: "5 documents on record", href: "/wiki" },
+        { key: "context", label: "Context", description: "Evidence and operating knowledge", state: "good", reason: "5 documents on record", href: "/coworker-decisions" },
       ],
     },
   ],
@@ -42,15 +42,27 @@ const fixtureView: WorkspaceCommandCenterView = {
 };
 
 describe("BusinessCommandCenter", () => {
-  it("renders the critical strip, snapshot, and work in motion", () => {
+  it("renders the posture strip, snapshot, and work in motion", () => {
     const html = renderToStaticMarkup(<BusinessCommandCenter view={fixtureView} />);
 
-    expect(html).toContain("Needs attention");
+    // Secondary "platform posture" watch — NOT a competing "what needs you" claim.
+    expect(html).toContain("Platform posture");
+    expect(html).not.toContain("Needs attention");
     expect(html).toContain("Approval required");
     expect(html).toContain("AI coworkers");
     expect(html).toContain("Open work");
     expect(html).toContain("Work in motion");
     expect(html).toContain("Reconcile overdue invoices");
+  });
+
+  it("never competes with the cockpit's attention count: empty strip reports clear POSTURE, not clear attention (BI-D35DE119 F2)", () => {
+    const html = renderToStaticMarkup(
+      <BusinessCommandCenter view={{ ...fixtureView, commandStrip: [] }} />,
+    );
+
+    expect(html).toContain("Platform posture is clear.");
+    // The old wording that contradicted a non-empty cockpit count must be gone.
+    expect(html).not.toContain("Nothing needs your attention right now.");
   });
 
   it("does NOT render the six-C readiness matrix (it moved to the platform surface)", () => {
@@ -59,7 +71,7 @@ describe("BusinessCommandCenter", () => {
     expect(html).not.toContain("Domain readiness");
     expect(html).not.toContain("Containment");
     // No deep platform-meta drill links leak onto the business home.
-    expect(html).not.toContain('href="/wiki"');
+    expect(html).not.toContain('href="/coworker-decisions"');
     expect(html).not.toContain("AI Operations Map");
   });
 

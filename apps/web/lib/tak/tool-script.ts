@@ -53,7 +53,12 @@ export type ProgrammaticToolCallingConfig = {
 };
 
 export const PROGRAMMATIC_TOOL_CALLING_DEFAULTS: ProgrammaticToolCallingConfig = {
-  enabled: false,
+  // EP-27FD96BC · P2 (BI-9893614D) — the feature is now reachable by default
+  // (37–98% token cuts for read-heavy tool filtering). It stays fully gated:
+  // only agents holding the `tool_script_exec` grant can invoke it, and every
+  // callTool the script issues re-enters the kernel gate with a read-only-scoped
+  // JWT. An operator can still force it off per install via the PlatformConfig row.
+  enabled: true,
   maxOutputChars: 8_000,
   timeoutMs: 60_000,
 };
