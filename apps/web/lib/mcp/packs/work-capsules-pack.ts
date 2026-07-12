@@ -269,6 +269,27 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
+  {
+    name: "start_external_work",
+    description:
+      "Register that you are STARTING work on an external session — before any evidence — so a tracked Work Capsule exists immediately and the session is visible to other agents instead of appearing only after the first result. Idempotent per session (or per repo+branch when a worktree is supplied); summary is optional at start.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: { type: "string", description: "Provider string (claude, codex, grok, opencode) — mapped to the closest executor kind." },
+        externalSessionId: { type: "string", description: "Stable id for this external session (the capsule executorRef)." },
+        summary: { type: "string", description: "Optional short description of the work being started." },
+        backlogItemId: { type: "string", description: "Optional BacklogItem id (BI-*) this session works." },
+        worktreePath: { type: "string", description: "Optional local worktree path (enables the adopt path keyed on repo+branch)." },
+        branchName: { type: "string", description: "Optional branch (head) — required with worktreePath for the adopt path." },
+        repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo." },
+        baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
+      },
+      required: ["provider", "externalSessionId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
 ];
 
 const HANDLERS = () => import("@/lib/work-capsules/mcp-handlers");
@@ -289,6 +310,7 @@ export const workCapsulesPack: ToolPack = {
     release_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
     record_capsule_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
     reassign_capsule_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
+    start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
   },
   grants: {
     list_work_capsules: ["work_capsule_read"],
@@ -303,5 +325,6 @@ export const workCapsulesPack: ToolPack = {
     release_capsule_scope: ["work_capsule_write"],
     record_capsule_evidence: ["work_capsule_write"],
     reassign_capsule_executor: ["work_capsule_write"],
+    start_external_work: ["work_capsule_adopt"],
   },
 };

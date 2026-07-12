@@ -42,7 +42,7 @@ import {
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
-import { providerToExecutorKind } from "./external-session-capture";
+import { providerToExecutorKind, ensureExternalSessionCapsule } from "./external-session-capture";
 
 type ToolContext = {
   routeContext?: string;
@@ -798,5 +798,37 @@ export async function recordCapsuleEvidenceTool(
     entityId: renewedCapsule.capsuleId,
     message: `Recorded evidence for ${renewedCapsule.capsuleId}.`,
     data: { capsule: renewedCapsule },
+  };
+}
+
+export async function startExternalWorkTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const provider = stringParam(params, "provider");
+  const externalSessionId = stringParam(params, "externalSessionId");
+  if (!provider || !externalSessionId) {
+    return { success: false, error: "invalid_input", message: "provider and externalSessionId are required." };
+  }
+
+  const capsuleId = await ensureExternalSessionCapsule({
+    db: workCapsuleDb(),
+    externalSessionId,
+    provider,
+    actor: await actor(userId, context),
+    summary: stringParam(params, "summary"),
+    backlogItemId: stringParam(params, "backlogItemId"),
+    worktreePath: stringParam(params, "worktreePath"),
+    branchName: stringParam(params, "branchName"),
+    repositoryFullName: stringParam(params, "repositoryFullName"),
+    baseBranch: stringParam(params, "baseBranch"),
+  });
+
+  return {
+    success: true,
+    entityId: capsuleId,
+    message: `Started tracked work session ${capsuleId} for ${provider}.`,
+    data: { capsuleId },
   };
 }

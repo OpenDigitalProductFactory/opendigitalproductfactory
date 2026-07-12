@@ -57,9 +57,45 @@ export async function captureExternalSessionEvidence(args: {
   repositoryFullName?: string | null;
   baseBranch?: string | null;
 }): Promise<string> {
+  const capsuleId = await ensureExternalSessionCapsule(args);
+
+  await recordWorkCapsuleEvidence({
+    db: args.db,
+    capsuleId,
+    evidence: {
+      kind: "note",
+      summary: args.summary.trim().slice(0, 500) || "External development evidence recorded",
+    },
+    actor: args.actor,
+  });
+
+  return capsuleId;
+}
+
+/**
+ * BI-5FDBF786: ensure an external session is a tracked WorkCapsule at WORK
+ * START — before any evidence is recorded. captureExternalSessionEvidence
+ * fires on first evidence (after work); this is the pure start signal so an
+ * external agent (Claude/Codex/Grok/opencode) that has started but not yet
+ * reported is not invisible. Idempotent per externalSessionId (create path) or
+ * per (repo, branch) (adopt path). `summary` is optional — a starting session
+ * need not describe an outcome yet.
+ */
+export async function ensureExternalSessionCapsule(args: {
+  db: CapsuleDb;
+  externalSessionId: string;
+  provider: string;
+  actor: WorkCapsuleActor;
+  summary?: string | null;
+  backlogItemId?: string | null;
+  worktreePath?: string | null;
+  branchName?: string | null;
+  repositoryFullName?: string | null;
+  baseBranch?: string | null;
+}): Promise<string> {
   const idempotencyKey = `external-session:${args.externalSessionId}`;
   const objective =
-    args.summary.trim().slice(0, 500)
+    args.summary?.trim().slice(0, 500)
     || `External ${args.provider} development session`;
   const title = `${providerLabel(args.provider)} session ${args.externalSessionId}`.slice(0, 120);
   const backlogItemId = args.backlogItemId?.trim() || null;
@@ -69,9 +105,8 @@ export async function captureExternalSessionEvidence(args: {
   // Prefer the adopt path when we have a location: it keys the capsule on
   // (repo, branch) so the session's BI, worktree, and branch are one record —
   // and late-binds the BI if the branch was already adopted without one.
-  let capsule;
   if (worktreePath && branchName) {
-    capsule = await adoptWorktreeCapsule({
+    const capsule = await adoptWorktreeCapsule({
       db: args.db,
       input: {
         title,
@@ -89,31 +124,21 @@ export async function captureExternalSessionEvidence(args: {
       },
       actor: args.actor,
     });
-  } else {
-    capsule = await createWorkCapsule({
-      db: args.db,
-      input: {
-        title,
-        objective,
-        source: "external-adoption",
-        executorKind: providerToExecutorKind(args.provider),
-        executorRef: args.externalSessionId,
-        idempotencyKey,
-        backlogItemId,
-      },
-      actor: args.actor,
-    });
+    return capsule.capsuleId;
   }
 
-  await recordWorkCapsuleEvidence({
+  const capsule = await createWorkCapsule({
     db: args.db,
-    capsuleId: capsule.capsuleId,
-    evidence: {
-      kind: "note",
-      summary: args.summary.trim().slice(0, 500) || "External development evidence recorded",
+    input: {
+      title,
+      objective,
+      source: "external-adoption",
+      executorKind: providerToExecutorKind(args.provider),
+      executorRef: args.externalSessionId,
+      idempotencyKey,
+      backlogItemId,
     },
     actor: args.actor,
   });
-
   return capsule.capsuleId;
 }

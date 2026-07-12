@@ -187,6 +187,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   plan_capsule_worktree: ["work_capsule_write"],
   adopt_worktree: ["work_capsule_adopt"],
   claim_backlog_item_for_work: ["work_capsule_adopt"],
+  start_external_work: ["work_capsule_adopt"],
   claim_capsule_scope: ["work_capsule_write"],
   record_capsule_evidence: ["work_capsule_write"],
   heartbeat_capsule: ["work_capsule_write"],
