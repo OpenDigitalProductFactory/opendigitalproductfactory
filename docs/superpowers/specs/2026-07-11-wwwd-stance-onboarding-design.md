@@ -2,10 +2,11 @@
 
 - **Epic:** EP-0AF96937 — Decision Governance Surface (extends it: the *first-run* leg of the see → adjust → review loop)
 - **Related BI:** BI-EBBBD275 (author the two escalated stances — the tactical instance of the gap this design closes systemically)
-- **Date:** 2026-07-11
-- **Status:** Design (design-first; STOP for founder go/no-go before build — this changes first-run behavior for every install)
-- **Kernel routing:** both open forks routed through `principle_decide` (`callingPopulation=external_coding_agent`, surface `stance-onboarding-design`), both **high confidence, no commandment conflict** — ledgers in §6.
+- **Date:** 2026-07-11 (design) · **updated 2026-07-12** (all phases shipped)
+- **Status:** ✅ **Shipped** — founder go received 2026-07-11 ("deliver on this here locally"); all four build phases merged and live-verified on the local install. Build plan + phase→PR map: [2026-07-11-wwwd-stance-onboarding-build.md](../plans/2026-07-11-wwwd-stance-onboarding-build.md). See §12 for the shipped-state summary.
+- **Kernel routing:** both design forks routed through `principle_decide` (`callingPopulation=external_coding_agent`, surface `stance-onboarding-design`), both **high confidence, no commandment conflict** — ledgers in §6.
 - **UX-Fit:** new setup step + scenario-card capture → binds the UX-Fit gate (AGENTS.md §12/§16/§17). Reviewed in §7.4.
+- **Adjacent:** the archetype **stance-vector derivation** this spec adds (`resolveStanceVectors`) is a member of the same archetype-derivation family the [Operational Twin Framework](2026-07-12-operational-twin-framework-design.md) builds on; that spec's cog-confirm HITL + needs-you quests are governed by the WWWD gate this spec primes. Cross-reference in §13.
 
 ---
 
@@ -219,27 +220,66 @@ corrects here:
 
 ## 10. Phasing & backlog
 
-Each phase independently shippable; the operator can stop after any.
+Each phase independently shippable; the operator can stop after any. **All shipped** (2026-07-11/12);
+the design phases below map onto three build PRs (grouped in the [build plan](../plans/2026-07-11-wwwd-stance-onboarding-build.md)).
 
-- **Phase 0 (this PR)** — spec + simulation backtest + BIs. No production code.
-- **Phase 1 — Archetype stance-vector defaults + seeder redistribution** (**BI-70ADC71F**): extend
-  `ArchetypeBusinessProfile` with `stanceVectors`; extend `seedOrgWwwdCorpus` to seed vector pages +
-  per-class bundles (B/0.6) and retag the existing four pages into their bundles. Includes authoring
-  BI-EBBBD275's two founder-ruled stances as the live install's first A/1.0 human-ruled materials.
-- **Phase 2 — "How you decide" setup step** (**BI-D6DC2432**): the §7 card UI + confirm/adjust/skip write
-  paths + bundle upgrade semantics; same cards mounted in `/wiki/stance` for later adjustment.
-- **Phase 3 — JIT capture write-back** (**BI-9677364B**): non-build capture path for WWWD escalations —
-  founder answers from the review queue, optional "make this our standing answer" writes the stance
-  page + A/1.0 material in the decision's class and sets `humanOutcome`. Closes the loop found open
-  in §1.
-- **Phase 4 — Stance publish → promotion** (**BI-002DEB85**): publishing a `/wiki/stance` draft flips its
-  linked `PerspectiveMaterial` to approved/promoted (A/0.9) — today an authored stance is never
-  gate-live.
+- **Phase 0** ✅ — spec + simulation backtest + BIs (PR #2784). No production code.
+- **Phase 1 — Archetype stance-vector defaults + seeder redistribution** (**BI-70ADC71F**) ✅ **PR #2800**:
+  extended `ArchetypeBusinessProfile` with `stanceVectors` (`resolveStanceVectors`); `seedOrgWwwdCorpus`
+  seeds a `stances/<key>` page + per-class `PerspectiveMaterial` bundles (B/0.6) across all four domain
+  classes and retags the original four pages into their bundles; a **shape-aware boot backfill** carries
+  the redistribution to already-onboarded installs.
+- **Phase 2 — "How you decide" setup step** (**BI-D6DC2432**) ✅ **PR #2837**: the §7 card UI
+  (`HowYouDecideCards`) + confirm/adjust/skip write paths + bundle-upgrade semantics (`confirmStanceVectors`);
+  same cards mounted in `/wiki/stance` for later adjustment.
+- **Phase 3 — JIT capture write-back** (**BI-9677364B**) ✅ **PR #2812**: `captureOrgDecisionOutcome`
+  non-build capture path for WWWD escalations — owner answers from the `/wiki/review` "Waiting on your
+  call" cards, optional "remember this" writes a ruled (A/1.0) `stances/ruling-<id>` page and sets
+  `humanOutcome`. Closes the loop found open in §1.
+- **Phase 4 — Stance publish → promotion** (**BI-002DEB85**) ✅ **PR #2812**: `publishBusinessStance`
+  publishes + embeds a `/wiki/stance` draft and promotes an owner-confirmed (A/0.9) `PerspectiveMaterial`
+  in the picked decision area — an authored stance is now gate-live instead of an inert draft.
 
-## 11. Open questions for the founder (go/no-go)
+The confirm/promote/rule write path is unified in `lib/decision-perspective/stance-promotion.ts`
+(`promoteStanceMaterial`, tiers `confirmed` A/0.9 / `ruled` A/1.0, never-downgrade).
 
-1. **Ceiling defaults per archetype** — the §4 amounts are starters; confirm or hand back a table.
-2. **Medium-risk posture story** — accept that balanced-posture orgs keep escalating medium-risk
-   decisions until a class is fully human-ruled (the honest ladder), or opt orgs into progressive
-   posture more aggressively during onboarding?
-3. **Step title** — "How you decide" vs "Your business judgment" vs other (naming is operator-owned).
+## 11. Founder go/no-go — resolved
+
+The three go/no-go questions were answered by the founder go ("deliver on this here locally", 2026-07-11)
+and are settled in the shipped code:
+
+1. **Ceiling defaults per archetype** — shipped as editable per-industry starters in
+   `INDUSTRY_STANCE_VECTORS` (goodwill/pricing/spend); the owner confirms or adjusts each via a curated
+   ceiling picker. Not free-authored.
+2. **Medium-risk posture story** — shipped as the honest ladder: balanced-posture orgs keep escalating
+   medium-risk decisions until a class is fully human-ruled (A/1.0 → recommend @ 0.9); progressive posture
+   arbitrates medium-risk from A/0.9. No aggressive auto-opt-in to progressive.
+3. **Step title** — shipped as **"How you decide"** (`STEP_LABELS["how-you-decide"]`).
+
+## 12. Shipped state (2026-07-12)
+
+- **Merged:** #2784 (design), #2800 (Phase 1), #2812 (Phases 3+4), #2837 (Phase 2). BIs BI-70ADC71F /
+  BI-D6DC2432 / BI-9677364B / BI-002DEB85 → **done**.
+- **Live-verified** on the local install (`:3000`, redeployed at the merge SHA): the org's WWWD corpus
+  now carries archetype-default material in all four decision classes; the two originally-escalated
+  decisions reproduce the pre-confirmation rung exactly — billing-goodwill `escalate @ 0.35` and
+  quality-vs-offering `escalate @ 0.45`, both now **from the org's own profile** (not platform fallback) —
+  and the high-risk probe still escalates (invariant holds).
+- **The last rung is the owner's, by design:** a Confirm-all at `/wiki/stance` (or a ruling via the
+  `/wiki/review` capture loop) upgrades the bundle to A/0.9+ and clears the low-risk classes. The AI never
+  self-confirms — consent is the mechanism, not a gap. **BI-EBBBD275** (the two specific founder rulings)
+  stays open for exactly this reason: the tooling to satisfy it is live, but authoring the two standing
+  answers is a one-click owner action, not an engineering task.
+
+## 13. Adjacency — the Operational Twin Framework
+
+The [Operational Twin Framework](2026-07-12-operational-twin-framework-design.md) derives a per-archetype
+"twin" from the archetype's operating-model surfaces. Its `deriveTwinProfile` family and the
+`resolveStanceVectors` derivation this spec added are **two consumers of the same archetype substrate**,
+and they meet at the twin's **cog**: when the cog proposes an allocation that carries a business judgment
+(comp/waive, spend, priority), that tap-to-confirm is exactly an `evaluate_org_business_decision` call,
+and an escalation is exactly a **needs-you quest** — answerable in place through the capture loop this spec
+shipped (the `/wiki/review` "Waiting on your call" pattern). See that spec's §5.1 (added by this PR) for
+how the stance-vector derivation sits in its derivation family and how the cog/quest primitives bind to the
+WWWD gate. Incorporation shape kernel-routed: `principle_decide` → additive cross-reference, high
+confidence, margin 3.59 (DI-4E2943E733A7).
