@@ -288,9 +288,18 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // run an external cited deep-research pass and attach it to the ideate
     // evidence trail. Opt-in (DPF_BUILD_PRE_SPEC_RESEARCH) and strictly
     // fail-open — research is advisory and must NEVER fail or delay ideate.
+    // The flag is resolved OUTSIDE the try so a disabled/unavailable config does
+    // NO work and writes NO activity row (keeps the ideate evidence trail exact
+    // when the feature is off — the default).
+    let preSpecResearchEnabled = false;
     try {
       const { isPreSpecResearchEnabled } = await import("./build-studio-config");
-      if (isPreSpecResearchEnabled()) {
+      preSpecResearchEnabled = isPreSpecResearchEnabled();
+    } catch {
+      preSpecResearchEnabled = false;
+    }
+    if (preSpecResearchEnabled) {
+      try {
         const { shouldRunPreSpecResearch, conductPreSpecResearch, formatResearchReportMarkdown, makeInferenceResearchDeps } =
           await import("@/lib/build/pre-spec-research");
         const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
@@ -306,11 +315,11 @@ export async function dispatchIdeateForApprovedBuild(params: {
           const report = await conductPreSpecResearch(`${featureTitle}: ${featureDescription}`.slice(0, 400), deps);
           await logActivity(`Pre-spec research (advisory, cited):\n${formatResearchReportMarkdown(report)}`);
         }
+      } catch (researchErr) {
+        // Advisory — swallow and continue; ideate must not depend on research.
+        const { getErrorMessage } = await import("@/lib/shared/get-error-message");
+        await logActivity(`Pre-spec research skipped (non-fatal): ${getErrorMessage(researchErr)}`);
       }
-    } catch (researchErr) {
-      // Advisory — swallow and continue; ideate must not depend on research.
-      const { getErrorMessage } = await import("@/lib/shared/get-error-message");
-      await logActivity(`Pre-spec research skipped (non-fatal): ${getErrorMessage(researchErr)}`);
     }
 
     const designDocKeys = Object.keys(ideateResult.designDoc as Record<string, unknown>);
