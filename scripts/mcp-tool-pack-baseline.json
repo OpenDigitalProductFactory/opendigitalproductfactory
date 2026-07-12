@@ -81,8 +81,5 @@
   "validate_schema",
   "verification_preflight",
   "verify_live_install_readiness",
-  "wiki_ingest",
-  "wiki_lint",
-  "wiki_query",
   "write_sandbox_file"
 ]

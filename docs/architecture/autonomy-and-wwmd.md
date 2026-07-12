@@ -5,6 +5,15 @@ description: How DPF uses the founder-kernel wiki, principle vectors, decision p
 
 DPF is not trying to make AI coworkers autonomous by removing humans from the loop. It is trying to make autonomy gradual, inspectable, and recoverable.
 
+> **Scope note (2026-07-12).** This page predates the **three-scope** partition of the decision
+> substrate and uses "WWMD" loosely for all of it. The current frame (kernel principle
+> [`decisions-belong-to-their-scope`](../founder-kernel/wiki/principles/decisions-belong-to-their-scope.md);
+> spec [`2026-07-04-decision-governance-surface-redesign-design.md`](../superpowers/specs/2026-07-04-decision-governance-surface-redesign-design.md))
+> separates three scopes that do not inherit each other's authority: **WWMD** (platform/founder
+> doctrine — `principle_decide`), **WWWD** (an organization's own business stance — the org Decision
+> Perspective Gate), and **WSID** (a profession's craft). Where this page says "WWMD" for a customer's
+> business call, read **WWWD**; the mechanics below (gate, confidence, ledger) are common to all three.
+
 WWMD is the working name for that decision substrate: "What Would Mark Do?" In product terms, it is a Decision Perspective Gate that lets a coworker ask the governed wiki how to resolve an ambiguity, then return an outcome with confidence, sources, and an audit record.
 
 The important architectural point is that the judgment is no longer trapped in chat. It becomes a reusable platform capability that can be called by Build Studio, in-product coworkers, and external MCP clients under the same governance rules.

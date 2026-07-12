@@ -64,6 +64,7 @@ import { workThreadPack } from "./packs/work-thread-pack";
 import { codeIntelligencePack } from "./packs/code-intelligence-pack";
 import { taxonomyArchetypePack } from "./packs/taxonomy-archetype-pack";
 import { modelProviderPack } from "./packs/model-provider-pack";
+import { wikiPack } from "./packs/wiki-pack";
 import { discoveryPack } from "./packs/discovery-pack";
 import { backlogPack } from "./packs/backlog-pack";
 
@@ -119,6 +120,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   codeIntelligencePack,
   taxonomyArchetypePack,
   modelProviderPack,
+  wikiPack,
   discoveryPack,
   backlogPack,
 ]);
