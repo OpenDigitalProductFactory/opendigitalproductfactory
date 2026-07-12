@@ -1856,10 +1856,6 @@ export async function executeTool(
 
     // build tool moved to a ToolPack
 
-    case "iterate_sandbox":
-      // Removed: these tools caused runaway loops by spawning nested LLM calls.
-      // Use write_sandbox_file / edit_sandbox_file / run_sandbox_command directly.
-      return { success: false, error: "Tool removed.", message: "generate_code and iterate_sandbox have been removed. Use write_sandbox_file, edit_sandbox_file, and run_sandbox_command directly to build the feature." };
 
 
 
