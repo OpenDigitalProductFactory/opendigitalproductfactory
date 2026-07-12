@@ -177,16 +177,36 @@ async function queryEndpointManifests(): Promise<EndpointManifest[]> {
     },
   });
 
-  return profiles.map((mp) => ({
+  return profiles.map((mp) => profileToManifest(mp));
+}
+
+type ProfileWithProvider = Awaited<
+  ReturnType<typeof prisma.modelProfile.findMany<{ include: { provider: true } }>>
+>[number];
+
+/**
+ * Map a ModelProfile (joined with its provider) into an EndpointManifest.
+ * Shared by the live candidate query (loadEndpointManifests) and the
+ * enable-candidate preview (loadEnableCandidateManifests), so both describe an
+ * endpoint identically. `statusOverride` lets the preview ask "would this
+ * endpoint be eligible IF its provider were enabled?" by forcing status to
+ * "active" without mutating the DB.
+ */
+function profileToManifest(
+  mp: ProfileWithProvider,
+  statusOverride?: EndpointManifest["status"],
+): EndpointManifest {
+  return {
     id: mp.id,
     providerId: mp.providerId,
     modelId: mp.modelId,
     name: mp.friendlyName || mp.modelId,
     endpointType: mp.provider.endpointType,
     // EP-INF-004: Derive status from worse of provider and model status
-    status: (mp.modelStatus === "degraded" || mp.provider.status === "degraded"
-      ? "degraded"
-      : mp.provider.status) as EndpointManifest["status"],
+    status: (statusOverride ??
+      (mp.modelStatus === "degraded" || mp.provider.status === "degraded"
+        ? "degraded"
+        : mp.provider.status)) as EndpointManifest["status"],
     providerTier: classifyProviderTier(mp.providerId),
     sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
     supportsToolUse: resolveToolUse(mp) ?? false,
@@ -223,7 +243,32 @@ async function queryEndpointManifests(): Promise<EndpointManifest[]> {
     metadataSource: mp.metadataSource ?? "inferred",
     metadataConfidence: mp.metadataConfidence ?? "low",
     perRequestLimits: mp.perRequestLimits as any ?? null,
-  }));
+  };
+}
+
+/**
+ * Load endpoint manifests for providers that are NOT currently active/degraded
+ * (i.e. disabled / inactive / unconfigured), with each manifest's status forced
+ * to "active". These are NOT routing candidates — they are used only to answer,
+ * for a blocked phase, "which currently-off provider WOULD satisfy this phase's
+ * routing contract if it were enabled?" (F10/F11). Reuses the exact same
+ * profile→manifest mapping as the live query so the hard-filter check
+ * (getExclusionReasonV2) behaves identically to real routing.
+ */
+export async function loadEnableCandidateManifests(): Promise<EndpointManifest[]> {
+  const profiles = await prisma.modelProfile.findMany({
+    where: {
+      modelStatus: { in: ["active", "degraded"] },
+      retiredAt: null,
+      provider: {
+        status: { notIn: ["active", "degraded"] },
+        endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] },
+        catalogVisibility: { not: "hidden" },
+      },
+    },
+    include: { provider: true },
+  });
+  return profiles.map((mp) => profileToManifest(mp, "active"));
 }
 
 /**

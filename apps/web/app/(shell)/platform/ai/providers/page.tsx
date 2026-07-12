@@ -20,6 +20,7 @@ import { LocalOnlyInferenceToggle } from "@/components/platform/LocalOnlyInferen
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
+import { resolveModelSelectionByPhase } from "@/lib/inference/phase-model-resolution";
 import Link from "next/link";
 
 
@@ -110,6 +111,26 @@ export default async function ProvidersPage() {
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
 
+  // F11 (BI-1A75E068): tie provider → blocked phase. Reuse the SAME resolver
+  // runtime-health uses; for any phase blocked with `no-eligible-endpoint`, it
+  // already computed which currently-off providers would resolve it. Map those
+  // to phase labels so each candidate row shows a "Resolves <phase>" badge —
+  // no duplicated eligibility logic. Best-effort: a resolver error never breaks
+  // the providers list.
+  const resolvesPhasesById = new Map<string, string[]>();
+  try {
+    const overview = await resolveModelSelectionByPhase();
+    for (const phase of overview.phases) {
+      for (const cand of phase.enableCandidates ?? []) {
+        const list = resolvesPhasesById.get(cand.providerId) ?? [];
+        if (!list.includes(phase.label)) list.push(phase.label);
+        resolvesPhasesById.set(cand.providerId, list);
+      }
+    }
+  } catch {
+    // Leave the map empty — badges simply don't render.
+  }
+
   return (
     <div>
       <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -175,6 +196,7 @@ export default async function ProvidersPage() {
               displayName={group.displayName}
               providers={group.providers}
               eligibilityById={eligibilityById}
+              hasResolver={group.providers.some((pw) => resolvesPhasesById.has(pw.provider.providerId))}
             >
               {group.providers.map((pw) => (
                 <ServiceRow
@@ -182,6 +204,7 @@ export default async function ProvidersPage() {
                   pw={pw}
                   eligibility={eligibilityById[pw.provider.providerId]!}
                   {...(modelSummaries.has(pw.provider.providerId) ? { modelSummary: modelSummaries.get(pw.provider.providerId)! } : {})}
+                  {...(resolvesPhasesById.has(pw.provider.providerId) ? { resolvesPhases: resolvesPhasesById.get(pw.provider.providerId)! } : {})}
                 />
               ))}
             </ServiceSection>
