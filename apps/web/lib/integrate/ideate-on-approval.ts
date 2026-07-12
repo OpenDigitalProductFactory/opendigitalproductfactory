@@ -202,7 +202,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // to cloud; otherwise it gracefully stays local).
     const { getModelTier } = await import("@/lib/explore/build-process-matrix");
     const { isModelTierRoutingEnabled } = await import("@/lib/integrate/build-studio-config");
-    const modelTier = isModelTierRoutingEnabled()
+    const modelTier = (await isModelTierRoutingEnabled())
       ? getModelTier(null, bi.effortSize) // tier is size-derived (P1); build.kind isn't in this select
       : undefined;
 
