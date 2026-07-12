@@ -43,6 +43,7 @@ apps/web/lib/mcp-tools-backlog.test.ts	901
 apps/web/lib/mcp-tools.ts	12422
 apps/web/lib/mcp-tools.ts	12802
 apps/web/lib/mcp-tools.ts	12851
+apps/web/lib/mcp-tools.ts	12171
 apps/web/lib/navigation/portal-navigation-model.ts	937
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1328
