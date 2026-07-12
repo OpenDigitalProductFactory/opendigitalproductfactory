@@ -95,6 +95,42 @@ Derivation rules (in priority order), all from substrate that already exists:
 
 Nouns resolve through the existing vocabulary system (`resolveVocabularyKey`, `customVocabulary`), so a credit union's board says Members and a clinic's rooms respect the PHI privacy class already modeled on `FieldDispatchProfile.privacyClass`.
 
+### 5.1 The cog is governed by the org's WWWD stance — and the stance is a sibling archetype derivation
+
+*(Added 2026-07-12 to reconcile with the shipped company-stance onboarding — [2026-07-11-wwwd-stance-onboarding-design.md](2026-07-11-wwwd-stance-onboarding-design.md), EP-0AF96937. Additive: it does not change this spec's grammar, templates, or derivation rules.)*
+
+Two connections make the twin's cog and quests concrete rather than hand-waved:
+
+**(a) The stance-vector derivation is a fourth-family member — at a different layer.** The
+`deriveTwinProfile`/`deriveOperationalValueStream`/`deriveMediaProfile`/`deriveFieldDispatchProfile`
+family lives in `packages/storefront-templates` and derives from `ArchetypeDefinition`. The WWWD
+**stance-vector** derivation (`resolveStanceVectors`, `apps/web/lib/onboarding/archetype-business-context.ts`,
+shipped in PR #2800) is the same *shape* — a pure derivation from the archetype (keyed off `archetypeId`
++ storefront `category`) with per-industry overrides and a confirm-not-author UX — but it runs one layer
+up, at onboarding, and its output is org-overlay WikiPages + `PerspectiveMaterial` (the WWWD corpus), not
+a render profile. It answers a question the twin doesn't: **for this kind of business, how much of the
+cog's judgment may run without asking, and where is the ceiling.** Treat it as a peer of `schedulingDefaults`
+in the "what an archetype carries" catalog — derived config, editable starter, no bespoke authoring.
+
+**(b) The cog's tap-to-confirm and the needs-you-quest primitive bind to the WWWD gate.** The grammar
+rule "HITL on every cog action" (§3) has a substrate now. A cog proposal splits by whether the allocation
+carries a **business judgment**:
+- Pure operational allocations (seat this party, route the nearest tech) — confirm as specified; no WWWD call.
+- Allocations that carry a business call the org has a stance on (comp/waive a charge, spend against a
+  ceiling, prioritize existing-customer quality over new work) route the confirm through
+  `evaluate_org_business_decision` (`domainClass` from the decision kind, `riskTier` from the amount/reach).
+  A `recommend`/`arbitrate` lets the cog present the pre-cleared action; an `escalate`/`defer` becomes a
+  **needs-you quest** pinned to twin context — answerable in place with the *same* capture pattern the
+  `/wiki/review` "Waiting on your call" cards use (`captureOrgDecisionOutcome`), so the operator's answer
+  can be remembered as standing doctrine (ruled A/1.0) and the equivalent cog action self-clears next time.
+
+Net: the twin is where WWWD decisions are *made in context*, the stance corpus is what lets the cog make
+the common ones without asking, and the needs-you quest is the escalation surface — one loop, already
+shipped. Nothing in this framework needs to re-implement decision governance; P3+ template work should
+pass cog actions that carry a business judgment through the gate and render escalations as quests. See the
+stance spec §13 for the reciprocal reference; incorporation shape kernel-routed (`principle_decide` →
+additive cross-reference, high confidence, margin 3.59, DI-4E2943E733A7).
+
 ## 6. Research & Benchmarking — the vertical-market evidence
 
 Per §10, each category was benchmarked against its market-leading vertical solutions (what their live-operations surface centers on, and the signature allocation decision it assists). Full briefs in §6.1; the synthesis:
