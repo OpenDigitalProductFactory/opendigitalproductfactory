@@ -125,7 +125,7 @@ describe("buildDisciplineCards", () => {
     const cards = buildDisciplineCards(base);
     for (const card of cards) {
       expect(
-        card.actions.some((a) => a.href === `/wiki/decisions?tier=${card.key}`),
+        card.actions.some((a) => a.href === `/coworker-decisions/decisions?tier=${card.key}`),
       ).toBe(true);
     }
   });

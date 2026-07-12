@@ -1,0 +1,383 @@
+<title>The Living Business - field-service dispatch floor</title>
+<style>
+  /* DPF tokens (globals.css). Both themes. STATIC-FIRST: renders + animates
+     with CSS alone. Interactivity (dispatch a queued job to the nearest tech)
+     is PROGRESSIVE ENHANCEMENT. Dynamic text is written via textContent only
+     (never innerHTML) so DOM text is never reinterpreted as HTML (XSS-safe).
+     Glyphs are numeric entities (charset-safe). The field-service operational
+     twin - complementary to the value-stream lens. */
+  :root{
+    --dpf-bg:#fafafa;--dpf-surface-1:#ffffff;--dpf-surface-2:#f4f4f6;--dpf-surface-3:#eeeef2;
+    --dpf-text:#1a1a2e;--dpf-text-secondary:#4a4a5e;--dpf-accent:#2563eb;--dpf-border:#d4d4dc;
+    --dpf-border-strong:#c8c8d4;--dpf-muted:#6b7280;--dpf-success:#16a34a;--dpf-warning:#d97706;
+    --dpf-error:#dc2626;--dpf-info:#0284c7;
+    --map: color-mix(in srgb, var(--dpf-success) 6%, var(--dpf-bg));
+    --road: color-mix(in srgb, var(--dpf-text) 8%, transparent);
+    --font-display:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+    --radius:10px;--sh:0 1px 2px color-mix(in srgb,var(--dpf-text) 8%,transparent);
+    --sh2:0 8px 26px color-mix(in srgb,var(--dpf-text) 16%,transparent);
+  }
+  @media (prefers-color-scheme: dark){:root{
+    --dpf-bg:#0f0f1a;--dpf-surface-1:#1a1a2e;--dpf-surface-2:#161625;--dpf-surface-3:#121220;
+    --dpf-text:#e2e2f0;--dpf-text-secondary:#b8b8cc;--dpf-accent:#7c8cf8;--dpf-border:#2a2a40;
+    --dpf-border-strong:#3a3a55;--dpf-muted:#8888a0;--dpf-success:#4ade80;--dpf-warning:#fbbf24;
+    --dpf-error:#f87171;--dpf-info:#38bdf8;--road:color-mix(in srgb,var(--dpf-text) 14%,transparent);}}
+  :root[data-theme="light"]{--dpf-bg:#fafafa;--dpf-surface-1:#ffffff;--dpf-surface-2:#f4f4f6;--dpf-surface-3:#eeeef2;--dpf-text:#1a1a2e;--dpf-text-secondary:#4a4a5e;--dpf-accent:#2563eb;--dpf-border:#d4d4dc;--dpf-border-strong:#c8c8d4;--dpf-muted:#6b7280;--dpf-success:#16a34a;--dpf-warning:#d97706;--dpf-error:#dc2626;--dpf-info:#0284c7;}
+  :root[data-theme="dark"]{--dpf-bg:#0f0f1a;--dpf-surface-1:#1a1a2e;--dpf-surface-2:#161625;--dpf-surface-3:#121220;--dpf-text:#e2e2f0;--dpf-text-secondary:#b8b8cc;--dpf-accent:#7c8cf8;--dpf-border:#2a2a40;--dpf-border-strong:#3a3a55;--dpf-muted:#8888a0;--dpf-success:#4ade80;--dpf-warning:#fbbf24;--dpf-error:#f87171;--dpf-info:#38bdf8;}
+
+  *{box-sizing:border-box;} html,body{margin:0;}
+  body{background:var(--dpf-bg);color:var(--dpf-text);font-family:var(--font-display);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;}
+  .tnum{font-variant-numeric:tabular-nums;font-family:var(--font-mono);}
+  .shell{display:flex;flex-direction:column;min-height:100%;}
+
+  .topbar{display:flex;align-items:center;gap:10px 14px;padding:11px 16px;background:var(--dpf-surface-1);border-bottom:1px solid var(--dpf-border);flex-wrap:wrap;}
+  .eyebrow{font-size:10.5px;letter-spacing:0.16em;text-transform:uppercase;color:var(--dpf-muted);font-weight:600;}
+  .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .brand h1{font-size:18px;font-weight:700;letter-spacing:-0.02em;margin:0;}
+  .brand .biz{font-size:13px;color:var(--dpf-muted);}
+  .spacer{flex:1 1 auto;}
+  .pill{display:inline-flex;align-items:center;gap:7px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:5px 11px;font-size:12.5px;color:var(--dpf-text);cursor:pointer;}
+  .lens{display:inline-flex;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:2px;}
+  .lens a{font-size:12px;color:var(--dpf-muted);text-decoration:none;padding:4px 11px;border-radius:999px;}
+  .lens a.on{background:var(--dpf-surface-1);color:var(--dpf-text);font-weight:600;box-shadow:var(--sh);}
+
+  .caps{display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px;background:var(--dpf-surface-1);border-bottom:1px solid var(--dpf-border);}
+  .cap{display:flex;align-items:baseline;gap:6px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:999px;padding:4px 12px;}
+  .cap .cv{font-family:var(--font-mono);font-weight:700;font-size:14px;} .cap .cl{font-size:10.5px;color:var(--dpf-muted);text-transform:uppercase;letter-spacing:.04em;}
+  .cap.hot .cv{color:var(--dpf-warning);} .cap.good .cv{color:var(--dpf-success);} .cap.bad .cv{color:var(--dpf-error);}
+
+  .banner{display:none;align-items:center;gap:10px;padding:9px 16px;background:color-mix(in srgb,var(--dpf-accent) 12%,var(--dpf-surface-1));border-bottom:1px solid var(--dpf-border);font-size:13px;}
+  .banner.on{display:flex;} .banner .x{margin-left:auto;cursor:pointer;color:var(--dpf-muted);font-size:12px;}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--dpf-text);color:var(--dpf-bg);font-size:13px;font-weight:600;padding:9px 16px;border-radius:999px;box-shadow:var(--sh2);opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;}
+  .toast.on{opacity:1;}
+
+  .wrap{padding:12px;display:flex;flex-direction:column;gap:12px;}
+  .zone{background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:var(--radius);box-shadow:var(--sh);}
+  .zone > .zh{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--dpf-border);flex-wrap:wrap;}
+  .zone .zt{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;}
+  .zone .zsub{font-size:11px;color:var(--dpf-muted);}
+
+  /* TERRITORY MAP - where techs/vans physically are */
+  .map{position:relative;height:340px;margin:12px;border:1px solid var(--dpf-border);border-radius:var(--radius);overflow:hidden;
+       background:
+         linear-gradient(var(--road) 1px, transparent 1px) 0 0/100% 25%,
+         linear-gradient(90deg,var(--road) 1px, transparent 1px) 0 0/25% 100%,
+         var(--map);}
+  .znlbl{position:absolute;transform:translate(-50%,-50%);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--dpf-muted);opacity:.8;white-space:nowrap;}
+  .yard{position:absolute;transform:translate(-50%,-50%);background:var(--dpf-surface-1);border:1.5px solid var(--dpf-border-strong);border-radius:8px;padding:5px 9px;text-align:center;box-shadow:var(--sh);z-index:2;}
+  .yard .yt{font-size:10px;font-weight:700;} .yard .ys{font-size:8.5px;color:var(--dpf-muted);}
+  .pin{position:absolute;transform:translate(-50%,-50%);z-index:3;display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .pin .job{width:20px;height:20px;border-radius:5px;display:grid;place-items:center;font-size:10px;color:#fff;background:var(--dpf-accent);box-shadow:var(--sh);}
+  .pin.emergency .job{background:var(--dpf-error);} .pin.scheduled .job{background:var(--dpf-info);}
+  .pin .plabel{font-size:8px;color:var(--dpf-text-secondary);background:color-mix(in srgb,var(--dpf-surface-1) 78%,transparent);padding:0 3px;border-radius:3px;white-space:nowrap;}
+  .tech{position:absolute;transform:translate(-50%,-50%);z-index:4;transition:left .5s ease,top .5s ease;}
+  .tech .dot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:8px;font-weight:700;color:#fff;background:var(--dpf-muted);border:2px solid var(--dpf-surface-1);box-shadow:var(--sh);position:relative;}
+  .tech[data-status="available"] .dot{background:var(--dpf-success);}
+  .tech[data-status="enroute"] .dot{background:var(--dpf-accent);}
+  .tech[data-status="onsite"] .dot{background:var(--dpf-info);}
+  .tech .base{position:absolute;right:-4px;top:-4px;width:12px;height:12px;border-radius:50%;font-size:7px;font-weight:700;display:grid;place-items:center;background:var(--dpf-surface-1);border:1px solid var(--dpf-border-strong);color:var(--dpf-muted);}
+  .tech.eligible .dot{box-shadow:0 0 0 3px color-mix(in srgb,var(--dpf-success) 40%,transparent);cursor:pointer;}
+  .tech.suggest .dot{box-shadow:0 0 0 3px color-mix(in srgb,var(--dpf-success) 60%,transparent);animation:sug 1.3s ease-in-out infinite;cursor:pointer;}
+  @keyframes sug{0%,100%{box-shadow:0 0 0 3px color-mix(in srgb,var(--dpf-success) 55%,transparent);}50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--dpf-success) 0%,transparent);}}
+  .maplegend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:0 14px 12px;}
+  .maplegend .li{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dpf-text-secondary);} .maplegend .sw{width:10px;height:10px;border-radius:50%;}
+
+  /* DISPATCH QUEUE (interactive) */
+  .queue .qlist{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;}
+  .job-card{flex:0 0 auto;min-width:190px;background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-left:3px solid var(--dpf-accent);border-radius:10px;padding:8px 11px;cursor:pointer;}
+  .job-card.emergency{border-left-color:var(--dpf-error);} .job-card.scheduled{border-left-color:var(--dpf-info);}
+  .job-card.sel{box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-accent) 30%,transparent);border-color:var(--dpf-accent);}
+  .job-card .jt{font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;gap:8px;}
+  .job-card .pr{font-family:var(--font-mono);font-size:8.5px;font-weight:700;border-radius:4px;padding:0 5px;}
+  .job-card .pr.e{color:var(--dpf-error);border:1px solid color-mix(in srgb,var(--dpf-error) 45%,var(--dpf-border));}
+  .job-card .pr.s{color:var(--dpf-info);border:1px solid color-mix(in srgb,var(--dpf-info) 45%,var(--dpf-border));}
+  .job-card .jm{font-size:10.5px;color:var(--dpf-muted);margin-top:3px;}
+  .job-card .sug{font-size:10px;color:var(--dpf-success);font-weight:600;margin-top:5px;}
+
+  /* APPOINTMENTS */
+  .appts .alist{display:flex;flex-direction:column;gap:0;padding:4px 12px 10px;}
+  .appt{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--dpf-border);}
+  .appt:last-child{border-bottom:none;}
+  .appt .win{font-family:var(--font-mono);font-size:11px;color:var(--dpf-muted);min-width:96px;}
+  .appt .ad{flex:1;min-width:0;font-size:12px;} .appt .ad small{color:var(--dpf-muted);}
+  .appt .status{font-size:10px;font-weight:700;border-radius:999px;padding:2px 8px;}
+  .appt .status.done{color:var(--dpf-success);background:color-mix(in srgb,var(--dpf-success) 13%,var(--dpf-surface-1));}
+  .appt .status.onsite{color:var(--dpf-info);background:color-mix(in srgb,var(--dpf-info) 13%,var(--dpf-surface-1));}
+  .appt .status.enroute{color:var(--dpf-accent);background:color-mix(in srgb,var(--dpf-accent) 13%,var(--dpf-surface-1));}
+  .appt .status.sched{color:var(--dpf-muted);background:var(--dpf-surface-2);}
+
+  /* FLEET ROSTER - staff shown by work owned + where the van is based */
+  .roster .rlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;padding:10px 12px;}
+  .trow{display:flex;align-items:center;gap:9px;background:var(--dpf-surface-2);border:1px solid var(--dpf-border);border-radius:10px;padding:7px 10px;}
+  .trow .tav{width:26px;height:26px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;font-size:8.5px;font-weight:700;color:#fff;background:var(--dpf-muted);}
+  .trow[data-status="available"] .tav{background:var(--dpf-success);} .trow[data-status="enroute"] .tav{background:var(--dpf-accent);} .trow[data-status="onsite"] .tav{background:var(--dpf-info);}
+  .trow .ti{min-width:0;flex:1;} .trow .tn{font-size:12px;font-weight:600;} .trow .tw{font-size:10.5px;color:var(--dpf-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .trow .vb{font-family:var(--font-mono);font-size:8.5px;color:var(--dpf-muted);border:1px solid var(--dpf-border);border-radius:4px;padding:0 5px;white-space:nowrap;}
+  .trow.eligible{border-color:var(--dpf-success);box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-success) 25%,transparent);cursor:pointer;}
+  .trow.suggest{border-color:var(--dpf-success);box-shadow:0 0 0 2px color-mix(in srgb,var(--dpf-success) 45%,transparent);cursor:pointer;}
+
+  .panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}
+  .panel{background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:var(--radius);box-shadow:var(--sh);padding:10px 12px;}
+  .panel .ph{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;margin-bottom:9px;display:flex;justify-content:space-between;}
+  .prow{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+  .prow .rl{flex:1;min-width:0;font-size:11.5px;color:var(--dpf-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .prow .bar{flex:0 0 64px;height:6px;border-radius:999px;background:var(--dpf-surface-3);overflow:hidden;}
+  .prow .bar i{display:block;height:100%;border-radius:999px;background:var(--dpf-success);}
+  .prow.low .bar i{background:var(--dpf-warning);} .prow.out .bar i{background:var(--dpf-error);width:100%;}
+  .prow .rv{font-family:var(--font-mono);font-size:11px;color:var(--dpf-muted);min-width:78px;text-align:right;}
+  .tagout{font-family:var(--font-mono);font-size:9px;font-weight:700;color:var(--dpf-error);border:1px solid color-mix(in srgb,var(--dpf-error) 45%,var(--dpf-border));border-radius:4px;padding:0 4px;}
+
+  .hud{border-top:1px solid var(--dpf-border);background:var(--dpf-surface-1);padding:12px 16px 18px;}
+  .hud .hd{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dpf-muted);font-weight:700;margin-bottom:9px;}
+  .need{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;border:1px solid var(--dpf-border);border-left-width:3px;border-radius:var(--radius);margin-bottom:8px;max-width:660px;}
+  .need.warn{border-left-color:var(--dpf-warning);} .need.error{border-left-color:var(--dpf-error);} .need.info{border-left-color:var(--dpf-info);}
+  .need .nb{flex:1;} .need .nt{font-weight:600;font-size:13px;} .need .nm{font-size:11px;color:var(--dpf-muted);margin-top:2px;}
+  .need .na{flex:0 0 auto;align-self:center;font-size:12px;font-weight:600;color:#fff;background:var(--dpf-accent);border:none;border-radius:7px;padding:5px 10px;cursor:pointer;}
+  .foot{font-size:11px;color:var(--dpf-muted);padding:0 16px 20px;} .foot code{font-family:var(--font-mono);font-size:10.5px;color:var(--dpf-text-secondary);}
+
+  @media (prefers-reduced-motion: reduce){ .tech.suggest .dot{animation:none;} .tech{transition:none;} }
+</style>
+
+<div class="shell">
+  <header class="topbar">
+    <div class="brand"><span class="eyebrow">DPF Workspace</span><h1>The Living Business</h1><span class="biz">Rapid Response Plumbing &amp; HVAC &#183; Tue 2:10pm</span></div>
+    <div class="spacer"></div>
+    <span class="lens"><a href="#" class="">Value stream</a><a href="#" class="on">Dispatch floor</a></span>
+    <button class="pill" id="dispatchNext">&#9654; Dispatch next</button>
+    <button class="pill" id="themeToggle" aria-label="Toggle theme">&#9680; Theme</button>
+  </header>
+
+  <div class="caps">
+    <div class="cap good"><span class="cv tnum" id="capAvail">3/6</span><span class="cl">techs available</span></div>
+    <div class="cap"><span class="cv tnum" id="capEnroute">1</span><span class="cl">en-route</span></div>
+    <div class="cap"><span class="cv tnum" id="capOnsite">2</span><span class="cl">on-site</span></div>
+    <div class="cap hot"><span class="cv tnum" id="capQueue">4</span><span class="cl">in dispatch queue</span></div>
+    <div class="cap bad"><span class="cv tnum" id="capEmerg">2</span><span class="cl">emergencies</span></div>
+    <div class="cap"><span class="cv tnum">3 yard / 3 home</span><span class="cl">van basing</span></div>
+    <div class="cap hot"><span class="cv tnum">2</span><span class="cl">parts low/out</span></div>
+  </div>
+
+  <div class="banner" id="banner"><span id="bannerText"></span><span class="x" id="bannerX">cancel (Esc)</span></div>
+
+  <div class="wrap">
+    <!-- TERRITORY MAP -->
+    <div class="zone">
+      <div class="zh"><span class="zt">Territory map &#183; where the fleet is</span><span class="zsub">yard-based vans park at the depot; home-garaged vans start in their neighborhood</span></div>
+      <div class="map" id="map">
+        <div class="znlbl" style="left:48%;top:11%">North</div>
+        <div class="znlbl" style="left:85%;top:38%">East</div>
+        <div class="znlbl" style="left:52%;top:92%">South</div>
+        <div class="znlbl" style="left:12%;top:44%">West</div>
+        <div class="znlbl" style="left:66%;top:66%">Downtown</div>
+        <div class="znlbl" style="left:22%;top:80%">Suburb</div>
+
+        <div class="yard" style="left:49%;top:50%"><div class="yt">&#127981; Yard</div><div class="ys">parts depot &#183; 2 vans</div></div>
+
+        <!-- active jobs on the map -->
+        <div class="pin emergency" style="left:48%;top:20%"><span class="job">&#9888;</span><span class="plabel">No-heat &#183; Rivera</span></div>
+        <div class="pin" style="left:82%;top:40%"><span class="job">&#128295;</span><span class="plabel">Water htr &#183; Chen</span></div>
+        <div class="pin" style="left:52%;top:84%"><span class="job">&#128295;</span><span class="plabel">Drain &#183; Diaz</span></div>
+
+        <!-- techs / vans; data-* drives dispatch. base: Y=yard, H=home -->
+        <div class="tech" data-id="t1" data-name="Rivera" data-van="3" data-status="enroute" data-base="Y" data-x="48" data-y="28" style="left:48%;top:28%"><span class="dot">RIV<span class="base">Y</span></span></div>
+        <div class="tech" data-id="t2" data-name="Chen" data-van="1" data-status="onsite" data-base="H" data-x="82" data-y="40" data-remain="35" style="left:82%;top:40%"><span class="dot">CHE<span class="base">H</span></span></div>
+        <div class="tech" data-id="t3" data-name="Okoro" data-van="5" data-status="available" data-base="Y" data-x="46" data-y="52" style="left:46%;top:52%"><span class="dot">OKO<span class="base">Y</span></span></div>
+        <div class="tech" data-id="t4" data-name="Diaz" data-van="2" data-status="onsite" data-base="H" data-x="52" data-y="84" data-remain="20" style="left:52%;top:84%"><span class="dot">DIA<span class="base">H</span></span></div>
+        <div class="tech" data-id="t5" data-name="Park" data-van="4" data-status="available" data-base="H" data-x="18" data-y="46" style="left:18%;top:46%"><span class="dot">PAR<span class="base">H</span></span></div>
+        <div class="tech" data-id="t6" data-name="Alvarez" data-van="6" data-status="available" data-base="Y" data-x="54" data-y="50" style="left:54%;top:50%"><span class="dot">ALV<span class="base">Y</span></span></div>
+      </div>
+      <div class="maplegend">
+        <span class="li"><span class="sw" style="background:var(--dpf-success)"></span>Available</span>
+        <span class="li"><span class="sw" style="background:var(--dpf-accent)"></span>En-route</span>
+        <span class="li"><span class="sw" style="background:var(--dpf-info)"></span>On-site</span>
+        <span class="li"><span class="sw" style="background:var(--dpf-error);border-radius:3px"></span>Emergency job</span>
+        <span class="li">Van base: <b>Y</b>=yard&nbsp; <b>H</b>=home-garaged</span>
+      </div>
+    </div>
+
+    <!-- DISPATCH QUEUE (interactive) -->
+    <div class="zone queue">
+      <div class="zh"><span class="zt">Dispatch queue</span><span class="zsub" id="queueSub">tap a job &#8594; cog suggests the nearest available tech &#8594; tap the tech to dispatch</span></div>
+      <div class="qlist" id="queue">
+        <div class="job-card emergency" data-id="j1" data-title="Burst pipe" data-zone="Downtown" data-skill="plumbing" data-x="66" data-y="66">
+          <div class="jt"><span>Burst pipe</span><span class="pr e">EMERGENCY</span></div><div class="jm">Downtown &#183; flooding &#183; plumbing</div><div class="sug">&#9881; suggest &#8212;</div></div>
+        <div class="job-card emergency" data-id="j2" data-title="No hot water" data-zone="North" data-skill="hvac" data-x="48" data-y="14">
+          <div class="jt"><span>No hot water</span><span class="pr e">EMERGENCY</span></div><div class="jm">North &#183; elderly resident &#183; HVAC</div><div class="sug">&#9881; suggest &#8212;</div></div>
+        <div class="job-card scheduled" data-id="j3" data-title="Faucet install" data-zone="West" data-skill="plumbing" data-x="16" data-y="46">
+          <div class="jt"><span>Faucet install</span><span class="pr s">2-4pm</span></div><div class="jm">West &#183; scheduled &#183; plumbing</div><div class="sug">&#9881; suggest &#8212;</div></div>
+        <div class="job-card scheduled" data-id="j4" data-title="AC tune-up" data-zone="Suburb" data-skill="hvac" data-x="24" data-y="76">
+          <div class="jt"><span>AC tune-up</span><span class="pr s">3-5pm</span></div><div class="jm">Suburb &#183; scheduled &#183; HVAC</div><div class="sug">&#9881; suggest &#8212;</div></div>
+      </div>
+    </div>
+
+    <!-- APPOINTMENTS -->
+    <div class="zone appts">
+      <div class="zh"><span class="zt">Today's appointments</span><span class="zsub">8 booked &#183; 2 done &#183; 2 in progress</span></div>
+      <div class="alist">
+        <div class="appt"><span class="win">9:00-11:00</span><span class="ad">Boiler service <small>&#183; 14 Oak St &#183; Rivera</small></span><span class="status done">Done</span></div>
+        <div class="appt"><span class="win">11:30-1:00</span><span class="ad">Leak repair <small>&#183; 8 Pine Ave &#183; Diaz</small></span><span class="status done">Done</span></div>
+        <div class="appt"><span class="win">1:00-3:00</span><span class="ad">Water heater <small>&#183; 40 Maple &#183; Chen (East)</small></span><span class="status onsite">On-site</span></div>
+        <div class="appt"><span class="win">2:00-4:00</span><span class="ad">Faucet install <small>&#183; 3 Elm &#183; unassigned</small></span><span class="status sched">Queued</span></div>
+        <div class="appt"><span class="win">3:00-5:00</span><span class="ad">AC tune-up <small>&#183; 9 Birch &#183; unassigned</small></span><span class="status sched">Queued</span></div>
+        <div class="appt"><span class="win">now</span><span class="ad">No-heat (emergency) <small>&#183; North &#183; Rivera</small></span><span class="status enroute">En-route</span></div>
+      </div>
+    </div>
+
+    <!-- FLEET ROSTER -->
+    <div class="zone roster">
+      <div class="zh"><span class="zt">Fleet &amp; crew &#183; on shift</span><span class="zsub">each anchored to live work &#183; van base shown</span></div>
+      <div class="rlist" id="roster">
+        <div class="trow" data-id="t1" data-status="enroute"><span class="tav">RIV</span><div class="ti"><div class="tn">Rivera &#183; van 3</div><div class="tw">en-route to No-heat (North)</div></div><span class="vb">yard</span></div>
+        <div class="trow" data-id="t2" data-status="onsite"><span class="tav">CHE</span><div class="ti"><div class="tn">Chen &#183; van 1</div><div class="tw">on-site &#183; water heater (East) &#183; ~35m</div></div><span class="vb">home</span></div>
+        <div class="trow" data-id="t3" data-status="available"><span class="tav">OKO</span><div class="ti"><div class="tn">Okoro &#183; van 5</div><div class="tw">available at the yard</div></div><span class="vb">yard</span></div>
+        <div class="trow" data-id="t4" data-status="onsite"><span class="tav">DIA</span><div class="ti"><div class="tn">Diaz &#183; van 2</div><div class="tw">on-site &#183; drain clog (South) &#183; ~20m</div></div><span class="vb">home</span></div>
+        <div class="trow" data-id="t5" data-status="available"><span class="tav">PAR</span><div class="ti"><div class="tn">Park &#183; van 4</div><div class="tw">available &#183; home-based (West)</div></div><span class="vb">home</span></div>
+        <div class="trow" data-id="t6" data-status="available"><span class="tav">ALV</span><div class="ti"><div class="tn">Alvarez &#183; van 6</div><div class="tw">available at the yard</div></div><span class="vb">yard</span></div>
+      </div>
+    </div>
+
+    <!-- PANELS -->
+    <div class="panels">
+      <div class="panel">
+        <div class="ph"><span>Common parts &#183; truck vs yard</span><span>2 to reorder</span></div>
+        <div class="prow low"><span class="rl">Thermocouple</span><span class="bar"><i style="width:20%"></i></span><span class="rv">1 truck / 4 yard</span></div>
+        <div class="prow out"><span class="rl">Capacitor 45&#181;F <span class="tagout">low</span></span><span class="bar"><i></i></span><span class="rv">0 truck / 2 yard</span></div>
+        <div class="prow"><span class="rl">Wax ring</span><span class="bar"><i style="width:70%"></i></span><span class="rv">6 truck / 20 yard</span></div>
+        <div class="prow low"><span class="rl">Copper 1/2in fittings</span><span class="bar"><i style="width:28%"></i></span><span class="rv">low on 2 trucks</span></div>
+      </div>
+      <div class="panel">
+        <div class="ph"><span>Response &amp; SLA</span><span>cold-snap surge</span></div>
+        <div class="prow"><span class="rl">Avg response (emergency)</span><span class="bar"><i style="width:62%;background:var(--dpf-warning)"></i></span><span class="rv">2.1h</span></div>
+        <div class="prow"><span class="rl">First-time fix</span><span class="bar"><i style="width:88%;background:var(--dpf-success)"></i></span><span class="rv">88%</span></div>
+        <div class="prow low"><span class="rl">SLA at risk today</span><span class="bar"><i style="width:40%"></i></span><span class="rv">2 jobs</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="hd">What needs you now</div>
+    <div class="need error"><div class="nb"><div class="nt">2 emergencies unassigned</div><div class="nm">Burst pipe (Downtown) &amp; no hot water (North) &#183; nearest free techs are Okoro/Alvarez at the yard</div></div><button class="na" id="needDispatch">Dispatch both</button></div>
+    <div class="need warn"><div class="nb"><div class="nt">Van 4 (Park) is home-garaged in the West</div><div class="nm">Closest to the Faucet install &#8212; dispatch from home instead of routing a yard van across town</div></div><button class="na">Assign Park</button></div>
+    <div class="need warn"><div class="nb"><div class="nt">Capacitor 45&#181;F out on the trucks</div><div class="nm">2 in the yard &#183; the AC tune-up may need one &#8212; load before dispatch</div></div><button class="na">Add to load</button></div>
+  </div>
+
+  <div class="foot">
+    Field-service operational twin. <b>Interactive</b> (needs JavaScript): tap a queued job &#8594; the dispatch <b>cog</b> suggests the
+    nearest available tech by travel time (respecting whether a van is yard-based or home-garaged) &#8594; tap the tech to dispatch.
+    Binds to a per-archetype fleet/territory model on real <code>field-dispatch</code> lifecycle, <code>schedulingDefaults</code>/appointments,
+    inventory (parts on truck vs yard), and roster + <code>agent-event-bus</code> data.
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+  const $=id=>document.getElementById(id), $$=s=>Array.prototype.slice.call(document.querySelectorAll(s));
+  const GEAR=String.fromCharCode(9881); // cog
+  const numAttr=(el,a)=>parseFloat(el.dataset[a])||0;
+  let sel=null; // selected queued job element
+
+  const techs=()=>$$('#map .tech');
+  const rosterRow=id=>document.querySelector('#roster .trow[data-id="'+id+'"]');
+
+  function dist(ax,ay,bx,by){ const dx=ax-bx, dy=ay-by; return Math.sqrt(dx*dx+dy*dy); }
+  function eta(d,extra){ return Math.max(6, Math.round(d*0.7)+(extra||0)); } // travel min + any wait
+
+  // dispatch cog: nearest AVAILABLE tech to the job; else the on-site tech that
+  // frees soonest, plus travel. Yard-based available techs start at the yard;
+  // home-garaged available techs start in their neighborhood (already in data-x/y).
+  function suggest(job){
+    const jx=numAttr(job,"x"), jy=numAttr(job,"y");
+    let best=null,bestEta=1e9,soon=null,soonEta=1e9;
+    techs().forEach(t=>{
+      const tx=numAttr(t,"x"), ty=numAttr(t,"y"), st=t.dataset.status;
+      if(st==="available"){ const e=eta(dist(tx,ty,jx,jy)); if(e<bestEta){bestEta=e;best=t;} }
+      else if(st==="onsite"){ const e=eta(dist(tx,ty,jx,jy), numAttr(t,"remain")); if(e<soonEta){soonEta=e;soon=t;} }
+    });
+    if(best) return {tech:best, eta:bestEta, free:true};
+    if(soon) return {tech:soon, eta:soonEta, free:false};
+    return null;
+  }
+
+  function refreshSuggestions(){
+    $$('#queue .job-card').forEach(j=>{
+      const s=suggest(j), el=j.querySelector(".sug"); if(!el) return;
+      if(!s){ el.textContent=GEAR+" no tech available"; return; }
+      const base=s.tech.dataset.base==="H"?" (home-based)":"";
+      el.textContent = s.free
+        ? GEAR+" dispatch "+s.tech.dataset.name+base+" ~"+s.eta+"m"
+        : GEAR+" "+s.tech.dataset.name+" frees + travel ~"+s.eta+"m";
+    });
+  }
+
+  function updateCaps(){
+    let avail=0,enr=0,ons=0;
+    techs().forEach(t=>{ const st=t.dataset.status; if(st==="available")avail++; else if(st==="enroute")enr++; else if(st==="onsite")ons++; });
+    const q=$$('#queue .job-card').length, em=$$('#queue .job-card.emergency').length;
+    $("capAvail").textContent=avail+"/6"; $("capEnroute").textContent=enr; $("capOnsite").textContent=ons;
+    $("capQueue").textContent=q; $("capEmerg").textContent=em;
+    $("queueSub").textContent = q ? "tap a job, then the highlighted tech to dispatch" : "queue clear - all jobs dispatched";
+  }
+
+  let toastT=null;
+  function toast(msg){ const el=$("toast"); el.textContent=msg; el.classList.add("on"); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("on"),2800); }
+
+  function clearSel(){
+    if(sel) sel.classList.remove("sel"); sel=null; $("banner").classList.remove("on");
+    techs().forEach(t=>t.classList.remove("eligible","suggest"));
+    $$('#roster .trow').forEach(r=>r.classList.remove("eligible","suggest"));
+  }
+
+  function selectJob(j){
+    if(sel===j){ clearSel(); return; }
+    clearSel(); sel=j; j.classList.add("sel");
+    const s=suggest(j), title=j.dataset.title;
+    techs().forEach(t=>{ if(t.dataset.status==="available"){ t.classList.add("eligible"); const r=rosterRow(t.dataset.id); if(r) r.classList.add("eligible"); } });
+    let msg="Dispatching "+title+" ("+j.dataset.zone+") - tap a highlighted tech.";
+    if(s&&s.free){ s.tech.classList.remove("eligible"); s.tech.classList.add("suggest"); const r=rosterRow(s.tech.dataset.id); if(r){r.classList.remove("eligible");r.classList.add("suggest");}
+      msg+=" Cog suggests "+s.tech.dataset.name+(s.tech.dataset.base==="H"?" (home-based)":"")+", ETA ~"+s.eta+"m."; }
+    else if(s){ msg+=" No tech free - "+s.tech.dataset.name+" clears + travels in ~"+s.eta+"m."; }
+    else { msg+=" No tech available - overtime or reschedule."; }
+    $("bannerText").textContent=msg; $("banner").classList.add("on");
+  }
+
+  function assign(t){
+    if(!sel||t.dataset.status!=="available") return;
+    const jx=numAttr(sel,"x"), jy=numAttr(sel,"y"), name=t.dataset.name, title=sel.dataset.title, zone=sel.dataset.zone, emerg=sel.classList.contains("emergency");
+    const s=suggest(sel), e=s?s.eta:eta(dist(numAttr(t,"x"),numAttr(t,"y"),jx,jy));
+    // tech -> en-route: move marker toward the job (halfway) and recolor
+    t.dataset.status="enroute";
+    const mx=(numAttr(t,"x")+jx)/2, my=(numAttr(t,"y")+jy)/2;
+    t.dataset.x=mx; t.dataset.y=my; t.style.left=mx+"%"; t.style.top=my+"%";
+    const r=rosterRow(t.dataset.id); if(r){ r.dataset.status="enroute"; const tw=r.querySelector(".tw"); if(tw) tw.textContent="en-route to "+title+" ("+zone+") - ETA ~"+e+"m"; }
+    // drop a job pin on the map
+    const pin=document.createElement("div"); pin.className="pin"+(emerg?" emergency":" scheduled");
+    pin.style.left=jx+"%"; pin.style.top=jy+"%";
+    const jb=document.createElement("span"); jb.className="job"; jb.textContent=String.fromCodePoint(128295); // wrench
+    const pl=document.createElement("span"); pl.className="plabel"; pl.textContent=title+" - "+name;
+    pin.appendChild(jb); pin.appendChild(pl); $("map").appendChild(pin);
+    sel.remove(); clearSel(); updateCaps(); refreshSuggestions();
+    toast("Dispatched "+name+" to "+title+" ("+zone+") ETA ~"+e+"m");
+  }
+
+  // wire
+  $$('#queue .job-card').forEach(j=>j.addEventListener("click",()=>selectJob(j)));
+  techs().forEach(t=>t.addEventListener("click",()=>{ if(sel&&t.classList.contains("eligible")||sel&&t.classList.contains("suggest")) assign(t); }));
+  $$('#roster .trow').forEach(r=>r.addEventListener("click",()=>{ if(!sel) return; const t=document.querySelector('#map .tech[data-id="'+r.dataset.id+'"]'); if(t&&(r.classList.contains("eligible")||r.classList.contains("suggest"))) assign(t); }));
+  $("dispatchNext").addEventListener("click",()=>{
+    const jobs=$$('#queue .job-card'); if(!jobs.length){ toast("Dispatch queue is clear"); return; }
+    // emergencies first, then whichever has a free tech
+    jobs.sort((a,b)=>(b.classList.contains("emergency")-a.classList.contains("emergency")));
+    for(const j of jobs){ const s=suggest(j); if(s&&s.free){ selectJob(j); assign(s.tech); return; } }
+    toast("No tech free for the next job - overtime or reschedule");
+  });
+  $("needDispatch").addEventListener("click",()=>{ $("dispatchNext").click(); setTimeout(()=>$("dispatchNext").click(),350); });
+  $("bannerX").addEventListener("click",clearSel);
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") clearSel(); });
+  $("themeToggle").addEventListener("click",()=>{const c=document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",c==="dark"?"light":"dark");});
+
+  refreshSuggestions(); updateCaps();
+})();
+</script>

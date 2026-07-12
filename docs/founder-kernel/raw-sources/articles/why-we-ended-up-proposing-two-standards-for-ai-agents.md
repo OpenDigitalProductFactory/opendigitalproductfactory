@@ -160,6 +160,6 @@ That is the stage I believe this work has now reached.
 
 ## See also
 
-- Related standards draft: [docs/architecture/trusted-ai-kernel.md](D:/DPF/docs/architecture/trusted-ai-kernel.md)
-- Related standards draft: [docs/architecture/GAID.md](D:/DPF/docs/architecture/GAID.md)
-- Related white paper: [docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md](D:/DPF/docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md)
+- Related standards draft: [trusted-ai-kernel.md](../../../architecture/trusted-ai-kernel.md)
+- Related standards draft: [GAID.md](../../../architecture/GAID.md)
+- Related white paper: [2026-04-18-trusted-ai-agent-governance-white-paper.md](../../../architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md)

@@ -51,9 +51,9 @@ export default async function VoiceProfileAdminPage({ params }: { params: Params
     <div className="mx-auto max-w-2xl px-4 py-8">
       {/* Breadcrumb */}
       <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/wiki" className="hover:text-foreground">Wiki</Link>
+        <Link href="/coworker-decisions" className="hover:text-foreground">Wiki</Link>
         <span>/</span>
-        <Link href="/wiki/perspectives" className="hover:text-foreground">Perspectives</Link>
+        <Link href="/coworker-decisions/perspectives" className="hover:text-foreground">Perspectives</Link>
         <span>/</span>
         <span className="text-foreground font-medium">{profile.name}</span>
         <span>/</span>

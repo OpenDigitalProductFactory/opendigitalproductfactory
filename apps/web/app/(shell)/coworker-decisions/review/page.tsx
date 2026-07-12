@@ -140,8 +140,8 @@ export default async function DecisionReviewPage() {
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
       <nav className="mb-6 flex items-center gap-2 text-sm text-[var(--dpf-muted)]">
-        <Link href="/wiki" className="hover:text-[var(--dpf-text)]">
-          Decision governance
+        <Link href="/coworker-decisions" className="hover:text-[var(--dpf-text)]">
+          Coworker Decision Engine
         </Link>
         <span>/</span>
         <span className="text-[var(--dpf-text)] font-medium">Review &amp; adjust</span>
@@ -225,7 +225,7 @@ export default async function DecisionReviewPage() {
           </p>
         </div>
         <Link
-          href="/wiki/matrix"
+          href="/coworker-decisions/matrix"
           className="text-sm text-[var(--dpf-accent)] hover:underline shrink-0"
         >
           View the matrix →
