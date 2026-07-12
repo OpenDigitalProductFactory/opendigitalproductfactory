@@ -9,10 +9,8 @@ import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import { slugify } from "@/lib/shared/slugify";
-import { generateBuildId } from "@/lib/feature-build-types";
 import {
   logBuildActivity,
-  TERMINAL_BUILD_PHASES,
   extractBuildIdHint,
   resolveActiveBuildId,
   updateBuildHappyPathState,

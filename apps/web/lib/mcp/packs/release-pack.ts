@@ -597,7 +597,7 @@ async function scheduleReleaseBundle(params: Record<string, unknown>): Promise<T
         category: "platform",
         ownerEmployeeId: employee.id,
         visibility: "team",
-        color: "#f59e0b",
+        color: "#f59e0b", // style-drift-allow -- persisted calendar color, not CSS
       },
       update: { title: `Deployment: ${bundle.title}`, startAt: new Date() },
     });
