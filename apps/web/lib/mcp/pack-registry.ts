@@ -73,6 +73,7 @@ import { adminPack } from "./packs/admin-pack";
 import { decompositionPack } from "./packs/decomposition-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
+import { releasePack } from "./packs/release-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -129,6 +130,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   coworkerPack,
   platformUtilitiesPack,
   backlogPack,
+  releasePack,
   adminPack,
   decompositionPack,
 ]);
