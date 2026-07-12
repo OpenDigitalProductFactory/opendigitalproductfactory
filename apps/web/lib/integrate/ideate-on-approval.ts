@@ -309,7 +309,8 @@ export async function dispatchIdeateForApprovedBuild(params: {
       }
     } catch (researchErr) {
       // Advisory — swallow and continue; ideate must not depend on research.
-      await logActivity(`Pre-spec research skipped (non-fatal): ${researchErr instanceof Error ? researchErr.message : String(researchErr)}`);
+      const { getErrorMessage } = await import("@/lib/shared/get-error-message");
+      await logActivity(`Pre-spec research skipped (non-fatal): ${getErrorMessage(researchErr)}`);
     }
 
     const designDocKeys = Object.keys(ideateResult.designDoc as Record<string, unknown>);
