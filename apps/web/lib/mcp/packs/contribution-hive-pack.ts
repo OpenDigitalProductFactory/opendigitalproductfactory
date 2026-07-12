@@ -15,65 +15,11 @@ import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-
-// ── Local helpers replicated from mcp-tools.ts ───────────────────────────────
-// These are broadly shared (used by ~35 inline tools) and not exported, so the
-// pack keeps its own copies rather than importing them. The originals stay
-// inline; both must stay behaviour-identical.
-
-function logBuildActivity(buildId: string, tool: string, summary: string): void {
-  prisma.buildActivity.create({ data: { buildId, tool, summary } }).catch(() => {});
-}
-
-/**
- * Phases that exclude a FeatureBuild from "active" auto-resolution.
- * `abandoned` is included because abandoned builds from prior runs would
- * otherwise shadow the freshly promoted build.
- */
-const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
-
-/**
- * Pull a well-formed `buildId` hint out of a tool's params bag.
- * Returns null when the hint is missing, non-string, or doesn't have the
- * `FB-` prefix that all real FeatureBuild IDs carry.
- */
-function extractBuildIdHint(params: Record<string, unknown>): string | null {
-  const v = params["buildId"];
-  if (typeof v !== "string") return null;
-  const trimmed = v.trim();
-  return trimmed.startsWith("FB-") ? trimmed : null;
-}
-
-/**
- * Resolve the active FeatureBuild for the current user.
- *
- * When `buildIdHint` is supplied AND it resolves to an existing build the
- * caller is allowed to act on, that hint wins — even if the user has a more
- * recently updated build. This is how explicit `buildId` arguments from MCP
- * tool calls reach the per-tool handlers without being silently overridden.
- *
- * Fallback: most-recently-updated non-terminal build created by the user.
- */
-async function resolveActiveBuildId(
-  userId: string,
-  buildIdHint?: string | null,
-): Promise<string | null> {
-  if (buildIdHint && buildIdHint.startsWith("FB-")) {
-    const hinted = await prisma.featureBuild.findUnique({
-      where: { buildId: buildIdHint },
-      select: { buildId: true, createdById: true },
-    });
-    // Access model today is owner-only — see getFeatureBuildForContext for the
-    // matching check. If a future grant model lands, expand this predicate.
-    if (hinted && hinted.createdById === userId) return hinted.buildId;
-  }
-  const build = await prisma.featureBuild.findFirst({
-    where: { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } },
-    orderBy: { updatedAt: "desc" },
-    select: { buildId: true },
-  });
-  return build?.buildId ?? null;
-}
+import {
+  logBuildActivity,
+  extractBuildIdHint,
+  resolveActiveBuildId,
+} from "@/lib/mcp/build-tool-helpers";
 
 const definitions: ToolDefinition[] = [
   {

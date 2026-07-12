@@ -16,9 +16,13 @@
 
 import { prisma } from "@dpf/db";
 import { slugify } from "@/lib/shared/slugify";
-import { mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import {
+  resolveActiveBuildId,
+  extractBuildIdHint,
+  updateBuildHappyPathState,
+} from "@/lib/mcp/build-tool-helpers";
 
 const definitions: ToolDefinition[] = [
   {
@@ -135,63 +139,6 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
 ];
-
-// ─── Shared build-resolution helpers (replicated from mcp-tools.ts) ──────────
-// These are used by many inline build tools; local copies keep this pack
-// self-contained without moving the originals out of mcp-tools.ts.
-
-const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
-
-function extractBuildIdHint(params: Record<string, unknown>): string | null {
-  const v = params["buildId"];
-  if (typeof v !== "string") return null;
-  const trimmed = v.trim();
-  return trimmed.startsWith("FB-") ? trimmed : null;
-}
-
-async function resolveActiveBuildId(
-  userId: string,
-  buildIdHint?: string | null,
-): Promise<string | null> {
-  if (buildIdHint && buildIdHint.startsWith("FB-")) {
-    const hinted = await prisma.featureBuild.findUnique({
-      where: { buildId: buildIdHint },
-      select: { buildId: true, createdById: true },
-    });
-    if (hinted && hinted.createdById === userId) return hinted.buildId;
-  }
-  const build = await prisma.featureBuild.findFirst({
-    where: { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } },
-    orderBy: { updatedAt: "desc" },
-    select: { buildId: true },
-  });
-  return build?.buildId ?? null;
-}
-
-async function updateBuildHappyPathState(
-  userId: string,
-  patch: Parameters<typeof mergeHappyPathStateIntoPlan>[1],
-  buildId?: string | null,
-): Promise<void> {
-  const resolvedBuildId = buildId ?? await resolveActiveBuildId(userId);
-  if (!resolvedBuildId) return;
-
-  const build = await prisma.featureBuild.findUnique({
-    where: { buildId: resolvedBuildId },
-    select: { plan: true },
-  });
-  if (!build) return;
-
-  const mergedPlan = mergeHappyPathStateIntoPlan(
-    (build.plan as Record<string, unknown> | null) ?? null,
-    patch,
-  );
-
-  await prisma.featureBuild.update({
-    where: { buildId: resolvedBuildId },
-    data: { plan: mergedPlan as import("@dpf/db").Prisma.InputJsonValue },
-  });
-}
 
 // ─── Handlers ───────────────────────────────────────────────────────────────
 

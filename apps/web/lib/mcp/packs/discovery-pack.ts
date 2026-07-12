@@ -25,37 +25,7 @@ import {
 import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-
-// Local copy of the mega-module's terminal-phase set and active-build
-// resolution helpers. These are broadly shared in mcp-tools.ts, so the
-// originals stay inline and this pack carries its own byte-identical copy.
-const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
-
-function extractBuildIdHint(params: Record<string, unknown>): string | null {
-  const v = params["buildId"];
-  if (typeof v !== "string") return null;
-  const trimmed = v.trim();
-  return trimmed.startsWith("FB-") ? trimmed : null;
-}
-
-async function resolveActiveBuildId(
-  userId: string,
-  buildIdHint?: string | null,
-): Promise<string | null> {
-  if (buildIdHint && buildIdHint.startsWith("FB-")) {
-    const hinted = await prisma.featureBuild.findUnique({
-      where: { buildId: buildIdHint },
-      select: { buildId: true, createdById: true },
-    });
-    if (hinted && hinted.createdById === userId) return hinted.buildId;
-  }
-  const build = await prisma.featureBuild.findFirst({
-    where: { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } },
-    orderBy: { updatedAt: "desc" },
-    select: { buildId: true },
-  });
-  return build?.buildId ?? null;
-}
+import { resolveActiveBuildId, extractBuildIdHint } from "@/lib/mcp/build-tool-helpers";
 
 const definitions: ToolDefinition[] = [
   {

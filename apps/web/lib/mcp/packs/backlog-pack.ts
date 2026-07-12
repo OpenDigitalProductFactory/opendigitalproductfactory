@@ -11,15 +11,14 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 //
-// `updateBuildHappyPathState` (and its `resolveActiveBuildId` dependency plus
-// the local `TERMINAL_BUILD_PHASES` constant) is replicated here as a faithful
-// local copy: it is broadly shared by many still-inline tools in mcp-tools.ts,
-// so the original stays there and this copy backs create_backlog_item's
-// `/build` happy-path update only.
+// `updateBuildHappyPathState` (backing create_backlog_item's `/build`
+// happy-path update) is imported from the shared build-tool-helpers module
+// (EP-8DC217EB BET-4), which owns the one canonical copy of the build-
+// resolution helpers rather than replicating them per pack.
 
-import { mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { handleUpdateBacklogItem } from "@/lib/mcp-handlers/update-backlog-item";
+import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
 import {
   BACKLOG_SOURCE_VALUES,
   BACKLOG_STATUS_VALUES,
@@ -299,59 +298,6 @@ const definitions: ToolDefinition[] = [
     sideEffect: false,
   },
 ];
-
-// ── Replicated build happy-path helpers (see file header) ───────────────────
-// Faithful local copies of the mcp-tools.ts originals, which stay inline there
-// because many still-inline tools also call them. TERMINAL_BUILD_PHASES here
-// mirrors the mcp-tools.ts local constant (3 phases) — deliberately NOT the
-// wip-cap.ts export (2 phases) — so behaviour is byte-identical.
-const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
-
-async function resolveActiveBuildId(
-  userId: string,
-  buildIdHint?: string | null,
-): Promise<string | null> {
-  const { prisma } = await import("@dpf/db");
-  if (buildIdHint && buildIdHint.startsWith("FB-")) {
-    const hinted = await prisma.featureBuild.findUnique({
-      where: { buildId: buildIdHint },
-      select: { buildId: true, createdById: true },
-    });
-    if (hinted && hinted.createdById === userId) return hinted.buildId;
-  }
-  const build = await prisma.featureBuild.findFirst({
-    where: { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } },
-    orderBy: { updatedAt: "desc" },
-    select: { buildId: true },
-  });
-  return build?.buildId ?? null;
-}
-
-async function updateBuildHappyPathState(
-  userId: string,
-  patch: Parameters<typeof mergeHappyPathStateIntoPlan>[1],
-  buildId?: string | null,
-): Promise<void> {
-  const { prisma } = await import("@dpf/db");
-  const resolvedBuildId = buildId ?? await resolveActiveBuildId(userId);
-  if (!resolvedBuildId) return;
-
-  const build = await prisma.featureBuild.findUnique({
-    where: { buildId: resolvedBuildId },
-    select: { plan: true },
-  });
-  if (!build) return;
-
-  const mergedPlan = mergeHappyPathStateIntoPlan(
-    (build.plan as Record<string, unknown> | null) ?? null,
-    patch,
-  );
-
-  await prisma.featureBuild.update({
-    where: { buildId: resolvedBuildId },
-    data: { plan: mergedPlan as import("@dpf/db").Prisma.InputJsonValue },
-  });
-}
 
 // ── Handlers (case bodies moved verbatim) ───────────────────────────────────
 
