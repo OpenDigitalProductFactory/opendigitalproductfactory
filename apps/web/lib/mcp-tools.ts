@@ -381,146 +381,12 @@ function stringArray(value: unknown): string[] {
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
-  {
-    name: "promote_to_build_studio",
-    description: "Promote a triaged backlog item (status=open, triageOutcome=build) to a FeatureBuild in Build Studio. Runs the Definition of Ready capacity check under an advisory-lock transaction. Authority-gated via the build_promote grant category.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        itemId: { type: "string", description: "The item ID to promote" },
-      },
-      required: ["itemId"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
-  {
-    name: "update_lifecycle",
-    description: "Update a digital product's lifecycle stage and status",
-    inputSchema: {
-      type: "object",
-      properties: {
-        productId: { type: "string", description: "Product identifier" },
-        lifecycleStage: { type: "string", enum: ["plan", "design", "build", "production", "retirement"] },
-        lifecycleStatus: { type: "string", enum: ["draft", "active", "inactive"] },
-      },
-      required: ["productId"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
-  {
-    name: "verify_live_install_readiness",
-    description:
-      "Preflight a feature against the live install before driving its happy path. Returns the same deterministic verdict as `pnpm verify:preflight` — CAN-TEST (served bytes contain the feature commit), MUST-ADVANCE (behind/unprovable → advance via the governed self-upgrade path), or BLOCKED (no testable runtime → file a BI and stop) — plus one next action. Surface-agnostic: identical verdict logic for CLI and in-portal/Build Studio. Read-only.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        featureSha: {
-          type: "string",
-          description:
-            "The commit the feature under test requires — a PR/BI merge SHA or a build's commit. Compared against the live install's served image identity.",
-        },
-      },
-      required: ["featureSha"],
-    },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: false,
-  },
-  {
-    name: "record_execution_evidence",
-    description: "Attach an evidence record to a backlog item (test pass/fail, build pass/fail, ux verification, spec review, manual check, external link). Writes an evidence activity row; the cross-cutting audit lives in ToolExecution. Side-effecting.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        itemId: { type: "string", description: "Semantic backlog item id" },
-        kind: {
-          type: "string",
-          enum: [
-            "test_pass",
-            "test_fail",
-            "build_pass",
-            "build_fail",
-            "ux_verified",
-            "spec_review",
-            "manual_check",
-            "external_link",
-          ],
-          description: "Evidence kind",
-        },
-        summary: { type: "string", description: "Headline for the timeline (<= 240 chars)" },
-        url: { type: "string", description: "Link to PR / CI run / screenshot" },
-        body: { type: "string", description: "Longer notes (<= 8000 chars)" },
-        toolExecutionId: { type: "string", description: "Audit row id when this evidence was produced by a prior tool call" },
-      },
-      required: ["itemId", "kind", "summary"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
-  {
-    name: "record_local_integration_result",
-    description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, status (passed | failed | conflict | blocked_sandbox_drift — the latter means the shared sandbox was stale/not-ready and the run is NOT product evidence), and evidence including dependency-freshness verdict.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        provider: { type: "string", enum: ["build-studio", "claude", "codex", "grok", "coworker"] },
-        externalSessionId: { type: "string" },
-        routeContext: { type: "string" },
-        buildId: { type: "string" },
-        taskRunId: { type: "string" },
-        candidateBranch: { type: "string" },
-        mode: { type: "string", enum: ["single-branch", "sibling-set", "post-merge-main"] },
-        status: { type: "string", enum: ["passed", "failed", "conflict", "blocked_sandbox_drift"] },
-        summary: { type: "string" },
-        evidence: { type: "object" },
-      },
-      required: ["provider", "externalSessionId", "routeContext", "candidateBranch", "mode", "status", "summary", "evidence"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: true,
-    buildPhases: ["ideate", "plan", "build", "review", "ship"],
-  },
-  {
-    name: "record_functional_failure_evidence",
-    description: "Create or update a deduped backlog item from Playwright FunctionalFailureEvidence. Uses a deterministic testId+route+actual fingerprint and records an evidence activity; the cross-cutting audit lives in ToolExecution. Side-effecting.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        testId: { type: "string", description: "Stable automated test id" },
-        suite: { type: "string", description: "Playwright suite or project" },
-        route: { type: "string", description: "Application route under test" },
-        expected: { type: "string", description: "Expected behavior" },
-        actual: { type: "string", description: "Observed failure" },
-        screenshotPath: { type: "string", description: "Local screenshot path when available" },
-        tracePath: { type: "string", description: "Local trace path when available" },
-        userRole: { type: "string", description: "User role used by the test" },
-        agentId: { type: "string", description: "Expected or active coworker id" },
-        routeContext: { type: "string", description: "Route context used by the test" },
-        reproCommand: { type: "string", description: "Command to reproduce the failure" },
-        createdAt: { type: "string", description: "Evidence timestamp" },
-        likelyOwnerArea: { type: "string", description: "Likely owning product area" },
-        buildId: { type: "string", description: "Optional Build Studio id" },
-        backlogItemId: { type: "string", description: "Optional explicit backlog item to attach to" },
-      },
-      required: [
-        "testId",
-        "suite",
-        "route",
-        "expected",
-        "actual",
-        "userRole",
-        "routeContext",
-        "reproCommand",
-        "createdAt",
-        "likelyOwnerArea",
-      ],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
+  // promote_to_build_studio moved to a build ToolPack
+  // update_lifecycle moved to a build ToolPack
+  // verify_live_install_readiness moved to a build ToolPack
+  // record_execution_evidence moved to a build ToolPack
+  // record_local_integration_result moved to a build ToolPack
+  // record_functional_failure_evidence moved to a build ToolPack
   // ─── Build Studio Tools ───────────────────────────────────────────────────
   // update_feature_brief and create_build_epic execute immediately (no approval dialog).
   // Only register_digital_product_from_build needs HITL approval (creates a real product).
@@ -717,59 +583,9 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       idempotentHint: false,
     },
   },
-  {
-    name: "reconcile_build_engines",
-    description: "Re-provision build engines that were provisioned on demand and are now missing from the sandbox (e.g. after a sandbox rebuild). Idempotent and narrow: only restores engines with desired=present AND a prior successful provision that a fresh probe reports absent — a no-op for fresh or baked-only sandboxes. Side-effecting (may run installs). Also fires automatically when start_sandbox brings a recreated sandbox to ready. Returns { checked, restored[], skipped }.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        offline: {
-          type: "boolean",
-          description: "When true, only use no-egress (prestaged-binary) recipes. Default false.",
-        },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: true,
-    buildPhases: ["ideate", "plan", "build", "review"],
-  },
-  {
-    name: "provision_build_engine",
-    description: "Install a build-dispatch engine (claude, codex, grok, opencode) into the running sandbox from its registry recipe, then verify by re-probing. Idempotent — a no-op if the engine is already present. Side-effecting: runs the install command (e.g. `npm install -g`, the grok curl-installer, or the opencode prestaged-binary/tarball) inside the sandbox, so it requires sandbox_execute. Pass offline:true to use only no-egress (prestaged-binary) recipes for air-gapped installs. Returns { kind, version, recipe }.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        engineId: { type: "string", description: "Engine to provision: 'claude' | 'codex' | 'grok' | 'opencode'." },
-        offline: {
-          type: "boolean",
-          description: "When true, only run no-egress (prestaged-binary) recipes (air-gapped install). Default false.",
-        },
-      },
-      required: ["engineId"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: true,
-    buildPhases: ["ideate", "plan", "build", "review"],
-  },
-  {
-    name: "get_build_engine_readiness",
-    description: "Report whether each build-dispatch engine (claude, codex, grok, opencode) is present and healthy in the build sandbox. Returns per-engine { present, version, lastProbedAt, bakeInDefault } from the last probe (BuildEngineState). Pass refresh:true to live re-probe each engine (docker exec <verifyCommand>) and persist the fresh result. Use this to see engine readiness before selecting a build dispatch engine — e.g. an engine that is selectable but shows present:false would fail at runtime with 'not found'.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        refresh: {
-          type: "boolean",
-          description: "When true, live re-probe each engine in the sandbox and persist the result before returning. Default false (return last known state).",
-        },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate", "plan", "build", "review"],
-  },
+  // reconcile_build_engines moved to a build ToolPack
+  // provision_build_engine moved to a build ToolPack
+  // get_build_engine_readiness moved to a build ToolPack
   {
     name: "check_sandbox",
     description: "Check whether the sandbox container (dpf-sandbox-1) is running. Returns status: 'running', 'stopped', or 'not_found'. If the result is not_found or detached, call diagnose_sandbox for governed recovery guidance.",
@@ -923,26 +739,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false, // Sandbox is isolated from production — safe in any mode
     buildPhases: ["build", "review"],
   },
-  {
-    name: "run_tool_script",
-    description:
-      "Run a short script that calls several READ-only tools and filters their results inside an isolated sandbox, returning only the small filtered result. Use instead of calling many read tools individually when results are large — e.g. scan N records and keep the few that match. The code is the body of an async run: call `await callTool(name, args)` for each tool, then `emit(value)` once with your final small result. Read-only: the script cannot call side-effecting tools. Disabled unless an operator has enabled it.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        code: {
-          type: "string",
-          description:
-            "Script body. You have `callTool(name, args)` (returns the tool's data) and `emit(value)` (return your final small result). Example: const r = await callTool('query_backlog', { status: 'open' }); emit(r.items.filter(i => i.priority === 'high').map(i => i.itemId));",
-        },
-        purpose: { type: "string", description: "One line describing what the script does (recorded for audit)." },
-      },
-      required: ["code"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false, // sandbox-isolated; inner calls are read-only + governed per call
-  },
+  // run_tool_script moved to a build ToolPack
   {
     name: "validate_schema",
     description: "Validate the Prisma schema in the sandbox for common errors: missing inverse relations, undefined types, unindexed foreign keys. MUST be called before running prisma migrate. Returns specific errors with fix instructions.",
@@ -1052,22 +849,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate"],
   },
   // ─── Manifest Tools ────────────────────────────────────────────────────────
-  {
-    name: "propose_file_change",
-    description: "Propose a change to a project file. Shows a diff for human review. Requires approval before the change is applied.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Relative file path to modify or create" },
-        description: { type: "string", description: "Human-readable description of the change" },
-        newContent: { type: "string", description: "The complete new file contents" },
-      },
-      required: ["path", "description", "newContent"],
-    },
-    requiredCapability: "manage_capabilities",
-    sideEffect: true,
-    buildPhases: ["build"],
-  },
+  // propose_file_change moved to a build ToolPack
   // ─── Feedback Loop ──────────────────────────────────────────────────────────
   // propose_improvement def moved to mcp/packs/contribution-hive-pack.ts
   // propose_skill_improvement def moved to mcp/packs/contribution-hive-pack.ts
@@ -1153,24 +935,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   // ─── Endpoint Testing Tools ──────────────────────────────────────────────
-  {
-    name: "run_endpoint_tests",
-    description: "Run the agent test harness against a scoped endpoint. On provider detail routes, omit endpointId to use the current provider and default to quick probes. Set allEndpoints=true or allModels=true only when the user explicitly asks for exhaustive diagnostics.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        endpointId: { type: "string", description: "Provider endpoint to test. Defaults to the current /platform/ai/providers/:providerId route when available." },
-        modelId: { type: "string", description: "Optional model profile to test. Defaults to a representative active model for the endpoint." },
-        taskType: { type: "string", description: "Run only scenarios for this task type (default: all)" },
-        probesOnly: { type: "boolean", description: "Run only capability probes, skip scenarios (default: true for coworker calls)" },
-        allEndpoints: { type: "boolean", description: "Explicitly test every active LLM endpoint. Use only when the user asks for all endpoints." },
-        allModels: { type: "boolean", description: "Test every active model profile for the endpoint. Use only for exhaustive diagnostics." },
-      },
-    },
-    requiredCapability: "manage_capabilities",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
+  // run_endpoint_tests moved to a build ToolPack
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -1394,373 +1159,17 @@ export async function executeTool(
     return packHandler(params, userId, context);
   }
   switch (toolName) {
-    case "promote_to_build_studio": {
-      const itemId = String(params["itemId"] ?? "");
-      const governedConfig = await prisma.platformDevConfig.findUnique({
-        where: { id: "singleton" },
-        select: { governedBacklogEnabled: true },
-      });
-      const governedBacklogEnabled = governedConfig?.governedBacklogEnabled === true;
+    // promote_to_build_studio moved to a build ToolPack
 
-      // WIP cap (shared with the createFeatureBuild start path): refuse to
-      // promote another build into Build Studio while too many are unfinished.
-      {
-        const { wipCapReached, BUILD_WIP_CAP, BuildWipCapError, TERMINAL_BUILD_PHASES } =
-          await import("@/lib/build/wip-cap");
-        const activeBuilds = await prisma.featureBuild.count({
-          where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
-        });
-        if (wipCapReached(activeBuilds)) {
-          const err = new BuildWipCapError(activeBuilds, BUILD_WIP_CAP);
-          return { success: false, error: "wip_cap_reached", message: err.message };
-        }
-      }
+    // update_lifecycle moved to a build ToolPack
 
-      const result = await prisma.$transaction(async (tx) => {
-        return promoteBacklogItemToBuildDraft({
-          tx,
-          itemId,
-          userId,
-          governedBacklogEnabled,
-        });
-      });
+    // verify_live_install_readiness moved to a build ToolPack
 
-      if (result.kind === "error") {
-        return { success: false, error: result.error, message: result.message };
-      }
+    // record_execution_evidence moved to a build ToolPack
 
-      // BI-52022707 axis D — auto-dispatch Ideate after governed promotion.
-      // The transaction inside promoteBacklogItemToBuildDraft set
-      // draftApprovedAt for governed + non-empty-body promotions; that closes
-      // the "Record Approve Start" gate but does NOT fire the Ideate research.
-      // Mirror the approveBuildStart action's fire-and-forget pattern here so
-      // the BS pipeline actually starts work without a second operator click.
-      // Fire-and-forget on purpose: the operator's MCP call returns immediately
-      // with the FB-* id, and the ~3-min Codex research runs async, exactly
-      // like the manual UI button path. Errors are logged + written to
-      // BuildActivity by the helper itself — never thrown out here.
-      if (result.autoApprovedDispatchEligible) {
-        void (async () => {
-          try {
-            const { dispatchIdeateForApprovedBuild } = await import("@/lib/integrate/ideate-on-approval");
-            await dispatchIdeateForApprovedBuild({ buildId: result.build.buildId, userId });
-          } catch (err) {
-            console.error(
-              "[promote_to_build_studio] auto-dispatch Ideate failed (handler swallowed by ideate-on-approval but the dynamic import or top-level invocation rejected):",
-              { buildId: result.build.buildId },
-              err,
-            );
-          }
-        })();
-      }
+    // record_local_integration_result moved to a build ToolPack
 
-      return {
-        success: true,
-        entityId: result.build.buildId,
-        message: result.autoApprovedDispatchEligible
-          ? `Promoted ${itemId} to Build Studio (auto-approved under governed flow — Ideate research dispatched)`
-          : `Promoted ${itemId} to Build Studio`,
-        data: {
-          buildId: result.build.buildId,
-          backlogItemId: itemId,
-          autoApprovedDispatchEligible: result.autoApprovedDispatchEligible,
-        },
-      };
-    }
-
-    case "update_lifecycle": {
-      const prod = await prisma.digitalProduct.findUnique({ where: { productId: String(params["productId"]) } });
-      if (!prod) return { success: false, error: "Product not found", message: `Product ${String(params["productId"])} not found` };
-      const updates: Record<string, unknown> = {};
-      if (typeof params["lifecycleStage"] === "string") updates["lifecycleStage"] = params["lifecycleStage"];
-      if (typeof params["lifecycleStatus"] === "string") updates["lifecycleStatus"] = params["lifecycleStatus"];
-      await prisma.digitalProduct.update({ where: { productId: String(params["productId"]) }, data: updates });
-      return { success: true, entityId: String(params["productId"]), message: `Updated lifecycle for ${String(params["productId"])}` };
-    }
-
-    case "verify_live_install_readiness": {
-      const featureSha = String(params["featureSha"] ?? "").trim();
-      if (!featureSha)
-        return {
-          success: false,
-          error: "missing_feature_sha",
-          message: "featureSha is required (a PR/BI merge SHA or a build's commit).",
-        };
-      const { resolveLiveInstallReadiness } = await import("@/lib/verify/preflight-service");
-      const verdict = await resolveLiveInstallReadiness({ featureSha });
-      return {
-        success: true,
-        message: `${verdict.verdict}: ${verdict.reason}`,
-        data: verdict,
-      };
-    }
-
-    case "record_execution_evidence": {
-      const itemIdRaw = String(params["itemId"] ?? "").trim();
-      const kindRaw = String(params["kind"] ?? "");
-      const summaryRaw = String(params["summary"] ?? "").slice(0, 240);
-      const url = typeof params["url"] === "string" ? params["url"] : null;
-      const body = typeof params["body"] === "string" ? params["body"].slice(0, 8000) : null;
-      const toolExecutionId =
-        typeof params["toolExecutionId"] === "string" ? params["toolExecutionId"] : null;
-      const ALLOWED_KINDS = new Set([
-        "test_pass",
-        "test_fail",
-        "build_pass",
-        "build_fail",
-        "ux_verified",
-        "spec_review",
-        "manual_check",
-        "external_link",
-      ]);
-      if (!itemIdRaw || !kindRaw || !summaryRaw)
-        return {
-          success: false,
-          error: "missing_required",
-          message: "itemId, kind, summary are all required",
-        };
-      if (!ALLOWED_KINDS.has(kindRaw))
-        return { success: false, error: "invalid_kind", message: `kind=${kindRaw} not allowed` };
-      const item = await prisma.backlogItem.findUnique({
-        where: { itemId: itemIdRaw },
-        select: { id: true },
-      });
-      if (!item)
-        return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
-      const activity = await prisma.backlogItemActivity.create({
-        data: {
-          backlogItemId: item.id,
-          kind: "evidence",
-          summary: summaryRaw,
-          payload: {
-            evidenceKind: kindRaw,
-            url,
-            body,
-            toolExecutionId,
-          },
-          recordedById: userId,
-          recordedByAgentId: context?.agentId ?? null,
-          toolExecutionId,
-        },
-      });
-      return {
-        success: true,
-        entityId: activity.id,
-        message: `Recorded ${kindRaw} evidence for ${itemIdRaw}`,
-        data: { activityId: activity.id, recordedAt: activity.recordedAt.toISOString() },
-      };
-    }
-
-    case "record_local_integration_result": {
-      const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
-      const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
-      const provider = stringValue("provider");
-      const externalSessionId = stringValue("externalSessionId");
-      const routeContext = stringValue("routeContext") || context?.routeContext || "";
-      const candidateBranch = stringValue("candidateBranch");
-      const mode = stringValue("mode");
-      const status = stringValue("status");
-      const summary = stringValue("summary");
-      const evidence = params["evidence"];
-      const missing = [
-        ["provider", provider],
-        ["externalSessionId", externalSessionId],
-        ["routeContext", routeContext],
-        ["candidateBranch", candidateBranch],
-        ["mode", mode],
-        ["status", status],
-        ["summary", summary],
-      ].filter(([, value]) => !value).map(([key]) => key);
-      if (evidence === undefined) missing.push("evidence");
-      if (missing.length > 0) {
-        return {
-          success: false,
-          error: "missing_required",
-          message: `Missing required local integration result field(s): ${missing.join(", ")}`,
-        };
-      }
-      if (!["build-studio", "claude", "codex", "coworker"].includes(provider)) {
-        return { success: false, error: "invalid_provider", message: `Unsupported provider: ${provider}` };
-      }
-      if (!["single-branch", "sibling-set", "post-merge-main"].includes(mode)) {
-        return { success: false, error: "invalid_mode", message: `Unsupported local integration mode: ${mode}` };
-      }
-      if (!["passed", "failed", "conflict", "blocked_sandbox_drift"].includes(status)) {
-        return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
-      }
-
-      const result = await recordLocalIntegrationResult({
-        actorUserId: userId,
-        provider: provider as "build-studio" | "claude" | "codex" | "coworker",
-        externalSessionId,
-        routeContext,
-        buildId: stringValue("buildId") || undefined,
-        taskRunId: stringValue("taskRunId") || undefined,
-        candidateBranch,
-        mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
-        status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift",
-        summary,
-        evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
-      });
-      return {
-        success: true,
-        entityId: result.id,
-        message: `Recorded local integration result for ${candidateBranch}.`,
-        data: { evidenceId: result.id, status },
-      };
-    }
-
-    case "record_functional_failure_evidence": {
-      const required = [
-        "testId",
-        "suite",
-        "route",
-        "expected",
-        "actual",
-        "userRole",
-        "routeContext",
-        "reproCommand",
-        "createdAt",
-        "likelyOwnerArea",
-      ];
-      const missing = required.filter((key) => typeof params[key] !== "string" || !String(params[key]).trim());
-      if (missing.length > 0) {
-        return {
-          success: false,
-          error: "missing_required",
-          message: `Missing required functional failure evidence field(s): ${missing.join(", ")}`,
-        };
-      }
-
-      const testId = String(params["testId"]).trim();
-      const suite = String(params["suite"]).trim();
-      const route = String(params["route"]).trim();
-      const expected = redactFunctionalFailureText(String(params["expected"]));
-      const actual = redactFunctionalFailureText(String(params["actual"]));
-      const userRole = String(params["userRole"]).trim();
-      const routeContext = String(params["routeContext"]).trim();
-      const reproCommand = String(params["reproCommand"]).trim();
-      const createdAt = String(params["createdAt"]).trim();
-      const likelyOwnerArea = String(params["likelyOwnerArea"]).trim();
-      const agentId = typeof params["agentId"] === "string" ? params["agentId"].trim() || null : null;
-      const screenshotPath =
-        typeof params["screenshotPath"] === "string" ? params["screenshotPath"].trim() || null : null;
-      const tracePath = typeof params["tracePath"] === "string" ? params["tracePath"].trim() || null : null;
-      const buildId = typeof params["buildId"] === "string" ? params["buildId"].trim() || null : null;
-      const explicitItemId =
-        typeof params["backlogItemId"] === "string" ? params["backlogItemId"].trim() || null : null;
-
-      const normalizedActual = actual.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 1200);
-      const failureFingerprint = crypto
-        .createHash("sha256")
-        .update(`${testId}|${route}|${normalizedActual}`)
-        .digest("hex")
-        .slice(0, 16);
-
-      const evidencePayload = {
-        evidenceKind: "test_fail",
-        source: "functional-test-failure",
-        failureFingerprint,
-        testId,
-        suite,
-        route,
-        expected,
-        actual,
-        screenshotPath,
-        tracePath,
-        userRole,
-        agentId,
-        routeContext,
-        reproCommand,
-        createdAt,
-        likelyOwnerArea,
-        buildId,
-      };
-      const summary = `${testId} failed${route ? ` on ${route}` : ""}: ${actual.slice(0, 120)}`;
-
-      let item = explicitItemId
-        ? await prisma.backlogItem.findUnique({
-            where: { itemId: explicitItemId },
-            select: { id: true, itemId: true, occurrenceCount: true },
-          })
-        : null;
-
-      if (!item) {
-        item = await prisma.backlogItem.findFirst({
-          where: {
-            source: "functional-test-failure",
-            status: { notIn: ["done", "deferred"] },
-            body: { contains: `failureFingerprint: ${failureFingerprint}` },
-          },
-          select: { id: true, itemId: true, occurrenceCount: true },
-        });
-      }
-
-      let action: "created" | "updated";
-      if (!item) {
-        item = await prisma.backlogItem.create({
-          data: {
-            itemId: `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-            title: `[${testId}] ${route} functional smoke failure`,
-            type: "product",
-            status: "triaging",
-            source: "functional-test-failure",
-            submittedById: userId,
-            agentId: context?.agentId ?? agentId ?? null,
-            lastSeenAt: new Date(createdAt),
-            body: [
-              `failureFingerprint: ${failureFingerprint}`,
-              `ownerArea: ${likelyOwnerArea}`,
-              `route: ${route}`,
-              `suite: ${suite}`,
-              `expected: ${expected}`,
-              `actual: ${actual}`,
-              `repro: ${reproCommand}`,
-            ].join("\n"),
-          },
-          select: { id: true, itemId: true, occurrenceCount: true },
-        });
-        action = "created";
-      } else {
-        item = await prisma.backlogItem.update({
-          where: { id: item.id },
-          data: {
-            occurrenceCount: { increment: 1 },
-            lastSeenAt: new Date(createdAt),
-          },
-          select: { id: true, itemId: true, occurrenceCount: true },
-        });
-        action = "updated";
-      }
-
-      const activity = await prisma.backlogItemActivity.create({
-        data: {
-          backlogItemId: item.id,
-          kind: "evidence",
-          summary: action === "created" ? summary.slice(0, 240) : `${testId} failed again on ${route}`.slice(0, 240),
-          payload: evidencePayload,
-          recordedById: userId,
-          recordedByAgentId: context?.agentId ?? agentId ?? null,
-        },
-      });
-
-      return {
-        success: true,
-        entityId: item.itemId,
-        message:
-          action === "created"
-            ? `Created ${item.itemId} for ${testId} functional failure`
-            : `Updated ${item.itemId} with repeated ${testId} functional failure`,
-        data: {
-          action,
-          itemId: item.itemId,
-          activityId: activity.id,
-          failureFingerprint,
-          occurrenceCount: item.occurrenceCount,
-          recordedAt: activity.recordedAt.toISOString(),
-        },
-      };
-    }
+    // record_functional_failure_evidence moved to a build ToolPack
 
     case "update_feature_brief": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
@@ -3063,73 +2472,11 @@ export async function executeTool(
       return { success: true, message: `Plan review: ${review.decision}. ${review.summary}${archAdvisoryNote}`, data: { review } };
     }
 
-    case "reconcile_build_engines": {
-      const offline = params["offline"] === true;
-      const { reconcileBuildEngines } = await import("@/lib/integrate/build-engine-reconcile");
-      const summary = await reconcileBuildEngines({ offline, actorUserId: userId });
-      return {
-        success: true,
-        message:
-          summary.restored.length === 0
-            ? `No engines needed restoring (checked ${summary.checked}, skipped ${summary.skipped}).`
-            : `Restored ${summary.restored.length} engine(s): ${summary.restored
-                .map((r) => `${r.engineId} (${r.outcome})`)
-                .join(", ")}.`,
-        data: summary,
-      };
-    }
+    // reconcile_build_engines moved to a build ToolPack
 
-    case "provision_build_engine": {
-      const engineId = optionalString(params["engineId"]);
-      if (!engineId) {
-        return {
-          success: false,
-          error: "engineId is required.",
-          message: "Provide engineId — one of 'claude', 'codex', 'grok'.",
-        };
-      }
-      const offline = params["offline"] === true;
-      const { provisionBuildEngine } = await import("@/lib/integrate/build-engine-provision");
-      const outcome = await provisionBuildEngine(engineId, { offline, actorUserId: userId });
-      const ok = outcome.kind === "provisioned" || outcome.kind === "already-present";
-      const message =
-        outcome.kind === "provisioned"
-          ? `Provisioned ${engineId}${outcome.version ? ` v${outcome.version}` : ""} via ${outcome.recipe}; verified present in the sandbox.`
-          : outcome.kind === "already-present"
-            ? `${engineId} is already installed in the sandbox${outcome.version ? ` (v${outcome.version})` : ""}.`
-            : outcome.kind === "no-recipe"
-              ? `Cannot provision ${engineId}: ${outcome.reason}.`
-              : outcome.kind === "verify-failed"
-                ? `Ran the ${outcome.recipe} recipe for ${engineId} but it is still not present: ${outcome.error}`
-                : `Failed to provision ${engineId}: ${outcome.error}`;
-      return { success: ok, message, data: outcome };
-    }
+    // provision_build_engine moved to a build ToolPack
 
-    case "get_build_engine_readiness": {
-      const refresh = params["refresh"] === true;
-      // Shared with the /platform/ai/build-studio config page's proactive probe
-      // + "Probe all engines" action (BI-805D01E4): one implementation of
-      // load-vs-live-probe. Live rows carry the per-engine failure reason.
-      const { loadBuildEngineReadiness, probeBuildEngineReadiness } = await import(
-        "@/lib/integrate/build-engine-readiness"
-      );
-      const readiness = refresh
-        ? await probeBuildEngineReadiness()
-        : await loadBuildEngineReadiness();
-
-      const present = readiness.filter((r) => r.present === true).map((r) => r.engineId);
-      const absent = readiness.filter((r) => r.present === false).map((r) => r.engineId);
-      const unknown = readiness.filter((r) => r.present === null).map((r) => r.engineId);
-
-      return {
-        success: true,
-        message:
-          readiness.length === 0
-            ? "No build engines registered yet. Run sync-engine-registry to populate the BuildEngine catalog from build-engines.json."
-            : `Build engines — present: ${present.join(", ") || "none"}; not installed: ${absent.join(", ") || "none"}; never probed: ${unknown.join(", ") || "none"}.${refresh ? " (live re-probe)" : " (last known state — pass refresh:true to re-probe)"}`,
-        data: { engines: readiness, refreshed: refresh },
-      };
-    }
+    // get_build_engine_readiness moved to a build ToolPack
 
     case "diagnose_sandbox": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
@@ -3313,7 +2660,6 @@ export async function executeTool(
       };
     }
 
-    case "generate_code":
     case "iterate_sandbox":
       // Removed: these tools caused runaway loops by spawning nested LLM calls.
       // Use write_sandbox_file / edit_sandbox_file / run_sandbox_command directly.
@@ -3537,23 +2883,7 @@ export async function executeTool(
       };
     }
 
-    case "run_tool_script": {
-      // Programmatic tool calling (R4 / P7): governed read-only code execution.
-      // Standalone case — NOT part of the sandbox-file fall-through group below;
-      // it must return before those labels so they keep sharing the
-      // run_sandbox_command block. The handler mints a scoped read-only JWT and
-      // runs the model's script in the sandbox; each inner callTool reenters
-      // /api/mcp/v1 → governedExecuteTool (kernel gate + grants per call). Gated
-      // by the tool_script_exec grant (default-deny) AND the
-      // programmatic_tool_calling flag (default-off).
-      const { runToolScript } = await import("@/lib/tak/tool-script");
-      return runToolScript(params, {
-        userId,
-        agentId: context?.agentId,
-        threadId: context?.threadId,
-        routeContext: context?.routeContext,
-      });
-    }
+    // run_tool_script moved to a build ToolPack
 
     // ─── Sandbox File Tools ──────────────────────────────────────────────────
     // Shared auto-init: ensure sandbox is initialized before any file tool runs.
@@ -4726,70 +4056,7 @@ export async function executeTool(
     }
 
     // ─── Design Intelligence Tools (UI UX Pro Max) ──────────────────────────
-    case "propose_file_change": {
-      const { readProjectFile, writeProjectFile, generateSimpleDiff } = await import("./integrate/codebase-tools");
-      const path = String(params.path ?? "");
-      const newContent = String(params.newContent ?? "");
-      const description = String(params.description ?? "");
-
-      const current = await readProjectFile(path);
-      const currentContent = "content" in current ? current.content : "";
-      const diff = generateSimpleDiff(currentContent, newContent, path);
-
-      const writeResult = await writeProjectFile(path, newContent);
-      if ("error" in writeResult) return { success: false, error: writeResult.error, message: writeResult.error };
-
-      // Auto-commit the approved change
-      let commitHash: string | undefined;
-      try {
-        const { commitFile, formatCommitMessage, isGitAvailable } = await import("@/lib/git-utils");
-        if (await isGitAvailable()) {
-          // Resolve buildId from thread context (best-effort)
-          let buildId: string | undefined;
-          if (context?.threadId) {
-            const build = await prisma.featureBuild.findFirst({
-              where: { threadId: context.threadId, phase: { in: ["build", "review"] } },
-              select: { buildId: true, id: true },
-            });
-            if (build) buildId = build.buildId;
-          }
-
-          const message = formatCommitMessage({ description, filePath: path, ...(buildId ? { buildId } : {}), approvedBy: userId });
-          const result = await commitFile({ filePath: path, message });
-
-          if ("hash" in result) {
-            commitHash = result.hash;
-
-            // Update AgentActionProposal with commit hash (best-effort)
-            if (context?.threadId) {
-              await prisma.agentActionProposal.updateMany({
-                where: { threadId: context.threadId, actionType: "propose_file_change", status: "approved", gitCommitHash: null },
-                data: { gitCommitHash: commitHash },
-              }).catch(() => {});
-            }
-
-            // Append commit hash to FeatureBuild (best-effort)
-            if (buildId) {
-              await prisma.featureBuild.update({
-                where: { buildId },
-                data: { gitCommitHashes: { push: commitHash } },
-              }).catch(() => {});
-            }
-          } else {
-            console.warn("[propose_file_change] git commit failed: %s", JSON.stringify(result.error));
-          }
-        }
-      } catch (err) {
-        console.warn("[propose_file_change] auto-commit error:", err);
-      }
-
-      return {
-        success: true,
-        entityId: path,
-        message: commitHash ? `Applied and committed: ${path}` : `Applied change to ${path}`,
-        data: { path, diff, description, ...(commitHash ? { commitHash } : {}) },
-      };
-    }
+    // propose_file_change moved to a build ToolPack
 
     // propose_improvement case moved to mcp/packs/contribution-hive-pack.ts
 
@@ -5198,53 +4465,7 @@ export async function executeTool(
       };
     }
 
-    case "run_endpoint_tests": {
-      const { runEndpointTests } = await import("@/lib/endpoint-test-runner");
-      const request = buildEndpointTestRunRequest(params, context);
-
-      if (request.error) {
-        return { success: false, message: request.error };
-      }
-
-      const modelId = request.modelId ?? (
-        request.endpointId && !request.allModels
-          ? await resolveRepresentativeEndpointModelId(request.endpointId)
-          : undefined
-      );
-
-      const results = await runEndpointTests({
-        ...(request.endpointId ? { endpointId: request.endpointId } : {}),
-        ...(modelId ? { modelId } : {}),
-        ...(request.taskType ? { taskType: request.taskType } : {}),
-        probesOnly: request.probesOnly,
-        triggeredBy: userId,
-      });
-
-      const summary = results.map((r) => {
-        const probesPassed = r.probes.filter((p) => p.pass).length;
-        const probesFailed = r.probes.filter((p) => !p.pass).length;
-        const scenariosPassed = r.scenarios.filter((s) => s.passed).length;
-        const scenariosFailed = r.scenarios.filter((s) => !s.passed).length;
-        const lines = [
-          `**${r.endpointId}**: Probes ${probesPassed}/${probesPassed + probesFailed} passed`,
-        ];
-        if (r.scenarios.length > 0) {
-          lines.push(`Scenarios ${scenariosPassed}/${scenariosPassed + scenariosFailed} passed`);
-        }
-        lines.push(`Instruction following: ${r.instructionFollowing ?? "unknown"}`);
-        if (r.codingCapability) lines.push(`Coding: ${r.codingCapability}`);
-        // List failures
-        for (const p of r.probes.filter((p) => !p.pass)) {
-          lines.push(`  FAIL probe: ${p.name} — ${p.reason}`);
-        }
-        for (const s of r.scenarios.filter((s) => !s.passed)) {
-          lines.push(`  FAIL scenario: ${s.name}`);
-        }
-        return lines.join("\n");
-      }).join("\n\n");
-
-      return { success: true, message: summary || "No endpoints to test.", data: { results, scope: { ...request, ...(modelId ? { modelId } : {}) } } };
-    }
+    // run_endpoint_tests moved to a build ToolPack
 
     default: {
       const { parseNamespacedTool, executeMcpServerTool } = await import("./mcp-server-tools");
