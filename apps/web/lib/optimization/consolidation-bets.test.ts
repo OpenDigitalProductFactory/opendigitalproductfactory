@@ -1,11 +1,13 @@
 // Contract tests for the consolidation-bet registry (BI-D9B58004).
 //
 // The registry's value is that every selector points at a REAL artifact — a
-// file on disk, a Prisma model in schema.prisma, an MCP tool in mcp-tools.ts.
-// These tests enforce that mechanically so the registry cannot drift into
-// fabrication as consolidations rename or remove their targets.
+// file on disk, a Prisma model in schema.prisma, a registered MCP tool. These
+// tests enforce that mechanically so the registry cannot drift into fabrication
+// as consolidations rename or remove their targets. MCP tools live either
+// inline in mcp-tools.ts or in a scoped pack under lib/mcp/packs/*, so the tool
+// check scans both surfaces.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -20,7 +22,13 @@ import {
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 const SCHEMA = readFileSync(join(REPO_ROOT, "packages/db/prisma/schema.prisma"), "utf8");
-const MCP_TOOLS = readFileSync(join(REPO_ROOT, "apps/web/lib/mcp-tools.ts"), "utf8");
+const PACKS_DIR = join(REPO_ROOT, "apps/web/lib/mcp/packs");
+const MCP_TOOLS = [
+  readFileSync(join(REPO_ROOT, "apps/web/lib/mcp-tools.ts"), "utf8"),
+  ...readdirSync(PACKS_DIR)
+    .filter((f) => f.endsWith("-pack.ts"))
+    .map((f) => readFileSync(join(PACKS_DIR, f), "utf8")),
+].join("\n");
 
 describe("consolidation-bets registry", () => {
   it("has unique, well-formed bet keys", () => {
