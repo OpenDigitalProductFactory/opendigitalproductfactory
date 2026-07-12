@@ -63,6 +63,7 @@ import { sorReadPack } from "./packs/sor-read-pack";
 import { workThreadPack } from "./packs/work-thread-pack";
 import { codeIntelligencePack } from "./packs/code-intelligence-pack";
 import { modelProviderPack } from "./packs/model-provider-pack";
+import { discoveryPack } from "./packs/discovery-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 
@@ -115,4 +116,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   workThreadPack,
   codeIntelligencePack,
   modelProviderPack,
+  discoveryPack,
 ]);
