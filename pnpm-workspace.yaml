@@ -42,7 +42,17 @@ overrides:
   # hono < 4.12.25: GHSA-88fw-hqm2-52qc CORS-with-credentials wildcard reflection
   # (high) + 4 medium Lambda/edge adapter issues. Runtime dependency.
   hono: '^4.12.25'
-  mermaid: '^11.15.0'
+  # Keep the CLI's diagram stack on the last policy-vetted releases. Floating
+  # transitive ranges let lockfile regeneration pull a same-day ZenUML/Floating
+  # UI graph even after the CLI itself was rolled back (BI-72E0A27B).
+  mermaid: '11.15.0'
+  '@mermaid-js/mermaid-zenuml': '0.2.2'
+  '@zenuml/core': '3.47.8'
+  '@floating-ui/core': '1.7.5'
+  '@floating-ui/dom': '1.7.6'
+  '@floating-ui/react-dom': '2.1.8'
+  '@floating-ui/react': '0.27.19'
+  '@floating-ui/utils': '0.2.11'
   ip-address: '^10.2.0'
   qs: '^6.15.2'
   # --- jest 30 unification (apps/mobile) ---
