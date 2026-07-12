@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, useCallback } from "react";
-import { ExpandableCard } from "@/components/ui/report-kit";
+import { ExpandableCard } from "@/components/ui/report-kit/ExpandableCard";
 import { RFCDetailPanel } from "./RFCDetailPanel";
 import { StandardChangeCatalog } from "./StandardChangeCatalog";
 

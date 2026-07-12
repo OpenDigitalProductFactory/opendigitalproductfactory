@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useTransition } from "react";
-import { ExpandableCard } from "@/components/ui/report-kit";
+import { ExpandableCard } from "@/components/ui/report-kit/ExpandableCard";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
