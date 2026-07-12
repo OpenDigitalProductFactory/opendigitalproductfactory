@@ -1,11 +1,4 @@
 [
-  "admin_query_db",
-  "admin_read_file",
-  "admin_restart_service",
-  "admin_run_command",
-  "admin_run_migration",
-  "admin_run_seed",
-  "admin_view_logs",
   "approve_decomposition",
   "assess_complexity",
   "check_deployment_windows",

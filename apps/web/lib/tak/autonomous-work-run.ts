@@ -248,6 +248,9 @@ export async function executeAutonomousAgenticLoop(input: {
    * replies. See agentic-loop.ts param doc.
    */
   interactionMode?: "chat" | "autonomous";
+  /** BI-80532D5C — divert side-effecting non-artifact tool calls to proposals
+   *  (propose boundary). Forwarded verbatim to runAgenticLoop. */
+  proposeSideEffects?: boolean;
   onProgress?: (event: AgentEvent) => void;
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
@@ -286,6 +289,7 @@ export async function executeAutonomousAgenticLoop(input: {
       activeSkillId: input.activeSkillId ?? null,
       agentMessageId: input.agentMessageId ?? null,
       interactionMode: input.interactionMode,
+      proposeSideEffects: input.proposeSideEffects ?? false,
       ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
       onProgress: input.onProgress,
     }),

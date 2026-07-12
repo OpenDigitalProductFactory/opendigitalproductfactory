@@ -8,6 +8,8 @@ import {
   buildCapsuleWorktreePath,
   isRootClonePath,
   isWorkCapsuleEvidenceKind,
+  isAgentActivityKind,
+  type AgentActivityKind,
   isWorkCapsuleExecutorKind,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
@@ -721,6 +723,42 @@ export async function recordWorkCapsuleEvidence(args: {
     kind: "evidence-recorded",
     summary: args.evidence.summary,
     payload: args.evidence,
+    actor: args.actor,
+  });
+}
+
+/**
+ * Emit a human-legible agent-session activity (thought / action / question /
+ * response / error) onto the WorkCapsule's timeline (BI-C41AB195). The capsule
+ * IS the teammate session; every executor and sub-worker writes to the SAME
+ * capsule via this one writer, so multi-agent work rolls up into one feed on one
+ * item rather than N separate surfaces. `payload.subtaskRef` (optional) lets a
+ * sub-worker line be attributed without a separate session record.
+ */
+export async function recordAgentActivity(args: {
+  db: CapsuleDb;
+  capsuleId: string;
+  activity: {
+    type: AgentActivityKind;
+    body: string;
+    payload?: Record<string, unknown>;
+  };
+  actor: WorkCapsuleActor;
+}) {
+  if (!isAgentActivityKind(args.activity.type)) {
+    throw new Error("Invalid agent activity type");
+  }
+
+  const capsule = await args.db.workCapsule.findUnique({
+    where: { capsuleId: args.capsuleId },
+  });
+  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+
+  return recordActivity(args.db, {
+    workCapsuleId: capsule.id,
+    kind: args.activity.type,
+    summary: args.activity.body,
+    payload: args.activity.payload ?? {},
     actor: args.actor,
   });
 }

@@ -290,6 +290,23 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
+  {
+    name: "record_agent_activity",
+    description:
+      "Emit a human-legible session activity onto a Work Capsule's timeline — what the working teammate is thinking (thought), doing (action), asking (question), answering (response), or hit (error). Every executor and sub-worker writes to the same capsule, so multi-agent work reads as one teammate session on one item.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        type: { type: "string", enum: ENUMS.agentActivityKinds, description: "Activity type: thought | action | question | response | error." },
+        body: { type: "string", description: "Human-legible one-line description of the activity." },
+        payload: { type: "object", description: "Optional structured detail (e.g. subtaskRef, tool name)." },
+      },
+      required: ["capsuleId", "type", "body"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
 ];
 
 const HANDLERS = () => import("@/lib/work-capsules/mcp-handlers");
@@ -311,6 +328,7 @@ export const workCapsulesPack: ToolPack = {
     record_capsule_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
     reassign_capsule_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
+    record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),
   },
   grants: {
     list_work_capsules: ["work_capsule_read"],
@@ -326,5 +344,6 @@ export const workCapsulesPack: ToolPack = {
     record_capsule_evidence: ["work_capsule_write"],
     reassign_capsule_executor: ["work_capsule_write"],
     start_external_work: ["work_capsule_adopt"],
+    record_agent_activity: ["work_capsule_write"],
   },
 };

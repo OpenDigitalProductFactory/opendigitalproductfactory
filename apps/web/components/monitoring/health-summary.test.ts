@@ -6,6 +6,8 @@ import {
   derivePlatformSummary,
   deriveServiceStatuses,
   deriveServiceStatusesFromTargets,
+  friendlyJobLabel,
+  humanizeJobList,
   isHostTelemetryConfigured,
   type MonitoringAlert,
   type PrometheusActiveTarget,
@@ -72,6 +74,55 @@ describe("derivePlatformSummary", () => {
     expect(summary.tone).toBe("success");
     expect(summary.detail).toContain("Required platform services are up");
   });
+
+  it("names down required services in plain language, not raw scrape-job ids", () => {
+    // postgres + sandbox down, no alert firing (so this hits the up-targets
+    // branch, the one that used to emit `postgres, sandbox down`).
+    const summary = derivePlatformSummary({
+      checked: true,
+      online: true,
+      upTargets: [up("prometheus"), up("portal"), up("postgres", "0"), up("qdrant"), up("sandbox", "0")],
+      alerts: [],
+    });
+
+    expect(summary.value).toBe("Critical");
+    expect(summary.detail).toBe("Database and Build workspace are down");
+    expect(summary.detail).not.toContain("postgres");
+    expect(summary.detail).not.toContain("sandbox");
+  });
+
+  it("uses singular grammar and 'not reporting' for a single missing required service", () => {
+    const summary = derivePlatformSummary({
+      checked: true,
+      online: true,
+      // qdrant absent entirely (not in upTargets) => missing/unknown, not down.
+      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("sandbox")],
+      alerts: [],
+    });
+
+    expect(summary.value).toBe("Degraded");
+    expect(summary.detail).toBe("AI memory & search is not reporting");
+  });
+});
+
+describe("friendlyJobLabel / humanizeJobList", () => {
+  it("maps known jobs to plain-language labels", () => {
+    expect(friendlyJobLabel("postgres")).toBe("Database");
+    expect(friendlyJobLabel("qdrant")).toBe("AI memory & search");
+    expect(friendlyJobLabel("sandbox")).toBe("Build workspace");
+  });
+
+  it("falls back to the raw job id for an unmapped job (never crashes)", () => {
+    expect(friendlyJobLabel("some-new-scrape-job")).toBe("some-new-scrape-job");
+  });
+
+  it("joins with 'and'/Oxford comma", () => {
+    expect(humanizeJobList(["portal"])).toBe("Web portal");
+    expect(humanizeJobList(["portal", "postgres"])).toBe("Web portal and Database");
+    expect(humanizeJobList(["portal", "postgres", "sandbox"])).toBe(
+      "Web portal, Database, and Build workspace",
+    );
+  });
 });
 
 describe("deriveMonitoringSummary", () => {
@@ -90,7 +141,12 @@ describe("deriveMonitoringSummary", () => {
 
     expect(summary.value).toBe("Degraded");
     expect(summary.tone).toBe("warning");
-    expect(summary.detail).toContain("2 telemetry targets down");
+    // Humanized: plain "Host metrics"/"Container metrics", not raw job ids.
+    expect(summary.detail).toContain("Host metrics");
+    expect(summary.detail).toContain("Container metrics");
+    expect(summary.detail).toContain("unavailable");
+    expect(summary.detail).not.toContain("node-exporter");
+    expect(summary.detail).not.toContain("cadvisor");
   });
 
   it("reports active when Prometheus and telemetry targets are healthy", () => {

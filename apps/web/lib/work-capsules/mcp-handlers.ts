@@ -7,6 +7,9 @@ import {
   WORK_CAPSULE_BRANCH_TAXONOMIES,
   WORK_CAPSULE_DECISION_SCOPES,
   WORK_CAPSULE_EVIDENCE_KINDS,
+  AGENT_ACTIVITY_KINDS,
+  isAgentActivityKind,
+  type AgentActivityKind,
   WORK_CAPSULE_EXECUTOR_KINDS,
   WORK_CAPSULE_OUTCOME_ANCHOR_KINDS,
   WORK_CAPSULE_PORTFOLIO_ROLES,
@@ -36,6 +39,7 @@ import {
   planCapsuleWorkspace,
   releaseWorkCapsuleScope,
   recordWorkCapsuleEvidence,
+  recordAgentActivity,
   updateWorkCapsuleStatus,
   ScopeOverlapError,
   type CapsuleDb,
@@ -63,6 +67,7 @@ export function workCapsuleToolEnums() {
     portfolioRoles: [...WORK_CAPSULE_PORTFOLIO_ROLES],
     scopeActivityKinds: [...WORK_CAPSULE_SCOPE_ACTIVITY_KINDS],
     outcomeAnchorKinds: [...WORK_CAPSULE_OUTCOME_ANCHOR_KINDS],
+    agentActivityKinds: [...AGENT_ACTIVITY_KINDS],
   };
 }
 
@@ -830,5 +835,49 @@ export async function startExternalWorkTool(
     entityId: capsuleId,
     message: `Started tracked work session ${capsuleId} for ${provider}.`,
     data: { capsuleId },
+  };
+}
+
+export async function recordAgentActivityTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const capsuleId = stringParam(params, "capsuleId");
+  const type = stringParam(params, "type");
+  const body = stringParam(params, "body");
+  if (!capsuleId || !type || !body) {
+    return { success: false, error: "invalid_input", message: "capsuleId, type, and body are required." };
+  }
+  if (!isAgentActivityKind(type)) {
+    return {
+      success: false,
+      error: "invalid_type",
+      message: `type must be one of: ${AGENT_ACTIVITY_KINDS.join(", ")}.`,
+    };
+  }
+  const payload =
+    params["payload"] && typeof params["payload"] === "object" && !Array.isArray(params["payload"])
+      ? (params["payload"] as Record<string, unknown>)
+      : undefined;
+
+  const db = workCapsuleDb();
+  const renewedCapsule = await runAutoRenewedCapsuleWrite({
+    capsuleId,
+    userId,
+    context,
+    write: (currentActor) => recordAgentActivity({
+      db,
+      capsuleId,
+      activity: { type: type as AgentActivityKind, body, payload },
+      actor: currentActor,
+    }),
+  });
+
+  return {
+    success: true,
+    entityId: renewedCapsule.capsuleId,
+    message: `Recorded ${type} on ${renewedCapsule.capsuleId}.`,
+    data: { capsule: renewedCapsule },
   };
 }

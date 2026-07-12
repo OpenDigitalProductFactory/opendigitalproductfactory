@@ -46,6 +46,12 @@ export type BuildStudioPlanAdvancementBuild = {
   deliberationSummary: BuildDeliberationSummary | null;
 };
 
+/** BI-D996C238 — the risk tiers a caller may pass to graduate the gate. When
+ *  omitted the gate uses "medium" (byte-identical to the pre-graduation gate).
+ *  A caller under DPF_BUILD_GRADUATED_GATE_AUTONOMY derives this from the
+ *  build's deliverable sensitivity via deriveTransitionRiskTier. */
+type PlanAdvancementRiskTier = "low" | "medium" | "high" | "critical";
+
 function planAdvancementQuestion(build: BuildStudioPlanAdvancementBuild): string {
   return `Start implementation for "${build.title}" from the reviewed Build Studio plan?`;
 }
@@ -91,7 +97,7 @@ function failClosedEvaluation(input: {
   profile: DecisionPerspectiveProfile;
   question: string;
   options: string[];
-  riskTier: "medium";
+  riskTier: PlanAdvancementRiskTier;
   error: unknown;
   resolvedProfileChain: string[];
 }): DecisionPerspectiveEvaluationResult {
@@ -145,11 +151,15 @@ export async function evaluateBuildStudioPlanAdvancementGate(input: {
   triggeredByUserId?: string | null;
   evaluator?: GateEvaluator;
   now?: Date;
+  /** BI-D996C238 — graduated risk tier for this transition. Omitted → "medium"
+   *  (identical to the pre-graduation gate). A caller under the graduated-gate
+   *  flag derives it from the build's deliverable sensitivity. */
+  riskTier?: PlanAdvancementRiskTier;
 }): Promise<BuildStudioDecisionGateResult> {
   const interactionId = createDecisionInteractionId();
   const question = planAdvancementQuestion(input.build);
   const options = planAdvancementOptions();
-  const riskTier = "medium" as const;
+  const riskTier = input.riskTier ?? "medium";
   const now = input.now ?? new Date();
 
   let resolved;

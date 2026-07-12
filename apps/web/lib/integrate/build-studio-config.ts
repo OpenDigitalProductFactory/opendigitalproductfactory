@@ -222,6 +222,19 @@ export function isPreSpecResearchEnabled(): boolean {
   return v === "1" || v === "true";
 }
 
+/**
+ * BI-D996C238 (EP-0AF96937): graduated gate autonomy — the WWMD build gate's
+ * risk tier is derived from the deliverable's sensitivity (x transition) instead
+ * of a fixed "medium", so a low-sensitivity advancement can clear on the ladder
+ * while a high-sensitivity one always escalates. Opt-in (default off) so the
+ * gate stays byte-identical (fixed medium) until an operator enables graduation.
+ * Set DPF_BUILD_GRADUATED_GATE_AUTONOMY=1.
+ */
+export function isGraduatedGateAutonomyEnabled(): boolean {
+  const v = process.env.DPF_BUILD_GRADUATED_GATE_AUTONOMY;
+  return v === "1" || v === "true";
+}
+
 /** PlatformConfig key for the global build Cost/Quality/Time posture (P2). */
 export const BUILD_GOLDEN_TRIANGLE_POSTURE_KEY = "BUILD_GOLDEN_TRIANGLE_POSTURE";
 
