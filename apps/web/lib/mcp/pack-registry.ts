@@ -75,6 +75,7 @@ import { buildVisibilityPack } from "./packs/build-visibility-pack";
 import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
+import { releasePack } from "./packs/release-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -131,6 +132,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   coworkerPack,
   platformUtilitiesPack,
   backlogPack,
+  releasePack,
   adminPack,
   decompositionPack,
   buildVisibilityPack,
