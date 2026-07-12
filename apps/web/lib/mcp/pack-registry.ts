@@ -70,6 +70,9 @@ import { coworkerPack } from "./packs/coworker-pack";
 import { platformUtilitiesPack } from "./packs/platform-utilities-pack";
 import { backlogPack } from "./packs/backlog-pack";
 import { adminPack } from "./packs/admin-pack";
+import { buildEnginePack } from "./packs/build-engine-pack";
+import { buildEvidencePack } from "./packs/build-evidence-pack";
+import { buildOpsPack } from "./packs/build-ops-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 
@@ -129,4 +132,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   platformUtilitiesPack,
   backlogPack,
   adminPack,
+  buildEnginePack,
+  buildEvidencePack,
+  buildOpsPack,
 ]);
