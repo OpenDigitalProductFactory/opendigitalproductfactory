@@ -574,22 +574,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "create_digital_product",
-    description: "Register a new digital product in the inventory",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Product name" },
-        productId: { type: "string", description: "Unique product identifier" },
-        lifecycleStage: { type: "string", enum: ["plan", "design", "build", "production", "retirement"] },
-        portfolioSlug: { type: "string", description: "Portfolio slug to assign to" },
-      },
-      required: ["name", "productId"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
-  {
     name: "update_lifecycle",
     description: "Update a digital product's lifecycle stage and status",
     inputSchema: {
@@ -903,63 +887,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
-  },
-  {
-    name: "get_finance_period_summary",
-    description: "Return verified income, expenses, and net for a finance period (defaults to month-to-date). Income = sum of paid invoices; expenses = sum of paid bills + paid expense claims; net = income - expenses. Includes pending receivables/payables, multi-currency flags, source paths, and explicit gap descriptions when activity is missing. Use this whenever the user asks for a P&L figure, income vs expenses, or net cash position for a period - it is the canonical numeric answer for the Finance Specialist coworker.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        period: {
-          type: "string",
-          enum: ["month-to-date", "last-month", "quarter-to-date", "year-to-date"],
-          description: "Preset period. Defaults to month-to-date. Ignored when startDate/endDate are provided.",
-        },
-        startDate: {
-          type: "string",
-          description: "ISO date (e.g. 2026-05-01). When set, period is treated as a custom window. endDate is required alongside.",
-        },
-        endDate: {
-          type: "string",
-          description: "ISO date for the end of the custom window. Must be on or after startDate.",
-        },
-      },
-      required: [],
-    },
-    requiredCapability: "view_finance",
-    executionMode: "immediate",
-    sideEffect: false,
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-  },
-  {
-    name: "drive_browser_task",
-    description:
-      "Drive an authenticated browser to perform a bounded task on an auth-walled site (supplier portal, Substack, ad dashboard) that has no usable API. Picks the means by a governed decision, runs against a provisioned service-account profile (or the operator's attended session), and audits every action. Outward irreversible actions (publish/submit/send/order/configure) are NOT executed directly — they return awaiting-approval with an envelope the human approves first. Returns needs-provisioning when the site has no service-account profile yet (set one up in Service Account Browser Setup).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        task: { type: "string", description: "Natural-language task for the browser, e.g. 'fill the newsletter draft title and body'." },
-        siteKey: { type: "string", description: "Site identifier selecting the provisioned profile, e.g. 'substack'." },
-        accountKey: { type: "string", description: "Account within the site. Defaults to 'default'." },
-        targetDomains: { type: "array", items: { type: "string" }, description: "Navigation allowlist; the session may only drive these domains." },
-        targetUrl: { type: "string", description: "Optional URL to open at." },
-        kind: { type: "string", enum: ["read", "act"], description: "read = extract data only; act = drive (default)." },
-        mode: { type: "string", enum: ["service-account", "operator-live"], description: "service-account (autonomous, default) or operator-live (attended)." },
-        outwardAction: { type: "string", enum: ["publish", "submit", "send", "order", "configure"], description: "Set ONLY when the task takes an outward irreversible action — gates an approval envelope instead of acting." },
-        renderedArtifact: { type: "object", description: "The exact payload the human approves at the destructive boundary (rendered post/form)." },
-        rationale: { type: "string", description: "Why this action — recorded on the approval envelope." },
-      },
-      required: ["task", "siteKey", "targetDomains"],
-    },
-    requiredCapability: null,
-    requiresExternalAccess: true,
-    executionMode: "immediate",
-    sideEffect: true,
   },
   // ─── Build Studio Tools ───────────────────────────────────────────────────
   // update_feature_brief and create_build_epic execute immediately (no approval dialog).
@@ -1584,27 +1511,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // Lets the onboarding/COO coworker walk a non-technical operator through
   // configuring their OWN outbound email (SMTP). Operator-only
   // (manage_provider_connections) + the `email_config` agent grant.
-  {
-    name: "setup_email",
-    description:
-      "Help the operator set up their OWN outbound email (SMTP) so the platform can send invoices, payment links, dunning, and approvals. Three actions: action='detect' identifies the provider from the organization's domain and returns the one credential the operator must obtain (e.g. a Google App Password); action='save' persists the SMTP settings the operator provides; action='test' sends a test email to confirm delivery. DPF never relays email on the operator's behalf — their own provider sends. Walk the operator through getting the credential in plain language before calling 'save'.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        action: { type: "string", enum: ["detect", "save", "test"], description: "detect | save | test" },
-        host: { type: "string", description: "SMTP host (save) — e.g. smtp.gmail.com" },
-        port: { type: "number", description: "SMTP port (save) — default 587 (STARTTLS) or 465 (implicit TLS)" },
-        secure: { type: "boolean", description: "Implicit TLS on port 465 (save)" },
-        user: { type: "string", description: "SMTP username (save) — usually the full email address" },
-        from: { type: "string", description: "From address (save) — e.g. 'Acme <billing@acme.com>'" },
-        pass: { type: "string", description: "SMTP password / app password / API key (save). Leave blank to keep the existing one." },
-        to: { type: "string", description: "Recipient for the test email (test)" },
-      },
-      required: ["action"],
-    },
-    requiredCapability: "manage_provider_connections",
-    sideEffect: true,
-  },
   // ─── Admin Coworker Tools (TAK-ADMIN-001) ──────────────────────────────
   // These tools are available on the /admin route for platform administration.
   // Tier 1 = read-only, Tier 2 = reversible, Tier 3 = destructive (sideEffect: true).
@@ -2090,84 +1996,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
   },
-  {
-    name: "list_patch_posture",
-    description:
-      "Summarize estate patch posture: open patch findings (vulnerabilities, available updates, end-of-life) across discovered software, ranked by severity and active exploitation (CISA KEV).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        severity: { type: "string", description: "Filter to one severity: critical|high|medium|low|info (optional)" },
-        status: { type: "string", description: "open (default) or all to include resolved (optional)" },
-      },
-      required: [],
-    },
-    requiredCapability: "view_inventory",
-    sideEffect: false,
-  },
-
-  // ─── Multi-Agent Collaboration Tools (EP-A2A, 2026-06-04 spec) ─────────────
-  {
-    name: "request_coworker",
-    description:
-      "Hand off a scoped sub-task to a NAMED peer coworker. Unlike spawn_work_thread (anonymous child), this targets a specific coworker by agentId or slug and emits a VISIBLE handoff the user sees inline. Use when you need another coworker's distinct capability (e.g. ask the Enterprise Architect to review a schema).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias (e.g. 'ea-architect')." },
-        objective: { type: "string", description: "The scoped sub-task for the peer coworker." },
-        questionPacketSummary: { type: "string", description: "Optional one-line summary of the intent/question shown on the handoff card." },
-        tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2). Tier 3 requires depth-2 spawn support." },
-        enteredVia: { type: "string", enum: ["handoff", "escalation", "spawn"], description: "How the peer is entering (default 'handoff')." },
-      },
-      required: ["targetAgent", "objective"],
-    },
-    requiredCapability: null,
-    sideEffect: true,
-    // Delegation is advise-safe coordination — an advisor may route a scoped
-    // sub-task to a named peer with a visible handoff without leaving advise
-    // mode. Kept sideEffect:true for annotations; adviseCoordination exempts it
-    // from the advise-mode runtime filter (BI-7EB4AE2C).
-    adviseCoordination: true,
-  },
-  {
-    name: "summon_coworker",
-    description:
-      "Bring a NAMED coworker into the current conversation as a second/third-tier participant to address part of the work, emitting a VISIBLE summon the user sees inline. YOU (the active coworker) decide which peer to bring in and what to task them with — this is your responsibility, not the user's. Use when a request needs a peer's distinct capability alongside you in the conversation.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias." },
-        objective: { type: "string", description: "What the summoned coworker should address." },
-        tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2)." },
-      },
-      required: ["targetAgent", "objective"],
-    },
-    requiredCapability: null,
-    sideEffect: true,
-    // Bringing a named peer into the conversation is advise-safe coordination —
-    // the advisor decides which teammate to pull in; the handoff is visible and
-    // reversible. Kept sideEffect:true for annotations; adviseCoordination
-    // exempts it from the advise-mode runtime filter (BI-7EB4AE2C).
-    adviseCoordination: true,
-  },
-  {
-    name: "trigger_contributor_inventory_sync",
-    description:
-      "Dispatch an on-demand contributor inventory sync (git worktrees, branches, GitHub PRs) without waiting for the 10-minute cron. Used by agents that just made an external change (pushed a branch, opened a PR) and want the /platform/development/change-lanes dashboard to reflect it on the next refresh. Returns the Inngest event id immediately; the runner creates the ContributorInventorySyncRun row asynchronously.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        reason: {
-          type: "string",
-          description: "Optional short tag propagated to the run row's triggeredBy field for audit.",
-        },
-      },
-    },
-    requiredCapability: "manage_provider_connections",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -2481,94 +2309,6 @@ export async function executeTool(
     return packHandler(params, userId, context);
   }
   switch (toolName) {
-    case "dpf_test_kernel_refuse_probe": {
-      // Test-only synthetic probe (Phase 9 live verification).
-      // Reachable ONLY when DPF_TEST_MCP_REFUSE_PROBE=1 because:
-      //   - loadEnforceablePrinciples injects a synthetic principle that
-      //     matches this tool name with refuse-in-both-modes, so the gate
-      //     above short-circuits before this body ever runs.
-      //   - When the env is unset, no principle matches, but neither does
-      //     any production code path call this tool name — we return the
-      //     unknown-tool default below.
-      // The body exists to give the dispatcher a recognizable case so the
-      // gate gets a chance to refuse before falling through to unknown-tool.
-      if (process.env.DPF_TEST_MCP_REFUSE_PROBE !== "1") {
-        return { success: false, message: "tool not registered", error: "tool not registered" };
-      }
-      return {
-        success: true,
-        message: "probe tool body — should not be reached when gate is wired and DPF_TEST_MCP_REFUSE_PROBE=1",
-      };
-    }
-    case "request_coworker": {
-      if (!context?.threadId) {
-        return { success: false, error: "missing_threadId", message: "request_coworker requires caller thread context." };
-      }
-      const targetAgent = String(params["targetAgent"] ?? "").trim();
-      const objective = String(params["objective"] ?? "").trim();
-      if (!targetAgent || !objective) {
-        return { success: false, error: "invalid_params", message: "request_coworker requires targetAgent and objective." };
-      }
-      const tierParam = Number(params["tier"]);
-      const enteredViaParam = typeof params["enteredVia"] === "string" ? params["enteredVia"] : undefined;
-      const { requestCoworker } = await import("@/lib/tak/coworker-collaboration");
-      try {
-        const result = await requestCoworker(
-          {
-            parentThreadId: context.threadId,
-            targetAgent,
-            objective,
-            tier: tierParam === 3 ? 3 : 2,
-            enteredVia: enteredViaParam === "escalation" || enteredViaParam === "spawn" ? enteredViaParam : "handoff",
-            callerAgentId: context.agentId ?? null,
-            questionPacketSummary: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
-            routeContext: context.routeContext,
-          },
-          userId,
-        );
-        return {
-          success: true,
-          entityId: result.childThreadId,
-          message: `Handed off to ${result.targetLabel}.`,
-          data: result,
-        };
-      } catch (err) {
-        return { success: false, error: "handoff_failed", message: err instanceof Error ? err.message : "request_coworker failed." };
-      }
-    }
-    case "summon_coworker": {
-      if (!context?.threadId) {
-        return { success: false, error: "missing_threadId", message: "summon_coworker requires caller thread context." };
-      }
-      const targetAgent = String(params["targetAgent"] ?? "").trim();
-      const objective = String(params["objective"] ?? "").trim();
-      if (!targetAgent || !objective) {
-        return { success: false, error: "invalid_params", message: "summon_coworker requires targetAgent and objective." };
-      }
-      const tierParam = Number(params["tier"]);
-      const { summonCoworker } = await import("@/lib/tak/coworker-collaboration");
-      try {
-        const result = await summonCoworker(
-          {
-            parentThreadId: context.threadId,
-            targetAgent,
-            objective,
-            tier: tierParam === 3 ? 3 : 2,
-            callerAgentId: context.agentId ?? null,
-            routeContext: context.routeContext,
-          },
-          userId,
-        );
-        return {
-          success: true,
-          entityId: result.childThreadId,
-          message: `Summoned ${result.targetLabel}.`,
-          data: result,
-        };
-      } catch (err) {
-        return { success: false, error: "summon_failed", message: err instanceof Error ? err.message : "summon_coworker failed." };
-      }
-    }
     case "create_backlog_item": {
       // Converged onto the shared backlog-ingest front door (EP-INTAKE-UNIFY):
       // one validation + create + semantic-index + epic-resolve path, shared
@@ -3000,18 +2740,6 @@ export async function executeTool(
 
     case "update_backlog_item":
       return handleUpdateBacklogItem(params);
-
-    case "create_digital_product": {
-      const product = await prisma.digitalProduct.create({
-        data: {
-          productId: String(params["productId"]),
-          name: String(params["name"]),
-          lifecycleStage: String(params["lifecycleStage"] ?? "plan"),
-          lifecycleStatus: "draft",
-        },
-      });
-      return { success: true, entityId: product.productId, message: `Created product ${product.productId}` };
-    }
 
     case "update_lifecycle": {
       const prod = await prisma.digitalProduct.findUnique({ where: { productId: String(params["productId"]) } });
@@ -4120,42 +3848,6 @@ export async function executeTool(
         success: true,
         message: `Recommending ${ranked.length} item(s).`,
         data: { recommendations: ranked },
-      };
-    }
-
-    case "drive_browser_task": {
-      // Dynamic import: drive → select-means → mcp-tools forms a static cycle;
-      // importing here breaks it (same pattern as agent-grants / mcp-server-tools).
-      const { driveBrowserTask } = await import("./browser-drive/drive");
-      const { isDestructiveBrowserAction } = await import("./browser-drive/envelope");
-      const outward = String(params["outwardAction"] ?? "");
-      const result = await driveBrowserTask({
-        task: String(params["task"] ?? ""),
-        siteKey: String(params["siteKey"] ?? ""),
-        accountKey: typeof params["accountKey"] === "string" ? (params["accountKey"] as string) : undefined,
-        targetDomains: Array.isArray(params["targetDomains"]) ? (params["targetDomains"] as unknown[]).map(String) : [],
-        targetUrl: typeof params["targetUrl"] === "string" ? (params["targetUrl"] as string) : undefined,
-        kind: params["kind"] === "read" ? "read" : "act",
-        mode: params["mode"] === "operator-live" ? "operator-live" : "service-account",
-        outwardAction: isDestructiveBrowserAction(outward) ? outward : undefined,
-        renderedArtifact: params["renderedArtifact"],
-        rationale: typeof params["rationale"] === "string" ? (params["rationale"] as string) : undefined,
-        agentId: context?.agentId?.trim() || "coworker",
-        threadId: context?.threadId?.trim() || "",
-        userId,
-      });
-      const messages: Record<string, string> = {
-        completed: "Browser task completed.",
-        "awaiting-approval": "Rendered the action for your approval — it will run once you approve the envelope.",
-        "needs-provisioning": `No service-account profile for "${String(params["siteKey"] ?? "")}" yet. Set one up in Service Account Browser Setup.`,
-        "needs-human": "The means selector wasn't confident — needs a human decision.",
-        blocked: "Blocked.",
-        error: "Browser task failed.",
-      };
-      return {
-        success: result.status === "completed" || result.status === "awaiting-approval",
-        message: messages[result.status] ?? result.status,
-        data: result,
       };
     }
 
@@ -9124,78 +8816,6 @@ export async function executeTool(
       return { success: true, message: summary || "No endpoints to test.", data: { results, scope: { ...request, ...(modelId ? { modelId } : {}) } } };
     }
 
-    case "list_patch_posture": {
-      const { prisma } = await import("@dpf/db");
-      const { getPatchPosture } = await import("@/lib/patch/patch-posture");
-      const status = params["status"] === "all" ? "all" : "open";
-      const posture = await getPatchPosture(
-        prisma as unknown as Parameters<typeof getPatchPosture>[0],
-        { status, limit: 200 },
-      );
-      const severity = typeof params["severity"] === "string" ? params["severity"] : undefined;
-      const findings = severity
-        ? posture.findings.filter((finding) => finding.policySeverity === severity)
-        : posture.findings;
-      const totals = posture.totals;
-      return {
-        success: true,
-        message: `Estate patch posture: ${totals.findings} open finding(s) across ${totals.hosts} host(s) — ${totals.bySeverity.critical ?? 0} critical, ${totals.bySeverity.high ?? 0} high, ${totals.kev} actively exploited (KEV).`,
-        data: {
-          totals,
-          capped: posture.capped,
-          findings: findings.slice(0, 50),
-        },
-      };
-    }
-
-    case "get_finance_period_summary": {
-      const { formatFinancePeriodSummary, getFinancePeriodSummary } = await import("@/lib/finance/period-summary");
-      const periodInput: Parameters<typeof getFinancePeriodSummary>[0] = {};
-      const period = typeof params["period"] === "string" ? params["period"] : undefined;
-      if (period === "month-to-date" || period === "last-month" || period === "quarter-to-date" || period === "year-to-date") {
-        periodInput.period = period;
-      }
-      if (typeof params["startDate"] === "string" && params["startDate"].trim()) {
-        periodInput.startDate = params["startDate"];
-      }
-      if (typeof params["endDate"] === "string" && params["endDate"].trim()) {
-        periodInput.endDate = params["endDate"];
-      }
-
-      try {
-        const summary = await getFinancePeriodSummary(periodInput);
-        return {
-          success: true,
-          message: formatFinancePeriodSummary(summary),
-          data: summary as unknown as Record<string, unknown>,
-        };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return { success: false, error: msg, message: `get_finance_period_summary failed: ${msg}` };
-      }
-    }
-
-    // ─── Email setup (PBI-INV-04 Phase 2) ───────────────────────────────
-    case "setup_email": {
-      const { runEmailSetupTool } = await import("./shared/email-setup-tool");
-      const result = await runEmailSetupTool({
-        action: String(params.action ?? "") as "detect" | "save" | "test",
-        host: typeof params.host === "string" ? params.host : undefined,
-        port: typeof params.port === "number" ? params.port : undefined,
-        secure: typeof params.secure === "boolean" ? params.secure : undefined,
-        user: typeof params.user === "string" ? params.user : undefined,
-        from: typeof params.from === "string" ? params.from : undefined,
-        pass: typeof params.pass === "string" ? params.pass : undefined,
-        to: typeof params.to === "string" ? params.to : undefined,
-      });
-      return {
-        success: result.ok,
-        message: result.message,
-        ...(result.error ? { error: result.error } : {}),
-        data: result.data,
-      };
-    }
-
     // ─── Admin Coworker Tools (TAK-ADMIN-001) ────────────────────────────
     // All admin tools audit-log every call to AdminActivity.
 
@@ -9398,32 +9018,6 @@ export async function executeTool(
         const output = ((execErr.stdout ?? "") + "\n" + (execErr.stderr ?? "")).trim();
         if (output) return { success: true, message: "Command exited with error.", data: { command, output: output.slice(0, 15000) } };
         return { success: false, error: (execErr.message ?? "Command failed").slice(0, 1000), message: `Failed: ${command.slice(0, 80)}` };
-      }
-    }
-
-    case "trigger_contributor_inventory_sync": {
-      // BI-063BDF1B Phase 5 — admin-scope handle for agents to dispatch the
-      // on-demand Inngest event. The runner is contributorInventorySyncOnDemand
-      // in apps/web/lib/queue/functions/contributor-inventory-sync.ts.
-      const reason = typeof params["reason"] === "string" ? params["reason"] : null;
-      try {
-        const { inngest } = await import("@/lib/queue/inngest-client");
-        const result = await inngest.send({
-          name: "ops/contributor-inventory-sync.run",
-          data: { triggeredBy: reason ? `mcp:${reason}` : "mcp" },
-        });
-        return {
-          success: true,
-          message: "Queued an on-demand contributor inventory sync.",
-          data: { eventIds: result.ids, status: "queued" },
-        };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return {
-          success: false,
-          error: msg,
-          message: `trigger_contributor_inventory_sync failed: ${msg}`,
-        };
       }
     }
 
