@@ -357,10 +357,13 @@ describe("executeTool inline-case ratchet", () => {
   );
   const inlineCases = extractInlineCaseNames(mcpToolsSource);
 
-  it("locates the switch body and extracts a plausible number of inline cases", () => {
+  it("locates the switch body and extracts inline cases that match the baseline", () => {
     // Guards against a refactor that silently breaks the extractor (e.g. the
-    // switch is renamed) and makes the ratchet vacuously pass.
-    expect(inlineCases.length).toBeGreaterThan(100);
+    // switch is renamed) and makes the ratchet vacuously pass. No fixed count
+    // floor: BET-4 (EP-8DC217EB) drains the inline set toward zero as domains
+    // move into packs, so the invariant is that the extractor agrees with the
+    // frozen baseline exactly — a broken extractor would diverge from it.
+    expect(new Set(inlineCases)).toEqual(new Set(baseline));
     expect(new Set(inlineCases).size).toBe(inlineCases.length); // no duplicate arms
   });
 
