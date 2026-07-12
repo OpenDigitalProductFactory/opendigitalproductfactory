@@ -251,6 +251,24 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_backlog",
     sideEffect: true,
   },
+  {
+    name: "reassign_capsule_executor",
+    description:
+      "Hand a Work Capsule off to a different executor: change the executor, transfer the active lease to the caller, and record an executor-changed event with the handoff manifest (next action, open risks, evidence digest). Renders as a plain status event, not raw agent plumbing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        toExecutorKind: { type: "string", enum: ENUMS.executors, description: "Executor taking over the work." },
+        toExecutorRef: { type: "string", description: "Optional session/owner id for the receiving executor." },
+        reason: { type: "string", description: "Why the handoff is happening." },
+        handoffManifest: { type: "object", description: "Optional handoff context: next action, open risks, evidence digest, branch/worktree, suggested receiver." },
+      },
+      required: ["capsuleId", "toExecutorKind"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
 ];
 
 const HANDLERS = () => import("@/lib/work-capsules/mcp-handlers");
@@ -270,6 +288,7 @@ export const workCapsulesPack: ToolPack = {
     update_work_capsule_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
     release_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
     record_capsule_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
+    reassign_capsule_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
   },
   grants: {
     list_work_capsules: ["work_capsule_read"],
@@ -283,5 +302,6 @@ export const workCapsulesPack: ToolPack = {
     update_work_capsule_status: ["work_capsule_write"],
     release_capsule_scope: ["work_capsule_write"],
     record_capsule_evidence: ["work_capsule_write"],
+    reassign_capsule_executor: ["work_capsule_write"],
   },
 };
