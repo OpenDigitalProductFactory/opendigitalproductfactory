@@ -39,11 +39,9 @@ apps/web/lib/integrate/build-agent-prompts.ts	1054
 apps/web/lib/integrate/build-orchestrator.ts	1780
 apps/web/lib/integrate/sandbox/build-branch.ts	854
 apps/web/lib/marketing.ts	1367
-apps/web/lib/mcp-tools-backlog.test.ts	901
+apps/web/lib/mcp-tools-backlog.test.ts	912
 apps/web/lib/mcp-tools.ts	7560
 apps/web/lib/mcp/packs/backlog-pack.ts	1382
-apps/web/lib/mcp-tools.ts	9466
-apps/web/lib/mcp/packs/backlog-pack.ts	1380
 apps/web/lib/navigation/portal-navigation-model.ts	937
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1328
