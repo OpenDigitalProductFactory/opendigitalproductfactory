@@ -232,7 +232,7 @@ export async function advanceReviewedBuildToShip(
   // blast radius warrants. Non-blocking + fail-open; gated on the same flag.
   try {
     const { isQualityFirstRightsizingEnabled } = await import("./build-studio-config");
-    if (isQualityFirstRightsizingEnabled()) {
+    if (await isQualityFirstRightsizingEnabled()) {
       const { deriveBlastRadiusSensitivity } = await import("./change-impact");
       const { deriveDeliverableSensitivity, DELIVERABLE_SENSITIVITIES } = await import(
         "@/lib/explore/build-process-matrix"

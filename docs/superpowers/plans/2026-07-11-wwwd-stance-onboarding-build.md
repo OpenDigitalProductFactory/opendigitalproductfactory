@@ -32,18 +32,33 @@
 - `/wiki/review`: "Waiting on your call" section listing unresolved org-business decisions with the
   inline answer + make-standing control; stance form gains the decision-area picker + Publish.
 
-## Phase 3 — "How you decide" setup step (BI-D6DC2432) ✅ this PR
+## Phase 3 — "How you decide" setup step (BI-D6DC2432) ✅ shipped (PR #2837)
 
 - `SETUP_STEPS` entry `how-you-decide` after `business-context`; 5 archetype-prefilled scenario
   cards (resolveStanceVectors), Confirm-all fast path; confirm upgrades the vector's bundle via
   `promoteStanceMaterial(confirmed)`; skip leaves B/0.6. Same card components mounted in
-  `/wiki/stance`. UX-Fit-Decision trailer on the PR.
+  `/wiki/stance`. UX-Fit-Decision trailer on the PR (DI-0FA7D451EA32).
 
-## Phase 4 — Local delivery & live verification
+## Phase 4 — Local delivery & live verification ✅ done (2026-07-12)
 
-- Merge PRs → redeploy the local live portal from clean main.
-- Re-run `seedOrgWwwdCorpus` for the existing org (idempotent; new vector pages + retags land).
-- Author BI-EBBBD275's two founder-ruled stances through the capture path (A/1.0, embedded).
-- Re-run `evaluate_org_business_decision` live on the billing-goodwill and quality-vs-offering
-  questions; expected: resolve (recommend/arbitrate per posture) instead of defer/escalate; verify
-  a high-risk probe still escalates.
+- ✅ Merged all three build PRs; redeployed the local live portal from clean main (worktree-build +
+  root-clone-recreate; portal healthy at the merge SHA).
+- ✅ Shape-aware boot backfill re-primed the existing org idempotently — the WWWD corpus now carries
+  archetype-default material in all four decision classes (was: 4 materials, plan-readiness only).
+- ✅ Live `evaluate_org_business_decision` probes reproduce the **pre-confirmation rung** exactly:
+  billing-goodwill `escalate @ 0.35` and quality-vs-offering `escalate @ 0.45`, both now **from the
+  org's own profile**; high-risk probe still escalates (invariant holds).
+- ⏳ **Owner action, not engineering** (BI-EBBBD275 stays open): the two founder-ruled stances land at
+  A/1.0 the moment the owner answers them via the live `/wiki/review` capture loop, or confirms the
+  corresponding cards at `/wiki/stance` (A/0.9). The AI does not self-confirm — that is the design, and
+  it is why the final "resolve instead of escalate" step waits on one owner click rather than a build.
+
+---
+
+## Adjacency: Operational Twin Framework (2026-07-12)
+
+The `resolveStanceVectors` archetype derivation added in Phase 1 is a sibling of the
+`deriveTwinProfile` family in [the Operational Twin spec](../specs/2026-07-12-operational-twin-framework-design.md).
+The two meet at the twin's **cog**: an allocation confirm that carries a business judgment is an
+`evaluate_org_business_decision` call, and an escalation is a needs-you quest answerable via the capture
+loop shipped here. The twin spec's §5.1 (added alongside this reconciliation) records the binding.

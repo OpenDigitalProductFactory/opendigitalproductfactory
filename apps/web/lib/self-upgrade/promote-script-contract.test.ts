@@ -146,6 +146,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       "step=health",
       "step=sha-verify",
       "step=content-verify",
+      "step=sandbox-refresh",
       "step=cleanup",
     ] as const;
 
@@ -192,13 +193,23 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       expect(dryRunResult.stdout).toContain("step=content-verify");
     });
 
+    // BI-A8686CFC: the sandbox image must be rebuilt+recreated on every upgrade
+    // too, or Dockerfile.sandbox improvements (opencode agent, TTS env) never
+    // reach installed sandboxes and Build Studio builds break at the coding phase.
+    it("emits sandbox-refresh step", () => {
+      expect(dryRunResult.stdout).toContain("step=sandbox-refresh");
+    });
+
     // Post-success disk hygiene: dangling portal images + build cache are swept
     // after all verifies pass, so upgrades stop piling up tens of GB of dead disk.
     it("emits cleanup step", () => {
       expect(dryRunResult.stdout).toContain("step=cleanup");
     });
 
-    it("steps appear in order: prepare → backup → docker-build → migrate → docker-up → health → sha-verify → content-verify → cleanup", () => {
+    // sandbox-refresh runs AFTER the portal is fully verified (content-verify)
+    // and BEFORE cleanup, so a sandbox failure never reverts a promoted portal
+    // and cleanup still sweeps any dangling sandbox image last.
+    it("steps appear in order: prepare → backup → docker-build → migrate → docker-up → health → sha-verify → content-verify → sandbox-refresh → cleanup", () => {
       const positions = STEPS.map((s) => dryRunResult.stdout.indexOf(s));
       for (let i = 1; i < positions.length; i++) {
         expect(positions[i]).toBeGreaterThan(positions[i - 1]);

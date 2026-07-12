@@ -475,7 +475,7 @@ async function stepGenerateCode(
   // risk axis; Cost/Speed cannot discount a sensitive deliverable below its floor).
   // Off-flag → plain size-based routing (byte-identical).
   let modelTier: "local" | "robust";
-  if (isQualityFirstRightsizingEnabled()) {
+  if (await isQualityFirstRightsizingEnabled()) {
     const { resolveBuildSizing, coerceBuildPosture } = await import("@/lib/explore/build-rightsizing-dial");
     const riskPosture = await prisma.businessContext
       .findFirst({ select: { riskPosture: true } })

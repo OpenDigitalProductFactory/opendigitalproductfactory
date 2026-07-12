@@ -297,6 +297,43 @@ if [[ $_dry_run -eq 0 ]]; then
   }
 fi
 
+# --- Step 7b: sandbox-refresh ---
+# Rebuild + recreate the dpf-sandbox image the same way step 3/4 do the portal
+# (BI-A8686CFC). The promote chain historically rebuilt ONLY the portal, so
+# every improvement to Dockerfile.sandbox — the opencode coding agent that the
+# Build Studio build phase shells into, the macOS TTS env wiring, provisioned
+# build engines — never reached an installed sandbox via self-upgrade. Its
+# image would sit at whatever was built at install time (a month stale on the
+# install that surfaced this), so BS builds died at the coding phase (exit 127,
+# `opencode` not found) and env-only compose fixes never took effect until a
+# manual `--force-recreate`. Kernel decision: mirror the portal contract
+# exactly — unconditional build every upgrade, letting the BuildKit layer cache
+# make an unchanged Dockerfile.sandbox near-instant, rather than a git-diff gate
+# whose missed input would silently reintroduce the very staleness this fixes.
+#
+# Sequenced AFTER the portal is fully verified and deliberately fail-LOUD but
+# NOT fail-ABORT: the portal swap already happened at step 4 and the
+# orchestrator process died with it, so a non-zero exit here reverts nothing —
+# it would only mislabel a genuinely-promoted portal as a failed upgrade. A
+# stale sandbox is a recoverable degraded state (recover_sandbox tool, the
+# health-alert surface) so we emit an explicit sandbox-refresh-failed marker and
+# continue to cleanup + done rather than aborting. This is the opposite of the
+# original silent bug: the rebuild always runs, and its failure is never hidden.
+emit_step sandbox-refresh
+if [[ $_dry_run -eq 0 ]]; then
+  _sandbox_ok=1
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    "${_f_args[@]}" build sandbox || _sandbox_ok=0
+  if [[ $_sandbox_ok -eq 1 ]]; then
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      "${_f_args[@]}" up -d --no-deps --force-recreate sandbox || _sandbox_ok=0
+  fi
+  if [[ $_sandbox_ok -eq 0 ]]; then
+    printf 'step=sandbox-refresh-failed target=%s\n' "$_built_sha"
+    printf 'warning: dpf-sandbox rebuild/recreate failed after a successful portal promotion — the portal upgrade stands, but the sandbox may be stale (Build Studio builds can fail at the coding phase until it is refreshed via recover_sandbox or a manual `docker compose build sandbox && docker compose up -d --force-recreate sandbox`) (BI-A8686CFC)\n' >&2
+  fi
+fi
+
 # --- Step 8: cleanup ---
 # A successful swap leaves the PREVIOUS portal image untagged (dangling) plus BuildKit
 # cache layers from step 3's rebuild. Nothing else sweeps them, so across upgrades they
