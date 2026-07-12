@@ -13,6 +13,7 @@
  */
 
 import { scanDiffForSecurityIssues, type SecurityScanResult } from "./security-scan";
+import { scanUiSource } from "@/lib/build/ui-quality-checks";
 import { scanForDestructiveOps } from "./sandbox/sandbox-promotion";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -216,13 +217,41 @@ function runDependencyGate(diff: string): GateResult {
  *   - ANY "warn" verdict  → canProceed=true, requiresHumanReview=true
  *   - ALL "pass"          → canProceed=true, requiresHumanReview=false
  */
+// BI-66656F61 — UI quality gate (advisory). Scans added lines of changed UI
+// files (.tsx/.jsx/.css) for design-token violations (hardcoded hex / tailwind
+// color-shade classes / inline rgb) and a11y smells (div onClick, span
+// role=button, missing focus-visible) — the exact rules the Frontend Engineer
+// prompt asks for, now enforced as a check. Advisory only: it NEVER blocks
+// (UX findings are non-gating in this pipeline), it flags for human review.
+function runUiQualityGate(diff: string): GateResult {
+  const files = extractFilePaths(diff).filter((f) => /\.(tsx|jsx|css)$/.test(f));
+  const findings: string[] = [];
+  for (const file of files) {
+    const added = extractAddedLinesForFile(diff, file);
+    if (added.length === 0) continue;
+    // Reconstruct the added source so file-level checks (focus-visible) and
+    // 1-based line numbers within the added hunk are meaningful.
+    const report = scanUiSource(added.join("\n"), { isPlatformUi: true });
+    for (const f of report.findings) {
+      findings.push(`${file}: [${f.severity}] ${f.description} — ${f.snippet}`);
+    }
+  }
+  return {
+    gate: "UI Quality (design tokens + a11y)",
+    // Advisory: warn when there are findings, never block.
+    verdict: findings.length > 0 ? "warn" : "pass",
+    findings,
+  };
+}
+
 export function runPrePRGates(diff: string): PrePRGateResult {
   const { result: securityResult, scan: securityScan } = runSecurityGate(diff);
   const destructiveResult = runDestructiveOpsGate(diff);
   const architectureResult = runArchitectureGate(diff);
   const dependencyResult = runDependencyGate(diff);
+  const uiQualityResult = runUiQualityGate(diff);
 
-  const gates = [securityResult, destructiveResult, architectureResult, dependencyResult];
+  const gates = [securityResult, destructiveResult, architectureResult, dependencyResult, uiQualityResult];
 
   const hasBlock = gates.some((g) => g.verdict === "block");
   const hasWarn = gates.some((g) => g.verdict === "warn");
