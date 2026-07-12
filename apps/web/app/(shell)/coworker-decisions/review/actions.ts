@@ -69,7 +69,7 @@ export async function answerGovernanceGap(input: {
       });
     }
 
-    revalidatePath("/wiki/review");
+    revalidatePath("/coworker-decisions/review");
 
     const drafts = result.committed.length;
     return {

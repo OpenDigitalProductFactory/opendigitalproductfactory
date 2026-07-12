@@ -263,7 +263,7 @@ export function WikiPageList({ pages }: Props): ReactNode {
     return (
       <li key={p.id}>
         <Link
-          href={`/wiki/${p.slug}`}
+          href={`/coworker-decisions/${p.slug}`}
           className="block px-3 py-2 hover:bg-[var(--dpf-surface-2)]"
         >
           <div className="flex items-center gap-2 flex-wrap">

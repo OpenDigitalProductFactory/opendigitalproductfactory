@@ -149,7 +149,7 @@ The default deployment path keeps audio on the host. Cloud TTS is the API-only o
 
 ### Voice Profile Admin
 
-Voice profiles are managed in the platform's wiki area at the persona admin page (`/wiki/personas/[id]/voice`). Operator workflow:
+Voice profiles are managed in the platform's wiki area at the persona admin page (`/coworker-decisions/personas/[id]/voice`). Operator workflow:
 
 1. Upload audio or video samples on the profile admin page
 2. The platform extracts audio from video (FFmpeg, server-side)
@@ -167,8 +167,8 @@ Re-training is allowed when sample quality improves or the existing voice degrad
 - **Decision Canvas** — a read surface for a single `DecisionInteraction`; shows the question, options, recommendation, confidence, material pulls, evidence sources, and audit identifiers without exposing internal tool names in the default view
 - **Material Backlinks** — a bounded local neighborhood for the cited principle or profile material; shows related stances and heuristics, citations, and prior decisions when the material has been approved and promoted
 - **Founder / owner review queue** — unresolved decisions grouped by human-readable gap reason. WWMD decisions use founder-review wording; WWWD and custom profiles use owner/operator wording.
-- **`/wiki/personas/[id]`** — profile detail with materials, generation style, and voice configuration
-- **`/wiki/personas/[id]/voice`** — voice training, consent record, training job status, provider voice ID
+- **`/coworker-decisions/personas/[id]`** — profile detail with materials, generation style, and voice configuration
+- **`/coworker-decisions/personas/[id]/voice`** — voice training, consent record, training job status, provider voice ID
 - **`DecisionInteraction` ledger** — every gate invocation; queryable for "what did the gate decide for this build, and on what basis?"
 - **Operations Map** — decision-pressure overlays appear alongside cost-pressure overlays so an operator can see when escalation rates rise on a particular profile
 
@@ -184,9 +184,9 @@ Use **founder review** when a WWMD platform decision needs a missing principle, 
 
 ## Coworker Awareness of the Governance Hub
 
-A coworker chat opened alongside `/wiki` can now read the same governance state the page renders, so "what should we do about these open reviews?" is answered from data rather than a request to paste the screen:
+A coworker chat opened alongside `/coworker-decisions` can now read the same governance state the page renders, so "what should we do about these open reviews?" is answered from data rather than a request to paste the screen:
 
-- **Page context.** When the user is on `/wiki`, the coworker's prompt is injected with the Decision Governance summary — open-review counts per discipline (WWMD / WWWD / WSID), decisions recorded in the last 30 days, governing-material counts, and the most recent unresolved reviews with their questions and decision-canvas links. This is the `/wiki` route-context provider in `apps/web/lib/tak/route-context.ts`.
+- **Page context.** When the user is on `/coworker-decisions`, the coworker's prompt is injected with the Decision Governance summary — open-review counts per discipline (WWMD / WWWD / WSID), decisions recorded in the last 30 days, governing-material counts, and the most recent unresolved reviews with their questions and decision-canvas links. This is the `/coworker-decisions` route-context provider in `apps/web/lib/tak/route-context.ts`.
 - **Perception by construction.** Only a handful of routes carry a bespoke provider like the one above; every other route (the large majority) now falls through to a **default provider** that names the page the user is on and steers the coworker to read via its tools rather than ask the user to paste the screen. So a coworker is never *fully* blind to which page it is looking at — a route without a bespoke summary degrades to page-identity context, not to nothing.
 - **The `list_open_decision_reviews` tool.** A read-only, `registry_read`-baseline tool (so every coworker inherits it) that returns the full open-review queue — each item's discipline, unresolved reason, gap detail, suggested action, and decision-canvas link — projected through the same `apps/web/lib/founder-review/queue.ts` the Founder Review workspace uses. A coworker reads the queue and **recommends** a resolution; **resolving** a deferred/escalated review stays a human action taken in the Founder Review workspace (Human-in-the-Loop at Phase Boundaries).
 
@@ -214,15 +214,15 @@ Tracked under EP-WWMD, EP-VOICE-LAYER, and EP-WSID:
 
 ## Related Routes
 
-- `/wiki` — **Decision governance** landing. Reframed (EP-0AF96937 Phase 1) around the three decision disciplines — WWMD (platform), WWWD (your business), WSID (each role's craft) — each card showing derived health (material counts, whether the org has its own stance, open review counts) and See / Manage / Review actions. The raw kernel material (principles, stances, heuristics) is retained below the hub as a "Governing material" drill-in rather than the front door. See `docs/superpowers/specs/2026-07-04-decision-governance-surface-redesign-design.md`.
-- `/wiki/review` — **Review & adjust** workspace (EP-0AF96937 Phase 2). A findings surface over the accumulating decision ledger: `conflict` findings (decisions the gate flagged as `principleConflict`), `gap` findings (clusters of `defer`/`escalate` outcomes in one decision domain where the doctrine has no settled answer yet), and `staleness` findings (decision material aged past its freshness window that still governs), each with a plain-language action. Drift (golden-decision flips) follows as a later sub-slice.
-- `/wiki/stance` — **WWWD business-stance editor** (EP-0AF96937 Phase 3). Where a business sees and adjusts how it decides ("what would WE do"). A plain-language "the question you want settled / how your business decides it" form saves a **draft** org-overlay `stance` page — exactly the corpus the coworker decision-routing block grounds business calls in. Draft by default: nothing becomes active doctrine until explicitly published.
-- `/wiki/craft` + `/wiki/craft/[professionKey]` — **WSID craft view + override** (EP-0AF96937 Phase 4). The professions the platform grounds each coworker in, and where a business adds its own local practices on top of the platform baseline (a draft org-overlay `heuristic` under the profession's slug namespace — never mutating the seeded corpus).
-- `/wiki/matrix` — **The decision matrix** (EP-0AF96937 Phase 2 completion). The axes (benefit/cost dimensions) and per-tier weights every principle is scored on, with a live per-axis principle count. Read-only — adding or reweighting an axis is a governed change — so decisions stay reproducible.
-- `/wiki/perspectives` — manage the profiles behind each discipline; give any perspective a voice
+- `/coworker-decisions` — **Coworker Decision Engine** landing. Reframed (EP-0AF96937 Phase 1) around the three decision disciplines — WWMD (platform), WWWD (your business), WSID (each role's craft) — each card showing derived health (material counts, whether the org has its own stance, open review counts) and See / Manage / Review actions. The raw kernel material (principles, stances, heuristics) is retained below the hub as a "Governing material" drill-in rather than the front door. See `docs/superpowers/specs/2026-07-04-decision-governance-surface-redesign-design.md`.
+- `/coworker-decisions/review` — **Review & adjust** workspace (EP-0AF96937 Phase 2). A findings surface over the accumulating decision ledger: `conflict` findings (decisions the gate flagged as `principleConflict`), `gap` findings (clusters of `defer`/`escalate` outcomes in one decision domain where the doctrine has no settled answer yet), and `staleness` findings (decision material aged past its freshness window that still governs), each with a plain-language action. Drift (golden-decision flips) follows as a later sub-slice.
+- `/coworker-decisions/stance` — **WWWD business-stance editor** (EP-0AF96937 Phase 3). Where a business sees and adjusts how it decides ("what would WE do"). A plain-language "the question you want settled / how your business decides it" form saves a **draft** org-overlay `stance` page — exactly the corpus the coworker decision-routing block grounds business calls in. Draft by default: nothing becomes active doctrine until explicitly published.
+- `/coworker-decisions/craft` + `/coworker-decisions/craft/[professionKey]` — **WSID craft view + override** (EP-0AF96937 Phase 4). The professions the platform grounds each coworker in, and where a business adds its own local practices on top of the platform baseline (a draft org-overlay `heuristic` under the profession's slug namespace — never mutating the seeded corpus).
+- `/coworker-decisions/matrix` — **The decision matrix** (EP-0AF96937 Phase 2 completion). The axes (benefit/cost dimensions) and per-tier weights every principle is scored on, with a live per-axis principle count. Read-only — adding or reweighting an axis is a governed change — so decisions stay reproducible.
+- `/coworker-decisions/perspectives` — manage the profiles behind each discipline; give any perspective a voice
 - Build Studio → **Decision Perspective Gate Panel** — primary surface for the gate
-- `/wiki/personas/[id]` — profile detail
-- `/wiki/personas/[id]/voice` — voice training and consent
+- `/coworker-decisions/personas/[id]` — profile detail
+- `/coworker-decisions/personas/[id]/voice` — voice training and consent
 - `/platform/ai/founder-review` — the owner/founder review queue for `defer`/`escalate` outcomes (`?mode=wwmd` / `?mode=wwwd`)
 - `/platform/ai/operations` — Operations Map with decision-pressure overlays
 - MCP — the `decisionPerspective.invoke` tool exposes the gate to external clients under the same grant model

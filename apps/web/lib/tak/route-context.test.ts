@@ -396,7 +396,7 @@ describe("getRouteDataContext", () => {
       },
     ]);
 
-    const context = await getRouteDataContext("/wiki", "user-1");
+    const context = await getRouteDataContext("/coworker-decisions", "user-1");
 
     expect(context).toContain("PAGE DATA — Decision Governance (/wiki):");
     expect(context).toContain("OPEN REVIEWS awaiting a human: 18 total");

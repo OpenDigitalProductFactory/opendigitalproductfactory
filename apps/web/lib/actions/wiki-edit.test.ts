@@ -196,8 +196,8 @@ describe("saveWikiOverlayEdit — update existing overlay", () => {
         createdById: "user_1",
       }),
     });
-    expect(revalidatePath).toHaveBeenCalledWith("/wiki/entities/portfolio");
-    expect(revalidatePath).toHaveBeenCalledWith("/wiki");
+    expect(revalidatePath).toHaveBeenCalledWith("/coworker-decisions/entities/portfolio");
+    expect(revalidatePath).toHaveBeenCalledWith("/coworker-decisions");
   });
 });
 

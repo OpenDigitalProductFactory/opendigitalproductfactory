@@ -210,7 +210,7 @@ export async function captureOrgDecisionOutcome(
     }
   }
 
-  revalidatePath("/wiki/review");
-  revalidatePath("/wiki");
+  revalidatePath("/coworker-decisions/review");
+  revalidatePath("/coworker-decisions");
   return { ok: true, status: "captured", standingSlug, standingPromoted };
 }

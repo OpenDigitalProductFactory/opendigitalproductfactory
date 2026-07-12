@@ -49,7 +49,7 @@ const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: str
   // business blurb — so asked "what should we do about these open reviews?" it
   // had no idea the page even showed reviews and told the user to paste the
   // screen (BI-C888E1B6 / EP-0AF96937).
-  "/wiki": getWikiGovernanceContext,
+  "/coworker-decisions": getWikiGovernanceContext,
 };
 
 export async function getRouteDataContext(routeContext: string, userId: string): Promise<RouteContextResult> {

@@ -96,9 +96,9 @@ describe("publishWikiOverlayPages — batch flow", () => {
     }
     expect(prisma.wikiPage.update).toHaveBeenCalledTimes(2);
     expect(prisma.wikiPageRevision.create).toHaveBeenCalledTimes(2);
-    expect(revalidatePath).toHaveBeenCalledWith("/wiki");
-    expect(revalidatePath).toHaveBeenCalledWith("/wiki/entities/a");
-    expect(revalidatePath).toHaveBeenCalledWith("/wiki/stances/b");
+    expect(revalidatePath).toHaveBeenCalledWith("/coworker-decisions");
+    expect(revalidatePath).toHaveBeenCalledWith("/coworker-decisions/entities/a");
+    expect(revalidatePath).toHaveBeenCalledWith("/coworker-decisions/stances/b");
   });
 
   it("reports each rejection reason — not-found, kernel, cross-org, already-target", async () => {

@@ -15,7 +15,7 @@ import { BUSINESS_STANCE_SLUG_PREFIX } from "@/lib/wiki/business-stance";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Your business stance · Decision governance",
+  title: "Your business stance · Coworker Decision Engine",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -48,8 +48,8 @@ export default async function BusinessStancePage() {
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
       <nav className="mb-6 flex items-center gap-2 text-sm text-[var(--dpf-muted)]">
-        <Link href="/wiki" className="hover:text-[var(--dpf-text)]">
-          Decision governance
+        <Link href="/coworker-decisions" className="hover:text-[var(--dpf-text)]">
+          Coworker Decision Engine
         </Link>
         <span>/</span>
         <span className="text-[var(--dpf-text)] font-medium">Your business (WWWD)</span>
@@ -89,7 +89,7 @@ export default async function BusinessStancePage() {
               <li key={s.id} className="px-4 py-3">
                 <div className="flex items-center gap-3">
                   <Link
-                    href={`/wiki/${s.slug}`}
+                    href={`/coworker-decisions/${s.slug}`}
                     className="text-sm font-medium text-[var(--dpf-text)] hover:underline min-w-0 flex-1 truncate"
                   >
                     {s.title}
@@ -99,7 +99,7 @@ export default async function BusinessStancePage() {
                   </span>
                   {s.slug.startsWith(`${BUSINESS_STANCE_SLUG_PREFIX}/`) && (
                     <Link
-                      href={`/wiki/edit/${s.slug}`}
+                      href={`/coworker-decisions/edit/${s.slug}`}
                       className="text-xs text-[var(--dpf-accent)] hover:underline shrink-0"
                     >
                       Edit
@@ -121,7 +121,7 @@ export default async function BusinessStancePage() {
 
       <p className="text-xs text-[var(--dpf-muted)] mt-6">
         Reviewing what your AI has already decided?{" "}
-        <Link href="/wiki/review" className="text-[var(--dpf-accent)] hover:underline">
+        <Link href="/coworker-decisions/review" className="text-[var(--dpf-accent)] hover:underline">
           Go to Review &amp; adjust
         </Link>
         .
