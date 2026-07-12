@@ -1,0 +1,31 @@
+# scripts/docs-reference-baseline.txt — grandfathered broken doc references.
+# Format: <source-doc>\t<href>. Managed by check-doc-reference-integrity.mjs.
+# Fix a reference and run `node scripts/check-doc-reference-integrity.mjs --update`
+# to retighten. The count is a one-way ratchet — new breakage fails the PR.
+# .gitattributes marks this merge=union so concurrent re-baselines don't clash.
+docs/architecture/dpf-patterns.md	../../scripts/audit-routing-spec-boot-invariants.ts
+docs/dogfood/2026-05-23-dale-hvac-build-studio.md	D:/DPF/.env:10
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	apps/web/app/api/business-context/setup/route.ts
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	apps/web/lib/actions/compliance.ts
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	apps/web/lib/change-management/register-change.ts
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	apps/web/lib/inference/local-only.ts
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	apps/web/lib/routing/pipeline-v2.ts:136
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	apps/web/lib/routing/request-contract.ts:54
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	apps/web/lib/routing/routed-inference.ts
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	docs/professions/legal-compliance/wiki/
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	packages/db/prisma/schema.prisma
+docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md	packages/db/scripts/seed-dora-regulation.ts
+docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md	apps/web/app/auth/callback/route.ts:9
+docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md	apps/web/lib/govern/provider-oauth.test.ts:66
+docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md	apps/web/lib/govern/provider-oauth.ts:53-64
+docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md	apps/web/lib/govern/provider-oauth.ts:90
+docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md	apps/web/lib/portal-url.ts:35-38
+docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md	packages/db/data/providers-registry.json
+docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md	.github/workflows/ci.yml:150
+docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md	Dockerfile:14
+docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md	Dockerfile:32
+docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md	apps/web/lib/gear-interface/otel-exporter.ts:109
+docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md	apps/web/lib/gear-interface/otel-exporter.ts:127
+docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md	apps/web/package.json
+docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md	package.json
+docs/triage/2026-05-24-portal-prisma-generate-rebuild-failure.md	packages/db/package.json

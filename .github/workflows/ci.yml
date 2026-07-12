@@ -504,6 +504,26 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node scripts/check-spec-plan-doc.mjs
 
+  doc-reference-integrity:
+    name: Doc Reference Integrity
+    runs-on: ubuntu-latest
+    # Referential integrity for docs. The Spec/Plan/Doc Gate proves a doc was
+    # TOUCHED; this proves docs are not BROKEN. Doc breakage is non-local — a route
+    # or file renamed on one side leaves a dead reference in a doc elsewhere the PR
+    # never touched — so it scans the whole live-doc corpus against the current
+    # route-manifest, not just the diff. Ratcheted: only NET-NEW broken references
+    # (vs scripts/docs-reference-baseline.txt) fail. EP-1155CEF3 / BI-62430075.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Test the gate
+        run: node --test scripts/check-doc-reference-integrity.test.mjs
+      - name: Run doc reference integrity gate
+        run: node scripts/check-doc-reference-integrity.mjs
+
   janitor-tests:
     name: Janitor Tests
     runs-on: ubuntu-latest
