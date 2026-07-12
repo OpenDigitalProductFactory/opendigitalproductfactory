@@ -6,6 +6,19 @@ vi.mock("./queue-awareness-resolver", () => ({
   resolveQueueAttention: vi.fn().mockResolvedValue([]),
 }));
 
+// BI-AE6AFE3D: loadBuildStudioCapability hits live Prisma (modelProfile /
+// modelProvider / buildEngine). When a sub-resolver soft-timeouts, the
+// cancelled-but-still-running promise can emit prisma:error console output
+// *after* the test returns → EnvironmentTeardownError
+// "Closing rpc while onUserConsoleLog was pending". Stub the capability
+// loader so this suite never opens a real DB connection.
+vi.mock("@/lib/build/build-studio-capability", () => ({
+  loadBuildStudioCapability: vi.fn().mockResolvedValue({
+    ok: true,
+    satisfyingProviderNames: ["test-provider"],
+  }),
+}));
+
 import {
   bucketPortalContextTimestamp,
   createPortalContextEnvelopeId,

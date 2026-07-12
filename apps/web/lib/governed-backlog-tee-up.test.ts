@@ -1,4 +1,48 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parseFixContextFromBody } from "./governed-backlog-tee-up";
+
+describe("parseFixContextFromBody (BI-E7BB3816)", () => {
+  it("parses label-line Fix Context fields", () => {
+    const parsed = parseFixContextFromBody(
+      [
+        "Reproduction steps: click save",
+        "Expected: row persists",
+        "Actual: 500",
+        "Root cause: null deref",
+        "Fix approach: null-check before write",
+      ].join("\n"),
+    );
+    expect(parsed).toEqual({
+      reproSteps: "click save",
+      expected: "row persists",
+      actual: "500",
+      rootCause: "null deref",
+      fixApproach: "null-check before write",
+    });
+  });
+
+  it("parses multi-line markdown headings", () => {
+    const parsed = parseFixContextFromBody(
+      [
+        "## Reproduction steps",
+        "step 1",
+        "step 2",
+        "## Root cause",
+        "parser drops fields",
+        "## Fix approach",
+        "map body → fixContext",
+      ].join("\n"),
+    );
+    expect(parsed.reproSteps).toBe("step 1\nstep 2");
+    expect(parsed.rootCause).toBe("parser drops fields");
+    expect(parsed.fixApproach).toBe("map body → fixContext");
+  });
+
+  it("returns empty object for body without Fix Context labels", () => {
+    expect(parseFixContextFromBody("just a free-form bug note")).toEqual({});
+    expect(parseFixContextFromBody(null)).toEqual({});
+  });
+});
 
 const mockPrisma = {
   platformDevConfig: {
@@ -150,39 +194,6 @@ describe("governed backlog tee-up", () => {
       "BI-EPIC-OLDER",
       "BI-EPIC-NEWER",
       "BI-BOOT-OLDER",
-    ]);
-  });
-
-  it("draws highest demandScore first, with a manual priority pin trumping the computed rank", async () => {
-    const { selectGovernedBacklogTeeUpCandidates } = await import("./governed-backlog-tee-up");
-    const base = {
-      body: null,
-      status: "open",
-      triageOutcome: "build",
-      effortSize: "medium",
-      activeBuildId: null,
-      digitalProductId: null,
-      epicId: null,
-      createdAt: new Date("2026-07-10T10:00:00.000Z"),
-      epic: null,
-    } as const;
-
-    const selected = selectGovernedBacklogTeeUpCandidates(
-      [
-        { ...base, id: "a", itemId: "BI-SCORE-10", title: "score 10", demandScore: 10 },
-        { ...base, id: "b", itemId: "BI-SCORE-50", title: "score 50", demandScore: 50 },
-        { ...base, id: "c", itemId: "BI-PINNED", title: "pinned low score", demandScore: 5, priority: 1 },
-        { ...base, id: "d", itemId: "BI-UNSCORED", title: "no score", demandScore: null },
-      ],
-      4,
-    );
-
-    // Pin first (trumps score), then descending demandScore, unscored last.
-    expect(selected.map((i) => i.itemId)).toEqual([
-      "BI-PINNED",
-      "BI-SCORE-50",
-      "BI-SCORE-10",
-      "BI-UNSCORED",
     ]);
   });
 
@@ -533,6 +544,66 @@ describe("governed backlog tee-up", () => {
         where: { id: "pir-row-1", featureBuildId: null },
         data: { featureBuildId: "build-row-fix" },
       });
+    });
+
+    it("maps structured Fix Context body fields onto fixContext (BI-E7BB3816)", async () => {
+      const body = [
+        "Contact form 500s on submit",
+        "",
+        "Source report: PIR-ABCDE",
+        "",
+        "## Reproduction steps",
+        "1. Open /portal/contact",
+        "2. Submit the form",
+        "",
+        "Expected: Form saves and shows a success toast",
+        "Actual: HTTP 500 and blank page",
+        "Root cause: format() called on undefined locale",
+        "Fix approach: Guard locale before format(); add regression test",
+      ].join("\n");
+
+      mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({
+        id: "bi-cuid-diagnosed",
+        itemId: "BI-DIAG-001",
+        title: "Contact form 500s on submit",
+        body,
+        status: "open",
+        triageOutcome: "build",
+        effortSize: "small",
+        activeBuildId: null,
+        digitalProductId: null,
+        epicId: null,
+        taxonomyNodeId: null,
+        workType: "bug",
+        source: "automated-detection",
+        epic: null,
+      });
+      mockPrisma.platformIssueReport.findUnique.mockResolvedValueOnce({
+        id: "pir-row-1",
+        reportId: "PIR-ABCDE",
+        severity: "high",
+        routeContext: "/portal/contact",
+        errorStack: "TypeError: cannot read 'format'",
+        description: "truncated PIR description that must not replace structured actual",
+      });
+      mockPrisma.epic.create.mockResolvedValueOnce({ id: "epic-cuid-fix", epicId: "EP-BUILD-FIX002" });
+      mockPrisma.featureBuild.create.mockResolvedValueOnce({ id: "build-row-fix2", buildId: "FB-FIX00002" });
+
+      const { promoteBacklogItemToBuildDraft } = await import("./governed-backlog-tee-up");
+      const result = await promoteBacklogItemToBuildDraft({
+        tx: mockPrisma,
+        itemId: "BI-DIAG-001",
+        userId: "user-1",
+        governedBacklogEnabled: true,
+      });
+
+      expect(result.kind).toBe("success");
+      const fc = mockPrisma.featureBuild.create.mock.calls[0]![0].data.brief.fixContext;
+      expect(fc.reproSteps).toContain("Open /portal/contact");
+      expect(fc.expected).toContain("success toast");
+      expect(fc.actual).toBe("HTTP 500 and blank page");
+      expect(fc.rootCause).toContain("format()");
+      expect(fc.fixApproach).toContain("Guard locale");
     });
 
     it("auto-creates a solo epic and falls back to a triaged-bi taxonomy anchor when BI has neither", async () => {

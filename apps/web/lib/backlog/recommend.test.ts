@@ -9,6 +9,7 @@ function candidate(overrides: Partial<RecommendCandidate>): RecommendCandidate {
     title: "Default item",
     status: "open",
     priority: null,
+    demandScore: null,
     effortSize: null,
     triageOutcome: null,
     hasActiveBuild: false,
@@ -22,6 +23,27 @@ function candidate(overrides: Partial<RecommendCandidate>): RecommendCandidate {
     ...overrides,
   };
 }
+
+describe("rankCandidates — demand value", () => {
+  it("ranks a higher demandScore ahead of a lower one (all else equal)", () => {
+    const ranked = rankCandidates([
+      candidate({ itemId: "BI-Low", demandScore: 10 }),
+      candidate({ itemId: "BI-High", demandScore: 400 }),
+      candidate({ itemId: "BI-None", demandScore: null }),
+    ]);
+    expect(ranked[0].itemId).toBe("BI-High");
+    expect(ranked[0].signals.demandScore).toBe(400);
+  });
+
+  it("does not let demand value outweigh spec+plan readiness", () => {
+    // spec+plan = 8; the demand term is capped at +4, so a ready item wins.
+    const ranked = rankCandidates([
+      candidate({ itemId: "BI-Ready", hasSpec: true, hasPlan: true, demandScore: 1 }),
+      candidate({ itemId: "BI-Valuable", demandScore: 1000 }),
+    ]);
+    expect(ranked[0].itemId).toBe("BI-Ready");
+  });
+});
 
 describe("rankCandidates — eligibility", () => {
   it("filters out done and deferred items", () => {

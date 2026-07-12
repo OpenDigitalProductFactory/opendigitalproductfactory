@@ -78,10 +78,7 @@ export function buildRevenueCockpitSummary(input: RevenueCockpitInput): RevenueC
   const quoteCount = countWhere(input.quoteCounts, ["draft", "sent"]);
   const sentQuotes = countWhere(input.quoteCounts, ["sent"]);
   const activeOrders = countWhere(input.orderCounts, ["confirmed", "in_progress"]);
-  const marketingWorkCount =
-    input.marketingWork.campaignBriefsOpen +
-    input.marketingWork.assetTasksOpen +
-    input.marketingWork.automationCandidatesOpen;
+  const pipelineEmpty = pipelineCount === 0;
 
   // The engagement inbox: what to work NOW, each with a plain-language why,
   // ordered by urgency (money overdue > deals stalling > new leads > renewals).
@@ -125,11 +122,24 @@ export function buildRevenueCockpitSummary(input: RevenueCockpitInput): RevenueC
     });
   }
 
-  if (marketingWorkCount > 0) {
+  // Marketing work products split by the queue that actually lists them, so the
+  // pill lands on the reviewable items — not the marketing overview hub.
+  const campaignWorkCount =
+    input.marketingWork.campaignBriefsOpen + input.marketingWork.assetTasksOpen;
+  const automationWorkCount = input.marketingWork.automationCandidatesOpen;
+  if (campaignWorkCount > 0) {
     attentionItems.push({
-      id: "marketing-work",
-      label: `${marketingWorkCount} marketing work product${marketingWorkCount === 1 ? " is" : "s are"} waiting`,
-      href: "/customer/marketing",
+      id: "marketing-campaign-work",
+      label: `${campaignWorkCount} campaign work product${campaignWorkCount === 1 ? " is" : "s are"} waiting for review`,
+      href: "/customer/marketing/campaigns",
+      tone: "accent",
+    });
+  }
+  if (automationWorkCount > 0) {
+    attentionItems.push({
+      id: "marketing-automation-work",
+      label: `${automationWorkCount} automation candidate${automationWorkCount === 1 ? " is" : "s are"} waiting for review`,
+      href: "/customer/marketing/automation",
       tone: "accent",
     });
   }
@@ -148,9 +158,12 @@ export function buildRevenueCockpitSummary(input: RevenueCockpitInput): RevenueC
         id: "pipeline",
         label: "Pipeline",
         value: String(pipelineCount),
-        detail: `${formatRevenueAmount(pipelineValue, currency)} open`,
+        // An empty pipeline is a revenue red flag, not a neutral zero — say so.
+        detail: pipelineEmpty
+          ? "No open pipeline — nothing in motion"
+          : `${formatRevenueAmount(pipelineValue, currency)} open`,
         href: "/customer/opportunities",
-        tone: "accent",
+        tone: pipelineEmpty ? "warning" : "accent",
       },
       {
         id: "quotes",

@@ -105,7 +105,7 @@ describe("mapBuildEvidenceTimelineEvents", () => {
 });
 
 describe("loadBuildEvidenceTimelineEvents", () => {
-  it("queries external evidence by FB- buildId and runtime/capsule by the cuid", async () => {
+  it("queries external evidence by buildId OR capsule link, and runtime/capsule by the cuid", async () => {
     const externalFindMany = vi.fn(async () => [
       { id: "x", provider: "codex", resultSummary: "did work", createdAt: new Date("2026-06-19T05:00:00.000Z") },
     ]);
@@ -127,8 +127,12 @@ describe("loadBuildEvidenceTimelineEvents", () => {
       build: { id: "fb-cuid", buildId: "FB-123" },
     });
 
+    // With a linked capsule, external evidence is matched by build id OR the
+    // capsule link, so capsule-bound external-agent work (no FeatureBuild) shows.
     expect(externalFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { buildId: "FB-123" } }),
+      expect.objectContaining({
+        where: { OR: [{ buildId: "FB-123" }, { workCapsuleId: "capsule-cuid" }] },
+      }),
     );
     expect(runtimeFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { featureBuildId: "fb-cuid" } }),
@@ -140,6 +144,26 @@ describe("loadBuildEvidenceTimelineEvents", () => {
       expect.objectContaining({ where: { workCapsuleId: "capsule-cuid", kind: "evidence-recorded" } }),
     );
     expect(events.map((event) => event.id)).toEqual(["external-x", "capsule-a"]);
+  });
+
+  it("falls back to a buildId-only external query when the build has no linked capsule", async () => {
+    const externalFindMany = vi.fn(async () => [] as unknown[]);
+
+    const db = {
+      externalEvidenceRecord: { findMany: externalFindMany },
+      runtimeVerification: { findMany: vi.fn(async () => [] as unknown[]) },
+      workCapsule: { findFirst: vi.fn(async () => null) },
+      workCapsuleActivity: { findMany: vi.fn(async () => [] as unknown[]) },
+    } as unknown as EvidenceTimelineDb;
+
+    await loadBuildEvidenceTimelineEvents({
+      db,
+      build: { id: "fb-cuid", buildId: "FB-123" },
+    });
+
+    expect(externalFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { buildId: "FB-123" } }),
+    );
   });
 
   it("skips the capsule-activity query when the build has no linked capsule", async () => {

@@ -7,7 +7,15 @@ import { DuplicateAccountsPanel } from "@/components/customer/DuplicateAccountsP
 import { RevenueCockpit } from "@/components/customer/RevenueCockpit";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { buildRevenueCockpitSummary } from "@/lib/crm/revenue-cockpit";
-import { getAccountStatusMeta } from "@/lib/crm/presentation";
+import {
+  CRM_TONE_CLASSES,
+  getAccountStatusMeta,
+  OPEN_OPPORTUNITY_STAGES,
+} from "@/lib/crm/presentation";
+import {
+  classifyAccountAttention,
+  sortAccountsByAttention,
+} from "@/lib/crm/account-attention";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
 export default async function CustomerPage({
@@ -39,7 +47,29 @@ export default async function CustomerPage({
         name: true,
         status: true,
         industry: true,
+        createdAt: true,
         _count: { select: { contacts: true, opportunities: true } },
+        // Open opportunities carry the dormancy + expected-close signals.
+        opportunities: {
+          where: { stage: { in: [...OPEN_OPPORTUNITY_STAGES] } },
+          select: { stage: true, isDormant: true, expectedClose: true },
+        },
+        // Sent + expired quotes carry the commitment/at-risk signals.
+        quotes: {
+          where: { status: { in: ["sent", "expired"] } },
+          select: { status: true, validUntil: true },
+        },
+        // Unworked inbound engagements carry the follow-up signal.
+        engagements: {
+          where: { status: { in: ["new", "contacted"] } },
+          select: { status: true },
+        },
+        // Most recent logged activity drives the stale signal.
+        activities: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { createdAt: true },
+        },
       },
     }),
     prisma.engagement.groupBy({
@@ -118,6 +148,27 @@ export default async function CustomerPage({
     },
   });
 
+  // Which customer needs the operator? Classify each account from existing CRM
+  // data and lead the list with the accounts carrying an unmet signal.
+  const now = new Date();
+  const accountsWithAttention = sortAccountsByAttention(
+    accounts.map((a) => ({
+      ...a,
+      attention: classifyAccountAttention({
+        status: a.status,
+        opportunities: a.opportunities,
+        quotes: a.quotes,
+        engagements: a.engagements,
+        lastActivityAt: a.activities[0]?.createdAt ?? null,
+        createdAt: a.createdAt,
+        now,
+      }),
+    })),
+    (a) => a.attention,
+    (a) => a.name,
+  );
+  const attentionCount = accountsWithAttention.filter((a) => a.attention.signal).length;
+
   return (
     <div>
       <div className="mb-6 flex items-start justify-between">
@@ -125,6 +176,14 @@ export default async function CustomerPage({
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">Customer</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
             {accounts.length} account{accounts.length !== 1 ? "s" : ""}
+            {attentionCount > 0 && (
+              <>
+                {" · "}
+                <span className="font-medium text-[var(--dpf-text)]">
+                  {attentionCount} need{attentionCount === 1 ? "s" : ""} attention
+                </span>
+              </>
+            )}
           </p>
         </div>
         <NewCustomerButton />
@@ -138,15 +197,19 @@ export default async function CustomerPage({
 
       {!view && (
         <>
-      {/* Account list */}
+      {/* Account list — accounts needing the operator lead the list. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {accounts.map((a) => {
+        {accountsWithAttention.map((a) => {
           const statusMeta = getAccountStatusMeta(a.status);
+          const attention = a.attention;
+          const borderClass = attention.signal
+            ? CRM_TONE_CLASSES[attention.tone].border
+            : "border-[var(--dpf-accent)]";
           return (
             <Link
               key={a.id}
               href={`/customer/${a.id}`}
-              className="rounded-lg border-l-4 border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-4 transition-colors hover:bg-[var(--dpf-surface-2)]"
+              className={`rounded-lg border-l-4 ${borderClass} bg-[var(--dpf-surface-1)] p-4 transition-colors hover:bg-[var(--dpf-surface-2)]`}
             >
               <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
                 {a.accountId}
@@ -160,6 +223,14 @@ export default async function CustomerPage({
                   tone={statusMeta.tone}
                 />
               </div>
+              {attention.signal && (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <CustomerStatusBadge label={attention.label} tone={attention.tone} />
+                  <span className="text-[10px] text-[var(--dpf-muted)]">
+                    {attention.reason}
+                  </span>
+                </div>
+              )}
               <div className="flex gap-3 text-[9px] text-[var(--dpf-muted)]">
                 <span>{a._count.contacts} contact{a._count.contacts !== 1 ? "s" : ""}</span>
                 {a._count.opportunities > 0 && (

@@ -1,11 +1,20 @@
+import { prisma } from "@dpf/db";
 import { getDemandItems } from "@/lib/demand/demand-data";
+import { resolveDemandPolicy } from "@/lib/demand/policy";
 import { DemandBoard } from "@/components/ops/DemandBoard";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 
 export const dynamic = "force-dynamic";
 
 export default async function DemandPage() {
-  const items = await getDemandItems();
+  const [items, policyConfig] = await Promise.all([
+    getDemandItems(),
+    prisma.platformDevConfig.findUnique({
+      where: { id: "singleton" },
+      select: { demandFramework: true, demandBucketTargets: true },
+    }),
+  ]);
+  const policy = resolveDemandPolicy(policyConfig);
   return (
     <div className="space-y-6">
       <div>
@@ -16,7 +25,11 @@ export default async function DemandPage() {
         </p>
       </div>
       <OpsTabNav />
-      <DemandBoard items={JSON.parse(JSON.stringify(items))} />
+      <DemandBoard
+        items={JSON.parse(JSON.stringify(items))}
+        bucketTargets={policy.bucketTargets}
+        activeFramework={policy.framework}
+      />
     </div>
   );
 }

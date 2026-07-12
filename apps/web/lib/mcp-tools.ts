@@ -144,6 +144,21 @@ export type ToolDefinition = {
    * memory; this flag only exempts it from the advise-mode runtime filter.
    */
   coworkerArtifact?: boolean;
+  /**
+   * Tool hands a scoped sub-task to a NAMED peer coworker (delegation /
+   * summon). Like `coworkerArtifact`, this is an advise-safe exemption: it
+   * remains `sideEffect: true` for MCP annotations and tool-execution memory,
+   * but is NOT stripped by the advise-mode runtime filter. Rationale
+   * (BI-7EB4AE2C): naming the right peer and handing off a scoped sub-task —
+   * with a visible handoff card the user sees inline — is COORDINATION, not an
+   * irreversible action on the outside world. The advise/act line guards
+   * against acting externally; routing work to a teammate is how an advisor
+   * gets the user a better answer. Without this flag an advise-mode coworker
+   * can NAME the right peer but the delegation is muzzled, so the sub-task
+   * dead-ends back to the human. Genuinely destructive writes stay
+   * `sideEffect: true` WITHOUT this flag and remain stripped in advise mode.
+   */
+  adviseCoordination?: boolean;
   /** When set, tool is only available during these build phases.
    *  Null/undefined = available in all phases (non-build tools). */
   buildPhases?: BuildPhaseTag[] | null;
@@ -2384,14 +2399,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   {
-    name: "apply_platform_update",
-    description: "Merge the new platform version into your customised source. Returns a clean merge or a list of conflicts for the AI coworker to resolve with you.",
-    inputSchema: { type: "object", properties: {} },
-    requiredCapability: "manage_platform",
-    executionMode: "immediate",
-    sideEffect: true,
-  },
-  {
     name: "evaluate_page",
     description: "Evaluate a live page for UX and accessibility issues using AI-powered browser automation (browser-use). Navigates to the page, analyzes layout, interactions, and accessibility, and returns structured findings. Works on production pages (default) or sandbox pages (if URL provided).",
     inputSchema: {
@@ -2930,58 +2937,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       idempotentHint: true,
     },
   },
-  // ─── EP-WIKI-001 coworker-UX: review pending overlay drafts ────────────────
-  {
-    name: "list_wiki_overlay_drafts",
-    description:
-      "List every wiki page in the current org's overlay that is still in draft status. Returns each page's slug, kind, abstract, body length + 800-char preview, kernel-override pointer, and the slug list of cited raw sources. Use this when the user asks 'what wiki drafts are pending review' or before walking them through a batch publish — the structured result feeds the review-wiki-drafts skill.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-    requiredCapability: null,
-    executionMode: "immediate",
-    sideEffect: false,
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-  },
-  // ─── EP-WIKI-001 coworker-UX: batch publish overlay drafts ─────────────────
-  {
-    name: "publish_wiki_overlay_pages",
-    description:
-      "Flip status on a batch of org-overlay wiki pages (default target: 'published'). Each flipped page gets a manual revision row attributed to the calling user. Kernel pages, cross-org pages, missing pages, and pages already at the target status are filtered out and reported in rejected[]. Use after walking the user through pending drafts via list_wiki_overlay_drafts — pass the ids the user said to keep.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        pageIds: {
-          type: "array",
-          items: { type: "string" },
-          description: "WikiPage row ids to flip.",
-        },
-        targetStatus: {
-          type: "string",
-          enum: ["draft", "published", "review-needed", "archived"],
-          description: "Status to flip to (default 'published').",
-        },
-        changeSummary: {
-          type: "string",
-          description: "Optional summary written to the revision log for every flipped page.",
-        },
-      },
-      required: ["pageIds"],
-    },
-    requiredCapability: null,
-    executionMode: "proposal",
-    sideEffect: true,
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-  },
   // ─── Endpoint Testing Tools ──────────────────────────────────────────────
   {
     name: "run_endpoint_tests",
@@ -3351,6 +3306,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
+    // Delegation is advise-safe coordination — an advisor may route a scoped
+    // sub-task to a named peer with a visible handoff without leaving advise
+    // mode. Kept sideEffect:true for annotations; adviseCoordination exempts it
+    // from the advise-mode runtime filter (BI-7EB4AE2C).
+    adviseCoordination: true,
   },
   {
     name: "summon_coworker",
@@ -3367,6 +3327,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: null,
     sideEffect: true,
+    // Bringing a named peer into the conversation is advise-safe coordination —
+    // the advisor decides which teammate to pull in; the handoff is visible and
+    // reversible. Kept sideEffect:true for annotations; adviseCoordination
+    // exempts it from the advise-mode runtime filter (BI-7EB4AE2C).
+    adviseCoordination: true,
   },
   {
     name: "trigger_contributor_inventory_sync",
@@ -3384,32 +3349,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
-  },
-  {
-    name: "summarize_upgrade_impact",
-    description:
-      "On-demand, install-tailored \"What's in this update?\" summary. Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        refresh: {
-          type: "boolean",
-          description: "Bypass the per-process cache and recompute. Default false.",
-        },
-        topN: {
-          type: "number",
-          description: "Cap on items in the headline list (default 8). The full list is always returned alongside.",
-        },
-        skipPhrasing: {
-          type: "boolean",
-          description: "Return only the deterministic shape (no LLM phrasing). Default false. Useful when an external client wants to render its own copy.",
-        },
-      },
-      required: [],
-    },
-    requiredCapability: "view_operations",
-    executionMode: "immediate",
-    sideEffect: false,
   },
 ];
 
@@ -5272,6 +5211,29 @@ export async function executeTool(
         );
       }
 
+      // Bind the evidence record to the capsule the capture just resolved so it
+      // rolls up onto the capsule timeline with producer identity
+      // (EP-WORK-CONVERGENCE Phase 1 / BI-D6FA8641). The record was written
+      // before capture (order preserved for back-compat); patch it here.
+      // Best-effort — a link failure must never fail the evidence write.
+      if (capturedCapsuleId) {
+        try {
+          await prisma.externalEvidenceRecord.update({
+            where: { id: evidence.id },
+            data: {
+              workCapsuleId: capturedCapsuleId,
+              executorKind: provider,
+              ...(context?.agentId ? { recordedByAgentId: context.agentId } : {}),
+            },
+          });
+        } catch (linkError) {
+          console.warn(
+            "[record_external_development_evidence] capsule link failed:",
+            getErrorMessage(linkError),
+          );
+        }
+      }
+
       return {
         success: true,
         entityId: evidence.id,
@@ -5533,6 +5495,7 @@ export async function executeTool(
           title: true,
           status: true,
           priority: true,
+          demandScore: true,
           effortSize: true,
           triageOutcome: true,
           activeBuildId: true,
@@ -5555,6 +5518,7 @@ export async function executeTool(
           title: i.title,
           status: i.status,
           priority: i.priority,
+          demandScore: i.demandScore,
           effortSize: i.effortSize,
           triageOutcome: i.triageOutcome,
           hasActiveBuild: i.activeBuildId != null,
@@ -11629,106 +11593,6 @@ export async function executeTool(
       }
     }
 
-    case "list_wiki_overlay_drafts": {
-      // Feeds the review-wiki-drafts skill. Read-only; safe in immediate mode.
-      const { listOverlayDrafts } = await import("@/lib/actions/wiki-publish");
-      try {
-        const drafts = await listOverlayDrafts();
-        if (drafts.length === 0) {
-          return {
-            success: true,
-            message: "No pending drafts in this org's overlay.",
-            data: { drafts: [] },
-          };
-        }
-        const summary = drafts
-          .map((d, i) => {
-            const sourceTag =
-              d.sourceSlugs.length > 0
-                ? ` · cites ${d.sourceSlugs.slice(0, 2).join(", ")}${d.sourceSlugs.length > 2 ? `, +${d.sourceSlugs.length - 2}` : ""}`
-                : "";
-            const overrideTag = d.kernelPageId ? " · overrides kernel" : "";
-            return `${i + 1}. ${d.slug} (${d.pageKind}, ${d.bodyLength} bytes${overrideTag}${sourceTag})`;
-          })
-          .join("\n");
-        return {
-          success: true,
-          message: `${drafts.length} draft(s) pending:\n${summary}`,
-          data: { drafts },
-        };
-      } catch (err) {
-        return {
-          success: false,
-          message: `list_wiki_overlay_drafts failed: ${(err as Error).message ?? String(err)}`,
-          error: (err as Error).message ?? String(err),
-        };
-      }
-    }
-
-    case "publish_wiki_overlay_pages": {
-      const pageIds = Array.isArray(params["pageIds"]) ? params["pageIds"] : null;
-      if (!pageIds || pageIds.length === 0) {
-        return {
-          success: false,
-          message: "publish_wiki_overlay_pages requires a non-empty pageIds array.",
-          error: "Empty pageIds",
-        };
-      }
-      const targetStatusParam = params["targetStatus"];
-      const targetStatus =
-        typeof targetStatusParam === "string" &&
-        ["draft", "published", "review-needed", "archived"].includes(
-          targetStatusParam,
-        )
-          ? (targetStatusParam as "draft" | "published" | "review-needed" | "archived")
-          : "published";
-      const changeSummary =
-        typeof params["changeSummary"] === "string"
-          ? (params["changeSummary"] as string)
-          : undefined;
-
-      const { publishWikiOverlayPages } = await import(
-        "@/lib/actions/wiki-publish"
-      );
-      const result = await publishWikiOverlayPages({
-        pageIds: pageIds.map((id) => String(id)),
-        targetStatus,
-        ...(changeSummary ? { changeSummary } : {}),
-      });
-      if (!result.ok) {
-        return {
-          success: false,
-          message: result.error,
-          error: result.error,
-        };
-      }
-      const publishedTag =
-        result.published.length === 0
-          ? "0 published"
-          : `Published ${result.published.length}: ${result.published
-              .map((p) => p.slug)
-              .slice(0, 6)
-              .join(", ")}${result.published.length > 6 ? `, +${result.published.length - 6}` : ""}`;
-      const rejectedTag =
-        result.rejected.length === 0
-          ? ""
-          : ` · Rejected ${result.rejected.length} (` +
-            Object.entries(
-              result.rejected.reduce<Record<string, number>>((acc, r) => {
-                acc[r.reason] = (acc[r.reason] ?? 0) + 1;
-                return acc;
-              }, {}),
-            )
-              .map(([reason, n]) => `${reason}=${n}`)
-              .join(", ") +
-            ")";
-      return {
-        success: true,
-        message: `${publishedTag}${rejectedTag}`,
-        data: result,
-      };
-    }
-
     case "run_endpoint_tests": {
       const { runEndpointTests } = await import("@/lib/endpoint-test-runner");
       const request = buildEndpointTestRunRequest(params, context);
@@ -12075,49 +11939,6 @@ export async function executeTool(
           findings: findings.slice(0, 50),
         },
       };
-    }
-
-    case "apply_platform_update": {
-      // Delegates to the shared server action in lib/actions/platform-dev-config.ts.
-      // The same code path backs the in-portal Apply Update UI added in
-      // BI-9B77E247, so both surfaces produce identical merge behavior and
-      // identical structured results — single source of truth.
-      const { applyPlatformUpdate } = await import("@/lib/actions/platform-dev-config");
-      const result = await applyPlatformUpdate();
-
-      switch (result.kind) {
-        case "engine-retired":
-          // BI-5B6C1C35: the /workspace merge engine is retired; the install
-          // advances only via the Self-Upgrade pipeline (governed-upgrade §5.0).
-          return { success: false, message: result.message, error: "Engine retired — use Self-Upgrade" };
-        case "no-update-pending":
-          return { success: false, message: result.message, error: "No update pending" };
-        case "invalid-version":
-          return { success: false, message: result.message, error: "Invalid version" };
-        case "conflicts":
-          return {
-            success: true,
-            message: result.message,
-            data: {
-              clean: false,
-              resumedMerge: result.resumedMerge,
-              conflicts: result.conflicts,
-              version: result.version,
-            } as unknown as Record<string, unknown>,
-          };
-        case "clean-merge":
-          return {
-            success: true,
-            message: result.message,
-            data: {
-              clean: true,
-              filesUpdated: result.filesUpdated,
-              version: result.version,
-            },
-          };
-        case "error":
-          return { success: false, message: result.message, error: result.message };
-      }
     }
 
     case "get_finance_period_summary": {
@@ -12987,42 +12808,6 @@ export async function executeTool(
           success: false,
           error: msg,
           message: `trigger_contributor_inventory_sync failed: ${msg}`,
-        };
-      }
-    }
-
-    case "summarize_upgrade_impact": {
-      // BI-C26F7EE1 — on-demand install-tailored upgrade impact summary.
-      // Read-only, advisory; does not queue or apply anything.
-      const refresh = params["refresh"] === true;
-      const skipPhrasing = params["skipPhrasing"] === true;
-      const topNRaw = params["topN"];
-      const topN =
-        typeof topNRaw === "number" && Number.isFinite(topNRaw) && topNRaw > 0
-          ? Math.floor(topNRaw)
-          : undefined;
-      try {
-        const { summarizeUpgradeImpact } = await import("@/lib/self-upgrade/impact");
-        const result = await summarizeUpgradeImpact({ refresh, skipPhrasing, topN });
-        if (!result.ok) {
-          return {
-            success: true,
-            message: result.detail,
-            data: { ok: false, reason: result.reason, detail: result.detail },
-          };
-        }
-        return {
-          success: true,
-          message: result.summary.phrased?.headline
-            ?? `Upgrade impact summary: ${result.summary.counts.total} commit(s) since the last lineage marker.`,
-          data: result.summary as unknown as Record<string, unknown>,
-        };
-      } catch (err) {
-        const msg = getErrorMessage(err);
-        return {
-          success: false,
-          error: msg,
-          message: `summarize_upgrade_impact failed: ${msg}`,
         };
       }
     }

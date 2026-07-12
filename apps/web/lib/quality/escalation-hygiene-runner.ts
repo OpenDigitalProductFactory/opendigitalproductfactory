@@ -41,7 +41,7 @@ export async function runEscalationHygiene(): Promise<{ scanned: number; resolve
       reportId: true,
       createdAt: true,
       featureBuild: {
-        select: { supersededByEpicId: true, originatingBacklogItemId: true },
+        select: { supersededByEpicId: true, originatingBacklogItemId: true, phase: true },
       },
     },
   });
@@ -70,6 +70,7 @@ export async function runEscalationHygiene(): Promise<{ scanned: number; resolve
       reportId: r.reportId,
       createdAt: r.createdAt,
       buildSupersededByEpicId: r.featureBuild?.supersededByEpicId ?? null,
+      buildPhase: r.featureBuild?.phase ?? null,
       originatingBacklogItemId: itemPk,
       backlogItemStatus: item?.status ?? null,
       backlogItemTriageOutcome: item?.triageOutcome ?? null,

@@ -19,8 +19,31 @@ export type DecisionInteractionRow = {
   rationale: string | null;
   buildId: string | null;
   taskRunId: string | null;
+  /** Portal/MCP route that produced the decision (e.g. mcp:principle_decide). */
+  routeContext: string | null;
+  /** Domain facet — kernel-consult rows are agent-internal WWMD consults. */
+  domainClass: string | null;
   createdAt: Date;
 };
+
+/**
+ * Agent-internal kernel consults (mcp:principle_decide during dev work, or
+ * domainClass=kernel-consult with no linked build/task) are already-executed
+ * development decisions — audit-visible, not founder "needs-you" residue
+ * (BI-9026B96C).
+ */
+export function isAgentInternalKernelConsult(row: Pick<
+  DecisionInteractionRow,
+  "buildId" | "taskRunId" | "routeContext" | "domainClass"
+>): boolean {
+  const linked = Boolean(row.buildId || row.taskRunId);
+  if (linked) return false;
+  const route = (row.routeContext ?? "").trim().toLowerCase();
+  if (route === "mcp:principle_decide" || route.startsWith("mcp:principle_decide")) return true;
+  const domain = (row.domainClass ?? "").trim().toLowerCase();
+  if (domain === "kernel-consult") return true;
+  return false;
+}
 
 function clip(s: string, max = 120): string {
   return s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s;
@@ -46,36 +69,13 @@ function residueFor(row: DecisionInteractionRow): ResidueReason {
   return "high-risk-gate"; // escalate: the cascade escalated on risk/low-confidence
 }
 
-// Some escalated/deferred decisions reach founder-review with an empty
-// `question` (the cascade recorded the residue but not a prose prompt). Without
-// a fallback the attention row renders with a BLANK title — an un-triageable
-// "high risk · Open →" the operator cannot act on (BI-D35DE119, F1). Derive a
-// short, honest title from the residue reason + blast radius so every row says
-// what it is and where it came from.
-function titleFor(row: DecisionInteractionRow): string {
-  const q = row.question?.trim();
-  if (q) return clip(q);
-  const reasonLabel =
-    residueFor(row) === "principle-conflict"
-      ? "a principle conflict"
-      : row.outcomeType === "defer"
-        ? "a coverage gap"
-        : "a high-risk gate";
-  const where = row.buildId
-    ? ` on build ${row.buildId}`
-    : row.taskRunId
-      ? " on a coworker task"
-      : "";
-  return `AI decision needs your review — ${reasonLabel}${where}`;
-}
-
 /** Pure projection of one unresolved decision into an attention item. */
 export function aiDecisionToAttentionItem(row: DecisionInteractionRow): AttentionItem {
   const blast = row.buildId ? `build ${row.buildId}` : row.taskRunId ? "a coworker task" : undefined;
   return {
     id: `ai-decision:${row.interactionId}`,
     source: "ai-decision",
-    title: titleFor(row),
+    title: clip(row.question),
     context: row.rationale ?? "The governed scopes could not resolve this decision.",
     decisionClass: { scorability: "unscorable" },
     riskClass: riskFromTier(row.riskTier),
@@ -110,8 +110,11 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
       rationale: true,
       buildId: true,
       taskRunId: true,
+      routeContext: true,
+      domainClass: true,
       createdAt: true,
     },
   });
-  return rows.map(aiDecisionToAttentionItem);
+  // Drop agent-internal kernel-consult noise; genuine founder residue stays.
+  return rows.filter((row) => !isAgentInternalKernelConsult(row)).map(aiDecisionToAttentionItem);
 }

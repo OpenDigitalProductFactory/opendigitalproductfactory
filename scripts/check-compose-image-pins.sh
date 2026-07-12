@@ -27,7 +27,7 @@ ALLOWLIST=(
   "grafana/alloy"                 # observability profile — not exercised in CI; pin when validated
   "gcr.io/cadvisor/cadvisor"      # observability profile — not exercised in CI; pin when validated
   "prom/node-exporter"            # observability profile — not exercised in CI; pin when validated
-  "inngest/inngest"               # pinned to v1.30.0 by PR #2048; remove this entry once merged
+  "inngest/inngest"               # pinned (v1.36.0 as of BI-915C40C6); never :latest (BI-C8164664)
 )
 
 is_allowlisted() {
