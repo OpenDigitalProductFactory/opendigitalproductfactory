@@ -67,6 +67,7 @@ import { modelProviderPack } from "./packs/model-provider-pack";
 import { wikiPack } from "./packs/wiki-pack";
 import { discoveryPack } from "./packs/discovery-pack";
 import { backlogPack } from "./packs/backlog-pack";
+import { adminPack } from "./packs/admin-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 
@@ -123,4 +124,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   wikiPack,
   discoveryPack,
   backlogPack,
+  adminPack,
 ]);
