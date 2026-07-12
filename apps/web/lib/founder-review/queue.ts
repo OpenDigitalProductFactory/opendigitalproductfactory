@@ -24,6 +24,7 @@ export type DecisionInteractionQueueRow = {
   buildId: string | null;
   taskRunId: string | null;
   routeContext: string | null;
+  domainClass?: string | null;
   createdAt: Date;
   profile?: {
     profileId: string;
@@ -57,6 +58,42 @@ const KNOWN_REASONS = new Set<FounderReviewUnresolvedReason>([
   "ownership-gap",
   "volunteers-dilemma",
 ]);
+
+export function isBlankFounderReviewQuestion(row: Pick<DecisionInteractionQueueRow, "question">): boolean {
+  return row.question.trim().length === 0;
+}
+
+export function isAgentInternalFounderReviewNoise(row: Pick<
+  DecisionInteractionQueueRow,
+  "buildId" | "taskRunId" | "routeContext" | "domainClass"
+>): boolean {
+  const linked = Boolean(row.buildId || row.taskRunId);
+  if (linked) return false;
+  const route = (row.routeContext ?? "").trim().toLowerCase();
+  if (route === "mcp:principle_decide" || route.startsWith("mcp:principle_decide")) return true;
+  const domain = (row.domainClass ?? "").trim().toLowerCase();
+  return domain === "kernel-consult";
+}
+
+function normalizeFounderReviewQuestion(question: string): string {
+  return question.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function dedupeFounderReviewCandidates<T extends FounderReviewCandidate>(candidates: T[]): T[] {
+  const seen = new Set<string>();
+  const unique: T[] = [];
+  for (const candidate of candidates) {
+    const key = [
+      candidate.perspective ?? "unknown",
+      candidate.profileLabel.trim().toLowerCase(),
+      normalizeFounderReviewQuestion(candidate.question),
+    ].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(candidate);
+  }
+  return unique;
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};

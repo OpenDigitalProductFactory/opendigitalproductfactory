@@ -41,7 +41,7 @@ const {
   mockResolveOrgProfileId: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
+vi.mock("@dpf/db", () => ({ Prisma: { DbNull: "DbNull" }, prisma: mockPrisma }));
 vi.mock("@/lib/tak/marketing-playbooks", () => ({ getPlaybook: mockGetPlaybook }));
 vi.mock("@/lib/storefront/archetype-vocabulary", () => ({ getVocabulary: mockGetVocabulary }));
 vi.mock("@/lib/decision-perspective/material", () => ({ resolveOrgProfileId: mockResolveOrgProfileId }));
@@ -357,21 +357,14 @@ describe("getRouteDataContext", () => {
     expect(mockPrisma.runtimeTarget.findMany).toHaveBeenCalled();
   });
 
-  it("gives /wiki the decision-governance open-review counts + named reviews, not a generic blurb (BI-C888E1B6)", async () => {
-    // Counts keyed off the where clause so each discipline gets a distinct number.
+  it("gives /coworker-decisions the decision-governance open-review counts + named reviews, not a generic blurb (BI-C888E1B6)", async () => {
     mockPrisma.decisionInteraction.count.mockImplementation(async (args: {
-      where: { outcomeType?: unknown; profileId?: unknown };
+      where: { profileId?: unknown };
     }) => {
       const { where } = args;
       const pid = where.profileId;
       const isWsid = typeof pid === "object" && pid !== null && "startsWith" in pid;
       const isWwmd = pid === "mark-dpf-platform";
-      if (where.outcomeType) {
-        // open-review counts
-        if (isWwmd) return 17;
-        if (isWsid) return 0;
-        return 1; // wwwd
-      }
       // 30-day decision counts
       if (isWwmd) return 46;
       if (isWsid) return 0;
@@ -381,24 +374,45 @@ describe("getRouteDataContext", () => {
       args.where.pageKind === "principle" ? 158 : 33,
     );
     mockPrisma.decisionPerspectiveProfile.count.mockResolvedValue(23);
-    mockPrisma.decisionInteraction.findMany.mockResolvedValue([
-      {
-        interactionId: "DI-ABC123",
-        question: "Should we prioritize the migration or the new feature?",
-        options: [{ id: "migrate" }, { id: "feature" }],
-        outcomeType: "escalate",
-        outcomePayload: { unresolvedReason: "principle-gap" },
-        buildId: null,
-        taskRunId: null,
-        routeContext: "/build",
-        createdAt: new Date("2026-07-01T00:00:00.000Z"),
-        profile: { profileId: "mark-dpf-platform", name: "WWMD Platform", kind: "platform" },
-      },
-    ]);
+    const review = (interactionId: string, profileId: string, question = `Review ${interactionId}`) => ({
+      interactionId,
+      question,
+      options: [{ id: "migrate" }, { id: "feature" }],
+      outcomeType: "escalate",
+      outcomePayload: { unresolvedReason: "principle-gap" },
+      buildId: null,
+      taskRunId: null,
+      routeContext: "/build",
+      domainClass: "architecture",
+      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+      profile: { profileId, name: "WWMD Platform", kind: "platform" },
+    });
+    mockPrisma.decisionInteraction.findMany.mockImplementation(async (args: {
+      where: { profileId?: unknown };
+      take?: number;
+    }) => {
+      if (args.take === 8) {
+        return [
+          review(
+            "DI-ABC123",
+            "mark-dpf-platform",
+            "Should we prioritize the migration or the new feature?",
+          ),
+        ];
+      }
+      const pid = args.where.profileId;
+      if (pid === "mark-dpf-platform") {
+        return Array.from({ length: 17 }, (_, i) => review(`DI-WWMD-${i}`, "mark-dpf-platform"));
+      }
+      if (typeof pid === "object" && pid !== null && "startsWith" in pid) {
+        return [];
+      }
+      return [review("DI-WWWD-1", "wwd-org")];
+    });
 
     const context = await getRouteDataContext("/coworker-decisions", "user-1");
 
-    expect(context).toContain("PAGE DATA — Decision Governance (/wiki):");
+    expect(context).toContain("PAGE DATA — Decision Governance (/coworker-decisions):");
     expect(context).toContain("OPEN REVIEWS awaiting a human: 18 total");
     expect(context).toContain("WWMD (platform): 17 open reviews");
     expect(context).toContain("WWWD (business): 1 open review");

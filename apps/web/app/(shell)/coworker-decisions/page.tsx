@@ -7,7 +7,7 @@
 // Server component; queries Prisma directly.
 
 import Link from "next/link";
-import { prisma } from "@dpf/db";
+import { Prisma, prisma } from "@dpf/db";
 
 import { WikiPageList, type WikiPageListItem } from "@/components/wiki/WikiPageList";
 import { DecisionDisciplineHub } from "@/components/wiki/DecisionDisciplineHub";
@@ -18,6 +18,13 @@ import {
 } from "@/lib/decision/caller-context";
 import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
 import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
+import {
+  dedupeFounderReviewCandidates,
+  isAgentInternalFounderReviewNoise,
+  isBlankFounderReviewQuestion,
+  projectFounderReviewCandidate,
+  type DecisionInteractionQueueRow,
+} from "@/lib/founder-review/queue";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +38,49 @@ type SearchParams = Promise<{
 }>;
 
 const UNRESOLVED = ["defer", "escalate"];
+
+function openDecisionReviewWhere(
+  profileId?: Prisma.DecisionInteractionWhereInput["profileId"],
+): Prisma.DecisionInteractionWhereInput {
+  return {
+    outcomeType: { in: UNRESOLVED },
+    humanOutcome: { equals: Prisma.DbNull },
+    question: { not: "" },
+    NOT: [
+      {
+        buildId: null,
+        taskRunId: null,
+        OR: [
+          { routeContext: { startsWith: "mcp:principle_decide" } },
+          { domainClass: "kernel-consult" },
+        ],
+      },
+    ],
+    ...(profileId !== undefined ? { profileId } : {}),
+  };
+}
+
+const openDecisionReviewSelect = {
+  interactionId: true,
+  question: true,
+  options: true,
+  outcomeType: true,
+  outcomePayload: true,
+  buildId: true,
+  taskRunId: true,
+  routeContext: true,
+  domainClass: true,
+  createdAt: true,
+  profile: { select: { profileId: true, name: true, kind: true } },
+} satisfies Prisma.DecisionInteractionSelect;
+
+function countUniqueOpenReviews(rows: DecisionInteractionQueueRow[]): number {
+  const candidates = rows
+    .filter((row) => !isBlankFounderReviewQuestion(row))
+    .filter((row) => !isAgentInternalFounderReviewNoise(row))
+    .map((row) => projectFounderReviewCandidate(row));
+  return dedupeFounderReviewCandidates(candidates).length;
+}
 
 export default async function WikiBrowsePage({
   searchParams,
@@ -79,10 +129,10 @@ export default async function WikiBrowsePage({
     kernelPrincipleCount,
     kernelHeuristicCount,
     orgStanceMaterialCount,
-    wwmdOpenReviews,
-    wwwdOpenReviews,
+    wwmdOpenReviewRows,
+    wwwdOpenReviewRows,
     wsidActiveProfiles,
-    wsidOpenReviews,
+    wsidOpenReviewRows,
     wwmdDecisions30d,
     wwwdDecisions30d,
     wsidDecisions30d,
@@ -120,17 +170,20 @@ export default async function WikiBrowsePage({
     prisma.perspectiveMaterial.count({
       where: { profileId: { in: wwwdProfileIds } },
     }),
-    prisma.decisionInteraction.count({
-      where: { outcomeType: { in: UNRESOLVED }, profileId: WWMD_PLATFORM_PROFILE_ID },
+    prisma.decisionInteraction.findMany({
+      where: openDecisionReviewWhere(WWMD_PLATFORM_PROFILE_ID),
+      select: openDecisionReviewSelect,
     }),
-    prisma.decisionInteraction.count({
-      where: { outcomeType: { in: UNRESOLVED }, profileId: { in: wwwdProfileIds } },
+    prisma.decisionInteraction.findMany({
+      where: openDecisionReviewWhere({ in: wwwdProfileIds }),
+      select: openDecisionReviewSelect,
     }),
     prisma.decisionPerspectiveProfile.count({
       where: { kind: "profession", status: "active" },
     }),
-    prisma.decisionInteraction.count({
-      where: { outcomeType: { in: UNRESOLVED }, profileId: { startsWith: "wsid-" } },
+    prisma.decisionInteraction.findMany({
+      where: openDecisionReviewWhere({ startsWith: "wsid-" }),
+      select: openDecisionReviewSelect,
     }),
     // Ledger usage per tier (30d) — the audit signal behind each card's
     // usage chip; a zero surfaces "no decisions recorded" so a dormant gate
@@ -145,6 +198,10 @@ export default async function WikiBrowsePage({
       where: { profile: { kind: "profession" }, createdAt: { gte: decisionWindow } },
     }),
   ]);
+
+  const wwmdOpenReviews = countUniqueOpenReviews(wwmdOpenReviewRows as DecisionInteractionQueueRow[]);
+  const wwwdOpenReviews = countUniqueOpenReviews(wwwdOpenReviewRows as DecisionInteractionQueueRow[]);
+  const wsidOpenReviews = countUniqueOpenReviews(wsidOpenReviewRows as DecisionInteractionQueueRow[]);
 
   const disciplineCards = buildDisciplineCards({
     kernelPrincipleCount,

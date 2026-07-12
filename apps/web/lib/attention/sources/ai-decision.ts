@@ -72,6 +72,7 @@ function residueFor(row: DecisionInteractionRow): ResidueReason {
 /** Pure projection of one unresolved decision into an attention item. */
 export function aiDecisionToAttentionItem(row: DecisionInteractionRow): AttentionItem {
   const blast = row.buildId ? `build ${row.buildId}` : row.taskRunId ? "a coworker task" : undefined;
+  const decisionHref = `/platform/ai/decisions/${encodeURIComponent(row.interactionId)}`;
   return {
     id: `ai-decision:${row.interactionId}`,
     source: "ai-decision",
@@ -88,9 +89,9 @@ export function aiDecisionToAttentionItem(row: DecisionInteractionRow): Attentio
     },
     createdAtIso: row.createdAt.toISOString(),
     actions: [
-      { kind: "open-in-context", label: "Review decision", href: "/platform/ai/founder-review" },
+      { kind: "open-in-context", label: "Review evidence", href: decisionHref },
     ],
-    deepLink: "/platform/ai/founder-review",
+    deepLink: decisionHref,
     audience: { operator: true },
   };
 }

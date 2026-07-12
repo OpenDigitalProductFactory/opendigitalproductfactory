@@ -1,7 +1,10 @@
-import { prisma } from "@dpf/db";
+import { Prisma, prisma } from "@dpf/db";
 import Link from "next/link";
 import {
+  dedupeFounderReviewCandidates,
   groupFounderReviewCandidates,
+  isAgentInternalFounderReviewNoise,
+  isBlankFounderReviewQuestion,
   projectFounderReviewCandidate,
   type DecisionInteractionQueueRow,
 } from "@/lib/founder-review/queue";
@@ -23,6 +26,29 @@ function titleForMode(mode: WikiPerspective | null) {
   return "Founder Review";
 }
 
+const WORK_QUEUE_GUIDE = [
+  {
+    title: "Needs you",
+    href: "/workspace/inbox",
+    description: "Start here for approvals, paused coworkers, escalations, and anything blocking a human outcome.",
+  },
+  {
+    title: "My queue",
+    href: "/workspace/my-queue",
+    description: "Your assigned work cases: things you or a teammate own through completion.",
+  },
+  {
+    title: "Build Studio",
+    href: "/build",
+    description: "Product/build work in flight, including build-specific “Needs you” moments.",
+  },
+  {
+    title: "Decision Governance",
+    href: "/coworker-decisions/review",
+    description: "Review and improve WWMD, WWWD, and role-craft decision rules after evidence is clear.",
+  },
+] as const;
+
 export default async function FounderReviewPage({ searchParams }: PageProps) {
   const resolvedSearchParams = await (searchParams ?? Promise.resolve({} as { mode?: string; profile?: string }));
   const mode = normalizeMode(resolvedSearchParams.mode);
@@ -33,6 +59,7 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
   const rows = await prisma.decisionInteraction.findMany({
     where: {
       outcomeType: { in: ["defer", "escalate"] },
+      humanOutcome: { equals: Prisma.DbNull },
       ...(profileFilter ? { profileId: profileFilter } : {}),
     },
     orderBy: { createdAt: "desc" },
@@ -46,6 +73,7 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
       buildId: true,
       taskRunId: true,
       routeContext: true,
+      domainClass: true,
       createdAt: true,
       profile: {
         select: {
@@ -58,9 +86,12 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
   });
 
   const candidates = rows
+    .filter((row) => !isBlankFounderReviewQuestion(row))
+    .filter((row) => !isAgentInternalFounderReviewNoise(row))
     .map((row) => projectFounderReviewCandidate(row as DecisionInteractionQueueRow))
     .filter((candidate) => !mode || candidate.perspective === mode);
-  const groups = groupFounderReviewCandidates(candidates);
+  const visibleCandidates = dedupeFounderReviewCandidates(candidates);
+  const groups = groupFounderReviewCandidates(visibleCandidates);
   const title = titleForMode(mode);
 
   return (
@@ -68,8 +99,23 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
       <div>
         <h1 className="text-lg font-semibold">{title}</h1>
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-          Unresolved decisions that need a principle, evidence, owner, or judgment call.
+          Filtered AI decision residue. Use Needs you as the main inbox for all approvals,
+          paused coworkers, and decisions waiting on a person.
         </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link
+            href="/workspace/inbox"
+            className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)]"
+          >
+            Open Needs you
+          </Link>
+          <Link
+            href="/coworker-decisions/review"
+            className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
+          >
+            Review decision governance
+          </Link>
+        </div>
         {profileFilter ? (
           <p className="mt-1 text-xs text-[var(--dpf-muted)]">
             Filtered to profile <code>{profileFilter}</code> ·{" "}
@@ -80,10 +126,44 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
         ) : null}
       </div>
 
+      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold">Where work lives</h2>
+            <p className="mt-1 max-w-prose text-sm text-[var(--dpf-muted)]">
+              You do not need to patrol every queue. Treat Needs you as the front door; use
+              the other pages when you are already in that kind of work.
+            </p>
+          </div>
+          <p className="text-xs text-[var(--dpf-muted)]">
+            Showing {visibleCandidates.length} distinct review {visibleCandidates.length === 1 ? "item" : "items"}
+            {" "}from {rows.length} unresolved AI decision {rows.length === 1 ? "row" : "rows"}.
+          </p>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {WORK_QUEUE_GUIDE.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3"
+            >
+              <span className="text-sm font-medium text-[var(--dpf-text)]">{item.title}</span>
+              <span className="mt-1 block text-xs text-[var(--dpf-muted)]">{item.description}</span>
+            </Link>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-[var(--dpf-muted)]">
+          These cards are created when an AI decision is deferred or escalated. Resolved
+          history, blank questions, internal consults, and duplicate asks are hidden here.
+        </p>
+      </section>
+
       {groups.length === 0 ? (
         <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
           <h2 className="text-sm font-semibold">No review items waiting</h2>
-          <p className="mt-1 text-sm text-[var(--dpf-muted)]">Build Studio has no unresolved decision requests.</p>
+          <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+            No unresolved AI decision residue matches this lens. The main attention queue is Needs you.
+          </p>
         </section>
       ) : (
         <div className="space-y-5">
@@ -104,13 +184,16 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
                         <p className="text-sm font-medium">{item.question}</p>
                         <p className="mt-1 text-xs text-[var(--dpf-muted)]">{item.profileLabel}</p>
                         <p className="mt-2 text-sm text-[var(--dpf-muted)]">{item.primaryActionLabel}</p>
+                        <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                          Open the evidence, then record the outcome from the owning workflow.
+                        </p>
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
                         <Link
                           className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
                           href={item.links.decisionCanvasHref}
                         >
-                          View Decision Canvas
+                          Review evidence
                         </Link>
                         {item.links.buildHref ? (
                           <Link
@@ -128,14 +211,6 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
                             Open task
                           </Link>
                         ) : null}
-                        <button
-                          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)]"
-                          disabled
-                          title="Record outcome is gated on the WWMD MCP Sprint 1 handler."
-                          type="button"
-                        >
-                          Record outcome
-                        </button>
                       </div>
                     </div>
                   </article>

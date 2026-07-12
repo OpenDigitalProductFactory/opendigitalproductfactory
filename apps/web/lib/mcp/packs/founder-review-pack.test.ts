@@ -5,6 +5,7 @@ const prismaMock = vi.hoisted(() => ({
   organizationFindFirst: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
+  Prisma: { DbNull: "DbNull" },
   prisma: {
     decisionInteraction: {
       findMany: (...args: unknown[]) => prismaMock.decisionInteractionFindMany(...args),
@@ -36,6 +37,7 @@ function reviewRow(over: Record<string, unknown> = {}) {
     buildId: null,
     taskRunId: null,
     routeContext: "/build",
+    domainClass: null,
     createdAt: new Date("2026-07-01T00:00:00.000Z"),
     profile: { profileId: "mark-dpf-platform", name: "WWMD Platform", kind: "platform" },
     deferralCapture: null,
@@ -92,12 +94,61 @@ describe("founder-review pack — list_open_decision_reviews", () => {
     );
 
     const args = prismaMock.decisionInteractionFindMany.mock.calls[0][0] as {
-      where: { profileId?: unknown; outcomeType?: unknown };
+      where: { profileId?: unknown; outcomeType?: unknown; humanOutcome?: unknown; question?: unknown; NOT?: unknown };
       take: number;
     };
     expect(args.where.profileId).toEqual({ startsWith: "wsid-" });
     expect(args.where.outcomeType).toEqual({ in: ["defer", "escalate"] });
+    expect(args.where.humanOutcome).toEqual({ equals: "DbNull" });
+    expect(args.where.question).toEqual({ not: "" });
+    expect(args.where.NOT).toEqual([
+      {
+        buildId: null,
+        taskRunId: null,
+        OR: [
+          { routeContext: { startsWith: "mcp:principle_decide" } },
+          { domainClass: "kernel-consult" },
+        ],
+      },
+    ]);
     expect(args.take).toBe(50);
+  });
+
+  it("suppresses blank and agent-internal kernel consult rows from coworker-readable reviews", async () => {
+    prismaMock.decisionInteractionFindMany.mockResolvedValue([
+      reviewRow({ interactionId: "DI-BLANK", question: " " }),
+      reviewRow({
+        interactionId: "DI-INTERNAL",
+        question: "Should the kernel consult itself?",
+        routeContext: "mcp:principle_decide",
+        domainClass: "kernel-consult",
+      }),
+      reviewRow({ interactionId: "DI-REAL", question: "Should the owner approve this exception?" }),
+    ]);
+
+    const res = await founderReviewPack.handlers.list_open_decision_reviews!({}, "user-1");
+
+    expect(res.success).toBe(true);
+    expect(res.data?.count).toBe(1);
+    const reviews = res.data?.reviews as Array<Record<string, unknown>>;
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0].interactionId).toBe("DI-REAL");
+    expect(String(res.message)).toContain("owning workflow");
+  });
+
+  it("deduplicates repeated open reviews before returning the coworker-readable queue", async () => {
+    prismaMock.decisionInteractionFindMany.mockResolvedValue([
+      reviewRow({ interactionId: "DI-DUP-NEW", question: "Should we fix quality issues first?" }),
+      reviewRow({ interactionId: "DI-DUP-OLD", question: "  Should we fix quality issues first? " }),
+      reviewRow({ interactionId: "DI-OTHER", question: "Should we launch the new offering?" }),
+    ]);
+
+    const res = await founderReviewPack.handlers.list_open_decision_reviews!({}, "user-1");
+
+    expect(res.success).toBe(true);
+    expect(res.data?.count).toBe(2);
+    const reviews = res.data?.reviews as Array<Record<string, unknown>>;
+    expect(reviews.map((review) => review.interactionId)).toEqual(["DI-DUP-NEW", "DI-OTHER"]);
   });
 
   it("prefers the deferral gapReason for a deferred review", async () => {

@@ -73,14 +73,12 @@ describe("buildDisciplineCards", () => {
     expect(wwmd?.chips.find((c) => c.label.includes("review"))?.tone).toBe("warning");
   });
 
-  it("pluralizes the WSID corpus chip and links every card to its review queue", () => {
+  it("pluralizes the WSID corpus chip and links every card to Decision Governance review", () => {
     const cards = buildDisciplineCards({ ...base, wsidActiveProfiles: 3 });
     const wsid = cards.find((c) => c.key === "wsid");
     expect(wsid?.chips.map((c) => c.label)).toContain("3 corpora active");
     for (const card of cards) {
-      expect(
-        card.actions.some((a) => a.href.startsWith("/platform/ai/founder-review")),
-      ).toBe(true);
+      expect(card.actions.some((a) => a.href === "/coworker-decisions/review")).toBe(true);
     }
   });
 
