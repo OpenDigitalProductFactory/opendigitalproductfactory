@@ -3,6 +3,7 @@ export type RecommendCandidate = {
   title: string;
   status: string;
   priority: number | null;
+  demandScore: number | null;
   effortSize: string | null;
   triageOutcome: string | null;
   hasActiveBuild: boolean;
@@ -29,6 +30,7 @@ export type RankedCandidate = {
     effortSize: string | null;
     priority: number | null;
     epicStatus: string | null;
+    demandScore: number | null;
   };
 };
 
@@ -62,12 +64,9 @@ function scoreCandidate(item: RecommendCandidate): { score: number; firedSignals
     score += 3;
     fired.push("has-plan");
   }
-  if (item.priority != null) {
-    // Flat bonus for being prioritised at all. Lower-priority-number-is-higher
-    // ordering is handled by the explicit tie-break in the sort.
-    score += 2;
-    fired.push(`priority=${item.priority}`);
-  }
+  // Demand value is added as a batch-relative term in rankCandidates (framework-
+  // agnostic normalization needs the eligible set), not here. `priority` is no
+  // longer a flat score term — it stays the explicit tie-break in the sort.
   if (item.effortSize === "small" || item.effortSize === "medium") {
     score += 1;
     fired.push(`size=${item.effortSize}`);
@@ -101,11 +100,27 @@ export function rankCandidates(
     (item) => !exclude.has(item.itemId) && isPickable(item, forAgentId),
   );
 
+  // Batch-relative demand-value term: normalize each item's demandScore against
+  // the highest in the eligible set, so it contributes 0..DEMAND_WEIGHT
+  // regardless of framework magnitude (RICE scores dwarf WSJF ones). Replaces
+  // the old flat "priority present +2".
+  const DEMAND_WEIGHT = 4;
+  const maxDemand = eligible.reduce(
+    (m, i) => (typeof i.demandScore === "number" && i.demandScore > m ? i.demandScore : m),
+    0,
+  );
+
   const scored = eligible.map((item) => {
     const { score, firedSignals } = scoreCandidate(item);
+    let total = score;
+    if (maxDemand > 0 && typeof item.demandScore === "number" && item.demandScore > 0) {
+      const demandTerm = Math.round((item.demandScore / maxDemand) * DEMAND_WEIGHT * 100) / 100;
+      total += demandTerm;
+      firedSignals.push(`demand=${item.demandScore} (+${demandTerm})`);
+    }
     return {
       item,
-      score,
+      score: total,
       firedSignals,
     };
   });
@@ -134,6 +149,7 @@ export function rankCandidates(
       effortSize: entry.item.effortSize,
       priority: entry.item.priority,
       epicStatus: entry.item.epicStatus,
+      demandScore: entry.item.demandScore,
     },
   }));
 }

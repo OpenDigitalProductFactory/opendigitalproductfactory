@@ -22,8 +22,8 @@ function StatPill({ label, value }: { label: string; value: string | number }) {
 }
 
 const SEVERITY_COLOR: Record<WorkforceConcernSeverity, string> = {
-  high: "var(--dpf-error, #e5484d)",
-  medium: "var(--dpf-warning, #f5a524)",
+  high: "var(--dpf-error)",
+  medium: "var(--dpf-warning)",
   low: "var(--dpf-muted)",
 };
 
