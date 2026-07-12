@@ -207,7 +207,6 @@ async function assessContributionHandler(
   if (!build) return { success: false, error: "Build not found.", message: "Build not found." };
 
   const brief = build.brief as Record<string, unknown> | null;
-  const plan = build.buildPlan as Record<string, unknown> | null;
   const diff = (build.diffPatch ?? build.diffSummary ?? "") as string;
   const designDoc = build.designDoc as Record<string, unknown> | null;
   const reusability = designDoc?.reusabilityAnalysis as { scope?: string; contributionReadiness?: string } | undefined;
@@ -586,7 +585,6 @@ async function contributeToHiveHandler(
         });
 
         const prTitle = `feat: ${build.title}`;
-        const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
         const prBody = [
           "## Summary",
           "",
