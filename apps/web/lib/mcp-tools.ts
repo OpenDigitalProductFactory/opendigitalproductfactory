@@ -9,7 +9,12 @@ import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import { slugify } from "@/lib/shared/slugify";
-import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
+import {
+  extractBuildIdHint,
+  logBuildActivity,
+  resolveActiveBuildId,
+  updateBuildHappyPathState,
+} from "@/lib/mcp/build-tool-helpers";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 // BI-ARCH-TOOLPACKS: deliberation + SIEM are fully owned by the first scoped tool
