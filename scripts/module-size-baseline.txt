@@ -42,6 +42,7 @@ apps/web/lib/marketing.ts	1367
 apps/web/lib/mcp-tools-backlog.test.ts	901
 apps/web/lib/mcp-tools.ts	8272
 apps/web/lib/mcp/packs/backlog-pack.ts	1382
+apps/web/lib/mcp-tools.ts	9466
 apps/web/lib/navigation/portal-navigation-model.ts	937
 apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1328
@@ -54,7 +55,7 @@ apps/web/lib/tak/agent-grants.test.ts	903
 apps/web/lib/tak/agent-grants.ts	815
 apps/web/lib/tak/agent-routing.ts	965
 apps/web/lib/tak/agentic-loop.test.ts	2183
-apps/web/lib/tak/agentic-loop.ts	2549
+apps/web/lib/tak/agentic-loop.ts	2579
 apps/web/lib/tak/route-context-map.ts	1226
 apps/web/lib/tak/route-context.ts	1363
 apps/web/lib/work-capsules/mcp-handlers.ts	835
