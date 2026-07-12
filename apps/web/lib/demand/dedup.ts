@@ -73,6 +73,38 @@ export function findDuplicateCandidates(
     .sort((a, b) => b.similarity - a.similarity);
 }
 
+export type DuplicatePair = {
+  a: string;
+  b: string;
+  titleA: string;
+  titleB: string;
+  similarity: number;
+};
+
+/**
+ * All-pairs sweep: every pair of items at or above `threshold`, most-similar
+ * first. Read-only detection over the open backlog — no hot-path cost at ingest.
+ * O(n^2) in the candidate set; callers bound `items` (e.g. open, same portfolio).
+ */
+export function findDuplicatePairs(items: DedupItem[], threshold = 0.6): DuplicatePair[] {
+  const pairs: DuplicatePair[] = [];
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      const similarity = itemSimilarity(items[i], items[j]);
+      if (similarity >= threshold) {
+        pairs.push({
+          a: items[i].itemId,
+          b: items[j].itemId,
+          titleA: items[i].title,
+          titleB: items[j].title,
+          similarity,
+        });
+      }
+    }
+  }
+  return pairs.sort((x, y) => y.similarity - x.similarity);
+}
+
 export type MergeInput = {
   survivorOccurrenceCount: number;
   duplicateOccurrenceCount: number;

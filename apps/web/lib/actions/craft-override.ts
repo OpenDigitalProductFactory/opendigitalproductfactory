@@ -41,7 +41,7 @@ export async function saveCraftOverride(
     return { ok: false, error: result.error };
   }
 
-  revalidatePath(`/wiki/craft/${validated.professionKey}`);
-  revalidatePath("/wiki/craft");
+  revalidatePath(`/coworker-decisions/craft/${validated.professionKey}`);
+  revalidatePath("/coworker-decisions/craft");
   return { ok: true, slug: result.slug, status: result.status };
 }

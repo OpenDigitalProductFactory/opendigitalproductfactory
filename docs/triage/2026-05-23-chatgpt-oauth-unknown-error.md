@@ -212,4 +212,4 @@ Three decisions for you:
 
 My recommendation: **option 1 (A + B1) + the test from Part C**. It fixes the seed, prevents the regression class entirely, and codifies the invariant. Estimated change footprint: 1-line registry change, ~10-line invariant guard, ~5-line test.
 
-Report path: [docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md](docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md)
+Report path: `docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md`

@@ -160,9 +160,9 @@ export async function publishWikiOverlayPages(
         previousStatus,
         newStatus: targetStatus,
       });
-      revalidatePath(`/wiki/${row.slug}`);
+      revalidatePath(`/coworker-decisions/${row.slug}`);
     }
-    revalidatePath("/wiki");
+    revalidatePath("/coworker-decisions");
 
     return { ok: true, published, rejected };
   } catch (err) {

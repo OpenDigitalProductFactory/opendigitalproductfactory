@@ -3,6 +3,7 @@ import {
   computeMerge,
   diceSimilarity,
   findDuplicateCandidates,
+  findDuplicatePairs,
   itemSimilarity,
   trigrams,
   type DedupItem,
@@ -52,6 +53,39 @@ describe("findDuplicateCandidates", () => {
     expect(out.map((c) => c.itemId)).not.toContain("X");
     expect(out[0].itemId).toBe("D1"); // most similar first
     expect(out[0].similarity).toBeGreaterThanOrEqual(out[out.length - 1].similarity);
+  });
+});
+
+describe("findDuplicatePairs", () => {
+  it("returns above-threshold pairs across the set, most-similar first", () => {
+    const items: DedupItem[] = [
+      { itemId: "A", title: "Add CSV export to reports" },
+      { itemId: "B", title: "Add a CSV export on reports" }, // ~dup of A
+      { itemId: "C", title: "Rotate database backups nightly" },
+      { itemId: "D", title: "Rotate the DB backups every night" }, // ~dup of C
+    ];
+    const pairs = findDuplicatePairs(items, 0.4);
+    // A-B and C-D should surface; A-C should not.
+    const keys = pairs.map((p) => [p.a, p.b].sort().join("-"));
+    expect(keys).toContain("A-B");
+    expect(keys).toContain("C-D");
+    expect(keys).not.toContain("A-C");
+    // sorted desc
+    for (let i = 1; i < pairs.length; i++) {
+      expect(pairs[i - 1].similarity).toBeGreaterThanOrEqual(pairs[i].similarity);
+    }
+  });
+
+  it("returns nothing when all items are distinct", () => {
+    expect(
+      findDuplicatePairs(
+        [
+          { itemId: "A", title: "alpha one" },
+          { itemId: "B", title: "zulu nine" },
+        ],
+        0.5,
+      ),
+    ).toEqual([]);
   });
 });
 

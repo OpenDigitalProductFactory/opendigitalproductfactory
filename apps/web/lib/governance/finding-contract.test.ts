@@ -36,9 +36,9 @@ describe("GovernanceFinding adapters (EP-8DC217EB BET-12)", () => {
       title: "Two stances disagree",
       detail: "…",
       count: 2,
-      href: "/wiki/decisions/d1",
+      href: "/coworker-decisions/decisions/d1",
       actionLabel: "Review",
-      actionHref: "/wiki/review",
+      actionHref: "/coworker-decisions/review",
     });
     expect(conflict).toMatchObject({
       source: "decision-review",
@@ -47,7 +47,7 @@ describe("GovernanceFinding adapters (EP-8DC217EB BET-12)", () => {
       status: "conflict",
       count: 2,
       actionLabel: "Review",
-      actionHref: "/wiki/review",
+      actionHref: "/coworker-decisions/review",
     });
     expect(
       fromReviewFinding({
@@ -58,7 +58,7 @@ describe("GovernanceFinding adapters (EP-8DC217EB BET-12)", () => {
         count: 1,
         href: null,
         actionLabel: "Answer",
-        actionHref: "/wiki/review",
+        actionHref: "/coworker-decisions/review",
       }).severity,
     ).toBe("low");
     expect(

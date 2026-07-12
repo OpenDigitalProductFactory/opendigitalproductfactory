@@ -99,7 +99,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
   return (
     <div className="max-w-3xl mx-auto py-6 px-4">
       <header className="mb-6">
-        <Link href="/wiki/decisions" className="text-sm text-[var(--dpf-accent)] hover:underline">
+        <Link href="/coworker-decisions/decisions" className="text-sm text-[var(--dpf-accent)] hover:underline">
           ← Decision log
         </Link>
         <div className="mt-2 flex items-center gap-2 flex-wrap">
@@ -241,7 +241,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
         ) : row.outcomeType === "escalate" || row.outcomeType === "defer" ? (
           <p className="text-sm text-[var(--dpf-muted)]">
             Awaiting human review — see{" "}
-            <Link href="/wiki/review" className="text-[var(--dpf-accent)] hover:underline">
+            <Link href="/coworker-decisions/review" className="text-[var(--dpf-accent)] hover:underline">
               Review &amp; adjust
             </Link>
             .

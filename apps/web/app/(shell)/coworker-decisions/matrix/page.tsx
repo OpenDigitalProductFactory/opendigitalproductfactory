@@ -15,7 +15,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Decision matrix · Decision governance",
+  title: "Decision matrix · Coworker Decision Engine",
 };
 
 export default async function DecisionMatrixPage() {
@@ -38,11 +38,11 @@ export default async function DecisionMatrixPage() {
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
       <nav className="mb-6 flex items-center gap-2 text-sm text-[var(--dpf-muted)]">
-        <Link href="/wiki" className="hover:text-[var(--dpf-text)]">
-          Decision governance
+        <Link href="/coworker-decisions" className="hover:text-[var(--dpf-text)]">
+          Coworker Decision Engine
         </Link>
         <span>/</span>
-        <Link href="/wiki/review" className="hover:text-[var(--dpf-text)]">
+        <Link href="/coworker-decisions/review" className="hover:text-[var(--dpf-text)]">
           Review &amp; adjust
         </Link>
         <span>/</span>

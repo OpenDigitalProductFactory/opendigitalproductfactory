@@ -37,6 +37,14 @@ export type BacklogItemWithRelations = {
   updatedAt: Date;
   upstreamIssueNumber: number | null;
   upstreamIssueUrl: string | null;
+  // Operator-triage inputs (BI-9952EA9E). All existing BacklogItem columns —
+  // optional here so existing fixtures/callers that don't select them still
+  // typecheck; the /ops loaders select them for the triage lens.
+  claimStatus?: string | null;
+  stalenessDetectedAt?: Date | null;
+  riskOpportunity?: number | null;
+  businessValue?: number | null;
+  timeCriticality?: number | null;
 };
 
 export type DigitalProductSelect = {

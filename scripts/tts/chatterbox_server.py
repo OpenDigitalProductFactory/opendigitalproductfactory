@@ -63,6 +63,14 @@ def root():
     return {"status": "ok", "model": "chatterbox", "device": DEVICE}
 
 
+@app.get("/health")
+def health():
+    # Alias of "/" — the portal's TTS liveness probe requests /health
+    # (BI-7988DAD8); serving it only at "/" made a healthy sidecar fire
+    # VoiceServiceDown forever.
+    return {"status": "ok", "model": "chatterbox", "device": DEVICE}
+
+
 @app.get("/v1/models")
 def models():
     return {"object": "list", "data": [{"id": "chatterbox", "object": "model"}]}

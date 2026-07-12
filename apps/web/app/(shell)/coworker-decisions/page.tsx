@@ -22,7 +22,7 @@ import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-professi
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Decision governance",
+  title: "Coworker Decision Engine",
 };
 
 type SearchParams = Promise<{
@@ -164,7 +164,7 @@ export default async function WikiBrowsePage({
     <div className="max-w-4xl mx-auto py-6 px-4">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-[var(--dpf-text)] mb-1">
-          Decision governance
+          Coworker Decision Engine
         </h1>
         <p className="text-sm text-[var(--dpf-muted)]">
           How your AI workforce decides on your behalf — and where you shape it.
@@ -177,7 +177,7 @@ export default async function WikiBrowsePage({
 
       {/* Review & adjust — the findings workspace over the decision ledger */}
       <Link
-        href="/wiki/review"
+        href="/coworker-decisions/review"
         className="mt-6 block rounded-lg border border-[var(--dpf-border)] p-4 hover:bg-[var(--dpf-surface-2)] transition-colors"
       >
         <div className="flex items-center justify-between">
@@ -206,7 +206,7 @@ export default async function WikiBrowsePage({
           </p>
         </div>
         <Link
-          href="/wiki/perspectives"
+          href="/coworker-decisions/perspectives"
           className="text-sm text-[var(--dpf-accent)] hover:underline shrink-0 ml-4"
         >
           Manage →

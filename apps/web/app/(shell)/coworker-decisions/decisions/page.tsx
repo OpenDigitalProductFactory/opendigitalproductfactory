@@ -132,10 +132,10 @@ export default async function DecisionLogPage({
             </p>
           </div>
           <Link
-            href="/wiki"
+            href="/coworker-decisions"
             className="text-sm text-[var(--dpf-accent)] hover:underline shrink-0"
           >
-            ← Decision governance
+            ← Coworker Decision Engine
           </Link>
         </div>
       </header>
@@ -153,7 +153,7 @@ export default async function DecisionLogPage({
                 ? "No decisions recorded on this tier yet."
                 : `${s.last30d} in 30d · ${s.unresolved} awaiting review · ${s.total} all-time`
             }
-            href={`/wiki/decisions?tier=${s.tier}`}
+            href={`/coworker-decisions/decisions?tier=${s.tier}`}
           />
         ))}
       </div>
@@ -190,7 +190,7 @@ export default async function DecisionLogPage({
           return (
             <Link
               key={f.label}
-              href={f.tier ? `/wiki/decisions?tier=${f.tier}` : "/wiki/decisions"}
+              href={f.tier ? `/coworker-decisions/decisions?tier=${f.tier}` : "/coworker-decisions/decisions"}
               className={
                 active
                   ? "rounded-full border border-[var(--dpf-accent)] bg-[var(--dpf-accent)] px-3 py-1 text-xs font-medium text-white"

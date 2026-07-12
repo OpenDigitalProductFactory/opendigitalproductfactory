@@ -29,6 +29,12 @@ export interface EscalationStalenessRow {
   createdAt: Date;
   /** FeatureBuild.supersededByEpicId — set when a decompose was approved (build handled). */
   buildSupersededByEpicId: string | null;
+  /**
+   * FeatureBuild.phase — when `abandoned`, the stall escalation is residue
+   * (BI-FCAE8154). Work (if still wanted) lives on the originating BI; the
+   * per-build dedupeKey frees so a genuine re-stall re-files.
+   */
+  buildPhase: string | null;
   /** Originating BacklogItem.id (FeatureBuild.originatingBacklogItemId), or null if unlinked. */
   originatingBacklogItemId: string | null;
   /** Originating BacklogItem.status, or null if unlinked/missing. */
@@ -42,6 +48,7 @@ export interface ResolvableEscalation {
   /** Stable machine reason for the auto-resolve, surfaced in logs/telemetry. */
   reason:
     | "build-superseded-by-epic"
+    | "originating-build-abandoned"
     | "superseded-by-newer-escalation"
     | "originating-item-done"
     | "originating-item-wont-do";
@@ -83,6 +90,9 @@ function resolveReason(
   // The decompose was approved → the build was superseded by an epic, so the
   // escalation raised against the now-superseded build is handled.
   if (row.buildSupersededByEpicId) return "build-superseded-by-epic";
+
+  // Terminal abandoned build → stall escalation is residue (BI-FCAE8154).
+  if (row.buildPhase === "abandoned") return "originating-build-abandoned";
 
   const itemId = row.originatingBacklogItemId;
   if (!itemId) return null; // No originating link and not superseded — can't prove staleness; keep.

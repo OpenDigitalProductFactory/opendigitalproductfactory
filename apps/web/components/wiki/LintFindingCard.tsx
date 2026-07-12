@@ -81,7 +81,7 @@ type Props = {
 
 export function LintFindingCard({ finding }: Props): ReactNode {
   const sevClass = SEVERITY_STYLES[finding.severity] ?? SEVERITY_STYLES.info;
-  const pageHref = finding.page ? `/wiki/${finding.page.slug}` : null;
+  const pageHref = finding.page ? `/coworker-decisions/${finding.page.slug}` : null;
   const detailLine = formatDetail(finding.detail);
 
   return (
