@@ -72,6 +72,17 @@ vi.mock("@/lib/integrate/ideate-on-approval", () => ({
   dispatchIdeateForApprovedBuild: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Same detached-async hazard as above: every backlog status transition now fires
+// a fire-and-forget `void (async () => …)()` that bridges the item to a WorkItem
+// (EP-WORK-CONVERGENCE / BI-AC815F1E). With the real bridge in place that promise
+// rejects under the mocked prisma and console.warns *after* the test returns —
+// surfacing during worker teardown as the intermittent
+// "Closing rpc while \"onUserConsoleLog\" was pending" EnvironmentTeardownError.
+// Stubbing the bridge makes the detached promise resolve quietly.
+vi.mock("@/lib/queue/bridges/backlog-bridge", () => ({
+  bridgeBacklogItemToWorkItem: vi.fn().mockResolvedValue(null),
+}));
+
 import { executeTool } from "./mcp-tools";
 
 describe("backlog MCP tool execution", () => {

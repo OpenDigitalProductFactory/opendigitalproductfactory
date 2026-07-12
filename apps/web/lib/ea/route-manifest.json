@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 545,
+  "routeCount": 546,
   "routes": [
     {
       "routePath": "/",
@@ -28,6 +28,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/page.tsx"
+    },
+    {
+      "routePath": "/admin/archetypes",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "archetypes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/archetypes/page.tsx"
     },
     {
       "routePath": "/admin/backlog",

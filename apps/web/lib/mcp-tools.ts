@@ -9,7 +9,12 @@ import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import { slugify } from "@/lib/shared/slugify";
-import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
+import {
+  logBuildActivity,
+  extractBuildIdHint,
+  resolveActiveBuildId,
+  updateBuildHappyPathState,
+} from "@/lib/mcp/build-tool-helpers";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 // BI-ARCH-TOOLPACKS: deliberation + SIEM are fully owned by the first scoped tool
@@ -377,78 +382,6 @@ function stringArray(value: unknown): string[] {
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
   {
-    // NOTE: this tool is DISTINCT from the existing `propose_decomposition`
-    // (epic + feature-set breakdown for ideation). This one operates on a
-    // passed FeatureBuild design and proposes how to SPLIT it into smaller
-    // builds — a downstream-of-Ideate decomposition, not an upstream-from-
-    // backlog one. Different name avoids the collision.
-    name: "propose_build_decomposition",
-    description: "Ask the SE coworker to propose 2-4 candidate decompositions of a passed-design xlarge FeatureBuild. Distinct from `propose_decomposition` (which is an upstream brainstorming tool that generates an Epic + feature-set breakdown). This one is downstream of Ideate — eligible when the build is in `ideate`, has a passed designReview, and the recorded sizeAssessment.decision is `decompose-recommended` or `decompose-required`; also allows a top-level `plan` build whose failed planReview has iteration.oscillating=true, recomputing sizeDesignDoc retroactively when sizeAssessment is missing. Optional `operatorHint` re-runs with guidance ('make the read-first smaller', 'ship the ledger separately'). Persists validated candidates to designReview.decompositionCandidates.latest; prior rounds are preserved under .priorRounds for audit. Returns the validated candidates plus an observability list of rejected ones (model returned them but they failed validateCandidate).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        buildId: { type: "string", description: "Originating FeatureBuild ID (FB-*)." },
-        operatorHint: {
-          type: "string",
-          description: "Optional regenerate guidance. Empty/omitted on first generation.",
-        },
-      },
-      required: ["buildId"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
-  {
-    name: "approve_decomposition",
-    description: "Atomically create an execution-organizational Epic + N child FeatureBuilds + sibling-dependency edges from a pre-validated DecompositionCandidate, and mark the originating FeatureBuild as superseded. The originating build must be in `ideate` phase with a passed designReview, or in `plan` with a failed oscillating planReview as the retroactive escape hatch, and must not itself be a child. Callers (typically the decomposition assistant flow) supply the candidate after the operator has chosen and optionally edited it; all invariants from epic-decomposition-invariants run before any DB writes.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        buildId: { type: "string", description: "Originating FeatureBuild ID (FB-*)." },
-        candidate: {
-          type: "object",
-          description: "The DecompositionCandidate to materialize. See apps/web/lib/build/decomposition-candidates.ts for the full shape.",
-          properties: {
-            candidateId: { type: "string" },
-            rationale: { type: "string" },
-            childScopes: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  childOrder: { type: "number" },
-                  title: { type: "string" },
-                  summary: { type: "string" },
-                  acceptanceCriteriaIndices: { type: "array", items: { type: "number" } },
-                  dependsOn: { type: "array", items: { type: "number" } },
-                },
-                required: ["childOrder", "title", "acceptanceCriteriaIndices", "dependsOn"],
-              },
-            },
-          },
-          required: ["candidateId", "rationale", "childScopes"],
-        },
-      },
-      required: ["buildId", "candidate"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
-  {
-    name: "record_decomposition_override",
-    description: "Record the operator's 'keep as one build' override on a FeatureBuild whose size assessment is decompose-required. Writes designReview.decompositionOverride for audit and hive-contribution context. Only valid on decompose-required builds; recommended-tier builds proceed without recording an override (single-click path per spec §4.1). Does not enforce — the downstream decomposition gate is the consumer of this record.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        buildId: { type: "string", description: "FeatureBuild ID (FB-*)." },
-        rationale: { type: "string", description: "Non-empty one-line justification for proceeding monolithically." },
-      },
-      required: ["buildId", "rationale"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
-  {
     name: "record_external_development_evidence",
     description: "Record Claude, Codex, Grok or other external development handoff evidence with optional Build Studio build/task links. Use for branches, commits, changed files, verification results, local integration output, unresolved questions, and skills used.",
     inputSchema: {
@@ -555,45 +488,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
     buildPhases: ["ship"],
-  },
-  // ─── Intake Tools ─────────────────────────────────────────────────────────
-  {
-    name: "assess_complexity",
-    description: "Score a feature on 7 dimensions, get path recommendation (simple/moderate/complex).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        taxonomySpan: { type: "number", description: "Score 1-3: 1=single node, 2=multi-node, 3=cross-portfolio" },
-        dataEntities: { type: "number", description: "Score 1-3: 1=read-only, 2=CRUD on existing, 3=new schema" },
-        integrations: { type: "number", description: "Score 1-3: 1=none, 2=internal, 3=external" },
-        novelty: { type: "number", description: "Score 1-3: 1=pattern exists, 2=variation, 3=novel" },
-        regulatory: { type: "number", description: "Score 1-3: 1=none, 2=moderate, 3=regulated" },
-        costEstimate: { type: "number", description: "Score 1-3: 1=small, 2=medium, 3=large" },
-        techDebt: { type: "number", description: "Score 1-3: 1=low, 2=moderate, 3=high" },
-      },
-      required: ["taxonomySpan", "dataEntities", "integrations", "novelty", "regulatory", "costEstimate", "techDebt"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate"],
-  },
-  {
-    name: "propose_decomposition",
-    description: "Generate an epic + feature set breakdown for a complex idea.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        epicTitle: { type: "string" },
-        epicDescription: { type: "string" },
-        featureSets: { type: "array", items: { type: "object", properties: { title: { type: "string" }, description: { type: "string" }, type: { type: "string", enum: ["feature_build", "digital_product"] }, estimatedBuilds: { type: "number" }, recommendation: { type: "string", enum: ["build", "buy", "integrate"] }, rationale: { type: "string" }, techDebtNote: { type: "string" } }, required: ["title", "description", "type", "estimatedBuilds", "recommendation", "rationale"] } },
-      },
-      required: ["epicTitle", "epicDescription", "featureSets"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate"],
   },
   // ─── Build Notes Tool ───────────────────────────────────────────────────
   {
@@ -1467,86 +1361,6 @@ export async function getAvailableTools(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Fire-and-forget: log tool activity for the Build Studio activity timeline. */
-function logBuildActivity(buildId: string, tool: string, summary: string): void {
-  prisma.buildActivity.create({ data: { buildId, tool, summary } }).catch(() => {});
-}
-
-/**
- * Phases that exclude a FeatureBuild from "active" auto-resolution.
- * `abandoned` is included because abandoned builds from prior runs would
- * otherwise shadow the freshly promoted build (BI-E9CD1B92, 2026-05-13).
- */
-const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
-
-/**
- * Pull a well-formed `buildId` hint out of a tool's params bag.
- * Returns null when the hint is missing, non-string, or doesn't have the
- * `FB-` prefix that all real FeatureBuild IDs carry.
- */
-function extractBuildIdHint(params: Record<string, unknown>): string | null {
-  const v = params["buildId"];
-  if (typeof v !== "string") return null;
-  const trimmed = v.trim();
-  return trimmed.startsWith("FB-") ? trimmed : null;
-}
-
-/**
- * Resolve the active FeatureBuild for the current user.
- *
- * When `buildIdHint` is supplied AND it resolves to an existing build the
- * caller is allowed to act on, that hint wins — even if the user has a more
- * recently updated build. This is how explicit `buildId` arguments from MCP
- * tool calls reach the per-tool handlers without being silently overridden
- * (the bug behind FB-1D69766D returning FB-72EB9C06's review).
- *
- * Fallback: most-recently-updated non-terminal build created by the user.
- */
-async function resolveActiveBuildId(
-  userId: string,
-  buildIdHint?: string | null,
-): Promise<string | null> {
-  if (buildIdHint && buildIdHint.startsWith("FB-")) {
-    const hinted = await prisma.featureBuild.findUnique({
-      where: { buildId: buildIdHint },
-      select: { buildId: true, createdById: true },
-    });
-    // Access model today is owner-only — see getFeatureBuildForContext for the
-    // matching check. If a future grant model lands, expand this predicate.
-    if (hinted && hinted.createdById === userId) return hinted.buildId;
-  }
-  const build = await prisma.featureBuild.findFirst({
-    where: { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } },
-    orderBy: { updatedAt: "desc" },
-    select: { buildId: true },
-  });
-  return build?.buildId ?? null;
-}
-
-async function updateBuildHappyPathState(
-  userId: string,
-  patch: Parameters<typeof mergeHappyPathStateIntoPlan>[1],
-  buildId?: string | null,
-): Promise<void> {
-  const resolvedBuildId = buildId ?? await resolveActiveBuildId(userId);
-  if (!resolvedBuildId) return;
-
-  const build = await prisma.featureBuild.findUnique({
-    where: { buildId: resolvedBuildId },
-    select: { plan: true },
-  });
-  if (!build) return;
-
-  const mergedPlan = mergeHappyPathStateIntoPlan(
-    (build.plan as Record<string, unknown> | null) ?? null,
-    patch,
-  );
-
-  await prisma.featureBuild.update({
-    where: { buildId: resolvedBuildId },
-    data: { plan: mergedPlan as import("@dpf/db").Prisma.InputJsonValue },
-  });
-}
 
 function redactFunctionalFailureText(text: string): string {
   return text
@@ -1690,90 +1504,6 @@ export async function executeTool(
     return packHandler(params, userId, context);
   }
   switch (toolName) {
-    case "propose_build_decomposition": {
-      const buildId = String(params["buildId"] ?? "");
-      if (!buildId.startsWith("FB-")) {
-        return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
-      }
-      const operatorHint = typeof params["operatorHint"] === "string" ? params["operatorHint"] : undefined;
-      const { proposeDecomposition } = await import("@/lib/build/propose-decomposition");
-      const result = await proposeDecomposition({
-        buildId,
-        userId,
-        agentId: context?.agentId ?? null,
-        ...(operatorHint ? { operatorHint } : {}),
-      });
-      if (!result.ok) {
-        return { success: false, error: result.code, message: result.error };
-      }
-      return {
-        success: true,
-        entityId: buildId,
-        message: `Proposed ${result.candidates.length} candidate decomposition(s) for ${buildId}.${result.rejected.length > 0 ? ` (${result.rejected.length} additional candidate(s) failed validation and were dropped.)` : ""}`,
-        data: {
-          candidates: result.candidates,
-          rejectedCount: result.rejected.length,
-        },
-      };
-    }
-
-    case "approve_decomposition": {
-      // Phase 4a (BI-2E6CC391). The candidate is pre-validated by the
-      // caller (Phase 4b assistant); we revalidate inside
-      // approveDecomposition's pipeline before any DB writes.
-      const buildId = String(params["buildId"] ?? "");
-      const candidateRaw = params["candidate"];
-      if (!buildId.startsWith("FB-")) {
-        return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
-      }
-      if (!candidateRaw || typeof candidateRaw !== "object") {
-        return { success: false, error: "invalid_candidate", message: "candidate must be an object matching the DecompositionCandidate shape." };
-      }
-      const { approveDecomposition } = await import("@/lib/build/approve-decomposition");
-      const result = await approveDecomposition({
-        buildId,
-        candidate: candidateRaw as Parameters<typeof approveDecomposition>[0]["candidate"],
-        userId,
-        agentId: context?.agentId ?? null,
-      });
-      if (!result.ok) {
-        return { success: false, error: result.code, message: result.error };
-      }
-      return {
-        success: true,
-        entityId: result.epicId,
-        message: `Decomposed ${buildId} into Epic ${result.epicId} with ${result.childBuildIds.length} child build(s).`,
-        data: {
-          epicId: result.epicId,
-          childBuildIds: result.childBuildIds,
-        },
-      };
-    }
-
-    case "record_decomposition_override": {
-      const buildId = String(params["buildId"] ?? "");
-      const rationale = String(params["rationale"] ?? "");
-      if (!buildId.startsWith("FB-")) {
-        return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
-      }
-      const { recordDecompositionOverride } = await import("@/lib/build/decomposition-override");
-      const result = await recordDecompositionOverride({
-        buildId,
-        rationale,
-        userId,
-        agentId: context?.agentId ?? null,
-      });
-      if (!result.ok) {
-        return { success: false, error: result.code, message: result.error };
-      }
-      return {
-        success: true,
-        entityId: buildId,
-        message: `Decomposition override recorded for ${buildId}.`,
-        data: { override: result.override },
-      };
-    }
-
     case "record_external_development_evidence": {
       const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
       const stringArray = (key: string) => (
@@ -2040,33 +1770,6 @@ export async function executeTool(
         const msg = err instanceof Error ? err.message : "Epic creation failed";
         return { success: false, error: msg, message: `Could not create epic: ${msg}` };
       }
-    }
-
-    case "assess_complexity": {
-      const { assessComplexity } = await import("@/lib/complexity-assessment");
-      const scores = {
-        taxonomySpan: Number(params["taxonomySpan"] ?? 1) as 1 | 2 | 3,
-        dataEntities: Number(params["dataEntities"] ?? 1) as 1 | 2 | 3,
-        integrations: Number(params["integrations"] ?? 1) as 1 | 2 | 3,
-        novelty: Number(params["novelty"] ?? 1) as 1 | 2 | 3,
-        regulatory: Number(params["regulatory"] ?? 1) as 1 | 2 | 3,
-        costEstimate: Number(params["costEstimate"] ?? 1) as 1 | 2 | 3,
-        techDebt: Number(params["techDebt"] ?? 1) as 1 | 2 | 3,
-      };
-      const result = assessComplexity(scores);
-      return { success: true, message: `Complexity: ${result.total}/21 — ${result.path} path.`, data: result as unknown as Record<string, unknown> };
-    }
-
-    case "propose_decomposition": {
-      const { validateDecompositionPlan } = await import("@/lib/decomposition");
-      const plan = {
-        epicTitle: String(params["epicTitle"] ?? ""),
-        epicDescription: String(params["epicDescription"] ?? ""),
-        featureSets: Array.isArray(params["featureSets"]) ? params["featureSets"] as import("@/lib/feature-build-types").FeatureSetEntry[] : [],
-      };
-      const validation = validateDecompositionPlan(plan);
-      if (!validation.valid) return { success: false, error: validation.errors.join(", "), message: `Invalid: ${validation.errors.join(", ")}` };
-      return { success: true, message: `${plan.epicTitle} — ${plan.featureSets.length} feature set${plan.featureSets.length !== 1 ? "s" : ""}.`, data: plan as unknown as Record<string, unknown> };
     }
 
     case "save_build_notes": {

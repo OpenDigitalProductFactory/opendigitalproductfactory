@@ -222,6 +222,32 @@ export function isPreSpecResearchEnabled(): boolean {
   return v === "1" || v === "true";
 }
 
+/**
+ * BI-D996C238 (EP-0AF96937): graduated gate autonomy — the WWMD build gate's
+ * risk tier is derived from the deliverable's sensitivity (x transition) instead
+ * of a fixed "medium", so a low-sensitivity advancement can clear on the ladder
+ * while a high-sensitivity one always escalates. Opt-in (default off) so the
+ * gate stays byte-identical (fixed medium) until an operator enables graduation.
+ * Set DPF_BUILD_GRADUATED_GATE_AUTONOMY=1.
+ */
+export function isGraduatedGateAutonomyEnabled(): boolean {
+  const v = process.env.DPF_BUILD_GRADUATED_GATE_AUTONOMY;
+  return v === "1" || v === "true";
+}
+
+/**
+ * BI-417AE8E9 (EP-27FD96BC): one-shot feature lane — a small/medium, low-
+ * sensitivity feature/fix whose graduated gate auto-proceeds and whose oracles
+ * are green takes a single-pass lane (skips multi-round deliberation) and
+ * auto-ships. Opt-in (default off) so every build stays on the standard
+ * multi-round lane until an operator enables it (and it composes the graduated
+ * gate, DPF_BUILD_GRADUATED_GATE_AUTONOMY). Set DPF_BUILD_ONE_SHOT_LANE=1.
+ */
+export function isOneShotLaneEnabled(): boolean {
+  const v = process.env.DPF_BUILD_ONE_SHOT_LANE;
+  return v === "1" || v === "true";
+}
+
 /** PlatformConfig key for the global build Cost/Quality/Time posture (P2). */
 export const BUILD_GOLDEN_TRIANGLE_POSTURE_KEY = "BUILD_GOLDEN_TRIANGLE_POSTURE";
 
