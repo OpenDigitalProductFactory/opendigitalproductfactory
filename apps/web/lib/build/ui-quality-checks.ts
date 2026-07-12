@@ -38,8 +38,9 @@ export type UiQualityReport = {
 // rare in generated code; we scan raw source lines.
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b/;
 // Tailwind color utility with a numeric shade: bg-green-400, text-red-500,
-// border-slate-200, ring-blue-600, from-indigo-500. Excludes token classes like
-// bg-[var(--dpf-...)] and semantic non-color utilities.
+// border-slate-200, ring-blue-600, from-indigo-500. Excludes DPF token classes
+// (arbitrary-value utilities that reference the var(--dpf-*) design tokens) and
+// semantic non-color utilities.
 const TW_COLOR_RE = /\b(?:bg|text|border|ring|from|to|via|fill|stroke|divide|outline|decoration|shadow|caret|accent|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|grey|zinc|neutral|stone)-\d{2,3}\b/;
 // Inline rgb/rgba/hsl literal.
 const RGB_RE = /\b(?:rgba?|hsla?)\s*\(/;
