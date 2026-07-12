@@ -133,7 +133,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // that PR #1030 fixed in this same file.
     const bi = await prisma.backlogItem.findUnique({
       where: { id: build.originatingBacklogItemId },
-      select: { title: true, body: true, effortSize: true },
+      select: { title: true, body: true, effortSize: true, workType: true },
     });
 
     if (!bi) {
@@ -282,6 +282,34 @@ export async function dispatchIdeateForApprovedBuild(params: {
       };
       await logActivity(`Auto-dispatch saved-evidence VERIFICATION FAILED after ${(durationMs / 1000).toFixed(1)}s: designDoc not present on ${buildId} after save.`);
       return outcome;
+    }
+
+    // BI-F8C5E01C — research-before-spec: for a right-size-triggered feature,
+    // run an external cited deep-research pass and attach it to the ideate
+    // evidence trail. Opt-in (DPF_BUILD_PRE_SPEC_RESEARCH) and strictly
+    // fail-open — research is advisory and must NEVER fail or delay ideate.
+    try {
+      const { isPreSpecResearchEnabled } = await import("./build-studio-config");
+      if (isPreSpecResearchEnabled()) {
+        const { shouldRunPreSpecResearch, conductPreSpecResearch, formatResearchReportMarkdown, makeInferenceResearchDeps } =
+          await import("@/lib/build/pre-spec-research");
+        const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+        const sensitivity = deriveDeliverableSensitivity({ text: `${featureTitle}\n${featureDescription}`, workType: bi.workType });
+        if (shouldRunPreSpecResearch({ workType: bi.workType, effortSize: bi.effortSize, sensitivity })) {
+          const { searchPublicWeb, fetchPublicWebsiteEvidence } = await import("@/lib/public-web-tools");
+          const { routeAndCall } = await import("@/lib/routed-inference");
+          const deps = makeInferenceResearchDeps({
+            llm: async (p) => (await routeAndCall([{ role: "user" as const, content: p }], "You are a research assistant. Follow the output format exactly.", "internal", { budgetClass: "minimize_cost" })).content,
+            search: async (q) => (await searchPublicWeb(q)).map((r) => ({ title: r.title, url: r.url, description: r.snippet })),
+            fetchSource: async (u) => { const e = await fetchPublicWebsiteEvidence(u); return { title: e.title, textExcerpt: e.textExcerpt }; },
+          });
+          const report = await conductPreSpecResearch(`${featureTitle}: ${featureDescription}`.slice(0, 400), deps);
+          await logActivity(`Pre-spec research (advisory, cited):\n${formatResearchReportMarkdown(report)}`);
+        }
+      }
+    } catch (researchErr) {
+      // Advisory — swallow and continue; ideate must not depend on research.
+      await logActivity(`Pre-spec research skipped (non-fatal): ${researchErr instanceof Error ? researchErr.message : String(researchErr)}`);
     }
 
     const designDocKeys = Object.keys(ideateResult.designDoc as Record<string, unknown>);

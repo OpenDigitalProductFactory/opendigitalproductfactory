@@ -156,6 +156,18 @@ export function isQualityFirstRightsizingEnabled(): boolean {
   return v === "1" || v === "true";
 }
 
+/**
+ * BI-F8C5E01C (EP-F7E35344): research-before-spec — a right-size-triggered
+ * external deep-research pass (standards / prior art / pitfalls) attached to the
+ * ideate evidence trail before the design is written. Opt-in (default off) so it
+ * merges inert and incurs no web-search spend until an operator enables it and a
+ * web-search provider (Brave) is configured. Set DPF_BUILD_PRE_SPEC_RESEARCH=1.
+ */
+export function isPreSpecResearchEnabled(): boolean {
+  const v = process.env.DPF_BUILD_PRE_SPEC_RESEARCH;
+  return v === "1" || v === "true";
+}
+
 /** PlatformConfig key for the global build Cost/Quality/Time posture (P2). */
 export const BUILD_GOLDEN_TRIANGLE_POSTURE_KEY = "BUILD_GOLDEN_TRIANGLE_POSTURE";
 
