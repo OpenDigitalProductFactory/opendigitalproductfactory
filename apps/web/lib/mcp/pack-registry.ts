@@ -71,6 +71,7 @@ import { coworkerPack } from "./packs/coworker-pack";
 import { platformUtilitiesPack } from "./packs/platform-utilities-pack";
 import { backlogPack } from "./packs/backlog-pack";
 import { adminPack } from "./packs/admin-pack";
+import { decompositionPack } from "./packs/decomposition-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 
@@ -131,4 +132,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   platformUtilitiesPack,
   backlogPack,
   adminPack,
+  decompositionPack,
 ]);
