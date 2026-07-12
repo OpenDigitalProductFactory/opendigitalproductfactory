@@ -128,6 +128,50 @@ describe("work capsule store", () => {
     }));
   });
 
+  it("persists a first-class Requester distinct from the creating actor (BI-B24F96D0)", async () => {
+    db.workCapsule.findUnique.mockResolvedValueOnce(null);
+    db.workCapsule.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-REQ", title: "Commissioned work" });
+
+    await createWorkCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Commissioned work",
+        objective: "Build the thing the founder asked for.",
+        source: "manual",
+        idempotencyKey: "manual:commissioned",
+        requestedByPrincipalId: "principal-requester",
+      },
+      actor: { userId: "worker-1", agentId: "agent-1", principalId: "principal-worker" },
+    });
+
+    expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        createdByPrincipalId: "principal-worker",
+        requestedByPrincipalId: "principal-requester",
+      }),
+    }));
+  });
+
+  it("defaults the Requester to null when not supplied", async () => {
+    db.workCapsule.findUnique.mockResolvedValueOnce(null);
+    db.workCapsule.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-NOREQ", title: "Self-started" });
+
+    await createWorkCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Self-started",
+        objective: "Agent started this on its own.",
+        source: "manual",
+        idempotencyKey: "manual:self-started",
+      },
+      actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
+    });
+
+    expect(db.workCapsule.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ requestedByPrincipalId: null }),
+    }));
+  });
+
   it("rejects invalid scope metadata before creating a capsule", async () => {
     db.workCapsule.findUnique.mockResolvedValueOnce(null);
 
