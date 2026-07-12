@@ -74,6 +74,31 @@ Before submitting a component, verify:
 - [ ] No inline hex colors for token roles
 - [ ] Component renders correctly in both light and dark mode (toggle OS preference to verify)
 
+## Progressive Disclosure
+
+Choose the disclosure construct by the relationship between its summary and
+content. Do not hand-roll a new expand/collapse dialect inside a feature.
+
+| Need | Canonical construct |
+|---|---|
+| Preview the first rows of one long list | `CollapsibleList` |
+| Reveal subordinate detail for one record among peer records | `ExpandableCard` |
+| Hide one short, secondary piece of prose or advanced help | Native `<details>` |
+| Preserve a large detail workspace while the list remains visible | Purpose-built drawer |
+| Support linking, history, or a full record workflow | Dedicated detail route |
+
+`ExpandableCard` follows the WAI-ARIA accordion/disclosure contract: a native
+button is the only control inside the heading; the button exposes
+`aria-expanded` and `aria-controls`; the panel is labelled by the trigger; and a
+visible chevron communicates state. Enter and Space work through native button
+semantics. Opening inline detail does not move focus. The same summary trigger
+closes it, so a separate remote "Close" action must not be added.
+
+Render record identity and summary metadata once. Loading and recoverable error
+states belong inside the opened panel while its summary remains stable. Lists of
+peer records should normally allow one open item at a time unless research shows
+that operators need side-by-side comparison.
+
 ## Readability & Plain Language
 
 Business-facing copy must be understandable by the people who **run** a business, not only the people who build the platform. The platform — and its own marketing — holds business copy to a **high-school reading level**, measured with the **Flesch–Kincaid** tests that word processors like Microsoft Word report. Plain language is a precondition for mass adoption, and a marketing requirement when reaching a non-technical audience.

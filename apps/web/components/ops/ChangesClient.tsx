@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, useCallback } from "react";
+import { ExpandableCard } from "@/components/ui/report-kit/ExpandableCard";
 import { RFCDetailPanel } from "./RFCDetailPanel";
 import { StandardChangeCatalog } from "./StandardChangeCatalog";
 
@@ -114,6 +115,7 @@ export default function ChangesClient() {
   const [filter, setFilter] = useState<FilterGroup>("active");
   const [selectedRfcId, setSelectedRfcId] = useState<string | null>(null);
   const [selectedRfc, setSelectedRfc] = useState<RFC | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Fetch list
@@ -139,8 +141,11 @@ export default function ChangesClient() {
   useEffect(() => {
     if (!selectedRfcId) {
       setSelectedRfc(null);
+      setDetailError(null);
       return;
     }
+    setSelectedRfc(null);
+    setDetailError(null);
     let cancelled = false;
     (async () => {
       try {
@@ -148,8 +153,13 @@ export default function ChangesClient() {
         if (!res.ok) throw new Error(`Failed to fetch RFC: ${res.status}`);
         const json = await res.json();
         if (!cancelled) setSelectedRfc(json.data ?? json);
-      } catch {
-        if (!cancelled) setSelectedRfc(null);
+      } catch (error) {
+        if (!cancelled) {
+          setSelectedRfc(null);
+          setDetailError(
+            error instanceof Error ? error.message : "Failed to load change details",
+          );
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -242,29 +252,23 @@ export default function ChangesClient() {
       {filter !== "catalog" && filtered.length > 0 && (
         <div className="space-y-3">
           {filtered.map((rfc) => (
-            <div key={rfc.id}>
-              <button
-                type="button"
-                onClick={() =>
-                  setSelectedRfcId(selectedRfcId === rfc.rfcId ? null : rfc.rfcId)
-                }
-                className={`w-full text-left p-4 rounded-lg border transition-colors ${
-                  selectedRfcId === rfc.rfcId
-                    ? "bg-[var(--dpf-surface-2)] border-[var(--dpf-accent)]/40"
-                    : "bg-[var(--dpf-surface-1)] border-[var(--dpf-border)] hover:border-[var(--dpf-accent)]/30"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
+            <ExpandableCard
+              key={rfc.id}
+              id={`change-${rfc.rfcId}`}
+              open={selectedRfcId === rfc.rfcId}
+              onOpenChange={(open) => setSelectedRfcId(open ? rfc.rfcId : null)}
+              summary={
+                <span className="flex items-start justify-between gap-4">
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-xs text-[var(--dpf-accent)]">
                         {rfc.rfcId}
                       </span>
                       <span className="font-semibold text-[var(--dpf-text)] truncate">
                         {rfc.title}
                       </span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    </span>
+                    <span className="mt-1.5 flex items-center gap-2 flex-wrap">
                       <Badge
                         label={TYPE_BADGES[rfc.type] ?? rfc.type.toUpperCase()}
                         color={rfc.type === "emergency" ? "var(--dpf-destructive)" : "var(--dpf-muted-foreground)"}
@@ -277,8 +281,8 @@ export default function ChangesClient() {
                         label={rfc.status}
                         color={STATUS_COLORS[rfc.status] ?? "var(--dpf-muted-foreground)"}
                       />
-                    </div>
-                    <div className="text-xs text-[var(--dpf-muted)] mt-1.5 space-x-3">
+                    </span>
+                    <span className="mt-1.5 block space-x-3 text-xs text-[var(--dpf-muted)]">
                       <span>
                         {new Date(rfc.createdAt).toLocaleDateString()}
                       </span>
@@ -287,23 +291,29 @@ export default function ChangesClient() {
                           {rfc.changeItems.length} item{rfc.changeItems.length !== 1 ? "s" : ""}
                         </span>
                       )}
-                    </div>
-                  </div>
-                </div>
-              </button>
-
-              {/* Inline detail panel */}
-              {selectedRfcId === rfc.rfcId && selectedRfc && (
-                <div className="mt-1">
-                  <RFCDetailPanel
-                    rfc={selectedRfc}
-                    isPending={isPending}
-                    onActionComplete={handleActionComplete}
-                    onClose={() => setSelectedRfcId(null)}
-                  />
+                    </span>
+                  </span>
+                </span>
+              }
+            >
+              {selectedRfcId === rfc.rfcId && detailError && (
+                <div role="alert" className="text-sm text-[var(--dpf-destructive)]">
+                  {detailError}. Collapse and reopen this change to try again.
                 </div>
               )}
-            </div>
+              {selectedRfcId === rfc.rfcId && !detailError && !selectedRfc && (
+                <div role="status" className="text-sm text-[var(--dpf-muted)]">
+                  Loading change details...
+                </div>
+              )}
+              {selectedRfcId === rfc.rfcId && selectedRfc && (
+                <RFCDetailPanel
+                  rfc={selectedRfc}
+                  isPending={isPending}
+                  onActionComplete={handleActionComplete}
+                />
+              )}
+            </ExpandableCard>
           ))}
         </div>
       )}

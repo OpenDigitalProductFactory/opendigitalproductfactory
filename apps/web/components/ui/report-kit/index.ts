@@ -49,6 +49,11 @@ export {
 } from "./CollapsibleList";
 
 export {
+  ExpandableCard,
+  type ExpandableCardProps,
+} from "./ExpandableCard";
+
+export {
   EmptyState,
   type EmptyStateProps,
 } from "./EmptyState";
