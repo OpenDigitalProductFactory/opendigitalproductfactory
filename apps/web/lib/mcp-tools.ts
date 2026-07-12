@@ -381,51 +381,15 @@ function stringArray(value: unknown): string[] {
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   ...TOOL_PACK_REGISTRY.definitions,
-  {
-    name: "record_external_development_evidence",
-    description: "Record Claude, Codex, Grok or other external development handoff evidence with optional Build Studio build/task links. Use for branches, commits, changed files, verification results, local integration output, unresolved questions, and skills used.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        provider: { type: "string", description: "External development provider, for example claude, codex, or grok" },
-        externalSessionId: { type: "string", description: "External thread/session/capsule identifier" },
-        backlogItemId: { type: "string", description: "Optional BI-* to bind the captured Work Capsule to, even without a build (closes the direct-agent binding gap)" },
-        worktreePath: { type: "string", description: "Optional local worktree path — when given with branchName the capsule also records the work location" },
-        branchName: { type: "string", description: "Optional branch (head) for this work — pairs with worktreePath to bind location" },
-        buildId: { type: "string", description: "Optional FB-* build id" },
-        taskRunId: { type: "string", description: "Optional TaskRun id" },
-        routeContext: { type: "string", description: "Route context where the work belongs, usually /build" },
-        summary: { type: "string", description: "Operator-readable handoff summary" },
-        commits: { type: "array", items: { type: "string" }, description: "Commit SHAs or refs included in the handoff" },
-        changedFiles: { type: "array", items: { type: "string" }, description: "Files touched by the external work" },
-        verification: { type: "array", items: { type: "string" }, description: "Verification commands and outcomes" },
-        localIntegration: { type: "object", description: "Local merged-code integration result summary" },
-        unresolvedQuestions: { type: "array", items: { type: "string" }, description: "Open questions that still need decision or founder review" },
-        skillIds: { type: "array", items: { type: "string" }, description: "DPF skill ids used by the external contributor" },
-      },
-      required: ["provider", "externalSessionId", "summary", "routeContext"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: true,
-    buildPhases: ["ideate", "plan", "build", "review", "ship"],
-  },
+  // promote_to_build_studio moved to a build ToolPack
+  // update_lifecycle moved to a build ToolPack
+  // verify_live_install_readiness moved to a build ToolPack
+  // record_execution_evidence moved to a build ToolPack
+  // record_local_integration_result moved to a build ToolPack
+  // record_functional_failure_evidence moved to a build ToolPack
   // ─── Build Studio Tools ───────────────────────────────────────────────────
   // update_feature_brief and create_build_epic execute immediately (no approval dialog).
   // Only register_digital_product_from_build needs HITL approval (creates a real product).
-  {
-    name: "inspect_build_code_impact",
-    description: "Analyze the active build's current diff and return route/schema impact plus code-graph coverage. Build ID is auto-resolved.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-      required: [],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["review", "ship"],
-  },
   {
     name: "update_feature_brief",
     description: "Save the Feature Brief for the current build. Build ID is auto-resolved.",
@@ -489,62 +453,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
     buildPhases: ["ship"],
   },
-  // ─── Build Notes Tool ───────────────────────────────────────────────────
-  {
-    name: "save_build_notes",
-    description: "Persist key points from the conversation to the running spec. Call silently after each significant exchange.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        processes: { type: "array", items: { type: "string" }, description: "Manual or automated processes described" },
-        requirements: { type: "array", items: { type: "string" }, description: "Requirements discovered (fields, workflows, roles)" },
-        decisions: { type: "array", items: { type: "string" }, description: "Decisions made (build vs buy, priorities)" },
-        integrations: { type: "array", items: { type: "string" }, description: "External systems or APIs mentioned" },
-        dataModel: { type: "array", items: { type: "string" }, description: "Data fields, entities, or structures identified" },
-        openQuestions: { type: "array", items: { type: "string" }, description: "Questions still to resolve" },
-      },
-      required: [],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: true,
-    buildPhases: ["ideate", "plan"],
-  },
-  // ─── Phase Handoff Tool (Claude Code-inspired cross-phase memory) ────────
-  {
-    name: "save_phase_handoff",
-    description: "Save a structured handoff briefing for the next phase. Call this as your LAST action before a phase transition.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
-        summary: { type: "string", description: "2-3 sentence plain-language summary of what was accomplished in this phase" },
-        decisionsMade: { type: "array", items: { type: "string" }, description: "Key decisions made and why" },
-        openIssues: { type: "array", items: { type: "string" }, description: "Unresolved issues or risks carried to next phase" },
-        userPreferences: { type: "array", items: { type: "string" }, description: "User preferences or constraints expressed during this phase" },
-      },
-      required: ["summary"],
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: true,
-    buildPhases: ["ideate", "plan", "build", "review"],
-  },
-  {
-    name: "get_build_progress_visibility",
-    description: "Read the Build Studio progress projection for a build: source-labelled DB task progress, stale chat conflicts, sandbox state, dispatch history, scoped verification, and quiet-agent status.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate", "plan", "build", "review", "ship"],
-    annotations: { readOnlyHint: true, idempotentHint: true },
-  },
   {
     name: "verification_preflight",
     description: "Deterministic verify-phase preflight (EP-VERIFY-PROC). Returns MUST_ADVANCE (evidence already sufficient — do not re-test), BLOCKED (a prerequisite is missing — report it, do not fabricate a result), or CAN_TEST (proceed to functional verification). Call this BEFORE attempting verification so testability is a procedural verdict, not a judgment call.",
@@ -567,52 +475,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate", "plan", "build", "review", "ship"],
-    annotations: { readOnlyHint: true, idempotentHint: true },
-  },
-  {
-    name: "get_build_dispatch_history",
-    description: "Read bounded codex-dispatch attempts for a Build Studio build, including model, duration, exit code, sanitized stdout/stderr excerpts, and classified failure axis.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate", "plan", "build", "review", "ship"],
-    annotations: { readOnlyHint: true, idempotentHint: true },
-  },
-  {
-    name: "get_build_scoped_verification",
-    description: "Read build-scoped verification for a Build Studio build, separating failures on the build's changed surface from workspace-wide/global-health noise.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ideate", "plan", "build", "review", "ship"],
-    annotations: { readOnlyHint: true, idempotentHint: true },
-  },
-  {
-    name: "list_build_activity_since",
-    description: "List recent BuildActivity rows for a Build Studio build after an optional ISO timestamp cursor. Use this for polling-friendly observer updates.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
-        cursor: { type: "string", description: "Optional ISO timestamp cursor; only rows after this timestamp are returned." },
       },
     },
     requiredCapability: "view_platform",
@@ -721,6 +583,9 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       idempotentHint: false,
     },
   },
+  // reconcile_build_engines moved to a build ToolPack
+  // provision_build_engine moved to a build ToolPack
+  // get_build_engine_readiness moved to a build ToolPack
   {
     name: "check_sandbox",
     description: "Check whether the sandbox container (dpf-sandbox-1) is running. Returns status: 'running', 'stopped', or 'not_found'. If the result is not_found or detached, call diagnose_sandbox for governed recovery guidance.",
@@ -874,6 +739,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false, // Sandbox is isolated from production — safe in any mode
     buildPhases: ["build", "review"],
   },
+  // run_tool_script moved to a build ToolPack
   {
     name: "validate_schema",
     description: "Validate the Prisma schema in the sandbox for common errors: missing inverse relations, undefined types, unindexed foreign keys. MUST be called before running prisma migrate. Returns specific errors with fix instructions.",
@@ -922,37 +788,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // configuring their OWN outbound email (SMTP). Operator-only
   // (manage_provider_connections) + the `email_config` agent grant.
   // ─── Hive Mind Contribution Tools (IT4IT §5.5 Release) ───────────────────
-  {
-    name: "assess_contribution",
-    description: "Evaluate whether a shipped feature should be contributed to the Hive Mind community. Assesses vision alignment, community value, augmentation vs innovation, and proprietary sensitivity. Always presents the assessment to the user — contribution is their choice.",
-    inputSchema: { type: "object", properties: {} },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ship"],
-  },
-  {
-    name: "contribute_to_hive",
-    description: "Package a shipped feature as a FeaturePack for community contribution. Only call after the user has seen the assessment and explicitly approved. Includes DCO (Developer Certificate of Origin) attestation.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        include_migrations: { type: "boolean", description: "Include database migrations in the pack. Default: true." },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "proposal",
-    sideEffect: true,
-    buildPhases: ["ship"],
-    // 2-state model (EP-1A78BAE1): there is no mode-based pre-authorization.
-    // Sharing is a per-change human-in-the-loop decision (the FeatureBuild
-    // disposition, suggest-then-confirm). Until that disposition gate lands,
-    // never auto-approve outbound contribution — fail closed to requiring the
-    // human's final call.
-    autoApproveWhen: async () => {
-      return false;
-    },
-  },
+  // assess_contribution def moved to mcp/packs/contribution-hive-pack.ts
+  // contribute_to_hive def moved to mcp/packs/contribution-hive-pack.ts
   {
     name: "run_ux_test",
     description: "Run natural-language UX test cases against the sandbox using AI-powered browser automation (browser-use). Each test case is a plain English assertion that the AI agent verifies by driving a real browser. Returns structured pass/fail results with screenshots. NOTE: UX verification runs automatically on review-phase entry via build/review.verify — this tool is retained for ad-hoc manual invocations only and is not in the review phase's tool allowlist.",
@@ -1012,88 +849,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate"],
   },
   // ─── Manifest Tools ────────────────────────────────────────────────────────
+  // propose_file_change moved to a build ToolPack
   // ─── Feedback Loop ──────────────────────────────────────────────────────────
-  {
-    name: "propose_improvement",
-    description:
-      "Propose a platform improvement based on friction or a missing capability observed in this conversation. " +
-      "Available to ALL employees regardless of role — anyone can submit an idea. Auto-attributes to the current user.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        title: { type: "string", description: "Short title for the improvement (max 100 chars)" },
-        description: { type: "string", description: "What should be improved and why" },
-        category: {
-          type: "string",
-          enum: ["ux_friction", "missing_feature", "performance", "accessibility", "security", "process"],
-          description: "Improvement category",
-        },
-        severity: {
-          type: "string",
-          enum: ["low", "medium", "high", "critical"],
-          description: "Impact severity (default: medium)",
-        },
-        observedFriction: { type: "string", description: "What you observed that prompted this suggestion" },
-      },
-      required: ["title", "description", "category"],
-    },
-    requiredCapability: null,
-    executionMode: "proposal",
-    sideEffect: true,
-  },
-  {
-    name: "propose_skill_improvement",
-    description:
-      "Propose a content change to a specific coworker skill (e.g. tightening instructions, fixing a stale " +
-      "reference). Use when you have observed the current skill prompt produce the wrong behavior and you can " +
-      "draft a better version. Submits an ImprovementProposal(category='skill', targetSkillId=…) that a human " +
-      "reviews on /platform/ai/skills.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        skillId: {
-          type: "string",
-          description: "The SkillDefinition.skillId (business id) the proposal targets, e.g. 'build-page'.",
-        },
-        title: { type: "string", description: "Short title for the change (max 100 chars)" },
-        description: { type: "string", description: "Why the change is needed; cite the friction or failure" },
-        proposedContent: {
-          type: "string",
-          description: "Full proposed SKILL.md body (replaces the current content if approved)",
-        },
-        severity: {
-          type: "string",
-          enum: ["low", "medium", "high", "critical"],
-          description: "Impact severity (default: medium)",
-        },
-        observedFriction: {
-          type: "string",
-          description: "What you observed that prompted this change",
-        },
-      },
-      required: ["skillId", "title", "description", "proposedContent"],
-    },
-    requiredCapability: null,
-    executionMode: "proposal",
-    sideEffect: true,
-  },
+  // propose_improvement def moved to mcp/packs/contribution-hive-pack.ts
+  // propose_skill_improvement def moved to mcp/packs/contribution-hive-pack.ts
   // ─── Provider Management ────────────────────────────────────────────────────
-  {
-    name: "submit_feedback",
-    description: "Log a feedback note for an employee (praise, constructive, or observation).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        toEmployeeId: { type: "string", description: "Employee profile ID receiving feedback" },
-        content: { type: "string", description: "Feedback content" },
-        feedbackType: { type: "string", enum: ["praise", "constructive", "observation"], description: "Type of feedback" },
-        visibility: { type: "string", enum: ["private", "shared", "public"], description: "Visibility (default: private)" },
-      },
-      required: ["toEmployeeId", "content", "feedbackType"],
-    },
-    requiredCapability: null,
-    executionMode: "immediate",
-  },
+  // submit_feedback def moved to mcp/packs/contribution-hive-pack.ts
   // ─── Principles-as-wiki-kind Phase 2 Task 2.7: advisory decision support ──
   {
     name: "principle_decide",
@@ -1174,6 +935,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   // ─── Endpoint Testing Tools ──────────────────────────────────────────────
+  // run_endpoint_tests moved to a build ToolPack
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -1397,144 +1159,17 @@ export async function executeTool(
     return packHandler(params, userId, context);
   }
   switch (toolName) {
-    case "record_external_development_evidence": {
-      const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
-      const stringArray = (key: string) => (
-        Array.isArray(params[key])
-          ? (params[key] as unknown[])
-            .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-            .map((value) => value.trim())
-          : []
-      );
-      const provider = stringValue("provider");
-      const externalSessionId = stringValue("externalSessionId");
-      const summary = stringValue("summary");
-      const routeContext = stringValue("routeContext") || context?.routeContext || "";
-      const missing = [
-        ["provider", provider],
-        ["externalSessionId", externalSessionId],
-        ["summary", summary],
-        ["routeContext", routeContext],
-      ].filter(([, value]) => !value).map(([key]) => key);
-      if (missing.length > 0) {
-        return {
-          success: false,
-          error: "missing_required",
-          message: `Missing required external development evidence field(s): ${missing.join(", ")}`,
-        };
-      }
+    // promote_to_build_studio moved to a build ToolPack
 
-      const buildId = stringValue("buildId") || undefined;
-      const taskRunId = stringValue("taskRunId") || undefined;
+    // update_lifecycle moved to a build ToolPack
 
-      // Authorize the supplied build before we write. Access model is owner-only
-      // today, mirroring resolveActiveBuildId / getFeatureBuildForContext: a caller
-      // holding only the view_platform grant must not attach an ExternalEvidenceRecord
-      // to a build owned by someone else (EP-UNIFIED-TRACKING Phase 0 / BI-4196AB21).
-      // A non-existent buildId is dangling, not a security risk — the read-side joins
-      // only real builds — so it is allowed (preserving back-compat for callers that
-      // pass an optimistic buildId). taskRunId ownership folds into the capsule-linkage
-      // work (BI-6357B975), where the canonical owner resolves.
-      if (buildId) {
-        const ownedBuild = await prisma.featureBuild.findUnique({
-          where: { buildId },
-          select: { createdById: true },
-        });
-        if (ownedBuild && ownedBuild.createdById !== userId) {
-          return {
-            success: false,
-            error: "forbidden",
-            message: `Not authorized to attach external development evidence to build ${buildId}`,
-          };
-        }
-      }
+    // verify_live_install_readiness moved to a build ToolPack
 
-      const localIntegration =
-        params["localIntegration"] && typeof params["localIntegration"] === "object" && !Array.isArray(params["localIntegration"])
-          ? params["localIntegration"] as Record<string, unknown>
-          : null;
-      const details = {
-        commits: stringArray("commits"),
-        changedFiles: stringArray("changedFiles"),
-        verification: stringArray("verification"),
-        localIntegration,
-        unresolvedQuestions: stringArray("unresolvedQuestions"),
-        skillIds: stringArray("skillIds"),
-      };
-      const evidence = await recordExternalEvidence({
-        actorUserId: userId,
-        routeContext,
-        operationType: "external_development_handoff",
-        target: externalSessionId,
-        provider,
-        resultSummary: summary,
-        buildId,
-        taskRunId,
-        details: details as unknown as import("@dpf/db").Prisma.InputJsonValue,
-      });
+    // record_execution_evidence moved to a build ToolPack
 
-      // Durable auto-capture (EP-UNIFIED-TRACKING / BI-636A11B3): recording evidence
-      // (which AGENTS.md §17 asks external agents to do) also makes the session a
-      // tracked WorkCapsule, so its work appears in the cross-surface activity view
-      // without a manual adopt_worktree. Idempotent per externalSessionId; best-effort
-      // — a capture failure must never fail the evidence write.
-      let capturedCapsuleId: string | null = null;
-      try {
-        const { captureExternalSessionEvidence } = await import(
-          "@/lib/work-capsules/external-session-capture"
-        );
-        capturedCapsuleId = await captureExternalSessionEvidence({
-          db: prisma,
-          externalSessionId,
-          provider,
-          summary,
-          actor: { userId, agentId: context?.agentId ?? null, principalId: null },
-          backlogItemId: stringValue("backlogItemId") || null,
-          worktreePath: stringValue("worktreePath") || null,
-          branchName: stringValue("branchName") || null,
-        });
-      } catch (captureError) {
-        console.warn(
-          "[record_external_development_evidence] auto-capsule capture failed:",
-          getErrorMessage(captureError),
-        );
-      }
+    // record_local_integration_result moved to a build ToolPack
 
-      // Bind the evidence record to the capsule the capture just resolved so it
-      // rolls up onto the capsule timeline with producer identity
-      // (EP-WORK-CONVERGENCE Phase 1 / BI-D6FA8641). The record was written
-      // before capture (order preserved for back-compat); patch it here.
-      // Best-effort — a link failure must never fail the evidence write.
-      if (capturedCapsuleId) {
-        try {
-          await prisma.externalEvidenceRecord.update({
-            where: { id: evidence.id },
-            data: {
-              workCapsuleId: capturedCapsuleId,
-              executorKind: provider,
-              ...(context?.agentId ? { recordedByAgentId: context.agentId } : {}),
-            },
-          });
-        } catch (linkError) {
-          console.warn(
-            "[record_external_development_evidence] capsule link failed:",
-            getErrorMessage(linkError),
-          );
-        }
-      }
-
-      return {
-        success: true,
-        entityId: evidence.id,
-        message: `Recorded external development evidence from ${provider}.`,
-        data: {
-          evidenceId: evidence.id,
-          buildId: buildId ?? null,
-          taskRunId: taskRunId ?? null,
-          workCapsuleId: capturedCapsuleId,
-        },
-      };
-    }
+    // record_functional_failure_evidence moved to a build ToolPack
 
     case "update_feature_brief": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
@@ -1665,191 +1300,6 @@ export async function executeTool(
       }
     }
 
-    case "save_build_notes": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
-      const latestBuild = await prisma.featureBuild.findUnique({
-        where: { buildId },
-        select: { buildId: true, plan: true },
-      });
-      if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-
-      const existing = (latestBuild.plan as Record<string, unknown> | null) ?? {};
-      const mergeArray = (key: string) => {
-        const prev = Array.isArray(existing[key]) ? existing[key] as string[] : [];
-        const incoming = Array.isArray(params[key]) ? (params[key] as string[]).map(String) : [];
-        // Deduplicate
-        return [...new Set([...prev, ...incoming])];
-      };
-
-      const merged = {
-        ...existing,
-        processes: mergeArray("processes"),
-        requirements: mergeArray("requirements"),
-        decisions: mergeArray("decisions"),
-        integrations: mergeArray("integrations"),
-        dataModel: mergeArray("dataModel"),
-        openQuestions: mergeArray("openQuestions"),
-        lastUpdated: new Date().toISOString(),
-      };
-
-      await prisma.featureBuild.update({
-        where: { buildId: latestBuild.buildId },
-        data: { plan: merged as import("@dpf/db").Prisma.InputJsonValue },
-      });
-
-      const totalItems = merged.processes.length + merged.requirements.length + merged.decisions.length + merged.integrations.length + merged.dataModel.length;
-      return { success: true, message: `Spec updated — ${totalItems} items captured.` };
-    }
-
-    case "save_phase_handoff": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
-      const latestBuild = await prisma.featureBuild.findUnique({
-        where: { buildId },
-        select: { buildId: true, phase: true, kind: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
-      });
-      if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-
-      // Determine the next phase. Hidden task-handoff controls are accepted
-      // only from the build orchestrator context; public callers keep the
-      // normal phase-transition behavior even if they send schema-extra params.
-      const { toPhase, autoAdvance } = resolveSavePhaseHandoffTransition(params, context, latestBuild.phase);
-
-      // Write the handoff record with a structured evidence manifest derived
-      // from the build's own evidence columns, so the next phase reads a
-      // one-line-per-field digest (rendered by agent-coworker's "Context from
-      // Previous Phase" block) instead of relying on the free-text summary
-      // alone. gateResult is filled on auto-advance below, once the gate runs.
-      const { buildPhaseHandoffEvidence } = await import("@/lib/feature-build-types");
-      const handoffEvidence = buildPhaseHandoffEvidence(latestBuild);
-      const createdHandoff = await prisma.phaseHandoff.create({
-        data: {
-          buildId: latestBuild.buildId,
-          fromPhase: latestBuild.phase,
-          toPhase,
-          fromAgentId: context?.agentId ?? "unknown",
-          toAgentId: "pending",
-          summary: String(params["summary"] ?? ""),
-          decisionsMade: Array.isArray(params["decisionsMade"]) ? (params["decisionsMade"] as string[]).map(String) : [],
-          openIssues: Array.isArray(params["openIssues"]) ? (params["openIssues"] as string[]).map(String) : [],
-          userPreferences: Array.isArray(params["userPreferences"]) ? (params["userPreferences"] as string[]).map(String) : [],
-          evidenceFields: handoffEvidence.evidenceFields,
-          evidenceDigest: handoffEvidence.evidenceDigest,
-          gateResult: {},
-        },
-      });
-
-      // Compress older handoffs for this build (fire-and-forget)
-      // Keep most recent handoff in full; summarize older ones to save context budget.
-      prisma.phaseHandoff.findMany({
-        where: { buildId: latestBuild.buildId, compressedSummary: null },
-        orderBy: { createdAt: "asc" },
-      }).then(async (allHandoffs) => {
-        // Only compress if there are 2+ handoffs (skip the newest one)
-        if (allHandoffs.length < 2) return;
-        const toCompress = allHandoffs.slice(0, -1); // all except newest
-        const { utilityInfer } = await import("@/lib/inference/utility-inference");
-        for (const h of toCompress) {
-          const fullText = [
-            `[${h.fromPhase} → ${h.toPhase}] ${h.summary}`,
-            h.decisionsMade.length > 0 ? `Decisions: ${h.decisionsMade.join("; ")}` : "",
-            h.openIssues.length > 0 ? `Open issues: ${h.openIssues.join("; ")}` : "",
-            h.userPreferences.length > 0 ? `User preferences: ${h.userPreferences.join("; ")}` : "",
-          ].filter(Boolean).join("\n");
-          try {
-            const result = await utilityInfer({ task: "summarize", input: fullText });
-            if (result?.output) {
-              await prisma.phaseHandoff.update({
-                where: { id: h.id },
-                data: { compressedSummary: `[${h.fromPhase} → ${h.toPhase}] ${result.output}` },
-              });
-            }
-          } catch { /* non-fatal */ }
-        }
-      }).catch(() => {});
-
-      if (!autoAdvance) {
-        return { success: true, message: `Phase handoff saved: ${latestBuild.phase} → ${toPhase}` };
-      }
-
-      // Actually advance the phase — the agent calls this as its last action
-      // before transitioning, so this is the right place to do the DB update.
-      // Gate check ensures we don't skip required evidence, and crucially
-      // passes happyPathState (intake anchors) so the gate's intake check
-      // evaluates against the real build state rather than default-null.
-      try {
-        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
-        if (canTransitionPhase(latestBuild.phase as import("@/lib/feature-build-types").BuildPhase, toPhase as import("@/lib/feature-build-types").BuildPhase)) {
-          const plan = (latestBuild.plan as Record<string, unknown> | null) ?? {};
-          const happyPathState = normalizeHappyPathState(plan.happyPathState);
-          const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
-          const gate = checkPhaseGate(
-            latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
-            toPhase as import("@/lib/feature-build-types").BuildPhase,
-            {
-              kind: latestBuild.kind,
-              // Right-sizing matrix: persisted on plan.processSize at promote time.
-              processSize: (plan.processSize as string | undefined) ?? "medium",
-              fixContext: handoffBrief?.fixContext,
-              designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
-              buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
-              verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
-              uxTestResults: latestBuild.uxTestResults,
-              uxVerificationStatus: latestBuild.uxVerificationStatus,
-              acceptanceCriteria: handoffBrief?.acceptanceCriteria ?? [],
-              happyPathState,
-            },
-          );
-          // Record the gate outcome on the handoff (the gate that allowed —
-          // or blocked — advancement). Best-effort; never fail the handoff.
-          await prisma.phaseHandoff
-            .update({
-              where: { id: createdHandoff.id },
-              data: {
-                gateResult: {
-                  allowed: gate.allowed,
-                  reason: gate.reason ?? null,
-                  fromPhase: latestBuild.phase,
-                  toPhase,
-                } as unknown as import("@dpf/db").Prisma.InputJsonValue,
-              },
-            })
-            .catch(() => {});
-          if (gate.allowed) {
-            await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
-            if (toPhase === "review") {
-              const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
-              await queueBuildReviewVerification(latestBuild.buildId);
-            }
-            const { agentEventBus } = await import("@/lib/agent-event-bus");
-            if (latestBuild.threadId) agentEventBus.emit(latestBuild.threadId, { type: "phase:change", buildId: latestBuild.buildId, phase: toPhase } as import("@/lib/agent-event-bus").AgentEvent);
-            logBuildActivity(latestBuild.buildId, "phase:advance", `Phase advanced: ${latestBuild.phase} → ${toPhase}`);
-            return { success: true, message: `Phase advanced: ${latestBuild.phase} → ${toPhase}` };
-          }
-          return { success: true, message: `Phase handoff saved but gate blocked advance: ${gate.reason}. Evidence may be incomplete.` };
-        }
-      } catch (err) {
-        console.error("[save_phase_handoff] auto-advance failed:", err);
-      }
-
-      return { success: true, message: `Phase handoff saved: ${latestBuild.phase} → ${toPhase}` };
-    }
-
-    case "get_build_progress_visibility": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
-      const { getBuildProgressVisibility } = await import("@/lib/build/progress-visibility");
-      const projection = await getBuildProgressVisibility(buildId);
-      if (!projection) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
-      return {
-        success: true,
-        entityId: buildId,
-        message: `Build progress visibility loaded for ${buildId}: ${projection.progress.primary.completed}/${projection.progress.primary.total} tasks from ${projection.progress.primary.source}.`,
-        data: projection as unknown as Record<string, unknown>,
-      };
-    }
-
     case "verification_preflight": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
@@ -1889,67 +1339,6 @@ export async function executeTool(
         entityId: buildId,
         message: `Sandbox state loaded for ${buildId}: branch ${state.branch ?? "unknown"}, ${state.sourceDiffstat.length} source file(s) changed.`,
         data: state as unknown as Record<string, unknown>,
-      };
-    }
-
-    case "get_build_dispatch_history": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
-      const { getDispatchHistoryForBuild } = await import("@/lib/build/dispatch-attempts");
-      const history = await getDispatchHistoryForBuild(buildId);
-      return {
-        success: true,
-        entityId: buildId,
-        message: `Dispatch history loaded for ${buildId}: ${history.length} attempt(s).`,
-        data: { buildId, attempts: history },
-      };
-    }
-
-    case "get_build_scoped_verification": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
-      const { getScopedVerificationForBuild } = await import("@/lib/build/scoped-verification");
-      const verification = await getScopedVerificationForBuild(buildId);
-      if (!verification) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
-      return {
-        success: true,
-        entityId: buildId,
-        message: `Scoped verification loaded for ${buildId}: ${verification.buildScoped.failureAxis ?? "no failure"} axis.`,
-        data: verification as unknown as Record<string, unknown>,
-      };
-    }
-
-    case "list_build_activity_since": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
-      const cursor = typeof params["cursor"] === "string" && params["cursor"].trim()
-        ? new Date(params["cursor"])
-        : null;
-      if (cursor != null && !Number.isFinite(cursor.getTime())) {
-        return { success: false, error: "Invalid cursor", message: "cursor must be an ISO timestamp when provided." };
-      }
-      const activities = await prisma.buildActivity.findMany({
-        where: {
-          buildId,
-          ...(cursor ? { createdAt: { gt: cursor } } : {}),
-        },
-        orderBy: { createdAt: "asc" },
-        take: 50,
-        select: { id: true, buildId: true, tool: true, summary: true, createdAt: true },
-      });
-      const rows = activities.map((activity) => ({
-        ...activity,
-        createdAt: activity.createdAt.toISOString(),
-      }));
-      return {
-        success: true,
-        entityId: buildId,
-        message: `Loaded ${rows.length} build activit${rows.length === 1 ? "y" : "ies"} for ${buildId}.`,
-        data: {
-          buildId,
-          activities: rows,
-          nextCursor: rows.at(-1)?.createdAt ?? params["cursor"] ?? null,
-        },
       };
     }
 
@@ -3083,35 +2472,11 @@ export async function executeTool(
       return { success: true, message: `Plan review: ${review.decision}. ${review.summary}${archAdvisoryNote}`, data: { review } };
     }
 
-    case "inspect_build_code_impact": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) {
-        return { success: false, error: "No active build.", message: "No active build." };
-      }
+    // reconcile_build_engines moved to a build ToolPack
 
-      const build = await prisma.featureBuild.findUnique({
-        where: { buildId },
-        select: { buildId: true, title: true, diffPatch: true },
-      });
-      if (!build?.diffPatch) {
-        return {
-          success: false,
-          error: "No diff patch saved yet.",
-          message: "No build diff is available yet. Run the build and save a diff before inspecting code impact.",
-        };
-      }
+    // provision_build_engine moved to a build ToolPack
 
-      const { analyzeChangeImpact, formatImpactForChat } = await import("@/lib/change-impact");
-      const report = await analyzeChangeImpact(build.diffPatch);
-      return {
-        success: true,
-        message: `Impact analysis for ${build.title ?? build.buildId}:\n\n${formatImpactForChat(report)}`,
-        data: {
-          buildId: build.buildId,
-          report,
-        },
-      };
-    }
+    // get_build_engine_readiness moved to a build ToolPack
 
     case "diagnose_sandbox": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
@@ -3517,6 +2882,8 @@ export async function executeTool(
         },
       };
     }
+
+    // run_tool_script moved to a build ToolPack
 
     // ─── Sandbox File Tools ──────────────────────────────────────────────────
     // Shared auto-init: ensure sandbox is initialized before any file tool runs.
@@ -4442,135 +3809,7 @@ export async function executeTool(
 
     // ─── Hive Mind Contribution ──────────────────────────────────────────────
 
-    case "assess_contribution": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-
-      const build = await prisma.featureBuild.findUnique({
-        where: { buildId },
-        select: {
-          title: true, brief: true, buildPlan: true, diffPatch: true, diffSummary: true,
-          phase: true, portfolioId: true, digitalProductId: true,
-          verificationOut: true, sandboxId: true, designDoc: true,
-        },
-      });
-      if (!build) return { success: false, error: "Build not found.", message: "Build not found." };
-
-      const brief = build.brief as Record<string, unknown> | null;
-      const plan = build.buildPlan as Record<string, unknown> | null;
-      const diff = (build.diffPatch ?? build.diffSummary ?? "") as string;
-      const designDoc = build.designDoc as Record<string, unknown> | null;
-      const reusability = designDoc?.reusabilityAnalysis as { scope?: string; contributionReadiness?: string } | undefined;
-
-      // Parse diff to understand scope
-      const changedFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
-      const newRoutes = changedFiles.filter((f) => f.includes("/app/") && f.endsWith("/page.tsx"));
-      const schemaChanges = changedFiles.filter((f) => f.includes("schema.prisma"));
-      const migrationFiles = changedFiles.filter((f) => f.startsWith("prisma/migrations/"));
-      const hasNewModels = diff.includes("model ") && diff.includes("@id");
-
-      // ── Criterion 1: Vision Alignment ──
-      const portfolioId = build.portfolioId ?? "unknown";
-      const description = String(brief?.description ?? "");
-      const isPortfolioAligned = !!build.portfolioId;
-      const mentionsDPPM = /product|portfolio|lifecycle|taxonomy|backlog|compliance|operations/i.test(description);
-      const visionScore = isPortfolioAligned && mentionsDPPM ? "high" : isPortfolioAligned ? "medium" : "low";
-      const visionReasoning = visionScore === "high"
-        ? `Aligned with portfolio ${portfolioId} and extends platform capabilities (${mentionsDPPM ? "touches DPPM concepts" : ""}).`
-        : visionScore === "medium"
-          ? `Assigned to portfolio ${portfolioId} but domain alignment is unclear from the description.`
-          : "Not assigned to a portfolio — unclear how this connects to the platform vision.";
-
-      // ── Criterion 2: Community Value ──
-      const targetRoles = Array.isArray(brief?.targetRoles) ? brief.targetRoles : [];
-      const broadRoles = targetRoles.length === 0 || targetRoles.includes("All") || targetRoles.length >= 3;
-      const acceptanceCriteria = Array.isArray(brief?.acceptanceCriteria) ? brief.acceptanceCriteria : [];
-      const isGeneral = !description.match(/\b(acme|our company|internal|proprietary|specific to)\b/i);
-      let communityScore = broadRoles && isGeneral ? "high" : isGeneral ? "medium" : "low";
-
-      // Enhance community value scoring with ideate-time reusability analysis
-      if (reusability) {
-        if (reusability.scope === "already_generic" || (reusability.scope === "parameterizable" && reusability.contributionReadiness === "high")) {
-          communityScore = "high";
-        } else if (reusability.scope === "parameterizable" && communityScore !== "high") {
-          communityScore = "medium";
-        }
-        // one_off: leave existing heuristic scoring — user explicitly chose single-use
-      }
-
-      const communityReasoning = communityScore === "high"
-        ? `Targets ${broadRoles ? "broad roles" : targetRoles.join(", ")} with ${acceptanceCriteria.length} general acceptance criteria.${reusability?.scope === "parameterizable" ? " Feature was designed with parameterization for reusability." : reusability?.scope === "already_generic" ? " Feature was designed as generic from the start." : ""}`
-        : communityScore === "medium"
-          ? `Targets specific roles (${targetRoles.join(", ")}) but the functionality appears generalizable.${reusability?.scope === "parameterizable" ? " Parameterization was planned but may need completion before contributing." : ""}`
-          : "Contains organization-specific language or targets a narrow use case.";
-
-      // ── Criterion 3: Augmentation vs Innovation ──
-      const isAugmentation = newRoutes.length <= 1 && !hasNewModels;
-      const augLevel = isAugmentation ? "augmentation" as const : "innovation" as const;
-      const augReasoning = isAugmentation
-        ? `Modifies ${changedFiles.length} existing files with ${newRoutes.length} new route(s). This augments existing capability — straightforward to merge.`
-        : `Creates ${newRoutes.length} new route(s) and ${hasNewModels ? "new data models" : "significant structural changes"}. This is an innovation — benefits from community review before merging.`;
-
-      // ── Criterion 4: Proprietary Sensitivity ──
-      const concerns: string[] = [];
-      // Only flag *assignments* of a secret-shaped identifier to a 20+ char opaque
-      // string, or known secret token prefixes (GitHub / OpenAI / Slack / AWS / JWT).
-      // The old bare-word match flagged benign identifiers like `scopeToken`,
-      // `cancellationToken`, `accessTokenName`, `secretRef` — every round of
-      // assess_contribution drowned in false positives.
-      const secretAssignment = /[A-Za-z0-9_]*(api[_-]?key|apikey|secret|password|token)[A-Za-z0-9_]*\s*[:=]\s*["'`][A-Za-z0-9_\-+/.=]{20,}/i;
-      const knownSecretPrefix = /(ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{15,}|AKIA[A-Z0-9]{16})/;
-      if (secretAssignment.test(diff) || knownSecretPrefix.test(diff)) concerns.push("Contains references to API keys or secrets");
-      if (/acme|our company|internal use only|confidential/i.test(diff)) concerns.push("Contains organization-specific references");
-      if (/\$\d+[\d,.]*|pricing|rate.*card|margin/i.test(diff)) concerns.push("Contains pricing or financial constants");
-      if (/customer.*name|client.*id|account.*number/i.test(diff)) concerns.push("Contains customer data references");
-      const isSensitive = concerns.length > 0;
-
-      // ── Overall Recommendation ──
-      let recommendation: "contribute" | "contribute_with_mods" | "keep_local" | "user_decides";
-      if (isSensitive) {
-        recommendation = concerns.length > 2 ? "keep_local" : "contribute_with_mods";
-      } else if (visionScore === "high" && communityScore === "high") {
-        recommendation = "contribute";
-      } else if (visionScore === "low" && communityScore === "low") {
-        recommendation = "keep_local";
-      } else {
-        recommendation = "user_decides";
-      }
-
-      const summaryMap = {
-        contribute: `This feature looks great for the community. It extends ${build.title} within the ${portfolioId} portfolio and other organizations would benefit. Would you like to contribute it to the Hive Mind?`,
-        contribute_with_mods: `This feature could benefit others, but I noticed some concerns: ${concerns.join("; ")}. If you'd like to contribute, I'd suggest removing organization-specific references first. Want me to prepare a cleaned version?`,
-        keep_local: `This feature is well-built but it's ${isSensitive ? "contains sensitive content" : "specific to your organization"}. I'd recommend keeping it local. You can always contribute later if you generalize it.`,
-        user_decides: `I see arguments both ways for contributing "${build.title}". Vision alignment: ${visionScore}. Community value: ${communityScore}. ${augLevel === "innovation" ? "This is an innovation that would benefit from review." : "This augments existing capability."} What would you prefer?`,
-      };
-
-      const assessment = {
-        recommendation,
-        criteria: {
-          visionAlignment: { score: visionScore, reasoning: visionReasoning },
-          communityValue: { score: communityScore, reasoning: communityReasoning },
-          augmentationLevel: { level: augLevel, reasoning: augReasoning },
-          proprietarySensitivity: { sensitive: isSensitive, concerns },
-        },
-        summary: summaryMap[recommendation],
-        suggestedMods: isSensitive ? concerns.map((c) => `Remove: ${c}`) : [],
-        filesChanged: changedFiles.length,
-        newRoutes: newRoutes.length,
-        hasSchemaChanges: schemaChanges.length > 0,
-        hasMigrations: migrationFiles.length > 0,
-      };
-
-      // Persist assessment on build record
-      await prisma.featureBuild.update({
-        where: { buildId },
-        data: { taskResults: { ...(build.verificationOut as Record<string, unknown> ?? {}), contributionAssessment: assessment } as unknown as import("@dpf/db").Prisma.InputJsonValue },
-      });
-
-      logBuildActivity(buildId, "assess_contribution", `Recommendation: ${recommendation}. Vision: ${visionScore}, Community: ${communityScore}, Type: ${augLevel}, Sensitive: ${isSensitive}`);
-
-      return { success: true, message: assessment.summary, data: assessment };
-    }
+    // assess_contribution case moved to mcp/packs/contribution-hive-pack.ts
 
     case "set_change_disposition": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
@@ -4599,378 +3838,7 @@ export async function executeTool(
       };
     }
 
-    case "contribute_to_hive": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-
-      const devConfig = await prisma.platformDevConfig.findUnique({
-        where: { id: "singleton" },
-        select: { contributionMode: true, upstreamRemoteUrl: true, dcoAcceptedAt: true, gitRemoteUrl: true, hiveContributionsPaused: true },
-      });
-      const { getPlatformDevPolicyState } = await import("@/lib/platform-dev-policy");
-      const policyState = getPlatformDevPolicyState(devConfig);
-      if (policyState === "policy_pending") {
-        return {
-          success: false,
-          error: "Platform development policy not configured.",
-          message:
-            "Contribution is blocked until Platform Development is configured in the portal. Finish that setup first, then decide whether this install stays private or contributes governed changes upstream.",
-        };
-      }
-      if (devConfig?.contributionMode === "private" || devConfig?.contributionMode === "fork_only") {
-        return {
-          success: false,
-          error: "Install is configured to keep everything on this system.",
-          message:
-            "This install keeps shipped work on your own system and does not contribute to the community. Switch to a contributing install in Admin > Platform Development if you want to share changes upstream.",
-        };
-      }
-
-      // Master pause overrides every contribution type (see
-      // packages/db/src/hive-contribution-settings.ts — "the master pause overrides
-      // everything"). The source/improvement path must honor it the same way the
-      // device-fingerprint (contribute-fingerprint.ts) and feedback-escalation paths
-      // do; otherwise the Admin "Pause all contributions" toggle silently still ships
-      // PRs upstream. Checked before any PR prerequisite work, like the per-type gate.
-      if (devConfig?.hiveContributionsPaused) {
-        return {
-          success: false,
-          error: "Hive contributions are paused.",
-          message:
-            "All contributions to the community are currently paused (Admin → Platform Development → Hive Contributions). Resume contributions there, then retry.",
-        };
-      }
-
-      // Prerequisite checks for PR creation — fail loudly up front rather
-      // than silently producing a FeaturePack with prUrl:null downstream.
-      // Previously both conditions below gated the PR attempt inside a
-      // try/catch at line ~4866 and a falsy result was swallowed: the tool
-      // returned success:true with no prUrl, leaving the coworker claiming
-      // "contributed" when no upstream PR ever landed.
-      if (!devConfig?.dcoAcceptedAt) {
-        return {
-          success: false,
-          error: "DCO not accepted.",
-          message:
-            "Upstream contributions require the Developer Certificate of Origin. Visit Admin > Platform Development and accept the DCO, then retry.",
-        };
-      }
-      const { resolveHiveToken: resolveHiveTokenEarly } = await import("@/lib/integrate/identity-privacy");
-      const hiveTokenEarly = await resolveHiveTokenEarly();
-      if (!hiveTokenEarly) {
-        return {
-          success: false,
-          error: "No GitHub token configured for hive contributions.",
-          message:
-            "Upstream contributions need a GitHub token. Set HIVE_CONTRIBUTION_TOKEN on the portal container, seed a 'hive-contribution' credential in admin, or fall back to GITHUB_TOKEN. Then retry.",
-        };
-      }
-
-      const build = await prisma.featureBuild.findUnique({
-        where: { buildId },
-        select: {
-          id: true, title: true, brief: true, diffPatch: true, diffSummary: true,
-          sandboxId: true, portfolioId: true, createdById: true,
-          buildBranch: true, gitCommitHashes: true, updatedAt: true, buildPlan: true,
-          description: true, designDoc: true, buildExecState: true,
-          disposition: true, dispositionSuggestionReason: true,
-          createdBy: { select: { email: true } },
-        },
-      });
-      if (!build || build.createdById !== userId) {
-        return { success: false, error: "Build not found.", message: `No active build ${buildId} was found for this user.` };
-      }
-
-      const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
-      const { assertSandboxReadyForContribution } = await import("@/lib/integrate/sandbox/sandbox-readiness-gate");
-      const readiness = await diagnoseSandboxReadiness({ buildId });
-      const readinessGate = assertSandboxReadyForContribution(readiness);
-      if (!readinessGate.ok) {
-        logBuildActivity(buildId, "contribute_to_hive", readinessGate.message);
-        return {
-          success: false,
-          error: "Sandbox readiness blocked contribution.",
-          message: readinessGate.message,
-          data: { ...readiness },
-        };
-      }
-
-      const diff = (build.diffPatch ?? "") as string;
-      if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };
-
-      // Private-paths boundary (Phase 1 of Private/Public Change Segregation):
-      // local records keep the full diff, but any OUTBOUND PR diff must never
-      // carry a path the operator marked proprietary. The `.dpf/private-paths`
-      // manifest ships empty → no-op until opted in. Spec:
-      // docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md
-      const { loadPrivatePathPatterns: _loadPriv, compilePrivatePathMatcher: _compilePriv, stripPrivatePathsFromDiff: _stripPriv } =
-        await import("@/lib/integrate/private-paths");
-      const shareableDiff = _stripPriv(diff, _compilePriv(await _loadPriv({ prisma }))).kept;
-      if (!shareableDiff.trim()) {
-        return {
-          success: false,
-          error: "Only private paths.",
-          message:
-            "This change only affects parts of your system you've marked private (see .dpf/private-paths or Admin > Platform Development), so there is nothing to share upstream.",
-        };
-      }
-
-      // Fail-closed disposition gate (EP-1A78BAE1): contribute_to_hive is always
-      // public-hive egress, so a change may leave only when explicitly
-      // "shareable". Default "private" blocks — the human's confirmation (via
-      // set_change_disposition / the ship UI) is required first.
-      const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/integrate/disposition");
-      if (!mayShareToPublicHive(build.disposition)) {
-        logBuildActivity(buildId, "contribute_to_hive", "blocked: change disposition is private (not confirmed shareable)");
-        return {
-          success: false,
-          error: "Change is kept private.",
-          message: privateDispositionBlockMessage(build.dispositionSuggestionReason),
-        };
-      }
-
-      const { buildSandboxStateFromRecord, assertSandboxReadyForPromotion, serializePlanDocument } = await import("@/lib/build/sandbox-state");
-      const sandboxState = buildSandboxStateFromRecord({
-        buildBranch: build.buildBranch,
-        gitCommitHashes: build.gitCommitHashes,
-        diffPatch: diff,
-        updatedAt: build.updatedAt,
-        planDocument: typeof build.buildPlan === "string" ? build.buildPlan : serializePlanDocument(build.buildPlan),
-        description: build.description,
-        buildExecState: build.buildExecState,
-      });
-      const promotionGate = assertSandboxReadyForPromotion(sandboxState);
-      if (!promotionGate.ok) {
-        logBuildActivity(buildId, "contribute_to_hive", promotionGate.message);
-        return {
-          success: false,
-          error: "Sandbox promotion integrity blocked contribution.",
-          message: `${promotionGate.message}\n\n${promotionGate.failures.join("\n")}`,
-          data: {
-            gate: {
-              ok: false,
-              failures: promotionGate.failures,
-            },
-            sandbox: promotionGate.state,
-          },
-        };
-      }
-
-      const includeMigrations = params.include_migrations !== false;
-      const brief = build.brief as Record<string, unknown> | null;
-
-      // Parse files from diff
-      const { allFiles, seedFit, securityScan } = await (await import("@/lib/integrate/contribution-review")).analyzeContributionSeedFit(shareableDiff, brief, build.designDoc);
-      const migrationFiles = allFiles.filter((f) => f.startsWith("prisma/migrations/"));
-      const codeFiles = allFiles.filter((f) => !f.startsWith("prisma/migrations/"));
-      const schemaFiles = allFiles.filter((f) => f.includes("schema.prisma"));
-
-      // Build manifest
-      const manifest = {
-        files: codeFiles,
-        migrations: includeMigrations ? migrationFiles : [],
-        schemaChanges: schemaFiles,
-        totalFiles: includeMigrations ? allFiles.length : codeFiles.length,
-        diffLength: diff.length,
-        portfolioContext: build.portfolioId,
-      };
-
-      // DCO attestation — uses pseudonymous platform identity, not personal info.
-      // Real user identity stays in the local DB only; public git metadata
-      // shows "dpf-agent-<shortId> <agent-<shortId>@hive.dpf>" so the community
-      // can recognize repeat contributors without exposing the real user.
-      const { getPlatformIdentity } = await import("@/lib/integrate/identity-privacy");
-      const platformId = await getPlatformIdentity();
-      const dcoAttestation = platformId.dcoSignoff;
-
-      // FeaturePack is upserted by buildId — NOT create-every-call.
-      //
-      // Two FeaturePack rows for the same build (with prUrl:null on both) was
-      // the observed symptom of contribute_to_hive being invoked twice. The
-      // old code created a fresh pack on each call; if the first call's PR
-      // creation failed, the pack stayed with prUrl:null. A retry then made
-      // a SECOND empty pack — and even when the retry's PR succeeded, its
-      // back-write only touched the second pack's manifest. The first pack
-      // was orphaned without its URL forever.
-      //
-      // Reusing the most recent pack for this build means:
-      //   - first call: create, get prUrl, back-write the same row.
-      //   - retry after failure: update the same row, try PR again; success
-      //     back-writes prUrl onto the existing pack (idempotent).
-      const existingPack = await prisma.featurePack.findFirst({
-        where: { buildId: build.id },
-        orderBy: { createdAt: "desc" },
-        select: { packId: true },
-      });
-      const packId = existingPack?.packId ?? `FP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      if (existingPack) {
-        await prisma.featurePack.update({
-          where: { packId },
-          data: {
-            title: build.title,
-            description: String(brief?.description ?? ""),
-            portfolioContext: build.portfolioId,
-            manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
-            status: "contributed",
-          },
-        });
-      } else {
-        await prisma.featurePack.create({
-          data: {
-            packId,
-            title: build.title,
-            description: String(brief?.description ?? ""),
-            portfolioContext: build.portfolioId,
-            version: "1.0.0",
-            manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
-            buildId: build.id,
-            status: "contributed",
-          },
-        });
-      }
-
-      // Create upstream PR via direct branch push (Option B).
-      // Anonymous identity pushes dpf/<hash>/<slug> branch directly to the upstream repo.
-      // No customer fork needed — the hive token provides write access.
-      let prUrl: string | null = null;
-      let prError: string | null = null;
-      try {
-        const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
-
-        // DCO + token already validated up-front (see prerequisite checks
-        // earlier in this case); reuse the resolved token so we don't hit
-        // the credential store a second time.
-        const { generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/integrate/identity-privacy");
-        const hiveToken = hiveTokenEarly;
-
-        {
-          const upstreamMatch = upstreamUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-          if (!upstreamMatch) {
-            prError = `upstreamRemoteUrl "${upstreamUrl}" is not a recognizable GitHub URL.`;
-          } else {
-            const { createBranchAndPR } = await import("@/lib/integrate/github-api-commit");
-
-            const branchName = generatePrivateBranchName(platformId.clientId, build.title);
-            const commitMessage = generateAnonymousCommitMessage({
-              title: build.title,
-              buildId,
-              productId: null,
-              platformIdentity: platformId,
-              dcoAcceptedAt: devConfig!.dcoAcceptedAt!,
-            });
-
-            const prTitle = `feat: ${build.title}`;
-            const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
-            const prBody = [
-              "## Summary",
-              "",
-              `Build: \`${buildId}\``,
-              `Author: ${platformId.authorName} (AI Coworker)`,
-              "",
-              `**Security Scan:** ${securityScan.passed ? "PASSED" : "FAILED"} (${securityScan.criticalCount} critical, ${securityScan.warningCount} warnings)`,
-              "",
-              `Files: ${manifest.totalFiles} | Migrations: ${manifest.migrations.length} | Schema changes: ${manifest.schemaChanges.length}`,
-              "",
-              "---",
-              `License: Apache-2.0 (inbound=outbound)`,
-              `${platformId.dcoSignoff}${seedFit.decision ? `\n\nSeed-Fit-Decision: ${seedFit.decision}` : ""}`,
-            ].join("\n");
-
-            const labels = ["ai-contributed", "build-studio", ...(seedFit.decision ? [`seed-fit:${seedFit.decision}`] : [])];
-            if (!securityScan.passed) labels.push("security-review-needed");
-
-            const prResult = await createBranchAndPR({
-              // Phase 3: caller still passes head === base. Phase 4 will switch
-              // to head = contributor fork / base = upstream when
-              // contributionModel === "fork-pr".
-              headOwner: upstreamMatch[1],
-              headRepo: upstreamMatch[2],
-              baseOwner: upstreamMatch[1],
-              baseRepo: upstreamMatch[2],
-              branchName,
-              commitMessage,
-              diff: shareableDiff,
-              prTitle,
-              prBody,
-              labels,
-              token: hiveToken,
-            });
-
-            if (prResult.prUrl) {
-              prUrl = prResult.prUrl;
-              await prisma.featurePack.update({
-                where: { packId },
-                data: { manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
-              });
-
-              // Run contribution review pipeline — sanitization, parameterization, vertical tagging
-              if (prResult.prNumber) {
-                try {
-                  const { runContributionReview } = await import("@/lib/integrate/contribution-review");
-                  const reviewResult = await runContributionReview({
-                    buildId,
-                    prUrl: prResult.prUrl!,
-                    prNumber: prResult.prNumber,
-                    repoOwner: upstreamMatch[1],
-                    repoName: upstreamMatch[2],
-                    token: hiveToken,
-                    diff: shareableDiff,
-                  });
-                  logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Seed fit: ${reviewResult.seedFit.decision ?? "not-applicable"}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
-                } catch (reviewErr) {
-                  console.warn("[contribute_to_hive] contribution review failed:", reviewErr);
-                  prError = `Contribution review failed: ${getErrorMessage(reviewErr)}`;
-                }
-              }
-            } else {
-              prError = `createBranchAndPR returned no prUrl (owner=${upstreamMatch[1]} repo=${upstreamMatch[2]} branch=${branchName}).`;
-            }
-          }
-        }
-      } catch (err) {
-        prError = getErrorMessage(err);
-        console.warn("[contribute_to_hive] upstream PR creation failed:", err);
-      }
-
-      // Update linked ImprovementProposal if exists
-      await prisma.improvementProposal.updateMany({
-        where: { buildId: build.id, contributionStatus: "local" },
-        data: { contributionStatus: "contributed" },
-      }).catch(() => {});
-
-      logBuildActivity(
-        buildId,
-        "contribute_to_hive",
-        prUrl
-          ? `FeaturePack ${packId} created + PR ${prUrl}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`
-          : `FeaturePack ${packId} created but upstream PR FAILED: ${prError ?? "unknown"}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`,
-      );
-
-      // Fork disposition has changed — ask the reconciler whether the build
-      // is ready to advance ship → complete. Success and failure both count
-      // as a terminal disposition for the upstream fork (errored is still
-      // terminal); the only state that blocks complete is in_progress.
-      {
-        const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
-        await reconcileBuildCompletion(buildId).catch(() => {});
-      }
-
-      if (!prUrl) {
-        return {
-          success: false,
-          error: prError ?? "Upstream PR creation failed.",
-          message: `Feature Pack ${packId} was created locally but the upstream pull request could not be opened: ${prError ?? "unknown error"}. Review the token, DCO, and upstream URL and retry.`,
-          data: { packId, manifest, dcoAttestation, prUrl: null, prError },
-        };
-      }
-
-      const prMessage = ` A pull request has been created: ${prUrl}`;
-      return {
-        success: true,
-        message: `Feature Pack ${packId} created and contributed to the Hive Mind. ${manifest.totalFiles} file(s) packaged with DCO attestation.${prMessage} Thank you for contributing!`,
-        data: { packId, manifest, dcoAttestation, prUrl },
-      };
-    }
+    // contribute_to_hive case moved to mcp/packs/contribution-hive-pack.ts
 
     case "run_ux_test": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
@@ -5188,175 +4056,13 @@ export async function executeTool(
     }
 
     // ─── Design Intelligence Tools (UI UX Pro Max) ──────────────────────────
-    case "propose_improvement": {
-      const proposalId = `IP-${crypto.randomUUID().slice(0, 5).toUpperCase()}`;
+    // propose_file_change moved to a build ToolPack
 
-      // Capture conversation excerpt (last 5 messages) for evidence
-      let conversationExcerpt: string | null = null;
-      if (context?.threadId) {
-        const recentMessages = await prisma.agentMessage.findMany({
-          where: { threadId: context.threadId },
-          orderBy: { createdAt: "desc" },
-          take: 5,
-          select: { role: true, content: true },
-        });
-        if (recentMessages.length > 0) {
-          conversationExcerpt = recentMessages
-            .reverse()
-            .map((m) => `[${m.role}] ${m.content?.slice(0, 200)}`)
-            .join("\n");
-        }
-      }
+    // propose_improvement case moved to mcp/packs/contribution-hive-pack.ts
 
-      const category = String(params["category"] ?? "missing_feature");
-      const proposal = await prisma.improvementProposal.create({
-        data: {
-          proposalId,
-          title: String(params["title"] ?? "Untitled improvement"),
-          description: String(params["description"] ?? ""),
-          category,
-          severity: String(params["severity"] ?? "medium"),
-          observedFriction: typeof params["observedFriction"] === "string" ? params["observedFriction"] : null,
-          conversationExcerpt,
-          submittedById: userId,
-          agentId: context?.agentId ?? "unknown",
-          routeContext: context?.routeContext ?? "unknown",
-          threadId: context?.threadId ?? null,
-        },
-      });
+    // propose_skill_improvement case moved to mcp/packs/contribution-hive-pack.ts
 
-      // Consolidation (EP-INTAKE-UNIFY / BI-7541AB88): file the work into the
-      // backlog the moment the proposal exists, so it is visible and triageable
-      // without the old manual Review→Prioritize promotion that never happened.
-      // The proposal stays the evidence record; the BacklogItem is the work.
-      let backlogItemId: string | null = null;
-      try {
-        const { ingestBacklogItem, improvementCategoryToWorkType } = await import(
-          "@/lib/operate/backlog-ingest"
-        );
-        const ingest = await ingestBacklogItem({
-          title: proposal.title,
-          body: [
-            proposal.description,
-            proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
-            `Category: ${category} | Severity: ${proposal.severity}`,
-            `From improvement proposal ${proposal.proposalId}`,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          workType: improvementCategoryToWorkType(category),
-          source: "automated-detection",
-          itemIdPrefix: "IMP",
-          submittedById: userId,
-          agentId: context?.agentId ?? null,
-          origin: { kind: "improvement", id: proposal.proposalId },
-        });
-        backlogItemId = ingest.itemId;
-        await prisma.improvementProposal.update({
-          where: { proposalId: proposal.proposalId },
-          data: { backlogItemId },
-        });
-      } catch (err) {
-        // Non-fatal: the proposal is still recorded even if the backlog projection fails.
-        console.error("[propose_improvement] backlog auto-file failed", err);
-      }
-
-      // Index the proposal in platform knowledge (was previously unreachable
-      // dead code after the return).
-      import("@/lib/semantic-memory")
-        .then(({ storePlatformKnowledge }) =>
-          storePlatformKnowledge({
-            entityId: proposal.proposalId,
-            entityType: "improvement",
-            title: proposal.title,
-            content: String(params["description"] ?? ""),
-          }),
-        )
-        .catch(() => {});
-
-      return {
-        success: true,
-        entityId: proposal.proposalId,
-        message: backlogItemId
-          ? `Improvement proposal ${proposal.proposalId} created and filed to the backlog as ${backlogItemId} for triage.`
-          : `Improvement proposal ${proposal.proposalId} created: "${proposal.title}".`,
-      };
-    }
-
-    case "propose_skill_improvement": {
-      const skillId = String(params["skillId"] ?? "").trim();
-      const proposedContent = String(params["proposedContent"] ?? "").trim();
-      const title = String(params["title"] ?? "").trim();
-      const description = String(params["description"] ?? "").trim();
-      if (!skillId || !proposedContent || !title || !description) {
-        return {
-          success: false,
-          error: "Missing required fields",
-          message:
-            "propose_skill_improvement requires skillId, title, description, and proposedContent.",
-        };
-      }
-      const sev = String(params["severity"] ?? "medium");
-      const severity = (["low", "medium", "high", "critical"].includes(sev) ? sev : "medium") as
-        | "low"
-        | "medium"
-        | "high"
-        | "critical";
-      const observedFriction =
-        typeof params["observedFriction"] === "string" ? params["observedFriction"] : null;
-      try {
-        const { submitSkillImprovementProposal } = await import("@/lib/skills/proposals");
-        const result = await submitSkillImprovementProposal({
-          skillId,
-          proposedContent,
-          title,
-          description,
-          severity,
-          submittedById: userId,
-          agentId: context?.agentId ?? "unknown",
-          routeContext: context?.routeContext ?? "unknown",
-          threadId: context?.threadId ?? null,
-          observedFriction,
-        });
-        return {
-          success: true,
-          entityId: result.proposalId,
-          message: `Skill proposal ${result.proposalId} created for ${skillId}. A reviewer must approve before it takes effect.`,
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        return {
-          success: false,
-          error: msg,
-          message: `Could not create skill proposal: ${msg}`,
-        };
-      }
-    }
-
-    case "submit_feedback": {
-      const fromProfile = await prisma.employeeProfile.findUnique({
-        where: { userId },
-        select: { id: true },
-      });
-      if (!fromProfile) return { success: false, error: "Your employee profile not found", message: "Cannot submit feedback without an employee profile" };
-
-      const feedbackId = `FB-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      await prisma.feedbackNote.create({
-        data: {
-          feedbackId,
-          fromEmployeeId: fromProfile.id,
-          toEmployeeId: String(params["toEmployeeId"]),
-          content: String(params["content"]),
-          feedbackType: String(params["feedbackType"] ?? "observation"),
-          visibility: String(params["visibility"] ?? "private"),
-        },
-      });
-      return {
-        success: true,
-        entityId: feedbackId,
-        message: "Feedback submitted.",
-      };
-    }
+    // submit_feedback case moved to mcp/packs/contribution-hive-pack.ts
 
     case "principle_decide": {
       // Phase 2 Task 2.7. Pulls in-scope commandments from Postgres (always
@@ -5758,6 +4464,8 @@ export async function executeTool(
         },
       };
     }
+
+    // run_endpoint_tests moved to a build ToolPack
 
     default: {
       const { parseNamespacedTool, executeMcpServerTool } = await import("./mcp-server-tools");

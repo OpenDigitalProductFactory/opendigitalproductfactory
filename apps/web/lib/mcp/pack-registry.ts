@@ -62,6 +62,7 @@ import { projectFilesPack } from "./packs/project-files-pack";
 import { sorReadPack } from "./packs/sor-read-pack";
 import { workThreadPack } from "./packs/work-thread-pack";
 import { codeIntelligencePack } from "./packs/code-intelligence-pack";
+import { contributionHivePack } from "./packs/contribution-hive-pack";
 import { taxonomyArchetypePack } from "./packs/taxonomy-archetype-pack";
 import { modelProviderPack } from "./packs/model-provider-pack";
 import { wikiPack } from "./packs/wiki-pack";
@@ -74,6 +75,8 @@ import { buildEnginePack } from "./packs/build-engine-pack";
 import { buildEvidencePack } from "./packs/build-evidence-pack";
 import { buildOpsPack } from "./packs/build-ops-pack";
 import { decompositionPack } from "./packs/decomposition-pack";
+import { buildVisibilityPack } from "./packs/build-visibility-pack";
+import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 import { releasePack } from "./packs/release-pack";
@@ -126,6 +129,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   sorReadPack,
   workThreadPack,
   codeIntelligencePack,
+  contributionHivePack,
   taxonomyArchetypePack,
   modelProviderPack,
   wikiPack,
@@ -139,4 +143,6 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   buildEvidencePack,
   buildOpsPack,
   decompositionPack,
+  buildVisibilityPack,
+  buildEvidenceExtraPack,
 ]);
