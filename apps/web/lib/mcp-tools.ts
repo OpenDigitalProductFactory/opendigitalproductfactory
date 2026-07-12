@@ -5478,6 +5478,34 @@ export async function executeTool(
           logBuildActivity(buildId, "reviewBuildPlan", `Round ${currentRound}: remaining plan-review blockers were test-first-only — downgraded so the build proceeds; downstream gates still enforce tests.`);
         }
       }
+      // BI-269922A4 — Verified-finding review (opt-in). Before a CRITICAL plan
+      // finding is allowed to block the gate and trigger another rework round,
+      // an independent fresh-context verifier must reproduce it; criticals it
+      // cannot reproduce downgrade to advisory. Fail-closed: a verifier error
+      // leaves the finding blocking. Inert unless DPF_BUILD_VERIFIED_FINDING_REVIEW=1.
+      if (mergedReview.decision === "fail") {
+        const { isVerifiedFindingReviewEnabled } = await import("@/lib/integrate/build-studio-config");
+        if (isVerifiedFindingReviewEnabled()) {
+          const { verifyReviewFindings } = await import("@/lib/build/verified-finding-review");
+          const planArtifact = JSON.stringify(build.buildPlan ?? {}, null, 2);
+          const verified = await verifyReviewFindings(mergedReview, planArtifact, {
+            dispatch: async (verifierPrompt) => {
+              const out = await routeAndCall(
+                [{ role: "user" as const, content: verifierPrompt }],
+                "You are an independent verifier. Reproduce or refute the finding against the artifact; default to not-verified when uncertain.",
+                "internal",
+                { budgetClass: "minimize_cost" },
+              );
+              return out.content;
+            },
+          });
+          const downgraded = mergedReview.issues.length - verified.review.issues.filter((i) => i.severity === "critical").length;
+          if (verified.review.decision !== mergedReview.decision || downgraded > 0) {
+            logBuildActivity(buildId, "reviewBuildPlan", `Verified-finding review: ${verified.verdicts.filter((v) => !v.verified).length} of ${verified.verdicts.length} critical finding(s) could not be independently reproduced — downgraded to advisory. Gate now: ${verified.review.decision}.`);
+          }
+          mergedReview = verified.review;
+        }
+      }
       // BI-4396EFEC (D38) — Compute the iteration delta against the prior
       // round and attach to the ReviewResult. computeReviewDelta + isOscillating
       // live in feature-build-types so they're independently unit-testable.

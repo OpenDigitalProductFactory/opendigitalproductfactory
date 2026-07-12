@@ -197,6 +197,19 @@ export async function isQualityFirstRightsizingEnabled(): Promise<boolean> {
   );
 }
 
+/**
+ * BI-269922A4 (EP-27FD96BC): verified-finding review — a reviewer's *critical*
+ * finding may only BLOCK a gate (fail / trigger a rework round) after an
+ * independent fresh-context verifier reproduces it; unreproduced criticals are
+ * downgraded to advisory. Opt-in (default off) so it merges inert and adds no
+ * verifier spend until an operator enables it. Set
+ * DPF_BUILD_VERIFIED_FINDING_REVIEW=1 to turn it on.
+ */
+export function isVerifiedFindingReviewEnabled(): boolean {
+  const v = process.env.DPF_BUILD_VERIFIED_FINDING_REVIEW;
+  return v === "1" || v === "true";
+}
+
 /** PlatformConfig key for the global build Cost/Quality/Time posture (P2). */
 export const BUILD_GOLDEN_TRIANGLE_POSTURE_KEY = "BUILD_GOLDEN_TRIANGLE_POSTURE";
 
