@@ -22,6 +22,8 @@
 // attempts becomes a human-approved proposal rather than an unreviewed mutation.
 import { randomUUID } from "crypto";
 
+import { prisma, Prisma } from "@dpf/db";
+
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 
 /** Minimal shape of the persistence layer, injected so the decision + wording
@@ -113,4 +115,77 @@ export async function divertToolCallToProposal(input: {
     parameters: args,
   });
   return buildProposalToolResult(toolName, proposal.proposalId);
+}
+
+/**
+ * The agentic loop's single entry point: decide + divert + fail-closed, in one
+ * call so the hot loop stays thin. Returns the synthetic tool result when the
+ * call was captured as a proposal, or `null` when the tool should execute
+ * normally (not a propose boundary, or a read-only / artifact tool).
+ */
+export async function interceptToolCallAsProposal(input: {
+  toolDef: Pick<ToolDefinition, "sideEffect" | "coworkerArtifact" | "executionMode"> | undefined;
+  proposeSideEffects: boolean;
+  toolName: string;
+  args: Record<string, unknown>;
+  agentId: string;
+  threadId: string;
+  routeContext: string;
+  taskRunId: string | null;
+}): Promise<ToolResult | null> {
+  if (!shouldProposeToolCall(input.toolDef, input.proposeSideEffects)) return null;
+  try {
+    return await divertToolCallToProposal({
+      persistence: prismaProposalPersistence(),
+      toolName: input.toolName,
+      args: input.args,
+      agentId: input.agentId,
+      threadId: input.threadId,
+      routeContext: input.routeContext,
+      taskRunId: input.taskRunId,
+    });
+  } catch (err) {
+    console.warn(`[agentic-tool] propose-divert failed tool=${input.toolName}:`, err);
+    // Fail closed: never execute the side effect when the proposal could not be
+    // persisted — report failure so the model summarizes rather than acting.
+    return {
+      success: false,
+      error: "propose_divert_failed",
+      message: `Could not queue \`${input.toolName}\` for approval; it was not run. Continue without it.`,
+    };
+  }
+}
+
+/** The live Prisma-backed persistence port. Kept here (not in the agentic loop)
+ *  so the loop's divert call is a one-liner and this DB shape lives with the
+ *  interception logic it serves. */
+export function prismaProposalPersistence(): ProposalPersistence {
+  return {
+    createAssistantMessage: (m) =>
+      prisma.agentMessage.create({
+        data: {
+          threadId: m.threadId,
+          role: "assistant",
+          content: m.content,
+          agentId: m.agentId,
+          routeContext: m.routeContext,
+          ...(m.taskRunId ? { taskRunId: m.taskRunId } : {}),
+        },
+        select: { id: true },
+      }),
+    createProposal: (p) =>
+      prisma.agentActionProposal.create({
+        data: {
+          proposalId: p.proposalId,
+          threadId: p.threadId,
+          messageId: p.messageId,
+          ...(p.taskRunId ? { taskRunId: p.taskRunId } : {}),
+          agentId: p.agentId,
+          actionType: p.actionType,
+          parameters: p.parameters as Prisma.InputJsonValue,
+          status: "proposed",
+        },
+        select: { proposalId: true },
+      }),
+  };
 }

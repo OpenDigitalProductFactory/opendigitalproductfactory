@@ -11,11 +11,8 @@ import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage } from "@/lib/ai-inference";
-import { prisma, Prisma } from "@dpf/db";
-import {
-  divertToolCallToProposal,
-  shouldProposeToolCall,
-} from "@/lib/proactivity/propose-interception";
+import { prisma } from "@dpf/db";
+import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 import {
@@ -2389,54 +2386,18 @@ export async function runAgenticLoop(params: {
 
       // Propose-interception (BI-80532D5C): under a propose boundary, a
       // side-effecting non-artifact tool is captured as an AgentActionProposal
-      // for the owner to approve instead of running now. Curated artifacts and
-      // read-only tools fall through and execute normally.
-      if (shouldProposeToolCall(toolDef, proposeSideEffects)) {
-        const proposalResult = await divertToolCallToProposal({
-          persistence: {
-            createAssistantMessage: (m) =>
-              prisma.agentMessage.create({
-                data: {
-                  threadId: m.threadId,
-                  role: "assistant",
-                  content: m.content,
-                  agentId: m.agentId,
-                  routeContext: m.routeContext,
-                  ...(m.taskRunId ? { taskRunId: m.taskRunId } : {}),
-                },
-                select: { id: true },
-              }),
-            createProposal: (p) =>
-              prisma.agentActionProposal.create({
-                data: {
-                  proposalId: p.proposalId,
-                  threadId: p.threadId,
-                  messageId: p.messageId,
-                  ...(p.taskRunId ? { taskRunId: p.taskRunId } : {}),
-                  agentId: p.agentId,
-                  actionType: p.actionType,
-                  parameters: p.parameters as Prisma.InputJsonValue,
-                  status: "proposed",
-                },
-                select: { proposalId: true },
-              }),
-          },
-          toolName: tc.name,
-          args: tc.arguments,
-          agentId,
-          threadId,
-          routeContext,
-          taskRunId: taskRunId ?? null,
-        }).catch((err): ToolResult => {
-          console.warn(`[agentic-tool] propose-divert failed iter=${iteration} tool=${tc.name}:`, err);
-          // Fail closed: on a persistence error, do NOT execute the side effect —
-          // report it so the model summarizes rather than acting unapproved.
-          return {
-            success: false,
-            error: "propose_divert_failed",
-            message: `Could not queue \`${tc.name}\` for approval; it was not run. Continue without it.`,
-          };
-        });
+      // for the owner to approve instead of running now (null = execute normally).
+      const proposalResult = await interceptToolCallAsProposal({
+        toolDef,
+        proposeSideEffects,
+        toolName: tc.name,
+        args: tc.arguments,
+        agentId,
+        threadId,
+        routeContext,
+        taskRunId: taskRunId ?? null,
+      });
+      if (proposalResult) {
         console.log(`[agentic-tool] PROPOSED iter=${iteration} tool=${tc.name} (propose boundary)`);
         executedTools.push({ name: tc.name, args: tc.arguments, result: proposalResult });
         iterationResults.push({ tc, toolResult: proposalResult });
