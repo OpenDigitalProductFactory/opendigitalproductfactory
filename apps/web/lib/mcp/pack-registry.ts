@@ -70,6 +70,7 @@ import { discoveryPack } from "./packs/discovery-pack";
 import { coworkerPack } from "./packs/coworker-pack";
 import { platformUtilitiesPack } from "./packs/platform-utilities-pack";
 import { backlogPack } from "./packs/backlog-pack";
+import { sandboxPack } from "./packs/sandbox-pack";
 import { adminPack } from "./packs/admin-pack";
 import { buildEnginePack } from "./packs/build-engine-pack";
 import { buildEvidencePack } from "./packs/build-evidence-pack";
@@ -137,6 +138,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   coworkerPack,
   platformUtilitiesPack,
   backlogPack,
+  sandboxPack,
   releasePack,
   adminPack,
   buildEnginePack,
