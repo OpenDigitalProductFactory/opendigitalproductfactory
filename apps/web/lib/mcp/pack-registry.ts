@@ -66,6 +66,8 @@ import { taxonomyArchetypePack } from "./packs/taxonomy-archetype-pack";
 import { modelProviderPack } from "./packs/model-provider-pack";
 import { wikiPack } from "./packs/wiki-pack";
 import { discoveryPack } from "./packs/discovery-pack";
+import { coworkerPack } from "./packs/coworker-pack";
+import { platformUtilitiesPack } from "./packs/platform-utilities-pack";
 import { backlogPack } from "./packs/backlog-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
@@ -123,6 +125,8 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   modelProviderPack,
   wikiPack,
   discoveryPack,
+  coworkerPack,
+  platformUtilitiesPack,
   backlogPack,
   releasePack,
 ]);

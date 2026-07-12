@@ -1110,11 +1110,13 @@ async function updateBacklogItemStatus(
     triageOutcome: item.triageOutcome,
     hasActiveBuild: item.activeBuildId != null,
   });
-  // EP-3516E23D CWQ activation: a claim-on-start (→ in-progress) surfaces the
-  // BI as a WorkItem in the triage queue and records its arrival into queue
-  // flow-telemetry. Idempotent (no duplicate on re-claim) and best-effort —
-  // queue bridging must never fail the claim it observes.
-  if (target === "in-progress") {
+  // EP-3516E23D CWQ activation + BI-AC815F1E lifecycle sync: every backlog status
+  // transition is observed by the bridge. It materializes a WorkItem case when
+  // work starts (→ in-progress) and, on later transitions, syncs the live case's
+  // status (→ done closes it) so the unified WorkCase view tracks the item's whole
+  // lifecycle — not just the claim. Idempotent (no duplicate on re-claim) and
+  // best-effort — bridging must never fail the transition it observes.
+  {
     void (async () => {
       try {
         const { bridgeBacklogItemToWorkItem } = await import(

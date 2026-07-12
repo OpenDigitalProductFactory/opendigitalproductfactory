@@ -14,6 +14,7 @@ My Workspace is your personal home base inside the platform. It gives you a cros
 - **Activity Feed** — A chronological stream of recent actions across the platform, filtered to things you're involved in or watching.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
+- **"Needs you" inbox** — The one place for decisions that need you now — approvals, escalations, and paused AI — kept separate from the work backlog. The AI routes decisions through the governed scopes first, so you only see the residue it genuinely cannot resolve.
 
 ## What You Can Do
 
@@ -23,3 +24,4 @@ My Workspace is your personal home base inside the platform. It gives you a cros
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents) to review document state, versions, and references
 - Use the AI coworker to get a personalized briefing on what needs your attention
+- Open the ["Needs you" inbox](attention-inbox) to act on decisions that need you — approve, answer, or open them in context

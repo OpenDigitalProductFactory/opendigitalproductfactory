@@ -164,7 +164,7 @@ export function derivePlatformSummary({
     return {
       value: "Critical",
       tone: "critical",
-      detail: `${downRequiredJobs.join(", ")} down`,
+      detail: `${humanizeJobList(downRequiredJobs)} ${downRequiredJobs.length === 1 ? "is" : "are"} down`,
     };
   }
 
@@ -173,7 +173,7 @@ export function derivePlatformSummary({
     return {
       value: "Degraded",
       tone: "warning",
-      detail: `${missingRequiredJobs.join(", ")} status unknown`,
+      detail: `${humanizeJobList(missingRequiredJobs)} ${missingRequiredJobs.length === 1 ? "is" : "are"} not reporting`,
     };
   }
 
@@ -213,7 +213,7 @@ export function deriveMonitoringSummary({
     return {
       value: "Degraded",
       tone: "warning",
-      detail: `${telemetryDown.length} telemetry targets down: ${telemetryDown.join(", ")}`,
+      detail: `${humanizeJobList(telemetryDown)} ${telemetryDown.length === 1 ? "is" : "are"} unavailable`,
     };
   }
 
@@ -333,6 +333,47 @@ export const JOB_PRESENTATION: Record<string, JobPresentation> = {
   cadvisor: { name: "cAdvisor", internal: true },
   prometheus: { name: "Prometheus", hidden: true }, // self-monitoring; alert-only
 };
+
+// Plain-language service names for the health SUMMARY CARDS (BI-2F778C13
+// follow-up). JOB_PRESENTATION names are the tile-grid labels and are still
+// product/tech vocabulary ("PostgreSQL", "Qdrant", "cAdvisor") — fine on the
+// detailed operator grid, but the summary-card detail line used to join the
+// RAW scrape-job strings ("portal, postgres, qdrant, sandbox down") straight
+// at a non-technical business user. This map gives those same jobs a
+// what-it-is-to-you label; the wording mirrors alert-humanize's
+// SERVICE_DOWN_IMPACT so both surfaces speak one language.
+const PLATFORM_SERVICE_LABEL: Record<string, string> = {
+  portal: "Web portal",
+  sandbox: "Build workspace",
+  postgres: "Database",
+  qdrant: "AI memory & search",
+  neo4j: "Knowledge graph",
+  inngest: "Background jobs",
+  redis: "Queues & cache",
+  adp: "Document processing",
+  prometheus: "Health monitoring",
+  "node-exporter": "Host metrics",
+  "windows-host": "Host metrics",
+  cadvisor: "Container metrics",
+  "dev-portal": "Contributor preview",
+};
+
+// A job's plainest name for the summary cards: the what-it-is-to-you label,
+// falling back to the tile-grid friendly name, then the raw job string (so a
+// newly-added scrape job is never a crash — just its raw name until labelled).
+export function friendlyJobLabel(job: string): string {
+  return PLATFORM_SERVICE_LABEL[job] ?? JOB_PRESENTATION[job]?.name ?? job;
+}
+
+// Grammatical, humanized list of jobs for a summary-card detail line, e.g.
+// ["portal","postgres"] -> "Web portal and Database". Keeps the card terse
+// (comma list, "and" before the last) instead of raw job identifiers.
+export function humanizeJobList(jobs: string[]): string {
+  const labels = jobs.map(friendlyJobLabel);
+  if (labels.length <= 1) return labels[0] ?? "";
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
 
 // Services that have no Prometheus scrape target but the user should still
 // see on the Health tab — either because they exist but ship without a
