@@ -49,8 +49,24 @@ export function scheduledTaskToAttentionItem(input: {
       { kind: "snooze", label: "Snooze" },
     ],
     deepLink: "/platform/schedule",
-    audience: { operator: true, assigneePrincipalId: input.row.ownerUserId },
+    audience: audienceForEscalation(input.proactivity.escalationTarget, input.row.ownerUserId),
   };
+}
+
+/** BI-754C9E82: the plan's escalationTarget is ENFORCED as attention routing.
+ *  Personal targets (owner / attention-surface / role) carry the owner as the
+ *  assignee; operator-level targets (platform-operator / dispatcher) drop the
+ *  personal assignee so the item reads as an operations concern. The operator
+ *  flag stays true for every target so escalation can widen visibility but
+ *  never hide a failure. */
+function audienceForEscalation(
+  target: ProactivityPlan["escalationTarget"],
+  ownerUserId: string,
+): AttentionItem["audience"] {
+  if (target === "platform-operator" || target === "dispatcher") {
+    return { operator: true };
+  }
+  return { operator: true, assigneePrincipalId: ownerUserId };
 }
 
 export async function loadScheduledTaskItems(db: Db): Promise<AttentionItem[]> {
