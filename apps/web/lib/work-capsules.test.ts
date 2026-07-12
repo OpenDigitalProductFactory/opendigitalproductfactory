@@ -10,6 +10,8 @@ import {
   WORK_CAPSULE_SCOPE_ACTIVITY_KINDS,
   WORK_CAPSULE_SOURCES,
   WORK_CAPSULE_STATUSES,
+  AGENT_ACTIVITY_KINDS,
+  isAgentActivityKind,
   RELEASE_WORKTREE_DEFAULTS,
   buildCapsuleBranchName,
   buildCapsuleSlug,
@@ -24,6 +26,23 @@ import {
   normalizeBranchTaxonomy,
   parseScopeClaims,
 } from "./work-capsules";
+
+describe("agent activity kinds (BI-C41AB195)", () => {
+  it("exposes the five human-legible session kinds and they are all valid activity kinds", () => {
+    expect([...AGENT_ACTIVITY_KINDS]).toEqual(["thought", "action", "question", "response", "error"]);
+    for (const kind of AGENT_ACTIVITY_KINDS) {
+      expect(WORK_CAPSULE_ACTIVITY_KINDS).toContain(kind);
+    }
+  });
+
+  it("isAgentActivityKind accepts the five and rejects lifecycle kinds + junk", () => {
+    for (const kind of AGENT_ACTIVITY_KINDS) expect(isAgentActivityKind(kind)).toBe(true);
+    expect(isAgentActivityKind("created")).toBe(false);
+    expect(isAgentActivityKind("evidence-recorded")).toBe(false);
+    expect(isAgentActivityKind("chatter")).toBe(false);
+    expect(isAgentActivityKind(42)).toBe(false);
+  });
+});
 
 describe("work capsule enums", () => {
   it("uses hyphenated status values", () => {
