@@ -1,0 +1,316 @@
+// BI-754C9E82 — proactivity plan ENFORCEMENT on scheduled runs. Split from
+// agent-task-scheduler.test.ts (module-size ratchet): same mock harness, only
+// the enforcement describe block lives here.
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  auth: vi.fn(),
+  prisma: {
+    scheduledAgentTask: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    scheduledJob: {
+      update: vi.fn(),
+      upsert: vi.fn(),
+    },
+    agentThread: {
+      upsert: vi.fn(),
+    },
+    agentMessage: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+    },
+    user: {
+      findUnique: vi.fn(),
+    },
+    userFact: { findMany: vi.fn() },
+    taskRun: {
+      create: vi.fn(),
+      update: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    taskMessage: {
+      create: vi.fn(),
+    },
+    toolExecution: {
+      findFirst: vi.fn(),
+    },
+    marketingCampaignBrief: {
+      findFirst: vi.fn(),
+    },
+  },
+  resolveAgentForRouteWithPrompts: vi.fn(),
+  resolveAgentByIdWithPrompts: vi.fn(),
+  runAgenticLoop: vi.fn(),
+  getAvailableTools: vi.fn(),
+  toolsToOpenAIFormat: vi.fn(),
+  executeTool: vi.fn(),
+  governedExecuteTool: vi.fn(),
+  runArchitectureParitySteward: vi.fn(),
+  runConsolidationParitySteward: vi.fn(),
+  runSelfOptimizationSweep: vi.fn(),
+}));
+
+vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
+vi.mock("@dpf/db", () => ({
+  prisma: mocks.prisma,
+  DATA_MODEL_MIRROR_TASK_ID: "data-model-mirror-nightly",
+  SYSML_PROJECTION_TASK_ID: "sysml-projection-nightly",
+  SELF_OPTIMIZATION_SWEEP_TASK_ID: "self-optimization-sweep-weekly",
+}));
+vi.mock("@/lib/tak/agent-routing-server", () => ({
+  resolveAgentForRouteWithPrompts: mocks.resolveAgentForRouteWithPrompts,
+  resolveAgentByIdWithPrompts: mocks.resolveAgentByIdWithPrompts,
+}));
+vi.mock("@/lib/tak/agentic-loop", () => ({
+  runAgenticLoop: mocks.runAgenticLoop,
+}));
+vi.mock("@/lib/mcp-tools", () => ({
+  getAvailableTools: mocks.getAvailableTools,
+  toolsToOpenAIFormat: mocks.toolsToOpenAIFormat,
+  executeTool: mocks.executeTool,
+}));
+vi.mock("@/lib/mcp-governed-execute", () => ({
+  governedExecuteTool: mocks.governedExecuteTool,
+}));
+vi.mock("@/lib/ea/architecture-parity-steward", () => ({
+  runArchitectureParitySteward: mocks.runArchitectureParitySteward,
+}));
+vi.mock("@/lib/ea/consolidation-parity-steward", () => ({
+  runConsolidationParitySteward: mocks.runConsolidationParitySteward,
+}));
+vi.mock("@/lib/optimization/self-optimization-sweep", () => ({
+  runSelfOptimizationSweep: mocks.runSelfOptimizationSweep,
+}));
+
+import { executeScheduledAgentTask } from "./agent-task-scheduler";
+
+beforeEach(() => {
+  vi.resetAllMocks();
+});
+
+// Marketing Strategist coworker self-task fixture (mirrors the sibling file's
+// arrangeMarketingSelfTask; duplicated because vitest mock harnesses are
+// per-file).
+function arrangeMarketingSelfTask() {
+  mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+    taskId: "self-marketing-specialist-user-1",
+    agentId: "marketing-specialist",
+    title: "Refresh the acquisition campaign brief",
+    prompt: "Keep a current acquisition campaign brief on the Campaigns page.",
+    routeContext: "/customer/marketing",
+    schedule: "7 14 * * *",
+    timezone: "UTC",
+    isActive: true,
+    ownerUserId: "user-1",
+    attempts: 0,
+  });
+  mocks.prisma.agentThread.upsert.mockResolvedValue({ id: "thread-1" });
+  mocks.prisma.agentMessage.create.mockResolvedValue({});
+  mocks.prisma.user.findUnique.mockResolvedValue({ id: "user-1", isSuperuser: true });
+  mocks.prisma.userFact.findMany.mockResolvedValue([]);
+  mocks.resolveAgentForRouteWithPrompts.mockResolvedValue({
+    agentId: "marketing-specialist",
+    systemPrompt: "You are the Marketing Strategist.",
+    sensitivity: "confidential",
+    modelRequirements: { defaultMinimumTier: "frontier", defaultBudgetClass: "balanced" },
+  });
+  mocks.resolveAgentByIdWithPrompts.mockResolvedValue({
+    agentId: "marketing-specialist",
+    agentName: "Marketing Strategist",
+    agentDescription: "Marketing",
+    canAssist: true,
+    systemPrompt: "You are the Marketing Strategist.",
+    sensitivity: "confidential",
+    skills: [],
+  });
+  mocks.prisma.agentMessage.findMany.mockResolvedValue([]);
+  mocks.getAvailableTools.mockResolvedValue([
+    {
+      name: "create_marketing_campaign_brief",
+      description: "Create a campaign brief",
+      inputSchema: {},
+      requiredCapability: "operate_marketing",
+      executionMode: "immediate",
+      sideEffect: true,
+    },
+  ]);
+  mocks.toolsToOpenAIFormat.mockReturnValue([]);
+  mocks.governedExecuteTool.mockResolvedValue({
+    success: true,
+    message: "Saved marketing campaign brief brief-1",
+  });
+  mocks.prisma.taskRun.create.mockResolvedValue({
+    id: "task-run-row-1",
+    taskRunId: "TR-SCHED-MKTG1",
+    contextId: "thread-1",
+  });
+  mocks.prisma.taskMessage.create.mockResolvedValue({});
+  mocks.prisma.taskRun.update.mockResolvedValue({});
+  mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
+  mocks.prisma.scheduledJob.update.mockResolvedValue({});
+}
+
+describe("executeScheduledAgentTask — proactivity plan enforcement (BI-754C9E82)", () => {
+  function quietOverrideFact(agentId: string) {
+    return {
+      id: "fact-quiet-1",
+      key: `aiCoworkerProactivity:agent:${agentId}`,
+      value: JSON.stringify({ scopeKey: `agent:${agentId}`, level: "quiet" }),
+      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+    };
+  }
+  function assertiveOverrideFact(agentId: string) {
+    return {
+      id: "fact-assertive-1",
+      key: `aiCoworkerProactivity:agent:${agentId}`,
+      value: JSON.stringify({ scopeKey: `agent:${agentId}`, level: "assertive" }),
+      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+    };
+  }
+
+  it("gates tools to advise mode when the plan's actionBoundary is advise (quiet override)", async () => {
+    arrangeMarketingSelfTask();
+    // Quiet override → resolver returns actionBoundary "advise" for the run.
+    mocks.prisma.userFact.findMany.mockResolvedValue([quietOverrideFact("marketing-specialist")]);
+    mocks.runAgenticLoop.mockResolvedValue({ content: "ok", executedTools: [] });
+    // Recency guard satisfied so the run does not force-create a brief.
+    mocks.prisma.marketingCampaignBrief.findFirst.mockResolvedValue({ id: "brief-recent" });
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    expect(mocks.getAvailableTools).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ mode: "advise" }),
+    );
+  });
+
+  it("resolves act-mode tools when the boundary is propose (registry self-tasks are curated pre-authorized writes)", async () => {
+    arrangeMarketingSelfTask();
+    mocks.prisma.userFact.findMany.mockResolvedValue([]);
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "ok",
+      executedTools: [{ name: "create_marketing_campaign_brief", args: {}, result: { success: true, message: "ok" } }],
+    });
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    expect(mocks.getAvailableTools).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ mode: "act" }),
+    );
+  });
+
+  it("records the delegated posture on the run (dead resolveDelegatedPosture is now live)", async () => {
+    arrangeMarketingSelfTask();
+    mocks.prisma.userFact.findMany.mockResolvedValue([]);
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "ok",
+      executedTools: [{ name: "create_marketing_campaign_brief", args: {}, result: { success: true, message: "ok" } }],
+    });
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    expect(mocks.prisma.taskRun.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          a2aMetadata: expect.objectContaining({
+            delegatedPosture: expect.objectContaining({
+              executionAllowed: true,
+              proactivity: expect.objectContaining({
+                actionBoundary: expect.any(String),
+                effectiveLevel: expect.any(String),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("retries a failed run at the plan's follow-up cadence and increments attempts (assertive: +30min)", async () => {
+    arrangeMarketingSelfTask();
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "self-marketing-specialist-user-1",
+      agentId: "marketing-specialist",
+      title: "Refresh the acquisition campaign brief",
+      prompt: "Keep a current acquisition campaign brief on the Campaigns page.",
+      routeContext: "/customer/marketing",
+      schedule: "7 14 * * *",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+      attempts: 0,
+    });
+    mocks.prisma.userFact.findMany.mockResolvedValue([assertiveOverrideFact("marketing-specialist")]);
+    mocks.runAgenticLoop.mockRejectedValue(new Error("LLM unavailable"));
+
+    const before = Date.now();
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    const updateCall = mocks.prisma.scheduledAgentTask.update.mock.calls.find(
+      (call) => call[0]?.data?.lastStatus === "error",
+    );
+    expect(updateCall).toBeTruthy();
+    const data = updateCall![0].data;
+    expect(data.attempts).toBe(1);
+    // Assertive cadence[0] = 30 minutes — the retry lands ~30min out, far
+    // before the daily cron's next tick.
+    const deltaMinutes = (data.nextRunAt.getTime() - before) / 60_000;
+    expect(deltaMinutes).toBeGreaterThan(25);
+    expect(deltaMinutes).toBeLessThan(35);
+  });
+
+  it("re-arms the normal cron and resets attempts when the retry budget is exhausted", async () => {
+    arrangeMarketingSelfTask();
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "self-marketing-specialist-user-1",
+      agentId: "marketing-specialist",
+      title: "Refresh the acquisition campaign brief",
+      prompt: "Keep a current acquisition campaign brief on the Campaigns page.",
+      routeContext: "/customer/marketing",
+      schedule: "7 14 * * *",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+      // Two failures already burned this cycle; assertive maxAttempts=3 means
+      // this third failure exhausts the budget.
+      attempts: 2,
+    });
+    mocks.prisma.userFact.findMany.mockResolvedValue([assertiveOverrideFact("marketing-specialist")]);
+    mocks.runAgenticLoop.mockRejectedValue(new Error("LLM unavailable"));
+
+    const before = Date.now();
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    const updateCall = mocks.prisma.scheduledAgentTask.update.mock.calls.find(
+      (call) => call[0]?.data?.lastStatus === "error",
+    );
+    expect(updateCall).toBeTruthy();
+    const data = updateCall![0].data;
+    expect(data.attempts).toBe(0);
+    // Budget spent → back on the daily cron, not a near-term retry.
+    const deltaMinutes = (data.nextRunAt.getTime() - before) / 60_000;
+    expect(deltaMinutes).toBeGreaterThan(60);
+  });
+
+  it("resets attempts on success", async () => {
+    arrangeMarketingSelfTask();
+    mocks.prisma.userFact.findMany.mockResolvedValue([]);
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "ok",
+      executedTools: [{ name: "create_marketing_campaign_brief", args: {}, result: { success: true, message: "ok" } }],
+    });
+
+    await executeScheduledAgentTask("self-marketing-specialist-user-1");
+
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ lastStatus: "ok", attempts: 0 }),
+      }),
+    );
+  });
+});
