@@ -1,5 +1,14 @@
 # Build Studio — Capability-Matched Model-Tier Routing & Parallel Track
 
+> **⚠️ SUPERSEDED / FOLDED (2026-07-12).** Model-tier routing shipped and is authoritative in code as
+> `getModelTier` (`apps/web/lib/explore/build-process-matrix.ts`), gated by
+> `DPF_BUILD_MODEL_TIER_ROUTING`. Its *policy* is now owned by
+> [`2026-06-23-quality-first-risk-aware-build-rightsizing-design.md`](2026-06-23-quality-first-risk-aware-build-rightsizing-design.md)
+> (robust everywhere except the trivial small doc/chore tail; high sensitivity ⇒ frontier floor).
+> Keep this spec for the capability-matching *rationale* (local-30B context/VRAM limits observed
+> 2026-06-21/22); for current routing policy follow the quality-first spec and the code. Narrative map:
+> [`2026-07-12-dpf-development-model-and-frontier-harness-positioning-design.md`](2026-07-12-dpf-development-model-and-frontier-harness-positioning-design.md) §11.
+
 - **Status:** Design
 - **Date:** 2026-06-22
 - **Author:** Platform coworker (operator-directed)

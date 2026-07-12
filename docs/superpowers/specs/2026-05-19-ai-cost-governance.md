@@ -1,6 +1,16 @@
 # AI Cost Governance — Observability, Model Tiering, Context Compaction, and Budget Enforcement
 
-> **Status: DRAFT spec** — covers all four areas of the AI cost governance initiative.
+> **⚠️ SUPERSEDED (2026-07-12) — never left DRAFT; the domain was carried by other specs.** The four
+> areas here were realized elsewhere: cost/quality/time posture is owned by
+> [`docs/design/golden-triangle-design.md`](../../design/golden-triangle-design.md); context/token
+> economy by the four `2026-06-20-*` context-economy specs and
+> [`docs/architecture/context-engineering-standards.md`](../../architecture/context-engineering-standards.md);
+> model tiering by the quality-first right-sizing spec (`getModelTier`). Cost **strategy** is now
+> stated in [`2026-07-12-dpf-development-model-and-frontier-harness-positioning-design.md`](2026-07-12-dpf-development-model-and-frontier-harness-positioning-design.md)
+> §6. Retain this file for the original problem framing only; do not treat any mechanism here as
+> authoritative or unbuilt-but-planned.
+>
+> **Status: DRAFT spec (historical)** — covers all four areas of the AI cost governance initiative.
 > Feeds `writing-plans` for phased execution.
 > Epic: Create **EP-COST-001** in the backlog before the plan is written. EP-GOVERN already exists
 > (EP-GOVERN-002 is the Tool Evaluation Pipeline). AI cost governance is a distinct domain — a
