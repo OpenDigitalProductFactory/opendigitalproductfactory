@@ -111,3 +111,11 @@ alternative: a hard pre-response gate that blocks the model until it calls `prin
 too brittle for conversational turns (analysis/advise turns legitimately need no decision) and
 would fight IDENTITY_BLOCK rule #19. A prompt-level contract + visible skills is the
 lowest-blast-radius lever that makes the behavior proactive without a runtime chokepoint.
+
+---
+
+## Addendum (2026-07-12, BI-3CCE7978) — the CRAFT branch now routes to the WSID gate
+
+When this contract was written, all three branches named a surface but only two named a *gate*: PLATFORM→`principle_decide`, ORG→`evaluate_org_business_decision`, and CRAFT→"ground it in your profession knowledge" (prompt-injected corpus only). Meanwhile the WSID **gate** — `evaluateProfessionDecisionGate`, exposed as the `evaluate_profession_decision` tool (`profession-decision-pack`, registered in `pack-registry.ts`), which scores a craft call against the coworker's own `wsid-*` profile with the full ladder mechanics and records a `DecisionInteraction` per profession — shipped (BI-9900B365) but had **no routing consumer**: no coworker was ever told to call it, so it was dead-lettered while craft decisions stayed prompt-only and un-ledgered.
+
+This addendum closes that: the CRAFT branch now instructs the coworker to run `evaluate_profession_decision` for a *consequential* technique/method/standard-of-practice choice (parallel to the other two branches — ledgered, confidence-scored, human-escalating), while still answering low-stakes phrasing directly from the injected profession corpus. This makes WSID the third fully-gated scope, not a prompt-grounding exception, so "would a competent professional do X" becomes inspectable and ledgered like WWMD and WWWD. Changed in tandem: the offline constant `DECISION_ROUTING_BLOCK` and the seeded `prompts/platform-identity/decision-routing.prompt.md` (bumped to `version: 3`).
