@@ -255,6 +255,45 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       // BI-86FC0336: seed runs the full entrypoint from the freshly swapped image, after the swap.
       expect(log).toContain("run --rm -T --no-deps --entrypoint /docker-entrypoint.sh portal");
       expect(log).toContain("exec -T portal cat /app/.dpf-source-content-hash");
+      // BI-A8686CFC: the sandbox image is rebuilt + recreated the same way, so
+      // Dockerfile.sandbox improvements (opencode agent, TTS env) actually reach
+      // installed sandboxes instead of the promote chain only touching the portal.
+      expect(log).toContain("build sandbox");
+      expect(log).toContain("up -d --no-deps --force-recreate sandbox");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  // BI-A8686CFC: a sandbox rebuild that fails AFTER the portal is verified must
+  // NOT fail the whole promotion (the portal swap already happened and the
+  // orchestrator died with it) — it emits a loud sandbox-refresh-failed marker
+  // and still reaches step=done, rather than silently skipping the rebuild.
+  it("keeps the promotion successful but marks sandbox-refresh-failed when the sandbox rebuild fails", () => {
+    const { root, source, backup, head } = makeScratch();
+    try {
+      // A docker shim that fails ONLY on `compose ... build sandbox`, succeeds
+      // otherwise (and still answers the content-hash probe so portal verifies).
+      const bin = join(root, "failbin");
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(
+        join(bin, "docker"),
+        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"build sandbox"*) exit 1 ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+      );
+      writeFileSync(
+        join(bin, "curl"),
+        '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "%s" "$DPF_VERSION" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
+      );
+      chmodSync(join(bin, "docker"), 0o755);
+      chmodSync(join(bin, "curl"), 0o755);
+
+      const r = runPromote({ source, backup, targetSha: head, fakeBin: bin });
+
+      expect(r.stdout).toContain("step=sandbox-refresh-failed");
+      expect(r.stderr).toContain("dpf-sandbox rebuild/recreate failed");
+      // The portal promotion still completes.
+      expect(r.stdout).toContain(`step=done target=${head}`);
+      expect(r.status).toBe(0);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
