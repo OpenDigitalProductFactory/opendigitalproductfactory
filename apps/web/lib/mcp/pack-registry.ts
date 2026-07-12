@@ -60,6 +60,7 @@ import { coworkerCapabilityPack } from "./packs/coworker-capability-pack";
 import { publicWebDesignPack } from "./packs/public-web-design-pack";
 import { sorReadPack } from "./packs/sor-read-pack";
 import { codeIntelligencePack } from "./packs/code-intelligence-pack";
+import { modelProviderPack } from "./packs/model-provider-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 
@@ -109,4 +110,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   grokSigninPack,
   sorReadPack,
   codeIntelligencePack,
+  modelProviderPack,
 ]);
