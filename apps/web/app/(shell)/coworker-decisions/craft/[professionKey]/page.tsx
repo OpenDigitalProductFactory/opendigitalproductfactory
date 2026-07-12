@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: { params: Params }) {
   const family = PROFESSION_REGISTRY.families.find(
     (f) => f.professionKey === professionKey,
   );
-  return { title: `${family?.label ?? "Craft"} · Decision governance` };
+  return { title: `${family?.label ?? "Craft"} · Coworker Decision Engine` };
 }
 
 export default async function CraftProfessionPage({ params }: { params: Params }) {
@@ -58,11 +58,11 @@ export default async function CraftProfessionPage({ params }: { params: Params }
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
       <nav className="mb-6 flex items-center gap-2 text-sm text-[var(--dpf-muted)]">
-        <Link href="/wiki" className="hover:text-[var(--dpf-text)]">
-          Decision governance
+        <Link href="/coworker-decisions" className="hover:text-[var(--dpf-text)]">
+          Coworker Decision Engine
         </Link>
         <span>/</span>
-        <Link href="/wiki/craft" className="hover:text-[var(--dpf-text)]">
+        <Link href="/coworker-decisions/craft" className="hover:text-[var(--dpf-text)]">
           Craft
         </Link>
         <span>/</span>
@@ -81,7 +81,7 @@ export default async function CraftProfessionPage({ params }: { params: Params }
         </p>
         <div className="mt-3 flex flex-wrap gap-3 text-sm">
           <Link
-            href={`/wiki/perspectives/${encodeURIComponent(profileId)}/voice`}
+            href={`/coworker-decisions/perspectives/${encodeURIComponent(profileId)}/voice`}
             className="text-[var(--dpf-accent)] hover:underline"
           >
             See how this profile works →
@@ -117,7 +117,7 @@ export default async function CraftProfessionPage({ params }: { params: Params }
               <li key={o.id} className="px-4 py-3">
                 <div className="flex items-center gap-3">
                   <Link
-                    href={`/wiki/${o.slug}`}
+                    href={`/coworker-decisions/${o.slug}`}
                     className="text-sm font-medium text-[var(--dpf-text)] hover:underline min-w-0 flex-1 truncate"
                   >
                     {o.title}
@@ -126,7 +126,7 @@ export default async function CraftProfessionPage({ params }: { params: Params }
                     {STATUS_LABEL[o.status] ?? o.status}
                   </span>
                   <Link
-                    href={`/wiki/edit/${o.slug}`}
+                    href={`/coworker-decisions/edit/${o.slug}`}
                     className="text-xs text-[var(--dpf-accent)] hover:underline shrink-0"
                   >
                     Edit

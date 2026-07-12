@@ -32,6 +32,19 @@ const config = {
   outputFileTracingExcludes: {
     "**/*": ["./node_modules/@swc/core*", "./node_modules/esbuild*"],
   },
+  // EP-0AF96937 Phase 5: the decision-governance surface moved from /wiki to
+  // /coworker-decisions. Permanently redirect the old paths so existing
+  // bookmarks, deep links, and any lingering internal references keep working.
+  async redirects() {
+    return [
+      { source: "/wiki", destination: "/coworker-decisions", permanent: true },
+      {
+        source: "/wiki/:path*",
+        destination: "/coworker-decisions/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default config;

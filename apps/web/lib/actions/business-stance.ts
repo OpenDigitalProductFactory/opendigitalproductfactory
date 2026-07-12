@@ -51,8 +51,8 @@ export async function saveBusinessStance(
     return { ok: false, error: result.error };
   }
 
-  revalidatePath("/wiki/stance");
-  revalidatePath("/wiki");
+  revalidatePath("/coworker-decisions/stance");
+  revalidatePath("/coworker-decisions");
   return { ok: true, slug: result.slug, status: result.status };
 }
 
@@ -130,7 +130,7 @@ export async function publishBusinessStance(
     tier: "confirmed",
   });
 
-  revalidatePath("/wiki/stance");
-  revalidatePath("/wiki");
+  revalidatePath("/coworker-decisions/stance");
+  revalidatePath("/coworker-decisions");
   return { ok: true, slug: result.slug, gateLive: promoted.ok };
 }
