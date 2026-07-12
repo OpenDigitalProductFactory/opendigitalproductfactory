@@ -131,29 +131,70 @@ async function resolveBaseBuildStudioConfig(): Promise<BuildStudioDispatchConfig
   return autoDetectConfig();
 }
 
-/**
- * EP-MODEL-TIER-ROUTING: tier routing is opt-in (default off) so the change
- * merges inert and the operator enables it via env after a robust-tier
- * smoke-test. Set DPF_BUILD_MODEL_TIER_ROUTING=1 to route large/xlarge builds
- * to the configured robust (frontier) provider.
- */
-export function isModelTierRoutingEnabled(): boolean {
-  const v = process.env.DPF_BUILD_MODEL_TIER_ROUTING;
-  return v === "1" || v === "true";
+// EP-27FD96BC · BI-9E0595E7 — activate the dormant Build Studio cost flags.
+// The quality-first routing machinery (posture compiler + sensitivity floor +
+// robust-engine fallback) is fully built; it was gated behind default-off env
+// vars so it could merge inert. Activation makes it operator-governed and ON by
+// default, driven by the evidence the machinery already reads (the golden-
+// triangle posture, pinned to Quality) — not a hidden env var.
+//
+// Precedence, per flag: an explicit env var is the operator's emergency
+// kill-switch/override (0/false → off, 1/true → on); otherwise the PlatformConfig
+// row decides (explicit false → off), defaulting ON when absent. Fail-open to the
+// default (on) mirrors getBuildGoldenTrianglePosture — a config read blip must not
+// silently regress substantive builds back to the local tier.
+export const BUILD_MODEL_TIER_ROUTING_KEY = "BUILD_MODEL_TIER_ROUTING";
+export const BUILD_QUALITY_FIRST_RIGHTSIZING_KEY = "BUILD_QUALITY_FIRST_RIGHTSIZING";
+
+/** Env override → PlatformConfig row → default. Pure except the injected config read. */
+export function resolveActivationFlag(
+  envValue: string | undefined,
+  configValue: unknown,
+  defaultOn = true,
+): boolean {
+  if (envValue === "0" || envValue === "false") return false;
+  if (envValue === "1" || envValue === "true") return true;
+  if (configValue === false || configValue === "false" || configValue === "0") return false;
+  if (configValue === true || configValue === "true" || configValue === "1") return true;
+  return defaultOn;
+}
+
+async function readPlatformFlag(key: string): Promise<unknown> {
+  try {
+    const cfg = await prisma.platformConfig.findUnique({ where: { key } });
+    return cfg?.value ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * EP-QUALITY-RIGHTSIZING: quality-first defaults + the deliverable-sensitivity
- * risk axis are opt-in (default off) so the change merges inert and byte-identical
- * to today. Set DPF_BUILD_QUALITY_FIRST_RIGHTSIZING=1 to route substantive work
- * to the robust tier by default (local only for the trivial doc/chore tail) and
- * to let a HIGH-sensitivity deliverable escalate its build process regardless of
- * size. Honored in tandem with DPF_BUILD_MODEL_TIER_ROUTING — the tier decision
- * is still only acted on when routing is enabled + a robust engine is configured.
+ * EP-MODEL-TIER-ROUTING (activated by BI-9E0595E7): route large/xlarge builds to
+ * the configured robust (frontier) provider. ON by default; an operator disables
+ * it via the `BUILD_MODEL_TIER_ROUTING` PlatformConfig row or
+ * `DPF_BUILD_MODEL_TIER_ROUTING=0`. Falls back to local when no robust engine is
+ * configured, so a local-only install is unaffected.
  */
-export function isQualityFirstRightsizingEnabled(): boolean {
-  const v = process.env.DPF_BUILD_QUALITY_FIRST_RIGHTSIZING;
-  return v === "1" || v === "true";
+export async function isModelTierRoutingEnabled(): Promise<boolean> {
+  return resolveActivationFlag(
+    process.env.DPF_BUILD_MODEL_TIER_ROUTING,
+    await readPlatformFlag(BUILD_MODEL_TIER_ROUTING_KEY),
+  );
+}
+
+/**
+ * EP-QUALITY-RIGHTSIZING (activated by BI-9E0595E7): route substantive work to the
+ * robust tier by default (local only for the trivial doc/chore tail) and let a
+ * HIGH-sensitivity deliverable escalate its build process regardless of size. ON
+ * by default; disable via the `BUILD_QUALITY_FIRST_RIGHTSIZING` PlatformConfig row
+ * or `DPF_BUILD_QUALITY_FIRST_RIGHTSIZING=0`. The tier decision is still only acted
+ * on when a robust engine is configured (see isModelTierRoutingEnabled).
+ */
+export async function isQualityFirstRightsizingEnabled(): Promise<boolean> {
+  return resolveActivationFlag(
+    process.env.DPF_BUILD_QUALITY_FIRST_RIGHTSIZING,
+    await readPlatformFlag(BUILD_QUALITY_FIRST_RIGHTSIZING_KEY),
+  );
 }
 
 /** PlatformConfig key for the global build Cost/Quality/Time posture (P2). */
@@ -206,7 +247,7 @@ export async function getBuildStudioConfig(
   opts?: { modelTier?: BuildModelTier },
 ): Promise<BuildStudioDispatchConfig> {
   const base = await resolveBaseBuildStudioConfig();
-  if (opts?.modelTier === "robust" && isModelTierRoutingEnabled()) {
+  if (opts?.modelTier === "robust" && (await isModelTierRoutingEnabled())) {
     const robust = await resolveRobustProvider();
     if (robust) {
       const idField =

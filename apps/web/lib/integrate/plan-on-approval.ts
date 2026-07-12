@@ -336,7 +336,7 @@ export async function dispatchPlanForApprovedBuild(params: {
     // DPF_BUILD_MODEL_TIER_ROUTING is on.
     const { getModelTier } = await import("@/lib/explore/build-process-matrix");
     const { isModelTierRoutingEnabled } = await import("./build-studio-config");
-    const planModelTier = isModelTierRoutingEnabled()
+    const planModelTier = (await isModelTierRoutingEnabled())
       ? getModelTier(build.kind, biEffortSize)
       : undefined;
 
