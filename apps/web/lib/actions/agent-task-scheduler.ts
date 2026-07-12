@@ -27,6 +27,7 @@ import {
   resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
 import { resolveUserAwareProactivityPlan } from "@/lib/proactivity/proactivity-resolver.server";
+import { resolveDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import {
   isCoworkerSelfTaskId,
@@ -228,6 +229,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
   const now = new Date();
   let taskRunRef: ScheduledTaskRunRef | null = null;
+  // BI-754C9E82: the resolved plan is needed in the catch block (retry policy);
+  // null when failure precedes resolution (fall back to plain cron re-arm).
+  let resolvedPlan: Awaited<ReturnType<typeof resolveUserAwareProactivityPlan>> | null = null;
 
   try {
     // Get or create a dedicated thread for this scheduled task
@@ -257,6 +261,16 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         routeContext: task.routeContext,
       },
     });
+    resolvedPlan = proactivity;
+
+    // BI-754C9E82: record the resolved delegated posture on the run — the
+    // scheduler is the "caller" delegating scheduled work to the coworker, so
+    // the run carries an auditable effective level + action boundary instead of
+    // the posture resolver staying dead code.
+    const delegatedPosture = resolveDelegatedPosture({
+      caller: { agentId: "agent-task-scheduler" },
+      receiver: { agentId: task.agentId, localProactivityPlan: proactivity },
+    });
 
     taskRunRef = await createTaskRunForScheduledTask({
       taskId: task.taskId,
@@ -267,6 +281,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       title: task.title,
       prompt: task.prompt,
       proactivity,
+      delegatedPosture,
     });
 
     await createTaskMessage({
@@ -307,9 +322,15 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     ];
 
+    // BI-754C9E82: the proactivity plan's actionBoundary is ENFORCED here, not
+    // just displayed. boundary=advise (quiet level, regulated contexts) strips
+    // side-effecting tools from the autonomous run. boundary=propose keeps act
+    // tools: registry self-tasks are curated, idempotent, pre-authorized writes
+    // (COWORKER_SELF_TASKS); full propose-interception (side-effects diverted to
+    // AgentActionProposal) is the deferred remainder of BI-754C9E82.
     const { tools, toolsForProvider } = await resolveAutonomousWorkTools({
       userContext,
-      mode: "act",
+      mode: proactivity.actionBoundary === "advise" ? "advise" : "act",
       agentId: task.agentId,
     });
 
@@ -444,6 +465,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         lastThreadId: thread.id,
         taskRunId: taskRunRef.taskRunId,
         nextRunAt,
+        // BI-754C9E82: success closes the retry cycle.
+        attempts: 0,
         ...(oneShot ? { isActive: false } : {}),
       },
     });
@@ -497,7 +520,30 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       });
     }
 
-    const nextRunAt = computeNextCronRun(task.schedule, now);
+    // BI-754C9E82: the plan's followUpCadenceMinutes/maxAttempts are ENFORCED
+    // as the retry policy. Attempt N failing schedules a short-cadence retry at
+    // cadence[N-1] minutes while attempts < maxAttempts and a cadence step
+    // exists; exhausting the budget re-arms the normal cron and resets the
+    // budget so the next cycle starts fresh. resolvedPlan is null when the
+    // failure happened before plan resolution — fall back to plain cron re-arm.
+    const failedAttempts = (task.attempts ?? 0) + 1;
+    const cadence = resolvedPlan?.followUpCadenceMinutes ?? [];
+    const maxAttempts = resolvedPlan?.maxAttempts ?? 0;
+    const retryDelayMinutes =
+      failedAttempts < maxAttempts ? cadence[failedAttempts - 1] : undefined;
+    const willRetry = typeof retryDelayMinutes === "number" && retryDelayMinutes > 0;
+    const nextRunAt = willRetry
+      ? new Date(now.getTime() + retryDelayMinutes * 60_000)
+      : computeNextCronRun(task.schedule, now);
+    if (willRetry) {
+      console.info(
+        "[agent-task-scheduler] Task %s failed attempt %d/%d — retrying in %d min per proactivity plan",
+        JSON.stringify(taskId),
+        failedAttempts,
+        maxAttempts,
+        retryDelayMinutes,
+      );
+    }
     await prisma.scheduledAgentTask.update({
       where: { taskId },
       data: {
@@ -506,6 +552,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         lastError: errMsg,
         taskRunId: taskRunRef?.taskRunId ?? null,
         nextRunAt,
+        attempts: willRetry ? failedAttempts : 0,
       },
     });
 
