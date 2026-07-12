@@ -12,6 +12,7 @@ import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
+import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
 import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
 import {
@@ -1135,6 +1136,13 @@ export async function runAgenticLoop(params: {
    */
   interactionMode?: "chat" | "autonomous";
   /**
+   * BI-80532D5C — when true, a side-effecting non-artifact tool the model calls
+   * is diverted to an AgentActionProposal (status "proposed") instead of being
+   * executed. Set by the scheduler when the run's proactivity actionBoundary is
+   * "propose". Default false preserves the act path for every existing caller.
+   */
+  proposeSideEffects?: boolean;
+  /**
    * Optional active FeatureBuild.id for attribution on guard-written
    * PlatformIssueReport rows. Caller should look this up alongside buildPhase.
    */
@@ -1199,6 +1207,7 @@ export async function runAgenticLoop(params: {
     agentMessageId,
   } = params;
   const interactionMode: "chat" | "autonomous" = params.interactionMode ?? "autonomous";
+  const proposeSideEffects = params.proposeSideEffects ?? false;
 
   const userContext = await resolveUserContext(userId);
 
@@ -2372,6 +2381,27 @@ export async function runAgenticLoop(params: {
             message: `The tool \`${tc.name}\` ${reason}.${hint}`,
           },
         });
+        continue;
+      }
+
+      // Propose-interception (BI-80532D5C): under a propose boundary, a
+      // side-effecting non-artifact tool is captured as an AgentActionProposal
+      // for the owner to approve instead of running now (null = execute normally).
+      const proposalResult = await interceptToolCallAsProposal({
+        toolDef,
+        proposeSideEffects,
+        toolName: tc.name,
+        args: tc.arguments,
+        agentId,
+        threadId,
+        routeContext,
+        taskRunId: taskRunId ?? null,
+      });
+      if (proposalResult) {
+        console.log(`[agentic-tool] PROPOSED iter=${iteration} tool=${tc.name} (propose boundary)`);
+        executedTools.push({ name: tc.name, args: tc.arguments, result: proposalResult });
+        iterationResults.push({ tc, toolResult: proposalResult });
+        onProgress?.({ type: "tool:complete", tool: tc.name, success: proposalResult.success });
         continue;
       }
 

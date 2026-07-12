@@ -257,29 +257,63 @@ export type EnsurePromoterResult = {
 };
 
 /**
- * Make the promoter image present, building it just-in-time if it is missing.
+ * What ensurePromoterImage should do, given whether an image is already present
+ * and whether it is JIT-buildable. Pure so the load-bearing rule is unit-tested
+ * without docker.
+ *
+ * - `rebuild`: JIT-buildable dpf-promoter — ALWAYS rebuild from the portal's
+ *   freshly-baked /promoter/ layout, EVEN when a stale image is present. The
+ *   promoter bakes promote.sh as its ENTRYPOINT (Dockerfile.promoter), so a
+ *   present-but-outdated image runs an OLD promote.sh and silently skips newer
+ *   steps — the BI-8843BD48 bug that let a stale promoter drop BI-A8686CFC's
+ *   sandbox-refresh on installs whose promoter image predated the fix. The image
+ *   is tiny (docker CLI + compose + git + the script), so rebuilding every call
+ *   is negligible and correct-by-construction beats staleness detection.
+ * - `use-present`: a custom/registry image that exists — used as-is (we can't
+ *   synthesise someone else's tag locally).
+ * - `cannot-build`: a custom/registry image that is missing — left to the
+ *   operator's pull.
+ */
+export function decidePromoterEnsureAction(
+  present: boolean,
+  jitBuildable: boolean,
+): "rebuild" | "use-present" | "cannot-build" {
+  if (jitBuildable) return "rebuild";
+  return present ? "use-present" : "cannot-build";
+}
+
+/**
+ * Make the promoter image current, (re)building it just-in-time from the inputs
+ * baked into the portal.
  *
  * This is the self-heal for the `promoter-unavailable` self-upgrade skip and the
  * body of the governed `repair_promoter_image` tool: instead of stranding a
  * non-technical operator with a `docker build` command, the platform builds the
- * image itself from the inputs already baked into the portal. Idempotent — a
- * present image returns `{ ok: true, alreadyPresent: true }` without rebuilding.
+ * image itself. For the JIT-buildable `dpf-promoter` it ALWAYS rebuilds so the
+ * promoter never runs a stale baked promote.sh (BI-8843BD48); a custom/registry
+ * image is used as-is when present and left to the operator's pull when missing.
  * Never throws (mirrors `isPromoterAvailable`); failures surface via `ok:false`
  * + `skipReason` so callers decide whether to skip, fall back, or report.
  */
 export async function ensurePromoterImage(
   promoterImage?: string,
 ): Promise<EnsurePromoterResult> {
-  if (await isPromoterAvailable(promoterImage)) {
+  const present = await isPromoterAvailable(promoterImage);
+  const action = decidePromoterEnsureAction(
+    present,
+    isJitBuildablePromoterImage(promoterImage),
+  );
+
+  if (action === "use-present") {
     return { ok: true, alreadyPresent: true, built: false };
   }
-
   // A custom/registry image can't be synthesised locally — leave it to the
   // operator's pull, and report cleanly so the caller keeps the skip.
-  if (!isJitBuildablePromoterImage(promoterImage)) {
+  if (action === "cannot-build") {
     return { ok: false, alreadyPresent: false, built: false, skipReason: "custom-image" };
   }
 
+  // action === "rebuild": always refresh the JIT-buildable promoter image.
   return await new Promise<EnsurePromoterResult>((resolve) => {
     let settled = false;
     const finish = (r: EnsurePromoterResult): void => {

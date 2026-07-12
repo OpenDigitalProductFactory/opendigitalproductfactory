@@ -39,6 +39,7 @@ import {
 const MKT = "marketing-specialist";
 const INV = "inventory-specialist";
 const DOC = "doc-specialist";
+const PLT = "platform-engineer";
 const PROACTIVITY_KEY = (agentId: string) => `aiCoworkerProactivity:agent:${agentId}`;
 const factRow = (userId: string, agentId: string, level: string) => ({
   userId,
@@ -142,8 +143,18 @@ describe("rollout registry (BI-E962B9CD)", () => {
     expect(entry!.prompt).toContain(DOCS_HEALTH_DOCUMENT_ID);
   });
 
+  it("registers the AI Ops Engineer platform-posture self-task on /platform", () => {
+    const entry = COWORKER_SELF_TASKS[PLT];
+    expect(entry).toBeDefined();
+    expect(entry!.routeContext).toBe("/platform");
+    expect(entry!.prompt).toMatch(/create_knowledge_article/);
+    // Grounded on real AI-layer data, not invented.
+    expect(entry!.prompt).toMatch(/provider|model|cost|agent/i);
+    expect(entry!.prompt).toMatch(/do not invent/i);
+  });
+
   it("keeps the new coworkers sub-daily even at Assertive (conservative cadence)", () => {
-    for (const agentId of [INV, DOC]) {
+    for (const agentId of [INV, DOC, PLT]) {
       const dowField = COWORKER_SELF_TASKS[agentId]!.cadence.assertive.split(" ")[4];
       // A daily task has a wildcard day-of-week; these must NOT (sub-daily).
       expect(dowField).not.toBe("*");
@@ -178,6 +189,34 @@ describe("coworkerSelfTaskRequiredTool (anti-fabrication floor)", () => {
     expect(await tool!.hasRecentArtifact!()).toBe(true);
     // Guard must scope to the stable overview id.
     expect(findFirst.mock.calls[0]![0].where.documentId).toBe(DOCS_HEALTH_DOCUMENT_ID);
+  });
+
+  it("forces a knowledge article for the AI Ops Engineer, deduped per-topic (not global)", async () => {
+    const { prisma } = await import("@dpf/db");
+    const tool = coworkerSelfTaskRequiredTool(PLT);
+    expect(tool?.name).toBe("create_knowledge_article");
+    expect(tool!.args["title"]).toMatch(/^AI platform posture summary/);
+
+    const findFirst = prisma.knowledgeArticle.findFirst as ReturnType<typeof vi.fn>;
+    findFirst.mockClear();
+    findFirst.mockResolvedValueOnce({ articleId: "KA-PLT" });
+    expect(await tool!.hasRecentArtifact!()).toBe(true);
+    // The dedup MUST scope on this topic's title prefix — a global "any article"
+    // check would let the Estate Specialist's article stand down this task.
+    expect(findFirst.mock.calls.at(-1)![0].where.title).toEqual({ startsWith: "AI platform posture summary" });
+  });
+
+  it("scopes the Estate Specialist dedup to its OWN title prefix (no cross-topic collision)", async () => {
+    const { prisma } = await import("@dpf/db");
+    const findFirst = prisma.knowledgeArticle.findFirst as ReturnType<typeof vi.fn>;
+    findFirst.mockClear();
+    findFirst.mockResolvedValueOnce(null);
+    await coworkerSelfTaskRequiredTool(INV)!.hasRecentArtifact!();
+    expect(findFirst.mock.calls.at(-1)![0].where.title).toEqual({ startsWith: "Estate posture summary" });
+    // The two knowledge-article coworkers query DISJOINT title prefixes.
+    expect(coworkerSelfTaskRequiredTool(INV)!.args["title"]).not.toEqual(
+      coworkerSelfTaskRequiredTool(PLT)!.args["title"],
+    );
   });
 
   it("returns null for a coworker with no self-task", () => {

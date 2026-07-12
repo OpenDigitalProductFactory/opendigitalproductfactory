@@ -516,6 +516,25 @@ export async function advanceBuildPhase(
       },
     }).catch(() => {});
 
+    // BI-D996C238 — graduated gate autonomy (opt-in): derive the risk tier from
+    // the deliverable's sensitivity instead of the fixed "medium", so a
+    // low-sensitivity plan advancement can clear on the ladder while a
+    // high-sensitivity one always escalates. Fail-open to undefined (→ the gate's
+    // "medium" default) so a config/derive error never changes the gate.
+    let graduatedRiskTier: "low" | "medium" | "high" | "critical" | undefined;
+    try {
+      const { isGraduatedGateAutonomyEnabled } = await import("@/lib/integrate/build-studio-config");
+      if (isGraduatedGateAutonomyEnabled()) {
+        const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+        const { deriveTransitionRiskTier } = await import("@/lib/decision-perspective/graduated-autonomy");
+        const text = `${build.title ?? ""}\n${JSON.stringify(build.designDoc ?? build.buildPlan ?? {})}`.slice(0, 4000);
+        const sensitivity = deriveDeliverableSensitivity({ text, workType: build.kind });
+        graduatedRiskTier = deriveTransitionRiskTier({ sensitivity, transition: "plan-advance" });
+      }
+    } catch {
+      graduatedRiskTier = undefined;
+    }
+
     const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
       db: prisma,
       build: {
@@ -526,6 +545,7 @@ export async function advanceBuildPhase(
         deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null,
       },
       triggeredByUserId: userId,
+      riskTier: graduatedRiskTier,
     });
     if (!decisionGate.allowed) {
       throw new Error(decisionGate.operatorMessage);

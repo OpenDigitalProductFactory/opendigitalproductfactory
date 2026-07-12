@@ -14,6 +14,7 @@ import {
   reassignWorkCapsuleExecutor,
   planCapsuleWorkspace,
   recordWorkCapsuleEvidence,
+  recordAgentActivity,
   ScopeOverlapError,
   type CapsuleDb,
 } from "./work-capsule-store";
@@ -1049,6 +1050,53 @@ describe("work capsule store", () => {
         actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
       })).rejects.toThrow(/not found/i);
       expect(db.workCapsule.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("recordAgentActivity teammate-session feed (BI-C41AB195)", () => {
+    it.each(["thought", "action", "question", "response", "error"] as const)(
+      "writes a %s activity onto the capsule timeline with actor identity",
+      async (type) => {
+        db.workCapsule.findUnique.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-SESS" });
+        db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "act-1" });
+
+        await recordAgentActivity({
+          db: capsuleDb(),
+          capsuleId: "WC-SESS",
+          activity: { type, body: `did a ${type}`, payload: { subtaskRef: "sub-1" } },
+          actor: { userId: "user-1", agentId: "claude", principalId: "principal-1" },
+        });
+
+        expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+          data: expect.objectContaining({
+            workCapsuleId: "row-1",
+            kind: type,
+            summary: `did a ${type}`,
+            payload: { subtaskRef: "sub-1" },
+            recordedByAgentId: "claude",
+          }),
+        }));
+      },
+    );
+
+    it("rejects an invalid activity type before touching the capsule", async () => {
+      await expect(recordAgentActivity({
+        db: capsuleDb(),
+        capsuleId: "WC-SESS",
+        activity: { type: "chatter" as never, body: "nope" },
+        actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
+      })).rejects.toThrow(/activity type/i);
+      expect(db.workCapsule.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("throws when the capsule does not exist", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce(null);
+      await expect(recordAgentActivity({
+        db: capsuleDb(),
+        capsuleId: "WC-MISSING",
+        activity: { type: "thought", body: "hmm" },
+        actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
+      })).rejects.toThrow(/not found/i);
     });
   });
 });
