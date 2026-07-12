@@ -108,7 +108,7 @@ export function DecisionAuditTable({ rows }: { rows: DecisionAuditRow[] }) {
       columns={columns}
       rows={rows}
       getRowKey={(r) => r.interactionId}
-      rowHref={(r) => `/wiki/decisions/${r.interactionId}`}
+      rowHref={(r) => `/coworker-decisions/decisions/${r.interactionId}`}
       initialSort={{ key: "createdAt", dir: "desc" }}
       pageSize={25}
       empty="No decisions recorded yet for this view."

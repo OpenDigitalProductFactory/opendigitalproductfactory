@@ -256,7 +256,7 @@ export function ProfessionPanel({
     <div>
       <Section
         title="Profession profile (WSID)"
-        action={profession.profileId ? deepLink("/wiki/perspectives", "All perspectives") : null}
+        action={profession.profileId ? deepLink("/coworker-decisions/perspectives", "All perspectives") : null}
       >
         {profession.profile ? (
           <InfoGrid>
@@ -469,7 +469,7 @@ export function CapabilitiesPanel({
 
       <Section
         title="Voice"
-        action={profession.profileId ? deepLink(`/wiki/perspectives/${profession.profileId}/voice`, "Voice admin") : null}
+        action={profession.profileId ? deepLink(`/coworker-decisions/perspectives/${profession.profileId}/voice`, "Voice admin") : null}
       >
         {voice ? (
           <InfoGrid>

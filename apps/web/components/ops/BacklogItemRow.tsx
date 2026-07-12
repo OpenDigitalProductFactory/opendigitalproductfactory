@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { memo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, ExternalLink, LoaderCircle, Play } from "lucide-react";
@@ -17,7 +17,13 @@ type Props = {
   focused?: boolean;
 };
 
-export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
+// Memoized: on /ops hundreds of rows can be mounted at once (expanded epics +
+// the triage band). Without this, any OpsClient state change (filters, opening a
+// panel, toggling the triage band) re-renders every mounted row. Props are
+// primitives + a stable onEdit callback, so referential equality holds.
+export const BacklogItemRow = memo(BacklogItemRowImpl);
+
+function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -80,6 +86,10 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
 
       {/* Work-type badge */}
       <WorkTypeBadge workType={item.workType} />
+
+      {/* Altitude signal (BI-9952EA9E) — effort size, so a trivial tweak doesn't
+          read with the same weight as a platform-scale item. */}
+      <EffortSizeBadge effortSize={item.effortSize} />
 
       {/* Origin badge — which source this work came from (improvements,
           capability needs, issue reports, signals…), now that /ops is the one
@@ -276,6 +286,37 @@ function OriginBadge({ item }: { item: BacklogItemWithRelations }) {
       title={`origin: ${BACKLOG_ORIGIN_LABEL[origin]} — every source is seen and worked here in Operations`}
     >
       {BACKLOG_ORIGIN_LABEL[origin]}
+    </span>
+  );
+}
+
+const EFFORT_SIZE_BADGE: Record<string, { label: string; cls: string }> = {
+  small: { label: "S", cls: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]" },
+  medium: { label: "M", cls: "border-[var(--dpf-info)]/40 bg-[var(--dpf-info)]/10 text-[var(--dpf-info)]" },
+  large: { label: "L", cls: "border-[var(--dpf-warning)]/40 bg-[var(--dpf-warning)]/10 text-[var(--dpf-warning)]" },
+  xlarge: { label: "XL", cls: "border-[var(--dpf-error)]/40 bg-[var(--dpf-error)]/10 text-[var(--dpf-error)]" },
+};
+
+function EffortSizeBadge({ effortSize }: { effortSize: string | null }) {
+  const meta = effortSize ? EFFORT_SIZE_BADGE[effortSize] : undefined;
+  if (!meta) {
+    return (
+      <span
+        className="shrink-0 rounded border border-dashed border-[var(--dpf-border)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--dpf-muted)]"
+        title="effort size not set — a light altitude signal is missing"
+        aria-label="effort size unsized"
+      >
+        ?
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${meta.cls}`}
+      title={`effort size: ${effortSize}`}
+      aria-label={`effort size ${effortSize}`}
+    >
+      {meta.label}
     </span>
   );
 }

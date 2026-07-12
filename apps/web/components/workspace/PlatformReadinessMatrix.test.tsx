@@ -16,7 +16,7 @@ const readiness: BusinessDomainReadiness[] = [
         description: "Evidence and operating knowledge",
         state: "good",
         reason: "5 documents, 3 architecture views",
-        href: "/wiki",
+        href: "/coworker-decisions",
       },
       {
         key: "connections",

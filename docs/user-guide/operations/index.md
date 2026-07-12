@@ -40,3 +40,7 @@ The Promotions tab in Operations shows all features that have been through the B
 - **Rolled Back** — Deployment failed and was automatically reversed. Check the deployment log for details.
 
 When you click "Deploy Now", the platform starts the promoter service for the governed deployment workflow. The page updates automatically while deployment is in progress.
+
+### Promoter timeout
+
+The promoter builds a fresh application image and swaps the running container. That build is bounded by a hard wall-clock budget (default **25 minutes**): if a build step stalls — for example on a slow or degraded network fetch — the promoter is killed, its container is force-removed, and the deployment is marked failed with a retryable `promoter-timeout` diagnosis instead of hanging. A normal deployment completes in a few minutes; the timeout only trips on a genuine stall. Operators on unusually slow hosts can raise it by setting `DPF_PROMOTER_TIMEOUT_MS` (milliseconds) in the environment. A periodic watchdog additionally force-removes any promoter container orphaned by a mid-deployment restart, so a stalled build can never linger and cause an unexpected later swap.

@@ -1,11 +1,12 @@
 // apps/web/components/ops/OpsClient.tsx
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { BacklogPanel } from "./BacklogPanel";
 import { BacklogItemRow } from "./BacklogItemRow";
 import { EpicCard, type EpicSort } from "./EpicCard";
 import { EpicPanel } from "./EpicPanel";
+import { OperatorTriageBand } from "./OperatorTriageBand";
 import { isTerminalBacklogItemStatus } from "./backlogVisibility";
 import { FilterBar, type FacetDef } from "@/components/ui/report-kit";
 import { backlogItemOrigin, BACKLOG_ORIGIN_FILTERS } from "@/lib/ops/backlog-origin";
@@ -154,24 +155,32 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
     setEpicPanel(null);
     setPanel({ open: true, item: undefined, defaultType, ...(defaultEpicId ? { defaultEpicId } : {}) });
   }
-  function openEdit(item: BacklogItemWithRelations) {
+  // Stable callbacks so the memoized EpicCard / BacklogItemRow subtrees don't
+  // re-render every time unrelated OpsClient state changes (filters, panels,
+  // the triage band toggle). Load-bearing for the 470-item render cost.
+  const openEdit = useCallback((item: BacklogItemWithRelations) => {
     setEpicPanel(null);
     setPanel({ open: true, item });
-  }
+  }, []);
   function closePanel() { setPanel({ open: false }); }
 
   function openCreateEpic() {
     setPanel({ open: false });
     setEpicPanel({ mode: "create" });
   }
-  function openEditEpic(epic: EpicWithRelations) {
+  const openEditEpic = useCallback((epic: EpicWithRelations) => {
     setPanel({ open: false });
     setEpicPanel({ mode: "edit", epic });
-  }
+  }, []);
   function closeEpicPanel() { setEpicPanel(null); }
 
   return (
     <>
+      {/* Operator triage lens (BI-9952EA9E) — the small, prioritized set of items
+          awaiting an operator decision, above the raw wall. Spans ALL items (not
+          narrowed by the source/portfolio lenses below). */}
+      <OperatorTriageBand items={items} onEdit={openEdit} focusedItemId={focusedItemId} />
+
       {/* Source + portfolio lenses — narrow the one Operations surface */}
       <FilterBar
         mode="client"

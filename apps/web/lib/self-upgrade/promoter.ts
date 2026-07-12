@@ -59,6 +59,21 @@ export type PromoterParams = {
   /** Compose project name (COMPOSE_PROJECT_NAME). Defaults to "dpf" in promote.sh. */
   composeProject?: string;
   dryRun?: boolean;
+  /**
+   * Deterministic `docker run --name` for the promoter container. Lets the
+   * timeout path (and the watchdog backstop) `docker rm -f` a hung promoter by
+   * name — without it, docker assigns a random name and a stalled build can't be
+   * targeted for cleanup (SUR-756751D1). Convention: `dpf-promoter-<runId>`.
+   */
+  containerName?: string;
+  /**
+   * Hard wall-clock budget for the promoter subprocess, ms. On expiry runPromoter
+   * kills the child, force-removes the container, and resolves nonzero with a
+   * `[promoter-timeout]` excerpt instead of awaiting forever. Defaults to
+   * DPF_PROMOTER_TIMEOUT_MS or 25 min — generous vs a normal ~7-min swap, and
+   * under the 30-min DB watchdog so the orchestrator fails cleanly first.
+   */
+  timeoutMs?: number;
 };
 
 export type PromoterResult = {
@@ -95,6 +110,16 @@ export function buildPromoterCommand(
     // Reach the recreated portal's published host port for health/sha verify.
     "--add-host",
     "host.docker.internal:host-gateway",
+  ];
+
+  // Deterministic name so a hung promoter can be force-removed by the timeout
+  // path / watchdog. `--rm` still auto-cleans a clean exit; the name only
+  // matters when the build stalls and never closes.
+  if (params.containerName && params.containerName.length > 0) {
+    args.push("--name", params.containerName);
+  }
+
+  args.push(
     // Sibling-container control: the promoter drives the daemon to rebuild
     // and recreate the portal.
     "-v",
@@ -102,7 +127,7 @@ export function buildPromoterCommand(
     // Host source tree (read-only): build context + backup source.
     "-v",
     `${params.hostInstallPath}:${PROMOTER_CONTAINER_SOURCE}:ro`,
-  ];
+  );
 
   if (params.backupHostPath && params.backupHostPath.length > 0) {
     args.push("-v", `${params.backupHostPath}:/backups`);
@@ -305,14 +330,70 @@ export async function ensurePromoterImage(
   });
 }
 
-export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
-  const { command, args } = buildPromoterCommand(params);
+/** Exit code runPromoter reports when it kills a promoter that blew its budget. */
+export const PROMOTER_TIMEOUT_EXIT_CODE = 124; // GNU `timeout` convention.
 
+/** Default hard budget for the promoter subprocess: 25 min (env-overridable). */
+export function resolvePromoterTimeoutMs(params: PromoterParams): number {
+  if (typeof params.timeoutMs === "number" && params.timeoutMs > 0) return params.timeoutMs;
+  const env = Number(process.env.DPF_PROMOTER_TIMEOUT_MS);
+  if (Number.isFinite(env) && env > 0) return env;
+  return 25 * 60 * 1000;
+}
+
+/**
+ * Force-remove a promoter container by name. Best-effort: the timeout path uses
+ * it to stop a build that stalled and never closed (killing the local `docker
+ * run` client does NOT stop the daemon-side build/container). Never throws.
+ */
+export async function forceRemovePromoterContainer(name: string): Promise<void> {
+  if (!name) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const child = spawn("docker", ["rm", "-f", name], { env: { ...process.env } });
+      child.stdout?.on("data", () => {});
+      child.stderr?.on("data", () => {});
+      child.on("close", () => resolve());
+      child.on("error", () => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/**
+ * Spawn a process under a hard wall-clock budget. On expiry: kill the child,
+ * force-remove `containerName` (so a daemon-side build actually stops — killing
+ * the local client does not), and resolve nonzero with a `[promoter-timeout]`
+ * marker. Separated from runPromoter so the timeout path is unit-testable with a
+ * cheap hanging command instead of a real `docker run`.
+ */
+export async function runProcessWithBudget(
+  command: string,
+  args: string[],
+  opts: { timeoutMs: number; containerName?: string },
+): Promise<PromoterResult> {
   return new Promise((done, reject) => {
     const child = spawn(command, args, { env: { ...process.env } });
 
     let stdout = "";
     let stderr = "";
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const mins = Math.round(opts.timeoutMs / 60000);
+      stderr += `\n[promoter-timeout] promoter did not finish within ${mins}m — killed and container force-removed.`;
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+      void forceRemovePromoterContainer(opts.containerName ?? "").finally(() => {
+        done({ exitCode: PROMOTER_TIMEOUT_EXIT_CODE, stdout, stderr });
+      });
+    }, opts.timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk;
@@ -322,9 +403,29 @@ export async function runPromoter(params: PromoterParams): Promise<PromoterResul
     });
 
     child.on("close", (code: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       done({ exitCode: code ?? 1, stdout, stderr });
     });
 
-    child.on("error", reject);
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
+export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
+  const { command, args } = buildPromoterCommand(params);
+  // Hard wall-clock bound. Without it a stalled `docker build` (SUR-756751D1: an
+  // `apk add` fetch that crawled for 52 min) never closes, so `await runPromoter`
+  // blocks the orchestrator until the 30-min DB watchdog — and the orphaned
+  // container keeps building, risking a late unexpected swap.
+  return runProcessWithBudget(command, args, {
+    timeoutMs: resolvePromoterTimeoutMs(params),
+    containerName: params.containerName,
   });
 }

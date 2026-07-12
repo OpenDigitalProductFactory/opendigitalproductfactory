@@ -1344,6 +1344,9 @@ export async function sendMessage(input: {
     pageActionNames: new Set(pageActions.map((t) => t.name)),
     alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
     cap: toolCap,
+    // BI-ACE1EBA4 — when the cap forces deferral, keep the tools most relevant to
+    // this turn's intent within each priority tier.
+    intentQuery: trimmedContent,
   });
   // Advertise the load_tools meta-tool only when something was actually deferred.
   const attachedTools = deferredTools.length > 0 ? [LOAD_TOOLS_TOOL, ...budgetedTools] : budgetedTools;
@@ -1867,6 +1870,37 @@ export async function sendMessage(input: {
       availableToolNames: attachedTools.map((t) => t.name),
       messageChars: trimmedContent.length,
     });
+
+    // EP-27FD96BC · P4 (BI-8167C9CD) — delegation & altitude decision layer. Map
+    // the turn's altitude (from the warrant) and the agent's human-oversight tier
+    // (hitlTierDefault) to a recommended mode and surface it as guidance, so the
+    // coworker escalates high-stakes work / considers delegating big work instead
+    // of flailing inline. capabilityGap / decomposable are the model's judgment,
+    // so it gets the primitive menu rather than a forced choice.
+    try {
+      const agentRow = await prisma.agent
+        .findUnique({ where: { agentId: agent.agentId }, select: { hitlTierDefault: true } })
+        .catch(() => null);
+      const { decideDelegation, renderDelegationGuidance } = await import("@/lib/tak/delegation-policy");
+      const delegation = decideDelegation({
+        effortLevel: effortWarrant.level,
+        hitlTier: agentRow?.hitlTierDefault ?? 2,
+        capabilityGap: false,
+        decomposable: false,
+        delegationDepth: 0,
+      });
+      const guidance = renderDelegationGuidance(delegation);
+      if (guidance) {
+        populatedPrompt = `${populatedPrompt}\n\n${guidance}`;
+      } else if (effortWarrant.level === "high") {
+        populatedPrompt =
+          `${populatedPrompt}\n\nDELEGATION: this is high-effort work. If it needs a ` +
+          `capability you lack, call \`request_coworker\`; if it splits into independent ` +
+          `parallel parts, call \`spawn_work_thread\`; otherwise proceed inline.`;
+      }
+    } catch {
+      // Delegation guidance is advisory — never block the turn on it.
+    }
 
     const { runWithTransientInferenceRetry } = await import("@/lib/build/inference-retry");
     const agenticResult = await runWithTransientInferenceRetry(

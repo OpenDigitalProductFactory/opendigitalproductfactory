@@ -146,6 +146,43 @@ export interface ToolBudgetResult {
   deferred: ToolDefinition[];
 }
 
+// EP-27FD96BC · P3 (BI-ACE1EBA4) — cheap task-intent relevance for tool ranking.
+// Token overlap between the turn and a tool's name+description; no embedding call
+// on the hot path. Used only to order tools WITHIN a priority tier so the cap
+// keeps the most relevant ones.
+
+const INTENT_STOPWORDS: ReadonlySet<string> = new Set([
+  "the", "and", "for", "you", "your", "with", "this", "that", "can", "will",
+  "please", "how", "what", "when", "get", "let", "are", "from", "about", "need",
+  "want", "help", "into", "have",
+]);
+
+export function tokenizeIntent(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 3 && !INTENT_STOPWORDS.has(t)),
+  );
+}
+
+/** Distinct intent tokens found in the tool's name + description. Pure. */
+export function scoreToolIntentRelevance(
+  tool: ToolDefinition,
+  intentTokens: ReadonlySet<string>,
+): number {
+  if (intentTokens.size === 0) return 0;
+  const haystack = new Set(
+    `${tool.name} ${tool.description ?? ""}`
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean),
+  );
+  let score = 0;
+  for (const token of intentTokens) if (haystack.has(token)) score += 1;
+  return score;
+}
+
 /**
  * Right-size the per-turn attachment without touching authority.
  *
@@ -169,6 +206,11 @@ export function selectCoworkerToolBudget(params: {
   /** Extra names to force into tier 0 (e.g. load_tools). */
   alwaysIncludeNames?: ReadonlySet<string>;
   cap?: number;
+  /** EP-27FD96BC · P3 (BI-ACE1EBA4). The current turn's intent (the user
+   *  message). When present, tools are ranked by relevance to it WITHIN their
+   *  priority tier, so the cap keeps the most task-relevant tools instead of
+   *  whichever happened to come first. Omitted → today's stable order. */
+  intentQuery?: string;
 }): ToolBudgetResult {
   const cap = params.cap ?? MAX_COWORKER_ATTACHED_TOOLS;
   const pageActions = params.pageActionNames ?? new Set<string>();
@@ -182,9 +224,16 @@ export function selectCoworkerToolBudget(params: {
     return 3;
   };
 
+  const intentTokens = params.intentQuery ? tokenizeIntent(params.intentQuery) : null;
+  const scoreOf = (t: ToolDefinition): number =>
+    intentTokens ? scoreToolIntentRelevance(t, intentTokens) : 0;
+
+  // tier ASC (priority), then intent-relevance DESC within tier, then stable
+  // original index. Absent an intent query every score is 0, so this reduces to
+  // the prior `tier, index` order exactly.
   const ranked = params.tools
-    .map((t, i) => ({ t, i, tier: tierOf(t) }))
-    .sort((a, b) => a.tier - b.tier || a.i - b.i);
+    .map((t, i) => ({ t, i, tier: tierOf(t), score: scoreOf(t) }))
+    .sort((a, b) => a.tier - b.tier || b.score - a.score || a.i - b.i);
 
   const attached: Array<{ t: ToolDefinition; i: number }> = [];
   const deferred: Array<{ t: ToolDefinition; i: number }> = [];

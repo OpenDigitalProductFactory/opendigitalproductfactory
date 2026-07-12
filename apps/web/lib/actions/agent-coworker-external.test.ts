@@ -468,7 +468,7 @@ describe("agent coworker external access", () => {
     await sendMessage({
       threadId: "thread-1",
       content: "elaborate",
-      routeContext: "/wiki/perspectives/mark-dpf-platform/voice",
+      routeContext: "/coworker-decisions/perspectives/mark-dpf-platform/voice",
       coworkerMode: "act",
     });
 

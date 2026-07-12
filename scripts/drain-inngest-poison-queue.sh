@@ -5,7 +5,7 @@
 # -------
 # inngest/inngest 1.26 (the version :latest drifted onto) enqueued queue items
 # with a nil environment/workspace id (wsID = 00000000-0000-0000-0000-000000000000).
-# Newer Inngest (1.28+, and the pinned v1.30.0) reject those items at the
+# Newer Inngest (1.28+, and the pinned v1.36.0) reject those items at the
 # capacity-lease CONSTRAINT check with `invalid request: ... missing envID`.
 # Because that rejection happens BEFORE the attempt counter increments, the items
 # never exhaust `maxAtts` and never dead-letter — the scheduler re-scans them

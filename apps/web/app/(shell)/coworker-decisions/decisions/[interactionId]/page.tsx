@@ -1,0 +1,257 @@
+// Decision drill-in — the full audit record for one DecisionInteraction:
+// what was asked, the options weighed, what was recommended and why (top
+// principle contributors), flags, and any human resolution.
+// Server component; queries Prisma directly.
+
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { prisma } from "@dpf/db";
+
+import { StatusBadge } from "@/components/ui/report-kit";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { TIER_LABELS, tierForProfileKind } from "@/lib/wiki/decision-audit";
+
+export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "Decision record",
+};
+
+type Params = Promise<{ interactionId: string }>;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+type Contributor = {
+  principleId: string;
+  principleName: string;
+  tier: string;
+  contribution: number;
+};
+
+function readContributors(payload: Record<string, unknown>): Contributor[] {
+  if (!Array.isArray(payload.topContributors)) return [];
+  return payload.topContributors
+    .map((entry) => {
+      const c = asRecord(entry);
+      return typeof c.principleId === "string" && typeof c.contribution === "number"
+        ? {
+          principleId: c.principleId,
+          principleName: typeof c.principleName === "string" ? c.principleName : c.principleId,
+          tier: typeof c.tier === "string" ? c.tier : "—",
+          contribution: c.contribution,
+        }
+        : null;
+    })
+    .filter((c): c is Contributor => Boolean(c));
+}
+
+export default async function DecisionRecordPage({ params }: { params: Params }) {
+  const { interactionId } = await params;
+
+  const row = await prisma.decisionInteraction.findUnique({
+    where: { interactionId },
+    include: {
+      profile: { select: { kind: true, name: true, profileId: true } },
+      escalationCapture: true,
+      deferralCapture: true,
+    },
+  });
+  if (!row) notFound();
+
+  const tier = tierForProfileKind(row.profile?.kind);
+  const tierLabel = TIER_LABELS[tier];
+  const payload = asRecord(row.outcomePayload);
+  const optionDescriptions = asRecord(payload.optionDescriptions);
+  const contributors = readContributors(payload);
+  const options = Array.isArray(row.options)
+    ? row.options.filter((o): o is string => typeof o === "string")
+    : [];
+  // Insufficient-signal consults (every contribution zero) carry no real
+  // recommendation. New records set the explicit payload flag; records from
+  // before the guard existed are recognised by their all-zero composite +
+  // margin so the misleading "recommended" chip disappears from history too.
+  const insufficientSignal =
+    payload.insufficientSignal === true ||
+    (typeof payload.recommendedOptionId === "string" &&
+      payload.composite === 0 &&
+      payload.margin === 0);
+  const recommendedOptionId =
+    !insufficientSignal && typeof payload.recommendedOptionId === "string"
+      ? payload.recommendedOptionId
+      : null;
+  // Caller attribution — who brought this decision (client UA token /
+  // coworker agent / thread), so the row matches back to the activity.
+  const caller = asRecord(payload.caller);
+  const callerParts = [
+    typeof caller.client === "string" && caller.client ? caller.client : null,
+    typeof caller.agentId === "string" && caller.agentId ? `agent ${caller.agentId}` : null,
+    typeof caller.threadId === "string" && caller.threadId ? `thread ${caller.threadId}` : null,
+    typeof caller.apiTokenId === "string" && caller.apiTokenId ? `token ${caller.apiTokenId}` : null,
+    typeof payload.callingSurface === "string" && payload.callingSurface
+      ? `surface ${payload.callingSurface}`
+      : null,
+  ].filter((p): p is string => p !== null);
+
+  return (
+    <div className="max-w-3xl mx-auto py-6 px-4">
+      <header className="mb-6">
+        <Link href="/coworker-decisions/decisions" className="text-sm text-[var(--dpf-accent)] hover:underline">
+          ← Decision log
+        </Link>
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
+          <StatusBadge
+            intent={tier === "wwmd" ? "info" : tier === "wwwd" ? "accent" : "neutral"}
+            label={`${tierLabel.code} — ${tierLabel.expansion}`}
+            variant="soft"
+          />
+          <StatusBadge domain="decisionOutcome" status={row.outcomeType} />
+          <StatusBadge domain="decisionRisk" status={row.riskTier} variant="soft" />
+          {row.principleConflict ? (
+            <StatusBadge intent="danger" label="principle conflict" variant="soft" />
+          ) : null}
+          {insufficientSignal ? (
+            <StatusBadge intent="warning" label="insufficient signal" variant="soft" />
+          ) : null}
+        </div>
+        <h1 className="mt-3 text-xl font-semibold text-[var(--dpf-text)]">
+          {row.question || "(no question text)"}
+        </h1>
+        <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+          <LocalTime value={row.createdAt} /> · {row.profile?.name ?? row.profileId} ·{" "}
+          {row.routeContext ?? "—"} · {row.domainClass} · {row.interactionId}
+        </p>
+        {callerParts.length > 0 ? (
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+            Caller: {callerParts.join(" · ")}
+          </p>
+        ) : null}
+      </header>
+
+      {/* Options weighed */}
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
+          Options weighed
+        </h2>
+        {options.length === 0 ? (
+          <p className="text-sm text-[var(--dpf-muted)]">No options recorded.</p>
+        ) : (
+          <ul className="space-y-2">
+            {options.map((optionId) => {
+              const description = optionDescriptions[optionId];
+              const isRecommended = optionId === recommendedOptionId;
+              return (
+                <li
+                  key={optionId}
+                  className={`rounded-lg border p-3 ${
+                    isRecommended
+                      ? "border-[var(--dpf-accent)] bg-[var(--dpf-surface-2)]"
+                      : "border-[var(--dpf-border)]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm text-[var(--dpf-text)]">{optionId}</span>
+                    {isRecommended ? (
+                      <StatusBadge intent="success" label="recommended" variant="soft" />
+                    ) : null}
+                  </div>
+                  {typeof description === "string" && description ? (
+                    <p className="mt-1 text-xs text-[var(--dpf-muted)]">{description}</p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {/* Why */}
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
+          Why
+        </h2>
+        <p className="text-sm text-[var(--dpf-text)] whitespace-pre-wrap">
+          {row.rationale || "No rationale recorded."}
+        </p>
+        {insufficientSignal ? (
+          <p className="mt-2 text-sm text-[var(--dpf-warning)]">
+            No option was actually scored: every principle contribution was
+            zero, so no recommendation stands. This usually means the consult
+            was submitted without per-option feature values. The decision
+            needs human judgment — or a re-run with scoreable options.
+          </p>
+        ) : null}
+        {contributors.length > 0 ? (
+          <div className="mt-3 rounded-lg border border-[var(--dpf-border)] overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[var(--dpf-muted)] border-b border-[var(--dpf-border)]">
+                  <th className="px-3 py-2 font-medium">Principle</th>
+                  <th className="px-3 py-2 font-medium">Tier</th>
+                  <th className="px-3 py-2 font-medium text-right">Contribution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contributors.map((c) => (
+                  <tr key={c.principleId} className="border-b border-[var(--dpf-border)] last:border-0">
+                    <td className="px-3 py-2 text-[var(--dpf-text)]">{c.principleName}</td>
+                    <td className="px-3 py-2 text-[var(--dpf-muted)]">{c.tier}</td>
+                    <td
+                      className={`px-3 py-2 text-right font-mono ${
+                        c.contribution < 0 ? "text-[var(--dpf-error)]" : "text-[var(--dpf-text)]"
+                      }`}
+                    >
+                      {c.contribution.toFixed(3)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </section>
+
+      {/* Human resolution */}
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
+          Human review
+        </h2>
+        {row.escalationCapture ? (
+          <div className="rounded-lg border border-[var(--dpf-border)] p-3 text-sm">
+            <p className="text-[var(--dpf-text)]">
+              {row.escalationCapture.answer ?? "(resolved without an answer text)"}
+            </p>
+            {row.escalationCapture.rationale ? (
+              <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                {row.escalationCapture.rationale}
+              </p>
+            ) : null}
+            <p className="mt-2 text-xs text-[var(--dpf-muted)]">
+              Resolved <LocalTime value={row.escalationCapture.createdAt} />
+            </p>
+          </div>
+        ) : row.deferralCapture ? (
+          <p className="text-sm text-[var(--dpf-muted)]">
+            Deferred — {row.deferralCapture.gapReason}. The perspective lacks material to answer;
+            adding stance/principle coverage closes this gap.
+          </p>
+        ) : row.outcomeType === "escalate" || row.outcomeType === "defer" ? (
+          <p className="text-sm text-[var(--dpf-muted)]">
+            Awaiting human review — see{" "}
+            <Link href="/coworker-decisions/review" className="text-[var(--dpf-accent)] hover:underline">
+              Review &amp; adjust
+            </Link>
+            .
+          </p>
+        ) : (
+          <p className="text-sm text-[var(--dpf-muted)]">
+            None needed — the recommendation stood on its own.
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}

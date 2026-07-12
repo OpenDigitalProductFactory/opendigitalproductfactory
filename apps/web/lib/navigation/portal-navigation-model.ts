@@ -834,9 +834,9 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "wiki",
-    label: "Decision governance",
-    path: "/wiki",
-    parentPath: "/wiki",
+    label: "Coworker Decision Engine",
+    path: "/coworker-decisions",
+    parentPath: "/coworker-decisions",
     domain: "knowledge",
     audienceModes: ["worker", "operator"],
     destinationKind: "domain-home",

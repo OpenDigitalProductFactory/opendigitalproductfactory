@@ -15,6 +15,9 @@ const READ = tool({ name: "list_backlog_items" });
 const WRITE = tool({ name: "create_backlog_item", sideEffect: true });
 const PROVISION = tool({ name: "manage_coworker_tool_grant", sideEffect: true });
 const ARTIFACT = tool({ name: "save_marketing_review", sideEffect: true, coworkerArtifact: true });
+// Coworker→coworker delegation: side-effecting but advise-safe coordination.
+const REQUEST_PEER = tool({ name: "request_coworker", sideEffect: true, adviseCoordination: true });
+const SUMMON_PEER = tool({ name: "summon_coworker", sideEffect: true, adviseCoordination: true });
 
 const MERGED = [READ, WRITE, PROVISION, ARTIFACT];
 
@@ -22,6 +25,26 @@ describe("filterToolsForCoworkerRuntime — advise rule", () => {
   it("strips side-effect tools but keeps reads and coworker artifacts in advise mode", () => {
     const kept = filterToolsForCoworkerRuntime(MERGED, { coworkerMode: "advise", activeBuildPhase: null }).map((t) => t.name);
     expect(kept).toEqual(["list_backlog_items", "save_marketing_review"]);
+  });
+
+  it("keeps coworker→coworker delegation in advise mode but still strips destructive writes", () => {
+    // BI-7EB4AE2C: an advise-mode coworker must be able to hand a scoped sub-task
+    // to a named peer (coordination), while a genuinely destructive write stays muzzled.
+    const merged = [READ, WRITE, REQUEST_PEER, SUMMON_PEER];
+    const kept = filterToolsForCoworkerRuntime(merged, {
+      coworkerMode: "advise",
+      activeBuildPhase: null,
+    }).map((t) => t.name);
+    expect(kept).toContain("request_coworker");
+    expect(kept).toContain("summon_coworker");
+    // The destructive write is still stripped — the exemption is targeted, not blanket.
+    expect(kept).not.toContain("create_backlog_item");
+    expect(kept).toEqual(["list_backlog_items", "request_coworker", "summon_coworker"]);
+  });
+
+  it("does not list delegation tools as advise-held-back (they are not muzzled)", () => {
+    const held = adviseHeldBackTools([WRITE, REQUEST_PEER, SUMMON_PEER]).map((t) => t.name);
+    expect(held).toEqual(["create_backlog_item"]);
   });
 
   it("keeps everything in act mode", () => {

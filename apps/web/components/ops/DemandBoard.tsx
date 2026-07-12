@@ -149,7 +149,13 @@ function MatrixView({ items }: { items: DemandItemView[] }) {
   );
 }
 
-function BalanceView({ items }: { items: DemandItemView[] }) {
+function BalanceView({
+  items,
+  targets,
+}: {
+  items: DemandItemView[];
+  targets: Partial<Record<"run" | "grow" | "transform", number>> | null;
+}) {
   const rows = useMemo(() => {
     const mix = computeBucketMix(
       items.map((i) => ({
@@ -158,8 +164,8 @@ function BalanceView({ items }: { items: DemandItemView[] }) {
         weight: itemEffort(i),
       })),
     );
-    return { mix, balance: bucketBalance(mix, null) };
-  }, [items]);
+    return { mix, balance: bucketBalance(mix, targets) };
+  }, [items, targets]);
 
   if (rows.mix.total === 0) {
     return (
@@ -203,8 +209,8 @@ function BalanceView({ items }: { items: DemandItemView[] }) {
         ))}
       </div>
       <p className="text-xs text-[var(--dpf-muted)]">
-        Effort-weighted mix across {rows.mix.total} point(s) of demand vs the default 70/20/10 target (the black
-        tick). A bucket &gt;5% below target is flagged Starved.
+        Effort-weighted mix across {rows.mix.total} point(s) of demand vs the target allocation (the black tick). A
+        bucket &gt;5% below target is flagged Starved.
         {rows.mix.unclassified > 0 && ` ${rows.mix.unclassified} point(s) unclassified.`}
       </p>
     </div>
@@ -213,7 +219,15 @@ function BalanceView({ items }: { items: DemandItemView[] }) {
 
 type Tab = "funnel" | "matrix" | "balance";
 
-export function DemandBoard({ items }: { items: DemandItemView[] }) {
+export function DemandBoard({
+  items,
+  bucketTargets = null,
+  activeFramework,
+}: {
+  items: DemandItemView[];
+  bucketTargets?: Partial<Record<"run" | "grow" | "transform", number>> | null;
+  activeFramework?: string;
+}) {
   const [tab, setTab] = useState<Tab>("funnel");
   const scored = items.filter((i) => i.demandScore !== null).length;
 
@@ -249,6 +263,7 @@ export function DemandBoard({ items }: { items: DemandItemView[] }) {
         </div>
         <span className="text-xs text-[var(--dpf-muted)]">
           {scored} of {items.length} scored
+          {activeFramework ? ` · ${activeFramework} policy` : ""}
         </span>
       </div>
       {tab === "funnel" ? (
@@ -256,7 +271,7 @@ export function DemandBoard({ items }: { items: DemandItemView[] }) {
       ) : tab === "matrix" ? (
         <MatrixView items={items} />
       ) : (
-        <BalanceView items={items} />
+        <BalanceView items={items} targets={bucketTargets} />
       )}
     </div>
   );

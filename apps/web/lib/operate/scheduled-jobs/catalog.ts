@@ -193,8 +193,11 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     name: "Alert delivery bridge",
     purpose:
       "Delivers firing Prometheus/Loki alerts into the quality-issue inbox (the platform runs no Alertmanager). If it stops, firing alerts evaluate but never reach an operator — silent blindness. Core-locked for that reason.",
-    cron: "*/1 * * * *",
-    cadence: "Every minute",
+    // BI-915C40C6: every-minute was an orphan-accumulation multiplier (1440/day).
+    // 5-minute poll keeps operator latency acceptable; taskrun-watchdog alone
+    // stays every-minute as the deliberate liveness guard.
+    cron: "*/5 * * * *",
+    cadence: "Every 5 minutes",
     category: "core",
     tracksRunData: false,
     runNowEvent: null,
