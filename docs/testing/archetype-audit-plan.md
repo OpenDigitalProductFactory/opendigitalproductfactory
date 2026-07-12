@@ -2,7 +2,7 @@
 
 **Status:** Revised — 2026-06-10 (architecture / UX / operations review applied)  
 **Scope:** Full audit of every seeded archetype via browser-driven fresh installs. Produces gap backlog items for post-audit execution.  
-**Related:** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) (value-stream rationale — read first), [platform-qa-plan.md](platform-qa-plan.md), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
+**Related:** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) (value-stream rationale — read first), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
 
 > **Inventory ground truth (verified 2026-06-12 against `origin/main` `packages/storefront-templates/src/archetypes/`):** 56 seeded archetypes across 15 categories. The five archetypes previously flagged "not yet confirmed" (`landscaping`, `cleaning-service`, `personal-trainer`, `counselling`, `wholesale-distribution`) ARE seeded and are placed in Runs 1, 2, 3, and 6. `pet-rescue` is seeded once (category `nonprofit-community`) and is tested only in Run 11. The rental / shared-asset value stream (EP-ARCH-8D4F2A, merged #1725/#1726) added three: `equipment-rental` + `self-storage` (new `asset-rental` category) and `agricultural-cooperative` (category `nonprofit-community`, derives both member-owned and rental capability sets) — all in Run 17.
 
