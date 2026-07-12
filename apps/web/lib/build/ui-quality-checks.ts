@@ -34,8 +34,8 @@ export type UiQualityReport = {
   clean: boolean;
 };
 
-// Hardcoded hex: #abc / #aabbcc / #aabbccdd. Excludes CSS var fallbacks are rare
-// in generated code; we scan raw source lines.
+// Hardcoded hex color literal (3-, 6-, or 8-digit forms). CSS var fallbacks are
+// rare in generated code; we scan raw source lines.
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b/;
 // Tailwind color utility with a numeric shade: bg-green-400, text-red-500,
 // border-slate-200, ring-blue-600, from-indigo-500. Excludes token classes like
