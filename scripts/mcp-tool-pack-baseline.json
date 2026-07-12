@@ -10,7 +10,6 @@
   "get_build_sandbox_state",
   "iterate_sandbox",
   "list_sandbox_files",
-  "principle_decide",
   "promote_to_build_studio",
   "propose_file_change",
   "provision_build_engine",
