@@ -56,6 +56,7 @@ import { platformUpdatePack } from "./packs/platform-update-pack";
 import { wikiOverlayPack } from "./packs/wiki-overlay-pack";
 import { licensingPack } from "./packs/licensing-pack";
 import { marketingOpsPack } from "./packs/marketing-ops-pack";
+import { sorReadPack } from "./packs/sor-read-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -98,4 +99,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   wikiOverlayPack,
   licensingPack,
   marketingOpsPack,
+  sorReadPack,
 ]);

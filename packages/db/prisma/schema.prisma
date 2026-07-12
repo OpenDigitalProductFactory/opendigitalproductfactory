@@ -1440,6 +1440,10 @@ model WorkCapsule {
   leaseHolderPrincipalId  String?
   leaseExpiresAt          DateTime?
   createdByPrincipalId    String?
+  // EP-WORK-CONVERGENCE (BI-B24F96D0): first-class Requester — the principal who
+  // commissioned the work, distinct from the creator/executor. Nullable; the
+  // stable human-quotable key already exists as capsuleId (WC-*).
+  requestedByPrincipalId  String?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   lastSyncedAt            DateTime?
@@ -1462,6 +1466,7 @@ model WorkCapsule {
   @@index([headBranch])
   @@index([sandboxId])
   @@index([leaseExpiresAt])
+  @@index([requestedByPrincipalId])
 }
 
 model WorkCapsuleActivity {

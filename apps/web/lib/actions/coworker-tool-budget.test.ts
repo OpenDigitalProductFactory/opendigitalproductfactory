@@ -4,6 +4,8 @@ import {
   selectCoworkerToolBudget,
   selectLoadableTools,
   deriveCoworkerToolCap,
+  scoreToolIntentRelevance,
+  tokenizeIntent,
   LOAD_TOOLS_TOOL,
   LOAD_TOOLS_TOOL_NAME,
   MAX_COWORKER_ATTACHED_TOOLS,
@@ -160,5 +162,53 @@ describe("LOAD_TOOLS_TOOL definition", () => {
     expect(LOAD_TOOLS_TOOL.name).toBe(LOAD_TOOLS_TOOL_NAME);
     expect(LOAD_TOOLS_TOOL.requiredCapability).toBeNull();
     expect(LOAD_TOOLS_TOOL.sideEffect).toBe(false);
+  });
+});
+
+describe("task-intent tool prioritization (BI-ACE1EBA4)", () => {
+  it("scores a tool by intent-token overlap with its name + description", () => {
+    const t = tool("create_invoice", "draft and send a customer invoice");
+    const tokens = tokenizeIntent("please draft an invoice for the customer");
+    expect(scoreToolIntentRelevance(t, tokens)).toBeGreaterThanOrEqual(2); // invoice + customer
+    expect(scoreToolIntentRelevance(t, tokenizeIntent("check the weather"))).toBe(0);
+  });
+
+  it("keeps the intent-relevant tools within a tier when the cap forces deferral", () => {
+    // All three are tier-3 breadth tools; the cap (1) can keep only one.
+    const tools = [
+      tool("weather_lookup", "forecast the weather"),
+      tool("invoice_search", "search invoices and billing records"),
+      tool("song_lyrics", "fetch song lyrics"),
+    ];
+    const { attached, deferred } = selectCoworkerToolBudget({
+      tools,
+      roleGrants: [], // none are role tools → all tier 3
+      cap: 1,
+      intentQuery: "find an invoice for billing",
+    });
+    expect(attached.map((t) => t.name)).toEqual(["invoice_search"]);
+    expect(deferred.map((t) => t.name).sort()).toEqual(["song_lyrics", "weather_lookup"]);
+  });
+
+  it("never lets intent relevance override tier priority", () => {
+    // A highly-relevant breadth tool must still lose to a role tool under the cap.
+    const tools = [
+      tool("invoice_search", "search invoices billing invoice invoice"), // tier 3, very relevant
+      tool("create_backlog_item", "file a backlog item"), // tier 1 (role)
+    ];
+    const { attached } = selectCoworkerToolBudget({
+      tools,
+      roleGrants: ["backlog_write"],
+      cap: 1,
+      intentQuery: "invoice invoice invoice billing",
+    });
+    // The role tool (tier 1) is kept even though the breadth tool scores higher.
+    expect(attached.map((t) => t.name)).toEqual(["create_backlog_item"]);
+  });
+
+  it("is identical to the prior stable order when no intent query is given", () => {
+    const tools = [tool("a_tool"), tool("b_tool"), tool("c_tool")];
+    const withNoIntent = selectCoworkerToolBudget({ tools, roleGrants: [], cap: 2 });
+    expect(withNoIntent.attached.map((t) => t.name)).toEqual(["a_tool", "b_tool"]);
   });
 });

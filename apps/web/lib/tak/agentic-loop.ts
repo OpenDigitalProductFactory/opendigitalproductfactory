@@ -1238,6 +1238,35 @@ export async function runAgenticLoop(params: {
     modelRequirements,
   });
 
+  // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
+  // per turn and, when it is near the budget, bias the routing budget class
+  // toward cost so the router picks a cheaper (still capability-floor-respecting)
+  // model — instead of only logging the warning until the 100% hard-reject.
+  // Advisory: any failure leaves the class untouched and never blocks the turn.
+  try {
+    const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
+    const { spendAwareBudgetClass } = await import("@/lib/inference/spend-aware-routing");
+    const budget = await checkAgentBudgetFromRegistry(agentId);
+    const nearBudget = budget.status === "warning_80" || budget.status === "warning_95";
+    const biased = spendAwareBudgetClass(effectiveConfig.budgetClass, budget.status);
+    if (nearBudget && biased !== effectiveConfig.budgetClass) {
+      console.log(
+        `[budget-gate] spend-aware downgrade agent=${JSON.stringify(agentId)} ` +
+          `status=${budget.status} ratio=${budget.ratioPercent}% ` +
+          `${effectiveConfig.budgetClass} -> ${biased}`,
+      );
+      void writeBudgetEvent({
+        agentId,
+        eventKind: "downgrade",
+        actualTokens: budget.actualTokens,
+        limitTokens: budget.limitTokens,
+      });
+      effectiveConfig.budgetClass = biased;
+    }
+  } catch {
+    // Budget gate is advisory — never block a turn on it.
+  }
+
   // Build routeAndCall options once (reused every iteration)
   const routeOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
