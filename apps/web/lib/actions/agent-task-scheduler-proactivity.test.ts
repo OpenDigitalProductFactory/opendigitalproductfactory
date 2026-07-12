@@ -1,7 +1,7 @@
 // BI-754C9E82 — proactivity plan ENFORCEMENT on scheduled runs. Split from
 // agent-task-scheduler.test.ts (module-size ratchet): same mock harness, only
 // the enforcement describe block lives here.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -88,8 +88,27 @@ vi.mock("@/lib/optimization/self-optimization-sweep", () => ({
 
 import { executeScheduledAgentTask } from "./agent-task-scheduler";
 
+// Pin the wall clock. The daily-cron re-arm assertion below compares
+// nextRunAt against Date.now(), so a real clock makes it time-of-day
+// dependent: the `7 14 * * *` schedule's next tick can fall <60min out when
+// the suite runs shortly before the daily tick. computeNextCronRun resolves
+// "14:07" with host-LOCAL Date methods (setHours/getDate), so the danger
+// window is local time-of-day — a UTC-instant pin would still land inside it
+// on a host whose local clock reads ~13:xx. Constructing FIXED_NOW from local
+// components keeps the local time-of-day fixed at 09:00 on ANY host timezone,
+// leaving the next 14:07 tick ~5h out. Only Date is faked (not timers) so real
+// setTimeout/await in the code under test still resolves.
+// (Month is 0-indexed: 6 = July.)
+const FIXED_NOW = new Date(2026, 6, 12, 9, 0, 0, 0);
+
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(FIXED_NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 // Marketing Strategist coworker self-task fixture (mirrors the sibling file's

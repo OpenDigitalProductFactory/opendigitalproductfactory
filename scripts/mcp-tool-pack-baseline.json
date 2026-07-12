@@ -21,7 +21,6 @@
   "dpf_test_kernel_refuse_probe",
   "drive_browser_task",
   "edit_sandbox_file",
-  "evaluate_tool",
   "execute_promotion",
   "generate_code",
   "get_backlog_item",
@@ -73,9 +72,7 @@
   "save_phase_handoff",
   "schedule_promotion",
   "schedule_release_bundle",
-  "search_portfolio_context",
   "search_sandbox",
-  "search_tool_marketplace",
   "set_change_disposition",
   "setup_email",
   "size_backlog_item",
@@ -94,8 +91,5 @@
   "validate_schema",
   "verification_preflight",
   "verify_live_install_readiness",
-  "wiki_ingest",
-  "wiki_lint",
-  "wiki_query",
   "write_sandbox_file"
 ]
