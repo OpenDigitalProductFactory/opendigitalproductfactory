@@ -64,6 +64,7 @@ import { workThreadPack } from "./packs/work-thread-pack";
 import { codeIntelligencePack } from "./packs/code-intelligence-pack";
 import { taxonomyArchetypePack } from "./packs/taxonomy-archetype-pack";
 import { modelProviderPack } from "./packs/model-provider-pack";
+import { wikiPack } from "./packs/wiki-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 
@@ -117,4 +118,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   codeIntelligencePack,
   taxonomyArchetypePack,
   modelProviderPack,
+  wikiPack,
 ]);
