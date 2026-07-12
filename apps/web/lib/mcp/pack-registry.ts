@@ -55,6 +55,7 @@ import { crmSalesPipelinePack } from "./packs/crm-sales-pipeline-pack";
 import { platformUpdatePack } from "./packs/platform-update-pack";
 import { wikiOverlayPack } from "./packs/wiki-overlay-pack";
 import { licensingPack } from "./packs/licensing-pack";
+import { coworkerCapabilityPack } from "./packs/coworker-capability-pack";
 import { sorReadPack } from "./packs/sor-read-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
@@ -99,6 +100,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   platformUpdatePack,
   wikiOverlayPack,
   licensingPack,
+  coworkerCapabilityPack,
   grokSigninPack,
   sorReadPack,
 ]);
