@@ -53,6 +53,18 @@ export type CoworkerSelfTask = {
 export const DOCS_HEALTH_DOCUMENT_ID = "DOC-COWORKER-DOCS-HEALTH";
 
 /**
+ * Stable title prefixes for the knowledge-article self-tasks. `KnowledgeArticle`
+ * has no slug/stable id, so a per-topic `hasRecentArtifact` dedup scopes on the
+ * article title starting with its topic prefix. Each such self-task's fallback
+ * title AND its loop prompt use the matching prefix so the dedup recognizes the
+ * coworker's own article and never stands down a *different* topic's task — the
+ * fix that lets more than one coworker publish knowledge articles without the
+ * old global "any recent article" dedup colliding across topics.
+ */
+export const ESTATE_POSTURE_ARTICLE_TITLE_PREFIX = "Estate posture summary";
+export const AI_PLATFORM_POSTURE_ARTICLE_TITLE_PREFIX = "AI platform posture summary";
+
+/**
  * Registry of coworkers that self-drive when their Proactivity is turned up.
  * Keyed by agentId (the interactive coworker slug, e.g. "marketing-specialist").
  */
@@ -104,9 +116,10 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       "   attribution confidence, support/version risks) using your read tools.",
       "2. Search existing knowledge articles first (search_knowledge_base). If there",
       "   is NO recent estate-posture article, create ONE with create_knowledge_article:",
-      "   a concise reference article (category 'reference') titled for the estate",
-      "   posture, summarizing the top risks and what needs review, grounded ONLY in",
-      "   real discovered evidence.",
+      `   a concise reference article (category 'reference') whose title STARTS WITH`,
+      `   "${ESTATE_POSTURE_ARTICLE_TITLE_PREFIX}" (this stable prefix is how the`,
+      "   platform recognizes your own article), summarizing the top risks and what",
+      "   needs review, grounded ONLY in real discovered evidence.",
       "3. If a recent posture article already exists, do NOT duplicate it — refresh",
       "   the assessment only if the estate has materially changed, otherwise stop.",
       "Do not invent products, vendors, or numbers; cite only real discovered data.",
@@ -148,6 +161,44 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       // changes slowly, so Assertive stays sub-daily.
       balanced: "43 16 * * 3",
       assertive: "43 16 * * 3,6",
+    },
+  },
+
+  // AI Ops Engineer keeps a current "AI platform posture" knowledge article on the
+  // Platform surface so the AI layer's health (providers, model routing, cost,
+  // failover, unassigned agents) is legible without a human asking. It holds
+  // registry_write (create_knowledge_article) + agent_control_read for the real
+  // AI-layer data, and its article is deduped on a stable title prefix so it never
+  // collides with the Digital Product Estate Specialist's estate-posture article.
+  "platform-engineer": {
+    title: "Refresh the AI platform posture article",
+    prompt: [
+      "You are running as a scheduled, autonomous task — no human is watching this",
+      "turn, so finish the work rather than asking questions.",
+      "",
+      "Goal: keep a current AI platform posture knowledge article on the Platform",
+      "surface so the AI layer's health is legible without a human asking. Steps:",
+      "1. Review the REAL AI-layer state available to you (provider status, model",
+      "   profiles and tiers, token spend, failover chains, agent-to-provider",
+      "   assignments, scheduled jobs) using your read tools.",
+      "2. Search existing knowledge articles first (search_knowledge_base). If there",
+      "   is NO recent AI-platform-posture article, create ONE with",
+      `   create_knowledge_article: a concise reference article (category`,
+      `   'reference') whose title STARTS WITH "${AI_PLATFORM_POSTURE_ARTICLE_TITLE_PREFIX}"`,
+      "   (this stable prefix is how the platform recognizes your own article),",
+      "   summarizing provider health, cost posture, any underpowered or unassigned",
+      "   agents, and what needs review — grounded ONLY in real AI-layer data.",
+      "3. If a recent posture article already exists, do NOT duplicate it — refresh",
+      "   the assessment only if the AI layer has materially changed, otherwise stop.",
+      "Do not invent providers, models, costs, or agents; cite only real data.",
+    ].join("\n"),
+    routeContext: "/platform",
+    cadence: {
+      // Weekly (Thu) and twice-weekly (Thu+Sun) at 17:19 UTC. Platform posture
+      // changes slowly, so even Assertive stays sub-daily (matches the estate /
+      // docs knowledge tasks); off-peak minute the allocator can shift on collision.
+      balanced: "19 17 * * 4",
+      assertive: "19 17 * * 4,0",
     },
   },
 };
@@ -228,6 +279,21 @@ const RECENT_KNOWLEDGE_ARTICLE_WINDOW_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
 const RECENT_DOCS_OVERVIEW_WINDOW_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
 
 /**
+ * Per-topic dedup: has a knowledge article whose title starts with this topic
+ * prefix been created within the recency window? Scoping on the title prefix
+ * (not "any recent article") is what lets multiple knowledge-article self-tasks
+ * coexist — each stands down only its OWN topic's fallback.
+ */
+async function hasRecentKnowledgeArticle(titlePrefix: string): Promise<boolean> {
+  const since = new Date(Date.now() - RECENT_KNOWLEDGE_ARTICLE_WINDOW_MS);
+  const recent = await prisma.knowledgeArticle.findFirst({
+    where: { createdAt: { gte: since }, title: { startsWith: titlePrefix } },
+    select: { articleId: true },
+  });
+  return recent !== null;
+}
+
+/**
  * Required-tool guarantee for a coworker self-task, keyed by agentId. Null when
  * the coworker's self-task has no procedural guarantee (the loop's own output is
  * sufficient). Mirrors getRequiredProceduralToolForScheduledTask for the curated
@@ -267,19 +333,28 @@ export function coworkerSelfTaskRequiredTool(
       // no recent posture article AND the coworker's loop failed to produce one.
       // required: title, body. category defaults to 'reference'.
       args: {
-        title: "Estate posture summary (needs refresh)",
+        title: `${ESTATE_POSTURE_ARTICLE_TITLE_PREFIX} (needs refresh)`,
         body:
           "Provisional estate-posture article created automatically because the Discovery/Inventory surface had no recent posture summary. The Digital Product Estate Specialist should replace this with a grounded assessment of real discovered posture, freshness, and top risks on its next run.",
         category: "reference",
       },
-      hasRecentArtifact: async () => {
-        const since = new Date(Date.now() - RECENT_KNOWLEDGE_ARTICLE_WINDOW_MS);
-        const recent = await prisma.knowledgeArticle.findFirst({
-          where: { createdAt: { gte: since } },
-          select: { articleId: true },
-        });
-        return recent !== null;
+      hasRecentArtifact: () => hasRecentKnowledgeArticle(ESTATE_POSTURE_ARTICLE_TITLE_PREFIX),
+    };
+  }
+
+  if (agentId === "platform-engineer") {
+    return {
+      name: "create_knowledge_article",
+      // Honest, provisional placeholder — only reached when the Platform surface
+      // has no recent AI-posture article AND the coworker's loop failed to produce
+      // one. required: title, body. category defaults to 'reference'.
+      args: {
+        title: `${AI_PLATFORM_POSTURE_ARTICLE_TITLE_PREFIX} (needs refresh)`,
+        body:
+          "Provisional AI-platform-posture article created automatically because the Platform surface had no recent posture summary. The AI Ops Engineer should replace this with a grounded assessment of provider health, cost posture, model routing, and any underpowered or unassigned agents on its next run.",
+        category: "reference",
       },
+      hasRecentArtifact: () => hasRecentKnowledgeArticle(AI_PLATFORM_POSTURE_ARTICLE_TITLE_PREFIX),
     };
   }
 

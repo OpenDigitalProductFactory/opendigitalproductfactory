@@ -1,4 +1,5 @@
 import type { FieldDispatchProfileOverride } from "./field-dispatch";
+import type { TwinProfileOverride } from "./twin-profile";
 
 export type CtaType = "booking" | "purchase" | "inquiry" | "donation" | "rental";
 
@@ -585,4 +586,14 @@ export interface ArchetypeDefinition {
    * docs/superpowers/specs/2026-06-13-field-dispatch-capability-design.md ADR-4.
    */
   fieldDispatch?: FieldDispatchProfileOverride;
+  /**
+   * Optional override of the derived operational-twin configuration. Left unset
+   * for the common case — `deriveTwinProfile` (twin-profile.ts) picks the
+   * template and binds its nouns from this archetype's axes, scheduling,
+   * field-dispatch profile, and category. Set only for a genuine exception the
+   * derivation cannot express (the ADR-4 escape hatch, mirroring `fieldDispatch`
+   * / `mediaProfile`). See
+   * docs/superpowers/specs/2026-07-12-operational-twin-framework-design.md §5.
+   */
+  twinProfile?: TwinProfileOverride;
 }

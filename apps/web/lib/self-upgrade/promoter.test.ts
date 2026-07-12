@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildPromoterCommand,
+  decidePromoterEnsureAction,
   isJitBuildablePromoterImage,
   PROMOTER_JIT_BUILD_SCRIPT,
   PROMOTER_TIMEOUT_EXIT_CODE,
@@ -126,6 +127,29 @@ describe("isJitBuildablePromoterImage", () => {
     // building and mis-tagging it locally would masquerade as the real image.
     expect(isJitBuildablePromoterImage("ghcr.io/acme/dpf-promoter:v1")).toBe(false);
     expect(isJitBuildablePromoterImage("dpf-promoter:pinned")).toBe(false);
+  });
+});
+
+describe("decidePromoterEnsureAction", () => {
+  // BI-8843BD48: the promoter bakes promote.sh as its ENTRYPOINT, so a
+  // present-but-stale JIT image runs an OLD promote.sh and silently skips newer
+  // steps (this is why BI-A8686CFC's sandbox-refresh never fired on installs
+  // whose dpf-promoter image predated the fix). A JIT-buildable image must ALWAYS
+  // be rebuilt from the portal's freshly-baked layout — even when one is present.
+  it("rebuilds a JIT-buildable image even when a (possibly stale) one is present", () => {
+    expect(decidePromoterEnsureAction(true, true)).toBe("rebuild");
+  });
+
+  it("rebuilds a JIT-buildable image when none is present", () => {
+    expect(decidePromoterEnsureAction(false, true)).toBe("rebuild");
+  });
+
+  it("uses a present custom/registry image as-is (cannot synthesise someone else's tag)", () => {
+    expect(decidePromoterEnsureAction(true, false)).toBe("use-present");
+  });
+
+  it("cannot build a missing custom/registry image — left to the operator's pull", () => {
+    expect(decidePromoterEnsureAction(false, false)).toBe("cannot-build");
   });
 });
 

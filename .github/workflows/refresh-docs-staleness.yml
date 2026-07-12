@@ -1,0 +1,86 @@
+name: Docs Staleness Refresh
+
+# The deterministic-detector → agent/human-verdict surface for BI-AA5DFEA2.
+#
+# The Doc Reference Integrity gate catches DEAD references (a link that no longer
+# resolves). It cannot catch SEMANTIC staleness — a doc whose links still resolve
+# but whose words describe behaviour that has since changed. This workflow closes
+# that gap the only way DPF's topology allows: the signal is git-derived, but the
+# deployed single-tenant portal ships no git history and CI cannot reach a
+# customer's DB, so the signal is computed here (git present) and shipped as a
+# committed report. Weekly, it regenerates docs/maintenance/staleness-report.md and
+# opens a PR when the report changes. The PR diff IS the surface: reviewing what
+# newly went stale is the agent/human VERDICT step — a candidate is a doc pointing
+# at a repo file committed more recently than the doc, NOT a proven error.
+#
+# Mirrors stt-digest-watch.yml (self-committing weekly PR): GITHUB_TOKEN-created PRs
+# do not trigger checks, so ci.yml is dispatched onto the branch and auto-merge armed.
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC — a weekly cadence for an advisory signal
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the refresh branch
+  pull-requests: write # open the refresh PR + arm auto-merge
+  actions: write # dispatch ci.yml onto the branch (token-made PRs don't self-trigger)
+
+concurrency:
+  group: docs-staleness-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Refresh docs staleness report
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: chore/docs-staleness-refresh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the detector reads full commit history for last-change timestamps
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Test the detector
+        run: node --test scripts/build-docs-staleness.test.mjs
+      - name: Regenerate the report
+        run: node scripts/build-docs-staleness.mjs
+      - name: Detect drift
+        id: check
+        run: |
+          if git diff --quiet -- docs/maintenance/staleness-report.md; then
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+            echo "No change in the staleness report."
+          else
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Skip if a refresh PR is already open
+        id: existing
+        if: steps.check.outputs.drift == 'true'
+        run: |
+          open_pr=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number // empty' --repo "$GITHUB_REPOSITORY")
+          echo "pr=$open_pr" >> "$GITHUB_OUTPUT"
+      - name: Commit and open PR
+        if: steps.check.outputs.drift == 'true' && steps.existing.outputs.pr == ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add docs/maintenance/staleness-report.md
+          git commit -s \
+            -m "docs(maintenance): refresh documentation staleness report (auto)" \
+            -m "Automated weekly refresh by Docs Staleness Refresh (BI-AA5DFEA2). Each row is a live doc referencing a repo file committed more recently than the doc itself — a deterministic stale-candidate signal for a reviewer to confirm, not a proven error." \
+            -m "Process-Spine-Decision: generated maintenance report, no contract/behaviour change."
+          git push -f origin "$BRANCH"
+
+          gh pr create \
+            --title "docs(maintenance): weekly documentation staleness report (auto)" \
+            --body "Automated weekly refresh by the **Docs Staleness Refresh** (BI-AA5DFEA2, EP-1155CEF3). The diff shows which live docs newly reference a repo file committed more recently than the doc — deterministic stale *candidates*. Reviewing them is the verdict step: confirm whether each doc's wording actually needs updating (a candidate is not a proven error). GITHUB_TOKEN-created PRs do not self-trigger checks, so ci.yml is dispatched onto this branch and auto-merge is armed." \
+            --head "$BRANCH" --base main
+
+          gh workflow run ci.yml --ref "$BRANCH" || echo "ci.yml dispatch failed; dispatch manually"
+          gh pr merge "$BRANCH" --auto || echo "auto-merge not armed; arm manually after checks pass"
