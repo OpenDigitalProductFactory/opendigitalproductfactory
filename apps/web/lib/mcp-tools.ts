@@ -524,6 +524,10 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // ─── Build Studio Tools ───────────────────────────────────────────────────
   // update_feature_brief and create_build_epic execute immediately (no approval dialog).
   // Only register_digital_product_from_build needs HITL approval (creates a real product).
+  // update_feature_brief moved to a build ToolPack
+  // register_digital_product_from_build moved to a build ToolPack
+  // create_build_epic moved to a build ToolPack
+  // verification_preflight moved to a build ToolPack
   {
     name: "get_build_sandbox_state",
     description: "Read the source-bounded sandbox/git state for a Build Studio build, including branch, head SHA, source diffstat, ignored generated/dependency paths, and expected plan files.",
@@ -710,6 +714,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
     buildPhases: ["ideate", "plan", "build", "review"],
   },
+  // start_build moved to a build ToolPack
   {
     name: "run_sandbox_tests",
     description: "Run unit tests and typecheck inside the sandbox container. Set auto_fix to true to automatically diagnose and fix failures (up to 3 attempts).",
@@ -851,42 +856,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false, // sandbox-isolated; inner calls are read-only + governed per call
   },
+  // validate_schema moved to a build ToolPack
+  // deploy_feature moved to a build ToolPack
+  // create_portal_pr moved to a build ToolPack
+  // set_change_disposition moved to a build ToolPack
   // ─── Email setup (PBI-INV-04 Phase 2) ──────────────────────────────────
   // Lets the onboarding/COO coworker walk a non-technical operator through
   // configuring their OWN outbound email (SMTP). Operator-only
   // (manage_provider_connections) + the `email_config` agent grant.
   // ─── Hive Mind Contribution Tools (IT4IT §5.5 Release) ───────────────────
-  {
-    name: "assess_contribution",
-    description: "Evaluate whether a shipped feature should be contributed to the Hive Mind community. Assesses vision alignment, community value, augmentation vs innovation, and proprietary sensitivity. Always presents the assessment to the user — contribution is their choice.",
-    inputSchema: { type: "object", properties: {} },
-    requiredCapability: "view_platform",
-    executionMode: "immediate",
-    sideEffect: false,
-    buildPhases: ["ship"],
-  },
-  {
-    name: "contribute_to_hive",
-    description: "Package a shipped feature as a FeaturePack for community contribution. Only call after the user has seen the assessment and explicitly approved. Includes DCO (Developer Certificate of Origin) attestation.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        include_migrations: { type: "boolean", description: "Include database migrations in the pack. Default: true." },
-      },
-    },
-    requiredCapability: "view_platform",
-    executionMode: "proposal",
-    sideEffect: true,
-    buildPhases: ["ship"],
-    // 2-state model (EP-1A78BAE1): there is no mode-based pre-authorization.
-    // Sharing is a per-change human-in-the-loop decision (the FeatureBuild
-    // disposition, suggest-then-confirm). Until that disposition gate lands,
-    // never auto-approve outbound contribution — fail closed to requiring the
-    // human's final call.
-    autoApproveWhen: async () => {
-      return false;
-    },
-  },
+  // assess_contribution def moved to mcp/packs/contribution-hive-pack.ts
+  // contribute_to_hive def moved to mcp/packs/contribution-hive-pack.ts
+  // run_ux_test moved to a build ToolPack
+  // ─── Codebase Access Tools ──────────────────────────────────────────────────
+  // start_ideate_research moved to a build ToolPack
+  // start_scout_research moved to a build ToolPack
   // ─── Manifest Tools ────────────────────────────────────────────────────────
   {
     name: "propose_file_change",
@@ -905,87 +889,10 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["build"],
   },
   // ─── Feedback Loop ──────────────────────────────────────────────────────────
-  {
-    name: "propose_improvement",
-    description:
-      "Propose a platform improvement based on friction or a missing capability observed in this conversation. " +
-      "Available to ALL employees regardless of role — anyone can submit an idea. Auto-attributes to the current user.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        title: { type: "string", description: "Short title for the improvement (max 100 chars)" },
-        description: { type: "string", description: "What should be improved and why" },
-        category: {
-          type: "string",
-          enum: ["ux_friction", "missing_feature", "performance", "accessibility", "security", "process"],
-          description: "Improvement category",
-        },
-        severity: {
-          type: "string",
-          enum: ["low", "medium", "high", "critical"],
-          description: "Impact severity (default: medium)",
-        },
-        observedFriction: { type: "string", description: "What you observed that prompted this suggestion" },
-      },
-      required: ["title", "description", "category"],
-    },
-    requiredCapability: null,
-    executionMode: "proposal",
-    sideEffect: true,
-  },
-  {
-    name: "propose_skill_improvement",
-    description:
-      "Propose a content change to a specific coworker skill (e.g. tightening instructions, fixing a stale " +
-      "reference). Use when you have observed the current skill prompt produce the wrong behavior and you can " +
-      "draft a better version. Submits an ImprovementProposal(category='skill', targetSkillId=…) that a human " +
-      "reviews on /platform/ai/skills.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        skillId: {
-          type: "string",
-          description: "The SkillDefinition.skillId (business id) the proposal targets, e.g. 'build-page'.",
-        },
-        title: { type: "string", description: "Short title for the change (max 100 chars)" },
-        description: { type: "string", description: "Why the change is needed; cite the friction or failure" },
-        proposedContent: {
-          type: "string",
-          description: "Full proposed SKILL.md body (replaces the current content if approved)",
-        },
-        severity: {
-          type: "string",
-          enum: ["low", "medium", "high", "critical"],
-          description: "Impact severity (default: medium)",
-        },
-        observedFriction: {
-          type: "string",
-          description: "What you observed that prompted this change",
-        },
-      },
-      required: ["skillId", "title", "description", "proposedContent"],
-    },
-    requiredCapability: null,
-    executionMode: "proposal",
-    sideEffect: true,
-  },
+  // propose_improvement def moved to mcp/packs/contribution-hive-pack.ts
+  // propose_skill_improvement def moved to mcp/packs/contribution-hive-pack.ts
   // ─── Provider Management ────────────────────────────────────────────────────
-  {
-    name: "submit_feedback",
-    description: "Log a feedback note for an employee (praise, constructive, or observation).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        toEmployeeId: { type: "string", description: "Employee profile ID receiving feedback" },
-        content: { type: "string", description: "Feedback content" },
-        feedbackType: { type: "string", enum: ["praise", "constructive", "observation"], description: "Type of feedback" },
-        visibility: { type: "string", enum: ["private", "shared", "public"], description: "Visibility (default: private)" },
-      },
-      required: ["toEmployeeId", "content", "feedbackType"],
-    },
-    requiredCapability: null,
-    executionMode: "immediate",
-  },
+  // submit_feedback def moved to mcp/packs/contribution-hive-pack.ts
   // ─── Principles-as-wiki-kind Phase 2 Task 2.7: advisory decision support ──
   {
     name: "principle_decide",
@@ -1674,6 +1581,14 @@ export async function executeTool(
         },
       };
     }
+
+    // update_feature_brief moved to a build ToolPack
+
+    // register_digital_product_from_build moved to a build ToolPack
+
+    // create_build_epic moved to a build ToolPack
+
+    // verification_preflight moved to a build ToolPack
 
     case "get_build_sandbox_state": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
@@ -3023,6 +2938,8 @@ export async function executeTool(
       }
     }
 
+    // start_build moved to a build ToolPack
+
     case "generate_code":
     case "iterate_sandbox":
       // Removed: these tools caused runaway loops by spawning nested LLM calls.
@@ -3531,510 +3448,27 @@ export async function executeTool(
       return { success: false, error: "Unknown sandbox tool", message: "Internal error." };
     }
 
+    // validate_schema moved to a build ToolPack
+
+    // deploy_feature moved to a build ToolPack
+
+    // ─── Portal PR Creation & Merge ────────────────────────────────────────
+
+    // create_portal_pr moved to a build ToolPack
+
     // ─── Hive Mind Contribution ──────────────────────────────────────────────
 
-    case "assess_contribution": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+    // assess_contribution case moved to mcp/packs/contribution-hive-pack.ts
 
-      const build = await prisma.featureBuild.findUnique({
-        where: { buildId },
-        select: {
-          title: true, brief: true, buildPlan: true, diffPatch: true, diffSummary: true,
-          phase: true, portfolioId: true, digitalProductId: true,
-          verificationOut: true, sandboxId: true, designDoc: true,
-        },
-      });
-      if (!build) return { success: false, error: "Build not found.", message: "Build not found." };
+    // set_change_disposition moved to a build ToolPack
 
-      const brief = build.brief as Record<string, unknown> | null;
-      const plan = build.buildPlan as Record<string, unknown> | null;
-      const diff = (build.diffPatch ?? build.diffSummary ?? "") as string;
-      const designDoc = build.designDoc as Record<string, unknown> | null;
-      const reusability = designDoc?.reusabilityAnalysis as { scope?: string; contributionReadiness?: string } | undefined;
+    // contribute_to_hive case moved to mcp/packs/contribution-hive-pack.ts
 
-      // Parse diff to understand scope
-      const changedFiles = [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
-      const newRoutes = changedFiles.filter((f) => f.includes("/app/") && f.endsWith("/page.tsx"));
-      const schemaChanges = changedFiles.filter((f) => f.includes("schema.prisma"));
-      const migrationFiles = changedFiles.filter((f) => f.startsWith("prisma/migrations/"));
-      const hasNewModels = diff.includes("model ") && diff.includes("@id");
+    // run_ux_test moved to a build ToolPack
 
-      // ── Criterion 1: Vision Alignment ──
-      const portfolioId = build.portfolioId ?? "unknown";
-      const description = String(brief?.description ?? "");
-      const isPortfolioAligned = !!build.portfolioId;
-      const mentionsDPPM = /product|portfolio|lifecycle|taxonomy|backlog|compliance|operations/i.test(description);
-      const visionScore = isPortfolioAligned && mentionsDPPM ? "high" : isPortfolioAligned ? "medium" : "low";
-      const visionReasoning = visionScore === "high"
-        ? `Aligned with portfolio ${portfolioId} and extends platform capabilities (${mentionsDPPM ? "touches DPPM concepts" : ""}).`
-        : visionScore === "medium"
-          ? `Assigned to portfolio ${portfolioId} but domain alignment is unclear from the description.`
-          : "Not assigned to a portfolio — unclear how this connects to the platform vision.";
+    // start_ideate_research moved to a build ToolPack
 
-      // ── Criterion 2: Community Value ──
-      const targetRoles = Array.isArray(brief?.targetRoles) ? brief.targetRoles : [];
-      const broadRoles = targetRoles.length === 0 || targetRoles.includes("All") || targetRoles.length >= 3;
-      const acceptanceCriteria = Array.isArray(brief?.acceptanceCriteria) ? brief.acceptanceCriteria : [];
-      const isGeneral = !description.match(/\b(acme|our company|internal|proprietary|specific to)\b/i);
-      let communityScore = broadRoles && isGeneral ? "high" : isGeneral ? "medium" : "low";
-
-      // Enhance community value scoring with ideate-time reusability analysis
-      if (reusability) {
-        if (reusability.scope === "already_generic" || (reusability.scope === "parameterizable" && reusability.contributionReadiness === "high")) {
-          communityScore = "high";
-        } else if (reusability.scope === "parameterizable" && communityScore !== "high") {
-          communityScore = "medium";
-        }
-        // one_off: leave existing heuristic scoring — user explicitly chose single-use
-      }
-
-      const communityReasoning = communityScore === "high"
-        ? `Targets ${broadRoles ? "broad roles" : targetRoles.join(", ")} with ${acceptanceCriteria.length} general acceptance criteria.${reusability?.scope === "parameterizable" ? " Feature was designed with parameterization for reusability." : reusability?.scope === "already_generic" ? " Feature was designed as generic from the start." : ""}`
-        : communityScore === "medium"
-          ? `Targets specific roles (${targetRoles.join(", ")}) but the functionality appears generalizable.${reusability?.scope === "parameterizable" ? " Parameterization was planned but may need completion before contributing." : ""}`
-          : "Contains organization-specific language or targets a narrow use case.";
-
-      // ── Criterion 3: Augmentation vs Innovation ──
-      const isAugmentation = newRoutes.length <= 1 && !hasNewModels;
-      const augLevel = isAugmentation ? "augmentation" as const : "innovation" as const;
-      const augReasoning = isAugmentation
-        ? `Modifies ${changedFiles.length} existing files with ${newRoutes.length} new route(s). This augments existing capability — straightforward to merge.`
-        : `Creates ${newRoutes.length} new route(s) and ${hasNewModels ? "new data models" : "significant structural changes"}. This is an innovation — benefits from community review before merging.`;
-
-      // ── Criterion 4: Proprietary Sensitivity ──
-      const concerns: string[] = [];
-      // Only flag *assignments* of a secret-shaped identifier to a 20+ char opaque
-      // string, or known secret token prefixes (GitHub / OpenAI / Slack / AWS / JWT).
-      // The old bare-word match flagged benign identifiers like `scopeToken`,
-      // `cancellationToken`, `accessTokenName`, `secretRef` — every round of
-      // assess_contribution drowned in false positives.
-      const secretAssignment = /[A-Za-z0-9_]*(api[_-]?key|apikey|secret|password|token)[A-Za-z0-9_]*\s*[:=]\s*["'`][A-Za-z0-9_\-+/.=]{20,}/i;
-      const knownSecretPrefix = /(ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{15,}|AKIA[A-Z0-9]{16})/;
-      if (secretAssignment.test(diff) || knownSecretPrefix.test(diff)) concerns.push("Contains references to API keys or secrets");
-      if (/acme|our company|internal use only|confidential/i.test(diff)) concerns.push("Contains organization-specific references");
-      if (/\$\d+[\d,.]*|pricing|rate.*card|margin/i.test(diff)) concerns.push("Contains pricing or financial constants");
-      if (/customer.*name|client.*id|account.*number/i.test(diff)) concerns.push("Contains customer data references");
-      const isSensitive = concerns.length > 0;
-
-      // ── Overall Recommendation ──
-      let recommendation: "contribute" | "contribute_with_mods" | "keep_local" | "user_decides";
-      if (isSensitive) {
-        recommendation = concerns.length > 2 ? "keep_local" : "contribute_with_mods";
-      } else if (visionScore === "high" && communityScore === "high") {
-        recommendation = "contribute";
-      } else if (visionScore === "low" && communityScore === "low") {
-        recommendation = "keep_local";
-      } else {
-        recommendation = "user_decides";
-      }
-
-      const summaryMap = {
-        contribute: `This feature looks great for the community. It extends ${build.title} within the ${portfolioId} portfolio and other organizations would benefit. Would you like to contribute it to the Hive Mind?`,
-        contribute_with_mods: `This feature could benefit others, but I noticed some concerns: ${concerns.join("; ")}. If you'd like to contribute, I'd suggest removing organization-specific references first. Want me to prepare a cleaned version?`,
-        keep_local: `This feature is well-built but it's ${isSensitive ? "contains sensitive content" : "specific to your organization"}. I'd recommend keeping it local. You can always contribute later if you generalize it.`,
-        user_decides: `I see arguments both ways for contributing "${build.title}". Vision alignment: ${visionScore}. Community value: ${communityScore}. ${augLevel === "innovation" ? "This is an innovation that would benefit from review." : "This augments existing capability."} What would you prefer?`,
-      };
-
-      const assessment = {
-        recommendation,
-        criteria: {
-          visionAlignment: { score: visionScore, reasoning: visionReasoning },
-          communityValue: { score: communityScore, reasoning: communityReasoning },
-          augmentationLevel: { level: augLevel, reasoning: augReasoning },
-          proprietarySensitivity: { sensitive: isSensitive, concerns },
-        },
-        summary: summaryMap[recommendation],
-        suggestedMods: isSensitive ? concerns.map((c) => `Remove: ${c}`) : [],
-        filesChanged: changedFiles.length,
-        newRoutes: newRoutes.length,
-        hasSchemaChanges: schemaChanges.length > 0,
-        hasMigrations: migrationFiles.length > 0,
-      };
-
-      // Persist assessment on build record
-      await prisma.featureBuild.update({
-        where: { buildId },
-        data: { taskResults: { ...(build.verificationOut as Record<string, unknown> ?? {}), contributionAssessment: assessment } as unknown as import("@dpf/db").Prisma.InputJsonValue },
-      });
-
-      logBuildActivity(buildId, "assess_contribution", `Recommendation: ${recommendation}. Vision: ${visionScore}, Community: ${communityScore}, Type: ${augLevel}, Sensitive: ${isSensitive}`);
-
-      return { success: true, message: assessment.summary, data: assessment };
-    }
-
-    case "contribute_to_hive": {
-      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
-      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-
-      const devConfig = await prisma.platformDevConfig.findUnique({
-        where: { id: "singleton" },
-        select: { contributionMode: true, upstreamRemoteUrl: true, dcoAcceptedAt: true, gitRemoteUrl: true, hiveContributionsPaused: true },
-      });
-      const { getPlatformDevPolicyState } = await import("@/lib/platform-dev-policy");
-      const policyState = getPlatformDevPolicyState(devConfig);
-      if (policyState === "policy_pending") {
-        return {
-          success: false,
-          error: "Platform development policy not configured.",
-          message:
-            "Contribution is blocked until Platform Development is configured in the portal. Finish that setup first, then decide whether this install stays private or contributes governed changes upstream.",
-        };
-      }
-      if (devConfig?.contributionMode === "private" || devConfig?.contributionMode === "fork_only") {
-        return {
-          success: false,
-          error: "Install is configured to keep everything on this system.",
-          message:
-            "This install keeps shipped work on your own system and does not contribute to the community. Switch to a contributing install in Admin > Platform Development if you want to share changes upstream.",
-        };
-      }
-
-      // Master pause overrides every contribution type (see
-      // packages/db/src/hive-contribution-settings.ts — "the master pause overrides
-      // everything"). The source/improvement path must honor it the same way the
-      // device-fingerprint (contribute-fingerprint.ts) and feedback-escalation paths
-      // do; otherwise the Admin "Pause all contributions" toggle silently still ships
-      // PRs upstream. Checked before any PR prerequisite work, like the per-type gate.
-      if (devConfig?.hiveContributionsPaused) {
-        return {
-          success: false,
-          error: "Hive contributions are paused.",
-          message:
-            "All contributions to the community are currently paused (Admin → Platform Development → Hive Contributions). Resume contributions there, then retry.",
-        };
-      }
-
-      // Prerequisite checks for PR creation — fail loudly up front rather
-      // than silently producing a FeaturePack with prUrl:null downstream.
-      // Previously both conditions below gated the PR attempt inside a
-      // try/catch at line ~4866 and a falsy result was swallowed: the tool
-      // returned success:true with no prUrl, leaving the coworker claiming
-      // "contributed" when no upstream PR ever landed.
-      if (!devConfig?.dcoAcceptedAt) {
-        return {
-          success: false,
-          error: "DCO not accepted.",
-          message:
-            "Upstream contributions require the Developer Certificate of Origin. Visit Admin > Platform Development and accept the DCO, then retry.",
-        };
-      }
-      const { resolveHiveToken: resolveHiveTokenEarly } = await import("@/lib/integrate/identity-privacy");
-      const hiveTokenEarly = await resolveHiveTokenEarly();
-      if (!hiveTokenEarly) {
-        return {
-          success: false,
-          error: "No GitHub token configured for hive contributions.",
-          message:
-            "Upstream contributions need a GitHub token. Set HIVE_CONTRIBUTION_TOKEN on the portal container, seed a 'hive-contribution' credential in admin, or fall back to GITHUB_TOKEN. Then retry.",
-        };
-      }
-
-      const build = await prisma.featureBuild.findUnique({
-        where: { buildId },
-        select: {
-          id: true, title: true, brief: true, diffPatch: true, diffSummary: true,
-          sandboxId: true, portfolioId: true, createdById: true,
-          buildBranch: true, gitCommitHashes: true, updatedAt: true, buildPlan: true,
-          description: true, designDoc: true, buildExecState: true,
-          disposition: true, dispositionSuggestionReason: true,
-          createdBy: { select: { email: true } },
-        },
-      });
-      if (!build || build.createdById !== userId) {
-        return { success: false, error: "Build not found.", message: `No active build ${buildId} was found for this user.` };
-      }
-
-      const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
-      const { assertSandboxReadyForContribution } = await import("@/lib/integrate/sandbox/sandbox-readiness-gate");
-      const readiness = await diagnoseSandboxReadiness({ buildId });
-      const readinessGate = assertSandboxReadyForContribution(readiness);
-      if (!readinessGate.ok) {
-        logBuildActivity(buildId, "contribute_to_hive", readinessGate.message);
-        return {
-          success: false,
-          error: "Sandbox readiness blocked contribution.",
-          message: readinessGate.message,
-          data: { ...readiness },
-        };
-      }
-
-      const diff = (build.diffPatch ?? "") as string;
-      if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };
-
-      // Private-paths boundary (Phase 1 of Private/Public Change Segregation):
-      // local records keep the full diff, but any OUTBOUND PR diff must never
-      // carry a path the operator marked proprietary. The `.dpf/private-paths`
-      // manifest ships empty → no-op until opted in. Spec:
-      // docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md
-      const { loadPrivatePathPatterns: _loadPriv, compilePrivatePathMatcher: _compilePriv, stripPrivatePathsFromDiff: _stripPriv } =
-        await import("@/lib/integrate/private-paths");
-      const shareableDiff = _stripPriv(diff, _compilePriv(await _loadPriv({ prisma }))).kept;
-      if (!shareableDiff.trim()) {
-        return {
-          success: false,
-          error: "Only private paths.",
-          message:
-            "This change only affects parts of your system you've marked private (see .dpf/private-paths or Admin > Platform Development), so there is nothing to share upstream.",
-        };
-      }
-
-      // Fail-closed disposition gate (EP-1A78BAE1): contribute_to_hive is always
-      // public-hive egress, so a change may leave only when explicitly
-      // "shareable". Default "private" blocks — the human's confirmation (via
-      // set_change_disposition / the ship UI) is required first.
-      const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/integrate/disposition");
-      if (!mayShareToPublicHive(build.disposition)) {
-        logBuildActivity(buildId, "contribute_to_hive", "blocked: change disposition is private (not confirmed shareable)");
-        return {
-          success: false,
-          error: "Change is kept private.",
-          message: privateDispositionBlockMessage(build.dispositionSuggestionReason),
-        };
-      }
-
-      const { buildSandboxStateFromRecord, assertSandboxReadyForPromotion, serializePlanDocument } = await import("@/lib/build/sandbox-state");
-      const sandboxState = buildSandboxStateFromRecord({
-        buildBranch: build.buildBranch,
-        gitCommitHashes: build.gitCommitHashes,
-        diffPatch: diff,
-        updatedAt: build.updatedAt,
-        planDocument: typeof build.buildPlan === "string" ? build.buildPlan : serializePlanDocument(build.buildPlan),
-        description: build.description,
-        buildExecState: build.buildExecState,
-      });
-      const promotionGate = assertSandboxReadyForPromotion(sandboxState);
-      if (!promotionGate.ok) {
-        logBuildActivity(buildId, "contribute_to_hive", promotionGate.message);
-        return {
-          success: false,
-          error: "Sandbox promotion integrity blocked contribution.",
-          message: `${promotionGate.message}\n\n${promotionGate.failures.join("\n")}`,
-          data: {
-            gate: {
-              ok: false,
-              failures: promotionGate.failures,
-            },
-            sandbox: promotionGate.state,
-          },
-        };
-      }
-
-      const includeMigrations = params.include_migrations !== false;
-      const brief = build.brief as Record<string, unknown> | null;
-
-      // Parse files from diff
-      const { allFiles, seedFit, securityScan } = await (await import("@/lib/integrate/contribution-review")).analyzeContributionSeedFit(shareableDiff, brief, build.designDoc);
-      const migrationFiles = allFiles.filter((f) => f.startsWith("prisma/migrations/"));
-      const codeFiles = allFiles.filter((f) => !f.startsWith("prisma/migrations/"));
-      const schemaFiles = allFiles.filter((f) => f.includes("schema.prisma"));
-
-      // Build manifest
-      const manifest = {
-        files: codeFiles,
-        migrations: includeMigrations ? migrationFiles : [],
-        schemaChanges: schemaFiles,
-        totalFiles: includeMigrations ? allFiles.length : codeFiles.length,
-        diffLength: diff.length,
-        portfolioContext: build.portfolioId,
-      };
-
-      // DCO attestation — uses pseudonymous platform identity, not personal info.
-      // Real user identity stays in the local DB only; public git metadata
-      // shows "dpf-agent-<shortId> <agent-<shortId>@hive.dpf>" so the community
-      // can recognize repeat contributors without exposing the real user.
-      const { getPlatformIdentity } = await import("@/lib/integrate/identity-privacy");
-      const platformId = await getPlatformIdentity();
-      const dcoAttestation = platformId.dcoSignoff;
-
-      // FeaturePack is upserted by buildId — NOT create-every-call.
-      //
-      // Two FeaturePack rows for the same build (with prUrl:null on both) was
-      // the observed symptom of contribute_to_hive being invoked twice. The
-      // old code created a fresh pack on each call; if the first call's PR
-      // creation failed, the pack stayed with prUrl:null. A retry then made
-      // a SECOND empty pack — and even when the retry's PR succeeded, its
-      // back-write only touched the second pack's manifest. The first pack
-      // was orphaned without its URL forever.
-      //
-      // Reusing the most recent pack for this build means:
-      //   - first call: create, get prUrl, back-write the same row.
-      //   - retry after failure: update the same row, try PR again; success
-      //     back-writes prUrl onto the existing pack (idempotent).
-      const existingPack = await prisma.featurePack.findFirst({
-        where: { buildId: build.id },
-        orderBy: { createdAt: "desc" },
-        select: { packId: true },
-      });
-      const packId = existingPack?.packId ?? `FP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      if (existingPack) {
-        await prisma.featurePack.update({
-          where: { packId },
-          data: {
-            title: build.title,
-            description: String(brief?.description ?? ""),
-            portfolioContext: build.portfolioId,
-            manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
-            status: "contributed",
-          },
-        });
-      } else {
-        await prisma.featurePack.create({
-          data: {
-            packId,
-            title: build.title,
-            description: String(brief?.description ?? ""),
-            portfolioContext: build.portfolioId,
-            version: "1.0.0",
-            manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
-            buildId: build.id,
-            status: "contributed",
-          },
-        });
-      }
-
-      // Create upstream PR via direct branch push (Option B).
-      // Anonymous identity pushes dpf/<hash>/<slug> branch directly to the upstream repo.
-      // No customer fork needed — the hive token provides write access.
-      let prUrl: string | null = null;
-      let prError: string | null = null;
-      try {
-        const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
-
-        // DCO + token already validated up-front (see prerequisite checks
-        // earlier in this case); reuse the resolved token so we don't hit
-        // the credential store a second time.
-        const { generatePrivateBranchName, generateAnonymousCommitMessage } = await import("@/lib/integrate/identity-privacy");
-        const hiveToken = hiveTokenEarly;
-
-        {
-          const upstreamMatch = upstreamUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-          if (!upstreamMatch) {
-            prError = `upstreamRemoteUrl "${upstreamUrl}" is not a recognizable GitHub URL.`;
-          } else {
-            const { createBranchAndPR } = await import("@/lib/integrate/github-api-commit");
-
-            const branchName = generatePrivateBranchName(platformId.clientId, build.title);
-            const commitMessage = generateAnonymousCommitMessage({
-              title: build.title,
-              buildId,
-              productId: null,
-              platformIdentity: platformId,
-              dcoAcceptedAt: devConfig!.dcoAcceptedAt!,
-            });
-
-            const prTitle = `feat: ${build.title}`;
-            const { submitBuildAsPR } = await import("@/lib/contribution-pipeline");
-            const prBody = [
-              "## Summary",
-              "",
-              `Build: \`${buildId}\``,
-              `Author: ${platformId.authorName} (AI Coworker)`,
-              "",
-              `**Security Scan:** ${securityScan.passed ? "PASSED" : "FAILED"} (${securityScan.criticalCount} critical, ${securityScan.warningCount} warnings)`,
-              "",
-              `Files: ${manifest.totalFiles} | Migrations: ${manifest.migrations.length} | Schema changes: ${manifest.schemaChanges.length}`,
-              "",
-              "---",
-              `License: Apache-2.0 (inbound=outbound)`,
-              `${platformId.dcoSignoff}${seedFit.decision ? `\n\nSeed-Fit-Decision: ${seedFit.decision}` : ""}`,
-            ].join("\n");
-
-            const labels = ["ai-contributed", "build-studio", ...(seedFit.decision ? [`seed-fit:${seedFit.decision}`] : [])];
-            if (!securityScan.passed) labels.push("security-review-needed");
-
-            const prResult = await createBranchAndPR({
-              // Phase 3: caller still passes head === base. Phase 4 will switch
-              // to head = contributor fork / base = upstream when
-              // contributionModel === "fork-pr".
-              headOwner: upstreamMatch[1],
-              headRepo: upstreamMatch[2],
-              baseOwner: upstreamMatch[1],
-              baseRepo: upstreamMatch[2],
-              branchName,
-              commitMessage,
-              diff: shareableDiff,
-              prTitle,
-              prBody,
-              labels,
-              token: hiveToken,
-            });
-
-            if (prResult.prUrl) {
-              prUrl = prResult.prUrl;
-              await prisma.featurePack.update({
-                where: { packId },
-                data: { manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
-              });
-
-              // Run contribution review pipeline — sanitization, parameterization, vertical tagging
-              if (prResult.prNumber) {
-                try {
-                  const { runContributionReview } = await import("@/lib/integrate/contribution-review");
-                  const reviewResult = await runContributionReview({
-                    buildId,
-                    prUrl: prResult.prUrl!,
-                    prNumber: prResult.prNumber,
-                    repoOwner: upstreamMatch[1],
-                    repoName: upstreamMatch[2],
-                    token: hiveToken,
-                    diff: shareableDiff,
-                  });
-                  logBuildActivity(buildId, "contribution_review", `Merge readiness: ${reviewResult.mergeReadiness}. Seed fit: ${reviewResult.seedFit.decision ?? "not-applicable"}. Verticals: ${reviewResult.verticals.applicableVerticals.filter((v) => v.relevance !== "unlikely").map((v) => v.category).join(", ") || "none"}`);
-                } catch (reviewErr) {
-                  console.warn("[contribute_to_hive] contribution review failed:", reviewErr);
-                  prError = `Contribution review failed: ${getErrorMessage(reviewErr)}`;
-                }
-              }
-            } else {
-              prError = `createBranchAndPR returned no prUrl (owner=${upstreamMatch[1]} repo=${upstreamMatch[2]} branch=${branchName}).`;
-            }
-          }
-        }
-      } catch (err) {
-        prError = getErrorMessage(err);
-        console.warn("[contribute_to_hive] upstream PR creation failed:", err);
-      }
-
-      // Update linked ImprovementProposal if exists
-      await prisma.improvementProposal.updateMany({
-        where: { buildId: build.id, contributionStatus: "local" },
-        data: { contributionStatus: "contributed" },
-      }).catch(() => {});
-
-      logBuildActivity(
-        buildId,
-        "contribute_to_hive",
-        prUrl
-          ? `FeaturePack ${packId} created + PR ${prUrl}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`
-          : `FeaturePack ${packId} created but upstream PR FAILED: ${prError ?? "unknown"}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`,
-      );
-
-      // Fork disposition has changed — ask the reconciler whether the build
-      // is ready to advance ship → complete. Success and failure both count
-      // as a terminal disposition for the upstream fork (errored is still
-      // terminal); the only state that blocks complete is in_progress.
-      {
-        const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
-        await reconcileBuildCompletion(buildId).catch(() => {});
-      }
-
-      if (!prUrl) {
-        return {
-          success: false,
-          error: prError ?? "Upstream PR creation failed.",
-          message: `Feature Pack ${packId} was created locally but the upstream pull request could not be opened: ${prError ?? "unknown error"}. Review the token, DCO, and upstream URL and retry.`,
-          data: { packId, manifest, dcoAttestation, prUrl: null, prError },
-        };
-      }
-
-      const prMessage = ` A pull request has been created: ${prUrl}`;
-      return {
-        success: true,
-        message: `Feature Pack ${packId} created and contributed to the Hive Mind. ${manifest.totalFiles} file(s) packaged with DCO attestation.${prMessage} Thank you for contributing!`,
-        data: { packId, manifest, dcoAttestation, prUrl },
-      };
-    }
+    // start_scout_research moved to a build ToolPack
 
     // ─── Design Intelligence Tools (UI UX Pro Max) ──────────────────────────
     case "propose_file_change": {
@@ -4102,175 +3536,11 @@ export async function executeTool(
       };
     }
 
-    case "propose_improvement": {
-      const proposalId = `IP-${crypto.randomUUID().slice(0, 5).toUpperCase()}`;
+    // propose_improvement case moved to mcp/packs/contribution-hive-pack.ts
 
-      // Capture conversation excerpt (last 5 messages) for evidence
-      let conversationExcerpt: string | null = null;
-      if (context?.threadId) {
-        const recentMessages = await prisma.agentMessage.findMany({
-          where: { threadId: context.threadId },
-          orderBy: { createdAt: "desc" },
-          take: 5,
-          select: { role: true, content: true },
-        });
-        if (recentMessages.length > 0) {
-          conversationExcerpt = recentMessages
-            .reverse()
-            .map((m) => `[${m.role}] ${m.content?.slice(0, 200)}`)
-            .join("\n");
-        }
-      }
+    // propose_skill_improvement case moved to mcp/packs/contribution-hive-pack.ts
 
-      const category = String(params["category"] ?? "missing_feature");
-      const proposal = await prisma.improvementProposal.create({
-        data: {
-          proposalId,
-          title: String(params["title"] ?? "Untitled improvement"),
-          description: String(params["description"] ?? ""),
-          category,
-          severity: String(params["severity"] ?? "medium"),
-          observedFriction: typeof params["observedFriction"] === "string" ? params["observedFriction"] : null,
-          conversationExcerpt,
-          submittedById: userId,
-          agentId: context?.agentId ?? "unknown",
-          routeContext: context?.routeContext ?? "unknown",
-          threadId: context?.threadId ?? null,
-        },
-      });
-
-      // Consolidation (EP-INTAKE-UNIFY / BI-7541AB88): file the work into the
-      // backlog the moment the proposal exists, so it is visible and triageable
-      // without the old manual Review→Prioritize promotion that never happened.
-      // The proposal stays the evidence record; the BacklogItem is the work.
-      let backlogItemId: string | null = null;
-      try {
-        const { ingestBacklogItem, improvementCategoryToWorkType } = await import(
-          "@/lib/operate/backlog-ingest"
-        );
-        const ingest = await ingestBacklogItem({
-          title: proposal.title,
-          body: [
-            proposal.description,
-            proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
-            `Category: ${category} | Severity: ${proposal.severity}`,
-            `From improvement proposal ${proposal.proposalId}`,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          workType: improvementCategoryToWorkType(category),
-          source: "automated-detection",
-          itemIdPrefix: "IMP",
-          submittedById: userId,
-          agentId: context?.agentId ?? null,
-          origin: { kind: "improvement", id: proposal.proposalId },
-        });
-        backlogItemId = ingest.itemId;
-        await prisma.improvementProposal.update({
-          where: { proposalId: proposal.proposalId },
-          data: { backlogItemId },
-        });
-      } catch (err) {
-        // Non-fatal: the proposal is still recorded even if the backlog projection fails.
-        console.error("[propose_improvement] backlog auto-file failed", err);
-      }
-
-      // Index the proposal in platform knowledge (was previously unreachable
-      // dead code after the return).
-      import("@/lib/semantic-memory")
-        .then(({ storePlatformKnowledge }) =>
-          storePlatformKnowledge({
-            entityId: proposal.proposalId,
-            entityType: "improvement",
-            title: proposal.title,
-            content: String(params["description"] ?? ""),
-          }),
-        )
-        .catch(() => {});
-
-      return {
-        success: true,
-        entityId: proposal.proposalId,
-        message: backlogItemId
-          ? `Improvement proposal ${proposal.proposalId} created and filed to the backlog as ${backlogItemId} for triage.`
-          : `Improvement proposal ${proposal.proposalId} created: "${proposal.title}".`,
-      };
-    }
-
-    case "propose_skill_improvement": {
-      const skillId = String(params["skillId"] ?? "").trim();
-      const proposedContent = String(params["proposedContent"] ?? "").trim();
-      const title = String(params["title"] ?? "").trim();
-      const description = String(params["description"] ?? "").trim();
-      if (!skillId || !proposedContent || !title || !description) {
-        return {
-          success: false,
-          error: "Missing required fields",
-          message:
-            "propose_skill_improvement requires skillId, title, description, and proposedContent.",
-        };
-      }
-      const sev = String(params["severity"] ?? "medium");
-      const severity = (["low", "medium", "high", "critical"].includes(sev) ? sev : "medium") as
-        | "low"
-        | "medium"
-        | "high"
-        | "critical";
-      const observedFriction =
-        typeof params["observedFriction"] === "string" ? params["observedFriction"] : null;
-      try {
-        const { submitSkillImprovementProposal } = await import("@/lib/skills/proposals");
-        const result = await submitSkillImprovementProposal({
-          skillId,
-          proposedContent,
-          title,
-          description,
-          severity,
-          submittedById: userId,
-          agentId: context?.agentId ?? "unknown",
-          routeContext: context?.routeContext ?? "unknown",
-          threadId: context?.threadId ?? null,
-          observedFriction,
-        });
-        return {
-          success: true,
-          entityId: result.proposalId,
-          message: `Skill proposal ${result.proposalId} created for ${skillId}. A reviewer must approve before it takes effect.`,
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        return {
-          success: false,
-          error: msg,
-          message: `Could not create skill proposal: ${msg}`,
-        };
-      }
-    }
-
-    case "submit_feedback": {
-      const fromProfile = await prisma.employeeProfile.findUnique({
-        where: { userId },
-        select: { id: true },
-      });
-      if (!fromProfile) return { success: false, error: "Your employee profile not found", message: "Cannot submit feedback without an employee profile" };
-
-      const feedbackId = `FB-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      await prisma.feedbackNote.create({
-        data: {
-          feedbackId,
-          fromEmployeeId: fromProfile.id,
-          toEmployeeId: String(params["toEmployeeId"]),
-          content: String(params["content"]),
-          feedbackType: String(params["feedbackType"] ?? "observation"),
-          visibility: String(params["visibility"] ?? "private"),
-        },
-      });
-      return {
-        success: true,
-        entityId: feedbackId,
-        message: "Feedback submitted.",
-      };
-    }
+    // submit_feedback case moved to mcp/packs/contribution-hive-pack.ts
 
     case "principle_decide": {
       // Phase 2 Task 2.7. Pulls in-scope commandments from Postgres (always

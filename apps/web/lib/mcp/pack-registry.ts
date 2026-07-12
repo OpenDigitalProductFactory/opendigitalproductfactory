@@ -62,6 +62,7 @@ import { projectFilesPack } from "./packs/project-files-pack";
 import { sorReadPack } from "./packs/sor-read-pack";
 import { workThreadPack } from "./packs/work-thread-pack";
 import { codeIntelligencePack } from "./packs/code-intelligence-pack";
+import { contributionHivePack } from "./packs/contribution-hive-pack";
 import { taxonomyArchetypePack } from "./packs/taxonomy-archetype-pack";
 import { modelProviderPack } from "./packs/model-provider-pack";
 import { wikiPack } from "./packs/wiki-pack";
@@ -127,6 +128,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   sorReadPack,
   workThreadPack,
   codeIntelligencePack,
+  contributionHivePack,
   taxonomyArchetypePack,
   modelProviderPack,
   wikiPack,
