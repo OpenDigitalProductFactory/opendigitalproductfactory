@@ -483,3 +483,47 @@ index 1111111..2222222 100644
     expect(result.gates.every((g) => g.verdict === "pass")).toBe(true);
   });
 });
+
+describe("runPrePRGates — UI quality gate (BI-66656F61)", () => {
+  it("warns (never blocks) on a hardcoded color in a .tsx diff, and requires human review", () => {
+    const diff = `diff --git a/apps/web/components/Card.tsx b/apps/web/components/Card.tsx
+index 111..222 100644
+--- a/apps/web/components/Card.tsx
++++ b/apps/web/components/Card.tsx
+@@ -1,3 +1,4 @@
+   return (
++    <div style={{ color: "#4ade80" }} onClick={go}>hi</div>
+   );
+`;
+    const result = runPrePRGates(diff);
+    const ui = result.gates.find((g) => g.gate.startsWith("UI Quality"));
+    expect(ui?.verdict).toBe("warn");
+    expect(ui?.findings.length).toBeGreaterThan(0);
+    expect(result.canProceed).toBe(true); // advisory — never blocks
+    expect(result.requiresHumanReview).toBe(true);
+  });
+
+  it("passes a token-compliant .tsx diff", () => {
+    const diff = `diff --git a/apps/web/components/Ok.tsx b/apps/web/components/Ok.tsx
+index 111..222 100644
+--- a/apps/web/components/Ok.tsx
++++ b/apps/web/components/Ok.tsx
+@@ -1,2 +1,3 @@
++    <div className="text-[var(--dpf-text)]">ok</div>
+`;
+    const ui = runPrePRGates(diff).gates.find((g) => g.gate.startsWith("UI Quality"));
+    expect(ui?.verdict).toBe("pass");
+  });
+
+  it("ignores non-UI files", () => {
+    const diff = `diff --git a/apps/web/lib/foo.ts b/apps/web/lib/foo.ts
+index 111..222 100644
+--- a/apps/web/lib/foo.ts
++++ b/apps/web/lib/foo.ts
+@@ -1,2 +1,3 @@
++  const c = "#ffffff";
+`;
+    const ui = runPrePRGates(diff).gates.find((g) => g.gate.startsWith("UI Quality"));
+    expect(ui?.verdict).toBe("pass");
+  });
+});

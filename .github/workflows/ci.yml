@@ -233,6 +233,21 @@ jobs:
       - name: Run guard
         run: node scripts/check-module-size.mjs
 
+  docs-staleness-detector:
+    name: Docs Staleness Detector
+    runs-on: ubuntu-latest
+    # Unit-tests the doc-staleness detector (BI-AA5DFEA2). The detector itself runs
+    # weekly (refresh-docs-staleness.yml), not on every PR — but its logic is tested
+    # here so a change to it is caught at PR time.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Test the detector
+        run: node --test scripts/build-docs-staleness.test.mjs
+
   mcp-tool-pack-guard:
     name: MCP Tool Pack Guard
     runs-on: ubuntu-latest
