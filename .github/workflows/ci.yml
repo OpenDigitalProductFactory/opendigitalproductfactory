@@ -504,6 +504,33 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node scripts/check-spec-plan-doc.mjs
 
+  design-grounding-gate:
+    name: Design Grounding Gate
+    runs-on: ubuntu-latest
+    # Only meaningful on PRs — it diffs against the PR base and reads the PR body.
+    if: github.event_name == 'pull_request'
+    # BI-11900EE7. A UX/workflow/queue/navigation/process-spine change must name
+    # the existing specs/plans and code substrate reviewed before implementation.
+    # This complements Spec/Plan/Doc (durable artifact) and UX-Fit (cognitive
+    # load) by proving the agent grounded the change in current architecture.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Test design-grounding pre-edit hook
+        run: node --test packages/dpf-skill-pack/hooks/design-grounding-precheck.test.mjs
+      - name: Test design-grounding gate
+        run: node --test scripts/check-design-grounding-decision.test.mjs
+      - name: Run design-grounding gate
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/check-design-grounding-decision.mjs
+
   doc-reference-integrity:
     name: Doc Reference Integrity
     runs-on: ubuntu-latest
