@@ -740,6 +740,28 @@ export async function orchestrateDeliberation(
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
+
+/**
+ * Mark a TaskRun we bootstrapped for this deliberation as terminal.
+ * Scoped to non-terminal statuses so a concurrent settler cannot clobber a
+ * later outcome. Uses the business taskRunId (not the cuid).
+ */
+async function settleBootstrapTaskRun(
+  taskRunId: string,
+  status: "completed" | "failed",
+): Promise<void> {
+  await prisma.taskRun.updateMany({
+    where: {
+      taskRunId,
+      status: { in: ["active", "working", "queued", "running"] },
+    },
+    data: {
+      status,
+      completedAt: new Date(),
+    },
+  });
+}
+
 async function safeEmit(
   fn: OrchestrateDeliberationInput["emitProgress"] | undefined,
   event: OrchestrationProgress,

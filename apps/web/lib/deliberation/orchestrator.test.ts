@@ -126,7 +126,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.extractRoleRecipes.mockReturnValue(new Map());
   mocks.taskRunUpdateMany.mockResolvedValue({ count: 1 });
-    mocks.taskRunCreate.mockResolvedValue({
+  mocks.taskRunCreate.mockResolvedValue({
     id: "taskrun-db-1",
     taskRunId: "taskrun-1",
   });
