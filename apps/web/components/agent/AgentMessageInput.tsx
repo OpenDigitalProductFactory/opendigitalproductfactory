@@ -43,6 +43,8 @@ type Props = {
   elevatedAssistEnabled?: boolean;
   onToggleElevatedAssist?: () => void;
   externalAccessEnabled?: boolean;
+  /** Hide Web access when coworker lacks web_search grant (BI-CD9DC3BC). */
+  webAccessAvailable?: boolean;
   onToggleExternalAccess?: () => void;
   coworkerMode?: "advise" | "act";
   onToggleCoworkerMode?: () => void;
@@ -90,7 +92,7 @@ function truncate(value: string, max = 32): string {
   return `${value.slice(0, max - 1)}…`;
 }
 
-export function AgentMessageInput({ onSend, composerState, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle, elevatedAssistEnabled, onToggleElevatedAssist, externalAccessEnabled, onToggleExternalAccess, coworkerMode, onToggleCoworkerMode, useUnified }: Props) {
+export function AgentMessageInput({ onSend, composerState, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle, elevatedAssistEnabled, onToggleElevatedAssist, externalAccessEnabled, onToggleExternalAccess, webAccessAvailable = true, coworkerMode, onToggleCoworkerMode, useUnified }: Props) {
   const disabled = composerInputDisabled(composerState);
   const [value, setValue] = useState("");
   const [intentCenter, setIntentCenter] = useState("");
@@ -871,6 +873,7 @@ export function AgentMessageInput({ onSend, composerState, busy, threadId, pendi
               onToggleElevatedAssist={onToggleElevatedAssist!}
               externalAccessEnabled={!!externalAccessEnabled}
               onToggleExternalAccess={onToggleExternalAccess!}
+              webAccessAvailable={webAccessAvailable}
               {...(coworkerMode ? { coworkerMode } : {})}
               {...(onToggleCoworkerMode ? { onToggleCoworkerMode } : {})}
               useUnified={useUnified}
