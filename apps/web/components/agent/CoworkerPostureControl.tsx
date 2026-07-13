@@ -7,6 +7,12 @@ type Props = {
   onToggleElevatedAssist: () => void;
   externalAccessEnabled: boolean;
   onToggleExternalAccess: () => void;
+  /**
+   * When false, the Web access switch is hidden. Agents without the
+   * `web_search` grant cannot use public web tools even if the session
+   * flag is on — showing the toggle is a no-op (BI-CD9DC3BC).
+   */
+  webAccessAvailable?: boolean;
   coworkerMode?: "advise" | "act";
   onToggleCoworkerMode?: () => void;
   useUnified?: boolean;
@@ -106,6 +112,7 @@ export function CoworkerPostureControl({
   onToggleElevatedAssist,
   externalAccessEnabled,
   onToggleExternalAccess,
+  webAccessAvailable = true,
   coworkerMode,
   onToggleCoworkerMode,
   useUnified,
@@ -117,6 +124,7 @@ export function CoworkerPostureControl({
   const [open, setOpen] = useState(false);
   const showMode = Boolean(useUnified && onToggleCoworkerMode);
   const isAct = coworkerMode === "act";
+  const showWebAccess = webAccessAvailable;
 
   useEffect(() => {
     if (!open) return;
@@ -130,9 +138,10 @@ export function CoworkerPostureControl({
   const summaryParts: string[] = [];
   if (showMode) summaryParts.push(isAct ? "Act" : "Advise");
   if (elevatedAssistEnabled) summaryParts.push("edits on");
-  if (externalAccessEnabled) summaryParts.push("web on");
+  if (showWebAccess && externalAccessEnabled) summaryParts.push("web on");
   const summaryLabel = summaryParts.length > 0 ? summaryParts.join(" · ") : "Controls";
-  const postureActive = elevatedAssistEnabled || externalAccessEnabled || (showMode && isAct);
+  const postureActive =
+    elevatedAssistEnabled || (showWebAccess && externalAccessEnabled) || (showMode && isAct);
 
   const popoverShell: React.CSSProperties = {
     position: "absolute",
@@ -269,17 +278,19 @@ export function CoworkerPostureControl({
                 : "Off: this page's coworker only suggests changes"
             }
           />
-          <ToggleSwitchRow
-            checked={externalAccessEnabled}
-            onToggle={onToggleExternalAccess}
-            label="Web access"
-            description="Allow web search and fetch this session"
-            title={
-              externalAccessEnabled
-                ? "On: this page's coworker can use approved public web search and fetch tools"
-                : "Off: this page's coworker cannot reach public web tools"
-            }
-          />
+          {showWebAccess && (
+            <ToggleSwitchRow
+              checked={externalAccessEnabled}
+              onToggle={onToggleExternalAccess}
+              label="Web access"
+              description="Allow web search and fetch this session"
+              title={
+                externalAccessEnabled
+                  ? "On: this page's coworker can use approved public web search and fetch tools"
+                  : "Off: this page's coworker cannot reach public web tools"
+              }
+            />
+          )}
         </div>
       )}
     </div>
