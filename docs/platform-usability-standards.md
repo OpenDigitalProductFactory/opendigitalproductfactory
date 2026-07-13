@@ -139,3 +139,14 @@ Every coworker that writes customer-facing copy (marketing-specialist and peers)
 - Section 508 (US Federal Accessibility)
 - CSS Media Queries Level 5 (`prefers-color-scheme`)
 - Flesch Reading Ease & Flesch–Kincaid Grade Level — the readability tests reported by common word processors (e.g. Microsoft Word)
+
+## Operator identity and personalization
+
+When greeting or addressing the operator in portal UI:
+
+1. Prefer `User.displayName` / first name when present and human-looking.
+2. Fall back to a derived first name from email local-part only when it is not a opaque id.
+3. Never show a raw email as the primary greeting when a display name exists.
+4. Do not invent personalization knobs the operator cannot see or control; keep defaults progressive (one warm greeting, not a form).
+
+This is the operator-personalization pattern (displayName precedence → email fallback → human-name derivation) used by dashboard greeting work (BI-IMP-0FFB8D25).
