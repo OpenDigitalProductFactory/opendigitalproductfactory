@@ -38,6 +38,10 @@
 // the actor for the dispatch/review calls.
 
 import { prisma } from "@dpf/db";
+import {
+  isHappyPathIntakeReady,
+  normalizeHappyPathState,
+} from "@/lib/feature-build-types";
 
 export type ResumePreBuildOutcome =
   | { kind: "resumed"; phase: string; via: string; detail: string }
@@ -118,7 +122,7 @@ export async function resumePreBuildPhase(params: {
 
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { designDoc: true, buildPlan: true, planReview: true, designReview: true },
+      select: { designDoc: true, buildPlan: true, planReview: true, designReview: true, plan: true },
     });
     if (!build) {
       return { kind: "failed", phase, error: "build not found" };
@@ -194,6 +198,28 @@ export async function resumePreBuildPhase(params: {
         const { dispatchDesignReviewFixLoop } = await import("@/lib/integrate/ideate-on-approval");
         const outcome = await dispatchDesignReviewFixLoop({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchDesignReviewFixLoop", detail: outcome.kind };
+      }
+      // BI-E212CAE2: when review already PASSed and plan.happyPathState is
+      // present but still incomplete, re-running reviewDesignDoc cannot clear a
+      // STATIC completeness gate — park for the operator instead of looping
+      // (burned cloud quota on FB-A500CCE6). If happyPathState is absent, re-run
+      // review so auto-intake can populate epic/backlog/goal/taxonomy once.
+      const designPassed =
+        (build.designReview as { decision?: string } | null)?.decision === "pass";
+      if (designPassed) {
+        const planRec = (build as { plan?: unknown }).plan as Record<string, unknown> | null | undefined;
+        const rawHps = planRec?.happyPathState;
+        if (rawHps != null) {
+          const happy = normalizeHappyPathState(rawHps);
+          if (!isHappyPathIntakeReady(happy)) {
+            return {
+              kind: "skipped",
+              phase,
+              reason:
+                "design passed review but intake is incomplete (taxonomy/backlog/epic/goal) — parked for operator (NOT re-running reviewDesignDoc; static gate).",
+            };
+          }
+        }
       }
       const { executeTool } = await import("@/lib/mcp-tools");
       const result = await executeTool("reviewDesignDoc", { buildId }, userId, { featureBuildId: buildId });
