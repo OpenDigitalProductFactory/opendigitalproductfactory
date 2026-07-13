@@ -32,6 +32,7 @@ const GUARD_SCRIPTS = [
   "decision-routing-guard.mjs",
   "ux-fit-precheck.mjs",
   "spec-plan-doc-precheck.mjs",
+  "design-grounding-precheck.mjs",
   "tool-economy-precheck.mjs",
 ];
 const WRITE_TOOLS = ["Write", "Edit", "MultiEdit"];
@@ -162,7 +163,7 @@ test("lease-guard + root-clone-guard ride a Bash matcher; the prechecks ride a w
     return WRITE_TOOLS.some((t) => tools.includes(t));
   });
   assert.ok(writeEntry, "expected a Write|Edit|MultiEdit matcher for the prechecks");
-  for (const s of ["ux-fit-precheck.mjs", "spec-plan-doc-precheck.mjs"]) {
+  for (const s of ["ux-fit-precheck.mjs", "spec-plan-doc-precheck.mjs", "design-grounding-precheck.mjs"]) {
     assert.ok(
       (writeEntry.hooks ?? []).some((h) => JSON.stringify(h).includes(s)),
       `${s} must ride the write-tool matcher`,
