@@ -33,6 +33,14 @@ export default defineConfig({
     // (Surfaced 2026-05-19 in BuildStudioHeaderLayout.test.tsx CI runs;
     // local always passed because timing differs.)
     pool: "forks",
+    // BI-6F44EA89 / BI-CA33B14B: green suites still exit 1 with
+    // EnvironmentTeardownError ("Closing rpc while onUserConsoleLog was
+    // pending") when Vitest's console intercept keeps a log callback open as
+    // the forks worker shuts down. Disable intercept so teardown is not
+    // blocked by pending console traffic; assertions and CI still see
+    // stdout/stderr via the process pipes.
+    disableConsoleIntercept: true,
+    teardownTimeout: 30_000,
     server: {
       deps: {
         // Auth.js imports the Next server runtime by extensionless subpath.
