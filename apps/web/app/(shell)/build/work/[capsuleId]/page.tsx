@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { WorkCapsuleLaunchPanel } from "@/components/build/work-control/WorkCapsuleLaunchPanel";
+import { AgentSessionFeed } from "@/components/build/AgentSessionFeed";
 import { getCapsuleDetail } from "@/lib/actions/work-capsules";
 import { auth } from "@/lib/auth";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
@@ -45,6 +46,7 @@ export default async function CapsuleDetailPage({
         <div className="font-mono text-xs text-[var(--dpf-muted)]">{capsule.capsuleId}</div>
       </header>
       <PortalContextStrip envelope={portalContext} />
+      <AgentSessionFeed activities={capsule.activities} />
       <WorkCapsuleLaunchPanel steps={steps} />
     </section>
   );

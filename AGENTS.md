@@ -150,7 +150,11 @@ Then retry the MCP call in the running session. No file edits. No re-registratio
 ```
 The sync scripts copy MCP config, preserve non-root Compose isolation, and refresh `.dpf-worktree-readiness.json` so agents know whether the worktree is `compile-ready` or `source-only`.
 
-Agent `tool_grants` in `agent_registry.json` are enforced at runtime. `getAvailableTools()` (`apps/web/lib/agent-grants.ts`) intersects:
+Agent `tool_grants` in `agent_registry.json` are enforced at runtime.
+
+**Advise-safe tool classification.** A side-effect tool (`sideEffect: true` in MCP tool defs) may still be included in advise-mode when it (1) keeps human visibility (SSE/UI cards), (2) writes an audit trail, (3) is grant- and lifecycle-gated, and (4) is listed in a shared constant imported by every filter path (e.g. peer `request_coworker` / `summon_coworker`). Do not invent a parallel advise-mode allowlist. (BI-IMP-F710F41C)
+
+ `getAvailableTools()` (`apps/web/lib/agent-grants.ts`) intersects:
 
 1. User role capabilities (`PERMISSIONS[capability].roles` for the user's `platformRole`)
 2. Agent grants (`config_profile.tool_grants`)
@@ -173,6 +177,15 @@ Every tool call writes to `ToolExecution` (`agentId`, `userId`, `toolName`, `par
 4. **Promote** — `establish_coworker` `action: "promote"` flips draft → production only when the definition landed AND a passing certification exists.
 
 The paved-road walkthrough is the `dpf-establish-coworker` skill (`packages/dpf-skill-pack/skills/dpf-establish-coworker/SKILL.md`).
+
+
+## 8a. Advise-safe tools, server-action exports, coworker coordination (pointers)
+
+**Advise-safe tool classification (BI-IMP-F710F41C).** A side-effect tool (`sideEffect: true` in `mcp-tools.ts`) may stay visible in **advise mode** only when it (1) preserves human visibility (SSE + UI cards), (2) writes an audit trail (e.g. `ToolExecution` / delegation chain), (3) is grant- and lifecycle-gated, and (4) is listed in a **shared constant** imported by every filter path (see `adviseHeldBackTools` / coworker tool filter). Do not invent a parallel allowlist per route. Prefer pure reads in advise mode; only promote a side-effect into advise when those four hold.
+
+**`"use server"` modules export only functions and concrete values (BI-IMP-21C466DE).** Type aliases and interfaces stay **local** (or live in a non-`"use server"` module). Exporting types from a server-action file breaks Turbopack registration. Prefer `export type` from a sibling `*.types.ts` or `lib/` module.
+
+**Coworker capability filtering is single-source (BI-IMP-60B0893E).** Agent tool grants live in `agent_registry.json` / `AgentToolGrant`; runtime intersection is `getAvailableTools` + `TOOL_TO_GRANTS` + coworker filter helpers under `apps/web/lib/actions/coworker-tool-filter.ts` and `apps/web/lib/tak/agent-grants.ts`. Route-local allowlists that re-express the same policy are defects — extend the shared filter, do not fork it. Peer coordination tools (`request_coworker`, `summon_coworker`) follow the advise-safe pattern above.
 
 ## 9. External Tools
 

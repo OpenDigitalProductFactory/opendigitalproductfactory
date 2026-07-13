@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
+import { agentHoldsWebSearchGrant } from "@/lib/tak/agent-web-search-grant";
 import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
 import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
@@ -274,6 +275,7 @@ export function AgentCoworkerPanel({
 
   const routeAgent: AgentInfo = resolveAgentForRouteSync(effectiveRoute, userContext);
   const agent = routeAgent;
+  const webAccessAvailable = agentHoldsWebSearchGrant(agent.agentId);
   const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
 
@@ -1191,8 +1193,9 @@ export function AgentCoworkerPanel({
         onVoicePlaybackToggle={toggleVoicePlayback}
         elevatedAssistEnabled={elevatedAssistEnabled}
         onToggleElevatedAssist={handleToggleElevatedAssist}
-        externalAccessEnabled={externalAccessEnabled}
+        externalAccessEnabled={webAccessAvailable && externalAccessEnabled}
         onToggleExternalAccess={handleToggleExternalAccess}
+        webAccessAvailable={webAccessAvailable}
         coworkerMode={coworkerMode}
         onToggleCoworkerMode={handleToggleCoworkerMode}
         useUnified={useUnifiedCoworker}

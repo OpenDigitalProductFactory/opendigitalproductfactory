@@ -41,6 +41,13 @@ describe("CoworkerPostureControl", () => {
     expect(screen.getByRole("switch", { name: "Web access" })).toBeTruthy();
   });
 
+  it("hides Web access when the coworker lacks web_search (BI-CD9DC3BC)", () => {
+    render(<CoworkerPostureControl {...baseProps} webAccessAvailable={false} />);
+    fireEvent.click(screen.getByText("Controls"));
+    expect(screen.getByRole("switch", { name: "Edit fields on this page" })).toBeTruthy();
+    expect(screen.queryByRole("switch", { name: "Web access" })).toBeNull();
+  });
+
   it("fires the page-editing toggle through the switch", () => {
     const onToggleElevatedAssist = vi.fn();
     render(<CoworkerPostureControl {...baseProps} onToggleElevatedAssist={onToggleElevatedAssist} />);
