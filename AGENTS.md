@@ -150,7 +150,11 @@ Then retry the MCP call in the running session. No file edits. No re-registratio
 ```
 The sync scripts copy MCP config, preserve non-root Compose isolation, and refresh `.dpf-worktree-readiness.json` so agents know whether the worktree is `compile-ready` or `source-only`.
 
-Agent `tool_grants` in `agent_registry.json` are enforced at runtime. `getAvailableTools()` (`apps/web/lib/agent-grants.ts`) intersects:
+Agent `tool_grants` in `agent_registry.json` are enforced at runtime.
+
+**Advise-safe tool classification.** A side-effect tool (`sideEffect: true` in MCP tool defs) may still be included in advise-mode when it (1) keeps human visibility (SSE/UI cards), (2) writes an audit trail, (3) is grant- and lifecycle-gated, and (4) is listed in a shared constant imported by every filter path (e.g. peer `request_coworker` / `summon_coworker`). Do not invent a parallel advise-mode allowlist. (BI-IMP-F710F41C)
+
+ `getAvailableTools()` (`apps/web/lib/agent-grants.ts`) intersects:
 
 1. User role capabilities (`PERMISSIONS[capability].roles` for the user's `platformRole`)
 2. Agent grants (`config_profile.tool_grants`)
