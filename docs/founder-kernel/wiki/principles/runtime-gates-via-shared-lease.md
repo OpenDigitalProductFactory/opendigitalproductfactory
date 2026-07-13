@@ -44,6 +44,17 @@ The shared lease is the same unleased-shared-mutable-resource discipline applied
 - `blast_radius: -0.6` — a leased shared runtime cannot silently mutate another thread's preview or production data.
 - `long_term_maintainability: 0.5` — one shared sandbox to maintain, not a per-branch image matrix.
 
+
+## Contention decision rule (BI-94A765BD)
+
+When two producers want the same scarce thing, pick the **exclusivity mechanism** from the scarcity class — do not invent a parallel gate:
+
+1. **Compute scarcity** (GPU, model slot, sandbox executor, shared `:3001`) → **admission gate**: Inngest concurrency key / atomic MCP lease keyed to the *physical* resource, acquired by **every** producer before work starts.
+2. **Record/slot exclusivity** (booking row, unique hold, single active phase owner) → **atomic Postgres constraint** (unique partial index / exclusion) so the **database** decides the winner under concurrency.
+3. **Cooperative human coordination** only (rare double is tolerable; force is meaningful) → advisory check-then-act UI is acceptable; still prefer a soft unique or optimistic version when cheap.
+
+Never reintroduce check-then-act for compute or record exclusivity. Broaden every new feature against this rule before adding a second mutex.
+
 ## Related
 
 - [`worktree-is-source-control-not-runtime`](worktree-is-source-control-not-runtime.md) — why the shared sandbox, not per-worktree runtimes, is the verification substrate.
