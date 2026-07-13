@@ -671,7 +671,7 @@ export function DecisionsPanel({ record }: { record: CoworkerRecord }) {
     <div>
       <Section
         title="Decision signals (30d)"
-        action={profession.profileId ? deepLink(`/platform/ai/founder-review?profile=${profession.profileId}`, "Review inbox") : null}
+        action={profession.profileId ? deepLink("/workspace/inbox", "Open Needs you") : null}
       >
         {decisions.total > 0 ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>

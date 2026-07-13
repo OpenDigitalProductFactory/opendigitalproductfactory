@@ -231,8 +231,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Open decision reviews — the /wiki governance hub's queue of deferred/escalated
   // decisions awaiting a human. Read-only tool on the `registry_read` baseline: any
-  // coworker may read and recommend on the queue; resolving stays a human action in
-  // the Founder Review workspace (Human-in-the-Loop at Phase Boundaries).
+  // coworker may read and recommend on the queue; resolving stays a human action
+  // in the owning workflow after reviewing Decision Canvas evidence.
   list_open_decision_reviews: ["registry_read"],
 
   // Backlog triage and Build Studio promotion (spec 2026-04-21)

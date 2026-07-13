@@ -79,7 +79,7 @@ export function buildDisciplineCards(
     actions: [
       { label: "Governing material", href: "#governing-material" },
       { label: "Decision log", href: "/coworker-decisions/decisions?tier=wwmd" },
-      { label: "Review decisions", href: "/platform/ai/founder-review?mode=wwmd" },
+      { label: "Review decisions", href: "/coworker-decisions/review" },
     ],
   };
 
@@ -101,7 +101,7 @@ export function buildDisciplineCards(
     actions: [
       { label: "Manage stance", href: "/coworker-decisions/stance", emphasis: true },
       { label: "Decision log", href: "/coworker-decisions/decisions?tier=wwwd" },
-      { label: "Review decisions", href: "/platform/ai/founder-review?mode=wwwd" },
+      { label: "Review decisions", href: "/coworker-decisions/review" },
     ],
   };
 
@@ -127,7 +127,7 @@ export function buildDisciplineCards(
     actions: [
       { label: "Role craft", href: "/coworker-decisions/craft", emphasis: true },
       { label: "Decision log", href: "/coworker-decisions/decisions?tier=wsid" },
-      { label: "Review decisions", href: "/platform/ai/founder-review" },
+      { label: "Review decisions", href: "/coworker-decisions/review" },
     ],
   };
 

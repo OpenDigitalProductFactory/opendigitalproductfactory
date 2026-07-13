@@ -91,7 +91,11 @@ describe("aiDecisionToAttentionItem", () => {
     expect(item.riskClass).toBe("high-risk");
     expect(item.triage.residueReason).toBe("high-risk-gate");
     expect(item.triage.blastRadius).toBe("build FB-3");
-    expect(item.deepLink).toBe("/platform/ai/founder-review");
+    expect(item.deepLink).toBe("/platform/ai/decisions/DI-1");
+    expect(item.actions[0]).toMatchObject({
+      label: "Review evidence",
+      href: "/platform/ai/decisions/DI-1",
+    });
   });
 
   it("maps a principle conflict ahead of the outcome type", () => {

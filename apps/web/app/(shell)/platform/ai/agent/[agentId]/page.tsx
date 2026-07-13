@@ -297,7 +297,7 @@ export default async function AgentDetailPage({
             { label: "Model & priority grid", href: "/platform/ai/assignments" },
             { label: "Authority & audit", href: "/platform/audit" },
             ...(profession.profileId
-              ? [{ label: "Decision review inbox", href: `/platform/ai/founder-review?profile=${profession.profileId}` }]
+              ? [{ label: "Open Needs you", href: "/workspace/inbox" }]
               : []),
           ]}
         />
