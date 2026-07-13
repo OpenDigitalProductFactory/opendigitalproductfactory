@@ -12,9 +12,9 @@ import {
 const TONE_DOT: Record<AgentSessionTone, string> = {
   thought: "var(--dpf-muted)",
   action: "var(--dpf-accent)",
-  question: "var(--dpf-warning, #b0872e)",
+  question: "var(--dpf-warning)",
   response: "var(--dpf-accent)",
-  error: "var(--dpf-danger, #bc4a38)",
+  error: "var(--dpf-danger)",
   lifecycle: "var(--dpf-border)",
 };
 
