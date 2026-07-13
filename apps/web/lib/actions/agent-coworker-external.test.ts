@@ -583,7 +583,8 @@ describe("agent coworker external access", () => {
 
     expect(mockRouteAndCall.mock.calls[0][1]).toContain("EXTERNAL ACCESS DISABLED");
     expect(mockRouteAndCall.mock.calls[0][1]).toContain("search_public_web");
-    expect(mockRouteAndCall.mock.calls[0][1]).toContain("ask the employee to enable External Access");
+    expect(mockRouteAndCall.mock.calls[0][1]).toContain("Web access");
+    expect(mockRouteAndCall.mock.calls[0][1]).toContain("message box");
     expect(mockPrisma.toolExecution.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
