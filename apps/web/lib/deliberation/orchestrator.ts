@@ -383,6 +383,7 @@ export async function orchestrateDeliberation(
     taskRunBootstrapped = true;
   }
 
+  try {
   // ── Create DeliberationRun row ────────────────────────────────────────
   const adjudicationMode =
     (pattern.outputContract as Record<string, unknown>)?.adjudicationMode;
@@ -710,6 +711,12 @@ export async function orchestrateDeliberation(
     await applyConsensusOutcome(buildId, consensusDecision, branchVotes, prisma);
   }
 
+  // BI-132FC1B9: settle bootstrapped TaskRuns so a failed/timeout caller cannot
+  // leave them in working forever and trip the self-upgrade quiescence drain.
+  if (taskRunBootstrapped && taskRunId) {
+    await settleBootstrapTaskRun(taskRunId, "completed");
+  }
+
   return {
     deliberationRunId: deliberationRun.id,
     taskRunId: taskRunId!,
@@ -721,6 +728,12 @@ export async function orchestrateDeliberation(
     branchBudgetUsed,
     consensusDecision,
   };
+  } catch (err) {
+    if (taskRunBootstrapped && taskRunId) {
+      await settleBootstrapTaskRun(taskRunId, "failed");
+    }
+    throw err;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
