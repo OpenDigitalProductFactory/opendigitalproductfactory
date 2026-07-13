@@ -180,6 +180,32 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(out).toMatchObject({ kind: "resumed", via: "dispatchDesignReviewFixLoop" });
   });
 
+
+  it("parks when design PASSed but persisted happyPath intake is still incomplete (BI-E212CAE2)", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "pass", sizeAssessment: { decision: "ok" } },
+      plan: {
+        happyPathState: {
+          intake: {
+            taxonomyNodeId: null,
+            backlogItemId: "BI-X",
+            epicId: "EP-X",
+            constrainedGoal: null,
+            status: "blocked",
+            failureReason: "Intake is incomplete",
+          },
+        },
+      },
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-INTAKE", phase: "ideate", userId: "uI" });
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(dispatchIdeateMock).not.toHaveBeenCalled();
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toContain("intake is incomplete");
+  });
+
   it("returns failed (never throws) when the build row is missing", async () => {
     findUniqueMock.mockResolvedValue(null);
     const out = await resumePreBuildPhase({ buildId: "FB-6", phase: "plan", userId: "u6" });
