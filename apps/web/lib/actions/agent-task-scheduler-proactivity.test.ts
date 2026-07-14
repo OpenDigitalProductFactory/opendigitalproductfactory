@@ -11,9 +11,11 @@ const mocks = vi.hoisted(() => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     scheduledJob: {
       update: vi.fn(),
+      updateMany: vi.fn(),
       upsert: vi.fn(),
     },
     agentThread: {
@@ -103,6 +105,10 @@ const FIXED_NOW = new Date(2026, 6, 12, 9, 0, 0, 0);
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // BI-D1CD3A11: the idempotent claim runs before execution; default to a WON
+  // claim so these plan-behavior tests exercise the work.
+  mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 1 });
+  mocks.prisma.scheduledJob.updateMany.mockResolvedValue({ count: 1 });
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(FIXED_NOW);
 });

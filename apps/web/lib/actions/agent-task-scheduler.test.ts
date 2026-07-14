@@ -8,9 +8,11 @@ const mocks = vi.hoisted(() => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     scheduledJob: {
       update: vi.fn(),
+      updateMany: vi.fn(),
       upsert: vi.fn(),
     },
     agentThread: {
@@ -95,6 +97,11 @@ import {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
+  // default to a WON claim so existing tests exercise the work. Per-test
+  // overrides simulate losing the claim.
+  mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 1 });
+  mocks.prisma.scheduledJob.updateMany.mockResolvedValue({ count: 1 });
 });
 
 describe("extractDiscoveryTriageSummary", () => {
@@ -489,6 +496,37 @@ describe("executeScheduledAgentTask — coworker self-task model + required-tool
     await executeScheduledAgentTask("self-marketing-specialist-user-1");
 
     expect(mocks.governedExecuteTool).not.toHaveBeenCalled();
+  });
+});
+
+describe("executeScheduledAgentTask idempotent claim (BI-D1CD3A11)", () => {
+  it("advances nextRunAt via a guarded claim BEFORE running the work", async () => {
+    arrangeScheduledTask();
+    mocks.runAgenticLoop.mockResolvedValue({ content: "Done.", executedTools: [] });
+
+    await executeScheduledAgentTask("discovery-taxonomy-gap-triage-daily");
+
+    // The claim updateMany fired, guarded on the task still being due…
+    const claim = mocks.prisma.scheduledAgentTask.updateMany.mock.calls[0]?.[0];
+    expect(claim?.where).toMatchObject({ taskId: "discovery-taxonomy-gap-triage-daily", isActive: true });
+    expect(claim?.where?.nextRunAt?.lte).toBeInstanceOf(Date);
+    expect(claim?.data?.nextRunAt).toBeInstanceOf(Date);
+    // …and it happened BEFORE the agentic loop ran.
+    expect(mocks.prisma.scheduledAgentTask.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.runAgenticLoop.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("does NOT run the work when the claim is lost (a concurrent dispatch already claimed it)", async () => {
+    arrangeScheduledTask();
+    // The other dispatcher won the race → our guarded update matches 0 rows.
+    mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 0 });
+
+    await executeScheduledAgentTask("discovery-taxonomy-gap-triage-daily");
+
+    // No double execution: the agentic loop and TaskRun creation never happen.
+    expect(mocks.runAgenticLoop).not.toHaveBeenCalled();
+    expect(mocks.prisma.taskRun.create).not.toHaveBeenCalled();
   });
 });
 
