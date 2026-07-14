@@ -39,8 +39,15 @@ describe("collectLocalChanges", () => {
     expect(res.available).toBe(true);
     expect(res.changes).toHaveLength(1);
     expect(res.changes[0].subject).toBe("feat: keep this private");
-    // log invoked with the upstream..installBranch range
-    expect(run).toHaveBeenLastCalledWith(expect.arrayContaining(["origin/main..dpf/install", `--format=${LEDGER_LOG_FORMAT}`]));
+    // BI-75C4A412: content diff, not sha range — three-dot symmetric range with
+    // --cherry-pick --right-only drops commits already upstreamed under a
+    // different (squash-rebased) sha.
+    const logArgs = run.mock.calls.at(-1)?.[0] as string[];
+    expect(logArgs).toContain("origin/main...dpf/install");
+    expect(logArgs).not.toContain("origin/main..dpf/install");
+    expect(logArgs).toContain("--cherry-pick");
+    expect(logArgs).toContain("--right-only");
+    expect(logArgs).toContain(`--format=${LEDGER_LOG_FORMAT}`);
   });
 
   it("returns unavailable (not an error) when the log command fails", async () => {

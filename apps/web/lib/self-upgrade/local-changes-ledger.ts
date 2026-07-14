@@ -1,11 +1,19 @@
 /**
  * Local-changes ledger — Private/Public Change Segregation (EP-1A78BAE1).
  *
- * Lists the commits on the durable install branch (`dpf/install`) that are NOT
- * in upstream — i.e. the changes the operator has kept on their own system and
- * not shared with the community. Shared changes flow upstream (and return via
- * the self-upgrade merge), so by construction the local-only commits ARE the
- * private delta. This answers, in plain language, "what have we kept private?"
+ * Lists the commits on the durable install branch (`dpf/install`) whose CONTENT
+ * is NOT upstream — i.e. the changes the operator has kept on their own system
+ * and not shared with the community. This answers, in plain language, "what have
+ * we kept private?"
+ *
+ * BI-75C4A412: a plain two-dot commit range (`upstream..installBranch`) over-
+ * reports. Shared changes flow upstream and return via the self-upgrade merge,
+ * but upstream squash-rebases them, so the returned commit has a DIFFERENT sha —
+ * the operator's original commit is still not reachable from upstream and a
+ * commit-range would keep counting it as "private". We instead compare by
+ * CONTENT: `--cherry-pick --right-only` over a three-dot (`...`) symmetric range
+ * drops any install-branch commit that is patch-equivalent to one already
+ * upstream, leaving only the genuinely-private delta.
  *
  * Pure parsing/collection here (unit-tested over a GitRunner); the server
  * resolver `getLocalChangesLedger` wires the live install path + config.
@@ -67,9 +75,13 @@ export async function collectLocalChanges(run: GitRunner, opts: CollectOptions):
     };
   }
 
-  const range = `${remote}/${branch}..${installBranch}`;
+  // Three-dot symmetric range + --cherry-pick --right-only = install-branch
+  // commits whose patch is NOT already upstream (content diff, not sha range).
+  // See BI-75C4A412 note above.
+  const range = `${remote}/${branch}...${installBranch}`;
   const res = await run([
-    "-C", hostSourcePath, "log", "--no-merges", `--max-count=${max}`, `--format=${LEDGER_LOG_FORMAT}`, range,
+    "-C", hostSourcePath, "log", "--no-merges", "--cherry-pick", "--right-only",
+    `--max-count=${max}`, `--format=${LEDGER_LOG_FORMAT}`, range,
   ]);
   if (res.code !== 0) {
     return {
