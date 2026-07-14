@@ -88,6 +88,11 @@ export async function publishWorkCapsuleActivityEvent(
   }
 }
 
+export function publishRecordedWorkCapsuleActivity(workCapsuleId: string, activityId?: string | null): void {
+  if (!activityId) return;
+  void publishWorkCapsuleActivityEvent({ workCapsuleId, activityId });
+}
+
 export async function subscribeToWorkCapsuleActivityEvents(
   onEvent: (event: WorkCapsuleActivityEvent) => void,
   pool: ListenPool | null = getListenPool(),

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-
 import {
   LEASE_TTL_MS,
   STATUS_OVERRIDE_TTL_MS,
@@ -26,8 +25,7 @@ import {
   type WorkCapsuleStatus,
 } from "@/lib/work-capsules";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
-import { publishWorkCapsuleActivityEvent } from "@/lib/work-capsules/activity-events";
-
+import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 export type WorkCapsuleActor = {
   userId: string;
   agentId: string | null;
@@ -154,12 +152,7 @@ async function recordActivity(
       recordedByAgentId: input.actor.agentId,
     },
   });
-  if (typeof activity?.id === "string" && activity.id.length > 0) {
-    void publishWorkCapsuleActivityEvent({
-      workCapsuleId: input.workCapsuleId,
-      activityId: activity.id,
-    }).catch(() => {});
-  }
+  publishRecordedWorkCapsuleActivity(input.workCapsuleId, activity?.id);
   revalidatePortalContext();
   return activity;
 }
