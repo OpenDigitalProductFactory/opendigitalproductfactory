@@ -497,6 +497,33 @@ describe("runAgenticLoop", () => {
     expect(result.modelId).toBe("unknown");
   });
 
+  it("tells the operator to reconnect a provider (not 'wait 30s') when every endpoint is eliminated", async () => {
+    // The real incident: the cloud provider's OAuth sign-in expired AND the bundled
+    // local model's 24k window is too small for a heavy coworker's ~21k-token prompt
+    // (recorded RouteDecisionLog: "Context window too small: 24576 < 32000"). Routing
+    // eliminates every candidate and throws a plain "No eligible endpoints for task
+    // type '…'" with NO toolUse token — which used to fall through to the misleading
+    // "temporarily unavailable, try again in 30 seconds". Waiting never clears a
+    // config gap.
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValueOnce(new Error(
+      "No eligible endpoints for task 'data-extraction': No eligible endpoints for task type 'data-extraction' with sensitivity 'internal'. 1 endpoint(s) excluded. (1 endpoint(s) excluded)",
+    ));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/platform/ai/providers",
+      agentId: "scrum-master",
+    });
+
+    expect(result.content).toContain("No AI model can handle this request right now");
+    expect(result.content).toContain("Providers & Routing");
+    expect(result.content).toContain("waiting won't clear this");
+    expect(result.content).not.toContain("try again in about 30 seconds");
+    expect(result.providerId).toBe("unknown");
+    expect(result.modelId).toBe("unknown");
+  });
+
   it("explains a transient paid outage + local tool cap instead of blaming config", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
