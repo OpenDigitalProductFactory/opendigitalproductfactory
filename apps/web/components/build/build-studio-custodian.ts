@@ -92,8 +92,15 @@ function resolveCustodianStatusSignal(input: {
   isQuietReview: boolean;
   isQuietBuild: boolean;
   isQuietEarlyPhase: boolean;
+  emptyDiff: boolean;
 }): NonNullable<ProactivityResolverInput["statusSignal"]> {
-  if (input.uxReviewGap || input.blockedByEvidence || input.technicalRecovery || input.failedInference) {
+  if (
+    input.uxReviewGap
+    || input.blockedByEvidence
+    || input.technicalRecovery
+    || input.failedInference
+    || input.emptyDiff
+  ) {
     return "blocked";
   }
   if (input.isQuietReview || input.isQuietBuild || input.isQuietEarlyPhase) {
@@ -102,22 +109,86 @@ function resolveCustodianStatusSignal(input: {
   return "normal";
 }
 
+/**
+ * True when the build has no deployable source changes (BI-9C66860E).
+ * Pure — null/whitespace-only patch and summary both count as empty.
+ */
+export function hasNoReleasableDiff(
+  build: Pick<FeatureBuildRow, "diffPatch" | "diffSummary">,
+): boolean {
+  const patch = build.diffPatch?.trim() ?? "";
+  const summary = build.diffSummary?.trim() ?? "";
+  return patch.length === 0 && summary.length === 0;
+}
+
+/**
+ * True when the system should surface the empty-diff honest card instead of a
+ * generic "gone quiet" state (EP-BS-UX-HARDENING invariant 5 / BI-9C66860E).
+ * Mid-coding builds with no patch yet are excluded unless they are quiet or
+ * already in review/ship after coding finished.
+ */
+export function isEmptyDiffHonestOutcome(args: {
+  build: FeatureBuildRow;
+  progressVisibility?: BuildProgressVisibility | null;
+}): boolean {
+  const { build, progressVisibility } = args;
+  if (!hasNoReleasableDiff(build)) return false;
+  if (build.phase === "ideate" || build.phase === "plan" || build.phase === "complete" || build.phase === "abandoned") {
+    return false;
+  }
+  // Ship with nothing to deploy is the classic deploy_feature refuse path.
+  if (build.phase === "ship") {
+    return true;
+  }
+  const quiet = progressVisibility?.quietAgent.quiet === true;
+  // Review: only when quiet (would otherwise show generic quiet) or UX already
+  // passed (coding finished, deploy path next) — not while UX/evidence is the
+  // active blocker (those cards take precedence).
+  if (build.phase === "review") {
+    // "complete" is the successful UX verification terminal (see FeatureBuildRow).
+    const uxPassed = build.uxVerificationStatus === "complete";
+    return quiet || uxPassed;
+  }
+  // build phase: only after coding has gone quiet or the exec step is terminalish
+  if (build.phase === "build") {
+    const step = (build.buildExecState as { step?: string } | null)?.step ?? null;
+    const terminalish =
+      step === "complete"
+      || step === "failed"
+      || step === "ship_blocked"
+      || step === "deploy_failed";
+    return quiet || terminalish;
+  }
+  return false;
+}
+
 export function deriveBuildStudioCustodianPrompt({
   build,
   action,
   progressVisibility,
 }: CustodianPromptInput): BuildStudioCustodianPrompt | null {
-  // Terminal phases the custodian must never nudge on. "abandoned" (BI-A2F3FA9D)
-  // is an escalate-to-human handoff: WIP is freed and the originating BI parked
-  // as "deferred", so there is nothing to keep moving here — a nudge would be
-  // noise. "failed" is intentionally NOT excluded: it retains a live retry-build
-  // recovery path the custodian's technicalRecovery branch surfaces on purpose.
-  if (build.phase === "complete" || build.phase === "ship" || build.phase === "abandoned") {
+  const emptyDiff = isEmptyDiffHonestOutcome({ build, progressVisibility });
+
+  // Terminal phases the custodian must never nudge on — except empty-diff ship
+  // (BI-9C66860E), a definitive terminal outcome that must not look healthy.
+  // "abandoned" (BI-A2F3FA9D) is an escalate-to-human handoff: WIP is freed and
+  // the originating BI parked as "deferred", so there is nothing to keep moving
+  // here — a nudge would be noise. "failed" is intentionally NOT excluded: it
+  // retains a live retry-build recovery path the custodian's technicalRecovery
+  // branch surfaces on purpose.
+  if (
+    (build.phase === "complete" || build.phase === "ship" || build.phase === "abandoned")
+    && !emptyDiff
+  ) {
     return null;
   }
 
   const guidance = deriveBuildStudioOperatorGuidance(action, build);
-  if (guidance.status.kind === "working" && progressVisibility?.quietAgent.quiet !== true) {
+  if (
+    !emptyDiff
+    && guidance.status.kind === "working"
+    && progressVisibility?.quietAgent.quiet !== true
+  ) {
     return null;
   }
 
@@ -146,7 +217,8 @@ export function deriveBuildStudioCustodianPrompt({
   const uxReviewGap = isUxReviewGap(build, action, progressVisibility);
 
   if (
-    !uxReviewGap
+    !emptyDiff
+    && !uxReviewGap
     && !blockedByEvidence
     && !technicalRecovery
     && !failedInference
@@ -170,9 +242,12 @@ export function deriveBuildStudioCustodianPrompt({
       isQuietReview,
       isQuietBuild,
       isQuietEarlyPhase,
+      emptyDiff,
     }),
   });
 
+  // UX evidence gap stays ahead of empty-diff: a failed/missing UX check is a
+  // more specific next action than "no releasable diff" when both could apply.
   if (uxReviewGap) {
     return {
       dismissKey,
@@ -221,6 +296,33 @@ export function deriveBuildStudioCustodianPrompt({
         action.message,
         "This is a failed AI call, not a missing input from you. Retrying re-runs the same request.",
       ].filter(Boolean),
+      proactivityPlan,
+    };
+  }
+
+  // Empty-diff (BI-9C66860E) is more specific than generic technical recovery
+  // when the retry/reset path is only available because coding produced no
+  // releasable bytes — lead with the honest outcome, still keep workflow CTA.
+  if (emptyDiff && (action.kind === "retry-build" || action.kind === "reset-build" || action.kind === "resume-implementation")) {
+    return {
+      dismissKey: `${dismissKey}:empty-diff`,
+      title: "This build finished without changes to deploy.",
+      whyNow:
+        "The AI completed its pass but did not produce any source changes — there is nothing to release from this run.",
+      recommendedAction:
+        "Retry the build from the current brief, or refine the description so the next pass has a clearer target.",
+      primaryLabel: action.primaryLabel ?? "Retry build",
+      primaryAction: "workflow",
+      coworkerPrompt: appendCustodianInstruction(
+        action,
+        "Act as the Build Studio custodian. This build has no releasable diff. Explain that in plain English, offer Retry build or refine the brief, and do not claim work is still moving.",
+      ),
+      statusLabel: "No changes to deploy",
+      intent: "warning",
+      details: [
+        "Deploy correctly refused because there was no releasable source diff.",
+        "This is not an indefinite quiet state — the outcome is known: zero deployable changes from this run.",
+      ],
       proactivityPlan,
     };
   }
@@ -321,6 +423,33 @@ export function deriveBuildStudioCustodianPrompt({
       details: [
         action.disabledReason ?? "Required evidence is missing.",
         "The human should see the conclusion and one next action, not raw workflow internals.",
+      ],
+      proactivityPlan,
+    };
+  }
+
+  // BI-9C66860E — definitive empty-diff outcome beats generic quiet copy
+  // (EP-BS-UX-HARDENING invariant 5: honest status). Retry/reset/resume kinds
+  // are handled earlier (with workflow CTA); remaining actions use coworker.
+  if (emptyDiff) {
+    return {
+      dismissKey: `${dismissKey}:empty-diff`,
+      title: "This build finished without changes to deploy.",
+      whyNow:
+        "The AI completed its pass but did not produce any source changes — there is nothing to release from this run.",
+      recommendedAction:
+        "Retry the build from the current brief, or refine the description so the next pass has a clearer target.",
+      primaryLabel: "Retry build",
+      primaryAction: "coworker",
+      coworkerPrompt: appendCustodianInstruction(
+        action,
+        "Act as the Build Studio custodian. This build has no releasable diff. Explain that in plain English, offer Retry build or refine the brief, and do not claim work is still moving.",
+      ),
+      statusLabel: "No changes to deploy",
+      intent: "warning",
+      details: [
+        "Deploy correctly refused because there was no releasable source diff.",
+        "This is not an indefinite quiet state — the outcome is known: zero deployable changes from this run.",
       ],
       proactivityPlan,
     };
