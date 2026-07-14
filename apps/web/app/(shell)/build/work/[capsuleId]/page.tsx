@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { WorkCapsuleLaunchPanel } from "@/components/build/work-control/WorkCapsuleLaunchPanel";
-import { AgentSessionFeed } from "@/components/build/AgentSessionFeed";
+import { AgentSessionFeedLive } from "@/components/build/AgentSessionFeedLive";
 import { getCapsuleDetail } from "@/lib/actions/work-capsules";
 import { auth } from "@/lib/auth";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
+import { presentAgentSession } from "@/lib/work-capsules/agent-activity-presenter";
+import { serializeAgentSessionEntry } from "@/lib/work-capsules/activity-stream";
 import { presentLaunchInstructions } from "@/lib/work-capsules/launch-presenter";
 
 export default async function CapsuleDetailPage({
@@ -46,7 +48,10 @@ export default async function CapsuleDetailPage({
         <div className="font-mono text-xs text-[var(--dpf-muted)]">{capsule.capsuleId}</div>
       </header>
       <PortalContextStrip envelope={portalContext} />
-      <AgentSessionFeed activities={capsule.activities} />
+      <AgentSessionFeedLive
+        capsuleId={capsule.capsuleId}
+        initialEntries={presentAgentSession(capsule.activities).map(serializeAgentSessionEntry)}
+      />
       <WorkCapsuleLaunchPanel steps={steps} />
     </section>
   );

@@ -26,6 +26,7 @@ import {
   type WorkCapsuleStatus,
 } from "@/lib/work-capsules";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
+import { publishWorkCapsuleActivityEvent } from "@/lib/work-capsules/activity-events";
 
 export type WorkCapsuleActor = {
   userId: string;
@@ -153,6 +154,12 @@ async function recordActivity(
       recordedByAgentId: input.actor.agentId,
     },
   });
+  if (typeof activity?.id === "string" && activity.id.length > 0) {
+    void publishWorkCapsuleActivityEvent({
+      workCapsuleId: input.workCapsuleId,
+      activityId: activity.id,
+    }).catch(() => {});
+  }
   revalidatePortalContext();
   return activity;
 }
