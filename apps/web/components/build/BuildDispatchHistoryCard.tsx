@@ -5,7 +5,7 @@ import type { BuildDispatchAttemptView } from "@/lib/build/dispatch-attempts";
 import {
   formatDispatchAttemptCustomerStatus,
   formatDispatchFailureAxisPlain,
-} from "@/lib/build/dispatch-attempts";
+} from "@/lib/build/dispatch-attempt-customer";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 
 type Props = {

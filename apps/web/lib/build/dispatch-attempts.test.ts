@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  buildDispatchAttemptData,
-  classifyDispatchFailureAxis,
   formatDispatchAttemptCustomerStatus,
   formatDispatchFailureAxisPlain,
+  stripDispatchJargon,
+} from "./dispatch-attempt-customer";
+import {
+  buildDispatchAttemptData,
+  classifyDispatchFailureAxis,
   isUsageLimitDispatchOutput,
   lineMatchesFailureAxis,
   recomputeRootCauseSummary,
   recordBuildDispatchAttempt,
-  stripDispatchJargon,
 } from "./dispatch-attempts";
 import type { BuildFailureAxis } from "./progress-visibility-types";
 
