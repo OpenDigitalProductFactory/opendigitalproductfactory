@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { FileText } from "lucide-react";
+import { FileText, PlugZap } from "lucide-react";
 import type { AgentMessageProvider, AgentMessageRow } from "@/lib/agent-coworker-types";
 import type { ReactNode } from "react";
 import { AgentAttachmentCard } from "./AgentAttachmentCard";
@@ -90,6 +90,22 @@ const HIDDEN_PARAMS = new Set(["buildId", "digitalProductId", "featureBrief"]);
 
 function extractManagedDocumentIds(content: string): string[] {
   return [...new Set(content.match(/\bDOC-[A-Z0-9]{8}\b/g) ?? [])].slice(0, 4);
+}
+
+/** Deep-link target for the AI provider reconnect / activation surface. */
+export const PROVIDER_ROUTING_ROUTE = "/platform/ai/providers";
+
+/**
+ * True when an assistant message steers the operator to reconnect or activate an
+ * AI provider. Every provider-config failure branch (describeToolRouteFailure in
+ * agentic-loop.ts, and the credential-gap messages in agent-coworker.ts) names
+ * the "Providers & Routing" surface. BI-282C39D5: rather than make the user hunt
+ * the menu, render a one-click chip straight to it — hand the fix, don't just
+ * describe it. Benign on the rare false positive: the chip only links to a page
+ * the message already names. Assistant-only; user text is never scanned.
+ */
+export function referencesProviderRoutingSurface(content: string): boolean {
+  return /Providers\s*&\s*Routing/i.test(content);
 }
 
 function formatProposalParams(
@@ -554,6 +570,31 @@ export function AgentMessageBubble({
                     {documentId}
                   </Link>
                 ))}
+              </div>
+            )}
+            {referencesProviderRoutingSurface(message.content) && (
+              <div style={{ marginTop: 8 }}>
+                <Link
+                  href={PROVIDER_ROUTING_ROUTE}
+                  data-testid="agent-provider-reconnect-cta"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    border: "1px solid color-mix(in srgb, var(--dpf-accent) 45%, transparent)",
+                    background: "color-mix(in srgb, var(--dpf-accent) 14%, transparent)",
+                    borderRadius: 999,
+                    color: "var(--dpf-accent)",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    lineHeight: 1,
+                    padding: "6px 10px",
+                    textDecoration: "none",
+                  }}
+                >
+                  <PlugZap size={12} aria-hidden="true" />
+                  Open Providers &amp; Routing
+                </Link>
               </div>
             )}
           </div>
