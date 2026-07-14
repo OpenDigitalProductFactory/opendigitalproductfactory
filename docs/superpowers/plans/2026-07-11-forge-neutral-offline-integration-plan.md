@@ -50,16 +50,17 @@ Verification: targeted tests, web typecheck, production build, and before/after 
 Status: implementation in progress. Landed slices make `pnpm run pregate`
 record local evidence without publishing by default, retain push-before-lease
 only as explicit `--push` transition/recovery mode, consume a locally available
-accepted-base ref by default, and record candidate/base/integration/tree SHA
-metadata in gate evidence. The remaining work in this BI is stronger
-toolchain/expiry evidence, pre-push refinements independent of remote names, and
-full network-disconnect proof.
+accepted-base ref by default, record candidate/base/integration/tree SHA
+metadata in gate evidence, and remove the pre-push docs-only bypass's hard
+dependency on `origin/main` by allowing a configured local accepted-base ref.
+The remaining work in this BI is stronger toolchain/expiry evidence and full
+network-disconnect proof.
 
 1. Change `scripts/gate-worktree.sh` so local verification defaults to `--no-push`; publication is a separate explicit operation.
 2. Change `scripts/local-ci-runner.sh` and `scripts/lib/local-integration-ci.mjs` to consume a local candidate ref/SHA and a locally available accepted-base ref.
 3. Record base SHA, candidate SHA, synthesized tree SHA, commands, toolchain fingerprint, and expiry in gate evidence.
 4. Make stale/missing base explicit. If a recent remote base cannot be fetched, report the accepted local base age; do not fabricate freshness.
-5. Update `.githooks/pre-push-gate` so it checks SHA-bound evidence independent of the remote name.
+5. Update `.githooks/pre-push-gate` so docs-only bypasses compare against a configured local base ref instead of a hard-coded remote name.
 
 Verification: disconnect network; prove the full local gate runs and records evidence. Reconnect; prove the same candidate can publish without rerunning unless policy/freshness requires it.
 
