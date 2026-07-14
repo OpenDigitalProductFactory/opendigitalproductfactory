@@ -25,6 +25,7 @@ import {
   fetchAlertSources,
   type AlertSourceSystem,
 } from "@/lib/observability/alert-sources";
+import { screenAlertsForSelfDistrust } from "@/lib/observability/alert-self-distrust";
 import {
   upsertHealthAlertIssue,
   resolveHealthAlertIssue,
@@ -61,7 +62,8 @@ const ZERO = (reached: Record<AlertSourceSystem, boolean>): AlertDeliveryResult 
 export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
   const { prisma } = await import("@dpf/db");
 
-  const { alerts, reached } = await fetchAlertSources();
+  const { alerts: rawAlerts, reached } = await fetchAlertSources();
+  const alerts = await screenAlertsForSelfDistrust(rawAlerts);
 
   // Both evaluators down — do nothing. Critically, do NOT resolve anything: an
   // empty firing set here means "we couldn't see", not "everything cleared".

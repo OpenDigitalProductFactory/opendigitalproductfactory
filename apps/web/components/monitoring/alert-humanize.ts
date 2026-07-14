@@ -127,6 +127,16 @@ const ALERT_TRANSLATIONS: Record<string, AlertTranslation> = {
     explanation: () =>
       "Voice narration is turned on, but its speech service isn't running — narration and voice previews won't play.",
   },
+  DetectorSelfDistrust: {
+    title: (_s, labels) =>
+      labels.contradicted_alert === "VoiceServiceDown"
+        ? "Monitoring may be wrong about voice narration"
+        : "A health monitor may be reporting the wrong thing",
+    explanation: (_s, labels) =>
+      labels.contradicted_alert === "VoiceServiceDown"
+        ? "The monitor says voice narration is down, but narration is not currently enabled. Treat this as a monitoring problem, not a feature outage."
+        : "A health rule is firing even though live platform state contradicts it. Check the monitor before treating the feature as broken.",
+  },
   ServiceFlapping: {
     title: (s) => `${s ?? "A platform service"} is unstable`,
     explanation: () => "It keeps switching between up and down, so it can't be relied on right now.",
