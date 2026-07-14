@@ -724,14 +724,23 @@ export async function reconcileQuiescenceOnBoot(opts: {
             `[quiescence-reconcile] ${run.runId} -> swap-complete (booted on target ${opts.currentVersion ?? "?"})`,
           ),
         );
-      } else {
-        // Not running its target → the swap did not land; the row is orphaned.
+      } else if (staleAfterMs > 0) {
+        // Stale (periodic watchdog) AND not on target → the swap genuinely never
+        // landed; the row is orphaned. Fail it.
         await failQuiescenceSwap(
           run.runId,
-          `Reconciled on boot: running bundle does not match target (deployed=${opts.currentBundleHash ?? opts.currentVersion ?? "unknown"} targetBundle=${run.targetBundleHash ?? "unknown"})`,
+          `Reconciled by watchdog (stale > ${Math.round(staleAfterMs / 60000)}m): running bundle ${opts.currentBundleHash ?? opts.currentVersion ?? "unknown"} != target ${run.targetBundleHash ?? "unknown"}`,
         );
         failed++;
         logger.log(`[quiescence-reconcile] ${run.runId} -> failed (orphaned, target mismatch)`);
+      } else {
+        // BOOT pass on a non-target bundle: the swap is PENDING (we may have come
+        // up on the pre-upgrade SHA before the promoter recreated the portal on
+        // target), not orphaned. Failing here is the false "Upgrade postponed,
+        // failed" after a SUCCESSFUL upgrade (BI-3C6447D5). Leave it in-flight —
+        // the watchdog above fails it only if it genuinely never lands. Mirrors
+        // reconcileSelfUpgradeRunsOnBoot's boot-mode tolerance (instrumentation.ts).
+        logger.log(`[quiescence-reconcile] ${run.runId} -> left in-flight (boot; deferring to watchdog)`);
       }
     }
 
