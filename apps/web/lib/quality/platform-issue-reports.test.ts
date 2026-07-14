@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Hoisted Prisma mock — must be declared before the import under test
 const prismaMock = vi.hoisted(() => ({
-  platformIssueReport: { create: vi.fn() },
+  platformIssueReport: { create: vi.fn(), findFirst: vi.fn() },
   portfolio: { findUnique: vi.fn() },
   digitalProduct: { findUnique: vi.fn() },
 }));
@@ -17,6 +17,7 @@ import { ISSUE_REPORT_STATUS } from "./issue-report-status";
 
 beforeEach(() => {
   prismaMock.platformIssueReport.create.mockReset();
+  prismaMock.platformIssueReport.findFirst.mockReset();
   prismaMock.portfolio.findUnique.mockReset();
   prismaMock.digitalProduct.findUnique.mockReset();
   prismaMock.platformIssueReport.create.mockResolvedValue({});
@@ -297,6 +298,62 @@ describe("createPlatformIssueReport", () => {
       name: "quality/issue-report.created",
       data: { reportId },
     });
+  });
+
+  // BI-PIR-76bf293c — idempotency race on the dedupeKey partial-unique.
+  const p2002 = (target: unknown) =>
+    Object.assign(new Error("Unique constraint failed"), { code: "P2002", meta: { target } });
+
+  it("returns the surviving open report's id when a concurrent dedupeKey insert races (P2002)", async () => {
+    prismaMock.platformIssueReport.create.mockRejectedValueOnce(
+      p2002("PlatformIssueReport_dedupeKey_open_key"),
+    );
+    prismaMock.platformIssueReport.findFirst.mockResolvedValue({ reportId: "PIR-EXIST" });
+    const result = await createPlatformIssueReport({
+      type: "runtime_error",
+      title: "Recurring signature",
+      source: "automated-detection",
+      dedupeKey: "log-sig:portal:abc1234567",
+    });
+    expect(result.reportId).toBe("PIR-EXIST");
+    expect(prismaMock.platformIssueReport.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          dedupeKey: "log-sig:portal:abc1234567",
+          status: { notIn: ["resolved_locally", "resolved_upstream", "suppressed"] },
+        }),
+      }),
+    );
+    // The surviving report already projected when first filed — no re-projection.
+    expect(inngestMock.send).not.toHaveBeenCalled();
+  });
+
+  it("re-throws a P2002 that is not on the dedupeKey (e.g. reportId collision)", async () => {
+    prismaMock.platformIssueReport.create.mockRejectedValueOnce(p2002("PlatformIssueReport_reportId_key"));
+    await expect(
+      createPlatformIssueReport({
+        type: "runtime_error",
+        title: "x",
+        source: "automated-detection",
+        dedupeKey: "log-sig:portal:abc1234567",
+      }),
+    ).rejects.toMatchObject({ code: "P2002" });
+    expect(prismaMock.platformIssueReport.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("re-throws a dedupeKey P2002 when no surviving report can be found", async () => {
+    prismaMock.platformIssueReport.create.mockRejectedValueOnce(
+      p2002(["dedupeKey"]),
+    );
+    prismaMock.platformIssueReport.findFirst.mockResolvedValue(null);
+    await expect(
+      createPlatformIssueReport({
+        type: "runtime_error",
+        title: "x",
+        source: "automated-detection",
+        dedupeKey: "log-sig:portal:abc1234567",
+      }),
+    ).rejects.toMatchObject({ code: "P2002" });
   });
 
   it("is non-fatal when the projection event fails to send", async () => {
