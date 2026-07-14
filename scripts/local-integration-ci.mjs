@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
-import { createLocalIntegrationPlan } from "./lib/local-integration-ci.mjs";
+import { collectToolchainFingerprint, createLocalIntegrationPlan } from "./lib/local-integration-ci.mjs";
 
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
@@ -65,6 +65,7 @@ if (metadataOut) {
     integrationCommitSha: revParse("HEAD"),
     synthesizedTreeSha: revParse("HEAD^{tree}"),
     buildStrategy: plan.buildStrategy,
+    ...collectToolchainFingerprint({ buildStrategy: plan.buildStrategy }),
     commands: plan.commands.map((command) => command.join(" ")),
     startedAt,
     completedAt: new Date().toISOString(),
