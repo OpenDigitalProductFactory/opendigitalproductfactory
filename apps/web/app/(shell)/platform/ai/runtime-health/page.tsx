@@ -18,6 +18,7 @@ import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
 import { QueueHealthSection } from "@/components/queue/QueueHealthSection";
 import { readQueueSnapshots } from "@/lib/queue/queue-snapshot-service";
+import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { PhaseRemediationActions } from "@/components/platform/PhaseRemediationActions";
 import Link from "next/link";
 
@@ -115,7 +116,10 @@ export default async function RuntimeHealthPage() {
 
   // Fetch here (in the async page body) and pass to the synchronous section so
   // the page renders in a single synchronous pass — no suspending child.
-  const queueSnapshots = await readQueueSnapshots({ limit: 24 });
+  const [queueSnapshots, jobEngineHealth] = await Promise.all([
+    readQueueSnapshots({ limit: 24 }),
+    getJobEngineHealth(),
+  ]);
 
   return (
     <div>
@@ -137,6 +141,78 @@ export default async function RuntimeHealthPage() {
       <div style={{ marginBottom: 20 }}>
         <QueueHealthSection snapshots={queueSnapshots} />
       </div>
+
+      <section
+        style={{
+          border: "1px solid var(--dpf-border)",
+          borderRadius: 8,
+          padding: 14,
+          marginBottom: 20,
+          background: "var(--dpf-surface-1)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div>
+            <h2 style={{ fontSize: 13, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
+              Background job engine
+            </h2>
+            <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4, maxWidth: 740 }}>
+              Watches Inngest registration and executor traffic from the portal process,
+              so starvation is visible even when Inngest cron itself is not firing.
+            </p>
+          </div>
+          <Chip
+            bg={
+              jobEngineHealth.status === "healthy"
+                ? "var(--dpf-state-success)"
+                : jobEngineHealth.status === "degraded"
+                  ? "var(--dpf-state-error)"
+                  : "var(--dpf-surface-2)"
+            }
+            fg={
+              jobEngineHealth.status === "healthy"
+                ? "var(--dpf-success)"
+                : jobEngineHealth.status === "degraded"
+                  ? "var(--dpf-error)"
+                  : "var(--dpf-muted)"
+            }
+          >
+            {jobEngineHealth.status.toUpperCase()}
+          </Chip>
+        </div>
+        {jobEngineHealth.detail && (
+          <p style={{ fontSize: 12, color: "var(--dpf-text)", marginTop: 8, marginBottom: 0 }}>
+            {jobEngineHealth.detail}
+          </p>
+        )}
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10, fontSize: 11, color: "var(--dpf-muted)" }}>
+          <span>
+            Last registration:{" "}
+            {jobEngineHealth.checkedAt ? <LocalTime value={jobEngineHealth.checkedAt} /> : "not recorded"}
+          </span>
+          <span>
+            Last executor POST:{" "}
+            {jobEngineHealth.watchdog.lastInvocationAt ? (
+              <LocalTime value={jobEngineHealth.watchdog.lastInvocationAt} />
+            ) : (
+              "not observed"
+            )}
+          </span>
+          <span>
+            Watchdog: {jobEngineHealth.watchdog.status}
+          </span>
+          {jobEngineHealth.watchdog.lastRecoveryAttemptAt && (
+            <span>
+              Last safe reap: <LocalTime value={jobEngineHealth.watchdog.lastRecoveryAttemptAt} />
+            </span>
+          )}
+        </div>
+        {jobEngineHealth.watchdog.lastRecoverySummary && (
+          <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 8, marginBottom: 0 }}>
+            Recovery summary: {jobEngineHealth.watchdog.lastRecoverySummary}
+          </p>
+        )}
+      </section>
 
       {loadError && (
         <div
