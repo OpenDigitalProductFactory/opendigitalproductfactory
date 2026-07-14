@@ -226,18 +226,7 @@ export async function updateFeatureBrief(
   if (build.createdById !== userId) throw new Error("Forbidden");
   if (build.phase !== "ideate") throw new Error("Brief can only be updated during Ideate phase");
 
-  // Seed title/description from the build row when the brief is only carrying
-  // fixContext (BI-PIR-f8c1640b / BI-PIR-309fb74b). Fix promotions pre-seed
-  // FeatureBuild.title/description but may leave brief null until the first
-  // full save — without this, a fixContext-only MCP update fails validation
-  // and was misreported as "past ideate".
-  const seededBrief: FeatureBrief = {
-    ...brief,
-    title: brief.title?.trim() ? brief.title : (build.title ?? ""),
-    description: brief.description?.trim() ? brief.description : (build.description ?? ""),
-  };
-
-  const validation = validateFeatureBrief(seededBrief);
+  const validation = validateFeatureBrief(brief);
   if (!validation.valid) throw new Error(validation.errors.join(", "));
 
   const organization = await prisma.organization.findFirst({ select: { id: true } });
@@ -248,7 +237,7 @@ export async function updateFeatureBrief(
     buildId: build.buildId,
     featureBuildId: build.id,
     title: build.title,
-    brief: seededBrief,
+    brief,
     submittedByUserId: userId,
   });
   const acceptedFields = businessBrief.status === "accepted"
@@ -259,7 +248,7 @@ export async function updateFeatureBrief(
   await prisma.$transaction(async (tx) => {
     await tx.featureBuild.update({
       where: { buildId },
-      data: { brief: seededBrief as unknown as Prisma.InputJsonValue },
+      data: { brief: brief as unknown as Prisma.InputJsonValue },
     });
 
     await tx.businessBuildBrief.upsert({
