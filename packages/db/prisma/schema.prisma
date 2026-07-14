@@ -12605,3 +12605,16 @@ model JournalLine {
   @@index([journalEntryId])
   @@index([accountId])
 }
+
+/// BET-5 (BI-A1E864A5): pgvector-backed vector storage, replacing Qdrant. The `embedding`
+/// column is Unsupported (Prisma can't model pgvector) — access via $queryRaw in
+/// packages/db/src/pgvector-store.ts. One table, per-collection HNSW indexes (see migration).
+model VectorEmbedding {
+  collection String
+  pointId    BigInt                     @map("point_id")
+  embedding  Unsupported("vector(768)")
+  payload    Json                       @default("{}")
+
+  @@id([collection, pointId])
+  @@map("vector_embedding")
+}
