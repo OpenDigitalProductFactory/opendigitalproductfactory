@@ -11,7 +11,7 @@
 # What does NOT need a gate record:
 #   - delete-only / tag-only pushes (nothing to verify)
 #   - pushes from main or a detached HEAD (the merge queue governs main)
-#   - docs-only diffs vs origin/main (no runtime code changed)
+#   - docs-only diffs vs the configured comparison base (no runtime code changed)
 #
 # Override (recorded, PR-visible — NOT silent): set BOTH
 #   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="why" git push
@@ -96,13 +96,18 @@ fs.writeFileSync(file, JSON.stringify({
   exit 0
 fi
 
-# Docs-only diffs need no sandbox run — there is no runtime code to gate.
-if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
-  merge_base="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+# Docs-only diffs need no sandbox run — there is no runtime code to gate. The
+# comparison base defaults to origin/main for GitHub-hosted clones, but can be
+# pointed at a local accepted-base ref by offline/forge-neutral integrations.
+# If the configured base is missing, do NOT fall back silently; require the
+# SHA-bound gate record instead.
+base_ref="${DPF_PREPUSH_BASE_REF:-origin/main}"
+if git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
+  merge_base="$(git merge-base HEAD "$base_ref" 2>/dev/null || true)"
   if [ -n "$merge_base" ]; then
     non_docs_changes="$(git diff --name-only "$merge_base" HEAD | grep -Ev '^docs/|^memory/|\.md$' || true)"
     if [ -z "$non_docs_changes" ]; then
-      echo "[pre-push-gate] docs-only diff vs origin/main — local-CI gate not required."
+      echo "[pre-push-gate] docs-only diff vs $base_ref — local-CI gate not required."
       exit 0
     fi
   fi

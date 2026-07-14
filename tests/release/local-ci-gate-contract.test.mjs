@@ -462,6 +462,7 @@ function cleanHookEnv(extra = {}) {
   delete env.DPF_SKIP_PREPUSH_GATE;
   delete env.DPF_SKIP_PREPUSH_GATE_REASON;
   delete env.DPF_PREPUSH_GATE_INFLIGHT;
+  delete env.DPF_PREPUSH_BASE_REF;
   for (const [k, v] of Object.entries(extra)) if (v !== undefined) env[k] = v;
   return env;
 }
@@ -561,6 +562,38 @@ test("pre-push-gate lets docs-only diffs through without a record", () => {
   const result = runGateHook(dir, { input: refsLine(g) });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /docs-only diff/);
+});
+
+test("pre-push-gate can use a configured local accepted-base ref for docs-only detection", () => {
+  const { dir, g } = makeTempRepo();
+  const baseSha = g(["rev-parse", "refs/remotes/origin/main"]);
+  g(["update-ref", "refs/dpf/integration/main", baseSha]);
+  g(["update-ref", "-d", "refs/remotes/origin/main"]);
+  mkdirSync(join(dir, "docs"), { recursive: true });
+  writeFileSync(join(dir, "docs", "note.md"), "# doc\n");
+  g(["add", "."]);
+  g(["commit", "-qm", "docs change"]);
+  const result = runGateHook(dir, {
+    input: refsLine(g),
+    env: cleanHookEnv({ DPF_PREPUSH_BASE_REF: "refs/dpf/integration/main" }),
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /docs-only diff vs refs\/dpf\/integration\/main/);
+});
+
+test("pre-push-gate requires evidence when the configured docs-only base ref is missing", () => {
+  const { dir, g } = makeTempRepo();
+  mkdirSync(join(dir, "docs"), { recursive: true });
+  writeFileSync(join(dir, "docs", "note.md"), "# doc\n");
+  g(["add", "."]);
+  g(["commit", "-qm", "docs change"]);
+  const result = runGateHook(dir, {
+    input: refsLine(g),
+    env: cleanHookEnv({ DPF_PREPUSH_BASE_REF: "refs/dpf/missing/main" }),
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /No local-CI gate record/);
+  assert.doesNotMatch(result.stdout, /docs-only diff/);
 });
 
 test("pre-push-gate skips delete-only and tag-only pushes", () => {
