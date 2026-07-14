@@ -107,6 +107,10 @@ export type WorkspaceWorkCaseDetailView = {
   summary: WorkspaceWorkCaseListItem;
   evidenceTimeline: WorkCaseTimelineEvent[];
   sourceRefs: WorkCaseSourceRef[];
+  // BI-B416B12A: the underlying WorkItem id/title, so the detail surface can post
+  // a comment (WorkItemMessage.workItemId) with @mention notification.
+  workItemId: string;
+  workItemTitle: string;
 };
 
 function iso(value: Date | string | null | undefined): string | null {
@@ -336,5 +340,7 @@ export async function loadWorkspaceWorkCaseDetail({
     summary: toListItem(item, userId, now),
     evidenceTimeline: detail.timeline,
     sourceRefs: detail.summary.sourceRefs,
+    workItemId: item.id,
+    workItemTitle: item.title,
   };
 }

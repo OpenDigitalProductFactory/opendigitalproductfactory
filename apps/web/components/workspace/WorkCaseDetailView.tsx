@@ -4,6 +4,7 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { StatusBadge } from "@/components/ui/report-kit";
 import type { Intent } from "@/components/ui/report-kit/statusColors";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
+import { WorkItemCommentBox } from "@/components/workspace/WorkItemCommentBox";
 
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
@@ -119,6 +120,11 @@ export function WorkCaseDetailView({ detail }: Props) {
             </div>
           ))}
         </div>
+      </section>
+
+      <section aria-labelledby="work-case-comment-title" className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <h2 id="work-case-comment-title" className="sr-only">Add a comment</h2>
+        <WorkItemCommentBox workItemId={detail.workItemId} workItemTitle={detail.workItemTitle} />
       </section>
     </main>
   );

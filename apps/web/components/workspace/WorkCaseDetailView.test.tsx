@@ -39,6 +39,8 @@ const detail: WorkspaceWorkCaseDetailView = {
     { kind: "source", id: "BK-1", sourceType: "booking" },
     { kind: "work-item", id: "WI-1", status: "awaiting-input" },
   ],
+  workItemId: "wi-cuid-1",
+  workItemTitle: "Confirm condenser appointment",
 };
 
 describe("WorkCaseDetailView", () => {
