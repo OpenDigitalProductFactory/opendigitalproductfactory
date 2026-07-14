@@ -6,6 +6,7 @@ import {
   detectFabrication,
   buildRepeatedQuestionNudge,
   buildRepeatedToolStopMessage,
+  buildRuntimeLimitToolLoopMessage,
   detectToolRefusedDespiteAvailability,
   phaseRequiresToolCall,
   detectUnsavedEvidence,
@@ -245,6 +246,35 @@ describe("buildRepeatedToolStopMessage", () => {
     expect(msg).not.toMatch(/\d times with the same arguments/);
     expect(msg).toMatch(/build's details panel|build details/i);
     expect(msg.toLowerCase()).toContain("got stuck");
+  });
+});
+
+describe("buildRuntimeLimitToolLoopMessage (BI-0C19AFDD)", () => {
+  const anyTools = [
+    { name: "search_knowledge", result: { ok: true } as never },
+    { name: "query_ontology_graph", result: { ok: true } as never },
+  ];
+
+  it("stays domain-agnostic — never confabulates a finance domain", () => {
+    const msg = buildRuntimeLimitToolLoopMessage(anyTools);
+    // The prior copy hard-coded a "finance reports"/"finance-summary tool"
+    // suggestion that surfaced for every non-finance coworker (Dale's
+    // truck-parts build was told to "use the finance reports directly").
+    expect(msg.toLowerCase()).not.toContain("finance");
+    expect(msg).not.toMatch(/finance-summary tool/i);
+  });
+
+  it("gives a generic, honest next step and summarizes the tools it used", () => {
+    const msg = buildRuntimeLimitToolLoopMessage(anyTools);
+    expect(msg).toContain("search_knowledge");
+    expect(msg.toLowerCase()).toContain("runtime limit");
+    expect(msg).toMatch(/narrower question|smaller step/i);
+  });
+
+  it("falls back to a generic phrase when no tools were executed", () => {
+    const msg = buildRuntimeLimitToolLoopMessage([]);
+    expect(msg).toContain("the available tools");
+    expect(msg.toLowerCase()).not.toContain("finance");
   });
 });
 

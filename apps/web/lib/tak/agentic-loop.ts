@@ -597,12 +597,17 @@ function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
     .join(", ");
 }
 
-function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]): string {
+// BI-0C19AFDD: this message must stay domain-agnostic. The prior copy hard-coded
+// a "finance reports"/"finance-summary tool" suggestion, which confabulated an
+// unrelated domain for every non-finance coworker (e.g. Dale's truck-parts build
+// was told to "use the finance reports directly"). Keep the guidance generic,
+// mirroring the honest max-iter sibling below.
+export function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]): string {
   const toolSummary = summarizeExecutedToolNames(executedTools) || "the available tools";
   return [
     `I used ${toolSummary}, but the coworker hit the runtime limit before it produced a final answer.`,
     "I stopped before returning another raw tool request.",
-    "The route and tool attempts were recorded; try a narrower question or use the finance reports directly for the current totals while we add a more direct finance-summary tool.",
+    "The route and tool attempts were recorded; try a narrower question, or break the request into a smaller step.",
   ].join(" ");
 }
 
