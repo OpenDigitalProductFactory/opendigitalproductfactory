@@ -40,6 +40,7 @@ import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
 import { classifyProviderCapacity } from "@/lib/routing/provider-capacity";
+import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { recordProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
 
 const DEFAULT_SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -566,19 +567,29 @@ export async function dispatchOpencodeTask(params: {
     // STDOUT (its `--format json` event stream) rather than stderr — wire that
     // through onStdoutChunk; the stderr buffer is captured by the loop and
     // attached to any rejection for the catch block below.
-    const { stdout, durationMs: elapsed } = await runSandboxAgentCli({
-      containerId,
-      runnerScript,
-      timeoutMs,
-      asNodeUser: true,
-      onStdoutChunk: (chunk) => {
-        // --format json streams events; surface tool/file actions as progress.
-        for (const line of chunk.split("\n")) {
-          const msg = summarizeOpencodeEvent(line);
-          if (msg) params.onProgress?.(msg);
-        }
-      },
-    });
+    //
+    // BI-98572A51: opencode runs the model on the ONE local GPU. Acquire the SAME
+    // single-slot admission lane the coworker chat path uses (withLocalInferenceLock),
+    // held for the whole CLI run, so a chat local call and a build specialist (or
+    // two concurrent builds) never collide on the GPU. The portal owns admission
+    // in both cases — it awaits this docker-exec — so one in-process lane serializes
+    // them. The orchestrator's per-build MAX_CONCURRENT_TASKS=1 only serialized
+    // within a single build; this closes the chat↔build and build↔build gap.
+    const { stdout, durationMs: elapsed } = await withLocalInferenceLock(() =>
+      runSandboxAgentCli({
+        containerId,
+        runnerScript,
+        timeoutMs,
+        asNodeUser: true,
+        onStdoutChunk: (chunk) => {
+          // --format json streams events; surface tool/file actions as progress.
+          for (const line of chunk.split("\n")) {
+            const msg = summarizeOpencodeEvent(line);
+            if (msg) params.onProgress?.(msg);
+          }
+        },
+      }),
+    );
 
     const content = extractOpencodeResult(stdout);
 
