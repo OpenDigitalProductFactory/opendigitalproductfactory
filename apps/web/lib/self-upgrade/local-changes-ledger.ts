@@ -1,11 +1,25 @@
 /**
  * Local-changes ledger — Private/Public Change Segregation (EP-1A78BAE1).
  *
- * Lists the commits on the durable install branch (`dpf/install`) that are NOT
- * in upstream — i.e. the changes the operator has kept on their own system and
- * not shared with the community. Shared changes flow upstream (and return via
- * the self-upgrade merge), so by construction the local-only commits ARE the
- * private delta. This answers, in plain language, "what have we kept private?"
+ * Reports what this install keeps that the community version does NOT have,
+ * measured by CONTENT, not by commit identity.
+ *
+ * Why content, not commits: the public workflow squash-merges PRs (§4). A squash
+ * collapses N branch commits into one new commit on the community `main` with a
+ * fresh SHA; the install branch keeps the original unsquashed commits, which
+ * never match that squash by commit- or patch-identity. A commit-range
+ * (`origin/main..dpf/install`) therefore lists every squash-merged change as
+ * "private" forever — on this repo that was 4,707 commits, ~2,300 of them
+ * carrying a (#NNNN) PR number (i.e. provably public). `git cherry` /
+ * `--cherry-pick` cannot rescue it — patch-id can't match a squash either.
+ *
+ * The honest signal is the three-dot tree diff `<remote>/<branch>...<install>`:
+ * the content the install ADDED on its own side since the merge-base with the
+ * community reference. Work that was squash-merged upstream and returned through
+ * the self-upgrade merge sits at/below the merge-base, so it is excluded; and
+ * upstream changes the install has not merged yet ("behind") are on the other
+ * side of the merge-base, so they are excluded too. What remains is exactly the
+ * private delta — empty when nothing is kept private.
  *
  * Pure parsing/collection here (unit-tested over a GitRunner); the server
  * resolver `getLocalChangesLedger` wires the live install path + config.
@@ -13,10 +27,11 @@
 
 import type { GitRunner } from "./prepare-source";
 
+/** A file whose content differs on the install side (the private delta). */
 export interface LocalChange {
-  sha: string;
-  subject: string;
-  date: string;
+  path: string;
+  added: number;
+  deleted: number;
 }
 
 export interface LocalChangesResult {
@@ -25,21 +40,28 @@ export interface LocalChangesResult {
   changes: LocalChange[];
 }
 
-// Unit separator — safe field delimiter for `git log --format`.
-const SEP = "\x1f";
-export const LEDGER_LOG_FORMAT = `%H${SEP}%s${SEP}%aI`;
-
-/** Parse `git log --format=%H<SEP>%s<SEP>%aI` output into LocalChange rows. */
-export function parseLedgerLog(stdout: string): LocalChange[] {
+/**
+ * Parse `git diff --numstat` output into LocalChange rows. Each line is
+ * `<added>\t<deleted>\t<path>`; binary files report `-` for the counts (kept as
+ * 0). Paths are taken verbatim (no rename arrows — the caller passes
+ * `--no-renames`).
+ */
+export function parseNumstat(stdout: string): LocalChange[] {
   return stdout
     .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [sha, subject, date] = line.split(SEP);
-      return { sha: (sha ?? "").slice(0, 12), subject: subject ?? "", date: date ?? "" };
+    .map((l) => l.replace(/\r$/, ""))
+    .filter((l) => l.trim().length > 0)
+    .map((line): LocalChange | null => {
+      const parts = line.split("\t");
+      if (parts.length < 3) return null;
+      const [addedRaw, deletedRaw, ...rest] = parts;
+      const path = rest.join("\t").trim();
+      if (path.length === 0) return null;
+      const added = addedRaw === "-" ? 0 : Number.parseInt(addedRaw, 10) || 0;
+      const deleted = deletedRaw === "-" ? 0 : Number.parseInt(deletedRaw, 10) || 0;
+      return { path, added, deleted };
     })
-    .filter((c) => c.sha.length > 0);
+    .filter((c): c is LocalChange => c !== null);
 }
 
 export interface CollectOptions {
@@ -51,8 +73,9 @@ export interface CollectOptions {
 }
 
 /**
- * Collect local-only commits (on installBranch, not in remote/branch). Never
- * throws: a non-git install (consumer mode) or an unset install branch returns
+ * Collect the private content delta: files the install branch added on its own
+ * side since the merge-base with the community reference (three-dot diff). Never
+ * throws: a non-git install (consumer mode) or an unresolvable reference returns
  * `available: false` with a plain-language note instead of an error.
  */
 export async function collectLocalChanges(run: GitRunner, opts: CollectOptions): Promise<LocalChangesResult> {
@@ -67,10 +90,11 @@ export async function collectLocalChanges(run: GitRunner, opts: CollectOptions):
     };
   }
 
-  const range = `${remote}/${branch}..${installBranch}`;
-  const res = await run([
-    "-C", hostSourcePath, "log", "--no-merges", `--max-count=${max}`, `--format=${LEDGER_LOG_FORMAT}`, range,
-  ]);
+  // Three-dot: diff the merge-base(community, install) against the install tip —
+  // i.e. only the content the install added on its own side. Commit identity is
+  // deliberately NOT used (squash-merges destroy it); the tree is the truth.
+  const range = `${remote}/${branch}...${installBranch}`;
+  const res = await run(["-C", hostSourcePath, "diff", "--numstat", "--no-renames", range]);
   if (res.code !== 0) {
     return {
       available: false,
@@ -79,7 +103,7 @@ export async function collectLocalChanges(run: GitRunner, opts: CollectOptions):
     };
   }
 
-  return { available: true, changes: parseLedgerLog(res.stdout) };
+  return { available: true, changes: parseNumstat(res.stdout).slice(0, max) };
 }
 
 /** Server resolver: read the live install's config + run git. */
