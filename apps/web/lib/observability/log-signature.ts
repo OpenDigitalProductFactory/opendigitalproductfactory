@@ -37,12 +37,25 @@ const SELF_NOISE = /has timestamp too old|final error sending batch|loki\.write/
 const INFO_DEBUG = /level=(info|debug)\b|"level":\s*"(info|debug)"/i;
 // A whole-word error token, NOT a substring of ErrorCode / ErrorMessage.
 const ERROR_TOKEN = /\b(error|fatal|panic|exception|traceback)\b/i;
+// The responses-adapter logs its OWN outbound AI requests (and streamed SSE
+// events) via console.log with no level= marker, so INFO_DEBUG can't catch
+// them. Two of these are benign but trip ERROR_TOKEN:
+//   1. `[responses-adapter] REQUEST to ...` outbound-request lines — never an
+//      application error, they are the request being sent.
+//   2. When the portal files a PlatformIssueReport THROUGH the AI, that outbound
+//      request body echoes the prior report ("Error Report PIR-..."), so
+//      ERROR_TOKEN matches "Error" and the scanner files a fresh PIR for its own
+//      request — a self-referential loop that generated thousands of duplicate
+//      signatures. `response.created` is the benign OpenAI Responses API SSE
+//      start event, likewise not an error.
+const OUTBOUND_REQUEST_NOISE = /\[responses-adapter\]\s+REQUEST|Error Report PIR-|\bresponse\.created\b/i;
 
 /** True when a line is a genuine error worth clustering (not info/debug/self-noise). */
 export function isErrorLine(line: string): boolean {
   if (!line) return false;
   if (SELF_NOISE.test(line)) return false;
   if (INFO_DEBUG.test(line)) return false;
+  if (OUTBOUND_REQUEST_NOISE.test(line)) return false;
   return ERROR_TOKEN.test(line);
 }
 
