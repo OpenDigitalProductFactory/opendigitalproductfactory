@@ -9,6 +9,49 @@
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
 
+// BI-C8164664: how long a "running" eval slot blocks a duplicate GPU eval for
+// the same model. runDimensionEval already skips when the model was EVALUATED
+// (lastEvalAt) within its own cooldown — but lastEvalAt is stamped only on a
+// SUCCESSFUL run, so an Inngest lease error that re-invokes the function BEFORE
+// completion never trips that guard and the GPU eval runs again and again (the
+// observed "burns the local GPU" storm). This slot claim is stamped BEFORE the
+// GPU work on the eval-background ScheduledJob (not lastEvalAt — that keeps its
+// "last successful eval" meaning for the routing/calibration signal), so a
+// storm re-invocation sees a recent "running" slot and skips. Override with
+// DPF_EVAL_SLOT_COOLDOWN_MS; must comfortably exceed one eval's duration.
+const EVAL_SLOT_COOLDOWN_MS = (() => {
+  const raw = Number(process.env.DPF_EVAL_SLOT_COOLDOWN_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 20 * 60_000;
+})();
+
+/** Atomically claim the GPU eval slot for a model before running it. Recency-
+ *  based: the claim wins only when the last eval attempt for this model is older
+ *  than the cooldown (or there is none). A retry/lease-storm re-invocation
+ *  within the window loses (count 0) and the caller skips the GPU work. Keyed on
+ *  the eval-<modelId> ScheduledJob's lastRunAt — NOT ModelProfile.lastEvalAt,
+ *  which must keep meaning "last SUCCESSFUL eval" for the calibration signal.
+ *  The stamp self-heals: it ages out after the cooldown, so a genuinely-next
+ *  eval proceeds. Exported for testing. */
+export async function claimEvalSlot(modelId: string, now: Date = new Date()): Promise<boolean> {
+  const { prisma } = await import("@dpf/db");
+  const jobId = `eval-${modelId}`;
+  const cutoff = new Date(now.getTime() - EVAL_SLOT_COOLDOWN_MS);
+  const claimed = await prisma.scheduledJob.updateMany({
+    where: { jobId, OR: [{ lastRunAt: { lt: cutoff } }, { lastRunAt: null }] },
+    data: { lastRunAt: now },
+  });
+  if (claimed.count > 0) return true;
+  // No row yet (first-ever eval for this model) → create and claim it.
+  const existing = await prisma.scheduledJob.findUnique({ where: { jobId }, select: { jobId: true } });
+  if (existing) return false; // row exists with a fresh lastRunAt → claim lost.
+  await prisma.scheduledJob
+    .create({
+      data: { jobId, name: `Eval: ${modelId}`, schedule: "manual", lastStatus: "running", lastRunAt: now, nextRunAt: null },
+    })
+    .catch(() => {});
+  return true;
+}
+
 /**
  * Background dimension eval for a single model.
  * Triggered by the "Run Eval" button on ModelCard / RoutingProfilePanel.
@@ -25,6 +68,20 @@ export const evalBackground = inngest.createFunction(
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const { endpointId, modelId, userId, force } = event.data;
+
+    // BI-C8164664: claim the GPU eval slot BEFORE the work. A retry/lease-storm
+    // re-invocation within the cooldown loses the claim and skips, so the GPU is
+    // not re-burned. Operator-forced runs bypass the slot (they also bypass the
+    // recency cooldown inside runDimensionEval).
+    if (force !== true) {
+      const claimed = await step.run("claim-eval-slot", async () => {
+        const { claimEvalSlot } = await import("./eval-background");
+        return claimEvalSlot(modelId);
+      });
+      if (!claimed) {
+        return { skipped: true, reason: "eval-slot-busy" };
+      }
+    }
 
     const result = await step.run("run-dimension-eval", async () => {
       const { runDimensionEval } = await import("@/lib/routing/eval-runner");
