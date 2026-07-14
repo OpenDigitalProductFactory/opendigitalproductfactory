@@ -55,6 +55,7 @@ type WorkspaceWorkItemRecord = {
 type WorkspaceWorkItemMessageRecord = {
   messageId: string;
   senderType: string;
+  senderUserId?: string | null;
   messageType: string;
   body: string;
   createdAt: Date | string;
@@ -103,10 +104,35 @@ export type WorkspaceWorkCaseLensView = {
   cases: WorkspaceWorkCaseListItem[];
 };
 
+export type WorkItemCommentThreadMessage = {
+  messageId: string;
+  senderLabel: string;
+  body: string;
+  createdAt: string;
+  mine: boolean;
+};
+
+export type WorkItemCommentThread = {
+  workItemId: string | null;
+  itemPublicId: string | null;
+  canComment: boolean;
+  participants: string[];
+  messages: WorkItemCommentThreadMessage[];
+};
+
+export const EMPTY_COMMENT_THREAD: WorkItemCommentThread = {
+  workItemId: null,
+  itemPublicId: null,
+  canComment: false,
+  participants: [],
+  messages: [],
+};
+
 export type WorkspaceWorkCaseDetailView = {
   summary: WorkspaceWorkCaseListItem;
   evidenceTimeline: WorkCaseTimelineEvent[];
   sourceRefs: WorkCaseSourceRef[];
+  commentThread: WorkItemCommentThread;
 };
 
 function iso(value: Date | string | null | undefined): string | null {
@@ -332,9 +358,31 @@ export async function loadWorkspaceWorkCaseDetail({
     evidence,
   });
 
+  const threadMessages: WorkItemCommentThreadMessage[] = messages.map((message) => {
+    const mine = message.senderUserId != null && message.senderUserId === userId;
+    const senderLabel = message.senderType === "user"
+      ? (message.senderUserId === userId ? "You" : "Teammate")
+      : "AI coworker";
+    return {
+      messageId: message.messageId,
+      senderLabel,
+      body: message.body,
+      createdAt: iso(message.createdAt) ?? "",
+      mine,
+    };
+  });
+  const participants = [...new Set(threadMessages.map((message) => message.senderLabel))];
+
   return {
     summary: toListItem(item, userId, now),
     evidenceTimeline: detail.timeline,
     sourceRefs: detail.summary.sourceRefs,
+    commentThread: {
+      workItemId: item.id,
+      itemPublicId: item.itemId,
+      canComment: true,
+      participants,
+      messages: threadMessages,
+    },
   };
 }

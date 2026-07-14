@@ -105,4 +105,26 @@ describe("workspace Work Case loader", () => {
     ]);
     expect(detail?.sourceRefs.map((ref) => ref.kind)).toContain("work-item");
   });
+
+  it("projects the comment thread view model from work-item messages", async () => {
+    const detail = await loadWorkspaceWorkCaseDetail({
+      prismaClient: prismaFor([baseItem]),
+      caseKey: "booking%3ABK-1",
+      userId: "user-1",
+    });
+
+    expect(detail?.commentThread.workItemId).toBe("row-1");
+    expect(detail?.commentThread.itemPublicId).toBe("WI-1");
+    expect(detail?.commentThread.canComment).toBe(true);
+    expect(detail?.commentThread.messages).toEqual([
+      {
+        messageId: "WIM-1",
+        senderLabel: "AI coworker",
+        body: "Need a human confirmation before booking.",
+        createdAt: "2026-06-28T10:10:00.000Z",
+        mine: false,
+      },
+    ]);
+    expect(detail?.commentThread.participants).toEqual(["AI coworker"]);
+  });
 });

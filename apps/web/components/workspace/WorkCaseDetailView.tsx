@@ -1,6 +1,7 @@
 import { ArrowLeft, Clock, FileText, ShieldCheck } from "lucide-react";
 
 import { LocalTime } from "@/components/ui/LocalTime";
+import { WorkItemCommentThread } from "@/components/workspace/WorkItemCommentThread";
 import { StatusBadge } from "@/components/ui/report-kit";
 import type { Intent } from "@/components/ui/report-kit/statusColors";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
@@ -104,6 +105,8 @@ export function WorkCaseDetailView({ detail }: Props) {
           </div>
         )}
       </section>
+
+      <WorkItemCommentThread thread={detail.commentThread} />
 
       <section aria-labelledby="work-case-source-title" className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <div className="flex items-center gap-2">
