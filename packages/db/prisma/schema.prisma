@@ -12618,3 +12618,27 @@ model VectorEmbedding {
   @@id([collection, pointId])
   @@map("vector_embedding")
 }
+
+/// BET-5 (BI-A1E864A5): Postgres graph mirror, replacing Neo4j. `key` is the universal node
+/// key (coalesce of productId/ciId/nodeId/slug). Traversals run as WITH RECURSIVE over
+/// graph_edge in packages/db/src/pg-graph.ts. Populated by the sync writers (formerly Neo4j).
+model GraphNode {
+  key    String   @id
+  labels String[]
+  props  Json     @default("{}")
+
+  @@map("graph_node")
+}
+
+model GraphEdge {
+  id      BigInt @id @default(autoincrement())
+  srcKey  String @map("src_key")
+  dstKey  String @map("dst_key")
+  relType String @map("rel_type")
+  props   Json   @default("{}")
+
+  @@unique([srcKey, dstKey, relType], name: "graph_edge_triple")
+  @@index([dstKey, relType])
+  @@index([srcKey, relType])
+  @@map("graph_edge")
+}
