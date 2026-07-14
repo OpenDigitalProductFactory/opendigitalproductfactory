@@ -159,3 +159,20 @@ now-inert `NEO4J_*`/`QDRANT_*` env — all backfill-only, retired once every ins
 **Optional specialized-store path (recorded, not built):** at very large scale a dedicated
 vector/graph engine may again beat Postgres; for the target customer that is far off. The
 seam-behind-a-re-export design means re-introducing one is a localized change, not a rewrite.
+
+### Self-upgrade postgres-image recreate (follow-up, 2026-07-14)
+
+A live self-upgrade of an existing install surfaced a gap the CI fix (pgvector CI service image)
+did not cover: `promote.sh` recreates ONLY the portal (`--no-deps`), so an existing install's
+`postgres` / `sandbox-postgres` containers keep the image they launched with (`postgres:16-alpine`).
+The Phase-0 compose bump to `pgvector/pgvector:pg16` therefore never reaches a running install, and
+`prisma migrate deploy` fails at `CREATE EXTENSION vector` ("extension vector is not available")
+BEFORE the swap — the upgrade aborts safely (old portal keeps serving) but never completes.
+
+Fix: `promote.sh` gains **step 3a `ensure-pgvector`** (recreate `postgres` onto the compose-pinned
+pgvector image before migrate) and a sandbox-postgres recreate in **step 7b**. Both are idempotent
+(skip when `vector.control` is already present — fresh installs and already-upgraded installs) and
+data-preserving (`pgvector/pgvector:pg16` is the same PG16 engine on the same `pgdata` volume, a
+strict superset image — no dump/restore). Step 3a is fail-closed (abort before swap); the
+sandbox-postgres recreate is fail-loud-not-abort like the rest of 7b. This makes every existing
+install (Mac + Windows) upgrade cleanly with no manual DB step.
