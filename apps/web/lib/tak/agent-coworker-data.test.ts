@@ -1,5 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { selectVisibleTelemetry } from "./agent-coworker-data";
+import { selectVisibleTelemetry, serializeMessage } from "./agent-coworker-data";
+
+const assistantMsg = {
+  id: "m1",
+  role: "assistant",
+  content: "Proposed `add customer contact` for your approval.",
+  agentId: "customer-advisor",
+  routeContext: "/customer",
+  createdAt: new Date("2026-07-12T00:00:00Z"),
+};
+
+describe("serializeMessage — proposal join (BI-867263F4)", () => {
+  it("attaches a joined proposal so its Approve/Reject card renders (incl. on reload)", () => {
+    const row = serializeMessage(assistantMsg, {
+      proposalId: "prop-1",
+      actionType: "add_customer_contact",
+      parameters: { name: "Dan Warfield" },
+      status: "proposed",
+      resultEntityId: null,
+      resultError: null,
+    });
+    expect(row.proposal).toEqual({
+      proposalId: "prop-1",
+      actionType: "add_customer_contact",
+      parameters: { name: "Dan Warfield" },
+      status: "proposed",
+    });
+  });
+
+  it("leaves proposal undefined when the message has none", () => {
+    expect(serializeMessage(assistantMsg, null).proposal).toBeUndefined();
+  });
+});
 
 const baseRow = {
   providerId: "anthropic",

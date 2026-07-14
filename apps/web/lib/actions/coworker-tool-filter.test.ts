@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ToolDefinition } from "@/lib/mcp-tools";
 
-import { adviseHeldBackTools, filterToolsForCoworkerRuntime } from "./coworker-tool-filter";
+import { adviseHeldBackTools, buildAdvisePromptSuffix, filterToolsForCoworkerRuntime } from "./coworker-tool-filter";
 
 const tool = (over: Partial<ToolDefinition> & { name: string }): ToolDefinition =>
   ({
@@ -51,6 +51,26 @@ describe("filterToolsForCoworkerRuntime — advise rule", () => {
     const kept = filterToolsForCoworkerRuntime(MERGED, { coworkerMode: "act", activeBuildPhase: null }).map((t) => t.name);
     expect(kept).toEqual(["list_backlog_items", "create_backlog_item", "manage_coworker_tool_grant", "save_marketing_review"]);
   });
+
+  it("KEEPS side-effect tools in advise mode when surfaceAsProposals is on (BI-867263F4)", () => {
+    // Advise now proposes: the tools stay so the loop can capture each call as an
+    // approval card, instead of stripping them and describing in prose.
+    const kept = filterToolsForCoworkerRuntime(MERGED, {
+      coworkerMode: "advise",
+      surfaceAsProposals: true,
+      activeBuildPhase: null,
+    }).map((t) => t.name);
+    expect(kept).toEqual(["list_backlog_items", "create_backlog_item", "manage_coworker_tool_grant", "save_marketing_review"]);
+  });
+
+  it("still strips in advise mode when surfaceAsProposals is off (default unchanged)", () => {
+    const kept = filterToolsForCoworkerRuntime(MERGED, {
+      coworkerMode: "advise",
+      surfaceAsProposals: false,
+      activeBuildPhase: null,
+    }).map((t) => t.name);
+    expect(kept).toEqual(["list_backlog_items", "save_marketing_review"]);
+  });
 });
 
 describe("adviseHeldBackTools", () => {
@@ -74,5 +94,29 @@ describe("adviseHeldBackTools", () => {
 
   it("returns empty when the coworker holds no side-effecting authority", () => {
     expect(adviseHeldBackTools([READ, ARTIFACT])).toEqual([]);
+  });
+});
+
+describe("buildAdvisePromptSuffix (BI-867263F4)", () => {
+  it("tells the coworker its recommendations become approval cards when surfacing proposals", () => {
+    const suffix = buildAdvisePromptSuffix({ coworkerMode: "advise", surfaceAsProposals: true, mergedTools: MERGED });
+    expect(suffix).toContain("YOUR RECOMMENDATIONS BECOME APPROVAL CARDS");
+    expect(suffix).toContain("do NOT just describe them in prose");
+    // It must NOT use the old muzzle framing that held the tools back.
+    expect(suffix).not.toContain("AUTHORITY HELD BACK");
+  });
+
+  it("falls back to the held-back muzzle note in advise mode without surfacing", () => {
+    const suffix = buildAdvisePromptSuffix({ coworkerMode: "advise", surfaceAsProposals: false, mergedTools: MERGED });
+    expect(suffix).toContain("AUTHORITY HELD BACK");
+    expect(suffix).toContain("create_backlog_item");
+  });
+
+  it("returns empty for act mode", () => {
+    expect(buildAdvisePromptSuffix({ coworkerMode: "act", mergedTools: MERGED })).toBe("");
+  });
+
+  it("returns empty when advise mode holds no side-effecting authority (nothing to muzzle)", () => {
+    expect(buildAdvisePromptSuffix({ coworkerMode: "advise", surfaceAsProposals: false, mergedTools: [READ, ARTIFACT] })).toBe("");
   });
 });
