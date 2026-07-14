@@ -123,3 +123,22 @@ export interface WorkCaseDetail {
   evidence: readonly unknown[];
   timeline: WorkCaseTimelineEvent[];
 }
+
+// BI-B416B12A (EP-WORK-CONVERGENCE): work-item comment thread projection. A single
+// comment (WorkItemMessage of messageType "comment") flattened for the workspace
+// detail view, with authorship resolved to a viewer-relative label.
+export interface WorkCaseComment {
+  messageId: string;
+  senderLabel: string;
+  body: string;
+  createdAt: string;
+  mine: boolean;
+}
+
+export interface WorkCaseCommentThread {
+  workItemId: string | null;
+  itemPublicId: string | null;
+  messages: WorkCaseComment[];
+  participants: string[];
+  canComment: boolean;
+}

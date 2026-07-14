@@ -21,7 +21,8 @@ export type AttentionSource =
   | "compliance-submission" // RegulatorySubmission draft (carries a dueDate)
   | "research-proposal" // ResearchProposal pending
   | "ai-readiness-blocker" // AI Readiness blocked domain requiring operator action
-  | "platform-health"; // PortfolioQualityIssue issueType=health_alert, status=open (BI-2F778C13)
+  | "platform-health" // PortfolioQualityIssue issueType=health_alert, status=open (BI-2F778C13)
+  | "work-item-mention"; // WorkItemMessage @mention (BI-B416B12A)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";

@@ -1,5 +1,15 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// The detail view now embeds the client comment thread (BI-B416B12A), which
+// pulls in useRouter and the postWorkItemComment server action. Stub both so this
+// server-render test stays a pure markup assertion.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: () => {} }),
+}));
+vi.mock("@/lib/actions/work-item-comments", () => ({
+  postWorkItemComment: async () => ({ ok: true, messageId: "stub", notified: 0 }),
+}));
 
 import { WorkCaseDetailView } from "./WorkCaseDetailView";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
@@ -39,6 +49,21 @@ const detail: WorkspaceWorkCaseDetailView = {
     { kind: "source", id: "BK-1", sourceType: "booking" },
     { kind: "work-item", id: "WI-1", status: "awaiting-input" },
   ],
+  commentThread: {
+    workItemId: "row-1",
+    itemPublicId: "WI-1",
+    messages: [
+      {
+        messageId: "WIM-1",
+        senderLabel: "Teammate",
+        body: "Need a human confirmation before booking.",
+        createdAt: "2026-06-28T10:10:00.000Z",
+        mine: false,
+      },
+    ],
+    participants: ["Teammate"],
+    canComment: true,
+  },
 };
 
 describe("WorkCaseDetailView", () => {

@@ -1,5 +1,7 @@
 import type {
   WorkCaseA2aStatus,
+  WorkCaseComment,
+  WorkCaseCommentThread,
   WorkCaseSourceRef,
   WorkCaseState,
   WorkCaseTimelineEvent,
@@ -55,6 +57,7 @@ type WorkspaceWorkItemRecord = {
 type WorkspaceWorkItemMessageRecord = {
   messageId: string;
   senderType: string;
+  senderUserId?: string | null;
   messageType: string;
   body: string;
   createdAt: Date | string;
@@ -107,7 +110,35 @@ export type WorkspaceWorkCaseDetailView = {
   summary: WorkspaceWorkCaseListItem;
   evidenceTimeline: WorkCaseTimelineEvent[];
   sourceRefs: WorkCaseSourceRef[];
+  commentThread: WorkCaseCommentThread;
 };
+
+function buildCommentThread(
+  item: { id: string; itemId: string },
+  messages: WorkspaceWorkItemMessageRecord[],
+  userId: string,
+): WorkCaseCommentThread {
+  const comments: WorkCaseComment[] = messages.map((message) => {
+    const mine = message.senderType === "user" && message.senderUserId === userId;
+    const senderLabel =
+      message.senderType === "user" ? (mine ? "You" : "Teammate") : "AI coworker";
+    return {
+      messageId: message.messageId,
+      senderLabel,
+      body: message.body,
+      createdAt: iso(message.createdAt) ?? "",
+      mine,
+    };
+  });
+  const participants = Array.from(new Set(comments.map((comment) => comment.senderLabel)));
+  return {
+    workItemId: item.id,
+    itemPublicId: item.itemId,
+    messages: comments,
+    participants,
+    canComment: true,
+  };
+}
 
 function iso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
@@ -336,5 +367,6 @@ export async function loadWorkspaceWorkCaseDetail({
     summary: toListItem(item, userId, now),
     evidenceTimeline: detail.timeline,
     sourceRefs: detail.summary.sourceRefs,
+    commentThread: buildCommentThread(item, messages, userId),
   };
 }
