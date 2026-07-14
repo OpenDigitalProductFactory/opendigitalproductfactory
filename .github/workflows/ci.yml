@@ -637,7 +637,7 @@ jobs:
         shard: [1, 2, 3, 4]
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: dpf
           POSTGRES_PASSWORD: ci_test_password
@@ -677,7 +677,7 @@ jobs:
     needs: changes
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: dpf
           POSTGRES_PASSWORD: ci_test_password
