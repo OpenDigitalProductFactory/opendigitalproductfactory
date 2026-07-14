@@ -762,6 +762,24 @@ export function detectToolRefusedDespiteAvailability(
 }
 
 /**
+ * Corrective nudge text when the model claims a delivered tool is unavailable
+ * (BI-PIR-6de01e8d). Pure + unit-tested; used by the agentic-loop recovery path.
+ */
+export function buildToolRefusedDespiteAvailableNudge(args: {
+  refusedToolName: string;
+  deliveredToolNames: string[];
+}): string {
+  const toolHint =
+    args.refusedToolName.startsWith("(unspecified")
+      ? args.deliveredToolNames.slice(0, 12).join(", ")
+      : args.refusedToolName;
+  return (
+    `CORRECTION: that tool IS available in this session (delivered tool list includes: ${toolHint}). ` +
+    `Do not claim it is unavailable, missing, or ungranted. Call it now via a tool call and continue the task.`
+  );
+}
+
+/**
  * Clause 2.2: phase advance is illegal without saved evidence; therefore
  * a turn in a build phase that produces zero tool calls is a contract
  * violation. Returns true when the phase requires a tool call before close.
@@ -1789,6 +1807,24 @@ export async function runAgenticLoop(params: {
           `tool-refused-despite-availability: ${refusedToolName}`,
           `Agent ${agentId} on route ${routeContext} asserted that ${refusedToolName} is unavailable in iteration ${iteration}, but the tool was in the delivered tool list. Response excerpt: ${trimmed.slice(0, 500)}`,
         );
+        // BI-PIR-6de01e8d: do not only file a PIR — recover in-loop when the
+        // model closed with zero tool calls. The tool is in `tools`; tell the
+        // model explicitly and continue so delivery is not abandoned.
+        if (executedTools.length === 0 && !result.toolsStripped) {
+          continuationNudges++;
+          messages = [
+            ...messages,
+            { role: "assistant" as const, content: result.content },
+            {
+              role: "user" as const,
+              content: buildToolRefusedDespiteAvailableNudge({
+                refusedToolName,
+                deliveredToolNames: tools.map((t) => t.name),
+              }),
+            },
+          ];
+          continue;
+        }
       }
 
       // 2.6b: zero-tool-call on phase-required turn

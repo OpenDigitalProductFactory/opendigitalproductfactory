@@ -7,6 +7,7 @@ import {
   buildRepeatedQuestionNudge,
   buildRepeatedToolStopMessage,
   detectToolRefusedDespiteAvailability,
+  buildToolRefusedDespiteAvailableNudge,
   phaseRequiresToolCall,
   detectUnsavedEvidence,
   enrichToolDescriptions,
@@ -1856,6 +1857,19 @@ describe("detectToolRefusedDespiteAvailability (clause 2.6)", () => {
     );
     expect(out).not.toBeNull();
     expect(out).toContain("unspecified");
+  });
+});
+
+describe("buildToolRefusedDespiteAvailableNudge (BI-PIR-6de01e8d)", () => {
+  it("names the refused tool and orders a tool call", () => {
+    const nudge = buildToolRefusedDespiteAvailableNudge({
+      refusedToolName: "run_hive_scout_ingest",
+      deliveredToolNames: ["run_hive_scout_ingest", "other"],
+    });
+    expect(nudge).toContain("run_hive_scout_ingest");
+    expect(nudge).toMatch(/IS available/i);
+    expect(nudge).toMatch(/Call it now/i);
+    expect(nudge).not.toMatch(/not available/i);
   });
 });
 
