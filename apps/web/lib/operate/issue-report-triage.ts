@@ -69,6 +69,36 @@ function buildCrashBoundaryItem(report: IssueReport, base: BacklogItemData): Bac
 
 // ─── Pure Functions ─────────────────────────────────────────────────────────
 
+/**
+ * True when a PlatformIssueReport is a zero-result / clean-estate status note
+ * that must not become a backlog item (BI-PIR-76694be9). Daily discovery
+ * triage that finds nothing still used to file "informational" PIRs that
+ * cluttered the open backlog with non-defects.
+ */
+export function shouldSuppressIssueReportAsBacklog(report: {
+  title: string;
+  description?: string | null;
+}): boolean {
+  const text = `${report.title}\n${report.description ?? ""}`.toLowerCase();
+  if (
+    /filter out zero-result|zero-result daily discovery|found no taxonomy gaps|no taxonomy gaps/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /all metrics at zero/.test(text)
+    || (/processed\s*0/.test(text) && /decisions\s*0/.test(text))
+  ) {
+    return true;
+  }
+  if (/digital product estate is clean/.test(text) && /this cycle/.test(text)) {
+    return true;
+  }
+  return false;
+}
+
 export function buildIssueBacklogItem(
   report: IssueReport,
   digitalProductId: string | null,
@@ -228,6 +258,13 @@ export async function triageIssueReports(deps: {
     // build-stall-escalation reports filed before the front-door guard existed.
     if (isResponderStream(classifyIssueReportStream(report))) {
       if (deps.holdForResponder) await deps.holdForResponder(report.id);
+      continue;
+    }
+
+    // BI-PIR-76694be9: acknowledge clean-estate / zero-result discovery notes
+    // without filing a bug BI (no defect to fix).
+    if (shouldSuppressIssueReportAsBacklog(report)) {
+      await deps.acknowledgeReport(report.id);
       continue;
     }
 
