@@ -7,6 +7,7 @@ Source of truth: convergence memo (`docs/superpowers/specs/2026-07-11-collaborat
 
 ## This slice
 - `lib/work-management/mention-notify.ts` — pure `buildMentionNotifications`: resolves @mentions against a roster → one Notification spec per mentioned human + list of mentioned coworker ids (agents have no user inbox).
+- `lib/work-management/mention-roster.ts` — pure `buildMentionRoster(coworkers, users)`: assembles the handle→principal roster (slugified from display name; first-writer-wins on collision). Closes the roster-assembly gap so a server caller just queries + calls.
 - `lib/work-management/post-work-item-comment.ts` — the comment write path: creates the `WorkItemMessage` (messageType "comment"), fans out Notifications to mentioned humans (skips the author's self-mention), records `mentionedAgentIds` on the message's `structuredPayload`. Structurally typed on db + injected roster → unit-testable.
 
 ## Verification
