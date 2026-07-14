@@ -54,8 +54,10 @@ accepted-base ref by default, record candidate/base/integration/tree SHA
 metadata in gate evidence, and remove the pre-push docs-only bypass's hard
 dependency on `origin/main` by allowing a configured local accepted-base ref.
 This slice adds toolchain fingerprint and gate-evidence expiry metadata so
-local passes are auditable but not timeless. The remaining work in this BI is
-full network-disconnect proof.
+local passes are auditable but not timeless; the follow-up slice enforces that
+expiry in the pre-push gate, so later publication is allowed only while the
+record is still fresh. The remaining work in this BI is full
+network-disconnect proof.
 
 1. Change `scripts/gate-worktree.sh` so local verification defaults to `--no-push`; publication is a separate explicit operation.
 2. Change `scripts/local-ci-runner.sh` and `scripts/lib/local-integration-ci.mjs` to consume a local candidate ref/SHA and a locally available accepted-base ref.
