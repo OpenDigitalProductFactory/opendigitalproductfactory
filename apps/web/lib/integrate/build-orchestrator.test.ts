@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome, getCompletedTaskTitles, buildStoredResultsSummary, buildScopedTaskContext, buildTaskArtifactEntry, buildTaskArtifactSummary, parseQAVerification, resolveBuildProviderRunner } from "./build-orchestrator";
+import { isMissingSandboxToolSurfaceOutput } from "./sandbox-tool-surface-detector";
 import type { StoredTaskResult } from "./build-orchestrator";
 import type { AgenticResult } from "@/lib/agentic-loop";
 import type { ClaudeResult } from "./claude-dispatch";
@@ -184,6 +185,25 @@ describe("classifyOutcome — ClaudeResult (CLI dispatch)", () => {
   it("returns BLOCKED when Claude CLI fails with no useful content", () => {
     const result = mockClaudeResult({ content: "Auth token expired.", success: false });
     expect(classifyOutcome(result, "software-engineer")).toBe("BLOCKED");
+  });
+
+  it("returns BLOCKED when the CLI reports the Build Studio sandbox tool set is not exposed", () => {
+    const result = mockClaudeResult({
+      content:
+        "the sandbox tool set this build workflow requires (start_build, read_sandbox_file, edit_sandbox_file, write_sandbox_file, search_sandbox, run_sandbox_command, run_sandbox_tests, describe_model, validate_schema, save_phase_handoff, saveBuildEvidence) is not exposed on this session, so I cannot create the build branch or touch sandbox files.",
+      success: true,
+    });
+    expect(isMissingSandboxToolSurfaceOutput(result.content)).toBe(true);
+    expect(classifyOutcome(result, "software-engineer")).toBe("BLOCKED");
+  });
+
+  it("does not confuse ordinary sandbox test failures with missing tool-surface reports", () => {
+    const result = mockClaudeResult({
+      content: "run_sandbox_tests reported 2 tests failed after the implementation changed the API response shape.",
+      success: true,
+    });
+    expect(isMissingSandboxToolSurfaceOutput(result.content)).toBe(false);
+    expect(classifyOutcome(result, "qa-engineer")).toBe("DONE_WITH_CONCERNS");
   });
 });
 

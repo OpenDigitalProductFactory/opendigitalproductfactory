@@ -25,6 +25,7 @@ import {
   SPECIALIST_MODEL_REQS,
   SPECIALIST_TOOLS,
 } from "./specialist-prompts";
+import { isMissingSandboxToolSurfaceOutput } from "./sandbox-tool-surface-detector";
 import type { SpecialistRole } from "./task-dependency-graph";
 import type {
   BuildPlanDoc,
@@ -553,10 +554,6 @@ export async function runBuildReviewDeliberation(
   };
 }
 
-// ─── Specialist Outcome Protocol (Superpowers-inspired) ────────────────────
-// Structured status codes for specialist results. Replaces boolean success
-// with a 4-status protocol that enables smarter orchestration decisions.
-
 export type SpecialistOutcome =
   | "DONE"                // Task completed successfully
   | "DONE_WITH_CONCERNS"  // Task completed but flagged issues for review
@@ -576,31 +573,22 @@ export const MISSING_PREREQUISITE_PATTERNS = [
 export function classifyOutcome(result: AgenticResult | CodexResult | ClaudeResult, role: SpecialistRole): SpecialistOutcome {
   const content = result.content.toLowerCase();
 
-  // CLI dispatch path: CodexResult and ClaudeResult both have durationMs + success
-  // but no providerId. They intentionally share this classification logic.
   if ("durationMs" in result && !("providerId" in result)) {
+    if (isMissingSandboxToolSurfaceOutput(result.content)) return "BLOCKED";
     if (!result.success) {
       if (content.includes("timed out")) return "BLOCKED";
       return "BLOCKED";
     }
-    // CLI succeeded — check content for concern indicators using contextual patterns.
-    // Avoids false positives from phrases like "Fixed the error handling",
-    // "failure path", "failure handling", or task names that include "failure".
-    // Patterns must match *output diagnostics*, not narrative descriptions.
     const CLI_CONCERN_PATTERNS = [
-      /\berrors?[:]\s/i,           // "error: something" or "errors: 3"
-      // NOTE: plain /\bfailed\b/i is intentionally absent — it causes false positives
-      // on tasks whose subject matter is about failure scenarios (e.g. "Queue failure path",
-      // "UI history and failure details") where the QA summary naturally mentions "failed"
-      // cases as part of a correct implementation description.
-      /\bwarnings?[:]\s/i,        // "warning: something"
-      /\d+\s+errors?\b/i,         // "3 errors"
-      /\d+\s+warnings?\b/i,       // "5 warnings"
-      /typecheck.*fail/i,         // "typecheck failed"
-      /build.*fail/i,             // "build failed"
-      /\d+\s+tests?\s+failed\b/i, // "3 tests failed" (numeric test failure count)
-      /\b\d+\s+failed\b/i,        // "2 failed" (standalone numeric count, e.g. jest/vitest output)
-      /test\s+suite.*fail/i,      // "test suite failed"
+      /\berrors?[:]\s/i,
+      /\bwarnings?[:]\s/i,
+      /\d+\s+errors?\b/i,
+      /\d+\s+warnings?\b/i,
+      /typecheck.*fail/i,
+      /build.*fail/i,
+      /\d+\s+tests?\s+failed\b/i,
+      /\b\d+\s+failed\b/i,
+      /test\s+suite.*fail/i,
     ];
     if (CLI_CONCERN_PATTERNS.some(pat => pat.test(content))) {
       return "DONE_WITH_CONCERNS";
@@ -834,21 +822,32 @@ async function dispatchSpecialist(params: {
 
     const outcome = classifyOutcome(cliResult, role);
 
-    agentEventBus.emit(parentThreadId, {
-      type: "orchestrator:task_complete",
-      buildId,
-      taskTitle: task.title,
-      specialist: ROLE_LABELS[role],
-      outcome: cliResult.success ? "DONE" : "BLOCKED",
-    });
+    if (isMissingSandboxToolSurfaceOutput(cliResult.content)) {
+      agentEventBus.emit(parentThreadId, {
+        type: "orchestrator:specialist_retry",
+        buildId,
+        specialist: ROLE_LABELS[role],
+        reason:
+          "CLI session reported that the Build Studio sandbox tool set is not exposed; retrying through the platform agentic tool path.",
+        attempt: 1,
+      });
+    } else {
+      agentEventBus.emit(parentThreadId, {
+        type: "orchestrator:task_complete",
+        buildId,
+        taskTitle: task.title,
+        specialist: ROLE_LABELS[role],
+        outcome: cliResult.success ? "DONE" : "BLOCKED",
+      });
 
-    return {
-      task,
-      result: cliResult,
-      outcome,
-      success: outcome === "DONE" || outcome === "DONE_WITH_CONCERNS",
-      retries: 0,
-    };
+      return {
+        task,
+        result: cliResult,
+        outcome,
+        success: outcome === "DONE" || outcome === "DONE_WITH_CONCERNS",
+        retries: 0,
+      };
+    }
   }
 
   // ─── Agentic loop path (legacy fallback) ─────────────────────────────────
