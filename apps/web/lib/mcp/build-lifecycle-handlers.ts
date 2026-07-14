@@ -86,7 +86,6 @@ export async function updateFeatureBrief(params: Record<string, unknown>, userId
     await updateFeatureBrief(
       buildId,
       brief as import("@/lib/feature-build-types").FeatureBrief,
-      { actorUserId: userId },
     );
     await updateBuildHappyPathState(userId, {
       intake: {

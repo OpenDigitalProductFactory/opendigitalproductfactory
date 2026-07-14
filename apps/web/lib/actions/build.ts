@@ -207,19 +207,11 @@ export async function approveBuildStart(buildId: string): Promise<{ approvedAt: 
 
 // ─── Update Feature Brief ────────────────────────────────────────────────────
 
-/**
- * Persist the Feature Brief for a build in ideate.
- *
- * @param actorUserId — when set (MCP coworker path), skips HTTP-session auth and
- *   uses this user as the writer (mirrors shipBuild's actorUserId). UI callers
- *   omit it and go through requireBuildAccess().
- */
 export async function updateFeatureBrief(
   buildId: string,
   brief: FeatureBrief,
-  opts?: { actorUserId?: string },
 ): Promise<void> {
-  const userId = opts?.actorUserId ?? await requireBuildAccess();
+  const userId = await requireBuildAccess();
 
   const build = await prisma.featureBuild.findUnique({ where: { buildId } });
   if (!build) throw new Error("Build not found");
