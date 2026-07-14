@@ -1,9 +1,10 @@
 # Forge-Neutral, Offline-Capable Git Integration Design
 
 **Date:** 2026-07-11
-**Status:** Proposed — operator reaction required before implementation
+**Status:** Ratified — Phase 1 implementation in progress
 **Epic:** EP-5410E8EA
 **Kernel decision:** `DI-C6483F614871` — `forge_abstraction_local_first`, composite 11.302, margin 1.785, high confidence, no commandment conflict, structured coverage strong
+**Boundary decision:** `DI-14811CE8E7ED` — bundle a bare local Git/ref-store core; keep full forges as external adapters
 **Decision population:** `external_coding_agent`
 **Related prior art:** `2026-06-18-local-git-and-private-public-segregation-analysis.md`, `2026-06-18-private-public-change-segregation-design.md`, `2026-06-19-hive-contribution-architecture-and-egress-model.md`
 
@@ -12,6 +13,8 @@
 DPF should make a **forge-neutral local integration record and serialized integration ref** the canonical, offline-capable integration point. GitHub remains the first public forge adapter and the public hive/release distribution surface. A self-hosted Forgejo/Gitea adapter is optional. Remote publication is asynchronous and reconciled; it is not evidence that the change was locally integrated correctly.
 
 This is not authorization to change the live remote. The first implementation phases preserve GitHub behavior behind contracts, then remove unnecessary network dependencies from local verification. Remote cutover, mirroring, or installation of a forge requires a later operator decision and its own migration evidence.
+
+Ratification update (2026-07-14): the operator selected in-session implementation for Phase 1. `DI-14811CE8E7ED` resolves the bundled-vs-external boundary: DPF bundles an invisible bare local Git/ref-store core as the source-byte substrate, while GitHub, GitLab, Forgejo, and Gitea remain external forge adapters. Portal/Postgres remains authoritative for review, approval, evidence, Hive/contribution classification, and merge-admission policy.
 
 The key distinction is:
 

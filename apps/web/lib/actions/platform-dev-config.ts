@@ -629,11 +629,11 @@ export async function configureForkSetup(input: {
     select: { upstreamRemoteUrl: true },
   });
   const upstreamUrl = cfg?.upstreamRemoteUrl ?? DEFAULT_UPSTREAM_URL;
-  const match = upstreamUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-  if (!match) {
+  const upstream = (await import("@/lib/forge/github-adapter")).parseGitHubRepositoryUrl(upstreamUrl);
+  if (!upstream) {
     return { success: false, error: `Upstream URL is not a recognizable GitHub repo: ${upstreamUrl}` };
   }
-  const [, upstreamOwner, upstreamRepo] = match;
+  const { owner: upstreamOwner, repo: upstreamRepo } = upstream;
 
   const { forkExistsAndIsFork, createForkAndWait } = await import("@/lib/integrate/github-fork");
 
