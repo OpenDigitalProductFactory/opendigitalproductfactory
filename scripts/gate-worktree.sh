@@ -106,6 +106,7 @@ write_state() {
   lease_id="$2"
   evidence_id="$3"
   status="$4"
+  expires_at_value="$5"
   mkdir -p "$(dirname "$STATE_FILE")"
   node -e '
 const fs = require("node:fs");
@@ -117,10 +118,11 @@ const payload = {
   leaseId: process.argv[5],
   evidenceRecordId: process.argv[6],
   status: process.argv[7],
+  expiresAt: process.argv[8],
   recordedAt: new Date().toISOString()
 };
 fs.writeFileSync(out, JSON.stringify(payload, null, 2) + "\n");
-' "$STATE_FILE" "$BRANCH" "$SHA" "$gate_passed" "$lease_id" "$evidence_id" "$status"
+' "$STATE_FILE" "$BRANCH" "$SHA" "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at_value"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -300,6 +302,7 @@ const evidence = {
   leaseId: process.argv[3],
   branch: process.argv[4],
   sha: process.argv[5],
+  expiresAt: process.argv[15],
   pushBeforeLease: process.argv[13] === "1",
   content: contentMetadata,
   gatePassed: outcome.gatePassed,
@@ -320,7 +323,7 @@ process.stdout.write(JSON.stringify({
   summary: outcome.summary,
   evidence
 }));
-' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE")"
+' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE" "$expires_at")"
 evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
 evidence_success="$(printf '%s' "$evidence_response" | field success)"
 if [ "$evidence_success" != "true" ] && [ "$status" = "blocked_sandbox_drift" ]; then
@@ -344,7 +347,7 @@ fi
 if [ "$evidence_success" = "true" ]; then
   evidence_id="$(printf '%s' "$evidence_response" | field entityId)"
 else
-  write_state false "$lease_id" "" "failed"
+  write_state false "$lease_id" "" "failed" "$expires_at"
   mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id")}" >/dev/null || true
   die "failed to record local integration evidence: $evidence_response"
 fi
@@ -353,7 +356,7 @@ release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(j
 release_success="$(printf '%s' "$release_response" | field success)"
 [ "$release_success" = "true" ] || die "failed to release local-CI lease: $release_response"
 
-write_state "$gate_passed" "$lease_id" "$evidence_id" "$status"
+write_state "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at"
 
 if [ "$gate_passed" = "true" ]; then
   printf '%s\n' "gate passed"

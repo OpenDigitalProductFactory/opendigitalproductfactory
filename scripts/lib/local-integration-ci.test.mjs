@@ -3,9 +3,44 @@
 // CI test job).
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createLocalIntegrationPlan } from "./local-integration-ci.mjs";
+import { createLocalIntegrationPlan, createToolchainFingerprint } from "./local-integration-ci.mjs";
 
 describe("createLocalIntegrationPlan", () => {
+  it("creates a stable toolchain fingerprint for local-CI evidence (BI-76551B2D)", () => {
+    const evidence = createToolchainFingerprint({
+      buildStrategy: "host-next",
+      nodeVersion: "v24.0.0",
+      pnpmVersion: "10.14.0",
+      gitVersion: "git version 2.50.1",
+      platform: "linux",
+      arch: "arm64",
+      lockfileSha256: "lock-sha",
+      nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
+    });
+
+    assert.equal(evidence.toolchainFingerprint.length, 64);
+    assert.deepEqual(evidence.toolchain, {
+      buildStrategy: "host-next",
+      nodeVersion: "v24.0.0",
+      pnpmVersion: "10.14.0",
+      gitVersion: "git version 2.50.1",
+      platform: "linux",
+      arch: "arm64",
+      lockfileSha256: "lock-sha",
+      nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
+    });
+    assert.equal(evidence.toolchainFingerprint, createToolchainFingerprint({
+      arch: "arm64",
+      buildStrategy: "host-next",
+      gitVersion: "git version 2.50.1",
+      lockfileSha256: "lock-sha",
+      nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
+      nodeVersion: "v24.0.0",
+      platform: "linux",
+      pnpmVersion: "10.14.0",
+    }).toolchainFingerprint);
+  });
+
   it("plans a single-branch local integration run", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "doc/build-studio-decision-skill-packs",

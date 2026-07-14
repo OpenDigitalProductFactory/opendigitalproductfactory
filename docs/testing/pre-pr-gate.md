@@ -152,9 +152,10 @@ in a dedicated **non-mutating scratch worktree** (`~/dpf-worktrees/.local-ci-run
 by default) — never in your topic worktree. It records content-addressed
 metadata to `.git/dpf-local-ci-metadata.json` and into MCP evidence: candidate
 ref/SHA, base ref/SHA, integration commit SHA, synthesized tree SHA, command
-list, and timestamps. `DPF_LOCAL_CI_BASE_REF` can point at another local
-accepted-base ref; `DPF_LOCAL_CI_FETCH_BASE=1` / `--fetch-base` is the explicit
-network-refresh mode. `DPF_LOCAL_CI_COMMAND` remains an explicit override. The
+list, timestamps, toolchain fingerprint, and gate-evidence expiry.
+`DPF_LOCAL_CI_BASE_REF` can point at another local accepted-base ref;
+`DPF_LOCAL_CI_FETCH_BASE=1` / `--fetch-base` is the explicit network-refresh
+mode. `DPF_LOCAL_CI_COMMAND` remains an explicit override. The
 old Phase 1 stub is only reachable via `DPF_ALLOW_LOCAL_CI_STUB=1` for contract
 tests and must never be used as release evidence.
 

@@ -408,7 +408,9 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   baseRef: "origin/main",
   baseSha: "base-sha",
   integrationCommitSha: "integration-sha",
-  synthesizedTreeSha: "tree-sha"
+  synthesizedTreeSha: "tree-sha",
+  toolchainFingerprint: "toolchain-sha",
+  toolchain: { nodeVersion: "v24.0.0" }
 }) + "\\n");
 `);
   chmodSync(gitStub, 0o755);
@@ -444,7 +446,12 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
     baseSha: "base-sha",
     integrationCommitSha: "integration-sha",
     synthesizedTreeSha: "tree-sha",
+    toolchainFingerprint: "toolchain-sha",
+    toolchain: { nodeVersion: "v24.0.0" },
   });
+  assert.match(evidenceCall.params.arguments.evidence.expiresAt, /^\d{4}-\d{2}-\d{2}T/);
+  const state = JSON.parse(readFileSync(join(temp, "dpf-local-ci-gate.json"), "utf8"));
+  assert.equal(state.expiresAt, evidenceCall.params.arguments.evidence.expiresAt);
 });
 
 // ── pre-push hook chain + pre-push-gate contract (BI-C74F4DE9) ───────────────

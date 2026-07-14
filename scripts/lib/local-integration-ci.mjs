@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+
 export function integrationBranchName(candidateBranch) {
   return `local-integration/${
     candidateBranch
@@ -22,6 +26,62 @@ export function dockerBuildTag(candidateBranch) {
 // did (and the freshness gate correctly stays green, so nothing else catches
 // it). Verified 2026-07-05: default heap SIGABRT; 8 GiB completes cleanly.
 export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=8192";
+
+function stableJson(value) {
+  if (value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function createToolchainFingerprint(input) {
+  const toolchain = {
+    buildStrategy: input.buildStrategy ?? "unknown",
+    nodeVersion: input.nodeVersion ?? "unknown",
+    pnpmVersion: input.pnpmVersion ?? "unknown",
+    gitVersion: input.gitVersion ?? "unknown",
+    platform: input.platform ?? "unknown",
+    arch: input.arch ?? "unknown",
+    lockfileSha256: input.lockfileSha256 ?? "unknown",
+    nodeOptions: input.nodeOptions ?? "",
+  };
+  return {
+    toolchain,
+    toolchainFingerprint: createHash("sha256").update(stableJson(toolchain)).digest("hex"),
+  };
+}
+
+function commandOutput(command, args) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    shell: process.platform === "win32",
+  });
+  if (result.status !== 0) return "unavailable";
+  return (result.stdout || result.stderr).trim();
+}
+
+function fileSha256(path) {
+  try {
+    return createHash("sha256").update(readFileSync(path)).digest("hex");
+  } catch {
+    return "unavailable";
+  }
+}
+
+export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd() } = {}) {
+  return createToolchainFingerprint({
+    buildStrategy,
+    nodeVersion: process.version,
+    pnpmVersion: commandOutput("pnpm", ["--version"]),
+    gitVersion: commandOutput("git", ["--version"]),
+    platform: process.platform,
+    arch: process.arch,
+    lockfileSha256: fileSha256(`${cwd}/pnpm-lock.yaml`),
+    nodeOptions: buildStrategy === "host-next" ? HOST_BUILD_NODE_OPTIONS : "",
+  });
+}
 
 export function createLocalIntegrationPlan(input) {
   const branch = integrationBranchName(input.candidateBranch);
