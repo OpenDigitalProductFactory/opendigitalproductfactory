@@ -2,7 +2,7 @@
 """BET-5 A/B parity gate: pgvector-store vs live Qdrant on the REAL wiki-pages corpus.
 Extracts the live Qdrant collection, loads it into pgvector exactly as the migration + store do,
 then runs identical top-k searches (ranking + payload-filter) through both and asserts parity."""
-import os, json, urllib.request
+import json, urllib.request
 import psycopg2
 from psycopg2.extras import execute_values
 

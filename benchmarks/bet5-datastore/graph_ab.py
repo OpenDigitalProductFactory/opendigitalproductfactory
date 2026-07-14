@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """BET-5 graph A/B: recursive-CTE traversals vs live Neo4j on the REAL code-graph/EA graph.
 Extracts Neo4j → graph_node/graph_edge in Postgres, then compares downstream-impact + neighbours."""
-import os, json
+import json
 import psycopg2
 from psycopg2.extras import execute_values
 from neo4j import GraphDatabase
@@ -9,7 +9,8 @@ from neo4j import GraphDatabase
 IMPACT = ["DEPENDS_ON","HOSTS","RUNS_ON","LISTENS_ON","MONITORS","MEMBER_OF",
           "ROUTES_THROUGH","CARRIED_BY","CONNECTS_TO","PEER_OF"]
 PG = dict(host="bet5-pggraph", dbname="g", user="g", password="g")
-NEO_PW = open("/neopw.txt").read().strip()
+with open("/neopw.txt") as _pw:
+    NEO_PW = _pw.read().strip()
 KEY = "coalesce(n.productId, n.ciId, n.nodeId, n.slug)"
 
 drv = GraphDatabase.driver("bolt://dpf-neo4j-1:7687", auth=("neo4j", NEO_PW))
