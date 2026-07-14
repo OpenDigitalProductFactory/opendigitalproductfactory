@@ -67,6 +67,15 @@ export type ResilientEventSourceOptions = {
    */
   onNamed?: Record<string, (event: MessageEvent) => void>;
   /**
+   * Called on each server liveness heartbeat frame (`dpf-hb`). The heartbeat is
+   * NOT forwarded to `onMessage`, but a consumer that needs to distinguish
+   * "server event loop is alive" from "the turn produced a data frame" can
+   * observe it here — e.g. a turn-completion watchdog that must not false-fire
+   * on a legitimately slow turn (which still heartbeats) yet must fire under
+   * event-loop saturation (where heartbeats stop). BI-2750EB6F.
+   */
+  onHeartbeat?: () => void;
+  /**
    * If true, the hook will not attempt to reconnect after the server
    * closes the stream cleanly. Default: true (allow reconnect). When false,
    * the heartbeat watchdog is also disabled (a one-shot stream is expected
@@ -154,11 +163,13 @@ export function useResilientEventSource(
         optsRef.current.onMessage(event);
       };
 
-      // Internal liveness listener — resets the watchdog and is never
-      // forwarded to the consumer. This is the frame that keeps an idle
-      // stream (e.g. the system banner) alive between real events.
+      // Internal liveness listener — resets the transport watchdog. Not
+      // forwarded to onMessage, but surfaced via onHeartbeat so a consumer can
+      // observe server-loop liveness (BI-2750EB6F). This is the frame that keeps
+      // an idle stream (e.g. the system banner) alive between real events.
       source.addEventListener(SSE_HEARTBEAT_EVENT, () => {
         armWatchdog();
+        optsRef.current.onHeartbeat?.();
       });
 
       if (optsRef.current.onNamed) {

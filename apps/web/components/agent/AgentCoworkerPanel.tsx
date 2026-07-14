@@ -8,6 +8,7 @@ import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { agentHoldsWebSearchGrant } from "@/lib/tak/agent-web-search-grant";
 import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
 import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
+import { isTurnStalled } from "@/lib/agent/turn-watchdog";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
@@ -125,6 +126,14 @@ function isClearDisabled(
   return !threadId || messages.length === 0 || busy || isClearing;
 }
 
+// BI-2750EB6F: how long a busy turn may go with NO sign of server life (no SSE
+// data frame and no 15s liveness heartbeat) before the client surfaces a failure
+// and clears the spinner. Comfortably above the 15s heartbeat cadence and the
+// 40s transport watchdog, so it only trips when the portal event loop is
+// genuinely saturated/dead — never on a legitimately slow-but-progressing turn.
+const TURN_STALL_LIMIT_MS = 90_000;
+const TURN_WATCHDOG_TICK_MS = 5_000;
+
 export function AgentCoworkerPanel({
   threadId,
   initialMessages,
@@ -150,6 +159,9 @@ export function AgentCoworkerPanel({
   // Count of /api/agent/send requests still settling — drives the composer's
   // "Sending…" window; isBusy keeps covering the whole agent execution.
   const [sendsInFlight, setSendsInFlight] = useState(0);
+  // BI-2750EB6F: last sign of SERVER life (any SSE data frame OR the 15s liveness
+  // heartbeat), driving the turn-completion watchdog effect below.
+  const lastServerActivityRef = useRef<number>(0);
   const [isClearing, startClearing] = useTransition();
   // Embedders that don't thread load state through (e.g. tests rendering the
   // panel directly) get the legacy inference: no threadId means still loading.
@@ -325,7 +337,15 @@ export function AgentCoworkerPanel({
   // periodic DB recovery poll that used to share this effect are split out below.
   const coworkerStreamUrl = isBusy && threadId ? `/api/agent/stream?threadId=${threadId}` : null;
   useResilientEventSource(coworkerStreamUrl, {
+    // BI-2750EB6F: the 15s liveness heartbeat proves the server loop is alive
+    // even between real events — record it so the turn watchdog below does not
+    // false-fire on a slow-but-progressing turn.
+    onHeartbeat: () => {
+      lastServerActivityRef.current = Date.now();
+    },
     onMessage: (event) => {
+      // Any real data frame is also a sign of server life.
+      lastServerActivityRef.current = Date.now();
       try {
         const data = JSON.parse(event.data);
         if (data.type === "tool:start") setCurrentTool(data.tool);
@@ -545,6 +565,36 @@ export function AgentCoworkerPanel({
     return () => clearInterval(recoveryInterval);
   }, [isBusy, threadId]);
 
+  // BI-2750EB6F: turn-completion watchdog. Purely client-side — the ONLY clearer
+  // that keeps working when the portal event loop itself is saturated (the SSE
+  // `done`, the DB recovery poll, and the transport reconnect all need the loop
+  // to make progress). If no server life (data frame OR liveness heartbeat) has
+  // been observed for TURN_STALL_LIMIT_MS while busy, the turn is presumed lost:
+  // surface a failure system message so the user isn't left staring at a silent
+  // spinner, clear isBusy so the composer is usable again, and reset the chips.
+  useEffect(() => {
+    if (!isBusy) return;
+    const watchdog = setInterval(() => {
+      if (!isTurnStalled(lastServerActivityRef.current, Date.now(), TURN_STALL_LIMIT_MS)) return;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `local-turn-timeout-${Date.now()}`,
+          role: "system" as const,
+          content:
+            "The coworker didn't respond — the server may be overloaded right now. Your message was sent; try again in a moment.",
+          agentId: agent.agentId,
+          routeContext: effectiveRoute,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      setIsBusy(false);
+      setCurrentTool(null);
+      setOrchestratorStatus(null);
+    }, TURN_WATCHDOG_TICK_MS);
+    return () => clearInterval(watchdog);
+  }, [isBusy, agent.agentId, effectiveRoute]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -655,6 +705,10 @@ export function AgentCoworkerPanel({
 
     setIsBusy(true);
     setSendsInFlight((count) => count + 1);
+    // BI-2750EB6F: start the turn watchdog's clock — the server has "just been
+    // heard from" (we're about to POST). If nothing (data or heartbeat) arrives
+    // before the deadline, the watchdog effect surfaces a failure.
+    lastServerActivityRef.current = Date.now();
 
     const runtimeMode = resolveCoworkerRuntimeMode({
       pathname,
