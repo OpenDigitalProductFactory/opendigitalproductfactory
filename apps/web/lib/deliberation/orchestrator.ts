@@ -383,6 +383,7 @@ export async function orchestrateDeliberation(
     taskRunBootstrapped = true;
   }
 
+  try {
   // ── Create DeliberationRun row ────────────────────────────────────────
   const adjudicationMode =
     (pattern.outputContract as Record<string, unknown>)?.adjudicationMode;
@@ -710,6 +711,12 @@ export async function orchestrateDeliberation(
     await applyConsensusOutcome(buildId, consensusDecision, branchVotes, prisma);
   }
 
+  // BI-132FC1B9: settle bootstrapped TaskRuns so a failed/timeout caller cannot
+  // leave them in working forever and trip the self-upgrade quiescence drain.
+  if (taskRunBootstrapped && taskRunId) {
+    await settleBootstrapTaskRun(taskRunId, "completed");
+  }
+
   return {
     deliberationRunId: deliberationRun.id,
     taskRunId: taskRunId!,
@@ -721,11 +728,39 @@ export async function orchestrateDeliberation(
     branchBudgetUsed,
     consensusDecision,
   };
+  } catch (err) {
+    if (taskRunBootstrapped && taskRunId) {
+      await settleBootstrapTaskRun(taskRunId, "failed");
+    }
+    throw err;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
+
+
+/**
+ * Mark a TaskRun we bootstrapped for this deliberation as terminal.
+ * Scoped to non-terminal statuses so a concurrent settler cannot clobber a
+ * later outcome. Uses the business taskRunId (not the cuid).
+ */
+async function settleBootstrapTaskRun(
+  taskRunId: string,
+  status: "completed" | "failed",
+): Promise<void> {
+  await prisma.taskRun.updateMany({
+    where: {
+      taskRunId,
+      status: { in: ["active", "working", "queued", "running"] },
+    },
+    data: {
+      status,
+      completedAt: new Date(),
+    },
+  });
+}
 
 async function safeEmit(
   fn: OrchestrateDeliberationInput["emitProgress"] | undefined,

@@ -119,6 +119,53 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 # shellcheck source=installer/lib/state.sh
 . "$SCRIPT_DIR/installer/lib/state.sh"
 
+# --- Worktree core seeding ---------------------------------------------------
+#
+# AGENTS.md documents this unified bootstrap as the one command that prepares a
+# linked worktree: MCP config, worktree-scoped COMPOSE_PROJECT_NAME, and
+# .dpf-worktree-readiness.json. The legacy seed script remains the single owner
+# of that file-writing/classification logic; bootstrap invokes it in core-only
+# mode to avoid the old ensure-dpf-skill-pack -> bootstrap recursion.
+
+is_linked_worktree() {
+  git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  _common="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
+  _main="$(cd "$(dirname "$_common")" && pwd -P)"
+  [ "$_main" != "$REPO_ROOT" ]
+}
+
+seed_worktree_core() {
+  _phase="$1"
+  [ "$DRY_RUN" -eq 1 ] && { info "DRY-RUN: would refresh worktree MCP config, Compose isolation, and readiness marker ($_phase)."; return 0; }
+  [ -f "$SCRIPT_DIR/seed-worktree-mcp.sh" ] || return 0
+  if is_linked_worktree; then
+    if bash "$SCRIPT_DIR/seed-worktree-mcp.sh" "$REPO_ROOT" --core-only >/dev/null; then
+      ok "Worktree core seeded ($_phase): MCP config, Compose isolation, readiness marker."
+    else
+      warn "Worktree core seed failed ($_phase); continuing with toolchain bootstrap."
+    fi
+  fi
+}
+
+seed_worktree_core "pre-toolchain"
+
+# Some contributor surfaces launch this script with pnpm available through a
+# bundled runtime while `node` itself is absent from PATH. pnpm can start, but
+# dependency lifecycle scripts (`node install/check.js`, etc.) then fail. If a
+# known bundled Node runtime exists, expose its bin directory to child processes.
+if ! command -v node >/dev/null 2>&1; then
+  for _node_dir in \
+    "$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin" \
+    "$HOME/.local/share/codex/node/bin" \
+    "$HOME/.codex/node/bin"; do
+    if [ -x "$_node_dir/node" ]; then
+      export PATH="$_node_dir:$PATH"
+      ok "Node runtime added to PATH for bootstrap child processes."
+      break
+    fi
+  done
+fi
+
 # --- Resolve substrate paths -------------------------------------------------
 
 CODEX_CONFIG_PATH="$HOME/.codex/config.toml"
@@ -356,7 +403,12 @@ if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
   if [ -f "$FALLBACK" ]; then
     fallback_args=(--mcp-url "$MCP_ENDPOINT")
     [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
-    exec bash "$FALLBACK" "${fallback_args[@]}"
+    if bash "$FALLBACK" "${fallback_args[@]}"; then
+      seed_worktree_core "post-fallback"
+      exit 0
+    fi
+    fail "Standalone updater failed."
+    exit 1
   fi
   fail "Standalone updater missing at $FALLBACK; cannot proceed."
   exit 1
@@ -710,5 +762,7 @@ if [ "$SHOW_SUBSTRATE" -eq 1 ]; then
   printf '    DPF platform ver  : %s\n' "$EXPECTED_VERSION"
   printf '    State file        : %s\n' "$(dpf_state_path)"
 fi
+
+seed_worktree_core "post-toolchain"
 
 printf '\n'

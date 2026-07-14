@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mocks = vi.hoisted(() => ({
   taskRunFindUnique: vi.fn(),
   taskRunCreate: vi.fn(),
+  taskRunUpdateMany: vi.fn(),
   deliberationRunCreate: vi.fn(),
   deliberationRunUpdate: vi.fn(),
   featureBuildUpdate: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@dpf/db", () => ({
     taskRun: {
       findUnique: mocks.taskRunFindUnique,
       create: mocks.taskRunCreate,
+      updateMany: mocks.taskRunUpdateMany,
     },
     deliberationRun: {
       create: mocks.deliberationRunCreate,
@@ -123,6 +125,7 @@ function mkNodeIdGen() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.extractRoleRecipes.mockReturnValue(new Map());
+  mocks.taskRunUpdateMany.mockResolvedValue({ count: 1 });
   mocks.taskRunCreate.mockResolvedValue({
     id: "taskrun-db-1",
     taskRunId: "taskrun-1",
@@ -214,6 +217,12 @@ describe("orchestrateDeliberation — review pattern", () => {
       decision: "escalate",
       confidence: 0,
     }));
+    expect(mocks.taskRunUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ taskRunId: "taskrun-1" }),
+        data: expect.objectContaining({ status: "completed" }),
+      }),
+    );
     expect(result).toMatchObject({
       deliberationRunId: "delib-1",
       taskRunId: "taskrun-1",
