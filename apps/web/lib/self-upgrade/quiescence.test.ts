@@ -166,7 +166,11 @@ describe("reconcileQuiescenceOnBoot (false-negative 'Upgrade postponed, failed' 
     expect(swapCompleteCalls("failed")).toHaveLength(0);
   });
 
-  it("fails an in-flight run whose target we did NOT boot onto (orphaned)", async () => {
+  it("BOOT mode leaves an in-flight non-target run PENDING — no false 'postponed, failed' (BI-3C6447D5)", async () => {
+    // We booted still on the pre-upgrade bundle (a real mid-swap window: the
+    // promoter has not recreated the portal on the target yet). Failing here is
+    // the false negative that shows "Upgrade postponed, failed" after a
+    // SUCCESSFUL upgrade. Boot mode (staleAfterMs===0) must leave it in-flight.
     prismaMock.quiescenceRunFindMany
       .mockResolvedValueOnce([
         { runId: "QR-2", targetVersion: "x", targetBundleHash: OTHER, triggerRefId: "SUR-2" },
@@ -176,6 +180,25 @@ describe("reconcileQuiescenceOnBoot (false-negative 'Upgrade postponed, failed' 
     const res = await reconcileQuiescenceOnBoot({
       currentVersion: DEPLOYED,
       currentBundleHash: DEPLOYED,
+      logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+
+    expect(res).toEqual({ reconciled: 0, failed: 0 });
+    expect(swapCompleteCalls("failed")).toHaveLength(0);
+    expect(swapCompleteCalls("succeeded")).toHaveLength(0);
+  });
+
+  it("PERIODIC watchdog (staleAfterMs>0) fails a stale in-flight non-target run (genuine orphan)", async () => {
+    prismaMock.quiescenceRunFindMany
+      .mockResolvedValueOnce([
+        { runId: "QR-2b", targetVersion: "x", targetBundleHash: OTHER, triggerRefId: "SUR-2b" },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const res = await reconcileQuiescenceOnBoot({
+      currentVersion: DEPLOYED,
+      currentBundleHash: DEPLOYED,
+      staleAfterMs: 30 * 60 * 1000,
       logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
     });
 
