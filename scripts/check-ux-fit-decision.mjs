@@ -23,6 +23,7 @@
 // verify a persisted DecisionInteraction record (BI-65DEE968 §5).
 
 import { execFileSync } from "node:child_process";
+import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 
 const ATTESTATION_RE = /UX-Fit-Decision:/i;
 
@@ -71,8 +72,9 @@ function git(...args) {
 }
 
 const base = assertSafeRef(process.env.BASE_SHA || "origin/main", "BASE_SHA");
-// Ensure the base ref is present (CI checks out a shallow tree).
-git("fetch", "--no-tags", "--depth=1", "origin", "main");
+// BI-1ADD56FC: never write .git/shallow into a full shared clone (breaks worktrees).
+// Depth is only used when the repo is already shallow (typical GITHUB_ACTIONS checkout).
+fetchOriginMainSharedSafe((args) => git(...args));
 
 const changed = git("diff", "--name-only", `${base}...HEAD`, "--", "apps/web/**/*.tsx")
   .split("\n")
