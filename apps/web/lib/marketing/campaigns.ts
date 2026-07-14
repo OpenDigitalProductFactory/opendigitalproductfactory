@@ -158,33 +158,78 @@ export async function attachToCampaign(input: {
   briefId?: string;
   taskId?: string;
 }): Promise<{ message: string } | { error: string; message: string }> {
-  if (!input.briefId && !input.taskId) {
+  const campaignId = input.campaignId.trim();
+  const briefId = input.briefId?.trim() || undefined;
+  const taskId = input.taskId?.trim() || undefined;
+
+  if (!briefId && !taskId) {
     return { error: "no-target", message: "Provide a briefId or taskId to attach to the campaign." };
   }
   const campaign = await prisma.marketingCampaign.findUnique({
-    where: { campaignId: input.campaignId },
+    where: { campaignId },
     select: { campaignId: true },
   });
   if (!campaign) {
-    return { error: "not-found", message: `Campaign ${input.campaignId} does not exist.` };
+    const [briefWithThatId, taskWithThatId] = await Promise.all([
+      prisma.marketingCampaignBrief.findUnique({
+        where: { briefId: campaignId },
+        select: { briefId: true },
+      }),
+      prisma.marketingAssetTask.findUnique({
+        where: { taskId: campaignId },
+        select: { taskId: true },
+      }),
+    ]);
+    if (briefWithThatId) {
+      return {
+        error: "wrong-campaign-id",
+        message: `The value passed as campaignId looks like a briefId (${campaignId}). Use the MarketingCampaign.campaignId returned by create_marketing_campaign or get_campaign_plan, and pass ${campaignId} as briefId if that is the brief to attach.`,
+      };
+    }
+    if (taskWithThatId) {
+      return {
+        error: "wrong-campaign-id",
+        message: `The value passed as campaignId looks like a taskId (${campaignId}). Use the MarketingCampaign.campaignId returned by create_marketing_campaign or get_campaign_plan, and pass ${campaignId} as taskId if that is the task to attach.`,
+      };
+    }
+    return { error: "not-found", message: `Campaign ${campaignId} does not exist.` };
+  }
+
+  if (briefId) {
+    const brief = await prisma.marketingCampaignBrief.findUnique({
+      where: { briefId },
+      select: { briefId: true },
+    });
+    if (!brief) {
+      return { error: "brief-not-found", message: `Brief ${briefId} does not exist.` };
+    }
+  }
+  if (taskId) {
+    const task = await prisma.marketingAssetTask.findUnique({
+      where: { taskId },
+      select: { taskId: true },
+    });
+    if (!task) {
+      return { error: "task-not-found", message: `Task ${taskId} does not exist.` };
+    }
   }
 
   const attached: string[] = [];
-  if (input.briefId) {
+  if (briefId) {
     await prisma.marketingCampaignBrief.update({
-      where: { briefId: input.briefId },
-      data: { campaignId: input.campaignId },
+      where: { briefId },
+      data: { campaignId },
     });
-    attached.push(`brief ${input.briefId}`);
+    attached.push(`brief ${briefId}`);
   }
-  if (input.taskId) {
+  if (taskId) {
     await prisma.marketingAssetTask.update({
-      where: { taskId: input.taskId },
-      data: { campaignId: input.campaignId },
+      where: { taskId },
+      data: { campaignId },
     });
-    attached.push(`task ${input.taskId}`);
+    attached.push(`task ${taskId}`);
   }
-  return { message: `Attached ${attached.join(" and ")} to campaign ${input.campaignId}.` };
+  return { message: `Attached ${attached.join(" and ")} to campaign ${campaignId}.` };
 }
 
 export async function getCampaignPlan(

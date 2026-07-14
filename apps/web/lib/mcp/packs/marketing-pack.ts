@@ -90,7 +90,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "attach_to_campaign",
     description:
-      "Attach an existing campaign brief and/or asset task to a campaign so it rolls up under one plan (replacing fuzzy title matching with a real link). Provide campaignId plus a briefId and/or taskId.",
+      "Attach an existing campaign brief and/or asset task to a campaign so it rolls up under one plan (replacing fuzzy title matching with a real link). campaignId must be a MarketingCampaign.campaignId returned by create_marketing_campaign or get_campaign_plan; do not pass a briefId or taskId as campaignId. Provide campaignId plus a briefId and/or taskId.",
     inputSchema: {
       type: "object",
       properties: {
