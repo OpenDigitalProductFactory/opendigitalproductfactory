@@ -13,6 +13,8 @@
  * tool that produced it.
  */
 
+import { parseGitHubRepositoryUrl } from "@/lib/forge/github-adapter";
+
 /** The canonical public DPF upstream — the public hive of last resort. */
 export const CANONICAL_UPSTREAM_OWNER = "OpenDigitalProductFactory";
 export const CANONICAL_UPSTREAM_REPO = "opendigitalproductfactory";
@@ -26,9 +28,8 @@ export interface RepoCoords {
 
 /** Parse owner/repo from a GitHub HTTPS or SSH remote URL. */
 export function parseRepoCoords(url: string | null | undefined): RepoCoords | null {
-  if (!url) return null;
-  const m = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-  return m ? { owner: m[1], repo: m[2] } : null;
+  const parsed = parseGitHubRepositoryUrl(url);
+  return parsed ? { owner: parsed.owner, repo: parsed.repo } : null;
 }
 
 function eq(a: string, b: string): boolean {

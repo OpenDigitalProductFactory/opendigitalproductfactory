@@ -14,6 +14,7 @@
  */
 
 import { prisma } from "@dpf/db";
+import { GitHubForgeAdapter, parseGitHubRepositoryUrl } from "@/lib/forge/github-adapter";
 import { getPlatformIdentity, redactHostnames } from "./identity-privacy";
 import { resolveHiveToken } from "./identity-privacy";
 
@@ -131,15 +132,8 @@ export async function loadSource(
 // ─── Repo coordinate parsing ────────────────────────────────────────────────
 
 export function parseGitHubRepo(remoteUrl: string): RepoCoordinates | null {
-  const httpsMatch = remoteUrl.match(/github\.com\/([^/]+)\/([^/.]+)/);
-  if (httpsMatch?.[1] && httpsMatch?.[2]) {
-    return { owner: httpsMatch[1], repo: httpsMatch[2] };
-  }
-  const sshMatch = remoteUrl.match(/github\.com:([^/]+)\/([^/.]+)/);
-  if (sshMatch?.[1] && sshMatch?.[2]) {
-    return { owner: sshMatch[1], repo: sshMatch[2] };
-  }
-  return null;
+  const parsed = parseGitHubRepositoryUrl(remoteUrl);
+  return parsed ? { owner: parsed.owner, repo: parsed.repo } : null;
 }
 
 // ─── Issue payload building ─────────────────────────────────────────────────
@@ -269,12 +263,6 @@ async function recordEscalation(
 
 // ─── GitHub API ─────────────────────────────────────────────────────────────
 
-interface CreateIssueResponse {
-  number?: number;
-  html_url?: string;
-  message?: string;
-}
-
 async function postIssue(args: {
   coordinates: RepoCoordinates;
   token: string;
@@ -282,43 +270,28 @@ async function postIssue(args: {
   labels: string[];
 }): Promise<{ number: number; url: string } | { error: string }> {
   const { coordinates, token, payload, labels } = args;
-  const apiUrl = `https://api.github.com/repos/${coordinates.owner}/${coordinates.repo}/issues`;
+  const adapter = new GitHubForgeAdapter({ token });
+  const result = await adapter.createIssue({
+    repository: { forge: "github", owner: coordinates.owner, repo: coordinates.repo },
+    title: payload.title,
+    body: payload.body,
+    labels,
+    egressClass: "public-hive",
+  });
 
-  let response: Response;
-  try {
-    response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        title: payload.title,
-        body: payload.body,
-        labels,
-      }),
-    });
-  } catch (err) {
-    return { error: `Network error: ${(err as Error).message}` };
+  if (!result.ok) {
+    if (result.category === "retryable" && result.status == null) {
+      return { error: `Network error: ${result.message}` };
+    }
+    if (result.category === "invalid-response" && result.message.includes("unparseable")) {
+      return { error: `GitHub returned ${result.status ?? "unknown"} with unparseable body` };
+    }
+    if (result.category === "invalid-response") {
+      return { error: result.message };
+    }
+    return { error: `GitHub API error: ${result.message}` };
   }
-
-  let data: CreateIssueResponse;
-  try {
-    data = (await response.json()) as CreateIssueResponse;
-  } catch {
-    return { error: `GitHub returned ${response.status} with unparseable body` };
-  }
-
-  if (!response.ok) {
-    const msg = data?.message ?? `status ${response.status}`;
-    return { error: `GitHub API error: ${msg}` };
-  }
-  if (typeof data.number !== "number" || typeof data.html_url !== "string") {
-    return { error: "GitHub response missing number/html_url" };
-  }
-  return { number: data.number, url: data.html_url };
+  return { number: result.remote.number, url: result.remote.url };
 }
 
 // ─── Main entry point ──────────────────────────────────────────────────────

@@ -1,10 +1,11 @@
 # Forge-Neutral, Offline-Capable Git Integration Plan
 
 **Date:** 2026-07-11
-**Status:** Proposed — do not implement until operator ratifies the design direction
+**Status:** Ratified — Phase 1 implementation in progress
 **Epic:** EP-5410E8EA
 **Spec:** `docs/superpowers/specs/2026-07-11-forge-neutral-offline-integration-design.md`
 **Kernel ledger:** DI-C6483F614871
+**Boundary ledger:** DI-14811CE8E7ED
 
 ## Delivery rules
 
@@ -26,7 +27,9 @@ Owner: operator + Enterprise Architect.
 3. Decide signed bundle/release provenance authority.
 4. Update the spec decision log; if options remain architecturally distinct, route each through `principle_decide`.
 
-Exit: no unresolved boundary changes the authority model.
+Status: partially ratified. `DI-14811CE8E7ED` selects the bundled bare local Git/ref-store core plus external forge adapters. Full Forgejo/Gitea remains optional deployment-profile scope, not default bundled architecture. Local-admission target and signed bundle/release provenance authority remain later-phase decisions before Phase 3/6 cutover work.
+
+Exit: no unresolved boundary changes the authority model for the phase being implemented.
 
 ## Phase 1 — Forge contracts and GitHub parity
 

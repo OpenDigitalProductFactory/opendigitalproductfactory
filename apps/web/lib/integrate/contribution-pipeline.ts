@@ -16,6 +16,7 @@ import { redactHostnames } from "@/lib/integrate/identity-privacy";
 import type { ChangeImpactReport } from "@/lib/change-impact";
 import type { SecurityScanResult } from "@/lib/security-scan";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { parseGitHubRepositoryUrl } from "@/lib/forge/github-adapter";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -179,15 +180,8 @@ function generateCommitMessage(input: {
  *   git@github.com:owner/repo.git
  */
 function parseGitHubRepo(remoteUrl: string): { owner: string; repo: string } | null {
-  // HTTPS: https://github.com/owner/repo.git
-  const httpsMatch = remoteUrl.match(/github\.com\/([^/]+)\/([^/.]+)/);
-  if (httpsMatch) return { owner: httpsMatch[1], repo: httpsMatch[2] };
-
-  // SSH: git@github.com:owner/repo.git
-  const sshMatch = remoteUrl.match(/github\.com:([^/]+)\/([^/.]+)/);
-  if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] };
-
-  return null;
+  const parsed = parseGitHubRepositoryUrl(remoteUrl);
+  return parsed ? { owner: parsed.owner, repo: parsed.repo } : null;
 }
 
 // PR creation is now handled by github-api-commit.ts (createBranchAndPR)
