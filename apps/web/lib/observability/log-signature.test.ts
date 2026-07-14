@@ -39,6 +39,25 @@ describe("isErrorLine", () => {
     expect(isErrorLine("")).toBe(false);
     expect(isErrorLine("request completed in 12ms")).toBe(false);
   });
+
+  it("rejects the responses-adapter self-referential outbound-request noise", () => {
+    // The adapter logs its own outbound AI request; when the portal files a PIR
+    // through the AI the body echoes a prior report, so "Error" trips ERROR_TOKEN
+    // and the scanner would file a fresh PIR for its own request (self-loop).
+    expect(
+      isErrorLine(
+        '[responses-adapter] REQUEST to https://chatgpt.com/backend-api/codex/responses | model=gpt-5.4 | tools=0 [none] | stream=true | input=[{"role":"user","content":"Error Report PIR-Y8EA8: New error signature..."}]',
+      ),
+    ).toBe(false);
+    // Plain outbound request line (no echoed report) is likewise not an error.
+    expect(
+      isErrorLine("[responses-adapter] REQUEST to https://chatgpt.com/backend-api/codex/responses | model=gpt-5.4 | stream=true"),
+    ).toBe(false);
+    // Benign OpenAI Responses API SSE start event.
+    expect(isErrorLine('data: {"type":"response.created","response":{"id":"resp_123"}}')).toBe(false);
+    // A genuine error that merely mentions the adapter must still cluster.
+    expect(isErrorLine("[responses-adapter] Error: upstream returned 500 for codex/responses")).toBe(true);
+  });
 });
 
 describe("toTemplate", () => {
