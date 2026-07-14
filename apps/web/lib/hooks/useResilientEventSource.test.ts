@@ -152,3 +152,37 @@ describe("useResilientEventSource heartbeat watchdog", () => {
     expect(MockEventSource.instances).toHaveLength(1);
   });
 });
+
+describe("useResilientEventSource onHeartbeat (BI-2750EB6F)", () => {
+  it("invokes onHeartbeat on each liveness frame without forwarding it to onMessage", () => {
+    const onMessage = vi.fn();
+    const onHeartbeat = vi.fn();
+    renderHook(() =>
+      useResilientEventSource("/api/agent/stream", { onMessage, onHeartbeat }),
+    );
+    act(() => MockEventSource.instances[0].emitOpen());
+
+    act(() => MockEventSource.instances[0].emitNamed(SSE_HEARTBEAT_EVENT, ""));
+    act(() => MockEventSource.instances[0].emitNamed(SSE_HEARTBEAT_EVENT, ""));
+
+    expect(onHeartbeat).toHaveBeenCalledTimes(2);
+    // The heartbeat is server-liveness only — never a data frame for the consumer.
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  it("a heartbeat resets the transport watchdog so no reconnect occurs", () => {
+    const onMessage = vi.fn();
+    const onHeartbeat = vi.fn();
+    renderHook(() =>
+      useResilientEventSource("/api/agent/stream", { onMessage, onHeartbeat }),
+    );
+    act(() => MockEventSource.instances[0].emitOpen());
+    // Heartbeat just before the watchdog window elapses…
+    act(() => vi.advanceTimersByTime(HEARTBEAT_WATCHDOG_MS - 1_000));
+    act(() => MockEventSource.instances[0].emitNamed(SSE_HEARTBEAT_EVENT, ""));
+    // …and the connection survives the original deadline.
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(MockEventSource.instances).toHaveLength(1);
+    expect(onHeartbeat).toHaveBeenCalledTimes(1);
+  });
+});
