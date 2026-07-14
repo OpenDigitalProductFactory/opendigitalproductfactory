@@ -62,6 +62,28 @@ files + the Qdrant callers.
 - Update install docs + the runtime-topology docs to the compressed stack.
 - Confirm `check-*` guards, backup dedup (BET-11), and health surfaces reflect the new set.
 
+### Phase 3b — Self-upgrade decommission of EXISTING installs (BI-922EBB99)
+
+Removing the services from compose only affects **fresh** installs. Instances upgraded via
+self-upgrade (e.g. the maintainer's macOS + Windows boxes) will otherwise keep **orphaned
+Neo4j/Qdrant containers + named volumes + images** — `docker compose up -d` neither removes
+services dropped from the file nor deletes named volumes. So the promoter/self-upgrade path
+needs an explicit, one-time decommission:
+
+1. **Data-safety gate first.** Verify Postgres holds the re-projected data before any
+   teardown (both stores are non-authoritative projections → re-projection check, not a data
+   migration). Abort teardown + log if the gate fails.
+2. **Teardown:** `docker compose rm -sf neo4j qdrant`, remove their named volumes, optional
+   image prune; add `--remove-orphans` to the promoter's `compose up` as a safety net.
+   Idempotent (no-op once decommissioned) and written to the self-upgrade change-record.
+3. **Cross-platform — both runtimes are live targets:** implement in the Mac/Linux `.sh`
+   path (`scripts/setup.sh:134` `docker compose up -d postgres neo4j qdrant`,
+   `.upgrade-workspace/*.sh`, `scripts/promote.sh`) **and** the Windows `.ps1` path
+   (`scripts/setup.ps1`, `scripts/fresh-install.ps1`, `scripts/redeploy-portal.ps1`).
+4. **Installer scripts** stop naming neo4j/qdrant.
+5. **Gated ordering:** only fires after Phase 1/2 cutovers have landed + verified; runs once
+   per install, rollback-aware.
+
 ## Sequencing & rollback
 
 - Vectors (Phase 1) before graph (Phase 2): smaller blast radius, cleaner A/B, and it's the
