@@ -21,14 +21,17 @@
 #   ./scripts/seed-worktree-mcp.sh <path>           # seed a specific worktree
 #   ./scripts/seed-worktree-mcp.sh --force          # overwrite existing files
 #   ./scripts/seed-worktree-mcp.sh <path> --force
+#   ./scripts/seed-worktree-mcp.sh <path> --core-only
 
 set -euo pipefail
 
 target=""
 force=0
+core_only=0
 for arg in "$@"; do
     case "$arg" in
         --force) force=1 ;;
+        --core-only) core_only=1 ;;
         *)
             if [ -z "$target" ]; then
                 target="$arg"
@@ -225,14 +228,18 @@ cat > "$target_abs/.dpf-worktree-readiness.json" <<EOF
 EOF
 ok "Recorded $readiness_state readiness in $target_abs/.dpf-worktree-readiness.json ($readiness_reason)"
 
-step "Ensuring DPF skill pack"
-skill_pack_script="$target_abs/scripts/ensure-dpf-skill-pack.sh"
-if [ -f "$skill_pack_script" ]; then
-    if ! bash "$skill_pack_script" "$target_abs"; then
-        warn "DPF skill pack bootstrap failed; MCP config, Compose isolation, and readiness marker were still written."
-    fi
+if [ "$core_only" -eq 1 ]; then
+    skip "Core-only mode requested; skipping DPF skill pack bootstrap."
 else
-    skip "No DPF skill pack installer found at $skill_pack_script"
+    step "Ensuring DPF skill pack"
+    skill_pack_script="$target_abs/scripts/ensure-dpf-skill-pack.sh"
+    if [ -f "$skill_pack_script" ]; then
+        if ! bash "$skill_pack_script" "$target_abs"; then
+            warn "DPF skill pack bootstrap failed; MCP config, Compose isolation, and readiness marker were still written."
+        fi
+    else
+        skip "No DPF skill pack installer found at $skill_pack_script"
+    fi
 fi
 
 printf '\nDone. Restart Claude Code, Codex, or VS Code in the worktree to pick up the dpf connector and skill pack.\n\n'

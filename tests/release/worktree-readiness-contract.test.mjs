@@ -112,6 +112,22 @@ test("seed-worktree-mcp.sh keeps core worktree setup even when optional skill bo
   }
 });
 
+test("seed-worktree-mcp.sh core-only writes worktree metadata without invoking skill bootstrap", () => {
+  const fixture = createRepoWithWorktree("core-only");
+  try {
+    mkdirSync(join(fixture.worktree, "scripts"), { recursive: true });
+    writeFileSync(join(fixture.worktree, "scripts", "ensure-dpf-skill-pack.sh"), "#!/bin/sh\nexit 42\n");
+
+    run("sh", [seedScript.pathname, fixture.worktree, "--core-only"]);
+
+    assert.match(readFileSync(join(fixture.worktree, ".env"), "utf8"), /^COMPOSE_PROJECT_NAME=dpf-core-only$/m);
+    assert.equal(readReadiness(fixture.worktree).reason, "node_modules_missing");
+    assert.equal(readFileSync(join(fixture.worktree, ".mcp.json"), "utf8"), readFileSync(join(fixture.repo, ".mcp.json"), "utf8"));
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("sync-mcp-worktrees.sh refreshes linked worktrees and stamps readiness markers", () => {
   const fixture = createRepoWithWorktree("sync-topic");
   try {
@@ -145,4 +161,14 @@ test("PowerShell worktree sync/seed scripts retain readiness-marker parity", () 
 
   assert.match(syncPs1, /Copy-WorktreeFile/, "sync script should copy MCP files portably");
   assert.doesNotMatch(syncPs1, /fsutil\s+hardlink/i, "sync script must not regress to D-drive-only hardlinks");
+});
+
+test("unified POSIX bootstrap delegates linked-worktree metadata to seed core", () => {
+  const bootstrap = readRepo("scripts/dpf-bootstrap-agent-toolchain.sh");
+
+  assert.match(bootstrap, /seed-worktree-mcp\.sh/, "bootstrap should invoke the seed script for linked worktree metadata");
+  assert.match(bootstrap, /--core-only/, "bootstrap must avoid recursive skill-pack bootstrap when seeding worktree metadata");
+  assert.match(bootstrap, /pre-toolchain/, "bootstrap should seed Compose isolation before toolchain work");
+  assert.match(bootstrap, /post-toolchain/, "bootstrap should refresh readiness after toolchain work");
+  assert.match(bootstrap, /post-fallback/, "fallback path should refresh readiness too");
 });

@@ -604,6 +604,7 @@ HOOK_PURPOSES = {
     "decision-routing-guard.mjs": "blocks asking the operator a platform decision with no kernel consultation",
     "ux-fit-precheck.mjs": "reminds to run a UX-fit review when editing UI surfaces",
     "spec-plan-doc-precheck.mjs": "reminds to attach a spec/plan/doc when writing gated files",
+    "design-grounding-precheck.mjs": "reminds to review specs and current code substrate before UX/workflow edits",
     "tool-economy-precheck.mjs": "reminds about tool-economy budget when adding tool surface",
     "worktree-create.mjs": "seeds a new worktree with MCP config on WorktreeCreate",
     "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
