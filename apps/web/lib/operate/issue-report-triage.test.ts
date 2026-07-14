@@ -1,5 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { buildIssueBacklogItem, triageIssueReports, llmTriageReport, checkForSpike, _resetCache } from "./issue-report-triage";
+import {
+  buildIssueBacklogItem,
+  triageIssueReports,
+  llmTriageReport,
+  checkForSpike,
+  shouldSuppressIssueReportAsBacklog,
+  _resetCache,
+} from "./issue-report-triage";
 
 // General-path fixture. NOTE: source is "manual" (not "crash_boundary") because
 // crash_boundary reports take the dedicated honest-triage gate (BI-B4F401B3)
@@ -17,6 +24,27 @@ const report = {
 };
 
 beforeEach(() => _resetCache());
+
+describe("shouldSuppressIssueReportAsBacklog (BI-PIR-76694be9)", () => {
+  it("suppresses zero-result discovery cadence status notes", () => {
+    expect(
+      shouldSuppressIssueReportAsBacklog({
+        title: "Filter out zero-result daily discovery triage notifications from backlog",
+        description:
+          "The cadence triage run found no taxonomy gaps. All metrics at zero: processed 0, decisions 0. The digital product estate is clean for this cycle.",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not suppress a real defect report", () => {
+    expect(
+      shouldSuppressIssueReportAsBacklog({
+        title: "Page crash on /ops",
+        description: "ReferenceError: ActionResult is not defined",
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("buildIssueBacklogItem", () => {
   it("creates item with BI-PIR prefix, workType=bug, source=automated-detection", () => {
@@ -87,6 +115,34 @@ describe("triageIssueReports", () => {
     expect(result.created).toBe(0);
     expect(created).toHaveLength(0);
     expect(incrementedTitles).toEqual(["Page crash on /platform/ai/providers/ollama"]);
+  });
+
+  it("acknowledges zero-result discovery notes without creating a BI (BI-PIR-76694be9)", async () => {
+    const zeroResult = {
+      ...report,
+      id: "zr1",
+      reportId: "PIR-WTWQA",
+      title: "Filter out zero-result daily discovery triage notifications from backlog",
+      description:
+        "The 2026-06-26 cadence triage run found no taxonomy gaps. All metrics at zero: processed 0, decisions 0. The digital product estate is clean for this cycle.",
+      severity: "low",
+    };
+    const created: unknown[] = [];
+    const acknowledged: string[] = [];
+    const result = await triageIssueReports(
+      triageDeps({
+        getOpenReports: async () => [zeroResult],
+        createBacklogItem: async (data: unknown) => {
+          created.push(data);
+        },
+        acknowledgeReport: async (id: string) => {
+          acknowledged.push(id);
+        },
+      }),
+    );
+    expect(result.created).toBe(0);
+    expect(created).toHaveLength(0);
+    expect(acknowledged).toEqual(["zr1"]);
   });
 
   it("prevents intra-batch duplicates", async () => {
