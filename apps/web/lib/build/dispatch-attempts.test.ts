@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  formatDispatchAttemptCustomerStatus,
+  formatDispatchFailureAxisPlain,
+  stripDispatchJargon,
+} from "./dispatch-attempt-customer";
+import {
   buildDispatchAttemptData,
   classifyDispatchFailureAxis,
   isUsageLimitDispatchOutput,
@@ -292,5 +297,54 @@ describe("recomputeRootCauseSummary (BI-594B76AB)", () => {
       failureAxis: "auth",
     });
     expect(result.toLowerCase()).toContain("unauthorized");
+  });
+});
+
+describe("BI-F606D0E6 plain-language dispatch surface", () => {
+  it("formatDispatchFailureAxisPlain never echoes technical axis tokens as the only UX", () => {
+    expect(formatDispatchFailureAxisPlain("unknown")).toMatch(/build assistant|could not/i);
+    expect(formatDispatchFailureAxisPlain("usage-limit")).toMatch(/usage limit/i);
+    expect(formatDispatchFailureAxisPlain("timeout")).toMatch(/too long|stopped/i);
+  });
+
+  it("stripDispatchJargon removes coding tool names and raw exit codes", () => {
+    expect(stripDispatchJargon("opencode failed with Exit code 127")).not.toMatch(/\bopencode\b/i);
+    expect(stripDispatchJargon("opencode failed with Exit code 127")).not.toMatch(/exit\s+code\s+127/i);
+    expect(stripDispatchJargon("codex-cli exited exit 1")).not.toMatch(/\bcodex\b/i);
+    expect(stripDispatchJargon("claude-code auth error")).toMatch(/build assistant/i);
+  });
+
+  it("formatDispatchAttemptCustomerStatus prefers plain diagnosis without jargon", () => {
+    const status = formatDispatchAttemptCustomerStatus({
+      success: false,
+      exitCode: 127,
+      failureAxis: "unknown",
+      rootCauseSummary: "opencode: command not found (Exit code 127)",
+    });
+    expect(status).not.toMatch(/\bopencode\b/i);
+    expect(status).not.toMatch(/exit\s+code\s+127/i);
+    expect(status.length).toBeGreaterThan(0);
+  });
+
+  it("formatDispatchAttemptCustomerStatus reports Completed on success", () => {
+    expect(
+      formatDispatchAttemptCustomerStatus({
+        success: true,
+        exitCode: 0,
+        failureAxis: "unknown",
+        rootCauseSummary: null,
+      }),
+    ).toBe("Completed");
+  });
+
+  it("falls back to axis plain language when root cause is null", () => {
+    expect(
+      formatDispatchAttemptCustomerStatus({
+        success: false,
+        exitCode: 1,
+        failureAxis: "auth",
+        rootCauseSummary: null,
+      }),
+    ).toMatch(/signed in/i);
   });
 });

@@ -11,9 +11,11 @@ import { BuildPhaseCostCard } from "./BuildPhaseCostCard";
 
 type Props = {
   projection: BuildProgressVisibility | null;
+  /** When true, Dispatch attempts shows exit codes / tool detail (BI-F606D0E6). */
+  engineerView?: boolean;
 };
 
-export function BuildProgressOperationalPanel({ projection }: Props) {
+export function BuildProgressOperationalPanel({ projection, engineerView = false }: Props) {
   if (!projection) {
     return (
       <div className="flex flex-1 items-center justify-center p-6 text-sm text-[var(--dpf-muted)]">
@@ -116,7 +118,7 @@ export function BuildProgressOperationalPanel({ projection }: Props) {
         <div className="grid gap-3 xl:grid-cols-3">
           <BuildPhaseCostCard phaseRuns={projection.phaseRuns} />
           <BuildSandboxCard sandbox={projection.sandbox} />
-          <BuildDispatchHistoryCard attempts={projection.dispatchHistory} />
+          <BuildDispatchHistoryCard attempts={projection.dispatchHistory} engineerView={engineerView} />
           <BuildVerificationScopedCard verification={projection.verification} />
         </div>
 

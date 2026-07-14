@@ -332,3 +332,11 @@ function normalizeFailureAxis(value: string): BuildFailureAxis {
       return "unknown";
   }
 }
+
+// Client-safe plain-language helpers live in dispatch-attempt-customer.ts so
+// browser bundles never pull this module's `crypto` / prisma imports (BI-F606D0E6 prod-build fix).
+export {
+  formatDispatchAttemptCustomerStatus,
+  formatDispatchFailureAxisPlain,
+  stripDispatchJargon,
+} from "./dispatch-attempt-customer";

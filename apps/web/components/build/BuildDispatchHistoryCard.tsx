@@ -2,10 +2,20 @@
 
 import { useEffect, useRef } from "react";
 import type { BuildDispatchAttemptView } from "@/lib/build/dispatch-attempts";
+import {
+  formatDispatchAttemptCustomerStatus,
+  formatDispatchFailureAxisPlain,
+} from "@/lib/build/dispatch-attempt-customer";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 
 type Props = {
   attempts: BuildDispatchAttemptView[];
+  /**
+   * When false (default), hide tool names, raw exit codes, model ids, and raw
+   * stdout/stderr — EP-BS-UX-HARDENING invariant 3 / BI-F606D0E6. Engineer view
+   * keeps the full technical detail.
+   */
+  engineerView?: boolean;
 };
 
 /**
@@ -15,7 +25,7 @@ type Props = {
  */
 const OPEN_LAST_DISPATCH_ATTEMPT_EVENT = "dpf:open-last-dispatch-attempt";
 
-export function BuildDispatchHistoryCard({ attempts }: Props) {
+export function BuildDispatchHistoryCard({ attempts, engineerView = false }: Props) {
   const latest = attempts.at(-1) ?? null;
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -51,6 +61,7 @@ export function BuildDispatchHistoryCard({ attempts }: Props) {
       ref={sectionRef}
       id="build-dispatch-history"
       className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
+      data-engineer-view={engineerView ? "true" : "false"}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Dispatch attempts</h3>
@@ -60,7 +71,13 @@ export function BuildDispatchHistoryCard({ attempts }: Props) {
         {attempts.length === 0 ? (
           <p className="text-xs text-[var(--dpf-muted)]">No dispatch attempts recorded yet.</p>
         ) : attempts.map((attempt, idx) => {
-          const diagnosis = attempt.rootCauseSummary ?? attempt.failureAxis;
+          const customerStatus = formatDispatchAttemptCustomerStatus({
+            success: attempt.success,
+            exitCode: attempt.exitCode,
+            failureAxis: attempt.failureAxis,
+            rootCauseSummary: attempt.rootCauseSummary,
+          });
+          const engineerDiagnosis = attempt.rootCauseSummary ?? attempt.failureAxis;
           const rawOutput = attempt.stdoutExcerpt ?? attempt.stderrExcerpt;
           const isMostRecent = idx === attempts.length - 1;
           return (
@@ -71,18 +88,35 @@ export function BuildDispatchHistoryCard({ attempts }: Props) {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-medium text-[var(--dpf-text)]">{attempt.taskTitle}</span>
-                <span className="text-[var(--dpf-muted)]">exit {attempt.exitCode ?? "running"} · {attempt.failureAxis}</span>
+                {engineerView ? (
+                  <span className="text-[var(--dpf-muted)]">
+                    exit {attempt.exitCode ?? "running"} · {attempt.failureAxis}
+                  </span>
+                ) : (
+                  <span className="text-[var(--dpf-muted)]">
+                    {attempt.success || attempt.exitCode === 0
+                      ? "ok"
+                      : formatDispatchFailureAxisPlain(attempt.failureAxis)}
+                  </span>
+                )}
               </div>
               <div
                 className="mt-1 text-[var(--dpf-text)]"
-                title="Classified diagnosis — derived from stdout/stderr and the failure axis."
+                title={
+                  engineerView
+                    ? "Classified diagnosis — derived from stdout/stderr and the failure axis."
+                    : "Plain-language outcome for this attempt."
+                }
               >
-                {diagnosis}
+                {engineerView ? engineerDiagnosis : customerStatus}
               </div>
-              {attempt.model && (
+              {engineerView && attempt.model && (
                 <div className="mt-1 text-[var(--dpf-muted)]">{attempt.model}</div>
               )}
-              {rawOutput && (
+              {engineerView && attempt.providerId && (
+                <div className="mt-1 text-[var(--dpf-muted)]">provider: {attempt.providerId}</div>
+              )}
+              {engineerView && rawOutput && (
                 <details className="mt-2">
                   <summary className="cursor-pointer text-[10px] uppercase text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
                     Raw stdout/stderr
