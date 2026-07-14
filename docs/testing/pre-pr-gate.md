@@ -152,12 +152,24 @@ in a dedicated **non-mutating scratch worktree** (`~/dpf-worktrees/.local-ci-run
 by default) — never in your topic worktree. It records content-addressed
 metadata to `.git/dpf-local-ci-metadata.json` and into MCP evidence: candidate
 ref/SHA, base ref/SHA, integration commit SHA, synthesized tree SHA, command
-list, timestamps, toolchain fingerprint, and gate-evidence expiry.
+list, timestamps, whether the accepted base came from a local ref or explicit
+`--fetch-base`, toolchain fingerprint, and gate-evidence expiry. The evidence
+also carries a `resilience` envelope: `publicationMode` (`deferred` by default
+or explicit `push-before-lease`), `acceptedBaseMode` (`local-ref` or
+`fetch-base`), and `networkTolerance` (`offline-capable` only when publication
+is deferred and the accepted base was local).
 `DPF_LOCAL_CI_BASE_REF` can point at another local accepted-base ref;
 `DPF_LOCAL_CI_FETCH_BASE=1` / `--fetch-base` is the explicit network-refresh
 mode. `DPF_LOCAL_CI_COMMAND` remains an explicit override. The
 old Phase 1 stub is only reachable via `DPF_ALLOW_LOCAL_CI_STUB=1` for contract
 tests and must never be used as release evidence.
+
+The network-disconnect proof is encoded in
+`tests/release/local-ci-gate-contract.test.mjs`: the contract denies network
+Git verbs during `gate-worktree.sh`, records local-only evidence with
+`networkTolerance=offline-capable`, then runs `.githooks/pre-push-gate` through
+the same no-network Git wrapper and proves the same unexpired SHA-bound record
+is sufficient for later publication.
 
 **The pre-push hook chain is active by default.** The local `pre-push` file is
 gitignored (git-lfs generates it), so the enforced logic ships as the tracked
