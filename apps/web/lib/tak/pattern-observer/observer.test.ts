@@ -228,6 +228,33 @@ describe("observeCoworkerPatterns", () => {
     });
   });
 
+  it("does NOT assert tool-surface overload from an execution-derived surface (BI-98D17D0B)", async () => {
+    // Periodic-review path: no toolSurface passed, so the observer reconstructs
+    // it from executed tools. Even 18 distinct calls with degraded selection —
+    // which would trip the count-proxy overload — must NOT fire, because the
+    // execution-derived surface omits the ~68-tool attached read baseline and is
+    // not a valid basis for an overload assertion.
+    const execs = Array.from({ length: 18 }, (_, i) =>
+      toolExecution({ toolName: `called_tool_${i}`, success: i % 3 !== 0 }),
+    );
+    const deps = makeDeps({ toolExecutions: execs });
+
+    await observeCoworkerPatterns(
+      { agentId: "agent-build", routeContext: "/build" /* no toolSurface, no window */ },
+      deps,
+    );
+
+    const submit = vi.mocked(deps.submitCoworkerSelfAssessment);
+    if (submit.mock.calls.length > 0) {
+      const needs = submit.mock.calls[0]?.[0]?.needs ?? [];
+      expect(
+        needs.some((n) => n.evidenceJson?.classifier === "tool-surface-overload"),
+      ).toBe(false);
+    }
+    // (No overload candidate ⇒ possibly no assessment submitted at all — both are
+    // acceptable; the invariant is simply that no tool-surface-overload need fires.)
+  });
+
   it("submits a code or convention need for a repeated successful manual workflow", async () => {
     const deps = makeDeps({
       taskRuns: [

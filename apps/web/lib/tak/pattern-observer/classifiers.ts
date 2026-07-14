@@ -98,8 +98,25 @@ function selectionIsDegraded(selection?: ToolSelectionAccuracy | null): boolean 
 export function classifyToolSurfaceOverload(
   assessment: ToolSurfaceAssessment,
   selection?: ToolSelectionAccuracy | null,
+  /**
+   * True when `assessment` was computed from the surface the runtime actually
+   * ATTACHED (baseline + grants). False when it was reconstructed from executed
+   * tools (the periodic-review fallback), which structurally omits every
+   * attached-but-uncalled tool — including the ~68-tool read baseline — and so
+   * is not a valid basis for an overload assertion (BI-98D17D0B). Defaults true
+   * for callers that always pass a real attached surface.
+   */
+  surfaceReflectsAttached: boolean = true,
 ): CoworkerCapabilityNeedInput | null {
   const windowKnown = assessment.windowShare !== null;
+
+  // An execution-derived surface omits the attached-but-uncalled baseline, so
+  // its toolCount/definition-token estimate understates the real surface. Never
+  // assert overload (or caution) from it — the count is measured against the
+  // wrong denominator. Evidence-before-diagnosis: assess overload only from the
+  // attached surface (BI-98D17D0B). The window-share path needs a live window
+  // too, which the executions fallback never carries.
+  if (!surfaceReflectsAttached) return null;
 
   // Two overload regimes, only one of which is self-evidently real:
   //  • window KNOWN and definitions crowd it (zone === "overload") — mechanistic

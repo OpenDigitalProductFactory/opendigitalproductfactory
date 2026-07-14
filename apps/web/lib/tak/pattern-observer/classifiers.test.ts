@@ -195,6 +195,37 @@ describe("pattern observer classifiers", () => {
         severity: "important",
       });
     });
+
+    // BI-98D17D0B: an execution-derived surface (periodic-review fallback) omits
+    // the attached-but-uncalled read baseline, so it is not a valid basis for an
+    // overload assertion — the classifier must suppress every zone when the
+    // surface does not reflect the attached set.
+    it("suppresses overload/caution when the surface does not reflect the attached set", () => {
+      const degraded: ToolSelectionAccuracy = { total: 10, succeeded: 6, accuracy: 0.6, perTool: {} };
+      // Even a would-be degraded-selection proxy overload is suppressed…
+      expect(classifyToolSurfaceOverload(proxyOverload, degraded, false)).toBeNull();
+      // …and a would-be window-known overload is suppressed…
+      const knownOverload: ToolSurfaceAssessment = {
+        toolCount: 40, estDefinitionTokens: 9000, exceedsLocalCliff: true, windowShare: 0.4, zone: "overload",
+      };
+      expect(classifyToolSurfaceOverload(knownOverload, null, false)).toBeNull();
+      // …and a caution surface is suppressed too.
+      expect(
+        classifyToolSurfaceOverload(
+          { toolCount: 12, estDefinitionTokens: 2200, exceedsLocalCliff: false, windowShare: 0.16, zone: "caution" },
+          null,
+          false,
+        ),
+      ).toBeNull();
+    });
+
+    it("still fires for a real attached surface (surfaceReflectsAttached defaults true)", () => {
+      const degraded: ToolSelectionAccuracy = { total: 10, succeeded: 6, accuracy: 0.6, perTool: {} };
+      expect(classifyToolSurfaceOverload(proxyOverload, degraded, true)).toMatchObject({
+        kind: "tool",
+        severity: "important",
+      });
+    });
   });
 
   describe("classifyRepeatedSuccess", () => {

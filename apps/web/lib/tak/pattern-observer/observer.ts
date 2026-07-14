@@ -510,6 +510,14 @@ export async function observeCoworkerPatterns(
     loadTaskRuns(input, window, resolved),
   ]);
 
+  // BI-98D17D0B: an explicitly-provided surface reflects the tools the runtime
+  // actually ATTACHED (baseline + grants). The executions fallback reconstructs
+  // the surface from tools that were CALLED — it structurally omits every
+  // attached-but-uncalled tool, including the ~68-tool read baseline the runtime
+  // always attaches. Overload is a property of the ATTACHED surface, so the
+  // classifier must know which it is looking at and never assert overload from
+  // the incomplete execution-derived view.
+  const surfaceReflectsAttached = input.toolSurface != null;
   const toolSurface = input.toolSurface ?? toolSurfaceFromExecutions(toolExecutions);
   const toolSurfaceAssessment = resolved.assessToolSurface({
     tools: toolSurface,
@@ -522,8 +530,13 @@ export async function observeCoworkerPatterns(
   const grantCandidates = classifyGrantDenials(toolExecutions);
   // Pass observed tool-selection accuracy so a count-proxy overload (window
   // unknown, surface past the local cliff) is only asserted when selection is
-  // actually degrading — not on the raw count alone (BI-3346DC28).
-  const toolSurfaceNeed = classifyToolSurfaceOverload(toolSurfaceAssessment, toolSelectionAccuracy);
+  // actually degrading — not on the raw count alone (BI-3346DC28) — and pass
+  // whether the surface reflects the true attached set (BI-98D17D0B).
+  const toolSurfaceNeed = classifyToolSurfaceOverload(
+    toolSurfaceAssessment,
+    toolSelectionAccuracy,
+    surfaceReflectsAttached,
+  );
   const toolSurfaceCandidates: CandidateNeed[] = toolSurfaceNeed
     ? [{ classifier: "tool-surface-overload", need: toolSurfaceNeed }]
     : [];
