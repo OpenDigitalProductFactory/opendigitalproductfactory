@@ -167,10 +167,11 @@ gitignored (git-lfs generates it), so the enforced logic ships as the tracked
 `scripts/lib/ensure-pre-push-hook.mjs`) converges the local shim to delegate to
 it (a hand-rolled custom hook is never clobbered; the install prints a warning
 instead). The gate refuses a push when the latest local-CI gate record is
-missing, belongs to a different branch/SHA, or has `gatePassed=false`. Not
-everything needs a record: docs-only diffs vs the configured comparison base,
-delete/tag-only pushes, detached HEAD, and `main` (merge-queue-governed) pass
-through. For offline/forge-neutral installs, `DPF_PREPUSH_BASE_REF=<ref>`
+missing, belongs to a different branch/SHA, has `gatePassed=false`, has no
+`expiresAt`, or is past `expiresAt`. Not everything needs a record: docs-only
+diffs vs the configured comparison base, delete/tag-only pushes, detached HEAD,
+and `main` (merge-queue-governed) pass through. For offline/forge-neutral
+installs, `DPF_PREPUSH_BASE_REF=<ref>`
 changes the docs-only comparison base to a local accepted-base ref (default:
 `origin/main`); if that configured ref is missing, the hook requires the normal
 SHA-bound gate record instead of silently falling back.

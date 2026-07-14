@@ -524,10 +524,44 @@ test("pre-push-gate passes with a matching passing gate record for branch+SHA", 
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
   const sha = g(["rev-parse", "HEAD"]);
-  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({ branch: "feat/topic", sha, gatePassed: true }));
+  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({
+    branch: "feat/topic",
+    sha,
+    gatePassed: true,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  }));
   const result = runGateHook(dir, { input: refsLine(g) });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /local-CI gate passed/);
+});
+
+test("pre-push-gate blocks an expired matching gate record", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+  const sha = g(["rev-parse", "HEAD"]);
+  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({
+    branch: "feat/topic",
+    sha,
+    gatePassed: true,
+    expiresAt: "2000-01-01T00:00:00.000Z",
+  }));
+  const result = runGateHook(dir, { input: refsLine(g) });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /local-CI gate record expired/);
+  assert.match(result.stderr, /pnpm run pregate/);
+});
+
+test("pre-push-gate blocks a matching gate record without expiry metadata", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+  const sha = g(["rev-parse", "HEAD"]);
+  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({ branch: "feat/topic", sha, gatePassed: true }));
+  const result = runGateHook(dir, { input: refsLine(g) });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /missing expiresAt/);
+  assert.match(result.stderr, /pnpm run pregate/);
 });
 
 test("pre-push-gate blocks a stale record (older SHA) and calls out the mismatch", () => {
@@ -677,7 +711,12 @@ exit 0
 
   // With a passing record the whole chain goes green.
   const sha = g(["rev-parse", "HEAD"]);
-  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({ branch: "feat/topic", sha, gatePassed: true }));
+  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({
+    branch: "feat/topic",
+    sha,
+    gatePassed: true,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  }));
   const ok = spawnSync("sh", [prePushHook, "origin", "https://example.invalid/repo.git"], {
     cwd: dir,
     encoding: "utf8",
