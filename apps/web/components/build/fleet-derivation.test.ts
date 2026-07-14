@@ -67,9 +67,12 @@ function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
 }
 
 describe("deriveQueueState", () => {
-  it("returns idle for ideate / plan / ship / complete phases", () => {
-    expect(deriveQueueState(makeBuild({ phase: "ideate" }))).toEqual({ kind: "idle" });
-    expect(deriveQueueState(makeBuild({ phase: "plan" }))).toEqual({ kind: "idle" });
+  it("counts ideate / plan as running in-flight, ship / complete as idle (BI-5939B62F)", () => {
+    // ideate/plan are active in-flight phases — they must not read as idle, or
+    // the fleet/queue counters show 0 while builds are genuinely in progress.
+    expect(deriveQueueState(makeBuild({ phase: "ideate" }))).toEqual({ kind: "running", stepLabel: "Ideating" });
+    expect(deriveQueueState(makeBuild({ phase: "plan" }))).toEqual({ kind: "running", stepLabel: "Planning" });
+    // ship/complete are terminal-ish → still idle.
     expect(deriveQueueState(makeBuild({ phase: "ship" }))).toEqual({ kind: "idle" });
     expect(deriveQueueState(makeBuild({ phase: "complete" }))).toEqual({ kind: "idle" });
   });
@@ -235,6 +238,24 @@ describe("isOperatorFocusEntry", () => {
         null,
       ),
     ).toBe(false);
+  });
+
+  it("keeps quiet ideate/plan OUT of focus even though they now derive to running (BI-5939B62F)", () => {
+    // deriveQueueState(ideate/plan) is now "running" so the fleet counters count
+    // them, but a non-selected, non-attention ideate/plan build stays out of the
+    // operator focus queue.
+    for (const phase of ["ideate", "plan"] as const) {
+      expect(
+        isOperatorFocusEntry(
+          {
+            build: makeBuild({ buildId: `FB-${phase}`, phase }),
+            queueState: { kind: "running", stepLabel: phase === "ideate" ? "Ideating" : "Planning" },
+            needsAttention: false,
+          },
+          null,
+        ),
+      ).toBe(false);
+    }
   });
 
   it("keeps the selected build visible even when it is otherwise parked", () => {

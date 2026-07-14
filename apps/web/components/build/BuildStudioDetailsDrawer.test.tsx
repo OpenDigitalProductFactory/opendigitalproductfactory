@@ -289,7 +289,14 @@ describe("BuildStudio DetailsDrawer integration", () => {
       <BuildStudio
         builds={[
           makeBuild({ buildId: "FB-RUNRUNRUN", phase: "build" }),
-          makeBuild({ buildId: "FB-IDLEEEEEE", phase: "ideate" }),
+          // BI-5939B62F: ideate/plan now derive to "running", so use a still-idle
+          // phase (ship with acceptance recorded → idle, not needs-you) to keep
+          // the running → idle sort covered.
+          makeBuild({
+            buildId: "FB-IDLEEEEEE",
+            phase: "ship",
+            acceptanceMet: true as unknown as FeatureBuildRow["acceptanceMet"],
+          }),
         ]}
         portfolios={[]}
         governedBacklogEnabled
