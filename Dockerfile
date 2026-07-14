@@ -8,7 +8,9 @@ WORKDIR /app
 FROM base AS dev
 WORKDIR /workspace
 RUN apk add --no-cache git postgresql16-client
-CMD ["sh", "-c", "pnpm install && pnpm --filter @dpf/db exec prisma generate && pnpm --filter web dev"]
+# BI-0DF1F354: preflight stops cleanly when the bind-mounted worktree is gone
+# (exit 0) so Docker does not thrash pnpm/next forever.
+CMD ["sh", "-c", "node scripts/lib/dev-portal-workspace-preflight.mjs && pnpm install && pnpm --filter @dpf/db exec prisma generate && pnpm --filter web dev"]
 
 # ─── Stage 2: deps ────────────────────────────────────────────────────────────
 FROM base AS deps

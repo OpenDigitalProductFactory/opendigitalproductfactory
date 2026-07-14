@@ -583,7 +583,10 @@ services:
     build:
       context: .
       target: dev
-    restart: unless-stopped
+    # BI-0DF1F354: never infinite-restart when the leased worktree vanishes.
+    # Cap crash restarts; missing-workspace preflight exits 0 so it does not
+    # thrash even under unless-stopped semantics.
+    restart: "on-failure:5"
     logging: *default-logging
     profiles: ["dev"]
     ports:
@@ -597,6 +600,8 @@ services:
       QDRANT_INTERNAL_URL: http://dev-qdrant:6333
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DPF_ENVIRONMENT: dev
+      # Preflight reads cwd (/workspace); override only for tests.
+      DPF_DEV_PORTAL_WORKSPACE_ROOT: /workspace
       AUTH_SECRET: dev_secret_change_me
       AUTH_TRUST_HOST: "true"
       CREDENTIAL_ENCRYPTION_KEY: dev_only_key_not_for_production_0000
