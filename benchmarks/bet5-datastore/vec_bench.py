@@ -2,7 +2,7 @@
 """BET-5 vector benchmark: pgvector+HNSW vs Qdrant on 768-dim cosine k-NN.
 Synthetic random-on-sphere vectors (hardest case for ANN → conservative recall).
 Measures: load time, index build, query latency p50/p95, recall@k vs exact."""
-import os, sys, time, json, statistics, urllib.request
+import os, time, json, urllib.request
 import numpy as np
 import psycopg2
 from psycopg2.extras import execute_values
@@ -57,7 +57,6 @@ rows = [(i, "[" + ",".join(f"{x:.6f}" for x in base[i]) + "]") for i in range(N)
 execute_values(cur, "INSERT INTO bench_vec (id, emb) VALUES %s", rows, page_size=2000)
 pg_insert = time.time()-t
 t = time.time()
-cur.execute("SET maxlockperzone_dummy TO DEFAULT" if False else "SELECT 1")
 cur.execute("CREATE INDEX ON bench_vec USING hnsw (emb vector_cosine_ops) WITH (m=16, ef_construction=64)")
 pg_build = time.time()-t
 pg_qvecs = ["[" + ",".join(f"{x:.6f}" for x in qs[i]) + "]" for i in range(Q)]
@@ -75,7 +74,7 @@ for ef in EFS:
 
 # ---- Qdrant ----
 try: qreq(f"/collections/{COLL}", "DELETE")
-except Exception: pass
+except Exception: pass  # best-effort: benchmark collection may not exist yet
 qreq(f"/collections/{COLL}", "PUT", {"vectors": {"size": DIM, "distance": "Cosine"},
       "hnsw_config": {"m": 16, "ef_construct": 64}})
 t = time.time()
@@ -97,7 +96,7 @@ for ef in EFS:
         hits += len(set(got) & set(exact[i].tolist()))
     qd_res[ef] = (hits/(Q*K), pct(lat,0.5), pct(lat,0.95))
 try: qreq(f"/collections/{COLL}", "DELETE")
-except Exception: pass
+except Exception: pass  # best-effort cleanup: ignore if already deleted
 
 print("\n===================== RESULTS =====================", flush=True)
 print(f"insert {N} vecs:  pgvector {pg_insert:.1f}s   Qdrant {qd_insert:.1f}s")

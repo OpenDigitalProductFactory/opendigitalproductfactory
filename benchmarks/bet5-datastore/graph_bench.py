@@ -2,7 +2,7 @@
 """BET-5 graph benchmark: Postgres recursive-CTE vs Neo4j on code-graph traversal.
 Synthetic DAG sized to the LIVE code-graph (24.8k nodes / 31.7k edges). Workloads:
 (1) bounded 3-hop neighborhood, (2) full transitive impact (reverse reachability)."""
-import os, time, statistics
+import os, time
 import numpy as np
 import psycopg2
 from neo4j import GraphDatabase
