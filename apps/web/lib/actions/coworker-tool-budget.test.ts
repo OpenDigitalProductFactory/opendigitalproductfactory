@@ -13,8 +13,8 @@ import {
 } from "./coworker-tool-budget";
 
 describe("deriveCoworkerToolCap", () => {
-  it("keeps the full 48 ceiling at a 32k window (capable-model line)", () => {
-    expect(deriveCoworkerToolCap(32_768)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  it("caps an exact 32k local window at the 15-tool accuracy cliff", () => {
+    expect(deriveCoworkerToolCap(32_768)).toBe(15);
   });
 
   it("caps a cliff-prone 24,576 window at the 15-tool accuracy cliff (BI-2B2F59EB)", () => {
@@ -44,8 +44,8 @@ describe("deriveCoworkerToolCap", () => {
   it("applies the accuracy-cliff ceiling only below the capable-model line", () => {
     // Just below 32k: cliff-prone → bounded at 15 despite window-fit allowing more.
     expect(deriveCoworkerToolCap(31_999)).toBe(15);
-    // At/above 32k: capable → full window-fit ceiling.
-    expect(deriveCoworkerToolCap(32_768)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+    // Just above 32k: capable → full window-fit ceiling.
+    expect(deriveCoworkerToolCap(32_769)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
   });
 
   it("is monotonic — a larger window never yields fewer tools", () => {

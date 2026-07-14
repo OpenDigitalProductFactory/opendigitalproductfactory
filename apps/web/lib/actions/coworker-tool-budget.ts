@@ -78,16 +78,17 @@ export const ACCURACY_CLIFF_PRONE_MAX_CONTEXT = 32_768;
  * load_tools round-trips, never a failure. `null`/unknown (no small-context
  * local model) → the full 48.
  *
- *   32_768 → 48 (capable; ceiling)   24_576 → 15 (accuracy cliff)   16_000 → 12 (floor)   null → 48
+ *   32_768 → 15 (accuracy cliff)   32_769 → 48 (capable; ceiling)   16_000 → 12 (floor)   null → 48
  */
 export function deriveCoworkerToolCap(servedContextTokens: number | null | undefined): number {
   if (!servedContextTokens || servedContextTokens <= 0) return MAX_COWORKER_ATTACHED_TOOLS;
   const toolBudgetTokens = servedContextTokens - COWORKER_NON_TOOL_RESERVE_TOKENS;
   const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
   // A cliff-prone small local model also caps at the selection cliff, not just
-  // the window fit. Larger/capable windows keep the full window-fit ceiling.
+  // the window fit. 32k local contexts still sit on the selection-accuracy
+  // cliff; larger/capable windows keep the full window-fit ceiling.
   const ceiling =
-    servedContextTokens < ACCURACY_CLIFF_PRONE_MAX_CONTEXT
+    servedContextTokens <= ACCURACY_CLIFF_PRONE_MAX_CONTEXT
       ? Math.min(MAX_COWORKER_ATTACHED_TOOLS, LOCAL_TOOL_SELECTION_CLIFF)
       : MAX_COWORKER_ATTACHED_TOOLS;
   return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(ceiling, fitted));
