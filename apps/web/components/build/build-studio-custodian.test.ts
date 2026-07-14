@@ -8,7 +8,11 @@ import {
   deriveBuildStudioWorkflowAction,
   type BuildStudioWorkflowAction,
 } from "./build-studio-workflow-actions";
-import { deriveBuildStudioCustodianPrompt } from "./build-studio-custodian";
+import {
+  deriveBuildStudioCustodianPrompt,
+  hasNoReleasableDiff,
+  isEmptyDiffHonestOutcome,
+} from "./build-studio-custodian";
 
 function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
   return {
@@ -358,5 +362,93 @@ describe("deriveBuildStudioCustodianPrompt — terminal abandoned (BI-A2F3FA9D)"
 
     expect(action.kind).toBe("escalated-to-human");
     expect(prompt).toBeNull();
+  });
+});
+
+// BI-9C66860E — empty-diff honest status (EP-BS-UX-HARDENING invariant 5)
+describe("empty-diff honest status (BI-9C66860E)", () => {
+  it("hasNoReleasableDiff is true for null/whitespace patch+summary", () => {
+    expect(hasNoReleasableDiff({ diffPatch: null, diffSummary: null })).toBe(true);
+    expect(hasNoReleasableDiff({ diffPatch: "  ", diffSummary: "" })).toBe(true);
+    expect(hasNoReleasableDiff({ diffPatch: "diff --git a/x b/x\n+", diffSummary: null })).toBe(false);
+  });
+
+  it("isEmptyDiffHonestOutcome is false mid-coding without quiet/terminal step", () => {
+    const build = makeBuild({
+      phase: "build",
+      diffPatch: null,
+      diffSummary: null,
+      buildExecState: { step: "deps_installed", retryCount: 0, startedAt: "2026-06-29T12:12:00.000Z" },
+    });
+    expect(
+      isEmptyDiffHonestOutcome({
+        build,
+        progressVisibility: progress({
+          quietAgent: { quiet: false, minutesQuiet: 1, lastObservableSignalAt: "2026-06-29T12:19:00.000Z" },
+        }),
+      }),
+    ).toBe(false);
+  });
+
+  it("surfaces a specific no-changes card instead of generic quiet when empty-diff + quiet", () => {
+    const build = makeBuild({
+      phase: "build",
+      diffPatch: null,
+      diffSummary: null,
+      uxVerificationStatus: null,
+      buildExecState: { step: "complete", retryCount: 0, startedAt: "2026-06-29T12:00:00.000Z" },
+    });
+    const action: BuildStudioWorkflowAction = {
+      kind: "retry-build",
+      title: "Retry",
+      message: "Retry the build.",
+      primaryLabel: "Retry build",
+      targetPhase: null,
+      disabledReason: null,
+      coworkerLabel: "Retry with coworker",
+      coworkerPrompt: "Retry the build.",
+    };
+    const prompt = deriveBuildStudioCustodianPrompt({
+      build,
+      action,
+      progressVisibility: progress({
+        quietAgent: { quiet: true, minutesQuiet: 17, lastObservableSignalAt: "2026-06-29T12:00:00.000Z" },
+      }),
+    });
+
+    expect(prompt).not.toBeNull();
+    expect(prompt?.title).toBe("This build finished without changes to deploy.");
+    expect(prompt?.statusLabel).toBe("No changes to deploy");
+    expect(prompt?.title).not.toBe("This build has gone quiet.");
+    expect(prompt?.whyNow).toMatch(/no source changes|nothing to release/i);
+    expect(prompt?.recommendedAction).toMatch(/Retry|refine/i);
+    expect(prompt?.details.join(" ")).toMatch(/no releasable/i);
+    expect(prompt?.primaryAction).toBe("workflow");
+  });
+
+  it("surfaces empty-diff honest card on ship phase (deploy refused, no releasable diff)", () => {
+    const build = makeBuild({
+      phase: "ship",
+      diffPatch: "",
+      diffSummary: null,
+      uxVerificationStatus: "complete",
+    });
+    const action: BuildStudioWorkflowAction = {
+      kind: "advance-phase",
+      title: "Release",
+      message: "Ship.",
+      primaryLabel: "Deploy",
+      targetPhase: "complete",
+      disabledReason: null,
+      coworkerLabel: "Ship with coworker",
+      coworkerPrompt: "Ship the build.",
+    };
+    const prompt = deriveBuildStudioCustodianPrompt({
+      build,
+      action,
+      progressVisibility: progress(),
+    });
+    expect(prompt?.statusLabel).toBe("No changes to deploy");
+    expect(prompt?.title).toContain("without changes to deploy");
   });
 });
