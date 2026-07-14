@@ -87,11 +87,16 @@ export function ContainerResourceTable() {
           </thead>
           <tbody>
             {rows.map((row) => {
-              const hasRestarts = row.restarts !== null && row.restarts > 0;
+              const restartCount = row.restarts !== null ? Math.round(row.restarts) : null;
+              // BI-0DF1F354: elevate crash-loop-scale restart counts so dev-portal
+              // thrash (observed 262) is visible on Platform Health, not a soft "!".
+              const crashLoopish = restartCount !== null && restartCount >= 10;
+              const hasRestarts = restartCount !== null && restartCount > 0;
               return (
                 <tr
                   key={row.name}
                   className="border-t border-[var(--dpf-border)]"
+                  data-crash-loop={crashLoopish ? "true" : undefined}
                 >
                   <td className="px-3 py-1.5 text-[var(--dpf-text)] font-mono">
                     {row.name.replace(/^dpf-/, "")}
@@ -111,11 +116,20 @@ export function ContainerResourceTable() {
                   </td>
                   <td
                     className={`px-3 py-1.5 text-right ${
-                      hasRestarts ? "text-[var(--dpf-warning)] font-semibold" : "text-[var(--dpf-text)]"
+                      crashLoopish
+                        ? "text-[var(--dpf-danger)] font-semibold"
+                        : hasRestarts
+                          ? "text-[var(--dpf-warning)] font-semibold"
+                          : "text-[var(--dpf-text)]"
                     }`}
+                    title={
+                      crashLoopish
+                        ? "High restart count — likely crash-loop (e.g. missing worktree for dev-portal)"
+                        : undefined
+                    }
                   >
-                    {row.restarts !== null ? Math.round(row.restarts) : "--"}
-                    {hasRestarts ? " !" : ""}
+                    {restartCount !== null ? restartCount : "--"}
+                    {crashLoopish ? " CRASH-LOOP?" : hasRestarts ? " !" : ""}
                   </td>
                 </tr>
               );
