@@ -31,7 +31,7 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 | [`dpf-decision-via-kernel`](skills/dpf-decision-via-kernel/SKILL.md) | dpf-brainstorming | `["*"]` | Maps options to `PRINCIPLE_DIMENSIONS`, invokes `principle_decide`, surfaces ledger, defers on commandment conflict |
 | [`dpf-verify-substrate-first`](skills/dpf-verify-substrate-first/SKILL.md) | (no analog) | `["*"]` | Grep + live-backlog + main-branch sweep before naming new types/tables/epics |
 | [`dpf-file-backlog-item`](skills/dpf-file-backlog-item/SKILL.md) | dpf-verify-substrate-first (`dpf-writing-plans` pending — slice 2) | `["build-specialist", "ops-coordinator", "platform-engineer"]` | Verify substrate → file BI → size → triage → link epic |
-| [`dpf-promote-to-build-studio`](skills/dpf-promote-to-build-studio/SKILL.md) | (no analog) | `["build-specialist", "ops-coordinator"]` | BI → promote → approve Ideate → let BS run |
+| [`dpf-promote-to-build-studio`](skills/dpf-promote-to-build-studio/SKILL.md) | (no analog) | `["build-specialist", "ops-coordinator"]` | Optional BI → BS promotion when the embedded Build Studio surface is the right executor; external host-worktree builds stay first-class via capsules/evidence |
 | [`dpf-worktree-per-session`](skills/dpf-worktree-per-session/SKILL.md) | dpf-finishing-a-development-branch (predecessor) | `["build-specialist", "platform-engineer"]` | `git worktree add` + MCP seed + `COMPOSE_PROJECT_NAME` + compile-ready/source-only verification discipline |
 | [`dpf-pr-with-dco`](skills/dpf-pr-with-dco/SKILL.md) | dpf-finishing-a-development-branch (successor) | `["build-specialist", "platform-engineer"]` | Branch from `origin/main`, `-s` sign-off, overlap-sweep, PR-when-ready |
 | [`dpf-evidence-before-diagnosis`](skills/dpf-evidence-before-diagnosis/SKILL.md) | dpf-systematic-debugging (predecessor) | `["*"]` | Query DB/status before claiming cause; dynamic-analysis output discipline |
@@ -56,7 +56,7 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 The pack owns DPF-native equivalents only for the superpowers capabilities it actually composed with. The rest are deliberately not re-authored — assessed under BI-E3638D04:
 
 - **Already covered by DPF — don't duplicate:** `spec-reviewer` / `plan-document-reviewer` → `dpf-architecture-review`; `code-quality-reviewer` / `requesting-`/`receiving-code-review` → harness `/code-review`, `/review`, `/security-review`, `/simplify`; `subagent-driven-development` / `dispatching-parallel-agents` → `dpf-worktree-per-session` + Build Studio orchestrator-worker + the `Workflow` tool; `writing-skills` → `skill-creator` + this authoring contract.
-- **Left as optional upstream install:** `implementer`, `executing-plans` (Build Studio's build-specialist + `dpf-promote-to-build-studio` cover the DPF path).
+- **Left as optional upstream install:** `implementer`, `executing-plans` (DPF's first-class host-worktree flow plus Build Studio's build-specialist / `dpf-promote-to-build-studio` cover the governed DPF paths).
 - **Folded, not authored:** `verification-before-completion` → `build-gate-mandatory` + `/verify` + `dpf-systematic-debugging` Phase 4 (kernel-ratified fold-in, not a standalone skill).
 
 ## Build Studio capability packs
