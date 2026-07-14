@@ -3,19 +3,17 @@
  * BI-0DF1F354 — Contributor preview (dev-portal) must not crash-loop forever
  * when its bind-mounted worktree is removed.
  *
- * Docker `restart: unless-stopped` restarts the container on every non-zero
- * (and even some zero) failure path until an operator intervenes. When
- * DPF_DEV_WORKTREE points at a deleted worktree, the /workspace mount is empty
- * or missing package.json and `pnpm install` / `next dev` thrash forever
- * (observed: 262 restarts) with no Platform Health signal that the *cause* is
- * a missing worktree.
- *
- * This preflight runs before pnpm/next in the Dockerfile `dev` stage CMD.
- * If the workspace root is not a DPF monorepo, it prints a clear diagnosis and
- * exits 0 so Docker does not treat the stop as a crash worth restarting.
- *
- * Pure helpers are exported for unit tests (Node test runner / vitest via
- * dynamic import).
+ * Contract (enforced by unit tests + entrypoint):
+ *  1. Assess workspace at DPF_DEV_PORTAL_WORKSPACE_ROOT (default /workspace).
+ *  2. On FAIL: print diagnosis, exit **non-zero** from this process so the
+ *     entrypoint can branch (must NOT use `preflight && pnpm` with exit 0 on
+ *     fail — that would continue into pnpm).
+ *  3. Entrypoint on FAIL: exit **0** without running pnpm/next so Docker
+ *     `on-failure` does not thrash (observed live: 262 restarts).
+ *  4. This script is **baked into the image** at
+ *     `/usr/local/bin/dev-portal-workspace-preflight.mjs` because the primary
+ *     failure mode is a deleted/empty bind mount — the worktree copy of this
+ *     file is not available when the mount is gone.
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -23,7 +21,16 @@ import { join } from "node:path";
 
 /**
  * @typedef {{ ok: true } | { ok: false; reason: string; detail: string }} PreflightResult
+ * @typedef {{
+ *   action: "start" | "stop-clean",
+ *   runInstallAndDev: boolean,
+ *   processExitCode: number,
+ *   preflightCliExitCode: number,
+ * }} DevPortalBootPlan
  */
+
+/** CLI exit when workspace is unusable — non-zero so entrypoint can gate pnpm. */
+export const PREFLIGHT_FAIL_EXIT = 1;
 
 /**
  * True when `root` looks like a usable DPF workspace mount for dev-portal.
@@ -76,8 +83,6 @@ export function assessDevPortalWorkspace(root, io = {}) {
   try {
     const raw = read(packageJsonPath, "utf8");
     const pkg = JSON.parse(raw);
-    // Prefer a monorepo marker (pnpm-workspace style name) but accept any
-    // package.json with a name so local forks still pass.
     if (!pkg || typeof pkg !== "object") {
       return {
         ok: false,
@@ -107,13 +112,50 @@ export function assessDevPortalWorkspace(root, io = {}) {
 }
 
 /**
- * Exit code for Docker: 0 = intentional stop (do not thrash restarts),
- * 1 = unexpected CLI misuse. Missing workspace uses exit 0 by design.
+ * Pure boot plan used by the image entrypoint (and integration tests).
+ * Missing workspace: never run pnpm; container exits 0 (no restart thrash).
+ * Healthy workspace: run install+dev; preflight CLI exits 0.
+ * @param {PreflightResult} result
+ * @returns {DevPortalBootPlan}
+ */
+export function planDevPortalBoot(result) {
+  if (result.ok) {
+    return {
+      action: "start",
+      runInstallAndDev: true,
+      processExitCode: 0,
+      preflightCliExitCode: 0,
+    };
+  }
+  return {
+    action: "stop-clean",
+    runInstallAndDev: false,
+    processExitCode: 0,
+    preflightCliExitCode: PREFLIGHT_FAIL_EXIT,
+  };
+}
+
+/**
+ * Exit code for the **preflight CLI process alone** (not the container).
+ * Fail → non-zero so entrypoint can skip pnpm. Success → 0.
  * @param {PreflightResult} result
  * @returns {number}
  */
 export function preflightExitCode(result) {
-  return result.ok ? 0 : 0;
+  return planDevPortalBoot(result).preflightCliExitCode;
+}
+
+/**
+ * Simulate the baked entrypoint shell contract without Docker.
+ * @param {PreflightResult} result
+ * @returns {{ ranPnpm: boolean; finalExit: number; action: string }}
+ */
+export function simulateDevPortalEntrypoint(result) {
+  const plan = planDevPortalBoot(result);
+  if (!plan.runInstallAndDev) {
+    return { ranPnpm: false, finalExit: plan.processExitCode, action: plan.action };
+  }
+  return { ranPnpm: true, finalExit: plan.processExitCode, action: plan.action };
 }
 
 /**
@@ -139,7 +181,7 @@ function main() {
     process.exit(0);
   }
   process.stderr.write(`${formatPreflightFailure(result)}\n`);
-  // Exit 0 so Docker restart policies do not treat this as a crash (BI-0DF1F354).
+  // Non-zero so entrypoint does not run pnpm (BI-0DF1F354). Entrypoint maps this to container exit 0.
   process.exit(preflightExitCode(result));
 }
 

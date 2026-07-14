@@ -8,9 +8,15 @@ WORKDIR /app
 FROM base AS dev
 WORKDIR /workspace
 RUN apk add --no-cache git postgresql16-client
-# BI-0DF1F354: preflight stops cleanly when the bind-mounted worktree is gone
-# (exit 0) so Docker does not thrash pnpm/next forever.
-CMD ["sh", "-c", "node scripts/lib/dev-portal-workspace-preflight.mjs && pnpm install && pnpm --filter @dpf/db exec prisma generate && pnpm --filter web dev"]
+# BI-0DF1F354: bake preflight + entrypoint into the IMAGE. The primary failure
+# mode is a deleted/empty bind mount — the worktree copy of this script is not
+# available then, so it must not live only under /workspace.
+COPY scripts/lib/dev-portal-workspace-preflight.mjs /usr/local/bin/dev-portal-workspace-preflight.mjs
+COPY scripts/lib/dev-portal-entrypoint.sh /usr/local/bin/dev-portal-entrypoint.sh
+RUN chmod +x /usr/local/bin/dev-portal-entrypoint.sh
+# Entrypoint: preflight fails non-zero on missing workspace → exit 0 without pnpm
+# (see planDevPortalBoot). Healthy workspace → pnpm install + next dev.
+CMD ["/usr/local/bin/dev-portal-entrypoint.sh"]
 
 # ─── Stage 2: deps ────────────────────────────────────────────────────────────
 FROM base AS deps
