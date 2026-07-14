@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchAlertSources } from "@/lib/observability/alert-sources";
+import { screenAlertsForSelfDistrust } from "@/lib/observability/alert-self-distrust";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,8 @@ const NO_CACHE_HEADERS = {
 // frontend's offline handling.
 
 export async function GET() {
-  const { alerts, reached } = await fetchAlertSources();
+  const { alerts: rawAlerts, reached } = await fetchAlertSources();
+  const alerts = await screenAlertsForSelfDistrust(rawAlerts);
 
   if (!reached.prometheus && !reached["loki-ruler"]) {
     return NextResponse.json(

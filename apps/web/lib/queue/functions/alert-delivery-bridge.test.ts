@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   upsert: vi.fn(),
   resolve: vi.fn(),
   findMany: vi.fn(),
+  isVoiceNarrationEnabled: vi.fn(),
 }));
 
 vi.mock("@/lib/observability/alert-sources", () => ({
@@ -13,6 +14,9 @@ vi.mock("@/lib/observability/alert-sources", () => ({
 vi.mock("@/lib/observability/health-alert-issue", () => ({
   upsertHealthAlertIssue: mocks.upsert,
   resolveHealthAlertIssue: mocks.resolve,
+}));
+vi.mock("@/lib/voice-synthesis/service-status", () => ({
+  isVoiceNarrationEnabled: mocks.isVoiceNarrationEnabled,
 }));
 vi.mock("@dpf/db", () => ({
   prisma: { portfolioQualityIssue: { findMany: mocks.findMany } },
@@ -40,6 +44,7 @@ const BOTH_UP = { prometheus: true, "loki-ruler": true };
 describe("runAlertDeliveryScan", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isVoiceNarrationEnabled.mockResolvedValue(true);
     // Default: upsert returns the deterministic key for the alert it received.
     mocks.upsert.mockImplementation(async (_db: unknown, a: { labels: Record<string, string> }) =>
       keyOf(a.labels.alertname, a.labels.service),
@@ -62,6 +67,31 @@ describe("runAlertDeliveryScan", () => {
     expect(res.firing).toBe(1);
     expect(mocks.upsert).toHaveBeenCalledTimes(1);
     expect(mocks.upsert.mock.calls[0][1].labels.alertname).toBe("PostgresDown");
+  });
+
+  it("flags a VoiceServiceDown alert as detector self-distrust when narration is disabled", async () => {
+    mocks.isVoiceNarrationEnabled.mockResolvedValue(false);
+    mocks.fetchAlertSources.mockResolvedValue({
+      alerts: [alert("VoiceServiceDown", "prometheus", "firing")],
+      reached: BOTH_UP,
+    });
+    mocks.findMany.mockResolvedValue([
+      { issueKey: keyOf("VoiceServiceDown"), details: { source: "prometheus" } },
+    ]);
+
+    const res = await runAlertDeliveryScan();
+
+    expect(res.delivered).toBe(1);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][1].labels).toMatchObject({
+      alertname: "DetectorSelfDistrust",
+      service: "VoiceServiceDown",
+      contradicted_alert: "VoiceServiceDown",
+      detector_self_distrust: "true",
+    });
+    // The original VoiceServiceDown key is no longer considered firing, so a
+    // stale phantom issue from the same source is allowed to resolve.
+    expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), keyOf("VoiceServiceDown"));
   });
 
   it("resolves an open issue whose alert cleared, from a source it reached", async () => {

@@ -29,6 +29,19 @@ describe("humanizeHealthAlert", () => {
     expect(h.explanation).toContain("speech service");
   });
 
+  it("translates detector self-distrust into a monitoring-quality issue", () => {
+    const h = humanizeHealthAlert(
+      alert({
+        alertname: "DetectorSelfDistrust",
+        contradicted_alert: "VoiceServiceDown",
+        service: "VoiceServiceDown",
+        severity: "warning",
+      }),
+    );
+    expect(h.title).toBe("Monitoring may be wrong about voice narration");
+    expect(h.explanation).toContain("monitoring problem");
+  });
+
   it("falls back to a de-camel-cased title + summary for unknown alerts", () => {
     const h = humanizeHealthAlert(
       alert({ alertname: "SomeNewRule" }, { summary: "Something is odd" }),
