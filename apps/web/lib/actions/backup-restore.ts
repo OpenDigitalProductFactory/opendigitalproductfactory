@@ -16,8 +16,6 @@ import {
   isRestoreInFlight,
   runPostgresRestore,
 } from "@/lib/operate/backups/postgres-restore-runner";
-import { runNeo4jRestore } from "@/lib/operate/backups/neo4j-restore-runner";
-import { runQdrantRestore } from "@/lib/operate/backups/qdrant-restore-runner";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requireBackupAdmin(): Promise<string | null> {
@@ -45,8 +43,8 @@ export interface ConfirmRestoreResult {
 }
 
 /**
- * Confirms and triggers a restore. Dispatches to the right runner based on
- * the BackupRun.target field. The confirmation text must match RESTORE exactly.
+ * Confirms and triggers a restore. postgres-only after BET-5 retired the neo4j
+ * + qdrant stores. The confirmation text must match RESTORE exactly.
  */
 export async function confirmRestoreAction(
   sourceBackupRunId: string,
@@ -80,15 +78,15 @@ export async function confirmRestoreAction(
     if (!run) {
       return { ok: false, error: `Backup run ${sourceBackupRunId} not found.`, errorClass: "integrity" };
     }
-
-    let result: { restoreId: string; status: "ok" | "failed" };
-    if (run.target === "neo4j") {
-      result = await runNeo4jRestore({ sourceBackupRunId, initiatedByUserId: userId });
-    } else if (run.target === "qdrant") {
-      result = await runQdrantRestore({ sourceBackupRunId, initiatedByUserId: userId });
-    } else {
-      result = await runPostgresRestore({ sourceBackupRunId, initiatedByUserId: userId });
+    if (run.target !== "postgres") {
+      return {
+        ok: false,
+        error: `Restore is postgres-only after BET-5 (backup target=${run.target}).`,
+        errorClass: "integrity",
+      };
     }
+
+    const result = await runPostgresRestore({ sourceBackupRunId, initiatedByUserId: userId });
 
     return { ok: result.status === "ok", restoreId: result.restoreId, status: result.status };
   } catch (err) {

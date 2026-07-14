@@ -1,10 +1,105 @@
 // packages/db/src/neo4j-sync.ts
-// Projection sync: push Prisma records into Neo4j after writes.
-// These are fire-and-forget projections — failures are logged but never
-// allowed to bubble up to the caller. Postgres is always the authority.
+// Projection sync: push Prisma records into the Postgres graph mirror after writes.
+// BET-5 (BI-A1E864A5): the writes formerly ran Cypher MERGE against Neo4j; they now
+// UPSERT into the `graph_node` / `graph_edge` tables (see 20260714120000_bet5_graph_mirror)
+// that pg-graph.ts reads. These are fire-and-forget projections — failures are logged
+// but never allowed to bubble up to the caller. Postgres is always the authority.
+//
+// Node-key model (graph_node.key — the universal key pg-graph.ts joins on):
+//   DigitalProduct → productId   Portfolio → slug        InfraCI → ciId
+//   TaxonomyNode   → nodeId      Document  → documentId  EaElement → elementId
+// The read side (pg-graph.ts getProductsByTaxonomySubtree) keys taxonomy nodes by
+// `nodeId` and traverses CHILD_OF / CATEGORIZED_AS in that key space. The Prisma
+// DigitalProduct/EaElement carry only the taxonomy FK (= TaxonomyNode.id = the `pgId`
+// property), so before wiring a CATEGORIZED_AS / EA_REPRESENTS edge we resolve the FK
+// to the taxonomy `nodeId` and use THAT as dst_key — otherwise the edge would be keyed
+// by pgId and the nodeId-keyed subtree read would never find the product.
 
-import { runCypher } from "./neo4j";
+import { prisma } from "./client";
 import { NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
+
+// ─── Graph-mirror primitives ──────────────────────────────────────────────────
+
+/** UPSERT a node. On conflict, labels are UNION-merged (existing order preserved,
+ *  genuinely-new labels appended) so labels added out-of-band — IT4IT value-stream
+ *  labels on DigitalProduct, the type-specific EaElement label — survive a re-sync
+ *  (Neo4j `MERGE ... SET` never touched the label set). Props are shallow-merged,
+ *  mirroring `SET n.x = …` (only named keys change; others are left intact). */
+async function upsertGraphNode(
+  key: string,
+  labels: string[],
+  props: Record<string, unknown>,
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO graph_node (key, labels, props)
+     VALUES ($1, $2::text[], $3::jsonb)
+     ON CONFLICT (key) DO UPDATE
+       SET labels = graph_node.labels || COALESCE((
+             SELECT array_agg(l ORDER BY ord)
+               FROM unnest(excluded.labels) WITH ORDINALITY AS t(l, ord)
+              WHERE NOT (l = ANY(graph_node.labels))
+           ), '{}'),
+           props  = graph_node.props || excluded.props`,
+    key,
+    labels,
+    JSON.stringify(props),
+  );
+}
+
+/** Append labels to an already-present node (Neo4j apoc.create.addLabels parity).
+ *  No-op if the node is absent or is not of `requiredLabel`. */
+async function addGraphNodeLabels(
+  key: string,
+  requiredLabel: string,
+  labels: string[],
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `UPDATE graph_node
+        SET labels = labels || COALESCE((
+              SELECT array_agg(l ORDER BY ord)
+                FROM unnest($2::text[]) WITH ORDINALITY AS t(l, ord)
+               WHERE NOT (l = ANY(graph_node.labels))
+            ), '{}')
+      WHERE key = $1 AND $3 = ANY(labels)`,
+    key,
+    labels,
+    requiredLabel,
+  );
+}
+
+/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type). Props shallow-merged. */
+async function upsertGraphEdge(
+  srcKey: string,
+  dstKey: string,
+  relType: string,
+  props: Record<string, unknown> = {},
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO graph_edge (src_key, dst_key, rel_type, props)
+     VALUES ($1, $2, $3, $4::jsonb)
+     ON CONFLICT (src_key, dst_key, rel_type) DO UPDATE
+       SET props = graph_edge.props || excluded.props`,
+    srcKey,
+    dstKey,
+    relType,
+    JSON.stringify(props),
+  );
+}
+
+/** Resolve a Prisma TaxonomyNode FK (= TaxonomyNode.id, stored as the `pgId`
+ *  property) to its semantic `nodeId`, which is the graph_node.key the read side
+ *  uses. Returns null when the taxonomy row is absent. */
+async function resolveTaxonomyNodeKey(taxonomyNodeId: string): Promise<string | null> {
+  const tn = await prisma.taxonomyNode.findUnique({
+    where: { id: taxonomyNodeId },
+    select: { nodeId: true },
+  });
+  return tn?.nodeId ?? null;
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
 
 /** Upsert a DigitalProduct node and wire its Portfolio + TaxonomyNode edges. */
 export async function syncDigitalProduct(dp: {
@@ -16,33 +111,26 @@ export async function syncDigitalProduct(dp: {
   taxonomyNodeId?: string | null;
 }): Promise<void> {
   // Upsert the node
-  await runCypher(
-    `MERGE (dp:DigitalProduct {productId: $productId})
-     SET dp.name           = $name,
-         dp.lifecycleStage = $lifecycleStage,
-         dp.lifecycleStatus= $lifecycleStatus,
-         dp.syncedAt       = datetime()`,
-    dp,
-  );
+  await upsertGraphNode(dp.productId, ["DigitalProduct"], {
+    productId: dp.productId,
+    name: dp.name,
+    lifecycleStage: dp.lifecycleStage,
+    lifecycleStatus: dp.lifecycleStatus,
+    syncedAt: nowIso(),
+  });
 
-  // BELONGS_TO Portfolio
+  // BELONGS_TO Portfolio (dst = portfolio slug)
   if (dp.portfolioSlug) {
-    await runCypher(
-      `MATCH (dp:DigitalProduct {productId: $productId})
-       MERGE (p:Portfolio {slug: $slug})
-       MERGE (dp)-[:BELONGS_TO]->(p)`,
-      { productId: dp.productId, slug: dp.portfolioSlug },
-    );
+    await upsertGraphEdge(dp.productId, dp.portfolioSlug, "BELONGS_TO");
   }
 
-  // CATEGORIZED_AS TaxonomyNode (nodeId stored on the Prisma TaxonomyNode)
+  // CATEGORIZED_AS TaxonomyNode. The Prisma FK is the taxonomy pgId; the read side
+  // keys taxonomy nodes by nodeId, so resolve FK → nodeId and use that as dst_key.
   if (dp.taxonomyNodeId) {
-    await runCypher(
-      `MATCH (dp:DigitalProduct {productId: $productId})
-       MERGE (tn:TaxonomyNode {pgId: $taxonomyNodeId})
-       MERGE (dp)-[:CATEGORIZED_AS]->(tn)`,
-      { productId: dp.productId, taxonomyNodeId: dp.taxonomyNodeId },
-    );
+    const taxonomyKey = await resolveTaxonomyNodeKey(dp.taxonomyNodeId);
+    if (taxonomyKey) {
+      await upsertGraphEdge(dp.productId, taxonomyKey, "CATEGORIZED_AS");
+    }
   }
 }
 
@@ -57,17 +145,7 @@ export async function syncIT4ITLabels(
   labels: Array<"S2P" | "R2D" | "R2F" | "D2C">,
 ): Promise<void> {
   if (labels.length === 0) return;
-  for (const label of labels) {
-    await runCypher(
-      `MATCH (dp:DigitalProduct {productId: $productId})
-       CALL apoc.create.addLabels(dp, [$label]) YIELD node
-       RETURN node`,
-      { productId, label },
-    ).catch((err: unknown) => {
-      // APOC not installed — label skipped
-      console.warn(`[neo4j-sync] IT4IT label ${label} failed for ${productId}:`, err);
-    });
-  }
+  await addGraphNodeLabels(productId, "DigitalProduct", labels);
 }
 
 /** Upsert a TaxonomyNode node and its CHILD_OF parent edge. */
@@ -77,21 +155,16 @@ export async function syncTaxonomyNode(tn: {
   pgId: string;
   parentNodeId?: string | null;
 }): Promise<void> {
-  await runCypher(
-    `MERGE (n:TaxonomyNode {nodeId: $nodeId})
-     SET n.name    = $name,
-         n.pgId    = $pgId,
-         n.syncedAt= datetime()`,
-    tn,
-  );
+  await upsertGraphNode(tn.nodeId, ["TaxonomyNode"], {
+    nodeId: tn.nodeId,
+    name: tn.name,
+    pgId: tn.pgId,
+    syncedAt: nowIso(),
+  });
 
+  // CHILD_OF: child (src = nodeId) → parent (dst = parentNodeId)
   if (tn.parentNodeId) {
-    await runCypher(
-      `MATCH (child:TaxonomyNode  {nodeId: $nodeId})
-       MERGE (parent:TaxonomyNode {nodeId: $parentNodeId})
-       MERGE (child)-[:CHILD_OF]->(parent)`,
-      { nodeId: tn.nodeId, parentNodeId: tn.parentNodeId },
-    );
+    await upsertGraphEdge(tn.nodeId, tn.parentNodeId, "CHILD_OF");
   }
 }
 
@@ -100,12 +173,11 @@ export async function syncPortfolio(p: {
   slug: string;
   name: string;
 }): Promise<void> {
-  await runCypher(
-    `MERGE (p:Portfolio {slug: $slug})
-     SET p.name     = $name,
-         p.syncedAt = datetime()`,
-    p,
-  );
+  await upsertGraphNode(p.slug, ["Portfolio"], {
+    slug: p.slug,
+    name: p.name,
+    syncedAt: nowIso(),
+  });
 }
 
 export async function syncDocumentNode(doc: {
@@ -114,19 +186,13 @@ export async function syncDocumentNode(doc: {
   currentState?: string | null;
   documentKind?: string | null;
 }): Promise<void> {
-  await runCypher(
-    `MERGE (doc:Document {documentId: $documentId})
-     SET doc.title = $title,
-         doc.currentState = $currentState,
-         doc.documentKind = $documentKind,
-         doc.syncedAt = datetime()`,
-    {
-      documentId: doc.documentId,
-      title: doc.title,
-      currentState: doc.currentState ?? null,
-      documentKind: doc.documentKind ?? null,
-    },
-  );
+  await upsertGraphNode(doc.documentId, ["Document"], {
+    documentId: doc.documentId,
+    title: doc.title,
+    currentState: doc.currentState ?? null,
+    documentKind: doc.documentKind ?? null,
+    syncedAt: nowIso(),
+  });
 }
 
 export async function syncDocumentReference(ref: {
@@ -143,39 +209,31 @@ export async function syncDocumentReference(ref: {
   refType: string;
   anchor?: string | null;
 }): Promise<void> {
-  await runCypher(
-    `MERGE (source:Document {documentId: $sourceDocumentId})
-     SET source.title = $sourceTitle,
-         source.currentState = $sourceState,
-         source.documentKind = $sourceKind,
-         source.syncedAt = datetime()
-     MERGE (target:Document {documentId: $targetDocumentId})
-     SET target.title = $targetTitle,
-         target.currentState = $targetState,
-         target.documentKind = $targetKind,
-         target.syncedAt = datetime()
-     MERGE (source)-[edge:DOC_REFERENCES {
-       refType: $refType,
-       sourceVersionId: $sourceVersionId,
-       targetVersionId: $targetVersionId
-     }]->(target)
-     SET edge.anchor = $anchor,
-         edge.syncedAt = datetime()`,
-    {
-      sourceDocumentId: ref.sourceDocumentId,
-      sourceTitle: ref.sourceTitle,
-      sourceState: ref.sourceState ?? null,
-      sourceKind: ref.sourceKind ?? null,
-      sourceVersionId: ref.sourceVersionId ?? null,
-      targetDocumentId: ref.targetDocumentId,
-      targetTitle: ref.targetTitle,
-      targetState: ref.targetState ?? null,
-      targetKind: ref.targetKind ?? null,
-      targetVersionId: ref.targetVersionId ?? null,
-      refType: ref.refType,
-      anchor: ref.anchor ?? null,
-    },
-  );
+  const syncedAt = nowIso();
+  await upsertGraphNode(ref.sourceDocumentId, ["Document"], {
+    documentId: ref.sourceDocumentId,
+    title: ref.sourceTitle,
+    currentState: ref.sourceState ?? null,
+    documentKind: ref.sourceKind ?? null,
+    syncedAt,
+  });
+  await upsertGraphNode(ref.targetDocumentId, ["Document"], {
+    documentId: ref.targetDocumentId,
+    title: ref.targetTitle,
+    currentState: ref.targetState ?? null,
+    documentKind: ref.targetKind ?? null,
+    syncedAt,
+  });
+  // DOC_REFERENCES edge. The Neo4j edge identity also carried refType +
+  // source/targetVersionId; the mirror's (src,dst,rel_type) uniqueness cannot
+  // hold parallel references, so those are stored as props on the single edge.
+  await upsertGraphEdge(ref.sourceDocumentId, ref.targetDocumentId, "DOC_REFERENCES", {
+    refType: ref.refType,
+    sourceVersionId: ref.sourceVersionId ?? null,
+    targetVersionId: ref.targetVersionId ?? null,
+    anchor: ref.anchor ?? null,
+    syncedAt,
+  });
 }
 
 export interface InfraCIExtendedProps {
@@ -209,87 +267,36 @@ export async function syncInfraCI(
   },
   extendedProps?: InfraCIExtendedProps,
 ): Promise<void> {
-  const setClauses = [
-    "ci.name = $name",
-    "ci.ciType = $ciType",
-    "ci.status = $status",
-    "ci.syncedAt = datetime()",
-  ];
-  const params: Record<string, unknown> = {
+  const props: Record<string, unknown> = {
     ciId: ci.ciId,
     name: ci.name,
     ciType: ci.ciType,
     status: ci.status,
+    syncedAt: nowIso(),
   };
 
   if (extendedProps) {
-    if (extendedProps.baseUrl !== undefined) {
-      setClauses.push("ci.baseUrl = $baseUrl");
-      params.baseUrl = extendedProps.baseUrl;
-    }
-    if (extendedProps.gpu !== undefined) {
-      setClauses.push("ci.gpu = $gpu");
-      params.gpu = extendedProps.gpu;
-    }
-    if (extendedProps.vramGb !== undefined) {
-      setClauses.push("ci.vramGb = $vramGb");
-      params.vramGb = extendedProps.vramGb;
-    }
-    if (extendedProps.modelCount !== undefined) {
-      setClauses.push("ci.modelCount = $modelCount");
-      params.modelCount = extendedProps.modelCount;
-    }
-    if (extendedProps.osiLayer !== undefined) {
-      setClauses.push("ci.osiLayer = $osiLayer");
-      params.osiLayer = extendedProps.osiLayer;
-    }
-    if (extendedProps.osiLayerName !== undefined) {
-      setClauses.push("ci.osiLayerName = $osiLayerName");
-      params.osiLayerName = extendedProps.osiLayerName;
-    }
-    if (extendedProps.networkAddress !== undefined) {
-      setClauses.push("ci.networkAddress = $networkAddress");
-      params.networkAddress = extendedProps.networkAddress;
-    }
-    if (extendedProps.networkMask !== undefined) {
-      setClauses.push("ci.networkMask = $networkMask");
-      params.networkMask = extendedProps.networkMask;
-    }
-    if (extendedProps.protocolFamily !== undefined) {
-      setClauses.push("ci.protocolFamily = $protocolFamily");
-      params.protocolFamily = extendedProps.protocolFamily;
-    }
-    if (extendedProps.parentCiId !== undefined) {
-      setClauses.push("ci.parentCiId = $parentCiId");
-      params.parentCiId = extendedProps.parentCiId;
-    }
-    if (extendedProps.scopeKey !== undefined) {
-      setClauses.push("ci.scopeKey = $scopeKey");
-      params.scopeKey = extendedProps.scopeKey;
-    }
-    if (extendedProps.customerAccountId !== undefined) {
-      setClauses.push("ci.customerAccountId = $customerAccountId");
-      params.customerAccountId = extendedProps.customerAccountId;
-    }
-    if (extendedProps.customerSiteId !== undefined) {
-      setClauses.push("ci.customerSiteId = $customerSiteId");
-      params.customerSiteId = extendedProps.customerSiteId;
-    }
+    // Only carry keys that were explicitly provided (parity with the conditional
+    // Neo4j SET clauses — an absent key leaves any existing prop untouched).
+    if (extendedProps.baseUrl !== undefined) props.baseUrl = extendedProps.baseUrl;
+    if (extendedProps.gpu !== undefined) props.gpu = extendedProps.gpu;
+    if (extendedProps.vramGb !== undefined) props.vramGb = extendedProps.vramGb;
+    if (extendedProps.modelCount !== undefined) props.modelCount = extendedProps.modelCount;
+    if (extendedProps.osiLayer !== undefined) props.osiLayer = extendedProps.osiLayer;
+    if (extendedProps.osiLayerName !== undefined) props.osiLayerName = extendedProps.osiLayerName;
+    if (extendedProps.networkAddress !== undefined) props.networkAddress = extendedProps.networkAddress;
+    if (extendedProps.networkMask !== undefined) props.networkMask = extendedProps.networkMask;
+    if (extendedProps.protocolFamily !== undefined) props.protocolFamily = extendedProps.protocolFamily;
+    if (extendedProps.parentCiId !== undefined) props.parentCiId = extendedProps.parentCiId;
+    if (extendedProps.scopeKey !== undefined) props.scopeKey = extendedProps.scopeKey;
+    if (extendedProps.customerAccountId !== undefined) props.customerAccountId = extendedProps.customerAccountId;
+    if (extendedProps.customerSiteId !== undefined) props.customerSiteId = extendedProps.customerSiteId;
   }
 
-  await runCypher(
-    `MERGE (ci:InfraCI {ciId: $ciId})
-     SET ${setClauses.join(", ")}`,
-    params,
-  );
+  await upsertGraphNode(ci.ciId, ["InfraCI"], props);
 
   if (ci.portfolioSlug) {
-    await runCypher(
-      `MATCH (ci:InfraCI {ciId: $ciId})
-       MERGE (p:Portfolio {slug: $portfolioSlug})
-       MERGE (ci)-[:BELONGS_TO]->(p)`,
-      { ciId: ci.ciId, portfolioSlug: ci.portfolioSlug },
-    );
+    await upsertGraphEdge(ci.ciId, ci.portfolioSlug, "BELONGS_TO");
   }
 }
 
@@ -305,16 +312,11 @@ export async function syncDependsOn(dep: {
   role?: string;   // e.g. "database" | "runtime" | "network"
   since?: string;  // ISO date string
 }): Promise<void> {
-  const fromKey = dep.fromLabel === "DigitalProduct" ? "productId" : "ciId";
-  await runCypher(
-    `MATCH (from:${dep.fromLabel} {${fromKey}: $fromId})
-     MATCH (to:InfraCI           {ciId: $toId})
-     MERGE (from)-[r:DEPENDS_ON]->(to)
-     SET r.role     = $role,
-         r.since    = $since,
-         r.syncedAt = datetime()`,
-    { fromId: dep.fromId, toId: dep.toId, role: dep.role ?? null, since: dep.since ?? null },
-  );
+  await upsertGraphEdge(dep.fromId, dep.toId, "DEPENDS_ON", {
+    role: dep.role ?? null,
+    since: dep.since ?? null,
+    syncedAt: nowIso(),
+  });
 }
 
 // ─── EA Modeling sync ─────────────────────────────────────────────────────────
@@ -407,7 +409,7 @@ export async function syncInventoryEntityAsInfraCI(entity: {
   );
 }
 
-/** Relationship types that get their own typed Neo4j edge instead of DEPENDS_ON. */
+/** Relationship types that get their own typed edge instead of DEPENDS_ON. */
 const TYPED_EDGE_RELATIONSHIP_TYPES = new Set([
   ...NETWORK_RELATIONSHIP_TYPES.map((t) => t.toUpperCase()),
   "MONITORS",
@@ -421,13 +423,9 @@ export async function syncInventoryRelationship(rel: {
   const neoType = rel.relationshipType.toUpperCase();
 
   if (TYPED_EDGE_RELATIONSHIP_TYPES.has(neoType)) {
-    await runCypher(
-      `MATCH (from:InfraCI {ciId: $fromId})
-       MATCH (to:InfraCI {ciId: $toId})
-       MERGE (from)-[r:${neoType}]->(to)
-       SET r.syncedAt = datetime()`,
-      { fromId: rel.fromEntityKey, toId: rel.toEntityKey },
-    );
+    await upsertGraphEdge(rel.fromEntityKey, rel.toEntityKey, neoType, {
+      syncedAt: nowIso(),
+    });
     return;
   }
 
@@ -453,67 +451,36 @@ export async function syncEaElement(element: {
   portfolioSlug?: string | null;
   taxonomyNodeId?: string | null;
 }): Promise<void> {
-  // Upsert the node — Cypher MERGE requires exact label set; we use apoc.merge.node
-  // for the dual-label pattern. Fall back to a parameterised label approach.
-  await runCypher(
-    `MERGE (n:EaElement {elementId: $id})
-     SET n.notationId      = $notationSlug,
-         n.elementType     = $elementTypeSlug,
-         n.name            = $name,
-         n.lifecycleStage  = $lifecycleStage,
-         n.lifecycleStatus = $lifecycleStatus,
-         n.infraCiKey      = $infraCiKey,
-         n.syncedAt        = datetime()`,
-    {
-      id: element.id,
-      notationSlug: element.notationSlug,
-      elementTypeSlug: element.elementTypeSlug,
-      name: element.name,
-      lifecycleStage: element.lifecycleStage,
-      lifecycleStatus: element.lifecycleStatus,
-      infraCiKey: element.infraCiKey ?? null,
-    },
-  );
-
-  // Add the type-specific label via APOC (safe if APOC not available — node still functions with :EaElement)
-  await runCypher(
-    `MATCH (n:EaElement {elementId: $id})
-     CALL apoc.create.addLabels(n, [$neoLabel]) YIELD node
-     RETURN node`,
-    { id: element.id, neoLabel: element.neoLabel },
-  ).catch((err: unknown) => {
-    // Any error (e.g. APOC not installed) — type-specific label skipped; :EaElement label still present
-    console.warn('[neo4j-sync] APOC dual-label failed for element', element.id, ':', err);
+  // Upsert the node with the dual label set (:EaElement:NeoLabel) applied directly
+  // — the mirror has no APOC step; both labels go on at insert and survive re-sync.
+  await upsertGraphNode(element.id, ["EaElement", element.neoLabel], {
+    elementId: element.id,
+    notationId: element.notationSlug,
+    elementType: element.elementTypeSlug,
+    name: element.name,
+    lifecycleStage: element.lifecycleStage,
+    lifecycleStatus: element.lifecycleStatus,
+    infraCiKey: element.infraCiKey ?? null,
+    syncedAt: nowIso(),
   });
 
   // EA_REPRESENTS → DigitalProduct
   if (element.digitalProductId) {
-    await runCypher(
-      `MATCH (ea:EaElement {elementId: $id})
-       MATCH (dp:DigitalProduct {productId: $digitalProductId})
-       MERGE (ea)-[:EA_REPRESENTS]->(dp)`,
-      { id: element.id, digitalProductId: element.digitalProductId },
-    );
+    await upsertGraphEdge(element.id, element.digitalProductId, "EA_REPRESENTS");
   }
 
   // EA_REPRESENTS → Portfolio
   if (element.portfolioSlug != null) {
-    await runCypher(
-      `MATCH (ea:EaElement {elementId: $id})
-       MATCH (p:Portfolio {slug: $portfolioSlug})
-       MERGE (ea)-[:EA_REPRESENTS]->(p)`,
-      { id: element.id, portfolioSlug: element.portfolioSlug },
-    );
+    await upsertGraphEdge(element.id, element.portfolioSlug, "EA_REPRESENTS");
   }
 
-  // EA_REPRESENTS → TaxonomyNode
+  // EA_REPRESENTS → TaxonomyNode. Resolve the Prisma FK (pgId) to the taxonomy
+  // nodeId — the key the graph mirror uses — before wiring the edge.
   if (element.taxonomyNodeId) {
-    await runCypher(
-      `MATCH (ea:EaElement {elementId: $id})
-       MATCH (tn:TaxonomyNode {pgId: $taxonomyNodeId})
-       MERGE (ea)-[:EA_REPRESENTS]->(tn)`,
-      { id: element.id, taxonomyNodeId: element.taxonomyNodeId },
-    );
+    const taxonomyKey = await resolveTaxonomyNodeKey(element.taxonomyNodeId);
+    if (taxonomyKey) {
+      await upsertGraphEdge(element.id, taxonomyKey, "EA_REPRESENTS");
+    }
   }
 }
 
@@ -526,38 +493,34 @@ export async function syncEaRelationship(rel: {
   notationSlug: string;
   relationshipTypeSlug: string;
 }): Promise<void> {
-  await runCypher(
-    `MATCH (from:EaElement {elementId: $fromId})
-     MATCH (to:EaElement   {elementId: $toId})
-     MERGE (from)-[r:${rel.neoType} {relationshipId: $id}]->(to)
-     SET r.notationId       = $notationSlug,
-         r.relationshipType = $relationshipTypeSlug,
-         r.syncedAt         = datetime()`,
-    {
-      id: rel.id,
-      fromId: rel.fromElementId,
-      toId: rel.toElementId,
-      notationSlug: rel.notationSlug,
-      relationshipTypeSlug: rel.relationshipTypeSlug,
-    },
-  );
+  // Edge identity in Neo4j also carried relationshipId; the mirror keys edges by
+  // (src,dst,rel_type) and stores relationshipId as a prop (used by deleteEaRelationship).
+  await upsertGraphEdge(rel.fromElementId, rel.toElementId, rel.neoType, {
+    relationshipId: rel.id,
+    notationId: rel.notationSlug,
+    relationshipType: rel.relationshipTypeSlug,
+    syncedAt: nowIso(),
+  });
 }
 
 /** Remove an EaElement node and all its EA edges. */
 export async function deleteEaElement(elementId: string): Promise<void> {
-  await runCypher(
-    `MATCH (n:EaElement {elementId: $elementId})
-     DETACH DELETE n`,
-    { elementId },
+  // DETACH DELETE equivalent: drop incident edges first, then the node.
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge WHERE src_key = $1 OR dst_key = $1`,
+    elementId,
+  );
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_node WHERE key = $1 AND 'EaElement' = ANY(labels)`,
+    elementId,
   );
 }
 
 /** Remove a single EaRelationship edge by its relationshipId property. */
 export async function deleteEaRelationship(relationshipId: string): Promise<void> {
-  await runCypher(
-    // No rel-type filter — matches any type by relationshipId (low volume, intentional)
-    `MATCH ()-[r {relationshipId: $relationshipId}]->()
-     DELETE r`,
-    { relationshipId },
+  // No rel-type filter — matches any type by relationshipId (low volume, intentional).
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge WHERE props->>'relationshipId' = $1`,
+    relationshipId,
   );
 }

@@ -85,12 +85,11 @@ export async function deleteDigitalProduct(id: string): Promise<void> {
 
   const dp = await prisma.digitalProduct.delete({ where: { id } });
 
-  // Remove from graph projection
-  import("@dpf/db").then(({ runCypher }) =>
-    runCypher(
-      `MATCH (dp:DigitalProduct {productId: $productId}) DETACH DELETE dp`,
-      { productId: dp.productId },
-    ).catch((err) => console.error("[neo4j] delete DigitalProduct failed:", err))
+  // Remove from graph projection (Postgres graph mirror)
+  import("@dpf/db").then(({ deleteGraphNode }) =>
+    deleteGraphNode(dp.productId).catch((err) =>
+      console.error("[graph] delete DigitalProduct failed:", err),
+    ),
   );
 
   revalidatePath("/portfolio");

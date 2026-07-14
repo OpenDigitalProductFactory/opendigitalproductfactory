@@ -38,8 +38,12 @@ vi.mock("@dpf/db", () => ({
     customerAccountId: scope.customerAccountId ?? null,
     customerSiteId: scope.customerSiteId ?? null,
   }),
-  runCypher: vi.fn().mockResolvedValue([]),
+  // BET-5: graph.ts no longer runs Cypher; customer-scope routing delegates to
+  // the pg-graph topology helpers (mocked above). The prisma reads it may touch
+  // for organization-internal fallback are stubbed here.
   prisma: {
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+    $executeRawUnsafe: vi.fn().mockResolvedValue(undefined),
     digitalProduct: { findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn().mockResolvedValue(null) },
     portfolio: { findMany: vi.fn().mockResolvedValue([]) },
     taxonomyNode: { findMany: vi.fn().mockResolvedValue([]) },

@@ -43,11 +43,8 @@ const recoveryPoint = {
   trigger: "pre-upgrade-recovery",
   selfUpgradeRunId: "SUR-ROLLBACK",
   createdAt: "2026-06-01T00:00:00.000Z",
-  members: [
-    { target: "postgres", runId: "BR-PG", status: "ok" },
-    { target: "neo4j", runId: "BR-N4J", status: "ok" },
-    { target: "qdrant", runId: "BR-QD", status: "ok" },
-  ],
+  // postgres-only after BET-5 retired neo4j + qdrant.
+  members: [{ target: "postgres", runId: "BR-PG", status: "ok" }],
 };
 
 function makeRun(overrides: Record<string, unknown> = {}) {
@@ -90,8 +87,6 @@ function makeBackupRun(id: string, target: string) {
 function mockRecoveryBackupRuns() {
   mockPrisma.backupRun.findMany.mockResolvedValue([
     makeBackupRun("BR-PG", "postgres"),
-    makeBackupRun("BR-N4J", "neo4j"),
-    makeBackupRun("BR-QD", "qdrant"),
   ]);
 }
 
@@ -136,7 +131,7 @@ describe("self-upgrade rollback", () => {
         completionEvidence: {
           recoveryPoint: {
             ...recoveryPoint,
-            members: recoveryPoint.members.filter((member) => member.target !== "qdrant"),
+            members: recoveryPoint.members.filter((member) => member.target !== "postgres"),
           },
         },
       }),
@@ -149,11 +144,11 @@ describe("self-upgrade rollback", () => {
         prismaClient: mockPrisma as never,
         runners: { postgres },
       }),
-    ).rejects.toThrow(/missing successful backup members: qdrant/i);
+    ).rejects.toThrow(/missing successful backup members: postgres/i);
     expect(postgres).not.toHaveBeenCalled();
   });
 
-  it("restores postgres, neo4j, then qdrant from the recovery point", async () => {
+  it("restores postgres from the recovery point", async () => {
     const calls: string[] = [];
     const now = vi
       .fn()
@@ -170,33 +165,13 @@ describe("self-upgrade rollback", () => {
       expect(args.prismaClient).toBe(mockPrisma);
       return { restoreId: "RR-PG", status: "ok" as const };
     });
-    const neo4j = vi.fn(async (args) => {
-      calls.push("neo4j");
-      expect(args).toMatchObject({
-        sourceBackupRunId: "BR-N4J",
-        trigger: "self-upgrade-rollback",
-        acquireLock: false,
-      });
-      expect(args.prismaClient).toBe(mockPrisma);
-      return { restoreId: "RR-N4J", status: "ok" as const };
-    });
-    const qdrant = vi.fn(async (args) => {
-      calls.push("qdrant");
-      expect(args).toMatchObject({
-        sourceBackupRunId: "BR-QD",
-        trigger: "self-upgrade-rollback",
-        acquireLock: false,
-      });
-      expect(args.prismaClient).toBe(mockPrisma);
-      return { restoreId: "RR-QD", status: "ok" as const };
-    });
 
     const result = await runSelfUpgradeRollback({
       runId: "SUR-ROLLBACK",
       initiatedByUserId: "user-ops",
       prismaClient: mockPrisma as never,
       now,
-      runners: { postgres, neo4j, qdrant },
+      runners: { postgres },
     });
 
     expect(result).toMatchObject({
@@ -205,15 +180,13 @@ describe("self-upgrade rollback", () => {
       runId: "SUR-ROLLBACK",
       restores: [
         { target: "postgres", sourceBackupRunId: "BR-PG", restoreId: "RR-PG", status: "ok" },
-        { target: "neo4j", sourceBackupRunId: "BR-N4J", restoreId: "RR-N4J", status: "ok" },
-        { target: "qdrant", sourceBackupRunId: "BR-QD", restoreId: "RR-QD", status: "ok" },
       ],
     });
-    expect(calls).toEqual(["postgres", "neo4j", "qdrant"]);
+    expect(calls).toEqual(["postgres"]);
     expect(mockPrisma.backupRun.findMany).toHaveBeenCalledWith({
-      where: { id: { in: ["BR-PG", "BR-N4J", "BR-QD"] } },
+      where: { id: { in: ["BR-PG"] } },
     });
-    expect(mockPrisma.backupRun.upsert).toHaveBeenCalledTimes(3);
+    expect(mockPrisma.backupRun.upsert).toHaveBeenCalledTimes(1);
     expect(mockPrisma.backupRun.upsert).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ where: { id: "BR-PG" } }),
@@ -233,35 +206,30 @@ describe("self-upgrade rollback", () => {
       trigger: "self-upgrade-rollback",
       status: "ok",
       selfUpgradeRunId: "SUR-ROLLBACK",
-      restoreOrder: ["postgres", "neo4j", "qdrant"],
+      restoreOrder: ["postgres"],
     });
   });
 
-  it("stops after a failed member restore and records rollback-failed evidence", async () => {
-    const postgres = vi.fn().mockResolvedValue({ restoreId: "RR-PG", status: "ok" });
-    const neo4j = vi.fn().mockRejectedValue(new Error("neo4j volume missing"));
-    const qdrant = vi.fn().mockResolvedValue({ restoreId: "RR-QD", status: "ok" });
+  it("records rollback-failed evidence when the postgres restore fails", async () => {
+    const postgres = vi.fn().mockRejectedValue(new Error("pg_restore failed"));
 
     const result = await runSelfUpgradeRollback({
       runId: "SUR-ROLLBACK",
       prismaClient: mockPrisma as never,
-      runners: { postgres, neo4j, qdrant },
+      runners: { postgres },
     });
 
     expect(result).toMatchObject({
       ok: false,
       status: "failed",
-      error: "self-upgrade rollback failed at neo4j: neo4j volume missing",
+      error: "self-upgrade rollback failed at postgres: pg_restore failed",
     });
     expect(postgres).toHaveBeenCalledTimes(1);
-    expect(neo4j).toHaveBeenCalledTimes(1);
-    expect(qdrant).not.toHaveBeenCalled();
-    expect(mockPrisma.backupRun.upsert).toHaveBeenCalledTimes(3);
     expect(mockPrisma.selfUpgradeRun.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: expect.objectContaining({
           status: "rollback-failed",
-          failureLog: "self-upgrade rollback failed at neo4j: neo4j volume missing",
+          failureLog: "self-upgrade rollback failed at postgres: pg_restore failed",
         }),
       }),
     );

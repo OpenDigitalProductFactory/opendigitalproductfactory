@@ -63,7 +63,7 @@ describe("restartPlatformService", () => {
       { match: /docker inspect/, stdout: "dpf\n" },
       { match: /docker ps -a/, stdout: "\n" },
     ]);
-    const result = await restartPlatformService("qdrant", exec);
+    const result = await restartPlatformService("postgres", exec);
     expect(result.success).toBe(false);
     expect(result.error).toBe("container_not_found");
   });

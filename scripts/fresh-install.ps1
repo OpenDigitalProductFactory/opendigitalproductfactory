@@ -7,7 +7,7 @@
 # What this does:
 #   1. Installs pnpm dependencies
 #   2. Creates .env files with generated secrets
-#   3. Starts Docker services (Postgres, Neo4j, Qdrant)
+#   3. Starts Docker services (Postgres — vectors + graph live in Postgres since BET-5)
 #   4. Runs migrations + seed + full DB restore
 
 param(
@@ -145,7 +145,8 @@ if (Test-Path $envExamplePath) {
 $dockerDataDir = "${InstallDrive}:\docker-data\dpf"
 
 if (-not $SkipDocker) {
-    Write-Step "Starting Docker services (PostgreSQL, Neo4j, Qdrant)"
+    # BET-5 (BI-A1E864A5): Postgres-only platform (pgvector + graph mirror); Neo4j + Qdrant retired.
+    Write-Step "Starting Docker services (PostgreSQL)"
 
     # Tear down any existing containers and volumes from a previous install
     # so the database starts clean (required for onboarding to trigger).
@@ -153,7 +154,7 @@ if (-not $SkipDocker) {
     docker compose down -v 2>$null
 
     # Wipe bind-mount data directories so re-installs get a fresh database
-    foreach ($subdir in @("pgdata", "neo4jdata", "qdrant_data")) {
+    foreach ($subdir in @("pgdata")) {
         $path = Join-Path $dockerDataDir $subdir
         if (Test-Path $path) {
             Remove-Item -Recurse -Force $path 2>$null
@@ -163,9 +164,7 @@ if (-not $SkipDocker) {
     # Configure Docker volume location on the project's drive
     foreach ($dir in @(
         $dockerDataDir,
-        (Join-Path $dockerDataDir "pgdata"),
-        (Join-Path $dockerDataDir "neo4jdata"),
-        (Join-Path $dockerDataDir "qdrant_data")
+        (Join-Path $dockerDataDir "pgdata")
     )) {
         if (-not (Test-Path $dir)) {
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -187,17 +186,6 @@ services:
       - "5432:5432"
     volumes:
       - "${dockerDataDirForCompose}/pgdata:/var/lib/postgresql/data"
-  neo4j:
-    ports:
-      - "7687:7687"
-      - "7474:7474"
-    volumes:
-      - "${dockerDataDirForCompose}/neo4jdata:/data"
-  qdrant:
-    ports:
-      - "6333:6333"
-    volumes:
-      - "${dockerDataDirForCompose}/qdrant_data:/qdrant/storage"
   portal:
     environment:
       INSTANCE_TYPE: dev
@@ -263,19 +251,7 @@ services:
         Write-Fail "PostgreSQL did not become ready. See logs above."
     }
     Write-Ok "PostgreSQL is ready"
-
-    Write-Host "  Waiting for Qdrant (vector database for agent memory)..."
-    $retries = 15
-    while ($retries -gt 0) {
-        try {
-            $qdrantReady = Invoke-WebRequest -Uri "http://localhost:6333/readyz" -TimeoutSec 3 -ErrorAction SilentlyContinue
-            if ($qdrantReady.StatusCode -eq 200) { break }
-        } catch {}
-        Start-Sleep -Seconds 2
-        $retries--
-    }
-    if ($retries -eq 0) { Write-Warn "Qdrant not ready yet  agent memory will initialize on first use." }
-    else { Write-Ok "Qdrant is ready" }
+    # BET-5: vectors live in Postgres (pgvector) — no separate Qdrant readiness wait.
 }
 
 Write-Host "========================================================" 

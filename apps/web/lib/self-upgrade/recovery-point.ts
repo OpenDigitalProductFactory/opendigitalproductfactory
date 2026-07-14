@@ -14,15 +14,9 @@ type ClusteredBackupRunner = (args: {
   composeProject?: string;
   backupsRoot?: string;
 }) => Promise<BackupRunnerResult>;
-type QdrantBackupRunner = (args: {
-  trigger: typeof RECOVERY_TRIGGER;
-  backupsRoot?: string;
-}) => Promise<BackupRunnerResult>;
 
 interface RecoveryPointRunners {
   postgres: ClusteredBackupRunner;
-  neo4j: ClusteredBackupRunner;
-  qdrant: QdrantBackupRunner;
 }
 
 export type SelfUpgradeRecoveryPointStatus = "ok" | "degraded" | "failed" | "skipped";
@@ -76,23 +70,14 @@ export async function createSelfUpgradeRecoveryPoint(
   const backupTargets = resolveRecoveryBackupTargets();
   const overrides = args.runners ?? {};
 
-  // postgres (the primary data store, and the only store a portal upgrade
-  // migrates) is always backed up. neo4j (code + knowledge graph) and qdrant
-  // (vectors) are DERIVED stores — rebuilt from source and untouched by a
-  // portal upgrade — so they are skipped unless an operator opts them in via
-  // DPF_RECOVERY_POINT_BACKUP_TARGETS. Skipping avoids running (and failing on)
-  // a backup of regenerable data on every upgrade.
+  // BET-5 retired neo4j (code + knowledge graph) and qdrant (vectors); the
+  // platform now runs on postgres only. postgres is the primary data store and
+  // the only store a portal upgrade migrates, so it is the sole recovery-point
+  // target.
   const members: SelfUpgradeRecoveryPointMember[] = [];
   for (const target of RECOVERY_TARGET_ORDER) {
     if (backupTargets.has(target)) {
       members.push(await runBackupForTarget(target, overrides, args));
-    } else {
-      members.push({
-        target,
-        runId: null,
-        status: "skipped",
-        reason: DERIVED_STORE_SKIP_REASON,
-      });
     }
   }
 
@@ -106,12 +91,11 @@ export async function createSelfUpgradeRecoveryPoint(
   };
 }
 
-/** The order recovery-point members are recorded in. */
-const RECOVERY_TARGET_ORDER: readonly BackupTarget[] = ["postgres", "neo4j", "qdrant"];
-
-const DERIVED_STORE_SKIP_REASON =
-  "derived store — rebuilt from source and unchanged by a portal upgrade; " +
-  "not backed up (set DPF_RECOVERY_POINT_BACKUP_TARGETS to opt in)";
+/**
+ * The order recovery-point members are recorded in. postgres-only after BET-5
+ * retired neo4j + qdrant.
+ */
+const RECOVERY_TARGET_ORDER: readonly BackupTarget[] = ["postgres"];
 
 /**
  * The primary data store. Always backed up, and the only target whose backup
@@ -121,28 +105,12 @@ const DERIVED_STORE_SKIP_REASON =
 export const PRIMARY_BACKUP_TARGET: BackupTarget = "postgres";
 
 /**
- * Which stores the pre-upgrade recovery point backs up. postgres is ALWAYS
- * included. neo4j (code + knowledge graph) and qdrant (vectors) are DERIVED
- * stores — rebuilt from source by the code-graph bootstrap and untouched by a
- * portal upgrade (separate containers + volumes) — so backing them up before
- * every upgrade is wasted work and a source of spurious failures (observed
- * 2026-06-14: a neo4j backup volume-mismatch blocked every self-upgrade). They
- * are skipped by default. An operator who prefers a fast restore over a
- * from-source rebuild can opt them in via DPF_RECOVERY_POINT_BACKUP_TARGETS
- * (comma-separated); opted-in derived backups are best-effort — a failure
- * degrades the recovery point but never blocks the upgrade.
+ * Which stores the pre-upgrade recovery point backs up. postgres only: BET-5
+ * retired neo4j (code + knowledge graph) and qdrant (vectors), so postgres is
+ * the sole store an upgrade needs to protect.
  */
-export function resolveRecoveryBackupTargets(
-  env: Record<string, string | undefined> = process.env,
-): Set<BackupTarget> {
-  const targets = new Set<BackupTarget>([PRIMARY_BACKUP_TARGET]);
-  const raw = env.DPF_RECOVERY_POINT_BACKUP_TARGETS;
-  if (raw && raw.trim()) {
-    for (const token of raw.split(",").map((t) => t.trim())) {
-      if (token === "neo4j" || token === "qdrant") targets.add(token);
-    }
-  }
-  return targets;
+export function resolveRecoveryBackupTargets(): Set<BackupTarget> {
+  return new Set<BackupTarget>([PRIMARY_BACKUP_TARGET]);
 }
 
 /**
@@ -166,8 +134,8 @@ export function classifyRecoveryPointStatus(
 
 /**
  * Run the backup for a single target, lazily importing only the runner we
- * actually need — so a skipped derived store never even pulls in its backup
- * module. Test callers pass runner overrides to avoid spawning real backups.
+ * actually need. postgres-only after BET-5. Test callers pass a runner override
+ * to avoid spawning a real backup.
  */
 async function runBackupForTarget(
   target: BackupTarget,
@@ -175,32 +143,13 @@ async function runBackupForTarget(
   args: CreateRecoveryPointArgs,
 ): Promise<SelfUpgradeRecoveryPointMember> {
   return runMember(target, async () => {
-    if (target === "postgres") {
-      const run =
-        overrides.postgres ??
-        (await import("@/lib/operate/backups/postgres-backup-runner"))
-          .runPostgresBackup;
-      return run({
-        trigger: RECOVERY_TRIGGER,
-        composeProject: args.composeProject,
-        backupsRoot: args.backupsRoot,
-      });
-    }
-    if (target === "neo4j") {
-      const run =
-        overrides.neo4j ??
-        (await import("@/lib/operate/backups/neo4j-backup-runner")).runNeo4jBackup;
-      return run({
-        trigger: RECOVERY_TRIGGER,
-        composeProject: args.composeProject,
-        backupsRoot: args.backupsRoot,
-      });
-    }
     const run =
-      overrides.qdrant ??
-      (await import("@/lib/operate/backups/qdrant-backup-runner")).runQdrantBackup;
+      overrides.postgres ??
+      (await import("@/lib/operate/backups/postgres-backup-runner"))
+        .runPostgresBackup;
     return run({
       trigger: RECOVERY_TRIGGER,
+      composeProject: args.composeProject,
       backupsRoot: args.backupsRoot,
     });
   });

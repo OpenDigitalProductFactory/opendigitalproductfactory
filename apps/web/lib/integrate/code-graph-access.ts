@@ -1,4 +1,4 @@
-import { prisma, runCypher } from "@dpf/db";
+import { prisma } from "@dpf/db";
 import type { CodeGraphEdgeKind } from "./code-graph/types";
 import { CODE_GRAPH_GRAPH_KEY } from "./code-graph/constants";
 import type { TrustAssessment } from "@/lib/trust-vector";
@@ -94,14 +94,16 @@ async function inspectStructuralRelationshipHealth(graphKey: string): Promise<{
   ) as Record<BenchmarkRelationship, number>;
 
   try {
-    const rows = await runCypher<{ relationship?: unknown; count?: unknown }>(
+    const rows = (await prisma.$queryRawUnsafe(
       [
-        "MATCH ()-[r {graphKey: $graphKey}]->()",
-        "WHERE type(r) IN $relationships",
-        "RETURN type(r) AS relationship, count(r) AS count",
+        "SELECT rel_type AS relationship, count(*)::int AS count",
+        "  FROM graph_edge",
+        " WHERE props->>'graphKey' = $1 AND rel_type = ANY($2::text[])",
+        " GROUP BY rel_type",
       ].join("\n"),
-      { graphKey, relationships: [...BENCHMARK_REQUIRED_RELATIONSHIPS] },
-    );
+      graphKey,
+      [...BENCHMARK_REQUIRED_RELATIONSHIPS],
+    )) as Array<{ relationship?: unknown; count?: unknown }>;
     for (const row of rows) {
       const relationship = row.relationship;
       if (

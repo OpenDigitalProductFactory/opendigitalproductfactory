@@ -1,17 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("./neo4j", () => ({
-  runCypher: vi.fn().mockResolvedValue([]),
+// BET-5: inferProductDependencies now writes DEPENDS_ON edges through
+// syncDependsOn, which UPSERTs into the Postgres graph mirror via
+// prisma.$executeRawUnsafe. Mock the client seam and assert the edge params.
+vi.mock("./client", () => ({
+  prisma: {
+    $executeRawUnsafe: vi.fn().mockResolvedValue(undefined),
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+    taxonomyNode: { findUnique: vi.fn().mockResolvedValue(null) },
+  },
 }));
 
-import { runCypher } from "./neo4j";
+import { prisma } from "./client";
 import {
   inferCrossCollectorRelationships,
   inferProductDependencies,
 } from "./discovery-inference";
 import type { CollectorOutput } from "./discovery-types";
 
-const mockRunCypher = vi.mocked(runCypher);
+const exec = vi.mocked(prisma.$executeRawUnsafe);
+
+/** Edge writes call $executeRawUnsafe(sql, srcKey, dstKey, relType, propsJson). */
+function edgeCall(call: unknown[]) {
+  return {
+    src: call[1] as string,
+    dst: call[2] as string,
+    relType: call[3] as string,
+  };
+}
 
 // ─── Pass 1: Cross-collector inference ─────────────────────────────────────
 
@@ -209,7 +225,7 @@ describe("inferCrossCollectorRelationships", () => {
 
 describe("inferProductDependencies", () => {
   beforeEach(() => {
-    mockRunCypher.mockClear();
+    exec.mockClear();
   });
 
   it("creates DEPENDS_ON from promoted product to its InfraCI", async () => {
@@ -235,12 +251,11 @@ describe("inferProductDependencies", () => {
     const result = await inferProductDependencies(db as never);
 
     expect(result.productToInfraEdges).toBe(1);
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).toContain("DEPENDS_ON");
-    const params = mockRunCypher.mock.calls[0]![1] as Record<string, unknown>;
-    expect(params.fromId).toBe("infra-dpf-portal");
-    expect(params.toId).toBe("container:portal-abc123");
+    expect(exec).toHaveBeenCalledTimes(1);
+    const edge = edgeCall(exec.mock.calls[0]!);
+    expect(edge.relType).toBe("DEPENDS_ON");
+    expect(edge.src).toBe("infra-dpf-portal");
+    expect(edge.dst).toBe("container:portal-abc123");
   });
 
   it("creates name-matched edges for unlinked products", async () => {
@@ -271,9 +286,9 @@ describe("inferProductDependencies", () => {
     const result = await inferProductDependencies(db as never);
 
     expect(result.nameMatchEdges).toBe(1);
-    const params = mockRunCypher.mock.calls[0]![1] as Record<string, unknown>;
-    expect(params.fromId).toBe("product-postgres-db");
-    expect(params.toId).toBe("container:postgres-def456");
+    const edge = edgeCall(exec.mock.calls[0]!);
+    expect(edge.src).toBe("product-postgres-db");
+    expect(edge.dst).toBe("container:postgres-def456");
   });
 
   it("does not create duplicate edges", async () => {
@@ -312,7 +327,7 @@ describe("inferProductDependencies", () => {
     // Should only create 1 edge (promoted), skip the name match since same key
     expect(result.productToInfraEdges).toBe(1);
     expect(result.nameMatchEdges).toBe(0);
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
+    expect(exec).toHaveBeenCalledTimes(1);
   });
 
   it("handles empty database gracefully", async () => {
@@ -328,6 +343,6 @@ describe("inferProductDependencies", () => {
     const result = await inferProductDependencies(db as never);
     expect(result.productToInfraEdges).toBe(0);
     expect(result.nameMatchEdges).toBe(0);
-    expect(mockRunCypher).not.toHaveBeenCalled();
+    expect(exec).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,8 @@ import {
   searchSimilar,
   scrollPoints,
   QDRANT_COLLECTIONS,
+  type MatchClause,
+  type QdrantFilter,
 } from "@dpf/db";
 import {
   semanticMemoryOps,
@@ -131,10 +133,10 @@ export async function recallGovernedContext(params: {
     const threshold = 0.55; // lower threshold — more recall to compensate for short message window
 
     // Base filter: same user, exclude current thread
-    const baseMust: Array<Record<string, unknown>> = [
+    const baseMust: MatchClause[] = [
       { key: "userId", match: { value: params.userId } },
     ];
-    const baseMustNot: Array<Record<string, unknown>> = params.currentThreadId
+    const baseMustNot: MatchClause[] = params.currentThreadId
       ? [{ key: "threadId", match: { value: params.currentThreadId } }]
       : [];
 
@@ -144,7 +146,7 @@ export async function recallGovernedContext(params: {
     // Pass 1: Route-scoped search (if routeContext provided)
     if (params.routeContext) {
       const domain = extractRouteDomain(params.routeContext);
-      const scopedFilter: Record<string, unknown> = {
+      const scopedFilter: QdrantFilter = {
         must: [...baseMust, { key: "routeDomain", match: { value: domain } }],
         ...(baseMustNot.length > 0 ? { must_not: baseMustNot } : {}),
       };
@@ -155,7 +157,7 @@ export async function recallGovernedContext(params: {
 
     // Pass 2: Global fallback if scoped returned fewer than 3 results
     if (results.length < 3) {
-      const globalFilter: Record<string, unknown> = {
+      const globalFilter: QdrantFilter = {
         must: baseMust,
         ...(baseMustNot.length > 0 ? { must_not: baseMustNot } : {}),
       };
@@ -427,7 +429,7 @@ export async function searchKnowledgeArticles(params: {
   const embedding = await generateEmbedding(params.query);
   if (!embedding) return [];
 
-  const must: Array<Record<string, unknown>> = [
+  const must: MatchClause[] = [
     { key: "entityType", match: { value: "knowledge-article" } },
     { key: "status", match: { value: "published" } },
   ];
@@ -467,7 +469,7 @@ export async function lookupCapabilityByFilter(filter: {
   route?: string;
   lifecycleStatus?: string;
 }): Promise<Array<{ actionName: string; specRef: string; lifecycleStatus: string; route: string }>> {
-  const conditions: Array<Record<string, unknown>> = [];
+  const conditions: MatchClause[] = [];
   if (filter.specRef) conditions.push({ key: "spec_ref", match: { value: filter.specRef } });
   if (filter.actionName) conditions.push({ key: "action_name", match: { value: filter.actionName } });
   if (filter.route) conditions.push({ key: "route", match: { value: filter.route } });

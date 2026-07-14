@@ -105,3 +105,57 @@ needs an explicit, one-time decommission:
 Not part of BET-5, but they land on the same Postgres substrate this plan consolidates onto:
 - **BI-E43DC136** — durable agent-workflow primitive (Postgres + Inngest).
 - **BI-83E63277** — push-based reactive agent-progress (LISTEN/NOTIFY or SSE).
+
+## Implementation record — delivered in one atomic PR (2026-07-14)
+
+Shipped as a single branch (`feat/bet5-datastore-compression`) so no install is ever left
+half-migrated. The seam pattern throughout: build the Postgres impl behind the existing
+export surface, A/B it against the live store on real data, then flip a one-file re-export so
+every caller is unchanged.
+
+**Runtime cutover (app reads + writes now Postgres-only):**
+- Vectors: `packages/db/src/pgvector-store.ts` reimplements the Qdrant surface on pgvector
+  (`vector_embedding` table, per-collection HNSW). `qdrant.ts` re-exports it. A/B on the real
+  wiki corpus: 1.000 top-5 ranking parity + identical payload-filter. **must_not fix:** the
+  legacy client passed the whole filter to Qdrant, so `must_not` worked implicitly; the new
+  `buildFilterSql` now handles `must_not` explicitly (else cross-thread memory exclusion would
+  silently break). Filter types (`MatchClause`/`QdrantFilter`) are exported and adopted by the
+  app callers (embeddings.ts, semantic-memory.ts).
+- Graph: `packages/db/src/pg-graph.ts` reimplements the Neo4j read surface as recursive CTEs
+  over `graph_node`/`graph_edge`; `neo4j-graph.ts` re-exports it. `neo4j-sync.ts` write path +
+  the code-graph projection/queries now emit SQL. A/B on the real infra/EA graph: 40/40
+  downstream-impact + 40/40 neighbours identical. New graph server-action helpers
+  (`getInfraEdges`, `getEdgesAmong`, `deleteGraphNode`, `clearGraphByLabel`) replaced the last
+  `runCypher` calls in `actions/graph.ts`, `actions/products.ts`, the rebuild scripts, and
+  `neo4j-schema.ts` (now Postgres-managed; keeps only the osiLayer data backfill).
+
+**One-time data migration (self-upgrade, BI-922EBB99):**
+- `neo4j-graph-backfill.ts` + `pgvector-backfill.ts` copy the live stores into the mirror.
+  Entry: `packages/db/scripts/bet5-decommission-backfill.ts`, run non-fatally on portal boot
+  (`portal-migrate-boot.sh`, after `prisma migrate deploy`) — it reaches the still-running old
+  containers by network alias. Idempotent (skip-if-populated + ON CONFLICT DO NOTHING) and
+  fail-soft (a fresh install with no legacy store finds nothing to copy). **InfraCI nodes have
+  no Prisma source of truth, so this backfill is the only thing that preserves them; code-graph
+  nodes are excluded because they regenerate from the repo (no data loss).**
+- Teardown: `scripts/decommission-neo4j-qdrant.{sh,ps1}` (Mac/Linux + Windows), **data-safety
+  gated** — removes Neo4j only once the graph mirror holds InfraCI nodes, Qdrant only once
+  `vector_embedding` has rows; idempotent; best-effort image reclaim. Wired into `promote.sh`
+  as step 7c (after health/verify prove boot completed), fail-LOUD-but-not-ABORT like
+  sandbox-refresh, so a good portal upgrade is never mislabelled.
+
+**Contraction:**
+- Compose: `neo4j`/`qdrant`/`dev-neo4j`/`dev-qdrant` service definitions + their volumes
+  removed from `docker-compose*.yml` (so nothing recreates them post-teardown). `NEO4J_*` /
+  `QDRANT_INTERNAL_URL` env kept on portal/sandbox/dev for the one-time backfill's reachability.
+- Backup / health / rollback: Neo4j + Qdrant dropped from the active backup-target, recovery-
+  point, rollback, dependency-health, service-restart, and health-probe paths (no more
+  scheduled backups of, or false "down" alerts for, removed services).
+
+**Deliberately deferred to a follow-up cleanup release** (cannot remove in the same release
+that needs them to migrate): the `neo4j-driver` + `@qdrant/js-client-rest` npm deps, the legacy
+driver modules (`neo4j.ts`, `qdrant-legacy.ts`), the dead manifest types/runner files, and the
+now-inert `NEO4J_*`/`QDRANT_*` env — all backfill-only, retired once every install has upgraded.
+
+**Optional specialized-store path (recorded, not built):** at very large scale a dedicated
+vector/graph engine may again beat Postgres; for the target customer that is far off. The
+seam-behind-a-re-export design means re-introducing one is a localized change, not a rewrite.

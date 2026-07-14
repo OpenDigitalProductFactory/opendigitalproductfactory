@@ -1,15 +1,15 @@
 // packages/db/scripts/init-neo4j.ts
-// One-time graph schema bootstrap + seed of Portfolios and TaxonomyNodes.
-// Run: cd packages/db && DATABASE_URL="..." NEO4J_URI="bolt://localhost:7687" NEO4J_USER="neo4j" NEO4J_PASSWORD="dpf_dev_password" npx tsx scripts/init-neo4j.ts
+// One-time graph bootstrap + seed of Portfolios and TaxonomyNodes into the Postgres
+// graph mirror (graph_node / graph_edge). The graph is Postgres-backed since BET-5.
+// Run: cd packages/db && DATABASE_URL="..." npx tsx scripts/init-neo4j.ts
 //
 // What this does:
-//   1. Creates constraints and indexes (idempotent)
+//   1. OSI-layer default backfill (graph schema itself is migration-managed)
 //   2. Seeds Portfolio nodes from Postgres
 //   3. Seeds TaxonomyNode nodes + CHILD_OF edges from Postgres
 //   4. Seeds DigitalProduct nodes + edges from Postgres
-//   5. Seeds foundational InfraCI nodes (PostgreSQL, Neo4j, Docker host)
+//   5. Seeds foundational InfraCI nodes (PostgreSQL, Docker host)
 
-// Env vars are supplied via command line — see comment at top.
 import { prisma } from "../src/client";
 import { initNeo4jSchema } from "../src/neo4j-schema";
 import {
@@ -19,10 +19,9 @@ import {
   syncInfraCI,
   syncDependsOn,
 } from "../src/neo4j-sync";
-import { closeNeo4j } from "../src/neo4j";
 
 async function main() {
-  // 1. Schema constraints + indexes
+  // 1. OSI-layer default backfill (graph schema is created by Prisma migration)
   await initNeo4jSchema();
 
   // 2. Portfolios
@@ -72,7 +71,6 @@ async function main() {
   console.log("Seeding foundational InfraCI nodes…");
   const infraNodes = [
     { ciId: "CI-postgres-01",   name: "DPF PostgreSQL",     ciType: "database",  status: "operational", portfolioSlug: "foundational" },
-    { ciId: "CI-neo4j-01",      name: "DPF Neo4j",          ciType: "database",  status: "operational", portfolioSlug: "foundational" },
     { ciId: "CI-docker-host-01",name: "Docker Host",         ciType: "server",    status: "operational", portfolioSlug: "foundational" },
     { ciId: "CI-nextjs-01",     name: "DPF Web (Next.js)",  ciType: "service",   status: "operational", portfolioSlug: "foundational" },
     { ciId: "CI-ollama-01",     name: "Ollama",             ciType: "ai-inference", status: "offline",      portfolioSlug: "foundational" },
@@ -86,17 +84,15 @@ async function main() {
   // 6. InfraCI dependency edges
   console.log("Seeding InfraCI DEPENDS_ON edges…");
   await syncDependsOn({ fromLabel: "InfraCI", fromId: "CI-nextjs-01",  toLabel: "InfraCI", toId: "CI-postgres-01",    role: "database" });
-  await syncDependsOn({ fromLabel: "InfraCI", fromId: "CI-nextjs-01",  toLabel: "InfraCI", toId: "CI-neo4j-01",       role: "graph-db" });
   await syncDependsOn({ fromLabel: "InfraCI", fromId: "CI-postgres-01",toLabel: "InfraCI", toId: "CI-docker-host-01", role: "runtime"  });
-  await syncDependsOn({ fromLabel: "InfraCI", fromId: "CI-neo4j-01",   toLabel: "InfraCI", toId: "CI-docker-host-01", role: "runtime"  });
   await syncDependsOn({ fromLabel: "InfraCI", fromId: "CI-ollama-01", toLabel: "InfraCI", toId: "CI-docker-host-01", role: "runtime" });
-  console.log("  5 edges done");
+  console.log("  3 edges done");
 
-  console.log("\n✓ Neo4j initialised. Open http://localhost:7474 to browse the graph.");
+  console.log("\n✓ Graph initialised (Postgres-backed).");
 }
 
 main()
   .catch((err) => { console.error(err); process.exit(1); })
   .finally(async () => {
-    await closeNeo4j();
+    await prisma.$disconnect();
   });

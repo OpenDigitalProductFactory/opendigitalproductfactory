@@ -1,19 +1,13 @@
 # Developer overlay — exposes database ports to the host so you can
 # run Next.js locally (pnpm dev) and connect to containers from your IDE.
 #
-# Usage:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres neo4j qdrant
+# Usage:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
 # Or:     The fresh-install.ps1 script merges these into the override automatically.
+#
+# BET-5 (BI-A1E864A5): the neo4j / qdrant port-mapping overrides were removed —
+# Neo4j/Qdrant are retired (platform runs on Postgres: pgvector + graph mirror).
 
 services:
   postgres:
     ports:
       - "5432:5432"
-
-  neo4j:
-    ports:
-      - "7687:7687"
-      - "7474:7474"
-
-  qdrant:
-    ports:
-      - "6333:6333"

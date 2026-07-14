@@ -7,13 +7,12 @@ import {
   RestoreLockedError,
   runPostgresRestore,
 } from "@/lib/operate/backups/postgres-restore-runner";
-import { runNeo4jRestore } from "@/lib/operate/backups/neo4j-restore-runner";
-import { runQdrantRestore } from "@/lib/operate/backups/qdrant-restore-runner";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export const SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT = "ROLLBACK";
 const ROLLBACK_TRIGGER = "self-upgrade-rollback";
-const RESTORE_ORDER: BackupTarget[] = ["postgres", "neo4j", "qdrant"];
+// postgres-only after BET-5 retired neo4j + qdrant.
+const RESTORE_ORDER: BackupTarget[] = ["postgres"];
 
 type PrismaLike = typeof defaultPrisma;
 
@@ -141,21 +140,20 @@ function memberMap(point: SelfUpgradeRecoveryPointLike): Record<BackupTarget, st
     );
   }
 
-  return {
-    postgres: byTarget.get("postgres")!,
-    neo4j: byTarget.get("neo4j")!,
-    qdrant: byTarget.get("qdrant")!,
-  };
+  const result: Partial<Record<BackupTarget, string>> = {};
+  for (const target of RESTORE_ORDER) {
+    result[target] = byTarget.get(target)!;
+  }
+  return result as Record<BackupTarget, string>;
 }
 
 async function resolveRunners(
   overrides?: Partial<Record<BackupTarget, RestoreRunner>>,
 ): Promise<Record<BackupTarget, RestoreRunner>> {
+  // postgres-only after BET-5.
   return {
     postgres: overrides?.postgres ?? runPostgresRestore,
-    neo4j: overrides?.neo4j ?? runNeo4jRestore,
-    qdrant: overrides?.qdrant ?? runQdrantRestore,
-  };
+  } as Record<BackupTarget, RestoreRunner>;
 }
 
 function backupRunSnapshotData(row: BackupRunSnapshot) {
@@ -371,8 +369,8 @@ export async function runSelfUpgradeRollback(
       });
       restores.push(result);
 
-      // Postgres restore rewinds the DB to a point before the Neo4j/Qdrant
-      // BackupRun rows existed. Reinsert all source rows before continuing.
+      // Postgres restore rewinds the DB to a point before the recovery-point
+      // BackupRun row existed. Reinsert the source row so it stays visible.
       if (target === "postgres") {
         await upsertBackupRunSnapshots(prisma, sourceSnapshots);
       }

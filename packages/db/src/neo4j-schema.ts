@@ -1,30 +1,14 @@
 // packages/db/src/neo4j-schema.ts
-// Creates constraints and indexes for the DPF graph schema.
-// Safe to re-run — all statements use IF NOT EXISTS.
+// Graph-schema bootstrap. Formerly created Neo4j constraints/indexes; the graph now
+// lives in Postgres (graph_node / graph_edge, created by the BET-5 migration), so
+// there is no schema to create at runtime. The OSI-layer default backfill is retained
+// as a pure data step over the Postgres mirror. Export names are unchanged so the
+// init script and barrel keep working across the cutover.
 //
-// Node labels:
-//   DigitalProduct  — mirrors Prisma DigitalProduct (keyed on productId)
-//   TaxonomyNode    — mirrors Prisma TaxonomyNode   (keyed on nodeId)
-//   Portfolio       — mirrors Prisma Portfolio       (keyed on slug)
-//   InfraCI         — infrastructure configuration item (no Prisma mirror yet)
-//   CodeFile        — committed source-code file projection (keyed on codeFileKey)
-//   Document        — managed document projection (keyed on documentId)
-//
-// Relationship types:
-//   BELONGS_TO      — DigitalProduct → Portfolio
-//   CATEGORIZED_AS  — DigitalProduct → TaxonomyNode
-//   CHILD_OF        — TaxonomyNode → TaxonomyNode (parent)
-//   DEPENDS_ON      — DigitalProduct|InfraCI → InfraCI  (with role, since props)
-//   PROVIDES_TO     — InfraCI → DigitalProduct
-//   DOC_REFERENCES  — Document → Document reference projection
-//
-// IT4IT value-stream labels (on DigitalProduct nodes):
-//   :S2P  Strategy to Portfolio  (ServiceCandidate / Portfolio)
-//   :R2D  Requirement to Deploy  (ServiceRelease / BuildUnit)
-//   :R2F  Request to Fulfill     (ServiceInstance / Subscription)
-//   :D2C  Detect to Correct      (ServiceInstance under operational monitoring)
+// Node labels (graph_node.labels) and relationship types (graph_edge.rel_type) mirror
+// the former Neo4j model 1:1 — see neo4j-sync.ts / pg-graph.ts for the write & read sides.
 
-import { runCypher } from "./neo4j";
+import { prisma } from "./client";
 
 /** Network topology relationship types (OSI-aware multi-layer graph). */
 export const NETWORK_RELATIONSHIP_TYPES = [
@@ -38,69 +22,18 @@ export const NETWORK_RELATIONSHIP_TYPES = [
   "PEER_OF",          // L2 → L2 (LLDP/CDP)
 ] as const;
 
-const SCHEMA_STATEMENTS = [
-  // ── Uniqueness constraints (also create backing index) ────────────────────
-  "CREATE CONSTRAINT dp_productId IF NOT EXISTS FOR (n:DigitalProduct) REQUIRE n.productId IS UNIQUE",
-  "CREATE CONSTRAINT tn_nodeId    IF NOT EXISTS FOR (n:TaxonomyNode)    REQUIRE n.nodeId    IS UNIQUE",
-  "CREATE CONSTRAINT p_slug       IF NOT EXISTS FOR (n:Portfolio)        REQUIRE n.slug      IS UNIQUE",
-  "CREATE CONSTRAINT ci_ciId      IF NOT EXISTS FOR (n:InfraCI)          REQUIRE n.ciId      IS UNIQUE",
-  "CREATE CONSTRAINT cf_codeFileKey IF NOT EXISTS FOR (n:CodeFile)       REQUIRE n.codeFileKey IS UNIQUE",
-  "CREATE CONSTRAINT cs_symbolKey IF NOT EXISTS FOR (n:CodeSymbol)       REQUIRE n.codeSymbolKey IS UNIQUE",
-  "CREATE CONSTRAINT cr_routeKey IF NOT EXISTS FOR (n:CodeRoute)         REQUIRE n.codeRouteKey IS UNIQUE",
-  "CREATE CONSTRAINT ct_toolKey IF NOT EXISTS FOR (n:CodeTool)           REQUIRE n.codeToolKey IS UNIQUE",
-  "CREATE CONSTRAINT pm_modelKey IF NOT EXISTS FOR (n:PrismaModel)       REQUIRE n.prismaModelKey IS UNIQUE",
-  "CREATE CONSTRAINT pts_promptKey IF NOT EXISTS FOR (n:PromptTemplateSource) REQUIRE n.promptTemplateSourceKey IS UNIQUE",
-  "CREATE CONSTRAINT tf_testFileKey IF NOT EXISTS FOR (n:TestFile)       REQUIRE n.testFileKey IS UNIQUE",
-  "CREATE CONSTRAINT em_moduleKey IF NOT EXISTS FOR (n:ExternalModule)   REQUIRE n.externalModuleKey IS UNIQUE",
-  "CREATE CONSTRAINT doc_documentId IF NOT EXISTS FOR (n:Document)       REQUIRE n.documentId IS UNIQUE",
-
-  // ── Existence constraints (enterprise only — skip on community) ───────────
-  // Community Neo4j does not support property existence constraints; omitted.
-
-  // ── Additional indexes ────────────────────────────────────────────────────
-  "CREATE INDEX dp_name  IF NOT EXISTS FOR (n:DigitalProduct) ON (n.name)",
-  "CREATE INDEX dp_stage IF NOT EXISTS FOR (n:DigitalProduct) ON (n.lifecycleStage)",
-  "CREATE INDEX tn_name  IF NOT EXISTS FOR (n:TaxonomyNode)   ON (n.name)",
-  "CREATE INDEX ci_type  IF NOT EXISTS FOR (n:InfraCI)        ON (n.ciType)",
-  "CREATE INDEX ci_status IF NOT EXISTS FOR (n:InfraCI)       ON (n.status)",
-  "CREATE INDEX cf_graphKey IF NOT EXISTS FOR (n:CodeFile)    ON (n.graphKey)",
-  "CREATE INDEX cf_path     IF NOT EXISTS FOR (n:CodeFile)    ON (n.path)",
-  "CREATE INDEX cs_graphKey IF NOT EXISTS FOR (n:CodeSymbol)  ON (n.graphKey)",
-  "CREATE INDEX cr_graphKey IF NOT EXISTS FOR (n:CodeRoute)   ON (n.graphKey)",
-  "CREATE INDEX ct_graphKey IF NOT EXISTS FOR (n:CodeTool)    ON (n.graphKey)",
-  "CREATE INDEX pm_graphKey IF NOT EXISTS FOR (n:PrismaModel) ON (n.graphKey)",
-  "CREATE INDEX pts_graphKey IF NOT EXISTS FOR (n:PromptTemplateSource) ON (n.graphKey)",
-  "CREATE INDEX tf_graphKey IF NOT EXISTS FOR (n:TestFile)    ON (n.graphKey)",
-  "CREATE INDEX em_graphKey IF NOT EXISTS FOR (n:ExternalModule) ON (n.graphKey)",
-  "CREATE INDEX doc_state   IF NOT EXISTS FOR (n:Document)    ON (n.currentState)",
-  "CREATE INDEX doc_kind    IF NOT EXISTS FOR (n:Document)    ON (n.documentKind)",
-
-  // OSI-aware topology indexes
-  "CREATE INDEX ci_osi_layer       IF NOT EXISTS FOR (n:InfraCI) ON (n.osiLayer)",
-  "CREATE INDEX ci_network_address IF NOT EXISTS FOR (n:InfraCI) ON (n.networkAddress)",
-];
-
 export async function initNeo4jSchema(): Promise<void> {
-  console.log("Initialising Neo4j schema constraints and indexes…");
-  for (const stmt of SCHEMA_STATEMENTS) {
-    try {
-      await runCypher(stmt);
-      console.log("  ✓", stmt.replace(/\s+/g, " ").slice(0, 80));
-    } catch (err: unknown) {
-      // Log but don't abort — a constraint that already exists in slightly
-      // different form should not block startup.
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn("  ⚠ skipped:", msg.slice(0, 120));
-    }
-  }
+  // Graph schema (graph_node/graph_edge + their indexes) is created by the Prisma
+  // migration, so there are no constraints/indexes to create here. Retain only the
+  // osiLayer default backfill, which is data, not schema.
   await backfillOsiLayers();
-  console.log("Neo4j schema ready.");
+  console.log("Graph schema ready (Postgres-managed).");
 }
 
 /**
  * Backfill osiLayer on existing InfraCI nodes that don't have one yet.
  * Maps ciType → default OSI layer. Safe to re-run — only touches nodes
- * where osiLayer IS NULL.
+ * whose osiLayer is absent or null.
  */
 export async function backfillOsiLayers(): Promise<void> {
   const mapping: Array<{ ciTypes: string[]; layer: number; layerName: string }> = [
@@ -110,16 +43,19 @@ export async function backfillOsiLayers(): Promise<void> {
   ];
   for (const { ciTypes, layer, layerName } of mapping) {
     try {
-      const result = await runCypher<{ updated: unknown }>(
-        `MATCH (ci:InfraCI)
-         WHERE ci.osiLayer IS NULL AND ci.ciType IN $ciTypes
-         SET ci.osiLayer = $layer, ci.osiLayerName = $layerName
-         RETURN count(ci) AS updated`,
-        { ciTypes, layer, layerName },
-      );
-      const count = Number(result[0]?.updated ?? 0);
-      if (count > 0) {
-        console.log(`  backfill: set osiLayer=${layer} on ${count} InfraCI nodes (${ciTypes.join(", ")})`);
+      const rows = (await prisma.$queryRawUnsafe(
+        `UPDATE graph_node
+            SET props = props || jsonb_build_object('osiLayer', $1::int, 'osiLayerName', $2::text)
+          WHERE 'InfraCI' = ANY(labels)
+            AND (NOT (props ? 'osiLayer') OR props->>'osiLayer' IS NULL)
+            AND props->>'ciType' = ANY($3)
+        RETURNING key`,
+        layer,
+        layerName,
+        ciTypes,
+      )) as Array<{ key: string }>;
+      if (rows.length > 0) {
+        console.log(`  backfill: set osiLayer=${layer} on ${rows.length} InfraCI nodes (${ciTypes.join(", ")})`);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

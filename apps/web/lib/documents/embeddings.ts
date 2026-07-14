@@ -1,4 +1,4 @@
-import { QDRANT_COLLECTIONS, searchSimilar, upsertVectors } from "@dpf/db";
+import { QDRANT_COLLECTIONS, searchSimilar, upsertVectors, type MatchClause } from "@dpf/db";
 import { generateEmbedding } from "@/lib/inference/embedding";
 
 const ENTITY_TYPE = "document";
@@ -74,7 +74,7 @@ export async function searchDocumentVectors(input: DocumentSemanticSearchInput):
   const vector = await generateEmbedding(input.query);
   if (!vector) return [];
 
-  const must: Array<Record<string, unknown>> = [
+  const must: MatchClause[] = [
     { key: "entityType", match: { value: ENTITY_TYPE } },
   ];
   if (input.organizationId) must.push({ key: "organizationId", match: { value: input.organizationId } });

@@ -2,10 +2,13 @@ generator client {
   provider            = "prisma-client"
   output              = "../generated/client"
   importFileExtension = "ts"
+  previewFeatures     = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  // BET-5 (BI-A1E864A5): vectors move Qdrant -> pgvector, graph hierarchy uses ltree.
+  extensions = [vector, ltree]
 }
 
 enum IntakeSource {
@@ -12601,4 +12604,41 @@ model JournalLine {
 
   @@index([journalEntryId])
   @@index([accountId])
+}
+
+/// BET-5 (BI-A1E864A5): pgvector-backed vector storage, replacing Qdrant. The `embedding`
+/// column is Unsupported (Prisma can't model pgvector) — access via $queryRaw in
+/// packages/db/src/pgvector-store.ts. One table, per-collection HNSW indexes (see migration).
+model VectorEmbedding {
+  collection String
+  pointId    BigInt                     @map("point_id")
+  embedding  Unsupported("vector(768)")
+  payload    Json                       @default("{}")
+
+  @@id([collection, pointId])
+  @@map("vector_embedding")
+}
+
+/// BET-5 (BI-A1E864A5): Postgres graph mirror, replacing Neo4j. `key` is the universal node
+/// key (coalesce of productId/ciId/nodeId/slug). Traversals run as WITH RECURSIVE over
+/// graph_edge in packages/db/src/pg-graph.ts. Populated by the sync writers (formerly Neo4j).
+model GraphNode {
+  key    String   @id
+  labels String[]
+  props  Json     @default("{}")
+
+  @@map("graph_node")
+}
+
+model GraphEdge {
+  id      BigInt @id @default(autoincrement())
+  srcKey  String @map("src_key")
+  dstKey  String @map("dst_key")
+  relType String @map("rel_type")
+  props   Json   @default("{}")
+
+  @@unique([srcKey, dstKey, relType], name: "graph_edge_triple")
+  @@index([dstKey, relType])
+  @@index([srcKey, relType])
+  @@map("graph_edge")
 }

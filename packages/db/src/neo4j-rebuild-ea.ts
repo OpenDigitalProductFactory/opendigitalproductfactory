@@ -5,15 +5,15 @@
 
 import "./load-env.js";
 import { prisma } from "./client.js";
-import { closeNeo4j, runCypher } from "./neo4j.js";
+import { clearGraphByLabel } from "./pg-graph.js";
 import { syncEaElement, syncEaRelationship } from "./neo4j-sync.js";
 
 async function rebuildEa(): Promise<void> {
   console.log("Rebuilding EA graph projection...");
 
   // 1. Drop all existing EA nodes and their edges
-  await runCypher(`MATCH (n:EaElement) DETACH DELETE n`, {});
-  console.log("Dropped existing :EaElement nodes");
+  await clearGraphByLabel("EaElement");
+  console.log("Dropped existing EaElement nodes");
 
   // 2. Rebuild EaElement nodes
   const elements = await prisma.eaElement.findMany({
@@ -82,4 +82,4 @@ async function rebuildEa(): Promise<void> {
 
 rebuildEa()
   .catch(console.error)
-  .finally(() => Promise.all([prisma.$disconnect(), closeNeo4j()]));
+  .finally(() => prisma.$disconnect());

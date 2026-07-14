@@ -1,4 +1,14 @@
-import { runCypher } from "@dpf/db";
+// apps/web/lib/integrate/code-graph/neo4j-projection.ts
+// BET-5 (BI-A1E864A5): the code-graph structural projection formerly ran Cypher MERGE
+// against Neo4j; it now UPSERTs into the Postgres graph mirror (`graph_node` /
+// `graph_edge`) that graph-queries.ts / code-graph-access.ts read. Node identity =
+// the namespaced key the extractors already mint (codeFileKey = `${graphKey}:${path}`,
+// codeSymbolKey = `${graphKey}:symbol:…`, etc.) → graph_node.key. Edge facts map
+// fromKey → src_key, toKey → dst_key, kind → rel_type (direction preserved from the
+// old MATCH (from)-[r]->(to)). `graphKey`, `path`, `filePath`, line/confidence/
+// extractor and any extractor attributes are carried in the jsonb `props`, which the
+// read side filters on (props->>'graphKey', props->>'name', props->>'path', …).
+import { prisma } from "@dpf/db";
 import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 
 import { CODE_GRAPH_EXTRACTORS } from "./extractors";
@@ -29,8 +39,6 @@ const STRUCTURAL_NODE_LABELS = [
   "TestFile",
   "ExternalModule",
 ];
-const PROJECTION_BATCH_SIZE = 100;
-const EDGE_PROJECTION_BATCH_SIZE = 50;
 
 type CodeFileProjection = {
   codeFileKey: string;
@@ -41,90 +49,104 @@ type CodeFileProjection = {
   indexedAt: Date;
 };
 
-type NodeEndpointProjection = {
-  label: CodeGraphNodeKind;
-  keyField: string;
-};
-
 export function buildCodeFileKey(graphKey: string, filePath: string): string {
   return `${graphKey}:${filePath}`;
 }
 
+// ─── Graph-mirror primitives ──────────────────────────────────────────────────
+
+/** UPSERT a node; props shallow-merged (parity with Cypher `SET n.x = …` / `n += map`). */
+async function upsertGraphNode(
+  key: string,
+  labels: string[],
+  props: Record<string, unknown>,
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO graph_node (key, labels, props)
+     VALUES ($1, $2::text[], $3::jsonb)
+     ON CONFLICT (key) DO UPDATE
+       SET labels = excluded.labels,
+           props  = graph_node.props || excluded.props`,
+    key,
+    labels,
+    JSON.stringify(props),
+  );
+}
+
+/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type); props shallow-merged. */
+async function upsertGraphEdge(
+  srcKey: string,
+  dstKey: string,
+  relType: string,
+  props: Record<string, unknown>,
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO graph_edge (src_key, dst_key, rel_type, props)
+     VALUES ($1, $2, $3, $4::jsonb)
+     ON CONFLICT (src_key, dst_key, rel_type) DO UPDATE
+       SET props = graph_edge.props || excluded.props`,
+    srcKey,
+    dstKey,
+    relType,
+    JSON.stringify(props),
+  );
+}
+
 export async function clearCodeGraph(graphKey: string): Promise<void> {
-  await runCypher(
-    "MATCH (n {graphKey: $graphKey}) DETACH DELETE n",
-    { graphKey },
+  // DETACH DELETE equivalent for every node in this graphKey (all labels).
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge
+      WHERE props->>'graphKey' = $1
+         OR src_key IN (SELECT key FROM graph_node WHERE props->>'graphKey' = $1)
+         OR dst_key IN (SELECT key FROM graph_node WHERE props->>'graphKey' = $1)`,
+    graphKey,
+  );
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_node WHERE props->>'graphKey' = $1`,
+    graphKey,
   );
 }
 
 export async function ensureCodeGraphNeo4jSchema(): Promise<void> {
-  const statements = [
-    "CREATE CONSTRAINT cf_codeFileKey IF NOT EXISTS FOR (n:CodeFile) REQUIRE n.codeFileKey IS UNIQUE",
-    "CREATE CONSTRAINT cs_symbolKey IF NOT EXISTS FOR (n:CodeSymbol) REQUIRE n.codeSymbolKey IS UNIQUE",
-    "CREATE CONSTRAINT cr_routeKey IF NOT EXISTS FOR (n:CodeRoute) REQUIRE n.codeRouteKey IS UNIQUE",
-    "CREATE CONSTRAINT ct_toolKey IF NOT EXISTS FOR (n:CodeTool) REQUIRE n.codeToolKey IS UNIQUE",
-    "CREATE CONSTRAINT pm_modelKey IF NOT EXISTS FOR (n:PrismaModel) REQUIRE n.prismaModelKey IS UNIQUE",
-    "CREATE CONSTRAINT pf_fieldKey IF NOT EXISTS FOR (n:PrismaField) REQUIRE n.prismaFieldKey IS UNIQUE",
-    "CREATE CONSTRAINT pts_promptKey IF NOT EXISTS FOR (n:PromptTemplateSource) REQUIRE n.promptTemplateSourceKey IS UNIQUE",
-    "CREATE CONSTRAINT tf_testFileKey IF NOT EXISTS FOR (n:TestFile) REQUIRE n.testFileKey IS UNIQUE",
-    "CREATE CONSTRAINT em_moduleKey IF NOT EXISTS FOR (n:ExternalModule) REQUIRE n.externalModuleKey IS UNIQUE",
-    "CREATE INDEX cf_graphKey IF NOT EXISTS FOR (n:CodeFile) ON (n.graphKey)",
-    "CREATE INDEX cf_path IF NOT EXISTS FOR (n:CodeFile) ON (n.path)",
-    "CREATE INDEX cs_graphKey IF NOT EXISTS FOR (n:CodeSymbol) ON (n.graphKey)",
-    "CREATE INDEX cr_graphKey IF NOT EXISTS FOR (n:CodeRoute) ON (n.graphKey)",
-    "CREATE INDEX ct_graphKey IF NOT EXISTS FOR (n:CodeTool) ON (n.graphKey)",
-    "CREATE INDEX pm_graphKey IF NOT EXISTS FOR (n:PrismaModel) ON (n.graphKey)",
-    "CREATE INDEX pf_graphKey IF NOT EXISTS FOR (n:PrismaField) ON (n.graphKey)",
-    "CREATE INDEX pts_graphKey IF NOT EXISTS FOR (n:PromptTemplateSource) ON (n.graphKey)",
-    "CREATE INDEX tf_graphKey IF NOT EXISTS FOR (n:TestFile) ON (n.graphKey)",
-    "CREATE INDEX em_graphKey IF NOT EXISTS FOR (n:ExternalModule) ON (n.graphKey)",
-  ];
-
-  for (const statement of statements) {
-    try {
-      await runCypher(statement);
-    } catch {
-      // Reconcile can proceed if an equivalent schema object already exists.
-    }
-  }
+  // No-op: the Postgres graph mirror (graph_node/graph_edge + its indexes) is
+  // provisioned by the 20260714120000_bet5_graph_mirror migration, so there is no
+  // per-run schema to create. Retained for call-site compatibility.
 }
 
 async function clearStructuralFactsForFile(graphKey: string, filePath: string): Promise<void> {
-  await runCypher(
-    [
-      "MATCH ()-[r {graphKey: $graphKey, filePath: $filePath}]-()",
-      "DELETE r",
-    ].join("\n"),
-    { graphKey, filePath },
+  // 1. Drop structural edges attributed to this file (props.graphKey + props.filePath).
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge WHERE props->>'graphKey' = $1 AND props->>'filePath' = $2`,
+    graphKey,
+    filePath,
   );
-  await runCypher(
-    [
-      "MATCH (n {graphKey: $graphKey, path: $filePath})",
-      "WHERE any(label IN labels(n) WHERE label IN $labels)",
-      "DETACH DELETE n",
-    ].join("\n"),
-    { graphKey, filePath, labels: STRUCTURAL_NODE_LABELS },
+  // 2. DETACH the structural nodes at this path: drop any remaining incident edges…
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge
+      WHERE src_key IN (
+              SELECT key FROM graph_node
+               WHERE props->>'graphKey' = $1 AND props->>'path' = $2 AND labels && $3::text[]
+            )
+         OR dst_key IN (
+              SELECT key FROM graph_node
+               WHERE props->>'graphKey' = $1 AND props->>'path' = $2 AND labels && $3::text[]
+            )`,
+    graphKey,
+    filePath,
+    STRUCTURAL_NODE_LABELS,
+  );
+  // …then the nodes themselves.
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_node
+      WHERE props->>'graphKey' = $1 AND props->>'path' = $2 AND labels && $3::text[]`,
+    graphKey,
+    filePath,
+    STRUCTURAL_NODE_LABELS,
   );
 }
 
 function keyFieldForLabel(label: string): string {
   return `${label.charAt(0).toLowerCase()}${label.slice(1)}Key`;
-}
-
-function endpointForKey(graphKey: string, key: string): NodeEndpointProjection | null {
-  const typedPrefixes: Array<{ prefix: string; label: CodeGraphNodeKind }> = [
-    { prefix: `${graphKey}:symbol:`, label: "CodeSymbol" },
-    { prefix: `${graphKey}:route:`, label: "CodeRoute" },
-    { prefix: `${graphKey}:tool:`, label: "CodeTool" },
-    { prefix: `${graphKey}:prisma-model:`, label: "PrismaModel" },
-    { prefix: `${graphKey}:prisma-field:`, label: "PrismaField" },
-    { prefix: `${graphKey}:test:`, label: "TestFile" },
-    { prefix: `${graphKey}:module:`, label: "ExternalModule" },
-  ];
-  const match = typedPrefixes.find((entry) => key.startsWith(entry.prefix));
-  const label = match?.label ?? (key.startsWith(`${graphKey}:`) ? "CodeFile" : null);
-  if (!label) return null;
-  return { label, keyField: keyFieldForLabel(label) };
 }
 
 function groupByKind<T extends { kind: string }>(facts: T[]): Map<string, T[]> {
@@ -140,143 +162,50 @@ function groupByKind<T extends { kind: string }>(facts: T[]): Map<string, T[]> {
   return groups;
 }
 
-function chunks<T>(items: T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size));
-  }
-  return result;
-}
-
-// `SET n += map` requires a non-null map; default missing attributes to {}.
-function withAttributeDefaults<T extends { attributes?: Record<string, unknown> }>(
-  facts: T[],
-): Array<T & { attributes: Record<string, unknown> }> {
-  return facts.map((fact) => ({ ...fact, attributes: fact.attributes ?? {} }));
-}
-
 async function projectCodeFileFacts(files: CodeFileProjection[]): Promise<void> {
-  for (const batch of chunks(files, PROJECTION_BATCH_SIZE)) {
-    if (batch.length === 0) continue;
-    await runCypher(
-      [
-        "UNWIND $files AS file",
-        "MERGE (f:CodeFile {codeFileKey: file.codeFileKey})",
-        "SET f.graphKey = file.graphKey,",
-        "    f.path = file.filePath,",
-        "    f.extension = file.extension,",
-        "    f.checksum = file.checksum,",
-        "    f.indexedAt = datetime(file.indexedAt)",
-      ].join("\n"),
-      {
-        files: batch.map((file) => ({
-          ...file,
-          indexedAt: file.indexedAt.toISOString(),
-        })),
-      },
-    );
+  for (const file of files) {
+    await upsertGraphNode(file.codeFileKey, ["CodeFile"], {
+      codeFileKey: file.codeFileKey,
+      graphKey: file.graphKey,
+      path: file.filePath,
+      extension: file.extension,
+      checksum: file.checksum,
+      indexedAt: file.indexedAt.toISOString(),
+    });
   }
 }
 
 async function projectNodeFacts(label: CodeGraphNodeKind, facts: CodeGraphNodeFact[]): Promise<void> {
   const keyField = keyFieldForLabel(label);
-  for (const batch of chunks(facts, PROJECTION_BATCH_SIZE)) {
-    if (batch.length === 0) continue;
-    await runCypher(
-      [
-        "UNWIND $facts AS fact",
-        `MERGE (n:${label} {${keyField}: fact.key})`,
-        "SET n.graphKey = fact.graphKey,",
-        "    n.name = fact.name,",
-        "    n.path = fact.filePath,",
-        "    n.startLine = fact.startLine,",
-        "    n.endLine = fact.endLine,",
-        "    n.extractor = fact.extractor,",
-        "    n += fact.attributes",
-      ].join("\n"),
-      { facts: withAttributeDefaults(batch) },
-    );
-  }
-}
-
-async function projectTypedEdgeFacts(
-  kind: CodeGraphEdgeKind,
-  from: NodeEndpointProjection,
-  to: NodeEndpointProjection,
-  facts: CodeGraphEdgeFact[],
-): Promise<void> {
-  for (const batch of chunks(facts, EDGE_PROJECTION_BATCH_SIZE)) {
-    if (batch.length === 0) continue;
-    await runCypher(
-      [
-        "UNWIND $facts AS fact",
-        `MATCH (from:${from.label} {${from.keyField}: fact.fromKey})`,
-        `MATCH (to:${to.label} {${to.keyField}: fact.toKey})`,
-        `MERGE (from)-[r:${kind} {graphKey: fact.graphKey, fromKey: fact.fromKey, toKey: fact.toKey}]->(to)`,
-        "SET r.filePath = fact.filePath,",
-        "    r.startLine = fact.startLine,",
-        "    r.endLine = fact.endLine,",
-        "    r.confidence = fact.confidence,",
-        "    r.extractor = fact.extractor,",
-        "    r += fact.attributes",
-      ].join("\n"),
-      { facts: withAttributeDefaults(batch) },
-    );
-  }
-}
-
-async function projectGenericEdgeFacts(kind: CodeGraphEdgeKind, facts: CodeGraphEdgeFact[]): Promise<void> {
-  for (const batch of chunks(facts, EDGE_PROJECTION_BATCH_SIZE)) {
-    if (batch.length === 0) continue;
-    await runCypher(
-      [
-        "UNWIND $facts AS fact",
-        "MATCH (from {graphKey: fact.graphKey})",
-        "WHERE any(key IN keys(from) WHERE from[key] = fact.fromKey)",
-        "MATCH (to {graphKey: fact.graphKey})",
-        "WHERE any(key IN keys(to) WHERE to[key] = fact.toKey)",
-        `MERGE (from)-[r:${kind} {graphKey: fact.graphKey, fromKey: fact.fromKey, toKey: fact.toKey}]->(to)`,
-        "SET r.filePath = fact.filePath,",
-        "    r.startLine = fact.startLine,",
-        "    r.endLine = fact.endLine,",
-        "    r.confidence = fact.confidence,",
-        "    r.extractor = fact.extractor,",
-        "    r += fact.attributes",
-      ].join("\n"),
-      { facts: withAttributeDefaults(batch) },
-    );
+  for (const fact of facts) {
+    await upsertGraphNode(fact.key, [label], {
+      [keyField]: fact.key,
+      graphKey: fact.graphKey,
+      name: fact.name,
+      path: fact.filePath,
+      startLine: fact.startLine,
+      endLine: fact.endLine,
+      extractor: fact.extractor,
+      // `SET n += fact.attributes` — extractor attributes override the base props.
+      ...(fact.attributes ?? {}),
+    });
   }
 }
 
 async function projectEdgeFacts(kind: CodeGraphEdgeKind, facts: CodeGraphEdgeFact[]): Promise<void> {
-  const typedGroups = new Map<string, {
-    from: NodeEndpointProjection;
-    to: NodeEndpointProjection;
-    facts: CodeGraphEdgeFact[];
-  }>();
-  const genericFacts: CodeGraphEdgeFact[] = [];
-
   for (const fact of facts) {
-    const from = endpointForKey(fact.graphKey, fact.fromKey);
-    const to = endpointForKey(fact.graphKey, fact.toKey);
-    if (!from || !to) {
-      genericFacts.push(fact);
-      continue;
-    }
-
-    const groupKey = `${from.label}:${to.label}`;
-    const group = typedGroups.get(groupKey);
-    if (group) {
-      group.facts.push(fact);
-    } else {
-      typedGroups.set(groupKey, { from, to, facts: [fact] });
-    }
+    await upsertGraphEdge(fact.fromKey, fact.toKey, kind, {
+      graphKey: fact.graphKey,
+      fromKey: fact.fromKey,
+      toKey: fact.toKey,
+      filePath: fact.filePath,
+      startLine: fact.startLine,
+      endLine: fact.endLine,
+      confidence: fact.confidence,
+      extractor: fact.extractor,
+      ...(fact.attributes ?? {}),
+    });
   }
-
-  for (const group of typedGroups.values()) {
-    await projectTypedEdgeFacts(kind, group.from, group.to, group.facts);
-  }
-  await projectGenericEdgeFacts(kind, genericFacts);
 }
 
 async function extractStructuralFacts(
@@ -341,9 +270,14 @@ export async function syncTrackedFile(
     }
     await projectStructuralFacts(await extractStructuralFacts(graphKey, filePath, content));
   } catch {
-    await runCypher(
-      "MATCH (f:CodeFile {codeFileKey: $codeFileKey}) DETACH DELETE f",
-      { codeFileKey },
+    // DETACH DELETE the CodeFile node (drop incident edges first, then the node).
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM graph_edge WHERE src_key = $1 OR dst_key = $1`,
+      codeFileKey,
+    );
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM graph_node WHERE key = $1 AND 'CodeFile' = ANY(labels)`,
+      codeFileKey,
     );
     await clearStructuralFactsForFile(graphKey, filePath);
     await deleteCodeGraphFileHash(graphKey, filePath);

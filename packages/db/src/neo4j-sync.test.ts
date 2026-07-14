@@ -1,21 +1,48 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock neo4j module before import
-vi.mock("./neo4j", () => ({
-  runCypher: vi.fn().mockResolvedValue([]),
+// BET-5: the sync writers now UPSERT into the Postgres graph mirror via
+// prisma.$executeRawUnsafe (see neo4j-sync.ts) instead of running Cypher.
+// Mock the prisma client seam and assert against the SQL + positional params.
+vi.mock("./client", () => ({
+  prisma: {
+    $executeRawUnsafe: vi.fn().mockResolvedValue(undefined),
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+    taxonomyNode: { findUnique: vi.fn().mockResolvedValue(null) },
+  },
 }));
 
-import { runCypher } from "./neo4j";
+import { prisma } from "./client";
 import { syncDocumentReference, syncInfraCI, syncInventoryRelationship } from "./neo4j-sync";
 
-const mockRunCypher = vi.mocked(runCypher);
+const exec = vi.mocked(prisma.$executeRawUnsafe);
+
+/** Node writes call $executeRawUnsafe(sql, key, labels, propsJson). */
+function nodeCall(call: unknown[]) {
+  return {
+    sql: call[0] as string,
+    key: call[1] as string,
+    labels: call[2] as string[],
+    props: JSON.parse(call[3] as string) as Record<string, unknown>,
+  };
+}
+
+/** Edge writes call $executeRawUnsafe(sql, srcKey, dstKey, relType, propsJson). */
+function edgeCall(call: unknown[]) {
+  return {
+    sql: call[0] as string,
+    src: call[1] as string,
+    dst: call[2] as string,
+    relType: call[3] as string,
+    props: JSON.parse((call[4] ?? "{}") as string) as Record<string, unknown>,
+  };
+}
 
 describe("syncInfraCI", () => {
   beforeEach(() => {
-    mockRunCypher.mockClear();
+    exec.mockClear();
   });
 
-  it("merges basic InfraCI node without extended props", async () => {
+  it("upserts a basic InfraCI node without extended props", async () => {
     await syncInfraCI({
       ciId: "CI-test-01",
       name: "Test Node",
@@ -23,11 +50,16 @@ describe("syncInfraCI", () => {
       status: "operational",
     });
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).toContain("MERGE (ci:InfraCI {ciId: $ciId})");
-    expect(cypher).toContain("ci.name = $name");
-    expect(cypher).toContain("ci.status = $status");
+    expect(exec).toHaveBeenCalledTimes(1);
+    const call = nodeCall(exec.mock.calls[0]!);
+    expect(call.sql).toContain("INSERT INTO graph_node");
+    expect(call.key).toBe("CI-test-01");
+    expect(call.labels).toContain("InfraCI");
+    expect(call.props).toMatchObject({
+      ciId: "CI-test-01",
+      name: "Test Node",
+      status: "operational",
+    });
   });
 
   it("sets extended properties when provided", async () => {
@@ -46,20 +78,15 @@ describe("syncInfraCI", () => {
       },
     );
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const params = mockRunCypher.mock.calls[0]![1] as Record<string, unknown>;
-    expect(params).toMatchObject({
+    expect(exec).toHaveBeenCalledTimes(1);
+    const call = nodeCall(exec.mock.calls[0]!);
+    expect(call.props).toMatchObject({
       ciId: "CI-ollama-01",
       baseUrl: "http://ollama:11434",
       gpu: "NVIDIA RTX 4090",
       vramGb: 24,
       modelCount: 3,
     });
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).toContain("ci.baseUrl = $baseUrl");
-    expect(cypher).toContain("ci.gpu = $gpu");
-    expect(cypher).toContain("ci.vramGb = $vramGb");
-    expect(cypher).toContain("ci.modelCount = $modelCount");
   });
 
   it("omits all extended properties when not provided", async () => {
@@ -70,11 +97,11 @@ describe("syncInfraCI", () => {
       status: "operational",
     });
 
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).not.toContain("ci.baseUrl");
-    expect(cypher).not.toContain("ci.gpu");
-    expect(cypher).not.toContain("ci.vramGb");
-    expect(cypher).not.toContain("ci.modelCount");
+    const call = nodeCall(exec.mock.calls[0]!);
+    expect(call.props).not.toHaveProperty("baseUrl");
+    expect(call.props).not.toHaveProperty("gpu");
+    expect(call.props).not.toHaveProperty("vramGb");
+    expect(call.props).not.toHaveProperty("modelCount");
   });
 
   it("creates BELONGS_TO edge when portfolioSlug provided", async () => {
@@ -86,15 +113,18 @@ describe("syncInfraCI", () => {
       portfolioSlug: "foundational",
     });
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(2);
-    const edgeCypher = mockRunCypher.mock.calls[1]![0] as string;
-    expect(edgeCypher).toContain("BELONGS_TO");
+    expect(exec).toHaveBeenCalledTimes(2);
+    const edge = edgeCall(exec.mock.calls[1]!);
+    expect(edge.sql).toContain("INSERT INTO graph_edge");
+    expect(edge.src).toBe("CI-test-03");
+    expect(edge.dst).toBe("foundational");
+    expect(edge.relType).toBe("BELONGS_TO");
   });
 });
 
 describe("syncInventoryRelationship", () => {
   beforeEach(() => {
-    mockRunCypher.mockClear();
+    exec.mockClear();
   });
 
   it("creates typed HOSTS edge for network relationship types", async () => {
@@ -104,10 +134,10 @@ describe("syncInventoryRelationship", () => {
       relationshipType: "HOSTS",
     });
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).toContain(":HOSTS");
-    expect(cypher).not.toContain("DEPENDS_ON");
+    expect(exec).toHaveBeenCalledTimes(1);
+    const edge = edgeCall(exec.mock.calls[0]!);
+    expect(edge.relType).toBe("HOSTS");
+    expect(edge.relType).not.toBe("DEPENDS_ON");
   });
 
   it("creates typed MONITORS edge", async () => {
@@ -117,10 +147,10 @@ describe("syncInventoryRelationship", () => {
       relationshipType: "monitors",
     });
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).toContain(":MONITORS");
-    expect(cypher).not.toContain("DEPENDS_ON");
+    expect(exec).toHaveBeenCalledTimes(1);
+    const edge = edgeCall(exec.mock.calls[0]!);
+    expect(edge.relType).toBe("MONITORS");
+    expect(edge.relType).not.toBe("DEPENDS_ON");
   });
 
   it("creates typed MEMBER_OF edge for subnet relationships", async () => {
@@ -130,9 +160,9 @@ describe("syncInventoryRelationship", () => {
       relationshipType: "MEMBER_OF",
     });
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).toContain(":MEMBER_OF");
+    expect(exec).toHaveBeenCalledTimes(1);
+    const edge = edgeCall(exec.mock.calls[0]!);
+    expect(edge.relType).toBe("MEMBER_OF");
   });
 
   it("creates typed RUNS_ON edge", async () => {
@@ -142,9 +172,9 @@ describe("syncInventoryRelationship", () => {
       relationshipType: "RUNS_ON",
     });
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).toContain(":RUNS_ON");
+    expect(exec).toHaveBeenCalledTimes(1);
+    const edge = edgeCall(exec.mock.calls[0]!);
+    expect(edge.relType).toBe("RUNS_ON");
   });
 
   it("falls back to DEPENDS_ON for unknown relationship types", async () => {
@@ -154,9 +184,9 @@ describe("syncInventoryRelationship", () => {
       relationshipType: "uses",
     });
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).toContain("DEPENDS_ON");
+    expect(exec).toHaveBeenCalledTimes(1);
+    const edge = edgeCall(exec.mock.calls[0]!);
+    expect(edge.relType).toBe("DEPENDS_ON");
   });
 
   it("handles case-insensitive relationship type matching", async () => {
@@ -166,15 +196,15 @@ describe("syncInventoryRelationship", () => {
       relationshipType: "hosts",
     });
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    expect(cypher).toContain(":HOSTS");
+    expect(exec).toHaveBeenCalledTimes(1);
+    const edge = edgeCall(exec.mock.calls[0]!);
+    expect(edge.relType).toBe("HOSTS");
   });
 });
 
 describe("syncDocumentReference", () => {
   beforeEach(() => {
-    mockRunCypher.mockClear();
+    exec.mockClear();
   });
 
   it("projects stable document nodes and a DOC_REFERENCES edge", async () => {
@@ -193,14 +223,22 @@ describe("syncDocumentReference", () => {
       anchor: "section 7",
     });
 
-    expect(mockRunCypher).toHaveBeenCalledTimes(1);
-    const cypher = mockRunCypher.mock.calls[0]![0] as string;
-    const params = mockRunCypher.mock.calls[0]![1] as Record<string, unknown>;
-    expect(cypher).toContain("MERGE (source:Document {documentId: $sourceDocumentId})");
-    expect(cypher).toContain(":DOC_REFERENCES");
-    expect(params).toMatchObject({
-      sourceDocumentId: "DOC-AAA11111",
-      targetDocumentId: "DOC-BBB22222",
+    // Two Document node upserts + one DOC_REFERENCES edge upsert.
+    expect(exec).toHaveBeenCalledTimes(3);
+
+    const sourceNode = nodeCall(exec.mock.calls[0]!);
+    expect(sourceNode.key).toBe("DOC-AAA11111");
+    expect(sourceNode.labels).toContain("Document");
+    expect(sourceNode.props).toMatchObject({ documentId: "DOC-AAA11111" });
+
+    const targetNode = nodeCall(exec.mock.calls[1]!);
+    expect(targetNode.key).toBe("DOC-BBB22222");
+
+    const edge = edgeCall(exec.mock.calls[2]!);
+    expect(edge.src).toBe("DOC-AAA11111");
+    expect(edge.dst).toBe("DOC-BBB22222");
+    expect(edge.relType).toBe("DOC_REFERENCES");
+    expect(edge.props).toMatchObject({
       refType: "cites",
       sourceVersionId: "version-a",
       targetVersionId: "version-b",

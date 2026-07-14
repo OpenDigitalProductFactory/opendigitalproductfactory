@@ -4,6 +4,8 @@
 import {
   getNeighbours,
   getInfraCIs,
+  getInfraEdges,
+  getEdgesAmong,
   getDownstreamImpact,
   getLayeredDependencyStack,
   getNetworkTopologyAtLayer,
@@ -14,7 +16,6 @@ import {
   type GraphNode,
   type GraphEdge,
 } from "@dpf/db";
-import { runCypher } from "@dpf/db";
 import { prisma } from "@dpf/db";
 
 export type GraphData = {
@@ -141,15 +142,7 @@ export async function getFullGraphData(): Promise<GraphData> {
     }
 
     // Add all InfraCI-to-InfraCI relationships
-    const infraEdges = await runCypher<{
-      fromId: string;
-      toId: string;
-      relType: string;
-    }>(
-      `MATCH (a:InfraCI)-[r]->(b:InfraCI)
-       RETURN a.ciId AS fromId, b.ciId AS toId, type(r) AS relType`,
-      {},
-    );
+    const infraEdges = await getInfraEdges();
     for (const edge of infraEdges) {
       if (nodeMap.has(edge.fromId) && nodeMap.has(edge.toId)) {
         links.push({
@@ -197,12 +190,7 @@ export async function getNetworkTopologyData(): Promise<GraphData> {
     }
     // Also include L7 nodes connected to L3 nodes (containers on subnets)
     const allInfra = await getInfraCIs();
-    const infraEdges = await runCypher<{ fromId: string; toId: string; relType: string }>(
-      `MATCH (a:InfraCI)-[r]->(b:InfraCI)
-       WHERE a.osiLayer = 3 OR b.osiLayer = 3
-       RETURN a.ciId AS fromId, b.ciId AS toId, type(r) AS relType`,
-      {},
-    );
+    const infraEdges = await getInfraEdges({ osiLayer: 3 });
     for (const edge of infraEdges) {
       for (const id of [edge.fromId, edge.toId]) {
         if (!nodeMap.has(id)) {
@@ -284,11 +272,9 @@ export async function getHostingStackData(): Promise<GraphData> {
         nodeMap.set(ci.id, infraCIToGraphNode(ci));
       }
     }
-    const infraEdges = await runCypher<{ fromId: string; toId: string; relType: string }>(
-      `MATCH (a:InfraCI)-[r:HOSTS|RUNS_ON|MEMBER_OF]->(b:InfraCI)
-       RETURN a.ciId AS fromId, b.ciId AS toId, type(r) AS relType`,
-      {},
-    );
+    const infraEdges = await getInfraEdges({
+      relTypes: ["HOSTS", "RUNS_ON", "MEMBER_OF"],
+    });
     const links: GraphData["links"] = infraEdges
       .filter((e) => nodeMap.has(e.fromId) && nodeMap.has(e.toId))
       .map((e) => ({ source: e.fromId, target: e.toId, type: e.relType }));
@@ -333,15 +319,7 @@ export async function getImpactData(ciId: string): Promise<GraphData> {
     // Get edges between the involved nodes
     const nodeIds = [...nodeMap.keys()];
     if (nodeIds.length === 0) return { nodes: [], links: [] };
-    const edges = await runCypher<{ fromId: string; toId: string; relType: string }>(
-      `MATCH (a)-[r]->(b)
-       WHERE coalesce(a.ciId, a.productId) IN $nodeIds
-         AND coalesce(b.ciId, b.productId) IN $nodeIds
-       RETURN coalesce(a.ciId, a.productId) AS fromId,
-              coalesce(b.ciId, b.productId) AS toId,
-              type(r) AS relType`,
-      { nodeIds },
-    );
+    const edges = await getEdgesAmong(nodeIds);
     const links = edges
       .filter((e) => nodeMap.has(e.fromId) && nodeMap.has(e.toId))
       .map((e) => ({ source: e.fromId, target: e.toId, type: e.relType }));
@@ -384,15 +362,7 @@ export async function getDependencyAuditData(productId: string): Promise<GraphDa
     // Get edges between involved nodes
     const nodeIds = [...nodeMap.keys()];
     if (nodeIds.length === 0) return { nodes: [], links: [] };
-    const edges = await runCypher<{ fromId: string; toId: string; relType: string }>(
-      `MATCH (a)-[r]->(b)
-       WHERE coalesce(a.ciId, a.productId) IN $nodeIds
-         AND coalesce(b.ciId, b.productId) IN $nodeIds
-       RETURN coalesce(a.ciId, a.productId) AS fromId,
-              coalesce(b.ciId, b.productId) AS toId,
-              type(r) AS relType`,
-      { nodeIds },
-    );
+    const edges = await getEdgesAmong(nodeIds);
     const links = edges
       .filter((e) => nodeMap.has(e.fromId) && nodeMap.has(e.toId))
       .map((e) => ({ source: e.fromId, target: e.toId, type: e.relType }));

@@ -57,5 +57,16 @@ if ! pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts; t
   echo "[portal-boot] WARN: catalog capability reconciliation failed — starting with the existing model catalog (see error above)" >&2
 fi
 
+# BET-5 (BI-A1E864A5 / BI-922EBB99): on an install that still has Neo4j + Qdrant, copy their
+# data into the Postgres mirror while those containers are still reachable, so the host-level
+# teardown script can then remove them without data loss. NON-FATAL and idempotent: a fresh
+# install (no Neo4j/Qdrant) or a post-teardown re-run finds nothing to copy and skips. This
+# only stages the data — the actual container/volume removal is the separately-gated
+# scripts/decommission-neo4j-qdrant.{sh,ps1}, which refuses to delete anything until the
+# mirror is confirmed populated.
+if ! pnpm --filter @dpf/db exec tsx scripts/bet5-decommission-backfill.ts; then
+  echo "[portal-boot] WARN: BET-5 datastore backfill reported an error — legacy stores left intact (see error above)" >&2
+fi
+
 echo "[portal-boot] provider catalog reconciled (or degraded); starting server"
 exec "$@"
