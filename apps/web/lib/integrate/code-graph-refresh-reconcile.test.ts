@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockExec, mockReadFile, mockRunCypher } = vi.hoisted(() => ({
+const { mockExec, mockReadFile, mockExecRawUnsafe } = vi.hoisted(() => ({
   mockExec: vi.fn(),
   mockReadFile: vi.fn(),
-  mockRunCypher: vi.fn(),
+  // BET-5: the structural projection now UPSERTs into the Postgres graph mirror
+  // via prisma.$executeRawUnsafe (INSERT INTO graph_node / graph_edge, one call
+  // per node/edge fact) instead of batching Cypher MERGE via runCypher.
+  mockExecRawUnsafe: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     $queryRaw: vi.fn(),
     $executeRaw: vi.fn(),
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+    $executeRawUnsafe: mockExecRawUnsafe,
     codeGraphIndexState: {
       findUnique: vi.fn(),
       upsert: vi.fn(),
@@ -26,8 +31,37 @@ vi.mock("@dpf/db", () => ({
       update: vi.fn(),
     },
   },
-  runCypher: mockRunCypher,
 }));
+
+/** graph_node upserts call $executeRawUnsafe(sql, key, labels, propsJson). */
+function nodeUpsertCalls(labelFilter?: string) {
+  return mockExecRawUnsafe.mock.calls
+    .filter(([sql]) => typeof sql === "string" && sql.includes("INSERT INTO graph_node"))
+    .map((call) => ({
+      key: call[1] as string,
+      labels: call[2] as string[],
+      props: JSON.parse(call[3] as string) as Record<string, unknown>,
+    }))
+    .filter((n) => (labelFilter ? n.labels.includes(labelFilter) : true));
+}
+
+/** graph_edge upserts call $executeRawUnsafe(sql, src, dst, relType, propsJson). */
+function edgeUpsertCalls(relTypeFilter?: string) {
+  return mockExecRawUnsafe.mock.calls
+    .filter(([sql]) => typeof sql === "string" && sql.includes("INSERT INTO graph_edge"))
+    .map((call) => ({
+      src: call[1] as string,
+      dst: call[2] as string,
+      relType: call[3] as string,
+      props: JSON.parse((call[4] ?? "{}") as string) as Record<string, unknown>,
+    }))
+    .filter((e) => (relTypeFilter ? e.relType === relTypeFilter : true));
+}
+
+/** SQL text of every $executeRawUnsafe statement (for negative structural checks). */
+function execStatements() {
+  return mockExecRawUnsafe.mock.calls.map(([sql]) => String(sql));
+}
 
 vi.mock("@/lib/shared/lazy-node", () => ({
   lazyExec: () => mockExec,
@@ -69,6 +103,7 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.PROJECT_ROOT = "/workspace";
+  mockExecRawUnsafe.mockResolvedValue(undefined);
   vi.mocked(prisma.$queryRaw).mockResolvedValue([{ locked: true }] as never);
   vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as never);
   vi.mocked(prisma.codeGraphFileHash.count).mockResolvedValue(1);
@@ -116,13 +151,17 @@ describe("reconcileCodeGraph", () => {
     expect(result.mode).toBe("full");
     expect(result.headSha).toBe("head-1");
     expect(result.workspaceDirty).toBe(false);
-    expect(mockRunCypher).toHaveBeenCalledWith(
-      expect.stringContaining("MATCH (n {graphKey: $graphKey})"),
-      expect.objectContaining({ graphKey: CODE_GRAPH_GRAPH_KEY }),
+    // A full rebuild clears the whole graphKey up front (clearCodeGraph), then
+    // re-projects. The clear deletes graph_node rows scoped by props->>'graphKey'.
+    expect(mockExecRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM graph_node WHERE props->>'graphKey' = $1"),
+      CODE_GRAPH_GRAPH_KEY,
     );
-    const cypherStatements = mockRunCypher.mock.calls.map(([statement]) => String(statement));
-    expect(cypherStatements.some((statement) => statement.includes("MATCH ()-[r {graphKey: $graphKey, filePath: $filePath}]-()"))).toBe(false);
-    expect(cypherStatements.some((statement) => statement.includes("MATCH (n {graphKey: $graphKey, path: $filePath})"))).toBe(false);
+    // A full rebuild must NOT emit the per-file incremental structural clears
+    // (those are scoped by props->>'filePath' / props->>'path').
+    const statements = execStatements();
+    expect(statements.some((s) => s.includes("props->>'filePath'"))).toBe(false);
+    expect(statements.some((s) => s.includes("props->>'path'"))).toBe(false);
     expect(prisma.codeGraphFileHash.deleteMany).toHaveBeenCalledWith({
       where: { graphKey: CODE_GRAPH_GRAPH_KEY },
     });
@@ -133,7 +172,12 @@ describe("reconcileCodeGraph", () => {
     );
   });
 
-  it("batches structural projection by node label and relationship kind", async () => {
+  it("projects CodeSymbol nodes and DEFINES edges from extracted facts", async () => {
+    // Intent preserved from the Neo4j era (which batched via UNWIND): every
+    // extracted symbol becomes a CodeSymbol node and each symbol its file
+    // defines becomes a DEFINES edge. The Postgres mirror UPSERTs one row per
+    // fact rather than one batched statement per label, so we assert on the
+    // set of per-fact graph_node / graph_edge writes instead of batch shape.
     vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
 
     mockExec.mockImplementation(async (command: string) => {
@@ -157,34 +201,20 @@ describe("reconcileCodeGraph", () => {
 
     await reconcileCodeGraph({ reason: "scheduled" });
 
-    const symbolProjectionCalls = mockRunCypher.mock.calls.filter(([statement]) => (
-      String(statement).includes("UNWIND $facts AS fact") &&
-      String(statement).includes("MERGE (n:CodeSymbol")
-    ));
-    expect(symbolProjectionCalls).toHaveLength(1);
-    expect(symbolProjectionCalls[0]?.[1]).toEqual(expect.objectContaining({
-      facts: expect.arrayContaining([
-        expect.objectContaining({ name: "firstSymbol" }),
-        expect.objectContaining({ name: "secondSymbol" }),
-      ]),
-    }));
+    const symbolNodes = nodeUpsertCalls("CodeSymbol");
+    const symbolNames = symbolNodes.map((n) => n.props.name);
+    expect(symbolNames).toEqual(expect.arrayContaining(["firstSymbol", "secondSymbol"]));
 
-    const definesProjectionCalls = mockRunCypher.mock.calls.filter(([statement]) => (
-      String(statement).includes("UNWIND $facts AS fact") &&
-      String(statement).includes("MERGE (from)-[r:DEFINES")
-    ));
-    expect(definesProjectionCalls).toHaveLength(1);
-    expect(String(definesProjectionCalls[0]?.[0])).toContain("MATCH (from:CodeFile {codeFileKey: fact.fromKey})");
-    expect(String(definesProjectionCalls[0]?.[0])).toContain("MATCH (to:CodeSymbol {codeSymbolKey: fact.toKey})");
-    expect(definesProjectionCalls[0]?.[1]).toEqual(expect.objectContaining({
-      facts: expect.arrayContaining([
-        expect.objectContaining({ confidence: "exact" }),
-      ]),
-    }));
-    expect(mockRunCypher.mock.calls.some(([statement]) => String(statement).includes("WHERE any(key IN keys(from)"))).toBe(false);
+    const definesEdges = edgeUpsertCalls("DEFINES");
+    expect(definesEdges.length).toBeGreaterThan(0);
+    // The DEFINES edge runs CodeFile(src) → CodeSymbol(dst) with exact confidence.
+    expect(definesEdges.some((e) => e.props.confidence === "exact")).toBe(true);
+    expect(definesEdges[0]?.props).toEqual(
+      expect.objectContaining({ fromKey: definesEdges[0]?.src, toKey: definesEdges[0]?.dst }),
+    );
   });
 
-  it("batches CodeFile projection during full rebuilds", async () => {
+  it("projects every CodeFile node during full rebuilds", async () => {
     vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
 
     mockExec.mockImplementation(async (command: string) => {
@@ -205,17 +235,13 @@ describe("reconcileCodeGraph", () => {
 
     await reconcileCodeGraph({ reason: "scheduled" });
 
-    const codeFileProjectionCalls = mockRunCypher.mock.calls.filter(([statement]) => (
-      String(statement).includes("UNWIND $files AS file") &&
-      String(statement).includes("MERGE (f:CodeFile")
-    ));
-    expect(codeFileProjectionCalls).toHaveLength(1);
-    expect(codeFileProjectionCalls[0]?.[1]).toEqual(expect.objectContaining({
-      files: expect.arrayContaining([
-        expect.objectContaining({ filePath: "apps/web/lib/one.ts" }),
-        expect.objectContaining({ filePath: "apps/web/lib/two.ts" }),
-      ]),
-    }));
+    // Both tracked files are projected as CodeFile graph_node rows (one UPSERT
+    // per file; the CodeFile props carry the source path).
+    const codeFileNodes = nodeUpsertCalls("CodeFile");
+    const codeFilePaths = codeFileNodes.map((n) => n.props.path);
+    expect(codeFilePaths).toEqual(
+      expect.arrayContaining(["apps/web/lib/one.ts", "apps/web/lib/two.ts"]),
+    );
     expect(prisma.codeGraphFileHash.createMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.arrayContaining([
         expect.objectContaining({ filePath: "apps/web/lib/one.ts" }),

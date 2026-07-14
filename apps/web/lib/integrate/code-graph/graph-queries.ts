@@ -1,4 +1,4 @@
-import { runCypher } from "@dpf/db";
+import { prisma } from "@dpf/db";
 
 import { getCodeGraphFreshness } from "@/lib/integrate/code-graph-access";
 import { CODE_GRAPH_GRAPH_KEY } from "./constants";
@@ -331,34 +331,32 @@ export async function searchCodeGraph(input: {
   }
 
   const limit = normalizeLimit(input.limit, 10);
-  const rows = await runCypher<RawSearchRow>(
+  const rows = (await prisma.$queryRawUnsafe(
     [
-      "MATCH (n)",
-      "WHERE n.graphKey = $graphKey",
-      "  AND any(label IN labels(n) WHERE label IN $nodeLabels)",
-      "  AND (",
-      "    toLower(coalesce(n.name, '')) CONTAINS $query",
-      "    OR toLower(coalesce(n.path, '')) CONTAINS $query",
-      "  )",
-      "RETURN labels(n) AS labels,",
-      "       coalesce(n.name, n.path) AS name,",
-      "       n.path AS path,",
-      "       n.startLine AS startLine,",
-      "       n.endLine AS endLine,",
-      "       n.extractor AS extractor",
-      "ORDER BY CASE",
-      "  WHEN toLower(coalesce(n.name, '')) = $query THEN 0",
-      "  WHEN toLower(coalesce(n.path, '')) = $query THEN 1",
-      "  ELSE 2",
-      "END, path ASC, name ASC",
+      "SELECT n.labels AS labels,",
+      "       coalesce(n.props->>'name', n.props->>'path') AS name,",
+      "       n.props->>'path' AS path,",
+      "       (n.props->>'startLine')::int AS \"startLine\",",
+      "       (n.props->>'endLine')::int AS \"endLine\",",
+      "       n.props->>'extractor' AS extractor",
+      "  FROM graph_node n",
+      " WHERE n.props->>'graphKey' = $1",
+      "   AND n.labels && $2::text[]",
+      "   AND (",
+      "     strpos(lower(coalesce(n.props->>'name', '')), $3) > 0",
+      "     OR strpos(lower(coalesce(n.props->>'path', '')), $3) > 0",
+      "   )",
+      " ORDER BY CASE",
+      "     WHEN lower(coalesce(n.props->>'name', '')) = $3 THEN 0",
+      "     WHEN lower(coalesce(n.props->>'path', '')) = $3 THEN 1",
+      "     ELSE 2",
+      "   END, n.props->>'path' ASC, coalesce(n.props->>'name', n.props->>'path') ASC",
       `LIMIT ${limit}`,
     ].join("\n"),
-    {
-      graphKey,
-      query,
-      nodeLabels: SEARCH_NODE_LABELS,
-    },
-  );
+    graphKey,
+    [...SEARCH_NODE_LABELS],
+    query,
+  )) as RawSearchRow[];
 
   const results = rows.map(mapSearchRow);
   return {
@@ -382,27 +380,73 @@ export async function traceCodeSurface(input: {
   const readiness = await getCodeGraphReadiness(graphKey);
   if (!readiness.available) return makeUnavailableTraceResult(readiness, query.selector);
 
-  const rows = await runCypher<RawTraceRow>(
+  // 1. Locate the surface node (label + graphKey + name).
+  const surfaceRows = (await prisma.$queryRawUnsafe(
     [
-      `MATCH (surface:${query.label} {graphKey: $graphKey, name: $surfaceName})`,
-      `OPTIONAL MATCH (file:CodeFile {graphKey: $graphKey})-[rel:${query.relationship}]->(surface)`,
-      "OPTIONAL MATCH (test:TestFile {graphKey: $graphKey})-[testedBy:TESTED_BY]->(file)",
-      "RETURN labels(surface) AS surfaceLabels,",
-      "       surface.name AS surfaceName,",
-      "       surface.path AS surfacePath,",
-      "       surface.startLine AS surfaceStartLine,",
-      "       surface.endLine AS surfaceEndLine,",
-      "       collect(DISTINCT CASE WHEN file.path IS NULL THEN null ELSE { path: file.path, relationship: type(rel) } END) AS implementationFiles,",
-      "       collect(DISTINCT CASE WHEN test.path IS NULL THEN null ELSE { path: test.path, confidence: testedBy.confidence } END) AS relatedTests",
-      "LIMIT 1",
+      "SELECT n.key AS key, n.labels AS \"surfaceLabels\",",
+      "       n.props->>'name' AS \"surfaceName\",",
+      "       n.props->>'path' AS \"surfacePath\",",
+      "       (n.props->>'startLine')::int AS \"surfaceStartLine\",",
+      "       (n.props->>'endLine')::int AS \"surfaceEndLine\"",
+      "  FROM graph_node n",
+      " WHERE $1 = ANY(n.labels) AND n.props->>'graphKey' = $2 AND n.props->>'name' = $3",
+      " LIMIT 1",
     ].join("\n"),
-    {
-      graphKey,
-      surfaceName: query.selector.value,
-    },
-  );
+    query.label,
+    graphKey,
+    query.selector.value,
+  )) as Array<{
+    key: string;
+    surfaceLabels: string[];
+    surfaceName: string | null;
+    surfacePath: string | null;
+    surfaceStartLine: number | null;
+    surfaceEndLine: number | null;
+  }>;
 
-  const trace = mapTraceRow(rows[0]);
+  let traceRow: RawTraceRow | undefined;
+  const surface = surfaceRows[0];
+  if (surface) {
+    // 2. Implementation files: (file:CodeFile)-[rel:relationship]->(surface).
+    const implRows = (await prisma.$queryRawUnsafe(
+      [
+        "SELECT DISTINCT f.key AS \"fileKey\", f.props->>'path' AS path, e.rel_type AS relationship",
+        "  FROM graph_edge e",
+        "  JOIN graph_node f ON f.key = e.src_key AND 'CodeFile' = ANY(f.labels) AND f.props->>'graphKey' = $1",
+        " WHERE e.dst_key = $2 AND e.rel_type = $3",
+      ].join("\n"),
+      graphKey,
+      surface.key,
+      query.relationship,
+    )) as Array<{ fileKey: string; path: string | null; relationship: string | null }>;
+
+    // 3. Related tests: (test:TestFile)-[TESTED_BY]->(file) for the impl files.
+    const fileKeys = implRows.map((r) => r.fileKey);
+    const testRows = fileKeys.length
+      ? ((await prisma.$queryRawUnsafe(
+          [
+            "SELECT DISTINCT t.props->>'path' AS path, e.props->>'confidence' AS confidence",
+            "  FROM graph_edge e",
+            "  JOIN graph_node t ON t.key = e.src_key AND 'TestFile' = ANY(t.labels) AND t.props->>'graphKey' = $1",
+            " WHERE e.rel_type = 'TESTED_BY' AND e.dst_key = ANY($2::text[])",
+          ].join("\n"),
+          graphKey,
+          fileKeys,
+        )) as Array<{ path: string | null; confidence: string | null }>)
+      : [];
+
+    traceRow = {
+      surfaceLabels: surface.surfaceLabels,
+      surfaceName: surface.surfaceName,
+      surfacePath: surface.surfacePath,
+      surfaceStartLine: surface.surfaceStartLine,
+      surfaceEndLine: surface.surfaceEndLine,
+      implementationFiles: implRows.map((r) => ({ path: r.path, relationship: r.relationship })),
+      relatedTests: testRows.map((r) => ({ path: r.path, confidence: r.confidence })),
+    };
+  }
+
+  const trace = mapTraceRow(traceRow);
   return {
     ...readiness,
     selector: query.selector,
@@ -432,22 +476,24 @@ export async function findRelatedTests(input: {
   }
 
   const limit = normalizeLimit(input.limit, 25);
-  const rows = await runCypher<RawRelatedTestRow>(
+  const rows = (await prisma.$queryRawUnsafe(
     [
-      "MATCH (test:TestFile {graphKey: $graphKey})-[r:TESTED_BY]->(source:CodeFile {graphKey: $graphKey, path: $filePath})",
-      "RETURN test.path AS path,",
-      "       test.name AS name,",
-      "       r.confidence AS confidence,",
-      "       r.startLine AS startLine,",
-      "       r.endLine AS endLine",
-      "ORDER BY confidence ASC, path ASC",
+      "SELECT t.props->>'path' AS path,",
+      "       t.props->>'name' AS name,",
+      "       e.props->>'confidence' AS confidence,",
+      "       (e.props->>'startLine')::int AS \"startLine\",",
+      "       (e.props->>'endLine')::int AS \"endLine\"",
+      "  FROM graph_edge e",
+      "  JOIN graph_node t ON t.key = e.src_key AND 'TestFile' = ANY(t.labels) AND t.props->>'graphKey' = $1",
+      "  JOIN graph_node s ON s.key = e.dst_key AND 'CodeFile' = ANY(s.labels)",
+      "       AND s.props->>'graphKey' = $1 AND s.props->>'path' = $2",
+      " WHERE e.rel_type = 'TESTED_BY'",
+      " ORDER BY confidence ASC, path ASC",
       `LIMIT ${limit}`,
     ].join("\n"),
-    {
-      graphKey,
-      filePath,
-    },
-  );
+    graphKey,
+    filePath,
+  )) as RawRelatedTestRow[];
 
   const tests = rows.map(mapRelatedTestRow);
   return {

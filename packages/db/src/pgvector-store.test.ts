@@ -62,6 +62,31 @@ describe("pgvector-store buildFilterSql (Qdrant filter DSL → SQL)", () => {
     expect(sql).toMatch(/^AND \(.* OR .*\)$/);
   });
 
+  it("negates must_not clauses (AND of NOTs) so excluded rows drop out", () => {
+    const params: unknown[] = [];
+    const sql = buildFilterSql(
+      {
+        must: [{ key: "userId", match: { value: "u1" } }],
+        must_not: [{ key: "threadId", match: { value: "t1" } }],
+      },
+      params,
+    );
+    // must first, then the negated must_not clause.
+    expect(sql).toContain("NOT (payload->'threadId'");
+    expect(sql).toMatch(/AND .*userId.* AND NOT /);
+    expect(params).toEqual(['"u1"', '"t1"']);
+  });
+
+  it("supports must_not with no must (pure exclusion)", () => {
+    const params: unknown[] = [];
+    const sql = buildFilterSql(
+      { must_not: [{ key: "threadId", match: { value: "t1" } }] },
+      params,
+    );
+    expect(sql.startsWith("AND NOT ")).toBe(true);
+    expect(params).toEqual(['"t1"']);
+  });
+
   it("translates match:{value:null} to absent-or-json-null", () => {
     const params: unknown[] = [];
     const sql = buildFilterSql(

@@ -105,7 +105,7 @@ if (-not (Test-Path $rootEnv)) {
 
 # -- Databases -------------------------------------------------------------------
 
-Write-Step "Starting services (PostgreSQL + Neo4j + Ollama)"
+Write-Step "Starting services (PostgreSQL + Ollama)"
 docker compose up -d
 
 Write-Host "  Waiting for PostgreSQL to be ready..."

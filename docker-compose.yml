@@ -59,34 +59,10 @@ services:
       retries: 5
       start_period: 10s
 
-  neo4j:
-    image: neo4j:5-community
-    restart: unless-stopped
-    logging: *default-logging
-    environment:
-      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/dpf_dev_password}
-      NEO4J_PLUGINS: '["apoc"]'
-    volumes:
-      - neo4jdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:7474 || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  qdrant:
-    image: qdrant/qdrant:v1.18.2
-    restart: unless-stopped
-    logging: *default-logging
-    volumes:
-      - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+  # BET-5 (BI-A1E864A5): Neo4j/Qdrant retired — platform runs on Postgres
+  # (pgvector + graph mirror). Legacy env on portal/sandbox targets surviving
+  # containers during the one-time upgrade backfill; containers are removed by
+  # scripts/decommission-neo4j-qdrant.{sh,ps1}.
 
   # ─── AI Inference ────────────────────────────────────────────────────────────
   # Docker Model Runner (built into Docker Desktop 4.40+) provides local LLM
@@ -515,41 +491,10 @@ services:
       timeout: 5s
       retries: 5
 
-  dev-neo4j:
-    image: neo4j:5-community
-    restart: unless-stopped
-    logging: *default-logging
-    profiles: ["dev"]
-    environment:
-      NEO4J_AUTH: neo4j/dpf_dev_password
-      NEO4J_PLUGINS: '["apoc"]'
-    ports:
-      - "7475:7474"
-      - "7688:7687"
-    volumes:
-      - dev_neo4jdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:7474 || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  dev-qdrant:
-    image: qdrant/qdrant:v1.18.2
-    restart: unless-stopped
-    logging: *default-logging
-    profiles: ["dev"]
-    volumes:
-      - dev_qdrant_data:/qdrant/storage
-    ports:
-      - "6334:6333"
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+  # BET-5 (BI-A1E864A5): Neo4j/Qdrant retired — platform runs on Postgres
+  # (pgvector + graph mirror). Legacy env on portal/sandbox targets surviving
+  # containers during the one-time upgrade backfill; containers are removed by
+  # scripts/decommission-neo4j-qdrant.{sh,ps1}.
 
   dev-init:
     build:
@@ -569,10 +514,6 @@ services:
     volumes: *dev-workspace-volumes
     depends_on:
       dev-postgres:
-        condition: service_healthy
-      dev-neo4j:
-        condition: service_healthy
-      dev-qdrant:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -964,9 +905,10 @@ services:
 
 volumes:
   pgdata:
-  neo4jdata:
   redis_data:
-  qdrant_data:
+  # BET-5 (BI-A1E864A5): neo4jdata / qdrant_data / dev_neo4jdata / dev_qdrant_data
+  # volume declarations removed — Neo4j/Qdrant retired (Postgres pgvector + graph
+  # mirror). Runtime volumes are deleted by scripts/decommission-neo4j-qdrant.{sh,ps1}.
   dpf-source-code:
   browser_evidence:
   # Service-account browser profiles (EP-BROWSER-DRIVE, spec §8.9). Holds
@@ -975,8 +917,6 @@ volumes:
   # the portal (cf. browser_evidence, which the portal mounts read-only).
   browser_profiles:
   dev_pgdata:
-  dev_neo4jdata:
-  dev_qdrant_data:
   dev_node_modules:
   # Package-local node_modules overlays (BI-9C557535) — keep pnpm's per-package
   # symlink farms off the host bind mount. One per workspace package.

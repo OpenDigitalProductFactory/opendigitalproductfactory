@@ -19,6 +19,8 @@ export {
   isQdrantHealthy,
   hashToNumber,
   QDRANT_COLLECTIONS,
+  type MatchClause,
+  type QdrantFilter,
 } from "./qdrant";
 
 // EP-WIKI-001 Phase 1a: wiki kernel + per-org overlay store helpers
@@ -93,6 +95,10 @@ export {
   shortestPath,
   getInfraCIs,
   getNeighbours,
+  getInfraEdges,
+  getEdgesAmong,
+  deleteGraphNode,
+  clearGraphByLabel,
   getLayeredDependencyStack,
   getNetworkTopologyAtLayer,
   getNetworkTopologyAtLayerForScope,

@@ -9,10 +9,8 @@ import { requireCapability } from "@/lib/actions/shared/guards";
 import { inngest } from "@/lib/queue/inngest-client";
 
 import {
-  NEO4J_BACKUP_EVENT,
   POSTGRES_BACKUP_EVENT,
   POSTGRES_BACKUP_JOB_ID,
-  QDRANT_BACKUP_EVENT,
 } from "@/lib/operate/backups/constants";
 import { getAllBackupReadiness, getPostgresBackupReadiness } from "@/lib/operate/backups/readiness";
 import { nextDailyRunAt } from "@/lib/operate/backups/managed-backup";
@@ -32,11 +30,9 @@ export async function getBackupReadinessAction(): Promise<ReadinessSummary> {
   return getPostgresBackupReadiness();
 }
 
-/** Returns readiness summaries for all three targets. */
+/** Returns backup readiness (postgres-only after BET-5). */
 export async function getAllBackupReadinessAction(): Promise<{
   postgres: ReadinessSummary;
-  neo4j: ReadinessSummary;
-  qdrant: ReadinessSummary;
 }> {
   await requireBackupAdmin();
   return getAllBackupReadiness();
@@ -81,19 +77,25 @@ export async function listBackupRunsAction(args?: {
   }));
 }
 
-const TARGET_EVENT: Record<BackupTarget, string> = {
+// postgres-only after BET-5 retired the neo4j + qdrant backup triggers.
+const TARGET_EVENT: Partial<Record<BackupTarget, string>> = {
   postgres: POSTGRES_BACKUP_EVENT,
-  neo4j: NEO4J_BACKUP_EVENT,
-  qdrant: QDRANT_BACKUP_EVENT,
 };
 
 export async function triggerBackupNowAction(
   target: BackupTarget = "postgres",
 ): Promise<{ ok: boolean; eventIds?: string[]; error?: string }> {
   await requireBackupAdmin();
+  const eventName = TARGET_EVENT[target];
+  if (!eventName) {
+    return {
+      ok: false,
+      error: `Backups are postgres-only after BET-5 (got target=${target}).`,
+    };
+  }
   try {
     const result = await inngest.send({
-      name: TARGET_EVENT[target],
+      name: eventName,
       data: { trigger: "manual" },
     });
     return { ok: true, eventIds: result.ids };

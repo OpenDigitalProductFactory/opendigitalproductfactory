@@ -133,7 +133,7 @@ dpf_doctor_collect() {
 
   # 6. Core service logs (last 200 lines each)
   mkdir -p "$bundle_dir/logs"
-  for svc in portal postgres neo4j qdrant; do
+  for svc in portal postgres; do
     if dpf_compose_files "${1:-dev}" 2>/dev/null; then
       docker compose "${DPF_COMPOSE_FILES[@]}" logs --tail=200 "$svc" 2>&1 > "$bundle_dir/logs/$svc.log" || true
     fi

@@ -509,3 +509,88 @@ export async function getNeighbours(nodeKey: string): Promise<{
     outgoing: outRows.map((r) => ({ node: nodeFromRow(r), relType: r.type })),
   };
 }
+
+/**
+ * All InfraCI→InfraCI edges (both endpoints labeled InfraCI), returning endpoint
+ * keys + relationship type. Replaces the Neo4j `MATCH (a:InfraCI)-[r]->(b:InfraCI)`
+ * reads in the graph server actions. Optional filters mirror the former Cypher variants:
+ *  - relTypes: restrict to these relationship types (e.g. HOSTS/RUNS_ON/MEMBER_OF)
+ *  - osiLayer: keep edges where either endpoint sits on this OSI layer
+ */
+export async function getInfraEdges(opts?: {
+  relTypes?: string[];
+  osiLayer?: number;
+}): Promise<Array<{ fromId: string; toId: string; relType: string }>> {
+  const params: unknown[] = [];
+  const where: string[] = [
+    "'InfraCI' = ANY(sn.labels)",
+    "'InfraCI' = ANY(dn.labels)",
+  ];
+  if (opts?.relTypes?.length) {
+    params.push(opts.relTypes);
+    where.push(`e.rel_type = ANY($${params.length})`);
+  }
+  if (opts?.osiLayer !== undefined) {
+    params.push(String(opts.osiLayer));
+    // osiLayer is stored as a JSON number; ->> yields its text form.
+    where.push(
+      `(sn.props->>'osiLayer' = $${params.length} OR dn.props->>'osiLayer' = $${params.length})`,
+    );
+  }
+  return (await prisma.$queryRawUnsafe(
+    `SELECT e.src_key AS "fromId", e.dst_key AS "toId", e.rel_type AS "relType"
+       FROM graph_edge e
+       JOIN graph_node sn ON sn.key = e.src_key
+       JOIN graph_node dn ON dn.key = e.dst_key
+      WHERE ${where.join(" AND ")}`,
+    ...params,
+  )) as Array<{ fromId: string; toId: string; relType: string }>;
+}
+
+/**
+ * All edges whose BOTH endpoints are in the given key set — the Postgres form of the
+ * Neo4j `MATCH (a)-[r]->(b) WHERE coalesce(a.ciId,a.productId) IN $ids ...` reads.
+ * graph_node.key already IS the coalesced business key, so this is a straight src/dst
+ * membership test. Empty input → no rows (and no query).
+ */
+export async function getEdgesAmong(
+  nodeIds: string[],
+): Promise<Array<{ fromId: string; toId: string; relType: string }>> {
+  if (nodeIds.length === 0) return [];
+  return (await prisma.$queryRawUnsafe(
+    `SELECT src_key AS "fromId", dst_key AS "toId", rel_type AS "relType"
+       FROM graph_edge
+      WHERE src_key = ANY($1) AND dst_key = ANY($1)`,
+    nodeIds,
+  )) as Array<{ fromId: string; toId: string; relType: string }>;
+}
+
+/**
+ * Remove a node and all edges touching it — the Postgres form of Neo4j
+ * `MATCH (n {key}) DETACH DELETE n`. Used when a projected entity is deleted.
+ */
+export async function deleteGraphNode(key: string): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge WHERE src_key = $1 OR dst_key = $1`,
+    key,
+  );
+  await prisma.$executeRawUnsafe(`DELETE FROM graph_node WHERE key = $1`, key);
+}
+
+/**
+ * Delete every node carrying `label` plus all edges touching those nodes — the
+ * Postgres form of Neo4j `MATCH (n:Label) DETACH DELETE n`. Used by the graph
+ * rebuild scripts before re-projecting from Postgres.
+ */
+export async function clearGraphByLabel(label: string): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge
+      WHERE src_key IN (SELECT key FROM graph_node WHERE $1 = ANY(labels))
+         OR dst_key IN (SELECT key FROM graph_node WHERE $1 = ANY(labels))`,
+    label,
+  );
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_node WHERE $1 = ANY(labels)`,
+    label,
+  );
+}

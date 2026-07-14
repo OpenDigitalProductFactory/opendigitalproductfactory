@@ -11,7 +11,8 @@
 // No compose file needed; multi-project hosts (contributor worktree sandboxes)
 // can't be cross-hit because of the project scope.
 
-export const RESTARTABLE_SERVICES = ["portal", "sandbox", "postgres", "neo4j", "qdrant"] as const;
+// postgres-only data service after BET-5 retired neo4j + qdrant.
+export const RESTARTABLE_SERVICES = ["portal", "sandbox", "postgres"] as const;
 export type RestartableService = (typeof RESTARTABLE_SERVICES)[number];
 
 /** Narrow exec surface (promisified child_process.exec) so tests inject a mock. */

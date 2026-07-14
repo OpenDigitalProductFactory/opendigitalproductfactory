@@ -63,75 +63,40 @@ export async function collectContainerMetrics(containerName: string): Promise<Pr
   return { status, metrics, message: null };
 }
 
-export async function collectDatabaseMetrics(dbType: "postgres" | "qdrant"): Promise<ProbeMetrics> {
-  if (dbType === "postgres") {
-    const [upResult, connResult, maxResult] = await Promise.all([
-      queryPrometheus("pg_up"),
-      queryPrometheus("pg_stat_activity_count"),
-      queryPrometheus("pg_settings_max_connections"),
-    ]);
+// postgres-only after BET-5 retired the qdrant vector DB.
+export async function collectDatabaseMetrics(dbType: "postgres"): Promise<ProbeMetrics> {
+  void dbType;
+  const [upResult, connResult, maxResult] = await Promise.all([
+    queryPrometheus("pg_up"),
+    queryPrometheus("pg_stat_activity_count"),
+    queryPrometheus("pg_settings_max_connections"),
+  ]);
 
-    if (upResult === null) {
-      return { status: "unreachable", metrics: {}, message: "Prometheus unreachable" };
-    }
-
-    const isUp = parseFloat(upResult?.[0]?.value?.[1] ?? "0") === 1;
-    if (!isUp) {
-      return { status: "critical", metrics: { accepting_connections: false }, message: "PostgreSQL is down" };
-    }
-
-    const activeConns = parseFloat(connResult?.[0]?.value?.[1] ?? "0");
-    const maxConns = parseFloat(maxResult?.[0]?.value?.[1] ?? "100");
-    const utilPct = (activeConns / maxConns) * 100;
-
-    const metrics = {
-      accepting_connections: true,
-      active_connections: activeConns,
-      max_connections: maxConns,
-      utilization_pct: utilPct,
-    };
-
-    let status: ProbeMetrics["status"] = "healthy";
-    if (utilPct >= 90) status = "critical";
-    else if (utilPct >= 80) status = "warning";
-
-    return { status, metrics, message: null };
-  }
-
-  // Qdrant — check both reachability and collection health
-  const upResult = await queryPrometheus('up{job="qdrant"}');
   if (upResult === null) {
     return { status: "unreachable", metrics: {}, message: "Prometheus unreachable" };
   }
+
   const isUp = parseFloat(upResult?.[0]?.value?.[1] ?? "0") === 1;
   if (!isUp) {
-    return { status: "critical", metrics: { reachable: false }, message: "Qdrant vector DB is unreachable" };
+    return { status: "critical", metrics: { accepting_connections: false }, message: "PostgreSQL is down" };
   }
 
-  // Check collection existence and point counts
-  const qdrantUrl = process.env.QDRANT_INTERNAL_URL ?? process.env.QDRANT_URL ?? "http://localhost:6333";
-  let agentMemoryPoints = 0;
-  let collectionsExist = false;
-  try {
-    const res = await fetch(`${qdrantUrl}/collections/agent-memory`, { signal: AbortSignal.timeout(5000) });
-    if (res.ok) {
-      collectionsExist = true;
-      const data = await res.json() as { result?: { points_count?: number } };
-      agentMemoryPoints = data.result?.points_count ?? 0;
-    }
-  } catch { /* non-fatal */ }
+  const activeConns = parseFloat(connResult?.[0]?.value?.[1] ?? "0");
+  const maxConns = parseFloat(maxResult?.[0]?.value?.[1] ?? "100");
+  const utilPct = (activeConns / maxConns) * 100;
 
-  const metrics: Record<string, number | boolean | string> = {
-    reachable: true,
-    collections_exist: collectionsExist,
-    agent_memory_points: agentMemoryPoints,
+  const metrics = {
+    accepting_connections: true,
+    active_connections: activeConns,
+    max_connections: maxConns,
+    utilization_pct: utilPct,
   };
 
-  return {
-    status: collectionsExist ? "healthy" : "warning",
-    metrics,
-    message: collectionsExist ? null : "Qdrant reachable but memory collections not initialized — semantic memory is not storing data",
-  };
+  let status: ProbeMetrics["status"] = "healthy";
+  if (utilPct >= 90) status = "critical";
+  else if (utilPct >= 80) status = "warning";
+
+  return { status, metrics, message: null };
 }
 
 export async function collectServiceMetrics(job: string): Promise<ProbeMetrics> {
@@ -159,12 +124,10 @@ export type BridgeResult = {
 export async function runHealthProbeBridge(): Promise<BridgeResult[]> {
   const results: BridgeResult[] = [];
 
-  // Container probes
+  // Container probes (neo4j + qdrant retired by BET-5).
   const containers = [
     "dpf-portal-1",
     "dpf-postgres-1",
-    "dpf-neo4j-1",
-    "dpf-qdrant-1",
     "dpf-sandbox-1",
     "dpf-sandbox-2-1",
     "dpf-sandbox-3-1",
@@ -174,20 +137,15 @@ export async function runHealthProbeBridge(): Promise<BridgeResult[]> {
     results.push({ probeKey: `container-${name}`, probeType: "container", result });
   }
 
-  // Database probes
+  // Database probes (postgres-only after BET-5).
   results.push({
     probeKey: "database-postgres",
     probeType: "database",
     result: await collectDatabaseMetrics("postgres"),
   });
-  results.push({
-    probeKey: "database-qdrant",
-    probeType: "database",
-    result: await collectDatabaseMetrics("qdrant"),
-  });
 
   // Service probes
-  for (const job of ["portal", "model-runner", "neo4j"]) {
+  for (const job of ["portal", "model-runner"]) {
     results.push({
       probeKey: `service-${job}`,
       probeType: "service",

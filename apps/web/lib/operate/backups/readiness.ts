@@ -8,9 +8,7 @@
 import { prisma } from "@dpf/db";
 
 import {
-  NEO4J_BACKUP_JOB_ID,
   POSTGRES_BACKUP_JOB_ID,
-  QDRANT_BACKUP_JOB_ID,
   TRIAL_RESTORE_TRIGGER,
 } from "./constants";
 import {
@@ -147,23 +145,10 @@ export async function getPostgresBackupReadiness(): Promise<ReadinessSummary> {
   return getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres");
 }
 
-export async function getNeo4jBackupReadiness(): Promise<ReadinessSummary> {
-  return getReadinessForTarget(NEO4J_BACKUP_JOB_ID, "neo4j");
-}
-
-export async function getQdrantBackupReadiness(): Promise<ReadinessSummary> {
-  return getReadinessForTarget(QDRANT_BACKUP_JOB_ID, "qdrant");
-}
-
+// postgres-only after BET-5 retired the neo4j + qdrant backup jobs.
 export async function getAllBackupReadiness(): Promise<{
   postgres: ReadinessSummary;
-  neo4j: ReadinessSummary;
-  qdrant: ReadinessSummary;
 }> {
-  const [postgres, neo4j, qdrant] = await Promise.all([
-    getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres"),
-    getReadinessForTarget(NEO4J_BACKUP_JOB_ID, "neo4j"),
-    getReadinessForTarget(QDRANT_BACKUP_JOB_ID, "qdrant"),
-  ]);
-  return { postgres, neo4j, qdrant };
+  const postgres = await getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres");
+  return { postgres };
 }

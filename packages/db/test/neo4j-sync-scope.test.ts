@@ -1,21 +1,38 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { runCypherMock } = vi.hoisted(() => ({ runCypherMock: vi.fn() }));
+// BET-5: syncInventoryEntityAsInfraCI now UPSERTs the InfraCI node into the
+// Postgres graph mirror via prisma.$executeRawUnsafe. Mock the client seam and
+// assert the customer-scope fields land in the node props JSON.
+const { execMock } = vi.hoisted(() => ({ execMock: vi.fn() }));
 
-vi.mock("../src/neo4j", () => ({
-  runCypher: runCypherMock,
+vi.mock("../src/client", () => ({
+  prisma: {
+    $executeRawUnsafe: execMock,
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+    taxonomyNode: { findUnique: vi.fn().mockResolvedValue(null) },
+  },
 }));
 
 import { syncInventoryEntityAsInfraCI } from "../src/neo4j-sync";
 
 beforeEach(() => {
-  runCypherMock.mockReset();
-  runCypherMock.mockResolvedValue([]);
+  execMock.mockReset();
+  execMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+/** Find the InfraCI node upsert and parse its props JSON. */
+function findNodeUpsert() {
+  const call = execMock.mock.calls.find(
+    ([sql]) => typeof sql === "string" && sql.includes("INSERT INTO graph_node"),
+  );
+  expect(call).toBeDefined();
+  const [, key, labels, propsJson] = call as [string, string, string[], string];
+  return { key, labels, props: JSON.parse(propsJson) as Record<string, unknown> };
+}
 
 describe("syncInventoryEntityAsInfraCI customer scope projection", () => {
   it("projects scopeKey, customerAccountId, and customerSiteId onto InfraCI nodes", async () => {
@@ -31,15 +48,10 @@ describe("syncInventoryEntityAsInfraCI customer scope projection", () => {
       },
     });
 
-    const call = runCypherMock.mock.calls.find(([cypher]) =>
-      typeof cypher === "string" && cypher.includes("MERGE (ci:InfraCI"),
-    );
-    expect(call).toBeDefined();
-    const [cypherText, params] = call as [string, Record<string, unknown>];
-    expect(cypherText).toContain("ci.scopeKey = $scopeKey");
-    expect(cypherText).toContain("ci.customerAccountId = $customerAccountId");
-    expect(cypherText).toContain("ci.customerSiteId = $customerSiteId");
-    expect(params).toMatchObject({
+    const { key, labels, props } = findNodeUpsert();
+    expect(labels).toContain("InfraCI");
+    expect(key).toBe("customer:cust_a:site:site_austin:host:arp:192.168.1.1");
+    expect(props).toMatchObject({
       ciId: "customer:cust_a:site:site_austin:host:arp:192.168.1.1",
       scopeKey: "customer:cust_a:site:site_austin",
       customerAccountId: "cust_a",
@@ -56,12 +68,7 @@ describe("syncInventoryEntityAsInfraCI customer scope projection", () => {
       properties: {},
     });
 
-    const call = runCypherMock.mock.calls.find(([cypher]) =>
-      typeof cypher === "string" && cypher.includes("MERGE (ci:InfraCI"),
-    );
-    expect(call).toBeDefined();
-    const [cypherText, params] = call as [string, Record<string, unknown>];
-    expect(cypherText).not.toContain("ci.scopeKey = $scopeKey");
-    expect(params).not.toHaveProperty("scopeKey");
+    const { props } = findNodeUpsert();
+    expect(props).not.toHaveProperty("scopeKey");
   });
 });

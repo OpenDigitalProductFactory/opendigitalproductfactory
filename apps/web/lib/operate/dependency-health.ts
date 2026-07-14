@@ -1,9 +1,9 @@
 // Liveness probes for core dependencies that expose NO Prometheus /metrics
 // endpoint, so they cannot be scrape targets and `ContainerDown` (up==0) can
-// never see them: neo4j (graph DB), the local model runner (DMR), and STT
-// (Speaches). Sets the dpf_dependency_up{service} gauge, refreshed on each
-// /api/metrics scrape. Mirrors the TTS probe in
-// lib/voice-synthesis/service-status.ts (BI-B2E777EB). [BI-963DBB05]
+// never see them: the local model runner (DMR) and STT (Speaches). Sets the
+// dpf_dependency_up{service} gauge, refreshed on each /api/metrics scrape.
+// Mirrors the TTS probe in lib/voice-synthesis/service-status.ts
+// (BI-B2E777EB). [BI-963DBB05] (neo4j retired by BET-5.)
 
 import { dependencyUp } from "@/lib/metrics"
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url"
@@ -23,11 +23,6 @@ async function probe(url: string): Promise<boolean> {
   }
 }
 
-/** neo4j exposes no Prometheus metrics; community edition serves an HTTP API on 7474. */
-export async function probeNeo4j(): Promise<boolean> {
-  return probe(process.env.NEO4J_HTTP_URL ?? "http://neo4j:7474/")
-}
-
 /** Local model runner (DMR / Ollama) — probe the OpenAI-compatible /models list. */
 export async function probeModelRunner(): Promise<boolean> {
   return probe(`${getOllamaBaseUrl().replace(/\/$/, "")}/models`)
@@ -40,7 +35,6 @@ export async function probeStt(): Promise<boolean> {
 }
 
 const SERVICES: Array<readonly [string, () => Promise<boolean>]> = [
-  ["neo4j", probeNeo4j],
   ["model-runner", probeModelRunner],
   ["stt", probeStt],
 ]

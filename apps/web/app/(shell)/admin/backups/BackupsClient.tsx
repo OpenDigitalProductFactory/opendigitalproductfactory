@@ -27,15 +27,11 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 interface AllReadiness {
   postgres: ReadinessSummary;
-  neo4j: ReadinessSummary;
-  qdrant: ReadinessSummary;
 }
 
 interface Props {
   initialReadiness: AllReadiness;
   initialPgRuns: BackupRunListItem[];
-  initialNeo4jRuns: BackupRunListItem[];
-  initialQdrantRuns: BackupRunListItem[];
   initialRestoreRuns: RestoreRunListItem[];
 }
 
@@ -135,30 +131,23 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-const TARGET_LABELS: Record<BackupTarget, string> = {
+// postgres-only after BET-5 retired the neo4j + qdrant stores.
+const TARGET_LABELS: Record<"postgres", string> = {
   postgres: "Postgres",
-  neo4j: "Neo4j",
-  qdrant: "Qdrant",
 };
 
-const TARGET_DESCRIPTIONS: Record<BackupTarget, string> = {
+const TARGET_DESCRIPTIONS: Record<"postgres", string> = {
   postgres: "Full database dump (pg_dump -Fc). All operator state, backlog, config.",
-  neo4j: "Offline dump (neo4j-admin). Wiki link graph, routing data, EA model topology. Requires ~10 s Neo4j restart.",
-  qdrant: "Full-instance snapshot (REST API). Vector embeddings, semantic memory, brand context. No service interruption.",
 };
 
 export function BackupsClient({
   initialReadiness,
   initialPgRuns,
-  initialNeo4jRuns,
-  initialQdrantRuns,
   initialRestoreRuns,
 }: Props) {
   const [readiness, setReadiness] = useState<AllReadiness>(initialReadiness);
-  const [runsByTarget, setRunsByTarget] = useState<Record<BackupTarget, BackupRunListItem[]>>({
+  const [runsByTarget, setRunsByTarget] = useState<Record<"postgres", BackupRunListItem[]>>({
     postgres: initialPgRuns,
-    neo4j: initialNeo4jRuns,
-    qdrant: initialQdrantRuns,
   });
   const [restoreRuns, setRestoreRuns] = useState(initialRestoreRuns);
   const [pendingTarget, setPendingTarget] = useState<BackupTarget | null>(null);
@@ -171,15 +160,13 @@ export function BackupsClient({
   const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
 
   async function refresh() {
-    const [next, pgRuns, neo4jRuns, qdrantRuns, restores] = await Promise.all([
+    const [next, pgRuns, restores] = await Promise.all([
       getAllBackupReadinessAction(),
       listBackupRunsAction({ limit: 50, target: "postgres" }),
-      listBackupRunsAction({ limit: 50, target: "neo4j" }),
-      listBackupRunsAction({ limit: 50, target: "qdrant" }),
       listRestoreRunsAction({ limit: 20 }),
     ]);
     setReadiness(next);
-    setRunsByTarget({ postgres: pgRuns, neo4j: neo4jRuns, qdrant: qdrantRuns });
+    setRunsByTarget({ postgres: pgRuns });
     setRestoreRuns(restores);
   }
 
@@ -257,7 +244,7 @@ export function BackupsClient({
     }
   }
 
-  const targets: BackupTarget[] = ["postgres", "neo4j", "qdrant"];
+  const targets = ["postgres"] as const;
 
   return (
     <div className="max-w-4xl space-y-10">
@@ -293,14 +280,6 @@ export function BackupsClient({
                 <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
                   {TARGET_DESCRIPTIONS[target]}
                 </p>
-                {target === "neo4j" && (
-                  <p
-                    className="text-xs mt-1 font-medium"
-                    style={{ color: "#fbbf24" }}
-                  >
-                    Manual trigger stops the Neo4j container for ~10 s.
-                  </p>
-                )}
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-4">
                 {target === "postgres" && (

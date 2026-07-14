@@ -130,8 +130,10 @@ fi
 
 # ── Compose services ─────────────────────────────────────────────────────────
 
-step "Starting contributor compose stack (Postgres + Neo4j + Qdrant)"
-docker compose up -d postgres neo4j qdrant
+# BET-5 (BI-A1E864A5): the platform runs on Postgres only (pgvector for vectors, a
+# graph_node/graph_edge mirror for the graph). Neo4j + Qdrant are retired.
+step "Starting contributor compose stack (Postgres)"
+docker compose up -d postgres
 
 echo "  Waiting for Postgres to be ready..."
 RETRIES=30

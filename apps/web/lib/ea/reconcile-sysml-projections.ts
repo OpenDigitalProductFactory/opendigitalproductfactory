@@ -8,8 +8,8 @@
 // projections cannot drift.
 //
 // Thin orchestrator over the per-domain reconciles; db injected for tests. The
-// code-structure reconcile additionally reads the Neo4j code graph, so its graph deps
-// (runCypher / freshness) are injectable separately via `codeGraph`.
+// code-structure reconcile additionally reads the Postgres code-graph mirror, so its
+// graph deps (freshness) are injectable separately via `codeGraph`.
 
 import { prisma } from "@dpf/db";
 import { reconcileMcpAuthorityModel, type McpAuthorityReconcileResult } from "./reconcile-mcp-authority";

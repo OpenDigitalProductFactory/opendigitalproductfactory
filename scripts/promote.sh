@@ -334,6 +334,34 @@ if [[ $_dry_run -eq 0 ]]; then
   fi
 fi
 
+# --- Step 7c: legacy-datastore decommission ---
+# BET-5 (BI-922EBB99): the portal now runs on Postgres only (pgvector for vectors, a graph
+# mirror for the graph), so retire the Neo4j + Qdrant containers and their volumes. The
+# portal's boot (portal-migrate-boot.sh → bet5-decommission-backfill.ts) copies their data
+# into Postgres BEFORE its server starts, and health passing above proves boot completed — so
+# the data is already mirrored when we get here. The teardown script is DATA-SAFETY GATED (it
+# refuses to delete a store until its data is confirmed in the mirror) and IDEMPOTENT (a no-op
+# once the containers are gone — e.g. fresh installs, or subsequent upgrades).
+#
+# Fail-LOUD but NOT fail-ABORT, exactly like sandbox-refresh: the portal swap already
+# succeeded, so a hiccup here (or data not yet mirrored) must never mislabel a good upgrade. A
+# store left standing is a recoverable degraded state — the next upgrade retries, or the
+# operator runs scripts/decommission-neo4j-qdrant.{sh,ps1} directly.
+emit_step decommission-legacy-stores
+if [[ $_dry_run -eq 0 ]]; then
+  if [[ -f "$PROMOTE_SOURCE/scripts/decommission-neo4j-qdrant.sh" ]]; then
+    DPF_POSTGRES_CONTAINER="${DPF_PRODUCTION_DB_CONTAINER:-${_project}-postgres-1}" \
+    DPF_NEO4J_CONTAINER="${_project}-neo4j-1" \
+    DPF_NEO4J_VOLUME="${_project}_neo4jdata" \
+    DPF_QDRANT_CONTAINER="${_project}-qdrant-1" \
+    DPF_QDRANT_VOLUME="${_project}_qdrant_data" \
+      sh "$PROMOTE_SOURCE/scripts/decommission-neo4j-qdrant.sh" || {
+        printf 'step=decommission-legacy-stores-deferred target=%s\n' "$_built_sha"
+        printf 'warning: Neo4j/Qdrant decommission did not complete (data not yet mirrored or a docker hiccup) — the portal upgrade stands; it retries on the next upgrade or via scripts/decommission-neo4j-qdrant.sh (BI-922EBB99)\n' >&2
+      }
+  fi
+fi
+
 # --- Step 8: cleanup ---
 # A successful swap leaves the PREVIOUS portal image untagged (dangling) plus BuildKit
 # cache layers from step 3's rebuild. Nothing else sweeps them, so across upgrades they

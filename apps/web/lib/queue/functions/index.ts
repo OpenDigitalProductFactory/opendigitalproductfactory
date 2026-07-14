@@ -47,8 +47,6 @@ import {
   postgresDailyBackupScheduled,
   postgresBackupRequested,
   postgresTrialRestoreRequested,
-  neo4jBackupRequested,
-  qdrantBackupRequested,
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import {
@@ -141,8 +139,6 @@ export const eventFunctions = [
   gitPromotionSandboxVerification,
   postgresBackupRequested,
   postgresTrialRestoreRequested,
-  neo4jBackupRequested,
-  qdrantBackupRequested,
   selfUpgradeManual,
   quiescenceRun,
   dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run

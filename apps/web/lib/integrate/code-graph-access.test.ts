@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockRunCypher } = vi.hoisted(() => ({
-  mockRunCypher: vi.fn(),
+// BET-5: structural relationship health now reads from the Postgres graph
+// mirror via prisma.$queryRawUnsafe (grouping graph_edge by rel_type) instead
+// of running Cypher.
+const { mockQueryRawUnsafe } = vi.hoisted(() => ({
+  mockQueryRawUnsafe: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $queryRawUnsafe: mockQueryRawUnsafe,
     codeGraphIndexState: {
       findUnique: vi.fn(),
     },
@@ -13,7 +17,6 @@ vi.mock("@dpf/db", () => ({
       findMany: vi.fn(),
     },
   },
-  runCypher: mockRunCypher,
 }));
 
 import { prisma } from "@dpf/db";
@@ -24,7 +27,7 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockRunCypher.mockResolvedValue([]);
+  mockQueryRawUnsafe.mockResolvedValue([]);
 });
 
 describe("getCodeGraphFreshness", () => {
@@ -103,7 +106,7 @@ describe("getCodeGraphFreshness", () => {
       indexedFileCount: 42,
       lastError: null,
     } as never);
-    mockRunCypher.mockResolvedValue([
+    mockQueryRawUnsafe.mockResolvedValue([
       { relationship: "DEFINES", count: 10 },
       { relationship: "IMPORTS", count: 20 },
     ]);

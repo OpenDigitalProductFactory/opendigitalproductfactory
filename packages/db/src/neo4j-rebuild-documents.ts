@@ -4,14 +4,14 @@
 
 import "./load-env.js";
 import { prisma } from "./client.js";
-import { closeNeo4j, runCypher } from "./neo4j.js";
+import { clearGraphByLabel } from "./pg-graph.js";
 import { syncDocumentNode, syncDocumentReference } from "./neo4j-sync.js";
 
 async function rebuildDocuments(): Promise<void> {
   console.log("Rebuilding managed document graph projection...");
 
-  await runCypher(`MATCH (doc:Document) DETACH DELETE doc`, {});
-  console.log("Dropped existing :Document nodes");
+  await clearGraphByLabel("Document");
+  console.log("Dropped existing Document nodes");
 
   const documents = await prisma.document.findMany({
     select: {
@@ -66,4 +66,4 @@ async function rebuildDocuments(): Promise<void> {
 
 rebuildDocuments()
   .catch(console.error)
-  .finally(() => Promise.all([prisma.$disconnect(), closeNeo4j()]));
+  .finally(() => prisma.$disconnect());

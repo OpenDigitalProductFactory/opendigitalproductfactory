@@ -43,13 +43,20 @@ export function hashToNumber(str: string): number {
 }
 
 // ─── Qdrant filter DSL → SQL ─────────────────────────────────────────────────
-// Callers pass Qdrant-shaped filters: { must?: Clause[], should?: Clause[] } where a
+// Callers pass Qdrant-shaped filters: { must?, should?, must_not? } where a
 // Clause is { key, match: { value } | { any: [...] } } and `value` may be null.
-// `must` = AND, `should` = OR. Payload values may be scalars OR arrays (Qdrant matches a
-// value against an array key by containment), so each equality checks both.
-
-type MatchClause = { key: string; match: { value?: unknown } | { any?: unknown[] } };
-type QdrantFilter = { must?: MatchClause[]; should?: MatchClause[] };
+// `must` = AND, `should` = OR, `must_not` = AND of negations. Payload values may be
+// scalars OR arrays (Qdrant matches a value against an array key by containment), so
+// each equality checks both. Exported so app-side callers can type their clause arrays.
+export type MatchClause = {
+  key: string;
+  match: { value?: unknown } | { any?: unknown[] };
+};
+export type QdrantFilter = {
+  must?: MatchClause[];
+  should?: MatchClause[];
+  must_not?: MatchClause[];
+};
 
 /** Exported for unit testing the translation without a database. */
 export function buildFilterSql(
@@ -83,6 +90,10 @@ export function buildFilterSql(
   }
   if (filter.should?.length) {
     parts.push(`(${filter.should.map(clauseSql).join(" OR ")})`);
+  }
+  if (filter.must_not?.length) {
+    // Qdrant must_not: the row must not match ANY negated clause → AND of NOTs.
+    parts.push(filter.must_not.map((c) => `NOT ${clauseSql(c)}`).join(" AND "));
   }
   return parts.length ? `AND ${parts.join(" AND ")}` : "";
 }
