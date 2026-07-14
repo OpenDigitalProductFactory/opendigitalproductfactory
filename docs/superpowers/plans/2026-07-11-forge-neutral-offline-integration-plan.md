@@ -47,11 +47,13 @@ Verification: targeted tests, web typecheck, production build, and before/after 
 
 **BI-76551B2D — Decouple pre-push and local CI from remote branch publication** (`large`)
 
-Status: implementation started. The first slice changes `scripts/gate-worktree.sh`
-so `pnpm run pregate` records local evidence without publishing by default, with
-push-before-lease retained only as an explicit `--push` transition/recovery
-mode. The remaining work in this BI is local candidate/base ref freshness,
-richer content-addressed evidence, and network-disconnect proof.
+Status: implementation in progress. Landed slices make `pnpm run pregate`
+record local evidence without publishing by default, retain push-before-lease
+only as explicit `--push` transition/recovery mode, consume a locally available
+accepted-base ref by default, and record candidate/base/integration/tree SHA
+metadata in gate evidence. The remaining work in this BI is stronger
+toolchain/expiry evidence, pre-push refinements independent of remote names, and
+full network-disconnect proof.
 
 1. Change `scripts/gate-worktree.sh` so local verification defaults to `--no-push`; publication is a separate explicit operation.
 2. Change `scripts/local-ci-runner.sh` and `scripts/lib/local-integration-ci.mjs` to consume a local candidate ref/SHA and a locally available accepted-base ref.

@@ -9,20 +9,22 @@
 # ~/dpf-worktrees/.local-ci-runner), never in the topic worktree and never in
 # the root clone's working tree. Inside the scratch workspace it runs the
 # canonical plan from scripts/lib/local-integration-ci.mjs:
-#   fetch origin/main → checkout -B local-integration/<slug> → merge candidate
-#   → sandbox-freshness converge (pnpm install if drifted) → vitest → typecheck
-#   → production build.
+#   resolve the locally available accepted-base ref → checkout -B
+#   local-integration/<slug> → merge candidate → sandbox-freshness converge
+#   (pnpm install if drifted) → vitest → typecheck → production build.
 #
 # This is a merge workspace, not a second DPF runtime: no portal, no compose
 # stack, no dev server (worktree-is-source-control-not-runtime). Runtime/UX
 # verification stays on the canonical install or the leased :3010 sandbox.
 #
 # Usage:
-#   scripts/local-ci-runner.sh [--candidate BRANCH] [--workspace PATH] [--dry-run]
+#   scripts/local-ci-runner.sh [--candidate BRANCH] [--base-ref REF] [--fetch-base] [--workspace PATH] [--dry-run]
 
 set -eu
 
 CANDIDATE=""
+BASE_REF="${DPF_LOCAL_CI_BASE_REF:-origin/main}"
+FETCH_BASE="${DPF_LOCAL_CI_FETCH_BASE:-0}"
 WORKSPACE="${DPF_LOCAL_CI_WORKSPACE:-}"
 DRY_RUN=0
 
@@ -32,11 +34,15 @@ Usage: scripts/local-ci-runner.sh [options]
 
 Options:
   --candidate BRANCH   Branch to gate (default: current branch)
+  --base-ref REF       Locally available accepted-base ref (default: origin/main)
+  --fetch-base         Fetch origin/main before checkout (explicit network mode)
   --workspace PATH     Scratch merge workspace (default: <root>-worktrees/.local-ci-runner)
   --dry-run            Print the resolved workspace + plan; run nothing
   --help               Show this help
 
 Environment:
+  DPF_LOCAL_CI_BASE_REF    Overrides the accepted-base ref (default: origin/main).
+  DPF_LOCAL_CI_FETCH_BASE  Set to 1 to fetch origin/main before integration.
   DPF_LOCAL_CI_WORKSPACE   Overrides the scratch workspace location.
 EOF
 }
@@ -49,6 +55,8 @@ die() {
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --candidate) CANDIDATE="${2:-}"; shift 2 ;;
+    --base-ref) BASE_REF="${2:-}"; shift 2 ;;
+    --fetch-base) FETCH_BASE=1; shift ;;
     --workspace) WORKSPACE="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --help|-h) usage; exit 0 ;;
@@ -59,6 +67,7 @@ done
 [ -n "$CANDIDATE" ] || CANDIDATE="$(git rev-parse --abbrev-ref HEAD)"
 [ "$CANDIDATE" != "HEAD" ] || die "cannot gate a detached HEAD — pass --candidate BRANCH"
 [ "$CANDIDATE" != "main" ] || die "gate topic branches, not main"
+[ -n "$BASE_REF" ] || die "--base-ref cannot be empty"
 
 # Resolve the TRUE root clone (first worktree entry is always the main
 # worktree), regardless of whether we run from the root or a linked worktree.
@@ -70,16 +79,35 @@ if [ -z "$WORKSPACE" ]; then
   WORKSPACE="$(dirname "$root")/$(basename "$root")-worktrees/.local-ci-runner"
 fi
 
+candidate_sha="$(git -C "$repo_top" rev-parse --verify "$CANDIDATE" 2>/dev/null || true)"
+base_sha="$(git -C "$repo_top" rev-parse --verify "$BASE_REF" 2>/dev/null || true)"
+base_commit_date=""
+[ -n "$base_sha" ] && base_commit_date="$(git -C "$repo_top" show -s --format=%cI "$base_sha" 2>/dev/null || true)"
+metadata_file="${DPF_LOCAL_CI_METADATA_FILE:-$(git -C "$repo_top" rev-parse --git-path dpf-local-ci-metadata.json)}"
+
 if [ "$DRY_RUN" = "1" ]; then
   printf 'local-ci-runner dry-run\n'
-  printf 'candidate=%s\nroot=%s\nworkspace=%s\n' "$CANDIDATE" "$root" "$WORKSPACE"
-  printf 'plan=node scripts/local-integration-ci.mjs --candidate %s (in workspace)\n' "$CANDIDATE"
+  printf 'candidate=%s\ncandidateSha=%s\nbaseRef=%s\nbaseSha=%s\nbaseCommitDate=%s\nfetchBase=%s\nroot=%s\nworkspace=%s\nmetadataFile=%s\n' "$CANDIDATE" "${candidate_sha:-unresolved}" "$BASE_REF" "${base_sha:-unresolved}" "$base_commit_date" "$FETCH_BASE" "$root" "$WORKSPACE" "$metadata_file"
+  printf 'plan=node scripts/local-integration-ci.mjs --candidate %s --base-ref %s --candidate-sha %s --base-sha %s --metadata-out %s%s (in workspace)\n' "$CANDIDATE" "$BASE_REF" "$candidate_sha" "$base_sha" "$metadata_file" "$([ "$FETCH_BASE" = "1" ] && printf ' --fetch-base' || true)"
   exit 0
 fi
 
+[ -n "$candidate_sha" ] || die "candidate ref not found locally: $CANDIDATE"
+[ -n "$base_sha" ] || die "accepted base ref not found locally: $BASE_REF (fetch or set DPF_LOCAL_CI_BASE_REF to a local ref)"
+
+printf 'local-ci-runner: candidate %s @ %s\n' "$CANDIDATE" "$candidate_sha"
+printf 'local-ci-runner: accepted base %s @ %s' "$BASE_REF" "$base_sha"
+if [ -n "$base_commit_date" ]; then
+  printf ' (commit date %s)' "$base_commit_date"
+fi
+printf '\n'
+if [ "$FETCH_BASE" != "1" ]; then
+  printf 'local-ci-runner: using locally available base ref without fetch (BI-76551B2D)\n'
+fi
+
 # Ensure the scratch worktree exists. Linked worktrees share refs with the
-# root clone, so the candidate branch and origin/main are visible without any
-# cross-clone fetch plumbing.
+# root clone, so the candidate branch and accepted-base ref are visible without
+# any cross-clone fetch plumbing.
 if [ ! -e "$WORKSPACE/.git" ]; then
   mkdir -p "$(dirname "$WORKSPACE")"
   git -C "$root" worktree add --detach "$WORKSPACE" >/dev/null 2>&1 \
@@ -139,8 +167,12 @@ fi
 
 # Run the CALLER's copy of the plan entrypoint (the version under review) with
 # the scratch workspace as cwd — a stale scratch checkout must never supply the
-# plan itself. The plan's own first steps fetch origin/main and re-checkout the
-# integration branch, so every command after that runs against merged bytes.
+# plan itself. The plan's own first steps checkout the accepted local base and
+# merge the candidate branch, so every command after that runs against merged
+# bytes.
 cd "$WORKSPACE"
 # shellcheck disable=SC2086 — MIGRATE_FLAG is a single optional token
-exec node "$repo_top/scripts/local-integration-ci.mjs" --candidate "$CANDIDATE" $MIGRATE_FLAG
+FETCH_FLAG=""
+[ "$FETCH_BASE" = "1" ] && FETCH_FLAG="--fetch-base"
+# shellcheck disable=SC2086 — MIGRATE_FLAG and FETCH_FLAG are single optional tokens
+exec node "$repo_top/scripts/local-integration-ci.mjs" --candidate "$CANDIDATE" --base-ref "$BASE_REF" --candidate-sha "$candidate_sha" --base-sha "$base_sha" --metadata-out "$metadata_file" $FETCH_FLAG $MIGRATE_FLAG

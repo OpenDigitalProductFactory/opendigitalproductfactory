@@ -15,7 +15,6 @@ describe("createLocalIntegrationPlan", () => {
     });
 
     assert.deepEqual(plan.commands.map((command) => command.join(" ")), [
-      "git fetch origin main",
       "git checkout -B local-integration/doc-build-studio-decision-skill-packs origin/main",
       "git merge --no-ff --no-edit doc/build-studio-decision-skill-packs",
       "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/doc-build-studio-decision-skill-packs",
@@ -24,6 +23,37 @@ describe("createLocalIntegrationPlan", () => {
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
+  });
+
+  it("uses a locally available accepted-base ref without fetching by default (BI-76551B2D)", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/local-ci-content-evidence",
+      mode: "single-branch",
+      siblingBranches: [],
+      baseRef: "refs/dpf/integration/main",
+      hostPlatform: "linux",
+    });
+
+    assert.deepEqual(plan.commands.slice(0, 2).map((command) => command.join(" ")), [
+      "git checkout -B local-integration/feat-local-ci-content-evidence refs/dpf/integration/main",
+      "git merge --no-ff --no-edit feat/local-ci-content-evidence",
+    ]);
+    assert.ok(!plan.commands.map((command) => command.join(" ")).some((command) => command.startsWith("git fetch ")));
+    assert.equal(plan.baseRef, "refs/dpf/integration/main");
+  });
+
+  it("can still opt into fetching the accepted base before local integration", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/local-ci-content-evidence",
+      mode: "single-branch",
+      siblingBranches: [],
+      baseRef: "origin/main",
+      fetchBase: true,
+      hostPlatform: "linux",
+    });
+
+    assert.equal(plan.commands[0].join(" "), "git fetch origin main");
+    assert.equal(plan.commands[1].join(" "), "git checkout -B local-integration/feat-local-ci-content-evidence origin/main");
   });
 
   it("runs the sandbox freshness preflight after every merge and before any gate", () => {

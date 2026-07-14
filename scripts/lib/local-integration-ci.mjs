@@ -25,6 +25,7 @@ export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=8192";
 
 export function createLocalIntegrationPlan(input) {
   const branch = integrationBranchName(input.candidateBranch);
+  const baseRef = input.baseRef ?? "origin/main";
   const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform);
   const productionBuildCommand = buildStrategy === "docker-build"
     ? ["docker", "build", "--target", "build", "-t", dockerBuildTag(input.candidateBranch), "."]
@@ -32,8 +33,8 @@ export function createLocalIntegrationPlan(input) {
     // POSIX-only by construction (Windows defaults to docker-build above).
     : ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "next", "build"];
   const commands = [
-    ["git", "fetch", "origin", "main"],
-    ["git", "checkout", "-B", branch, "origin/main"],
+    ...(input.fetchBase ? [["git", "fetch", "origin", "main"]] : []),
+    ["git", "checkout", "-B", branch, baseRef],
     ["git", "merge", "--no-ff", "--no-edit", input.candidateBranch],
     ...input.siblingBranches.map((sibling) => ["git", "merge", "--no-ff", "--no-edit", sibling]),
     // Step-zero sandbox freshness gate (BI-ECDF9520): after the merge changes
@@ -68,6 +69,7 @@ export function createLocalIntegrationPlan(input) {
   return {
     mode: input.mode,
     integrationBranch: branch,
+    baseRef,
     buildStrategy,
     commands,
   };
