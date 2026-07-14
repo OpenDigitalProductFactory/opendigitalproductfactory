@@ -166,6 +166,40 @@ if [[ $_dry_run -eq 0 ]]; then
   }
 fi
 
+# --- Step 3a: ensure Postgres provides pgvector ---
+# BET-5 (BI-A1E864A5): the vector migration runs `CREATE EXTENSION vector`, which the plain
+# `postgres:16` image does not ship. A self-upgrade recreates ONLY the portal (step 4, --no-deps),
+# so an existing install's postgres container keeps whatever image it launched with — and the
+# Phase-0 compose bump to `pgvector/pgvector:pg16` never reaches it. Without this step, step 3b
+# `migrate deploy` fails with "extension \"vector\" is not available" and the upgrade aborts
+# before the swap. Recreate postgres onto the compose-pinned pgvector image BEFORE migrate.
+#
+# IDEMPOTENT: skips when the running container already provides vector.control (a fresh install
+# built from the new compose, or an install already upgraded). DATA-PRESERVING: pgvector/pgvector
+# is the same PG16 engine as postgres:16 on the same pgdata volume (a strict superset image), so
+# the recreate keeps all data — no dump/restore. FAIL-CLOSED like migrate: if the recreate or the
+# readiness wait fails, abort before the swap so the old portal keeps serving the old code.
+emit_step ensure-pgvector
+if [[ $_dry_run -eq 0 ]]; then
+  _pg_container="${DPF_PRODUCTION_DB_CONTAINER:-${_project}-postgres-1}"
+  _has_vector="$(docker exec "$_pg_container" sh -lc 'test -f /usr/local/share/postgresql/extension/vector.control && echo yes || echo no' 2>/dev/null || echo no)"
+  if [[ "$_has_vector" != "yes" ]]; then
+    printf 'step=ensure-pgvector-recreate target=%s\n' "$PROMOTE_TARGET_SHA"
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      "${_f_args[@]}" up -d --no-deps --force-recreate postgres || {
+        printf 'error: could not recreate postgres onto the pgvector image — the BET-5 vector migration cannot apply\n' >&2
+        exit 1
+      }
+    # Wait for the recreated postgres to accept connections before migrate.
+    _pg_ready=0
+    for _i in $(seq 1 30); do
+      if docker exec "$_pg_container" pg_isready -U "${POSTGRES_USER:-dpf}" >/dev/null 2>&1; then _pg_ready=1; break; fi
+      sleep 2
+    done
+    [[ $_pg_ready -eq 1 ]] || { printf 'error: postgres did not become ready after the pgvector recreate\n' >&2; exit 1; }
+  fi
+fi
+
 # --- Step 3b: migrate ---
 # Apply DB migrations using the FRESHLY BUILT portal image BEFORE recreating the
 # long-running portal. The swap in step 4 recreates ONLY `portal` (--no-deps),
@@ -322,8 +356,23 @@ fi
 emit_step sandbox-refresh
 if [[ $_dry_run -eq 0 ]]; then
   _sandbox_ok=1
-  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
-    "${_f_args[@]}" build sandbox || _sandbox_ok=0
+  # BET-5 (BI-A1E864A5): the sandbox runs the same schema, so its Postgres also needs pgvector
+  # for `CREATE EXTENSION vector`. Recreate sandbox-postgres onto the pgvector image first — same
+  # idempotent (skip if vector.control present), data-preserving contract as step 3a. Fail-LOUD-
+  # not-ABORT like the rest of 7b: a sandbox-postgres it cannot upgrade degrades Build Studio, it
+  # never reverts the already-promoted portal.
+  _sbx_pg="${_project}-sandbox-postgres-1"
+  if docker inspect "$_sbx_pg" >/dev/null 2>&1; then
+    _sbx_has_vector="$(docker exec "$_sbx_pg" sh -lc 'test -f /usr/local/share/postgresql/extension/vector.control && echo yes || echo no' 2>/dev/null || echo no)"
+    if [[ "$_sbx_has_vector" != "yes" ]]; then
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+        "${_f_args[@]}" up -d --no-deps --force-recreate sandbox-postgres || _sandbox_ok=0
+    fi
+  fi
+  if [[ $_sandbox_ok -eq 1 ]]; then
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      "${_f_args[@]}" build sandbox || _sandbox_ok=0
+  fi
   if [[ $_sandbox_ok -eq 1 ]]; then
     docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
       "${_f_args[@]}" up -d --no-deps --force-recreate sandbox || _sandbox_ok=0
