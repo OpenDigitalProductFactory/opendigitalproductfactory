@@ -1087,15 +1087,13 @@ export async function register() {
     // Periodic re-sync (in-process, cron-independent): re-register every 5 min so
     // the job engine self-heals WITHOUT a portal reboot if the boot sync failed
     // or Inngest later restarts and forgets its registration (the 2026-06-14
-    // outage needed a reboot to re-register). Also keeps the ops.jobEngine health
-    // record fresh — it then reflects the CURRENT state, not just boot. The PUT is
-    // idempotent ("modified:false" when the catalog is unchanged).
+    // outage needed a reboot to re-register). Also keeps ops.jobEngine fresh.
     if (process.env.INNGEST_BASE_URL && isInngestSelfSyncOnBootEnabled()) {
       const appUrl = process.env.APP_URL ?? "http://localhost:3000";
       setInterval(
         () => {
           void (async () => {
-            const { recordInngestRegistration } = await import(
+            const { recordInngestRegistration, runInngestExecutorWatchdog } = await import(
               "@/lib/queue/job-engine-health"
             );
             try {
@@ -1110,6 +1108,7 @@ export async function register() {
                 `Inngest re-sync failed: ${getErrorMessage(err)}`,
               );
             }
+            void runInngestExecutorWatchdog().then((r) => r.status === "degraded" && console.warn(`[inngest-watchdog] ${r.detail ?? "executor degraded"}`));
           })();
         },
         5 * 60 * 1000,

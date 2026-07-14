@@ -112,6 +112,14 @@ const baseStatus = {
     status: "healthy" as const,
     detail: null,
     checkedAt: "2026-05-24T00:00:00.000Z",
+    watchdog: {
+      status: "healthy" as const,
+      detail: null,
+      lastInvocationAt: "2026-05-24T00:00:00.000Z",
+      lastGatewayHitAt: "2026-05-24T00:00:00.000Z",
+      lastRecoveryAttemptAt: null,
+      lastRecoverySummary: null,
+    },
   },
   platformVersion: {
     version: "1.0.0",
