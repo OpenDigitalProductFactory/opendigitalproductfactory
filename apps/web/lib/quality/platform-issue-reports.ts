@@ -163,34 +163,61 @@ export async function createPlatformIssueReport(
   }
 
   const reportId = generateReportId();
+  const dedupeKey = trimTo(input.dedupeKey ?? null, LIMITS.dedupeKey);
 
-  await prisma.platformIssueReport.create({
-    data: {
-      reportId,
-      type: input.type.slice(0, LIMITS.type),
-      severity: (input.severity ?? "medium").slice(0, LIMITS.severity),
-      title: input.title.slice(0, LIMITS.title),
-      description: trimTo(input.description ?? null, LIMITS.description),
-      routeContext: trimTo(input.routeContext ?? null, LIMITS.routeContext),
-      errorStack: trimTo(input.errorStack ?? null, LIMITS.errorStack),
-      errorDigest: trimTo(input.errorDigest ?? null, LIMITS.errorDigest),
-      deployedSha: trimTo(input.deployedSha ?? null, LIMITS.deployedSha),
-      userAgent: trimTo(input.userAgent ?? null, LIMITS.userAgent),
-      triggerKind: trimTo(input.triggerKind ?? null, LIMITS.triggerKind),
-      supportSessionId: trimTo(input.supportSessionId ?? null, LIMITS.supportSessionId),
-      dedupeKey: trimTo(input.dedupeKey ?? null, LIMITS.dedupeKey),
-      selfFixClass: trimTo(input.selfFixClass ?? null, LIMITS.selfFixClass),
-      reportedById: input.reportedById ?? null,
-      threadId: input.threadId ?? null,
-      agentId: input.agentId ?? null,
-      taskRunId: input.taskRunId ?? null,
-      featureBuildId: input.featureBuildId ?? null,
-      source: input.source.slice(0, LIMITS.source),
-      portfolioId,
-      digitalProductId,
-      ...(status !== undefined ? { status } : {}),
-    },
-  });
+  try {
+    await prisma.platformIssueReport.create({
+      data: {
+        reportId,
+        type: input.type.slice(0, LIMITS.type),
+        severity: (input.severity ?? "medium").slice(0, LIMITS.severity),
+        title: input.title.slice(0, LIMITS.title),
+        description: trimTo(input.description ?? null, LIMITS.description),
+        routeContext: trimTo(input.routeContext ?? null, LIMITS.routeContext),
+        errorStack: trimTo(input.errorStack ?? null, LIMITS.errorStack),
+        errorDigest: trimTo(input.errorDigest ?? null, LIMITS.errorDigest),
+        deployedSha: trimTo(input.deployedSha ?? null, LIMITS.deployedSha),
+        userAgent: trimTo(input.userAgent ?? null, LIMITS.userAgent),
+        triggerKind: trimTo(input.triggerKind ?? null, LIMITS.triggerKind),
+        supportSessionId: trimTo(input.supportSessionId ?? null, LIMITS.supportSessionId),
+        dedupeKey,
+        selfFixClass: trimTo(input.selfFixClass ?? null, LIMITS.selfFixClass),
+        reportedById: input.reportedById ?? null,
+        threadId: input.threadId ?? null,
+        agentId: input.agentId ?? null,
+        taskRunId: input.taskRunId ?? null,
+        featureBuildId: input.featureBuildId ?? null,
+        source: input.source.slice(0, LIMITS.source),
+        portfolioId,
+        digitalProductId,
+        ...(status !== undefined ? { status } : {}),
+      },
+    });
+  } catch (err) {
+    // BI-PIR-76bf293c — idempotency race on the dedupeKey partial-unique.
+    // Two automated producers (e.g. the log-signature scanner firing on
+    // overlapping cycles, or the same signature twice within one cycle) can
+    // both create the same dedupeKey while a non-resolved report is open,
+    // violating PlatformIssueReport_dedupeKey_open_key (UNIQUE WHERE status NOT
+    // IN resolved_locally/resolved_upstream/suppressed). Previously that P2002
+    // escaped this shared front door, got logged, and was itself re-scanned.
+    // Treat it as idempotent success: return the surviving open report's id and
+    // skip re-projection (that report already projected when first filed).
+    const code = (err as { code?: string } | null)?.code;
+    const target = JSON.stringify((err as { meta?: { target?: unknown } } | null)?.meta?.target ?? "");
+    if (code === "P2002" && dedupeKey && target.includes("dedupeKey")) {
+      const existing = await prisma.platformIssueReport.findFirst({
+        where: {
+          dedupeKey,
+          status: { notIn: ["resolved_locally", "resolved_upstream", "suppressed"] },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { reportId: true },
+      });
+      if (existing) return { reportId: existing.reportId };
+    }
+    throw err;
+  }
 
   // EP-INTAKE-UNIFY Phase 4 (BI-EDFBE081): project OPEN reports into the backlog
   // immediately via a durable event, instead of waiting up to 15 min for the
