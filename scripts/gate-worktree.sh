@@ -12,7 +12,7 @@ OWNER_SESSION_ID="${DPF_GATE_OWNER_SESSION_ID:-}"
 LEASE_WAIT_SECONDS="${DPF_GATE_LEASE_WAIT_SECONDS:-300}"
 POLL_SECONDS="${DPF_GATE_POLL_SECONDS:-10}"
 EXPIRES_MINUTES="${DPF_GATE_EXPIRES_MINUTES:-60}"
-PUSH_BRANCH=1
+PUSH_BRANCH=0
 DRY_RUN=0
 LOCAL_CI_COMMAND="${DPF_LOCAL_CI_COMMAND:-}"
 ALLOW_STUB="${DPF_ALLOW_LOCAL_CI_STUB:-0}"
@@ -30,14 +30,15 @@ Options:
   --branch NAME              Branch to gate (default: current branch)
   --sha SHA                  Commit SHA to gate (default: HEAD)
   --worktree PATH            Worktree path (default: git rev-parse --show-toplevel)
-  --remote NAME              Remote to push before claiming the lease (default: origin)
+  --remote NAME              Remote used only with --push (default: origin)
   --owner-provider NAME      build-studio|claude|codex|coworker (default: codex)
   --owner-session-id ID      External session id (default: gate-<pid>)
   --mcp-url URL              MCP endpoint (default: DPF_MCP_URL or local portal)
   --lease-wait-seconds N     Max time to wait when the lease is busy (default: 300)
   --poll-seconds N           Busy-lease poll interval (default: 10)
   --expires-minutes N        Lease expiry window (default: 60)
-  --no-push                  Do not push before claiming the lease
+  --push                     Push before claiming the lease (legacy/explicit publication mode)
+  --no-push                  Do not push before claiming the lease (default)
   --dry-run                  Print planned actions; skip git push and MCP calls
   --help                     Show this help
 
@@ -134,9 +135,11 @@ while [ "$#" -gt 0 ]; do
     --lease-wait-seconds) LEASE_WAIT_SECONDS="${2:-}"; shift 2 ;;
     --poll-seconds) POLL_SECONDS="${2:-}"; shift 2 ;;
     --expires-minutes) EXPIRES_MINUTES="${2:-}"; shift 2 ;;
+    --push) PUSH_BRANCH=1; shift ;;
     --no-push) PUSH_BRANCH=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --help|-h) usage; exit 0 ;;
+    --) shift ;;
     *) die "unknown option: $1" ;;
   esac
 done
@@ -158,6 +161,11 @@ fi
 if [ "$DRY_RUN" = "1" ]; then
   printf 'gate-worktree dry-run\n'
   printf 'branch=%s\nsha=%s\nworktree=%s\nremote=%s\nmcpUrl=%s\n' "$BRANCH" "$SHA" "$WORKTREE_PATH" "$REMOTE" "$MCP_URL"
+  if [ "$PUSH_BRANCH" = "1" ]; then
+    printf 'pushBeforeLease=true\n'
+  else
+    printf 'pushBeforeLease=false\n'
+  fi
   if [ -n "$LOCAL_CI_COMMAND" ]; then
     printf 'localCiCommand=%s\n' "$LOCAL_CI_COMMAND"
   elif [ "$ALLOW_STUB" = "1" ]; then
@@ -281,11 +289,13 @@ evidence_args="$(node -e '
 const outcome = JSON.parse(process.argv[11]);
 const evidence = {
   bi: "BI-166C59F3",
+  resilienceBi: "BI-76551B2D",
   freshnessBi: "BI-ECDF9520",
   phase: 1,
   leaseId: process.argv[3],
   branch: process.argv[4],
   sha: process.argv[5],
+  pushBeforeLease: process.argv[13] === "1",
   gatePassed: outcome.gatePassed,
   freshness: outcome.freshness,
   commands: [process.argv[7]],
@@ -304,7 +314,7 @@ process.stdout.write(JSON.stringify({
   summary: outcome.summary,
   evidence
 }));
-' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status")"
+' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH")"
 evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
 evidence_success="$(printf '%s' "$evidence_response" | field success)"
 if [ "$evidence_success" != "true" ] && [ "$status" = "blocked_sandbox_drift" ]; then

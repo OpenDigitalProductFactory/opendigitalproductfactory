@@ -134,11 +134,14 @@ From a worktree, the gate is:
 pnpm run pregate            # → sh scripts/gate-worktree.sh
 ```
 
-The script pushes the current branch, claims a `local-integration-ci` lease
-(waiting if the sandbox is already leased), runs the gate command, records a
-local-integration evidence record with the lease id and `gatePassed`, releases
-the lease, and writes the latest gate result to Git-local state
-(`.git/dpf-local-ci-gate.json`).
+The script claims a `local-integration-ci` lease (waiting if the sandbox is
+already leased), runs the gate command, records a local-integration evidence
+record with the lease id and `gatePassed`, releases the lease, and writes the
+latest gate result to Git-local state (`.git/dpf-local-ci-gate.json`). It does
+**not** publish the branch by default (BI-76551B2D); push/publication is a
+separate step after local evidence exists. The legacy push-before-lease behavior
+is available only as an explicit `scripts/gate-worktree.sh --push` operation for
+recovery/transition cases that intentionally need it.
 
 **The gate command has a checked-in default (BI-157DC9B2):**
 [`scripts/local-ci-runner.sh`](../../scripts/local-ci-runner.sh) runs the

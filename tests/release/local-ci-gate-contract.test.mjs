@@ -37,6 +37,23 @@ test("gate-worktree.sh parses explicit flags in dry-run mode", () => {
   assert.match(result.stdout, /sha=abc123/);
   assert.match(result.stdout, /worktree=\/tmp\/dpf-worktree/);
   assert.match(result.stdout, /remote=coordination/);
+  assert.match(result.stdout, /pushBeforeLease=false/);
+});
+
+test("gate-worktree.sh exposes push-before-lease only as an explicit dry-run mode", () => {
+  const result = runGate([
+    "--dry-run",
+    "--branch",
+    "feat/local-ci-sandbox",
+    "--sha",
+    "abc123",
+    "--worktree",
+    "/tmp/dpf-worktree",
+    "--push",
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /pushBeforeLease=true/);
 });
 
 test("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () => {
@@ -260,6 +277,84 @@ esac
   ]);
 });
 
+test("gate-worktree.sh does not push before claiming the local-CI lease by default (BI-76551B2D)", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
+  const callsFile = join(temp, "calls.ndjson");
+  const gitStub = join(temp, "git");
+  const curlStub = join(temp, "curl");
+
+  writeFileSync(gitStub, `#!/bin/sh
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
+  echo "${temp}/gate.json"
+  exit 0
+fi
+if [ "$1" = "push" ]; then
+  echo "unexpected push before local evidence: $*" >&2
+  exit 42
+fi
+echo "unexpected git call: $*" >&2
+exit 1
+`);
+  writeFileSync(curlStub, `#!/bin/sh
+data=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --data) data="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s\\n' "$data" >> "${callsFile}"
+tool="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); console.log(p.params.name)' <<EOF
+$data
+EOF
+)"
+case "$tool" in
+  claim_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    ;;
+  record_local_integration_result)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"EXT-TEST\\"}"}]}}'
+    ;;
+  release_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    ;;
+  *)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":false,\\"error\\":\\"unexpected_tool\\"}"}]}}'
+    ;;
+esac
+`);
+  chmodSync(gitStub, 0o755);
+  chmodSync(curlStub, 0o755);
+
+  const result = runGate([
+    "--branch",
+    "feat/local-ci-sandbox",
+    "--sha",
+    "abc123",
+    "--worktree",
+    temp,
+  ], {
+    env: {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_ALLOW_LOCAL_CI_STUB: "1",
+      DPF_GATE_GIT_BIN: gitStub,
+      DPF_GATE_CURL_BIN: curlStub,
+    },
+  });
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const calls = readFileSync(callsFile, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line).params.name);
+  assert.deepEqual(calls, [
+    "claim_nonprod_environment_lease",
+    "record_local_integration_result",
+    "release_nonprod_environment_lease",
+  ]);
+});
+
 // ── pre-push hook chain + pre-push-gate contract (BI-C74F4DE9) ───────────────
 
 // The tracked hook body — the local `pre-push` shim is gitignored (git-lfs
@@ -290,6 +385,7 @@ function makeTempRepo() {
   g(["config", "user.email", "test@dpf.local"]);
   g(["config", "user.name", "dpf-test"]);
   g(["config", "commit.gpgsign", "false"]);
+  g(["remote", "add", "origin", "https://example.invalid/repo.git"]);
   writeFileSync(join(dir, "code.ts"), "export const x = 1;\n");
   g(["add", "."]);
   g(["commit", "-q", "-m", "base"]);
@@ -412,10 +508,27 @@ test("pre-push chains BOTH git-lfs and the gate (gate blocks, LFS still ran)", (
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
 
-  // PATH-stub git-lfs: record the call, swallow stdin, succeed.
+  // PATH-stub `git lfs pre-push`: record the call, swallow stdin, succeed.
+  // The tracked hook calls `git lfs ...` rather than invoking `git-lfs`
+  // directly, so the fixture intercepts the git front door and delegates every
+  // non-LFS command to the real binary.
   const stubDir = mkdtempSync(join(tmpdir(), "dpf-lfs-stub-"));
   const marker = join(stubDir, "lfs-ran");
-  writeFileSync(join(stubDir, "git-lfs"), `#!/bin/sh\nif [ "$1" = "pre-push" ]; then cat >/dev/null; fi\ntouch "${marker}"\nexit 0\n`);
+  const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+  writeFileSync(join(stubDir, "git"), `#!/bin/sh
+if [ "$1" = "lfs" ] && [ "$2" = "pre-push" ]; then
+  cat >/dev/null
+  touch "${marker}"
+  exit 0
+fi
+exec "${realGit}" "$@"
+`);
+  writeFileSync(join(stubDir, "git-lfs"), `#!/bin/sh
+if [ "$1" = "pre-push" ]; then cat >/dev/null; fi
+touch "${marker}"
+exit 0
+`);
+  chmodSync(join(stubDir, "git"), 0o755);
   chmodSync(join(stubDir, "git-lfs"), 0o755);
 
   // The repo has no gate record → the chained gate must block the push, and
