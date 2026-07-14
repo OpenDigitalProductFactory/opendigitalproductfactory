@@ -30,10 +30,10 @@ function makeAttempt(): BuildDispatchAttemptView {
 }
 
 describe("BuildDispatchHistoryCard", () => {
-  it("renders attempt metadata and bounded failure output", () => {
-    render(<BuildDispatchHistoryCard attempts={[makeAttempt()]} />);
+  it("renders attempt metadata and bounded failure output in engineer view", () => {
+    render(<BuildDispatchHistoryCard attempts={[makeAttempt()]} engineerView />);
 
-    expect(screen.getByText("Dispatch")).toBeInTheDocument();
+    expect(screen.getByText("Dispatch attempts")).toBeInTheDocument();
     expect(screen.getByText("Add dispatch telemetry")).toBeInTheDocument();
     expect(screen.getByText(/exit 1.*usage-limit/)).toBeInTheDocument();
     expect(screen.getByText("gpt-5.3-codex")).toBeInTheDocument();
@@ -41,6 +41,28 @@ describe("BuildDispatchHistoryCard", () => {
     // also inside the collapsed <details> raw output. Use getAllByText since
     // it may appear in two places.
     expect(screen.getAllByText("ERROR: You've hit your usage limit.").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("hides exit codes, tool/model names, and raw output by default (BI-F606D0E6)", () => {
+    const html = renderToStaticMarkup(
+      <BuildDispatchHistoryCard
+        attempts={[
+          attempt({
+            exitCode: 127,
+            providerId: "opencode",
+            model: "opencode",
+            rootCauseSummary: "opencode failed with Exit code 127",
+            failureAxis: "unknown",
+            stdoutExcerpt: "command not found: opencode",
+          }),
+        ]}
+      />,
+    );
+    expect(html).not.toMatch(/\bexit\s+127\b/i);
+    expect(html).not.toMatch(/\bExit code 127\b/i);
+    expect(html).not.toMatch(/\bopencode\b/i);
+    expect(html).not.toContain("command not found");
+    expect(html).toContain("the build assistant");
   });
 });
 
@@ -68,22 +90,27 @@ function attempt(overrides: Partial<BuildDispatchAttemptView> = {}): BuildDispat
 }
 
 describe("BuildDispatchHistoryCard — root-cause display (BI-594B76AB)", () => {
-  it("renders rootCauseSummary as the visible diagnosis line when present", () => {
-    const html = renderToStaticMarkup(<BuildDispatchHistoryCard attempts={[attempt()]} />);
+  it("renders rootCauseSummary as the visible diagnosis line when present (engineer view)", () => {
+    const html = renderToStaticMarkup(
+      <BuildDispatchHistoryCard attempts={[attempt()]} engineerView />,
+    );
     expect(html).toContain("Usage limit reached for the day.");
   });
 
-  it("falls back to failureAxis text when rootCauseSummary is null", () => {
+  it("falls back to failureAxis text when rootCauseSummary is null (engineer view)", () => {
     const html = renderToStaticMarkup(
       <BuildDispatchHistoryCard
+        engineerView
         attempts={[attempt({ rootCauseSummary: null, failureAxis: "timeout", stdoutExcerpt: null })]}
       />,
     );
     expect(html).toMatch(/\btimeout\b/i);
   });
 
-  it("places stdoutExcerpt inside a <details> element, not the default visible body", () => {
-    const html = renderToStaticMarkup(<BuildDispatchHistoryCard attempts={[attempt()]} />);
+  it("places stdoutExcerpt inside a <details> element in engineer view only", () => {
+    const html = renderToStaticMarkup(
+      <BuildDispatchHistoryCard attempts={[attempt()]} engineerView />,
+    );
     expect(html).toMatch(/<details[\s>]/);
     const detailsMatch = html.match(/<details[\s\S]*?<\/details>/);
     expect(detailsMatch).not.toBeNull();
@@ -91,7 +118,9 @@ describe("BuildDispatchHistoryCard — root-cause display (BI-594B76AB)", () => 
   });
 
   it("does not duplicate the rootCauseSummary outside the expected places", () => {
-    const html = renderToStaticMarkup(<BuildDispatchHistoryCard attempts={[attempt()]} />);
+    const html = renderToStaticMarkup(
+      <BuildDispatchHistoryCard attempts={[attempt()]} engineerView />,
+    );
     const occurrences = (html.match(/Usage limit reached for the day\./g) ?? []).length;
     // Once in the visible diagnosis line, possibly once inside the raw <details>
     // because stdoutExcerpt contains the same string after the prologue.
@@ -99,8 +128,10 @@ describe("BuildDispatchHistoryCard — root-cause display (BI-594B76AB)", () => 
     expect(occurrences).toBeLessThanOrEqual(2);
   });
 
-  it("uses a <summary> label that names the raw section", () => {
-    const html = renderToStaticMarkup(<BuildDispatchHistoryCard attempts={[attempt()]} />);
+  it("uses a <summary> label that names the raw section (engineer view)", () => {
+    const html = renderToStaticMarkup(
+      <BuildDispatchHistoryCard attempts={[attempt()]} engineerView />,
+    );
     expect(html).toMatch(/<summary[^>]*>[^<]*Raw[^<]*<\/summary>/i);
   });
 });
@@ -117,7 +148,9 @@ describe("BuildDispatchHistoryCard — open-last-attempt event (BI-9A7DA4AC)", (
   });
 
   it("opens the most-recent attempt's <details> when the open-last event fires", () => {
-    const { container } = render(<BuildDispatchHistoryCard attempts={[attempt()]} />);
+    const { container } = render(
+      <BuildDispatchHistoryCard attempts={[attempt()]} engineerView />,
+    );
     const detailsBefore = container.querySelector<HTMLDetailsElement>("[data-most-recent='true'] details");
     expect(detailsBefore).not.toBeNull();
     expect(detailsBefore!.open).toBe(false);

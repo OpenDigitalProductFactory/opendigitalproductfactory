@@ -1025,6 +1025,7 @@ export function BuildStudio({
                       drawerInitialSectionId,
                       supervisedBuildRows,
                       changeNarrative,
+                      engineerView,
                     )}
                   />
                 </div>
@@ -1080,6 +1081,7 @@ function buildDetailsDrawerSections(
   initialSectionId: string | null,
   allBuilds: readonly FeatureBuildRow[],
   changeNarrative: BuildChangeNarrative | null,
+  engineerView: boolean = false,
 ): DetailsDrawerSection[] {
   // Default-open section depends on phase + explicit operator intent.
   // - When the queue header opened the drawer, BS-Queue is the explicit pick.
@@ -1104,7 +1106,7 @@ function buildDetailsDrawerSections(
       id: "progress",
       title: "Progress",
       defaultOpen: defaultId === "progress",
-      content: <BuildProgressOperationalPanel projection={progressVisibility} />,
+      content: <BuildProgressOperationalPanel projection={progressVisibility} engineerView={engineerView} />,
     },
     {
       id: "brief",
