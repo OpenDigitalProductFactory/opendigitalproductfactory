@@ -406,6 +406,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   candidateRef: "feat/local-ci-sandbox",
   candidateSha: "candidate-sha",
   baseRef: "origin/main",
+  fetchBase: false,
   baseSha: "base-sha",
   integrationCommitSha: "integration-sha",
   synthesizedTreeSha: "tree-sha",
@@ -443,15 +444,151 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
     candidateRef: "feat/local-ci-sandbox",
     candidateSha: "candidate-sha",
     baseRef: "origin/main",
+    fetchBase: false,
     baseSha: "base-sha",
     integrationCommitSha: "integration-sha",
     synthesizedTreeSha: "tree-sha",
     toolchainFingerprint: "toolchain-sha",
     toolchain: { nodeVersion: "v24.0.0" },
   });
+  assert.deepEqual(evidenceCall.params.arguments.evidence.resilience, {
+    publicationMode: "deferred",
+    acceptedBaseMode: "local-ref",
+    networkTolerance: "offline-capable",
+  });
   assert.match(evidenceCall.params.arguments.evidence.expiresAt, /^\d{4}-\d{2}-\d{2}T/);
   const state = JSON.parse(readFileSync(join(temp, "dpf-local-ci-gate.json"), "utf8"));
   assert.equal(state.expiresAt, evidenceCall.params.arguments.evidence.expiresAt);
+  assert.deepEqual(state.resilience, evidenceCall.params.arguments.evidence.resilience);
+});
+
+test("gate-worktree.sh records local-only evidence that pre-push can later publish without network git operations (BI-76551B2D)", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+  const sha = g(["rev-parse", "HEAD"]);
+
+  const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-offline-"));
+  const callsFile = join(temp, "calls.ndjson");
+  const gateGitStub = join(temp, "gate-git");
+  const curlStub = join(temp, "curl");
+  const writerScript = join(temp, "write-metadata.mjs");
+
+  writeFileSync(gateGitStub, `#!/bin/sh
+case "$1" in
+  fetch|push|pull|clone|ls-remote)
+    echo "network git operation forbidden during offline proof: $*" >&2
+    exit 42
+    ;;
+esac
+if [ "$1" = "remote" ] && [ "$2" = "update" ]; then
+  echo "network git operation forbidden during offline proof: $*" >&2
+  exit 42
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
+  echo "${dir}/.git/$3"
+  exit 0
+fi
+echo "unexpected gate git call: $*" >&2
+exit 1
+`);
+  writeFileSync(curlStub, `#!/bin/sh
+data=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --data) data="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s\\n' "$data" >> "${callsFile}"
+tool="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); console.log(p.params.name)' <<EOF
+$data
+EOF
+)"
+case "$tool" in
+  claim_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
+    ;;
+  record_local_integration_result)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"EXT-OFFLINE\\"}"}]}}'
+    ;;
+  release_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
+    ;;
+  *)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":false,\\"error\\":\\"unexpected_tool\\"}"}]}}'
+    ;;
+esac
+`);
+  writeFileSync(writerScript, `
+import { writeFileSync } from "node:fs";
+writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
+  schemaVersion: 1,
+  bi: "BI-76551B2D",
+  candidateRef: "feat/topic",
+  candidateSha: "${sha}",
+  baseRef: "refs/dpf/integration/main",
+  fetchBase: false,
+  baseSha: "base-sha",
+  integrationCommitSha: "integration-sha",
+  synthesizedTreeSha: "tree-sha",
+  toolchainFingerprint: "toolchain-sha"
+}) + "\\n");
+`);
+  chmodSync(gateGitStub, 0o755);
+  chmodSync(curlStub, 0o755);
+
+  const gateResult = runGate([
+    "--branch",
+    "feat/topic",
+    "--sha",
+    sha,
+    "--worktree",
+    dir,
+    "--no-push",
+  ], {
+    env: {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
+      DPF_GATE_GIT_BIN: gateGitStub,
+      DPF_GATE_CURL_BIN: curlStub,
+    },
+  });
+  assert.equal(gateResult.status, 0, `${gateResult.stdout}\n${gateResult.stderr}`);
+
+  const calls = readFileSync(callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  const evidenceCall = calls.find((call) => call.params.name === "record_local_integration_result");
+  assert.ok(evidenceCall, "expected evidence to be recorded");
+  assert.deepEqual(evidenceCall.params.arguments.evidence.resilience, {
+    publicationMode: "deferred",
+    acceptedBaseMode: "local-ref",
+    networkTolerance: "offline-capable",
+  });
+
+  const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+  const pathStubDir = mkdtempSync(join(tmpdir(), "dpf-no-network-git-"));
+  writeFileSync(join(pathStubDir, "git"), `#!/bin/sh
+case "$1" in
+  fetch|push|pull|clone|ls-remote)
+    echo "network git operation forbidden during publication replay proof: $*" >&2
+    exit 42
+    ;;
+esac
+if [ "$1" = "remote" ] && [ "$2" = "update" ]; then
+  echo "network git operation forbidden during publication replay proof: $*" >&2
+  exit 42
+fi
+exec "${realGit}" "$@"
+`);
+  chmodSync(join(pathStubDir, "git"), 0o755);
+
+  const publishReplay = runGateHook(dir, {
+    input: refsLine(g),
+    env: cleanHookEnv({ PATH: `${pathStubDir}:${process.env.PATH}` }),
+  });
+  assert.equal(publishReplay.status, 0, `${publishReplay.stdout}\n${publishReplay.stderr}`);
+  assert.match(publishReplay.stdout, /local-CI gate passed/);
 });
 
 // ── pre-push hook chain + pre-push-gate contract (BI-C74F4DE9) ───────────────

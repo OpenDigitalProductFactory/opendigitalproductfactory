@@ -15,6 +15,7 @@ const baseSha = valueAfter("--base-sha");
 const metadataOut = valueAfter("--metadata-out");
 const mode = valueAfter("--mode") || "single-branch";
 const buildStrategy = valueAfter("--build-strategy");
+const fetchBase = process.argv.includes("--fetch-base");
 const siblingBranches = process.argv
   .filter((arg) => arg.startsWith("--sibling="))
   .map((arg) => arg.slice("--sibling=".length));
@@ -30,7 +31,7 @@ const plan = createLocalIntegrationPlan({
   mode,
   siblingBranches,
   buildStrategy: buildStrategy || undefined,
-  fetchBase: process.argv.includes("--fetch-base"),
+  fetchBase,
   includeMigrateDeploy: process.argv.includes("--migrate-deploy"),
 });
 const startedAt = new Date().toISOString();
@@ -60,6 +61,7 @@ if (metadataOut) {
     candidateRef: candidateBranch,
     candidateSha: candidateSha || revParse(candidateBranch),
     baseRef,
+    fetchBase,
     baseSha: baseSha || revParse(baseRef),
     integrationBranch: plan.integrationBranch,
     integrationCommitSha: revParse("HEAD"),

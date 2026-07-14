@@ -107,9 +107,11 @@ write_state() {
   evidence_id="$3"
   status="$4"
   expires_at_value="$5"
+  resilience_json="${6:-null}"
   mkdir -p "$(dirname "$STATE_FILE")"
   node -e '
 const fs = require("node:fs");
+const resilience = JSON.parse(process.argv[9]);
 const out = process.argv[1];
 const payload = {
   branch: process.argv[2],
@@ -121,8 +123,9 @@ const payload = {
   expiresAt: process.argv[8],
   recordedAt: new Date().toISOString()
 };
+if (resilience) payload.resilience = resilience;
 fs.writeFileSync(out, JSON.stringify(payload, null, 2) + "\n");
-' "$STATE_FILE" "$BRANCH" "$SHA" "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at_value"
+' "$STATE_FILE" "$BRANCH" "$SHA" "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at_value" "$resilience_json"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -289,9 +292,23 @@ status="$(printf '%s' "$outcome_json" | field status)"
 gate_passed="$(printf '%s' "$outcome_json" | field gatePassed)"
 gate_summary="$(printf '%s' "$outcome_json" | field summary)"
 
+resilience_json="$(node -e '
+const fs = require("node:fs");
+const pushBeforeLease = process.argv[1] === "1";
+let contentMetadata = null;
+try { contentMetadata = JSON.parse(fs.readFileSync(process.argv[2], "utf8")); } catch {}
+const fetchBase = contentMetadata && contentMetadata.fetchBase === true;
+process.stdout.write(JSON.stringify({
+  publicationMode: pushBeforeLease ? "push-before-lease" : "deferred",
+  acceptedBaseMode: fetchBase ? "fetch-base" : "local-ref",
+  networkTolerance: (!pushBeforeLease && !fetchBase) ? "offline-capable" : "network-required"
+}));
+' "$PUSH_BRANCH" "$METADATA_FILE")"
+
 evidence_args="$(node -e '
 const fs = require("node:fs");
 const outcome = JSON.parse(process.argv[11]);
+const resilience = JSON.parse(process.argv[16]);
 let contentMetadata = null;
 try { contentMetadata = JSON.parse(fs.readFileSync(process.argv[14], "utf8")); } catch {}
 const evidence = {
@@ -304,6 +321,7 @@ const evidence = {
   sha: process.argv[5],
   expiresAt: process.argv[15],
   pushBeforeLease: process.argv[13] === "1",
+  resilience,
   content: contentMetadata,
   gatePassed: outcome.gatePassed,
   freshness: outcome.freshness,
@@ -323,7 +341,7 @@ process.stdout.write(JSON.stringify({
   summary: outcome.summary,
   evidence
 }));
-' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE" "$expires_at")"
+' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE" "$expires_at" "$resilience_json")"
 evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
 evidence_success="$(printf '%s' "$evidence_response" | field success)"
 if [ "$evidence_success" != "true" ] && [ "$status" = "blocked_sandbox_drift" ]; then
@@ -347,7 +365,7 @@ fi
 if [ "$evidence_success" = "true" ]; then
   evidence_id="$(printf '%s' "$evidence_response" | field entityId)"
 else
-  write_state false "$lease_id" "" "failed" "$expires_at"
+  write_state false "$lease_id" "" "failed" "$expires_at" "$resilience_json"
   mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id")}" >/dev/null || true
   die "failed to record local integration evidence: $evidence_response"
 fi
@@ -356,7 +374,7 @@ release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(j
 release_success="$(printf '%s' "$release_response" | field success)"
 [ "$release_success" = "true" ] || die "failed to release local-CI lease: $release_response"
 
-write_state "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at"
+write_state "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at" "$resilience_json"
 
 if [ "$gate_passed" = "true" ]; then
   printf '%s\n' "gate passed"

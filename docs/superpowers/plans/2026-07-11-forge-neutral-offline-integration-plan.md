@@ -47,17 +47,21 @@ Verification: targeted tests, web typecheck, production build, and before/after 
 
 **BI-76551B2D — Decouple pre-push and local CI from remote branch publication** (`large`)
 
-Status: implementation in progress. Landed slices make `pnpm run pregate`
+Status: implemented through the local-CI/pre-push substrate. Landed slices make `pnpm run pregate`
 record local evidence without publishing by default, retain push-before-lease
 only as explicit `--push` transition/recovery mode, consume a locally available
 accepted-base ref by default, record candidate/base/integration/tree SHA
 metadata in gate evidence, and remove the pre-push docs-only bypass's hard
 dependency on `origin/main` by allowing a configured local accepted-base ref.
-This slice adds toolchain fingerprint and gate-evidence expiry metadata so
-local passes are auditable but not timeless; the follow-up slice enforces that
-expiry in the pre-push gate, so later publication is allowed only while the
-record is still fresh. The remaining work in this BI is full
-network-disconnect proof.
+Follow-up slices added toolchain fingerprint and gate-evidence expiry metadata
+so local passes are auditable but not timeless, enforce that expiry in the
+pre-push gate, and record an explicit resilience envelope
+(`publicationMode`, `acceptedBaseMode`, `networkTolerance`) so later publication
+is allowed only while the same SHA-bound, offline-capable record is still fresh.
+The network-disconnect proof is captured in
+`tests/release/local-ci-gate-contract.test.mjs`: the test denies network Git
+verbs during local gate evidence capture, then proves `.githooks/pre-push-gate`
+accepts the same unexpired record when network Git verbs are still denied.
 
 1. Change `scripts/gate-worktree.sh` so local verification defaults to `--no-push`; publication is a separate explicit operation.
 2. Change `scripts/local-ci-runner.sh` and `scripts/lib/local-integration-ci.mjs` to consume a local candidate ref/SHA and a locally available accepted-base ref.
@@ -65,7 +69,10 @@ network-disconnect proof.
 4. Make stale/missing base explicit. If a recent remote base cannot be fetched, report the accepted local base age; do not fabricate freshness.
 5. Update `.githooks/pre-push-gate` so docs-only bypasses compare against a configured local base ref instead of a hard-coded remote name.
 
-Verification: disconnect network; prove the full local gate runs and records evidence. Reconnect; prove the same candidate can publish without rerunning unless policy/freshness requires it.
+Verification: `node --test tests/release/local-ci-gate-contract.test.mjs`
+includes the network-denied proof that the local gate records offline-capable
+evidence and that the pre-push publication check can reuse the same candidate
+record without rerunning while policy/freshness still allow it.
 
 ## Phase 3 — Local admission and serialized integration
 
