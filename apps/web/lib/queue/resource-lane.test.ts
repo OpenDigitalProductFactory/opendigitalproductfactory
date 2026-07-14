@@ -4,6 +4,8 @@ import {
   LaneBusyError,
   getResourceLane,
   localInferenceMaxQueueDepth,
+  withLocalInferenceLock,
+  LOCAL_INFERENCE_LANE_KEY,
 } from "./resource-lane";
 import type { QueueTransitionInput } from "./queue-telemetry";
 
@@ -159,5 +161,38 @@ describe("localInferenceMaxQueueDepth", () => {
     process.env[KEY] = "abc";
     expect(localInferenceMaxQueueDepth()).toBeNull();
     delete process.env[KEY];
+  });
+});
+
+describe("withLocalInferenceLock — the ONE local-GPU admission gate (BI-98572A51)", () => {
+  it("serializes concurrent local-inference callers strictly one at a time", async () => {
+    // Simulates chat and a build specialist both wanting the single GPU: only
+    // one runs at a time, the other waits — never double-subscribed.
+    let active = 0;
+    let maxActive = 0;
+    const gate = deferred<void>();
+    const run = () =>
+      withLocalInferenceLock(async () => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await gate.promise;
+        active--;
+        return "ok";
+      });
+    const a = run(); // "chat"
+    const b = run(); // "build specialist"
+    // Both scheduled, but only one may be inside the lane.
+    await Promise.resolve();
+    expect(maxActive).toBe(1);
+    gate.resolve();
+    await expect(a).resolves.toBe("ok");
+    await expect(b).resolves.toBe("ok");
+    expect(maxActive).toBe(1);
+  });
+
+  it("acquires the canonical LOCAL_INFERENCE_LANE_KEY singleton (chat + build share it)", () => {
+    // getResourceLane is one-lane-per-key, so every caller of withLocalInferenceLock —
+    // chat-adapter and opencode-dispatch alike — operates the same instance.
+    expect(getResourceLane(LOCAL_INFERENCE_LANE_KEY)).toBe(getResourceLane(LOCAL_INFERENCE_LANE_KEY));
   });
 });

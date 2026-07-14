@@ -175,3 +175,29 @@ export function localInferenceMaxQueueDepth(): number | null {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
+
+// The single local GPU (Docker Model Runner / Ollama) serves ONE request at a
+// time. BI-98572A51: chat inference and the local (opencode) build engine each
+// hit that one GPU, and both admission points run in the PORTAL process (chat
+// makes the HTTP call; the build orchestrator spawns AND awaits the sandbox CLI
+// for its whole run). They must share ONE admission gate or they collide/OOM —
+// so the canonical `withLocalInferenceLock` lives HERE, beside the lane key, and
+// BOTH callers import it. Defining it here (not in chat-adapter) makes the lane
+// singleton's telemetry deps independent of which caller loads first.
+const localInferenceLane = getResourceLane(LOCAL_INFERENCE_LANE_KEY, {
+  record: (input: QueueTransitionInput) => {
+    // Only emit on the hot inference path when an operator has opted into
+    // managing the lane — avoids per-inference DB writes in the default config.
+    if (localInferenceMaxQueueDepth() == null) return;
+    void import("./queue-telemetry").then(({ recordQueueTransition }) => {
+      void recordQueueTransition(input);
+    });
+  },
+});
+
+/** Run `fn` under the single-slot local-GPU admission lane. The one gate every
+ *  local-inference caller (chat + build) must acquire so the single GPU is
+ *  never double-subscribed (BI-98572A51). */
+export function withLocalInferenceLock<T>(fn: () => Promise<T>): Promise<T> {
+  return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth() });
+}

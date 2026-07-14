@@ -26,12 +26,10 @@ import {
 import { isAnthropic } from "./provider-utils";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
-import {
-  getResourceLane,
-  LOCAL_INFERENCE_LANE_KEY,
-  localInferenceMaxQueueDepth,
-} from "@/lib/queue/resource-lane";
-import type { QueueTransitionInput } from "@/lib/queue/queue-telemetry";
+// BI-98572A51: the single-GPU admission lane is canonical in resource-lane.ts so
+// chat AND the local build engine share ONE gate. Re-exported below for callers
+// (and tests) that import it from here.
+import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { buildAnthropicSystem } from "./anthropic-cache";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
@@ -65,20 +63,10 @@ function resolveInferenceTimeoutMs(providerId: string): number {
 // pile up and time out while waiting), and flow telemetry so lane wait/process
 // time is measurable. Both are gated on that env: UNSET ⇒ unbounded serialize with
 // no telemetry writes, byte-for-byte the prior behavior.
-const localInferenceLane = getResourceLane(LOCAL_INFERENCE_LANE_KEY, {
-  record: (input: QueueTransitionInput) => {
-    // Only emit on the hot inference path when an operator has opted into managing
-    // the lane — avoids per-inference DB writes in the default configuration.
-    if (localInferenceMaxQueueDepth() == null) return;
-    void import("@/lib/queue/queue-telemetry").then(({ recordQueueTransition }) => {
-      void recordQueueTransition(input);
-    });
-  },
-});
-
-export function withLocalInferenceLock<T>(fn: () => Promise<T>): Promise<T> {
-  return localInferenceLane.run(fn, { maxQueueDepth: localInferenceMaxQueueDepth() });
-}
+// Canonical home is resource-lane.ts (shared with the local build engine,
+// BI-98572A51); re-exported so existing importers/tests of this module are
+// unaffected.
+export { withLocalInferenceLock };
 
 // ─── Gemini part types ───────────────────────────────────────────────────────
 
