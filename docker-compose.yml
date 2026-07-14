@@ -42,7 +42,7 @@ x-dev-workspace-volumes: &dev-workspace-volumes
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     logging: *default-logging
     environment:
@@ -296,7 +296,7 @@ services:
 
   # ─── Sandbox Database (isolated from production) ────────────────────────
   sandbox-postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     logging: *default-logging
     environment:
@@ -497,7 +497,7 @@ services:
 
   # ─── Dev Environment (isolated databases for development) ──────────────────
   dev-postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     logging: *default-logging
     profiles: ["dev"]

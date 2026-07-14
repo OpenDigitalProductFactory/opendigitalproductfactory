@@ -2,10 +2,13 @@ generator client {
   provider            = "prisma-client"
   output              = "../generated/client"
   importFileExtension = "ts"
+  previewFeatures     = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  // BET-5 (BI-A1E864A5): vectors move Qdrant -> pgvector, graph hierarchy uses ltree.
+  extensions = [vector, ltree]
 }
 
 enum IntakeSource {
