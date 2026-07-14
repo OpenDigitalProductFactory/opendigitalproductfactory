@@ -52,7 +52,20 @@ export function deriveQueueState(build: FeatureBuildRow): BuildQueueState {
     return { kind: "running", stepLabel: "Verification & review" };
   }
 
-  // All other phases (ideate, plan, ship, complete) are idle from a runtime
+  // BI-5939B62F: ideate and plan are IN-FLIGHT phases — a coworker is actively
+  // working the brief / plan (or it's sitting at the gate awaiting approval), so
+  // the build is part of the live fleet. Mapping them to "idle" made the
+  // fleet/queue counters read 0 while builds were genuinely in progress. Count
+  // them as running so the fleet summary reflects reality; the phase mini-rail
+  // still conveys which stage.
+  if (build.phase === "ideate") {
+    return { kind: "running", stepLabel: "Ideating" };
+  }
+  if (build.phase === "plan") {
+    return { kind: "running", stepLabel: "Planning" };
+  }
+
+  // Remaining phases (ship, complete) are terminal-ish and idle from a runtime
   // queue perspective. The mini-rail conveys progress; the badge stays off.
   return { kind: "idle" };
 }
@@ -146,6 +159,12 @@ export function isOperatorFocusEntry(
 ): boolean {
   if (activeBuildId && entry.build.buildId === activeBuildId) return true;
   if (entry.needsAttention) return true;
+  // BI-5939B62F: ideate/plan now derive to "running" so they COUNT in the fleet
+  // summary, but quiet ideation/planning probes still stay OUT of the operator
+  // focus queue (AI-custody) unless selected or needing attention — the pre-fix
+  // behavior this list intentionally preserves. Keying focus on phase here
+  // decouples "counted as in-flight" from "operator-actionable".
+  if (entry.build.phase === "ideate" || entry.build.phase === "plan") return false;
   return entry.queueState.kind !== "idle";
 }
 

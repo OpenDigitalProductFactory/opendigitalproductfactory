@@ -1558,7 +1558,14 @@ function FleetRailZone({
   const [showCompleted, setShowCompleted] = useState(false);
   const [showAllFocus, setShowAllFocus] = useState(false);
 
-  const counts = deriveFleetCounts(focusEntries.map((e) => e.queueState));
+  // BI-5939B62F: a build can be BOTH needs-attention and running (e.g. a plan
+  // build with a failed review — its phase now derives to "running"). Such a
+  // build belongs in the "Needs you" bucket only; deriving working/waiting over
+  // the non-attention entries keeps it from being double-counted as "Working"
+  // (blockedCount below already applies the same !needsAttention guard).
+  const counts = deriveFleetCounts(
+    focusEntries.filter((e) => !e.needsAttention).map((e) => e.queueState),
+  );
   const parkedItemCount = parkedEntries.length + parkedEpicRollups.length;
   const needsYouCount =
     focusEntries.filter((entry) => entry.needsAttention).length
