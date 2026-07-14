@@ -10578,6 +10578,7 @@ model WorkItem {
   childItems        WorkItem[]        @relation("WorkItemHierarchy")
   a2aTaskId         String?
   messages          WorkItemMessage[]
+  presence          WorkItemPresence[]
   routingDecision   Json?
   completedAt       DateTime?
   createdAt         DateTime          @default(now())
@@ -10613,6 +10614,23 @@ model WorkItemMessage {
 
   @@index([workItemId, createdAt])
   @@index([senderUserId])
+}
+
+// BI-B416B12A (EP-WORK-CONVERGENCE): lightweight presence on a work item — who
+// (human or coworker) is currently viewing/working it. Heartbeated on lastSeenAt;
+// "active" is a time-window read (see filterActivePresence). One row per
+// (workItem, principal); the client heartbeats, the read filters by recency.
+model WorkItemPresence {
+  id            String   @id @default(cuid())
+  workItemId    String
+  workItem      WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  principalType String
+  principalId   String
+  displayLabel  String?
+  lastSeenAt    DateTime @default(now())
+
+  @@unique([workItemId, principalType, principalId])
+  @@index([workItemId, lastSeenAt])
 }
 
 model WorkSchedule {
