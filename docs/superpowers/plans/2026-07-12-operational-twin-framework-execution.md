@@ -34,8 +34,28 @@ archetype configuration — including the ones **not enabled**, which the
 setup-wizard redirect otherwise hides — with each row's derived operational-twin
 template. Plan: [2026-07-12-archetype-catalog-admin-view-execution.md](2026-07-12-archetype-catalog-admin-view-execution.md). Composed from report-kit; no render kit yet (that is P2).
 
-## P2 — the grammar kit · NEXT
-The ten primitives as React components on the token/report-kit substrate (`apps/web/components/twin/`), lifted from the four prototypes: capacity chips, zone, resource unit, work item (with blocked-on-external state), queue, cog banner, utility band, presence row, attributed feed, needs-you quests. Each rendered through `--dpf-*` tokens, reduced-motion-safe, dynamic text via a safe helper (no innerHTML). A fixture page per primitive. Requires a recorded `UX-Fit-Decision` (§12) for the metric/status components.
+## P2 — the grammar kit · DONE
+The ten primitives as React components on the token/report-kit substrate
+(`apps/web/components/twin/`), lifted from the four prototypes: capacity chips,
+zone, resource unit, work item (with blocked-on-external state), queue, cog banner,
+utility band, presence row, attributed feed, needs-you quests — plus a shared
+`ActorMark` that renders humans and AI coworkers on one plane (the operating-twin
+doctrine). Each is `--dpf-*` token-driven, reduced-motion-safe (`motion-safe:` live
+dots), and React-safe by construction (no `innerHTML`). Nine are pure/server-usable;
+only `CogBanner` is a client component (it owns the HITL confirm/dismiss). A viewable
+fixture — `/admin/twin-kit` (`TwinKitShowcase`) — renders all ten twice: a physical
+restaurant **FLOOR** and a non-physical SaaS **TENANTS** board, proving one grammar
+spans both lenses. Unit tests (`twin-kit.test.tsx`) assert each pure primitive renders
+to static markup and surfaces its data (incl. the blocked-on-external and attributed
+human/AI states).
+
+Verification: `pnpm --filter web typecheck` clean; `twin-kit.test.tsx` green;
+route manifest regenerated. **UX-Fit-Decision** recorded on the PR (composed from
+report-kit `intentStyle`/`StatusBadge`; progressive disclosure — capacity chips +
+one bottleneck queue + a single needs-you surface, not a chart wall; no raw/numeric
+operator inputs). The fixture is intentionally **not** linked from the admin nav —
+it is a developer preview, reachable directly and gated by the admin `view_admin`
+guard.
 
 ## P3 — first templates live
 FLOOR, TERRITORY, YARD as template compositions bound via `TwinProfile`, replacing the three hand-built prototypes with framework-rendered equivalents wired to `LivingBusinessSnapshot` + `agent-event-bus` (parent spec P1–P2). Registers as a workspace-home contribution per archetype.
