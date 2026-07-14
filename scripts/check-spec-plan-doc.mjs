@@ -36,6 +36,7 @@
 // interactive nudge is scripts/hooks/spec-plan-doc-precheck.mjs.
 
 import { execFileSync } from "node:child_process";
+import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 
 const ATTESTATION_RE = /Process-Spine-Decision:/i;
 
@@ -96,7 +97,8 @@ function git(...args) {
 }
 
 const base = assertSafeRef(process.env.BASE_SHA || "origin/main", "BASE_SHA");
-git("fetch", "--no-tags", "--depth=1", "origin", "main");
+// BI-1ADD56FC: never write .git/shallow into a full shared clone (breaks worktrees).
+fetchOriginMainSharedSafe((args) => git(...args));
 
 const changed = git("diff", "--name-only", `${base}...HEAD`)
   .split("\n")
