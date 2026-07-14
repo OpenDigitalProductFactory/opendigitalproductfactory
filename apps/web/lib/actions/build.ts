@@ -207,18 +207,37 @@ export async function approveBuildStart(buildId: string): Promise<{ approvedAt: 
 
 // ─── Update Feature Brief ────────────────────────────────────────────────────
 
+/**
+ * Persist the Feature Brief for a build in ideate.
+ *
+ * @param actorUserId — when set (MCP coworker path), skips HTTP-session auth and
+ *   uses this user as the writer (mirrors shipBuild's actorUserId). UI callers
+ *   omit it and go through requireBuildAccess().
+ */
 export async function updateFeatureBrief(
   buildId: string,
   brief: FeatureBrief,
+  opts?: { actorUserId?: string },
 ): Promise<void> {
-  const userId = await requireBuildAccess();
+  const userId = opts?.actorUserId ?? await requireBuildAccess();
 
   const build = await prisma.featureBuild.findUnique({ where: { buildId } });
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
   if (build.phase !== "ideate") throw new Error("Brief can only be updated during Ideate phase");
 
-  const validation = validateFeatureBrief(brief);
+  // Seed title/description from the build row when the brief is only carrying
+  // fixContext (BI-PIR-f8c1640b / BI-PIR-309fb74b). Fix promotions pre-seed
+  // FeatureBuild.title/description but may leave brief null until the first
+  // full save — without this, a fixContext-only MCP update fails validation
+  // and was misreported as "past ideate".
+  const seededBrief: FeatureBrief = {
+    ...brief,
+    title: brief.title?.trim() ? brief.title : (build.title ?? ""),
+    description: brief.description?.trim() ? brief.description : (build.description ?? ""),
+  };
+
+  const validation = validateFeatureBrief(seededBrief);
   if (!validation.valid) throw new Error(validation.errors.join(", "));
 
   const organization = await prisma.organization.findFirst({ select: { id: true } });
@@ -229,7 +248,7 @@ export async function updateFeatureBrief(
     buildId: build.buildId,
     featureBuildId: build.id,
     title: build.title,
-    brief,
+    brief: seededBrief,
     submittedByUserId: userId,
   });
   const acceptedFields = businessBrief.status === "accepted"
@@ -240,7 +259,7 @@ export async function updateFeatureBrief(
   await prisma.$transaction(async (tx) => {
     await tx.featureBuild.update({
       where: { buildId },
-      data: { brief: brief as unknown as Prisma.InputJsonValue },
+      data: { brief: seededBrief as unknown as Prisma.InputJsonValue },
     });
 
     await tx.businessBuildBrief.upsert({

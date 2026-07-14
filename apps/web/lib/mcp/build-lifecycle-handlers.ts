@@ -18,6 +18,9 @@ import {
 } from "@/lib/mcp/build-tool-helpers";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveIdeateBuildForToolPure } from "@/lib/build/ideate-build-resolution";
+import { formatUpdateFeatureBriefError } from "./update-feature-brief-error";
+
+export { formatUpdateFeatureBriefError } from "./update-feature-brief-error";
 
 type HandlerContext = Parameters<ToolPackHandler>[2];
 
@@ -51,12 +54,14 @@ export async function updateFeatureBrief(params: Record<string, unknown>, userId
   // brief object, so rebuilding it from scratch would clobber any field the
   // caller omits — notably fixContext, which the fix-flow ideate phase fills
   // incrementally. A fix build is also promoted with title/description
-  // pre-seeded; without this merge a fixContext-only update would blank them
-  // and fail validateFeatureBrief.
-  const prior = (await prisma.featureBuild.findUnique({
+  // pre-seeded on the FeatureBuild row; without merge + row fallback a
+  // fixContext-only update blanked title/description, failed validation, and
+  // was misreported as "past ideate" (BI-PIR-f8c1640b / BI-PIR-309fb74b).
+  const row = await prisma.featureBuild.findUnique({
     where: { buildId },
-    select: { brief: true },
-  }))?.brief as Partial<import("@/lib/feature-build-types").FeatureBrief> | null;
+    select: { brief: true, title: true, description: true, phase: true },
+  });
+  const prior = row?.brief as Partial<import("@/lib/feature-build-types").FeatureBrief> | null;
   const str = (key: string, fallback: string) =>
     params[key] != null ? String(params[key]) : fallback;
   const arr = (key: string, fallback: string[]) =>
@@ -68,8 +73,8 @@ export async function updateFeatureBrief(params: Record<string, unknown>, userId
     ? { ...(prior?.fixContext ?? {}), ...(incomingFix ?? {}) }
     : undefined;
   const brief = {
-    title: str("title", prior?.title ?? ""),
-    description: str("description", prior?.description ?? ""),
+    title: str("title", prior?.title ?? row?.title ?? ""),
+    description: str("description", prior?.description ?? row?.description ?? ""),
     portfolioContext: str("portfolioContext", prior?.portfolioContext ?? ""),
     targetRoles: arr("targetRoles", prior?.targetRoles ?? []),
     inputs: arr("inputs", prior?.inputs ?? []),
@@ -78,15 +83,19 @@ export async function updateFeatureBrief(params: Record<string, unknown>, userId
     ...(mergedFix ? { fixContext: mergedFix } : {}),
   };
   try {
-    await updateFeatureBrief(buildId, brief as import("@/lib/feature-build-types").FeatureBrief);
+    await updateFeatureBrief(
+      buildId,
+      brief as import("@/lib/feature-build-types").FeatureBrief,
+      { actorUserId: userId },
+    );
     await updateBuildHappyPathState(userId, {
       intake: {
         constrainedGoal: brief.title || null,
       },
     }, buildId);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Update failed";
-    return { success: false, error: msg, message: `Could not update brief: ${msg}. The brief can only be updated during the Ideate phase. You are past that phase — proceed with your current phase instead.` };
+    const formatted = formatUpdateFeatureBriefError(err);
+    return { success: false, error: formatted.error, message: formatted.message };
   }
   return { success: true, entityId: buildId, message: `Updated Feature Brief for ${buildId}` };
 }
