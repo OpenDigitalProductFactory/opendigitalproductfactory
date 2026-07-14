@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-
 import {
   LEASE_TTL_MS,
   STATUS_OVERRIDE_TTL_MS,
@@ -26,7 +25,7 @@ import {
   type WorkCapsuleStatus,
 } from "@/lib/work-capsules";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
-
+import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 export type WorkCapsuleActor = {
   userId: string;
   agentId: string | null;
@@ -153,6 +152,7 @@ async function recordActivity(
       recordedByAgentId: input.actor.agentId,
     },
   });
+  publishRecordedWorkCapsuleActivity(input.workCapsuleId, activity?.id);
   revalidatePortalContext();
   return activity;
 }

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 546,
+  "routeCount": 547,
   "routes": [
     {
       "routePath": "/",
@@ -3140,6 +3140,20 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/voice/train/route.ts"
+    },
+    {
+      "routePath": "/api/work-capsules/[capsuleId]/activity-stream",
+      "kind": "route",
+      "segments": [
+        "api",
+        "work-capsules",
+        "[capsuleId]",
+        "activity-stream"
+      ],
+      "dynamicParams": [
+        "capsuleId"
+      ],
+      "file": "apps/web/app/api/work-capsules/[capsuleId]/activity-stream/route.ts"
     },
     {
       "routePath": "/auth/callback",
