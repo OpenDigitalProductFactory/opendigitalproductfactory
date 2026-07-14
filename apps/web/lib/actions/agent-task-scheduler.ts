@@ -107,6 +107,38 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   });
   if (!task || !task.isActive) return;
 
+  // BI-D1CD3A11: idempotent claim BEFORE execution. The 5-min dispatch poll
+  // selects every task whose nextRunAt is due; an agent run routinely exceeds
+  // 5 minutes, so without advancing nextRunAt first the NEXT poll re-selects the
+  // still-running task and dispatches it a SECOND time (duplicate autonomous
+  // runs, doubled spend, racing writes). Atomically move nextRunAt forward here,
+  // guarded on it still being due — exactly ONE caller wins the claim; a
+  // concurrent poll (or an Inngest step retry) that loses gets count 0 and
+  // returns without re-running. The per-branch post-run updates below refine
+  // lastRunAt/lastStatus (and re-stamp the same nextRunAt) once work completes.
+  {
+    const claimNow = new Date();
+    // Mirror the terminal scheduling the post-run branches apply: a one-shot
+    // ("Once") task deactivates instead of re-arming (BI-D72CC945); a recurring
+    // task advances to its next cron time.
+    const oneShot = isOneShotCron(task.schedule);
+    const claimedNextRunAt = oneShot ? null : computeNextCronRun(task.schedule, claimNow);
+    const claim = await prisma.scheduledAgentTask.updateMany({
+      where: { taskId, isActive: true, nextRunAt: { lte: claimNow } },
+      data: oneShot ? { nextRunAt: null, isActive: false } : { nextRunAt: claimedNextRunAt },
+    });
+    if (claim.count === 0) {
+      // Already claimed by another dispatch of this due tick, or no longer due.
+      return;
+    }
+    await prisma.scheduledJob
+      .updateMany({
+        where: { jobId: taskId },
+        data: oneShot ? { nextRunAt: null } : { nextRunAt: claimedNextRunAt },
+      })
+      .catch(() => {});
+  }
+
   // EP-DATA-ARCH Phase 6: the data-model mirror is deterministic — run it
   // directly instead of through the LLM agentic loop.
   if (task.taskId === DATA_MODEL_MIRROR_TASK_ID) {
