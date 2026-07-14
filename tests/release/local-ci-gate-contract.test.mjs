@@ -355,6 +355,98 @@ esac
   ]);
 });
 
+test("gate-worktree.sh includes content-addressed local integration metadata in evidence (BI-76551B2D)", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
+  const callsFile = join(temp, "calls.ndjson");
+  const gitStub = join(temp, "git");
+  const curlStub = join(temp, "curl");
+  const writerScript = join(temp, "write-metadata.mjs");
+
+  writeFileSync(gitStub, `#!/bin/sh
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
+  echo "${temp}/$3"
+  exit 0
+fi
+echo "unexpected git call: $*" >&2
+exit 1
+`);
+  writeFileSync(curlStub, `#!/bin/sh
+data=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --data) data="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s\\n' "$data" >> "${callsFile}"
+tool="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); console.log(p.params.name)' <<EOF
+$data
+EOF
+)"
+case "$tool" in
+  claim_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    ;;
+  record_local_integration_result)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"EXT-TEST\\"}"}]}}'
+    ;;
+  release_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    ;;
+  *)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":false,\\"error\\":\\"unexpected_tool\\"}"}]}}'
+    ;;
+esac
+`);
+  writeFileSync(writerScript, `
+import { writeFileSync } from "node:fs";
+writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
+  schemaVersion: 1,
+  bi: "BI-76551B2D",
+  candidateRef: "feat/local-ci-sandbox",
+  candidateSha: "candidate-sha",
+  baseRef: "origin/main",
+  baseSha: "base-sha",
+  integrationCommitSha: "integration-sha",
+  synthesizedTreeSha: "tree-sha"
+}) + "\\n");
+`);
+  chmodSync(gitStub, 0o755);
+  chmodSync(curlStub, 0o755);
+
+  const result = runGate([
+    "--branch",
+    "feat/local-ci-sandbox",
+    "--sha",
+    "candidate-sha",
+    "--worktree",
+    temp,
+  ], {
+    env: {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
+      DPF_GATE_GIT_BIN: gitStub,
+      DPF_GATE_CURL_BIN: curlStub,
+    },
+  });
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const calls = readFileSync(callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  const evidenceCall = calls.find((call) => call.params.name === "record_local_integration_result");
+  assert.ok(evidenceCall, "expected evidence to be recorded");
+  assert.deepEqual(evidenceCall.params.arguments.evidence.content, {
+    schemaVersion: 1,
+    bi: "BI-76551B2D",
+    candidateRef: "feat/local-ci-sandbox",
+    candidateSha: "candidate-sha",
+    baseRef: "origin/main",
+    baseSha: "base-sha",
+    integrationCommitSha: "integration-sha",
+    synthesizedTreeSha: "tree-sha",
+  });
+});
+
 // ── pre-push hook chain + pre-push-gate contract (BI-C74F4DE9) ───────────────
 
 // The tracked hook body — the local `pre-push` shim is gitignored (git-lfs

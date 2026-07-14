@@ -150,6 +150,7 @@ done
 [ -n "$WORKTREE_PATH" ] || WORKTREE_PATH="$("$GIT_BIN" rev-parse --show-toplevel)"
 [ -n "$OWNER_SESSION_ID" ] || OWNER_SESSION_ID="gate-$$"
 STATE_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-gate.json)"
+METADATA_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-metadata.json)"
 
 # Checked-in default (BI-157DC9B2): when no DPF_LOCAL_CI_COMMAND is supplied and
 # the stub is not explicitly allowed, run the non-mutating merge-workspace
@@ -161,6 +162,7 @@ fi
 if [ "$DRY_RUN" = "1" ]; then
   printf 'gate-worktree dry-run\n'
   printf 'branch=%s\nsha=%s\nworktree=%s\nremote=%s\nmcpUrl=%s\n' "$BRANCH" "$SHA" "$WORKTREE_PATH" "$REMOTE" "$MCP_URL"
+  printf 'metadataFile=%s\n' "$METADATA_FILE"
   if [ "$PUSH_BRANCH" = "1" ]; then
     printf 'pushBeforeLease=true\n'
   else
@@ -237,7 +239,7 @@ printf '%s\n' "local-CI sandbox lease claimed: $lease_id"
 if [ -n "$LOCAL_CI_COMMAND" ]; then
   gate_command_label="$LOCAL_CI_COMMAND"
   printf '%s\n' "running local-CI command: $LOCAL_CI_COMMAND"
-  sh -c "$LOCAL_CI_COMMAND" >"$gate_output_file" 2>&1
+  DPF_LOCAL_CI_METADATA_FILE="$METADATA_FILE" sh -c "$LOCAL_CI_COMMAND" >"$gate_output_file" 2>&1
   gate_status=$?
 else
   gate_command_label="sandbox checkout/build stub"
@@ -286,7 +288,10 @@ gate_passed="$(printf '%s' "$outcome_json" | field gatePassed)"
 gate_summary="$(printf '%s' "$outcome_json" | field summary)"
 
 evidence_args="$(node -e '
+const fs = require("node:fs");
 const outcome = JSON.parse(process.argv[11]);
+let contentMetadata = null;
+try { contentMetadata = JSON.parse(fs.readFileSync(process.argv[14], "utf8")); } catch {}
 const evidence = {
   bi: "BI-166C59F3",
   resilienceBi: "BI-76551B2D",
@@ -296,6 +301,7 @@ const evidence = {
   branch: process.argv[4],
   sha: process.argv[5],
   pushBeforeLease: process.argv[13] === "1",
+  content: contentMetadata,
   gatePassed: outcome.gatePassed,
   freshness: outcome.freshness,
   commands: [process.argv[7]],
@@ -314,7 +320,7 @@ process.stdout.write(JSON.stringify({
   summary: outcome.summary,
   evidence
 }));
-' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH")"
+' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE")"
 evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
 evidence_success="$(printf '%s' "$evidence_response" | field success)"
 if [ "$evidence_success" != "true" ] && [ "$status" = "blocked_sandbox_drift" ]; then
