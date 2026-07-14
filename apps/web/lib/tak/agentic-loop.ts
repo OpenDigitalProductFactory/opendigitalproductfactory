@@ -37,6 +37,12 @@ import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } 
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
+import {
+  detectToolRefusedDespiteAvailability,
+  appendToolRefusedRecoveryMessages,
+} from "./tool-refused-recovery";
+// Re-export for importers (certification-oracles, tests) that pull from agentic-loop.
+export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — NOT a behavioral limit. The loop terminates when the model
 // responds with text only (no tool calls), matching the Anthropic API pattern
@@ -738,28 +744,6 @@ export function shouldNudge(params: {
 // ─── Build-specialist Operator Contract — clause 2.6 platform-side guards ────
 // Spec: docs/superpowers/specs/2026-04-30-build-specialist-operator-contract.md §2.6
 // Hallucinating LLMs cannot be trusted to self-report; the platform detects.
-
-/**
- * Clause 2.6 platform path: detect when the agent's text asserts a tool
- * is unavailable AND that tool name appears in its delivered tool list.
- * Returns the offending tool name (or `(unspecified — generic refusal)`
- * for blanket "currently empty / pending" claims), or null.
- */
-export function detectToolRefusedDespiteAvailability(
-  responseText: string,
-  deliveredTools: Array<{ name: string }>,
-): string | null {
-  if (!responseText) return null;
-  const refusalPattern = /(?:not (?:available|enabled|granted|callable|in (?:my )?tool list|exposed)|isn['’]t (?:available|enabled|granted|callable|in (?:my )?tool list|exposed)|is missing|currently `?\[\]`?|pending (?:follow-on |grant)|don['’]t have (?:access|the ability))(?:\s+(?:in|for|to|yet|now|here))?/i;
-  if (!refusalPattern.test(responseText)) return null;
-  for (const tool of deliveredTools) {
-    if (responseText.includes(tool.name)) return tool.name;
-  }
-  if (/currently `?\[\]`?|pending (?:follow-on |grant)/i.test(responseText)) {
-    return "(unspecified — generic refusal)";
-  }
-  return null;
-}
 
 /**
  * Clause 2.2: phase advance is illegal without saved evidence; therefore
@@ -1789,6 +1773,12 @@ export async function runAgenticLoop(params: {
           `tool-refused-despite-availability: ${refusedToolName}`,
           `Agent ${agentId} on route ${routeContext} asserted that ${refusedToolName} is unavailable in iteration ${iteration}, but the tool was in the delivered tool list. Response excerpt: ${trimmed.slice(0, 500)}`,
         );
+        // BI-PIR-6de01e8d: recover in-loop when model closed with no tools.
+        const recovered = appendToolRefusedRecoveryMessages({
+          messages, assistantContent: result.content, refusedToolName, deliveredTools: tools,
+          executedToolCount: executedTools.length, toolsStripped: Boolean(result.toolsStripped),
+        });
+        if (recovered) { continuationNudges++; messages = recovered; continue; }
       }
 
       // 2.6b: zero-tool-call on phase-required turn
