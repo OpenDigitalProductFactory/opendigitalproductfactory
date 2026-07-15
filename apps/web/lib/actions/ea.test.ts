@@ -62,7 +62,7 @@ vi.mock("@dpf/db/ea-validation", () => ({
 }));
 
 // Mock neo4j sync
-vi.mock("@dpf/db/neo4j-sync", () => ({
+vi.mock("@dpf/db/graph-sync", () => ({
   syncEaElement:        vi.fn(),
   syncEaRelationship:   vi.fn(),
   deleteEaElement:      vi.fn(),
@@ -229,7 +229,7 @@ describe("advanceEaLifecycle", () => {
 describe("deleteEaElement", () => {
   it("deletes element from Postgres and fires Neo4j sync", async () => {
     mockPrisma.eaElement.delete.mockResolvedValue({ id: "el-1" });
-    const { deleteEaElement: neoDeleteSpy } = await import("@dpf/db/neo4j-sync");
+    const { deleteEaElement: neoDeleteSpy } = await import("@dpf/db/graph-sync");
 
     await deleteEaElement("el-1");
 

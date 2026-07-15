@@ -5,7 +5,7 @@ import { deriveInventoryEnrichment } from "./inventory-enrichment";
 import {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
-} from "./neo4j-sync";
+} from "./graph-sync";
 
 export type DiscoveryPersistenceSummary = {
   runId?: string;

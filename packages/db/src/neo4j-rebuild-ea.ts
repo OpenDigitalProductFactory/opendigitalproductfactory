@@ -6,7 +6,7 @@
 import "./load-env.js";
 import { prisma } from "./client.js";
 import { clearGraphByLabel } from "./pg-graph.js";
-import { syncEaElement, syncEaRelationship } from "./neo4j-sync.js";
+import { syncEaElement, syncEaRelationship } from "./graph-sync.js";
 
 async function rebuildEa(): Promise<void> {
   console.log("Rebuilding EA graph projection...");

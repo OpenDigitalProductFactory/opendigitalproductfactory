@@ -5,7 +5,7 @@
 import "./load-env.js";
 import { prisma } from "./client.js";
 import { clearGraphByLabel } from "./pg-graph.js";
-import { syncDocumentNode, syncDocumentReference } from "./neo4j-sync.js";
+import { syncDocumentNode, syncDocumentReference } from "./graph-sync.js";
 
 async function rebuildDocuments(): Promise<void> {
   console.log("Rebuilding managed document graph projection...");

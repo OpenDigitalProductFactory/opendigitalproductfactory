@@ -9,7 +9,7 @@
     "./sysml-model-seed": "./src/sysml-model-seed.ts",
     "./coworker-service-catalog-seed": "./src/coworker-service-catalog-seed.ts",
     "./ea-validation": "./src/ea-validation.ts",
-    "./neo4j-sync": "./src/neo4j-sync.ts",
+    "./graph-sync": "./src/graph-sync.ts",
     "./reference-model-projection": "./src/reference-model-projection.ts",
     "./archetype-value-stream-projection": "./src/archetype-value-stream-projection.ts",
     "./discovery-attribution": "./src/discovery-attribution.ts",

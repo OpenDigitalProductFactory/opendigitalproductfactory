@@ -18,7 +18,7 @@ import {
   syncDigitalProduct,
   syncInfraCI,
   syncDependsOn,
-} from "../src/neo4j-sync";
+} from "../src/graph-sync";
 
 async function main() {
   // 1. OSI-layer default backfill (graph schema is created by Prisma migration)

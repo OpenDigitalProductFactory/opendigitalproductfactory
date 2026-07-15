@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
-import { syncDocumentReference } from "@dpf/db/neo4j-sync";
+import { syncDocumentReference } from "@dpf/db/graph-sync";
 import { DOCUMENT_TEXT_INLINE_LIMIT_BYTES } from "./blob-storage";
 import { searchDocumentVectors, storeDocumentVector } from "./embeddings";
 
