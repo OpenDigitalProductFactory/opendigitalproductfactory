@@ -5,6 +5,12 @@ import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 
+// A build in one of these phases is no longer live, so it must not block a
+// re-start of the backlog item (BI-08AE51DC). Mirrors the same set used by
+// coworker-tool-filter.ts; kept local to avoid coupling to wip-cap's variant,
+// which intentionally omits "abandoned".
+const TERMINAL_BUILD_PHASES = new Set<string>(["complete", "failed", "abandoned"]);
+
 export type StartBacklogBuildResult =
   | {
     status: "created" | "existing";
@@ -40,22 +46,41 @@ export async function startBacklogBuild(itemId: string): Promise<StartBacklogBui
     return { status: "blocked", error: `Backlog item ${semanticItemId} was not found.` };
   }
 
-  if (existing.activeBuild?.buildId) {
-    const href = buildHref(existing.activeBuild.buildId);
+  // BI-08AE51DC: only a LIVE build blocks re-start. A terminal build
+  // (complete/failed/abandoned — e.g. the un-audited bulk-abandon incident that
+  // set phase='abandoned' with no reason) previously left the item permanently
+  // wedged: Start-build routed to the corpse and nothing detached it. Route to
+  // the build only when it is still live; a terminal activeBuild falls through
+  // to a fresh draft.
+  const activeBuild = existing.activeBuild;
+  if (activeBuild?.buildId && !TERMINAL_BUILD_PHASES.has(activeBuild.phase)) {
+    const href = buildHref(activeBuild.buildId);
     return {
       status: "existing",
-      buildId: existing.activeBuild.buildId,
+      buildId: activeBuild.buildId,
       href,
     };
   }
+  // Past this point any activeBuild is terminal; capture its id so we can clear
+  // the stale 1:1 link (activeBuildId is @unique and promoteBacklogItemToBuildDraft
+  // refuses when it is set) inside the promote transaction below.
+  const staleTerminalBuildId = activeBuild?.buildId ?? null;
 
   const config = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
     select: { governedBacklogEnabled: true },
   });
 
-  const result = await prisma.$transaction((tx) =>
-    promoteBacklogItemToBuildDraft({
+  const result = await prisma.$transaction(async (tx) => {
+    if (staleTerminalBuildId) {
+      // Detach the corpse so promote can create a fresh draft. Atomic with the
+      // promote below; promote re-reads the item inside this same tx.
+      await tx.backlogItem.update({
+        where: { itemId: semanticItemId },
+        data: { activeBuildId: null },
+      });
+    }
+    return promoteBacklogItemToBuildDraft({
       tx,
       itemId: semanticItemId,
       userId,
@@ -64,8 +89,8 @@ export async function startBacklogBuild(itemId: string): Promise<StartBacklogBui
         tool: "backlog_row_start_build",
         summary: `Build Studio draft created from backlog row ${semanticItemId}.`,
       },
-    }),
-  );
+    });
+  });
 
   if (result.kind !== "success") {
     return { status: "blocked", error: result.message || result.error };
