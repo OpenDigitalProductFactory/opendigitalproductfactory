@@ -94,6 +94,54 @@ export function deriveCoworkerToolCap(servedContextTokens: number | null | undef
   return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(ceiling, fitted));
 }
 
+/**
+ * Max skills to ENUMERATE in the coworker system-prompt catalog on a cliff-prone
+ * small local window. The tool cap (above) sizes tool schemas to the window, but
+ * the skills catalog ("- skillId: label - description" per skill) is the largest
+ * UNCAPPED non-tool block: a heavy coworker (build/platform hold 36-38 skills ≈
+ * ~4k tokens) can push the assembled prompt past a small local window even after
+ * the tool cap. Bound it to the same selection-cliff the tool cap uses — a small
+ * local model can't usefully choose from dozens of skills either — and rely on
+ * per-turn re-ranking (rankSkillsByRelevance orders to the current message) to
+ * surface others when a later turn is about them.
+ */
+export const SKILL_CATALOG_CLIFF_CAP = 15;
+
+/**
+ * Max skills to list in the coworker prompt, sized to the LOCAL served context —
+ * the symmetric partner to deriveCoworkerToolCap. A cliff-prone small local window
+ * (<= ACCURACY_CLIFF_PRONE_MAX_CONTEXT) enumerates only the most relevant skills;
+ * a capable/unknown window (null or > cliff) is uncapped (Infinity) so cloud and
+ * large-window installs are byte-identical.
+ */
+export function deriveSkillCatalogCap(servedContextTokens: number | null | undefined): number {
+  if (!servedContextTokens || servedContextTokens <= 0) return Number.POSITIVE_INFINITY;
+  return servedContextTokens <= ACCURACY_CLIFF_PRONE_MAX_CONTEXT
+    ? SKILL_CATALOG_CLIFF_CAP
+    : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Apply the catalog cap to relevance-ordered skills, but NEVER drop a skill the
+ * user explicitly invoked (`pinnedSkillId`, e.g. an explicit "Use the X skill."
+ * marker) even when it falls beyond the cap — else the invocation would silently
+ * stop resolving. Pure; `cap = Infinity` (or a list already within the cap) is a
+ * no-op that returns a copy.
+ */
+export function capSkillCatalog<T extends { skillId: string }>(
+  rankedSkills: readonly T[],
+  cap: number,
+  pinnedSkillId?: string | null,
+): T[] {
+  if (!Number.isFinite(cap) || rankedSkills.length <= cap) return [...rankedSkills];
+  const kept = rankedSkills.slice(0, cap);
+  if (pinnedSkillId && !kept.some((s) => s.skillId === pinnedSkillId)) {
+    const pinned = rankedSkills.find((s) => s.skillId === pinnedSkillId);
+    if (pinned) kept.push(pinned);
+  }
+  return kept;
+}
+
 /** Name of the meta-tool that lets a coworker pull deferred tools back on demand. */
 export const LOAD_TOOLS_TOOL_NAME = "load_tools";
 
