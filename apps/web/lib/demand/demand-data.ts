@@ -22,6 +22,10 @@ export const getDemandItems = cache(async (): Promise<DemandItemView[]> => {
       jobSize: true,
       impact: true,
       investmentBucket: true,
+      estimateAiJobSize: true,
+      estimateHumanJobSize: true,
+      estimateSource: true,
+      estimateAgreed: true,
       epic: { select: { epicId: true } },
     },
   });
@@ -38,5 +42,9 @@ export const getDemandItems = cache(async (): Promise<DemandItemView[]> => {
     jobSize: r.jobSize,
     impact: r.impact,
     investmentBucket: r.investmentBucket,
+    estimateAiJobSize: r.estimateAiJobSize,
+    estimateHumanJobSize: r.estimateHumanJobSize,
+    estimateSource: r.estimateSource,
+    estimateAgreed: r.estimateAgreed,
   }));
 });

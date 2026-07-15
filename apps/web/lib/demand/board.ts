@@ -21,6 +21,13 @@ export type DemandItemView = {
   jobSize: number | null;
   impact: number | null;
   investmentBucket: string | null;
+  // Estimate provenance (EP-DELIVERY-FLOW): the attributed AI/human effort
+  // numbers, whose estimate is effective, and whether they still diverge — so the
+  // Delivery Flow can show the estimate chip and the ⇄ reconcile affordance.
+  estimateAiJobSize: number | null;
+  estimateHumanJobSize: number | null;
+  estimateSource: string | null;
+  estimateAgreed: boolean | null;
 };
 
 export type FunnelColumn = {

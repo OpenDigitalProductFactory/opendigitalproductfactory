@@ -1341,6 +1341,25 @@ model BacklogItem {
   // strategic-balance dimension so demand is prioritized against a target
   // allocation, not a flat list. Default derived from workType. §8.
   investmentBucket        String?
+  // Estimate provenance (EP-DELIVERY-FLOW BI-E731A6C1). The effort estimate
+  // (jobSize) is the value/effort score's DENOMINATOR; these facets attribute
+  // WHOSE number it is — an AI coworker's first-pass proposal and a human's
+  // confirm/overrule — so the Delivery Flow can show AI<->human divergence, a
+  // reconcile affordance, and mark the score trustworthy once agreed. jobSize
+  // stays the effective denominator scoring reads; the write door
+  // (record_effort_estimate) mirrors the resolved effective estimate into it.
+  // All additive-nullable — null = no attributed estimate yet; the
+  // jobSize/effortSize fallbacks feed scoring unchanged. Resolver:
+  // apps/web/lib/demand/estimate-provenance.ts. Spec: 2026-07-12-delivery-flow
+  // -demand-backlog-unification-design.md §"Collaborative estimation".
+  estimateAiJobSize       Float?
+  estimateAiById          String?
+  estimateAiAt            DateTime?
+  estimateHumanJobSize    Float?
+  estimateHumanById       String?
+  estimateHumanAt         DateTime?
+  estimateSource          String?
+  estimateAgreed          Boolean?
   activeBuildId           String?                       @unique
   activeEpicId            String?                       @unique
   duplicateOfId           String?

@@ -21,6 +21,10 @@ function item(partial: Partial<DemandItemView> & { itemId: string }): DemandItem
     jobSize: null,
     impact: null,
     investmentBucket: null,
+    estimateAiJobSize: null,
+    estimateHumanJobSize: null,
+    estimateSource: null,
+    estimateAgreed: null,
     ...partial,
   };
 }

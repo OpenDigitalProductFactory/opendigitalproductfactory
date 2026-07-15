@@ -137,6 +137,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_backlog_item: ["backlog_write"],
   update_backlog_item: ["backlog_write"],
   score_demand_item: ["backlog_write"],
+  record_effort_estimate: ["backlog_write"],
   set_demand_policy: ["backlog_write"],
   find_duplicate_candidates: ["backlog_read"],
   merge_backlog_items: ["backlog_write"],

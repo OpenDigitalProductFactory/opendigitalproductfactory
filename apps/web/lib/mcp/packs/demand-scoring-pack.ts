@@ -9,6 +9,9 @@
 
 import { prisma } from "@dpf/db";
 import { DEMAND_SCORE_FRAMEWORKS, DEMAND_STAGE_VALUES, INVESTMENT_BUCKET_VALUES } from "@/lib/explore/backlog";
+import type { DemandScoreFramework } from "@/lib/explore/backlog";
+import type { DemandScoreInputs, DemandScoreResult } from "@/lib/demand/scoring";
+import { resolveEstimateProvenance } from "@/lib/demand/estimate-provenance";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
 
@@ -33,6 +36,24 @@ const definitions: ToolDefinition[] = [
         investmentBucket: { type: "string", enum: [...INVESTMENT_BUCKET_VALUES], description: "Optional investment bucket (run|grow|transform). Auto-derived from workType when omitted (bug/chore/refactor=run, feature=grow)." },
       },
       required: ["itemId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "record_effort_estimate",
+    description:
+      "Record an attributed effort estimate — the value/effort score's denominator (jobSize) — for a backlog item and (re)compute its demandScore. by=ai captures an AI coworker's first-pass proposal; by=human sets or overrules it, and agree=true confirms the current AI estimate (marking the score reconciled). When the AI and human numbers differ the item surfaces as diverged for a human to reconcile; the human number leads when both exist, and the resolved estimate feeds demandScore. EP-DELIVERY-FLOW collaborative estimation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "The item to estimate." },
+        by: { type: "string", enum: ["ai", "human"], description: "Whose estimate this is: an AI coworker's proposal (ai) or a human's (human)." },
+        jobSize: { type: "number", description: "Effort points (the RICE/WSJF denominator). Required for an AI estimate; for a human, required unless agree=true adopts the current AI estimate." },
+        agentId: { type: "string", description: "For by=ai: the coworker/agent id that proposed the estimate (attribution)." },
+        agree: { type: "boolean", description: "For by=human: confirm the current AI estimate — marks the score reconciled/trustworthy and adopts the AI number when jobSize is omitted." },
+      },
+      required: ["itemId", "by"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -126,15 +147,31 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
-async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const itemId = String(params["itemId"] ?? "");
-  const item = await prisma.backlogItem.findUnique({ where: { itemId } });
-  if (!item) {
-    return { success: false, error: "not_found", message: `Item ${itemId} not found` };
-  }
+/** The BacklogItem fields the score/funnel derivation reads. */
+type ScorableItem = {
+  demandStage: string | null;
+  investmentBucket: string | null;
+  workType: string | null;
+};
+
+/**
+ * Shared: resolve the active framework, compute the demandScore under it, and
+ * derive the funnel-stage + investment-bucket advance — returning the prisma
+ * `data` patch that both score_demand_item and record_effort_estimate persist.
+ * The scoring INPUTS in `inputs` (reach…jobSize) are written back; occurrenceCount
+ * and effortSize are read-only fallbacks and are not part of the patch.
+ */
+async function buildScorePatch(
+  item: ScorableItem,
+  inputs: DemandScoreInputs,
+  opts: { framework?: unknown; demandStage?: unknown; investmentBucket?: unknown } = {},
+): Promise<{
+  patch: Record<string, unknown>;
+  result: DemandScoreResult;
+  framework: DemandScoreFramework;
+  nextStage: string;
+}> {
   const { computeDemandScore } = await import("@/lib/demand/scoring");
-  const numOrKeep = (key: string, current: number | null): number | null =>
-    typeof params[key] === "number" ? (params[key] as number) : current;
   // Framework: explicit param wins; otherwise the operator-owned demand policy
   // (PlatformDevConfig), falling back to the built-in default.
   const { resolveDemandPolicy } = await import("@/lib/demand/policy");
@@ -143,12 +180,55 @@ async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<
     select: { demandFramework: true, demandBucketTargets: true },
   });
   const policyFramework = resolveDemandPolicy(policyConfig).framework;
-  const f = typeof params["framework"] === "string" ? String(params["framework"]) : policyFramework;
+  const f = typeof opts.framework === "string" ? String(opts.framework) : policyFramework;
   const framework = (DEMAND_SCORE_FRAMEWORKS as readonly string[]).includes(f)
-    ? (f as (typeof DEMAND_SCORE_FRAMEWORKS)[number])
+    ? (f as DemandScoreFramework)
     : policyFramework;
+  const result = computeDemandScore(inputs, framework);
+  // Advance the funnel: a scored item is at least `screened`. Respect an
+  // explicit stage override and never regress a manually-advanced stage.
+  const stageOrder = DEMAND_STAGE_VALUES as readonly string[];
+  const explicitStage = stageOrder.includes(String(opts.demandStage))
+    ? (opts.demandStage as (typeof DEMAND_STAGE_VALUES)[number])
+    : null;
+  const derivedStage = result.score !== null ? "screened" : item.demandStage ?? "raw";
+  const currentIdx = item.demandStage ? stageOrder.indexOf(item.demandStage) : -1;
+  const derivedIdx = stageOrder.indexOf(derivedStage);
+  const nextStage = explicitStage ?? (derivedIdx > currentIdx ? derivedStage : item.demandStage ?? derivedStage);
+  // Investment bucket: explicit override, else keep what's set, else derive from
+  // work-type (bug/chore/refactor=run, feature=grow, else unclassified).
+  const { deriveBucket } = await import("@/lib/demand/buckets");
+  const explicitBucket = (INVESTMENT_BUCKET_VALUES as readonly string[]).includes(String(opts.investmentBucket))
+    ? (opts.investmentBucket as (typeof INVESTMENT_BUCKET_VALUES)[number])
+    : null;
+  const nextBucket = explicitBucket ?? item.investmentBucket ?? deriveBucket(item.workType);
+  const patch: Record<string, unknown> = {
+    reach: inputs.reach ?? null,
+    impact: inputs.impact ?? null,
+    confidence: inputs.confidence ?? null,
+    businessValue: inputs.businessValue ?? null,
+    timeCriticality: inputs.timeCriticality ?? null,
+    riskOpportunity: inputs.riskOpportunity ?? null,
+    jobSize: inputs.jobSize ?? null,
+    demandScore: result.score,
+    demandScoreFramework: framework,
+    demandScoreComputedAt: new Date(),
+    demandStage: nextStage,
+    investmentBucket: nextBucket,
+  };
+  return { patch, result, framework, nextStage };
+}
+
+async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const itemId = String(params["itemId"] ?? "");
+  const item = await prisma.backlogItem.findUnique({ where: { itemId } });
+  if (!item) {
+    return { success: false, error: "not_found", message: `Item ${itemId} not found` };
+  }
+  const numOrKeep = (key: string, current: number | null): number | null =>
+    typeof params[key] === "number" ? (params[key] as number) : current;
   // Merge supplied inputs over what's already stored (partial updates).
-  const inputs = {
+  const inputs: DemandScoreInputs = {
     reach: numOrKeep("reach", item.reach),
     impact: numOrKeep("impact", item.impact),
     confidence: numOrKeep("confidence", item.confidence),
@@ -159,41 +239,12 @@ async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<
     occurrenceCount: item.occurrenceCount,
     effortSize: item.effortSize,
   };
-  const result = computeDemandScore(inputs, framework);
-  // Advance the funnel: a scored item is at least `screened`. Respect an
-  // explicit stage override and never regress a manually-advanced stage.
-  const stageOrder = DEMAND_STAGE_VALUES as readonly string[];
-  const explicitStage = stageOrder.includes(String(params["demandStage"]))
-    ? (params["demandStage"] as (typeof DEMAND_STAGE_VALUES)[number])
-    : null;
-  const derivedStage = result.score !== null ? "screened" : item.demandStage ?? "raw";
-  const currentIdx = item.demandStage ? stageOrder.indexOf(item.demandStage) : -1;
-  const derivedIdx = stageOrder.indexOf(derivedStage);
-  const nextStage = explicitStage ?? (derivedIdx > currentIdx ? derivedStage : item.demandStage ?? derivedStage);
-  // Investment bucket: explicit override, else keep what's set, else derive from
-  // work-type (bug/chore/refactor=run, feature=grow, else unclassified).
-  const { deriveBucket } = await import("@/lib/demand/buckets");
-  const explicitBucket = (INVESTMENT_BUCKET_VALUES as readonly string[]).includes(String(params["investmentBucket"]))
-    ? (params["investmentBucket"] as (typeof INVESTMENT_BUCKET_VALUES)[number])
-    : null;
-  const nextBucket = explicitBucket ?? item.investmentBucket ?? deriveBucket(item.workType);
-  await prisma.backlogItem.update({
-    where: { itemId },
-    data: {
-      reach: inputs.reach,
-      impact: inputs.impact,
-      confidence: inputs.confidence,
-      businessValue: inputs.businessValue,
-      timeCriticality: inputs.timeCriticality,
-      riskOpportunity: inputs.riskOpportunity,
-      jobSize: inputs.jobSize,
-      demandScore: result.score,
-      demandScoreFramework: framework,
-      demandScoreComputedAt: new Date(),
-      demandStage: nextStage,
-      investmentBucket: nextBucket,
-    },
+  const { patch, result, framework, nextStage } = await buildScorePatch(item, inputs, {
+    framework: params["framework"],
+    demandStage: params["demandStage"],
+    investmentBucket: params["investmentBucket"],
   });
+  await prisma.backlogItem.update({ where: { itemId }, data: patch });
   return {
     success: true,
     entityId: itemId,
@@ -207,6 +258,124 @@ async function scoreDemandItemHandler(params: Record<string, unknown>): Promise<
       demandStage: nextStage,
       contributions: result.contributions,
       missing: result.missing,
+    },
+  };
+}
+
+async function recordEffortEstimateHandler(
+  params: Record<string, unknown>,
+  userId: string,
+): Promise<ToolResult> {
+  const itemId = String(params["itemId"] ?? "");
+  const by = String(params["by"] ?? "");
+  if (by !== "ai" && by !== "human") {
+    return { success: false, error: "invalid_input", message: '`by` must be "ai" or "human".' };
+  }
+  const item = await prisma.backlogItem.findUnique({ where: { itemId } });
+  if (!item) {
+    return { success: false, error: "not_found", message: `Item ${itemId} not found` };
+  }
+
+  const agree = params["agree"] === true;
+  const explicitJobSize =
+    typeof params["jobSize"] === "number" && Number.isFinite(params["jobSize"]) && (params["jobSize"] as number) > 0
+      ? (params["jobSize"] as number)
+      : null;
+
+  // Start from the item's current provenance, then apply this attributed edit.
+  let estimateAiJobSize = item.estimateAiJobSize;
+  let estimateAiById = item.estimateAiById;
+  let estimateAiAt = item.estimateAiAt;
+  let estimateHumanJobSize = item.estimateHumanJobSize;
+  let estimateHumanById = item.estimateHumanById;
+  let estimateHumanAt = item.estimateHumanAt;
+  let agreedFlag: boolean | null = item.estimateAgreed;
+  const now = new Date();
+
+  if (by === "ai") {
+    if (explicitJobSize === null) {
+      return { success: false, error: "invalid_input", message: "An AI estimate requires a positive numeric jobSize." };
+    }
+    estimateAiJobSize = explicitJobSize;
+    estimateAiById = typeof params["agentId"] === "string" ? (params["agentId"] as string) : item.estimateAiById;
+    estimateAiAt = now;
+    // A fresh AI proposal re-opens (or closes) reconcile against any human number.
+    if (estimateHumanJobSize !== null) agreedFlag = estimateHumanJobSize === explicitJobSize;
+  } else {
+    // human: adopt the AI number on agree, else set/overrule with an explicit one.
+    const humanVal = explicitJobSize ?? (agree ? item.estimateAiJobSize : null);
+    if (humanVal === null) {
+      return {
+        success: false,
+        error: "invalid_input",
+        message: "A human estimate requires a positive numeric jobSize (or agree=true to adopt the current AI estimate).",
+      };
+    }
+    estimateHumanJobSize = humanVal;
+    estimateHumanById = userId || item.estimateHumanById;
+    estimateHumanAt = now;
+    // Reconciled when the human confirms, or their number matches the AI's.
+    agreedFlag = agree || (estimateAiJobSize !== null && estimateAiJobSize === humanVal);
+  }
+
+  const provenance = resolveEstimateProvenance({
+    aiJobSize: estimateAiJobSize,
+    humanJobSize: estimateHumanJobSize,
+    agreed: agreedFlag,
+  });
+
+  // Recompute the score with the resolved effective estimate mirrored into jobSize.
+  const inputs: DemandScoreInputs = {
+    reach: item.reach,
+    impact: item.impact,
+    confidence: item.confidence,
+    businessValue: item.businessValue,
+    timeCriticality: item.timeCriticality,
+    riskOpportunity: item.riskOpportunity,
+    jobSize: provenance.effectiveJobSize,
+    occurrenceCount: item.occurrenceCount,
+    effortSize: item.effortSize,
+  };
+  const { patch, result, framework, nextStage } = await buildScorePatch(item, inputs);
+
+  await prisma.backlogItem.update({
+    where: { itemId },
+    data: {
+      ...patch,
+      estimateAiJobSize,
+      estimateAiById,
+      estimateAiAt,
+      estimateHumanJobSize,
+      estimateHumanById,
+      estimateHumanAt,
+      estimateSource: provenance.source,
+      estimateAgreed: provenance.agreed,
+    },
+  });
+
+  const divergeNote = provenance.diverged
+    ? ` ⇄ AI ${estimateAiJobSize} ↔ human ${estimateHumanJobSize} — reconcile.`
+    : "";
+  const scoreNote =
+    result.score !== null
+      ? ` ${framework} score ${result.score} (stage ${nextStage}).`
+      : ` ${framework} not computable — missing ${result.missing.join(", ")}.`;
+  return {
+    success: true,
+    entityId: itemId,
+    message:
+      `Recorded ${by} effort estimate for ${itemId}: effective ${provenance.effectiveJobSize} (${provenance.source}).` +
+      scoreNote +
+      divergeNote,
+    data: {
+      effectiveJobSize: provenance.effectiveJobSize,
+      estimateSource: provenance.source,
+      agreed: provenance.agreed,
+      diverged: provenance.diverged,
+      estimateAiJobSize,
+      estimateHumanJobSize,
+      demandScore: result.score,
+      demandStage: nextStage,
     },
   };
 }
@@ -456,6 +625,7 @@ export const demandScoringPack: ToolPack = {
   definitions,
   handlers: {
     score_demand_item: (params) => scoreDemandItemHandler(params),
+    record_effort_estimate: (params, userId) => recordEffortEstimateHandler(params, userId),
     set_demand_policy: (params) => setDemandPolicyHandler(params),
     find_duplicate_candidates: (params) => findDuplicateCandidatesHandler(params),
     merge_backlog_items: (params) => mergeBacklogItemsHandler(params),
@@ -464,6 +634,7 @@ export const demandScoringPack: ToolPack = {
   },
   grants: {
     score_demand_item: ["backlog_write"],
+    record_effort_estimate: ["backlog_write"],
     set_demand_policy: ["backlog_write"],
     find_duplicate_candidates: ["backlog_read"],
     merge_backlog_items: ["backlog_write"],
