@@ -150,3 +150,15 @@ When greeting or addressing the operator in portal UI:
 4. Do not invent personalization knobs the operator cannot see or control; keep defaults progressive (one warm greeting, not a form).
 
 This is the operator-personalization pattern (displayName precedence → email fallback → human-name derivation) used by dashboard greeting work (BI-IMP-0FFB8D25).
+
+## Operator queue deep links
+
+Cockpit tiles, attention cards, and coworker handoffs that open an operator work queue **must** use a stable filtered-link contract so the same URL works from email, chat, MCP, and progressive-disclosure UI (BI-IMP-5DE1139F / IP-E254E).
+
+1. **Canonical query params** — encode filters as stable, documented query keys (e.g. `?status=open&workType=bug&epic=EP-…`). Prefer closed enums already used by the backlog/MCP surface; do not invent one-off keys per page.
+2. **Deterministic section anchors** — when the page has bands (NEEDS-YOU, queue, detail), use stable `#section-id` anchors that match `id=` on the real DOM (not screenshot coordinates).
+3. **Server-readable filters** — the list must apply the same filters from the URL on first paint (SSR or first client read of `searchParams`). Do not require a click-only path that loses the deep link.
+4. **Graceful no-JS** — the URL alone must land on a useful view; optional client-side highlight/scroll is enhancement only.
+5. **No coordinate deep links** — never deep-link via x/y click targets or ephemeral row indexes; use semantic ids (`BI-*`, `FB-*`, `WC-*`).
+
+When adding a new operator queue, document its query keys next to the route (or in the page's report-kit `FilterBar`) so cockpit cards and `record_execution_evidence` links can reuse them.
