@@ -71,15 +71,43 @@ export function resolveEngineLimit(engineKey: EngineKey): number {
   return engineKey === "local" ? 1 : 8;
 }
 
-/** Max time a caller will wait for a slot before giving up. A safety net against
- *  a leaked release, not a routine path — with interactive priority and the
- *  serial autonomous dispatcher, sustained saturation is not expected on a
- *  single-operator install. */
-function resolveAcquireTimeoutMs(): number {
-  const raw = process.env.DPF_INFERENCE_ADMISSION_TIMEOUT_MS;
+/** Error code stamped on an admission-timeout rejection so a caller can treat a
+ *  capacity backpressure timeout distinctly from a substantive failure — e.g. a
+ *  coworker-certification journey should REQUEUE on this, not fail the coworker. */
+export const ADMISSION_TIMEOUT_CODE = "INFERENCE_ADMISSION_TIMEOUT" as const;
+type AdmissionTimeoutError = Error & { code?: string };
+
+/** True when `err` is an inference admission timeout (the engine was at capacity
+ *  and the wait exceeded the origin's budget) — capacity backpressure, NOT a
+ *  substantive failure of the work itself. */
+export function isAdmissionTimeout(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err as AdmissionTimeoutError).code === ADMISSION_TIMEOUT_CODE
+  );
+}
+
+/** Max time a caller will wait for a slot before giving up — ORIGIN-AWARE.
+ *
+ *  `interactive` keeps a tight budget: a human is waiting, so failing fast beats
+ *  hanging. `autonomous` (certification / background / long-running deliverable
+ *  work) is patient: no human is blocked, so it waits through capacity contention
+ *  and runs when a slot frees — the priority queue is the booking system, so we
+ *  maximize utilization rather than turn autonomous work away. Both stay bounded
+ *  as a safety net against a leaked release; the autonomous ceiling is a backstop
+ *  (callers such as cert REQUEUE on it, they do not fail). Tune per install via
+ *  DPF_INFERENCE_ADMISSION_TIMEOUT_MS (interactive) and
+ *  DPF_INFERENCE_ADMISSION_TIMEOUT_MS_AUTONOMOUS (autonomous). */
+function resolveAcquireTimeoutMs(origin: InferenceOrigin): number {
+  const raw =
+    origin === "autonomous"
+      ? process.env.DPF_INFERENCE_ADMISSION_TIMEOUT_MS_AUTONOMOUS
+      : process.env.DPF_INFERENCE_ADMISSION_TIMEOUT_MS;
   const parsed = raw != null && raw.trim() !== "" ? Number(raw) : NaN;
   if (Number.isFinite(parsed) && parsed > 0) return Math.trunc(parsed);
-  return 120_000;
+  // Interactive: fail fast (human waiting). Autonomous: patient (30 min) — long
+  // enough to wait out real contention, bounded enough to catch a stuck slot.
+  return origin === "autonomous" ? 1_800_000 : 120_000;
 }
 
 interface Waiter {
@@ -148,16 +176,17 @@ export async function acquireInferenceSlot(
       timer: null,
       enqueuedAt: startedWaiting,
     };
+    const timeoutMs = resolveAcquireTimeoutMs(origin);
     waiter.timer = setTimeout(() => {
       removeWaiter(s, waiter);
-      reject(
-        new Error(
-          `inference admission timeout on ${engineKey} engine after ` +
-            `${resolveAcquireTimeoutMs()}ms (origin=${origin}` +
-            `${opts?.providerId ? `, provider=${opts.providerId}` : ""})`,
-        ),
+      const err: AdmissionTimeoutError = new Error(
+        `inference admission timeout on ${engineKey} engine after ` +
+          `${timeoutMs}ms (origin=${origin}` +
+          `${opts?.providerId ? `, provider=${opts.providerId}` : ""})`,
       );
-    }, resolveAcquireTimeoutMs());
+      err.code = ADMISSION_TIMEOUT_CODE;
+      reject(err);
+    }, timeoutMs);
     (origin === "interactive" ? s.interactiveQ : s.autonomousQ).push(waiter);
   });
 
