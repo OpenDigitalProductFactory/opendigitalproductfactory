@@ -56,12 +56,40 @@ export async function resolveActiveBuildId(
     // matching check. If a future grant model lands, expand this predicate.
     if (hinted && hinted.createdById === userId) return hinted.buildId;
   }
+  const where = { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } };
   const build = await prisma.featureBuild.findFirst({
-    where: { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } },
+    where,
     orderBy: { updatedAt: "desc" },
     select: { buildId: true },
   });
-  return build?.buildId ?? null;
+  if (!build) return null;
+  // BI-F82915D7: refuse to GUESS when the fallback is ambiguous. Silently
+  // returning the most-recently-updated build is how a tool call with no
+  // explicit buildId attached to the WRONG build — the cross-build plan/activity
+  // contamination class (a zero-dispatch FeatureBuild showing another build's
+  // buildPlan; sandbox edits logged under a freshly-promoted build). If the user
+  // has more than one non-terminal build and nothing disambiguated it, refuse so
+  // the caller surfaces "no active build — pass an explicit FB-id" rather than
+  // acting on a foreign build.
+  //
+  // `count` is queried via optional access on purpose: it is part of the real
+  // Prisma client, but many unit tests mock `prisma.featureBuild` with just
+  // findUnique/findFirst/update for single-build scenarios. A missing `count`
+  // there safely means "one build" — preserving those tests' behavior — while
+  // production (and the dedicated test below) exercises the real ambiguity check.
+  const countFn = (
+    prisma.featureBuild as unknown as {
+      count?: (args: { where: typeof where }) => Promise<number>;
+    }
+  ).count;
+  const nonTerminalCount = countFn ? await countFn({ where }) : 1;
+  if (nonTerminalCount > 1) {
+    console.warn(
+      `[resolveActiveBuildId] ambiguous: user has multiple non-terminal builds and no buildId hint — refusing to guess. Pass an explicit FB-id.`,
+    );
+    return null;
+  }
+  return build.buildId;
 }
 
 export async function updateBuildHappyPathState(
