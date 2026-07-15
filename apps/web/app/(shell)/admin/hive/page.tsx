@@ -1,4 +1,5 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
+import { ContributionProvenanceTable } from "@/components/admin/ContributionProvenanceTable";
 import { HiveContributionsPanel } from "@/components/admin/HiveContributionsPanel";
 import { SeedContributionReviewTable } from "@/components/admin/SeedContributionReviewTable";
 import { StatusBadge, type Intent } from "@/components/ui/report-kit";
@@ -45,6 +46,15 @@ export default async function AdminHiveContributionsPage() {
           >
             {view.contributor ?? "not yet generated"}
           </div>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--dpf-text)] mb-1">Contribution provenance</h2>
+          <p className="text-sm text-[var(--dpf-muted)] mb-3">
+            A plain-language view of what is kept here, privately backed up, or shared with the community. A feature can
+            be active on this system and also sent outward, so these states are shown separately.
+          </p>
+          <ContributionProvenanceTable rows={view.contributionProvenance} />
         </section>
 
         <section>

@@ -449,6 +449,29 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     "install-local-only": "neutral",
     "reject-as-seed": "danger",
   },
+  // Admin > Hive contribution provenance. These statuses answer plain-language
+  // operator questions across four axes: kept here, privacy disposition, sent
+  // outside, and community acceptance. Keep them in the shared registry so the
+  // provenance report does not carry a private status color map.
+  contributionProvenance: {
+    accepted: "success",
+    "approved-to-share": "accent",
+    "blocked-policy": "warning",
+    "blocked-private-path": "warning",
+    "kept-here": "neutral",
+    "needs-attention": "warning",
+    "needs-review": "warning",
+    "not-queued": "neutral",
+    "not-sent": "neutral",
+    "private-backup": "accent",
+    "private-parts-removed": "success",
+    rejected: "warning",
+    "saved-locally": "neutral",
+    "sent-community": "accent",
+    "under-review": "accent",
+    "waiting-online": "warning",
+    withdrawn: "neutral",
+  },
 };
 
 /**

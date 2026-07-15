@@ -43,6 +43,26 @@ export type HiveContributionsView = {
     createdAt: string;
   }>;
   seedReviews: SeedContributionReviewRow[];
+  contributionProvenance: ContributionProvenanceRow[];
+};
+
+export type ContributionProvenanceAxis = {
+  status: string;
+  label: string;
+  detail: string;
+  url?: string;
+};
+
+export type ContributionProvenanceRow = {
+  id: string;
+  source: "feature-pack" | "improvement-proposal" | "hive-ledger";
+  title: string;
+  sourceLabel: string;
+  occurredAt: string;
+  localAvailability: ContributionProvenanceAxis;
+  privacyDisposition: ContributionProvenanceAxis;
+  publication: ContributionProvenanceAxis;
+  upstreamAcceptance: ContributionProvenanceAxis;
 };
 
 export type SeedContributionReviewRow = {
@@ -68,6 +88,20 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+function firstNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
 }
 
 const seedFitDecisions = new Set<string>(SEED_CONTRIBUTION_FIT_DECISIONS);
@@ -133,6 +167,204 @@ function toSeedReview(row: {
   };
 }
 
+function sentToCommunityAxis(prUrl: string, prNumber: number | null): ContributionProvenanceAxis {
+  return {
+    status: "sent-community",
+    label: "Sent to community project",
+    detail: prNumber ? `PR #${prNumber}` : "Public contribution PR recorded.",
+    url: prUrl,
+  };
+}
+
+function upstreamAxisFromLedgerStatus(status: string): ContributionProvenanceAxis {
+  switch (status) {
+    case "accepted":
+      return { status: "accepted", label: "Accepted by community", detail: "The community ledger marks this contribution accepted." };
+    case "rejected":
+      return { status: "rejected", label: "Rejected", detail: "The community ledger marks this contribution rejected." };
+    case "withdrawn":
+      return { status: "withdrawn", label: "Withdrawn", detail: "The contribution was withdrawn." };
+    case "curating":
+    case "submitted":
+      return { status: "under-review", label: "Under review", detail: "The community project has not accepted it yet." };
+    default:
+      return { status: "needs-review", label: "Needs provenance review", detail: `Ledger status is ${status}.` };
+  }
+}
+
+function upstreamAxisFromFeaturePackReview(mergeReadiness: string | null | undefined): ContributionProvenanceAxis {
+  if (mergeReadiness === "needs-work" || mergeReadiness === "blocked") {
+    return {
+      status: "needs-changes",
+      label: "Needs changes",
+      detail: "Contribution review found work that must be addressed before acceptance.",
+    };
+  }
+
+  return {
+    status: "under-review",
+    label: "Under review",
+    detail: "The community project has not accepted it yet.",
+  };
+}
+
+function featurePackProvenance(row: {
+  packId: string;
+  title: string;
+  status?: string | null;
+  prUrl?: string | null;
+  prNumber?: number | null;
+  mergeReadiness?: string | null;
+  reviewedAt?: Date | null;
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
+  manifest: unknown;
+}): ContributionProvenanceRow {
+  const manifest = asRecord(row.manifest);
+  const prUrl = firstString(row.prUrl, manifest?.prUrl);
+  const prNumber = firstNumber(row.prNumber, manifest?.prNumber);
+  const rawStatus = row.status ?? "local";
+  const occurredAt = (row.updatedAt ?? row.reviewedAt ?? row.createdAt ?? new Date(0)).toISOString();
+
+  const localAvailability: ContributionProvenanceAxis = {
+    status: "saved-locally",
+    label: "Saved locally",
+    detail: "Feature Pack exists on this install.",
+  };
+
+  if (prUrl) {
+    return {
+      id: `feature-pack:${row.packId}`,
+      source: "feature-pack",
+      title: row.title,
+      sourceLabel: "Feature Pack",
+      occurredAt,
+      localAvailability,
+      privacyDisposition: {
+        status: "approved-to-share",
+        label: "Approved to share",
+        detail: "A public community contribution record exists for this Feature Pack.",
+      },
+      publication: sentToCommunityAxis(prUrl, prNumber),
+      upstreamAcceptance: upstreamAxisFromFeaturePackReview(row.mergeReadiness),
+    };
+  }
+
+  if (rawStatus === "contributed") {
+    return {
+      id: `feature-pack:${row.packId}`,
+      source: "feature-pack",
+      title: row.title,
+      sourceLabel: "Feature Pack",
+      occurredAt,
+      localAvailability,
+      privacyDisposition: {
+        status: "approved-to-share",
+        label: "Approved to share",
+        detail: "Legacy Feature Pack status says contributed.",
+      },
+      publication: {
+        status: "needs-attention",
+        label: "Needs attention",
+        detail: "Marked contributed, but no sent-community proof was found.",
+      },
+      upstreamAcceptance: {
+        status: "needs-review",
+        label: "Needs provenance review",
+        detail: "Legacy status cannot prove whether the community accepted it.",
+      },
+    };
+  }
+
+  return {
+    id: `feature-pack:${row.packId}`,
+    source: "feature-pack",
+    title: row.title,
+    sourceLabel: "Feature Pack",
+    occurredAt,
+    localAvailability,
+    privacyDisposition: {
+      status: "kept-here",
+      label: "Kept on this system",
+      detail: "No public contribution evidence was found.",
+    },
+    publication: {
+      status: "not-queued",
+      label: "Not queued",
+      detail: "Nothing has been sent outside this install.",
+    },
+    upstreamAcceptance: {
+      status: "not-sent",
+      label: "Not sent",
+      detail: "No community review exists.",
+    },
+  };
+}
+
+function improvementProposalProvenance(row: {
+  proposalId: string;
+  title: string;
+  contributionStatus: string;
+  createdAt: Date;
+  updatedAt: Date;
+}): ContributionProvenanceRow {
+  const shared = row.contributionStatus === "contributed";
+  return {
+    id: `improvement-proposal:${row.proposalId}`,
+    source: "improvement-proposal",
+    title: row.title,
+    sourceLabel: "Improvement proposal",
+    occurredAt: row.updatedAt.toISOString(),
+    localAvailability: {
+      status: "saved-locally",
+      label: "Saved locally",
+      detail: "Improvement proposal exists on this install.",
+    },
+    privacyDisposition: shared
+      ? { status: "approved-to-share", label: "Approved to share", detail: "Proposal status says it was contributed." }
+      : { status: "kept-here", label: "Kept on this system", detail: "Proposal has not been contributed." },
+    publication: shared
+      ? { status: "sent-community", label: "Sent to community project", detail: "Contribution status says it was sent; no PR URL is attached." }
+      : { status: "not-queued", label: "Not queued", detail: "Nothing has been sent outside this install." },
+    upstreamAcceptance: shared
+      ? { status: "needs-review", label: "Needs provenance review", detail: "Legacy status does not prove community acceptance." }
+      : { status: "not-sent", label: "Not sent", detail: "No community review exists." },
+  };
+}
+
+function ledgerProvenance(row: {
+  id: string;
+  contributionType: string;
+  summary: string;
+  status: string;
+  redactionStatus: string | null;
+  createdAt: Date;
+}): ContributionProvenanceRow {
+  return {
+    id: `hive-ledger:${row.id}`,
+    source: "hive-ledger",
+    title: row.summary,
+    sourceLabel: row.contributionType,
+    occurredAt: row.createdAt.toISOString(),
+    localAvailability: {
+      status: "saved-locally",
+      label: "Saved locally",
+      detail: "Ledger record is stored on this install.",
+    },
+    privacyDisposition: {
+      status: row.redactionStatus === "blocked" ? "blocked-private-path" : "private-parts-removed",
+      label: row.redactionStatus === "blocked" ? "Blocked by policy" : "Private parts removed",
+      detail: row.redactionStatus ?? "Ledger contribution passed through the redaction boundary.",
+    },
+    publication: {
+      status: "sent-community",
+      label: "Sent to community project",
+      detail: "Hive ledger contains a public contribution record.",
+    },
+    upstreamAcceptance: upstreamAxisFromLedgerStatus(row.status),
+  };
+}
+
 export async function getHiveContributionsView(): Promise<HiveContributionsView> {
   const row = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
@@ -146,24 +378,37 @@ export async function getHiveContributionsView(): Promise<HiveContributionsView>
 
   const contributor = await getDisplayPseudonym().catch(() => null);
 
-  const [ledgerRows, featurePacks] = await Promise.all([
+  const [ledgerRows, featurePacks, improvementProposals] = await Promise.all([
     prisma.hiveContributionLedger.findMany({
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
     prisma.featurePack.findMany({
-      where: { reviewedAt: { not: null } },
-      orderBy: { reviewedAt: "desc" },
+      orderBy: { updatedAt: "desc" },
       take: 50,
       select: {
         packId: true,
         title: true,
+        status: true,
         prUrl: true,
         prNumber: true,
         mergeReadiness: true,
         reviewedAt: true,
+        createdAt: true,
+        updatedAt: true,
         manifest: true,
         reviewReport: true,
+      },
+    }),
+    prisma.improvementProposal.findMany({
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+      select: {
+        proposalId: true,
+        title: true,
+        contributionStatus: true,
+        createdAt: true,
+        updatedAt: true,
       },
     }),
   ]);
@@ -179,21 +424,30 @@ export async function getHiveContributionsView(): Promise<HiveContributionsView>
     createdAt: Date;
   };
 
+  const ledger = (ledgerRows as LedgerRow[]).map((r: LedgerRow) => ({
+    id: r.id,
+    contributionType: r.contributionType,
+    contributor: r.contributor,
+    ruleKey: r.ruleKey,
+    summary: r.summary,
+    status: r.status,
+    redactionStatus: r.redactionStatus,
+    createdAt: r.createdAt.toISOString(),
+  }));
+
+  const contributionProvenance = [
+    ...(featurePacks as Parameters<typeof featurePackProvenance>[0][]).map(featurePackProvenance),
+    ...(improvementProposals as Parameters<typeof improvementProposalProvenance>[0][]).map(improvementProposalProvenance),
+    ...(ledgerRows as LedgerRow[]).map(ledgerProvenance),
+  ].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+
   return {
     config,
     statuses: resolveHiveContributionStatuses(config),
     contributor,
-    ledger: (ledgerRows as LedgerRow[]).map((r: LedgerRow) => ({
-      id: r.id,
-      contributionType: r.contributionType,
-      contributor: r.contributor,
-      ruleKey: r.ruleKey,
-      summary: r.summary,
-      status: r.status,
-      redactionStatus: r.redactionStatus,
-      createdAt: r.createdAt.toISOString(),
-    })),
+    ledger,
     seedReviews: featurePacks.map(toSeedReview).filter((row): row is SeedContributionReviewRow => row !== null),
+    contributionProvenance,
   };
 }
 
