@@ -62,6 +62,13 @@ export type BuildFailureClass =
   // --rolled-back). Environment state from an earlier aborted attempt — often the
   // pgvector failure above — not a main defect (promoter step-3a self-heals it).
   | "p3009-failed-migration"
+  // The migrate/boot step cannot reach Postgres (Prisma P1001 "Can't reach
+  // database server") — the DB is down or unreachable (e.g. postgres stranded in
+  // `Created`, crashed, still starting). Environment/infra, not a main defect:
+  // confirm dpf-postgres-1 is Up; recreate it from the host compose if stuck
+  // (the pgdata volume is intact). Matched on the specific Prisma phrasing, NOT a
+  // bare ECONNREFUSED (which is ambiguous and stays unclassified).
+  | "database-unreachable"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -130,6 +137,10 @@ const PGVECTOR_MISSING = /extension\s+"?vector"?\s+is not available|could not op
 // Anchored on the P3009 code / its exact phrasing — NOT a bare "migrate failed",
 // which is a different (unknown) failure that must not be mislabeled.
 const P3009_FAILED_MIGRATION = /\bP3009\b|migrate found failed migrations in the target database|following migrations? have failed/i;
+// Prisma P1001: the DB server is unreachable. Anchored on the P1001 code / its
+// exact "Can't reach database server" phrasing — deliberately NOT a bare
+// ECONNREFUSED, which appears in many unrelated failures and stays unclassified.
+const DATABASE_UNREACHABLE = /\bP1001\b|can'?t reach database server|cannot reach database server/i;
 
 /** Up to ~6 lines around the first matching line, capped, for the agent. */
 function traceAround(log: string, re: RegExp): string {
@@ -258,8 +269,21 @@ export function classifyBuildFailure(
   }
 
   // Migrate-step failures (checked after the build-output classes — a migrate
-  // failure means the build already succeeded). pgvector first: when a retry
-  // shows P3009 it is the downstream symptom of this root cause.
+  // failure means the build already succeeded). Connectivity first: if the DB is
+  // unreachable, migrate never ran, so no pgvector/P3009 signal can be present.
+  if (DATABASE_UNREACHABLE.test(log)) {
+    return {
+      class: "database-unreachable",
+      summary:
+        "The migrate/boot step cannot reach Postgres (Prisma P1001 — \"Can't reach database server\"). The database is down or unreachable, not a main defect: confirm dpf-postgres-1 is Up and healthy; if it is stranded in `Created` (the pre-#2978 ensure-pgvector symptom) recreate it from the host compose — the named pgdata volume is intact — then re-trigger. Do NOT hand-rebuild the portal.",
+      playbookLink: BET5_PLAYBOOK,
+      failingTrace: traceAround(log, DATABASE_UNREACHABLE),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
+  // pgvector first among the reachable-DB migrate failures: when a retry shows
+  // P3009 it is the downstream symptom of this root cause.
   if (PGVECTOR_MISSING.test(log)) {
     return {
       class: "pgvector-extension-missing",
