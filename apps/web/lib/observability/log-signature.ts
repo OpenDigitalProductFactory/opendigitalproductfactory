@@ -49,6 +49,17 @@ const ERROR_TOKEN = /\b(error|fatal|panic|exception|traceback)\b/i;
 //      signatures. `response.created` is the benign OpenAI Responses API SSE
 //      start event, likewise not an error.
 const OUTBOUND_REQUEST_NOISE = /\[responses-adapter\]\s+REQUEST|Error Report PIR-|\bresponse\.created\b/i;
+// Postgres-side lifecycle FATALs emitted during a *controlled* restart (a
+// self-upgrade recycle or deploy): the database announcing it is starting up /
+// shutting down, terminating open connections on an operator SIGTERM, or the
+// postgres-exporter sidecar briefly failing to scrape while the DB bounces.
+// These are normal restart choreography, not application defects — and nothing
+// actionable is hidden by filtering them, because a *genuine* DB outage ALSO
+// surfaces app-side (Prisma DatabaseNotReachable / init errors), and those are
+// NOT filtered here, so the real signal still clusters. Empirically this exact
+// class minted ~6 duplicate BI-PIR-* during the 2026-07-15 self-upgrade window.
+const DB_LIFECYCLE_NOISE =
+  /database system is (starting up|shutting down)|terminating connection due to administrator command|error scraping (target|dsn)/i;
 
 /** True when a line is a genuine error worth clustering (not info/debug/self-noise). */
 export function isErrorLine(line: string): boolean {
@@ -56,6 +67,7 @@ export function isErrorLine(line: string): boolean {
   if (SELF_NOISE.test(line)) return false;
   if (INFO_DEBUG.test(line)) return false;
   if (OUTBOUND_REQUEST_NOISE.test(line)) return false;
+  if (DB_LIFECYCLE_NOISE.test(line)) return false;
   return ERROR_TOKEN.test(line);
 }
 

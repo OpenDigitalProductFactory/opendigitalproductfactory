@@ -58,6 +58,34 @@ describe("isErrorLine", () => {
     // A genuine error that merely mentions the adapter must still cluster.
     expect(isErrorLine("[responses-adapter] Error: upstream returned 500 for codex/responses")).toBe(true);
   });
+
+  it("rejects benign Postgres controlled-restart lifecycle noise (BI-PIR self-upgrade churn)", () => {
+    // These are normal restart choreography during a self-upgrade recycle, not
+    // application defects — they minted ~6 duplicate BI-PIR-* on 2026-07-15.
+    expect(
+      isErrorLine("2026-07-15 05:24:11.000 UTC [1] FATAL: terminating connection due to administrator command"),
+    ).toBe(false);
+    expect(isErrorLine("FATAL: the database system is starting up")).toBe(false);
+    expect(isErrorLine("FATAL: the database system is shutting down")).toBe(false);
+    // postgres-exporter sidecar losing its scrape while the DB bounces.
+    expect(
+      isErrorLine('level=error msg="Error scraping target" err="dial tcp: connect: connection refused"'),
+    ).toBe(false);
+  });
+
+  it("STILL clusters a genuine app-side DB outage (lifecycle filter must not hide real failures)", () => {
+    // The safety invariant: a real outage surfaces app-side via Prisma, and that
+    // path is NOT filtered — so filtering the Postgres-side lifecycle FATALs
+    // above never suppresses the actionable signal.
+    expect(
+      isErrorLine("[db] Error: PrismaClientInitializationError: Can't reach database server at postgres:5432"),
+    ).toBe(true);
+    expect(isErrorLine("Error: connect ECONNREFUSED 127.0.0.1:5432 (database unreachable)")).toBe(true);
+    // A genuine catalog-scout scraping error must NOT be swallowed — the DB
+    // filter is scoped to metrics-exporter phrasing ("scraping target/dsn"),
+    // not the word "scraping" alone.
+    expect(isErrorLine("[external-catalog-scout] Error scraping catalog vendor-x: timeout")).toBe(true);
+  });
 });
 
 describe("toTemplate", () => {
