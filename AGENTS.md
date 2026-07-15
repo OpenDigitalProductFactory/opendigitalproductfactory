@@ -203,6 +203,13 @@ External MCP servers, npm packages, and APIs must pass the Tool Evaluation Pipel
 
 Every new feature spec must include a "Research & Benchmarking" section before finalization. Compare 2–3 open-source leaders (read their data models, not just feature lists) and 2–3 commercial products. Document patterns adopted, patterns rejected, anti-patterns identified, and gaps the design fills. Reference specific projects, not abstract "best practices."
 
+**Minimum Architectural Alignment Checklist (BI-IMP-25A07E52).** Before finalizing a feature spec (or rubber-stamping a PR that changes contracts), confirm:
+
+1. **Deployment contracts** — if the change alters a public API response shape, install path, host-coupled default, service boundary, or self-upgrade step, review [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](docs/superpowers/specs/2026-05-09-deployment-contracts.md) and name the affected contract(s). Substrate-specific deltas stay in owning specs; universal rules stay in the doctrine.
+2. **Canonical identity** — name/display/org identity reads from `Organization` (and Principal convergence for identity-bearing entities), not a parallel field. → §11 and [organization-canonical-identity](docs/founder-kernel/wiki/principles/organization-canonical-identity.md).
+3. **No parallel utilities** — before adding a helper, verify the substrate (grep + code graph / `search_code_graph`) so existing shared modules are extended rather than duplicated. → [verify-substrate-before-proposing-new](docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md).
+4. **This rulebook** — the change does not invent a second home for a rule already stated here or in a kernel principle; use pointers, not copies. → [single-source-of-truth](docs/founder-kernel/wiki/principles/single-source-of-truth.md).
+
 ## 11. Data Model Stewardship
 
 Before adding any large feature, audit the existing schema for refactoring opportunities. Indicators that refactoring is needed: a domain model being reused as a shared concept; the same logical data appearing in two+ existing models; a new feature needing meta-data with no canonical home. → [kernel principle](docs/founder-kernel/wiki/principles/schema-audit-before-features.md)
