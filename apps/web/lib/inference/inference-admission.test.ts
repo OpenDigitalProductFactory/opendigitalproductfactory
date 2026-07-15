@@ -5,6 +5,7 @@ import {
   currentInferenceOrigin,
   engineKeyForProvider,
   getInferenceAdmissionSnapshot,
+  isAdmissionTimeout,
   resolveEngineLimit,
   withInferenceOrigin,
 } from "./inference-admission";
@@ -13,6 +14,7 @@ const ENV_KEYS = [
   "DPF_INFERENCE_MAX_CONCURRENCY_LOCAL",
   "DPF_INFERENCE_MAX_CONCURRENCY_REMOTE",
   "DPF_INFERENCE_ADMISSION_TIMEOUT_MS",
+  "DPF_INFERENCE_ADMISSION_TIMEOUT_MS_AUTONOMOUS",
 ] as const;
 
 const savedEnv: Record<string, string | undefined> = {};
@@ -151,15 +153,46 @@ describe("acquireInferenceSlot", () => {
     expect(getInferenceAdmissionSnapshot().local.active).toBe(0);
   });
 
-  it("times out a waiter that never gets a slot", async () => {
+  it("times out an interactive waiter via the interactive budget, tagged isAdmissionTimeout", async () => {
     process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
     process.env.DPF_INFERENCE_ADMISSION_TIMEOUT_MS = "20";
+    const r1 = await acquireInferenceSlot("local", "interactive");
+    let caught: unknown;
+    await acquireInferenceSlot("local", "interactive").catch((e) => (caught = e));
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toMatch(/admission timeout/);
+    // the capacity-timeout is tagged so callers (e.g. cert) can requeue not fail
+    expect(isAdmissionTimeout(caught)).toBe(true);
+    expect(getInferenceAdmissionSnapshot().local.interactiveWaiting).toBe(0);
+    r1();
+  });
+
+  it("times out an autonomous waiter via its OWN (autonomous) budget", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    process.env.DPF_INFERENCE_ADMISSION_TIMEOUT_MS_AUTONOMOUS = "20";
     const r1 = await acquireInferenceSlot("local", "autonomous");
     await expect(acquireInferenceSlot("local", "autonomous")).rejects.toThrow(
       /admission timeout/,
     );
-    // the timed-out waiter is removed from the queue
     expect(getInferenceAdmissionSnapshot().local.autonomousWaiting).toBe(0);
     r1();
+  });
+
+  it("autonomous is PATIENT: it ignores the tight interactive budget and waits for a slot", async () => {
+    process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
+    // A tiny INTERACTIVE budget must NOT time out autonomous work; autonomous has
+    // its own generous budget, so the waiter holds and is served when a slot frees.
+    process.env.DPF_INFERENCE_ADMISSION_TIMEOUT_MS = "20";
+    process.env.DPF_INFERENCE_ADMISSION_TIMEOUT_MS_AUTONOMOUS = "5000";
+    const r1 = await acquireInferenceSlot("local", "autonomous");
+    const waiting = acquireInferenceSlot("local", "autonomous");
+    await tick();
+    // still queued well past the 20ms interactive budget — not turned away
+    await new Promise((r) => setTimeout(r, 60));
+    expect(getInferenceAdmissionSnapshot().local.autonomousWaiting).toBe(1);
+    r1(); // free the slot — the patient waiter is now served
+    const r2 = await waiting;
+    expect(getInferenceAdmissionSnapshot().local.autonomousWaiting).toBe(0);
+    r2();
   });
 });

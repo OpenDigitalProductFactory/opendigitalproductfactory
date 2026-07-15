@@ -35,6 +35,7 @@ import {
 
 import { COWORKER_CERT_ADAPTER_KEY } from "./certification-status";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isAdmissionTimeout } from "@/lib/inference/inference-admission";
 
 export { COWORKER_CERT_ADAPTER_KEY };
 export const COWORKER_CERT_ADAPTER_VERSION = "1.0.0";
@@ -43,6 +44,10 @@ export type JourneyResult = {
   journeyId: string;
   mode: GoldenJourney["mode"];
   passed: boolean;
+  /** The journey could not be assessed because inference was at capacity and the
+   *  admission wait was exhausted — capacity backpressure, NOT a substantive
+   *  failure of the coworker. Such a run is requeued, never scored as a failure. */
+  capacityInconclusive: boolean;
   verdicts: OracleVerdict[];
   executedToolNames: string[];
   downgraded: boolean;
@@ -51,7 +56,9 @@ export type JourneyResult = {
 
 export type CoworkerCertificationResult = {
   agentId: string;
-  status: "passed" | "failed";
+  // "inconclusive" = at least one journey hit capacity backpressure and there was
+  // no genuine failure; the run is requeued rather than passing or failing.
+  status: "passed" | "failed" | "inconclusive";
   runId: string;
   journeys: JourneyResult[];
 };
@@ -62,6 +69,8 @@ export type CertificationSweepResult = {
   results: CoworkerCertificationResult[];
   passed: number;
   failed: number;
+  /** Runs left unresolved by inference capacity (not failures) — to be requeued. */
+  inconclusive: number;
 };
 
 /** First route bound to the agent in ROUTE_AGENT_MAP; workspace as fallback. */
@@ -188,12 +197,29 @@ async function executeJourney(
       journeyId: journey.journeyId,
       mode: journey.mode,
       passed: journeyPassed(verdicts),
+      capacityInconclusive: false,
       verdicts,
       executedToolNames: [...new Set(loop.executedTools.map((t) => t.name))],
       downgraded: loop.downgraded,
       durationMs: deps.now().getTime() - startedAt,
     };
   } catch (error) {
+    // Capacity backpressure, not a coworker failure: the engine was at its
+    // ceiling and the (patient, autonomous) admission wait was exhausted. Mark
+    // the journey inconclusive with NO failure verdicts, so the run is requeued
+    // and the coworker is never wrongly failed for a busy box.
+    if (isAdmissionTimeout(error)) {
+      return {
+        journeyId: journey.journeyId,
+        mode: journey.mode,
+        passed: false,
+        capacityInconclusive: true,
+        verdicts: [],
+        executedToolNames: [],
+        downgraded: false,
+        durationMs: deps.now().getTime() - startedAt,
+      };
+    }
     const message = getErrorMessage(error);
     const verdicts = evaluateJourneyOracles({
       content: "",
@@ -206,6 +232,7 @@ async function executeJourney(
       journeyId: journey.journeyId,
       mode: journey.mode,
       passed: false,
+      capacityInconclusive: false,
       verdicts,
       executedToolNames: [],
       downgraded: false,
@@ -224,7 +251,17 @@ async function persistCoworkerRun(
   deps: CertificationDeps,
 ): Promise<CoworkerCertificationResult> {
   const at = deps.now();
-  const status: "passed" | "failed" = journeys.every((j) => j.passed) ? "passed" : "failed";
+  // A GENUINE failure (a journey that ran and failed an oracle) trumps capacity
+  // backpressure — a broken coworker must not hide behind a busy box. Only a run
+  // with no genuine failures but some capacity-inconclusive journeys is
+  // "inconclusive" (requeued); an all-passed run is "passed".
+  const genuineFailure = journeys.some((j) => !j.passed && !j.capacityInconclusive);
+  const anyInconclusive = journeys.some((j) => j.capacityInconclusive);
+  const status: "passed" | "failed" | "inconclusive" = genuineFailure
+    ? "failed"
+    : anyInconclusive
+      ? "inconclusive"
+      : "passed";
   const runId = `assurance_coworker_cert_${agentId}_${at.toISOString().replace(/[^a-zA-Z0-9]/g, "_")}`;
 
   await deps.db.assuranceRun.create({
@@ -242,6 +279,7 @@ async function persistCoworkerRun(
         journeys: journeys.map((j) => ({
           journeyId: j.journeyId,
           passed: j.passed,
+          capacityInconclusive: j.capacityInconclusive,
           executedToolNames: j.executedToolNames,
           downgraded: j.downgraded,
           durationMs: j.durationMs,
@@ -328,7 +366,7 @@ export async function runCoworkerCertificationSweep(options?: {
 
   const userContext = await resolveCertificationUserContext(deps.db);
   if (!userContext) {
-    return { startedAt, completedAt: deps.now(), results: [], passed: 0, failed: 0 };
+    return { startedAt, completedAt: deps.now(), results: [], passed: 0, failed: 0, inconclusive: 0 };
   }
 
   const results: CoworkerCertificationResult[] = [];
@@ -346,6 +384,7 @@ export async function runCoworkerCertificationSweep(options?: {
     results,
     passed: results.filter((r) => r.status === "passed").length,
     failed: results.filter((r) => r.status === "failed").length,
+    inconclusive: results.filter((r) => r.status === "inconclusive").length,
   };
 }
 

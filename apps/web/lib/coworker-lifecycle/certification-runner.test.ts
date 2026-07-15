@@ -122,6 +122,28 @@ describe("coworker certification runner (EP-COWORKER-LIFECYCLE Phase 2)", () => 
     );
   });
 
+  it("an inference admission timeout yields an INCONCLUSIVE run (to requeue), not a coworker failure", async () => {
+    const { deps, created } = makeDeps();
+    // Inference was at capacity: the admission wait exhausted its (patient) budget.
+    // Tagged with the admission-timeout code the runner recognizes.
+    const capacityErr = Object.assign(
+      new Error("inference admission timeout on local engine after 1800000ms (origin=autonomous)"),
+      { code: "INFERENCE_ADMISSION_TIMEOUT" },
+    );
+    (deps.runLoop as ReturnType<typeof vi.fn>).mockRejectedValue(capacityErr);
+
+    const sweep = await runCoworkerCertificationSweep({ agentIds: ["coo"], deps });
+
+    // Not a failure — capacity backpressure is inconclusive and gets requeued.
+    expect(sweep.results[0].status).toBe("inconclusive");
+    expect(sweep.inconclusive).toBe(1);
+    expect(sweep.failed).toBe(0);
+    expect((created.runs[0] as Record<string, unknown>).status).toBe("inconclusive");
+    // every journey flagged capacity-inconclusive, and NO failure findings filed
+    expect(sweep.results[0].journeys.every((j) => j.capacityInconclusive)).toBe(true);
+    expect((created.findings as Array<unknown>).length).toBe(0);
+  });
+
   it("a recovered oracle is absent-cleaned via updateMany scoped to the agent", async () => {
     const { deps, updateManyCalls } = makeDeps();
     await runCoworkerCertificationSweep({ agentIds: ["coo"], deps });
