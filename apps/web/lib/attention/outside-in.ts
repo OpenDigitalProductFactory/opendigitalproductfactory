@@ -81,6 +81,7 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   "compliance-submission": "foundational", // regulatory filing
   "ai-readiness-blocker": "foundational", // platform readiness gap
   "platform-health": "foundational", // platform health alert — infra posture
+  "provider-credential": "foundational", // an AI provider's saved sign-in expired
 };
 
 /** The default portfolio for a source (outside-in classification). Pure. */
