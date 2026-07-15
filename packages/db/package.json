@@ -69,7 +69,6 @@
     "dotenv": "^17.4.2",
     "fflate": "^0.8.3",
     "i18n-iso-countries": "^7.14.0",
-    "neo4j-driver": "^6.2.0",
     "net-snmp": "^3.26.3",
     "pg": "^8.22.0",
     "read-excel-file": "9.2.0",

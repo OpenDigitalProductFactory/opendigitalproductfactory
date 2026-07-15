@@ -133,29 +133,9 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
     }
   }, TIMEOUT_MS);
 
-  it("DEGRADES OPEN — still starts the server when the BET-5 datastore backfill fails", () => {
-    // BI-A1E864A5: the Neo4j/Qdrant→Postgres backfill is best-effort and idempotent (the
-    // separately-gated teardown enforces data safety), so it must never block boot. Observed
-    // live: a backfill that hung after its work left the portal wedged before `exec server`,
-    // never serving. The script force-exits when done and the boot line is timeout-guarded;
-    // this proves a NON-zero backfill result still degrades open to the server start.
-    const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
-    try {
-      const appDir = join(root, "app");
-      mkdirSync(appDir, { recursive: true });
-      const r = run({
-        appDir,
-        fakeBin: makeFakeBin(root),
-        pnpmExit: 0,
-        pnpmFailMatch: "scripts/bet5-decommission-backfill.ts",
-      });
-      expect(r.status).toBe(0); // boot still succeeds
-      expect(r.stderr).toContain("BET-5 datastore backfill reported an error");
-      expect(r.stdout).toContain("BOOT_MARKER"); // server WAS started despite the failure
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  }, TIMEOUT_MS);
+  // (Removed: the BET-5 boot backfill degrade-open test — the one-time Neo4j/Qdrant→Postgres
+  // boot backfill was retired once the fleet finished migrating, BI-2A3BE4D7. Boot no longer
+  // runs it, so there is nothing to degrade open around.)
 
   it("FAILS CLOSED — does not start the server when migrations cannot apply", () => {
     const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
