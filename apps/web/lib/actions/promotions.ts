@@ -4,7 +4,6 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { prisma, type Prisma } from "@dpf/db";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { slugify } from "@/lib/shared/slugify";
 import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
@@ -407,9 +406,19 @@ export async function markDeployed(promotionId: string, deploymentLog?: string) 
 }
 
 /**
- * Execute an approved promotion. Tries the Docker promoter service first
- * (autonomous pipeline: backup, build, swap, health check). Falls back to
- * in-portal execution if Docker is not available.
+ * Execute an approved promotion through the in-portal promotion pipeline
+ * (backup production DB → scan destructive migrations → apply patch →
+ * post-deploy health check → mark deployed, or roll back with a recorded
+ * reason).
+ *
+ * This deliberately does NOT launch the `dpf-promoter` container: that image
+ * is a self-upgrade-only contract (its promote.sh hard-requires `--self-upgrade`
+ * plus PROMOTE_SOURCE/PROMOTE_TARGET_SHA/…), so starting it for a ChangePromotion
+ * (PROMOTION_ID env, no flag) made promote.sh exit 1 at its guard — the
+ * container died non-zero, the promotion never reached "deployed", and no
+ * rollbackReason was ever set, surfacing as a bare "Rolled back: unknown".
+ * BI-B8A6E80B routes change promotions to the deployer whose contract matches
+ * the operation.
  */
 export async function executePromotionAction(
   promotionId: string,
@@ -423,78 +432,13 @@ export async function executePromotionAction(
 
   const promo = await prisma.changePromotion.findFirst({
     where: { promotionId },
-    include: { productVersion: { include: { featureBuild: { select: { sandboxId: true } } } } },
+    select: { status: true },
   });
   if (!promo) return { success: false, step: "validate", message: "Promotion not found." };
   if (promo.status !== "approved") return { success: false, step: "validate", message: `Status is ${promo.status}, not approved.` };
 
-  const sandboxId = promo.productVersion?.featureBuild?.sandboxId;
-
-  // Try Docker promoter first (production path)
-  try {
-    const cp = lazyChildProcess();
-    const { promisify } = lazyUtil();
-    const execFileAsync = promisify(cp.execFile);
-    const execAsync = promisify(cp.exec);
-
-    await execAsync("docker info", { timeout: 5_000 });
-    await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");
-
-    // Ensure the promoter image exists, building it just-in-time from the
-    // portal's baked-in /promoter/ files if missing. Shared with the
-    // self-upgrade auto-heal and the governed repair tool so there is one
-    // recipe. On failure, fall through to the outer catch → in-portal path.
-    const ensured = await (await import("@/lib/self-upgrade/promoter")).ensurePromoterImage("dpf-promoter");
-    if (!ensured.ok) {
-      throw new Error(
-        `promoter image unavailable (${ensured.skipReason ?? "unknown"})${
-          ensured.detail ? `: ${ensured.detail}` : ""
-        }`,
-      );
-    }
-
-    // Resolve the host path where docker-compose.yml and .env live.
-    // DPF_HOST_INSTALL_PATH is the host-side path of the install directory
-    // (e.g. "D:/DPF" on Windows, "/opt/dpf" on Linux). The promoter needs
-    // these mounted at /host-source/ to restart the portal via compose.
-    const hostPath = process.env.DPF_HOST_INSTALL_PATH ?? "";
-    if (!hostPath) {
-      return {
-        success: false,
-        step: "validate",
-        message: "DPF_HOST_INSTALL_PATH is not configured. Set it in .env to the host-side install directory (e.g. D:/DPF) and restart the portal.",
-      };
-    }
-
-    const envArgs: string[] = [
-      "run", "-d",
-      "--name", "dpf-promoter-1",
-      "--network", `${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}_default`,
-      "-v", "/var/run/docker.sock:/var/run/docker.sock",
-      "-v", "dpf_backups:/backups",
-    ];
-    if (hostPath) {
-      envArgs.push("-v", `${hostPath}/docker-compose.yml:/host-source/docker-compose.yml:ro`);
-      envArgs.push("-v", `${hostPath}/.env:/host-source/.env:ro`);
-    }
-    envArgs.push(
-      "-e", `PROMOTION_ID=${promotionId}`,
-      "-e", `DPF_PRODUCTION_DB_CONTAINER=${process.env.DPF_PRODUCTION_DB_CONTAINER ?? "dpf-postgres-1"}`,
-      "-e", "DPF_PORTAL_CONTAINER=dpf-portal-1",
-      "-e", `DPF_COMPOSE_PROJECT=${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}`,
-      "-e", `POSTGRES_USER=${process.env.POSTGRES_USER ?? "dpf"}`,
-    );
-    if (sandboxId) envArgs.push("-e", `DPF_SANDBOX_CONTAINER=${sandboxId}`);
-    if (overrideReason) envArgs.push("-e", `DPF_WINDOW_OVERRIDE=${overrideReason}`);
-    envArgs.push("dpf-promoter");
-
-    await execFileAsync("docker", envArgs);
-    return { success: true, step: "started", message: "Promoter started. Deployment in progress -- monitor in promotions list." };
-  } catch {
-    // Docker not available -- fall back to in-portal execution
-    const { executePromotion } = await import("@/lib/sandbox-promotion");
-    return executePromotion(promotionId, overrideReason);
-  }
+  const { executePromotion } = await import("@/lib/sandbox-promotion");
+  return executePromotion(promotionId, overrideReason);
 }
 
 /**

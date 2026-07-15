@@ -29,6 +29,36 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+// BI-B8A6E80B: execute_promotion must deploy a ChangePromotion via the in-portal
+// executePromotion pipeline, NOT by launching the self-upgrade-only `dpf-promoter`
+// image (whose promote.sh hard-requires --self-upgrade and exits 1 otherwise,
+// leaving the promotion stuck and logging "Rolled back: unknown").
+const promo = vi.hoisted(() => ({
+  runInPortal: vi.fn(),
+  execFile: vi.fn(),
+  exec: vi.fn(),
+  logBuildActivity: vi.fn(),
+  reconcileBuildCompletion: vi.fn(),
+}));
+vi.mock("@/lib/sandbox-promotion", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  executePromotion: (...a: unknown[]) => promo.runInPortal(...a),
+}));
+vi.mock("@/lib/shared/lazy-node", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  lazyChildProcess: () => ({ exec: promo.exec, execFile: promo.execFile }),
+  lazyUtil: () => ({ promisify: (fn: (...a: unknown[]) => unknown) => fn }),
+}));
+vi.mock("@/lib/mcp/build-tool-helpers", () => ({
+  logBuildActivity: (...a: unknown[]) => promo.logBuildActivity(...a),
+}));
+vi.mock("@/lib/build-flow-state", () => ({
+  reconcileBuildCompletion: (...a: unknown[]) => {
+    promo.reconcileBuildCompletion(...a);
+    return Promise.resolve();
+  },
+}));
+
 import { releasePack } from "./release-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
@@ -104,6 +134,45 @@ describe("release pack — handler behavior (delegation preserved)", () => {
     expect(res.success).toBe(false);
     expect(res.error).toBe("Invalid promotion_id");
     expect(db.changePromotionFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("execute_promotion deploys via the in-portal pipeline and never launches the self-upgrade promoter (BI-B8A6E80B)", async () => {
+    db.changePromotionFindFirst.mockResolvedValue({
+      promotionId: "CP-1",
+      status: "approved",
+      rollbackReason: null,
+      deploymentLog: null,
+      productVersion: { featureBuild: { sandboxId: "sbx-1", buildId: "FB-1" } },
+    });
+    // Simulate an install where the dpf-promoter image DOES exist locally, so the
+    // old code path would try to `docker run dpf-promoter` (the wrong contract).
+    promo.exec.mockImplementation(async (cmd: string) => {
+      if (typeof cmd === "string" && cmd.includes("docker inspect dpf-promoter-1")) {
+        return { stdout: "exited 1\n" }; // promoter exited non-zero (flag guard)
+      }
+      return { stdout: "" };
+    });
+    promo.execFile.mockResolvedValue({ stdout: "" });
+    promo.runInPortal.mockResolvedValue({ success: true, step: "deployed", message: "deployed" });
+
+    vi.useFakeTimers();
+    const pending = releasePack.handlers.execute_promotion(
+      { promotion_id: "CP-1", override_reason: "emergency-hotfix" },
+      "u1",
+    );
+    await vi.advanceTimersByTimeAsync(11 * 60 * 1000);
+    const res = await pending;
+    vi.useRealTimers();
+
+    // Delegates to the in-portal ChangePromotion deployer with the override.
+    expect(promo.runInPortal).toHaveBeenCalledWith("CP-1", "emergency-hotfix");
+    // Never spawns the self-upgrade-only promoter container for a ChangePromotion.
+    const spawnedPromoter = promo.execFile.mock.calls.some(
+      ([bin, args]) =>
+        bin === "docker" && Array.isArray(args) && args.includes("dpf-promoter"),
+    );
+    expect(spawnedPromoter).toBe(false);
+    expect(res.success).toBe(true);
   });
 
   it("create_release_bundle requires a title and at least one build id", async () => {
