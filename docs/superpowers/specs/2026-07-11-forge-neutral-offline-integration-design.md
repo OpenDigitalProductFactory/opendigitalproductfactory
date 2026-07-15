@@ -1,8 +1,9 @@
 # Forge-Neutral, Offline-Capable Git Integration Design
 
 **Date:** 2026-07-11
-**Status:** Ratified — Phase 1 implementation in progress
+**Status:** Ratified — early phases underway (Phase 2 local-verification substrate landed; boundary ratification partial)
 **Epic:** EP-5410E8EA
+**Plan:** `docs/superpowers/plans/2026-07-11-forge-neutral-offline-integration-plan.md`
 **Kernel decision:** `DI-C6483F614871` — `forge_abstraction_local_first`, composite 11.302, margin 1.785, high confidence, no commandment conflict, structured coverage strong
 **Boundary decision:** `DI-14811CE8E7ED` — bundle a bare local Git/ref-store core; keep full forges as external adapters
 **Decision population:** `external_coding_agent`
@@ -47,6 +48,8 @@ Forge resilience must strengthen both. It must not reduce “Hive” to GitHub P
 
 The present system is therefore not “remote CI only.” Most expensive verification is already local. The avoidable coupling is orchestration: remote publication precedes local evidence, and merge readiness is represented only by GitHub PR/check/review state.
 
+_Update (2026-07-14): Phase 2 has since landed. `scripts/gate-worktree.sh` now defaults to `--no-push` and records SHA-bound, offline-capable evidence (`publicationMode`, `acceptedBaseMode`, `networkTolerance`), closing the gate-orchestration coupling described in the row above. The table remains as the authoring-time baseline the design addresses._
+
 ### 2.2 GitHub-specific integration authority
 
 | Operation | Grounded dependency |
@@ -87,6 +90,23 @@ The Hive commons already has canonical records: `FeaturePack`, `ImprovementPropo
 
 The portal Hive Mind is also not a forge feature. `2026-05-17-portal-context-overlay-hive-mind-work-surface-design.md` and `apps/web/lib/portal-context/hive-mind-resolver.ts` select builders, reviewers, architects, testers, operators, and specialists from shared route/work/attention context. Forge-neutral integration state therefore belongs in the existing `PortalContextEnvelope` and task/evidence projection, not in a new PR-only dashboard.
 
+### 2.5 Contribution provenance reporting confusion
+
+A parallel investigation found a user-facing confusion this design must not reproduce: contribution reporting can describe a feature as "local" even when the artifact has already been contributed to the public GitHub project, leaving non-technical users unsure what stayed on their install and what left it.
+
+The current substrate shows why the ambiguity is easy to create:
+
+- `FeaturePack.status` defaults to `local` (`packages/db/prisma/schema.prisma`), but `contribute_to_hive` creates/updates the row with `status: "contributed"` before the upstream PR outcome is fully resolved (`apps/web/lib/mcp/packs/contribution-hive-pack.ts`).
+- `ImprovementProposal.contributionStatus` defaults from `"local"` to `"contributed"` and is updated after the contribution attempt, independent of the user's plain-language mental model (`packages/db/prisma/schema.prisma`, `apps/web/lib/mcp/packs/contribution-hive-pack.ts`).
+- The contribution architecture spec intentionally frames these as ledger markers, not a complete user report: `2026-06-19-hive-contribution-architecture-and-egress-model.md` lists `FeaturePack`, `ImprovementProposal.contributionStatus`, and `HiveContributionLedger` as the existing ledger.
+
+The forge-neutral design must therefore treat contribution provenance as a product contract, not only a backend state machine. A non-technical report must answer two separate questions without Git vocabulary:
+
+1. **What is kept on this install?** Private/local source, local-only Feature Packs, and imported upstream features currently active here.
+2. **What left this install, and where did it go?** Private own-repo backups versus public community contributions, including queued, sent, accepted, rejected, withdrawn, or policy-blocked payloads, with the exact feature/learning summary and public/private sanitization result.
+
+The UI must not collapse those questions into one badge. A feature can be active locally and contributed upstream. A private implementation can stay local while a sanitized generic learning derived from it is shared. A contribution can be queued locally but not sent because GitHub/Forgejo is offline. Those are distinct states.
+
 ## 3. Required invariants
 
 Any design must preserve:
@@ -104,6 +124,7 @@ Any design must preserve:
 11. **Private integration is never publicly mirrored.** Local/own-repo refs may contain proprietary bytes. Public refs are constructed from the approved, stripped, shareable payload only.
 12. **Learning can be abstracted without leaking implementation.** A private code change may yield a separately reviewed public principle, fact, technique, or generic fix, but privacy classification applies independently to each derived artifact.
 13. **Hive Mind remains useful offline.** Local coworkers, context, knowledge retrieval, reviews, and task artifacts do not depend on a forge. Only cross-install synchronization becomes pending/stale.
+14. **Contribution provenance is axis-separated and plain-language.** Reports must distinguish local availability, public/own-repo publication state, contribution acceptance state, and privacy/disposition state. "Local" must never mean "not contributed" unless backed by a contribution/outbox/ledger query that proves no public payload was queued, sent, or accepted.
 
 ## 4. Options evaluated
 
@@ -239,16 +260,53 @@ A single local change may remain private while a generalized learning derived fr
 
 Inbound Hive Scout/FeaturePack discovery is also adapter-backed and asynchronous. The install continues to use its last locally ingested, provenance-recorded commons while offline. Freshness is visible. On reconnect, the scout resumes from a durable cursor, deduplicates by upstream identity/content digest, and routes findings through the existing review/backlog path; it never auto-merges new knowledge or code merely because connectivity returned.
 
+### 5.10 Contribution provenance report model
+
+The portal must expose contribution provenance as a small read model over existing ledgers and any new outbox/admission records introduced by this program. The read model is allowed to denormalize for display, but its facts must trace back to canonical records.
+
+It carries four independent axes:
+
+| Axis | Canonical question | Example plain-language states |
+|---|---|---|
+| Local availability | "Is this active or saved on this install?" | "Active on this system", "Saved locally", "Imported from the community", "Removed locally" |
+| Privacy/disposition | "Is the payload allowed to leave?" | "Kept on this system", "Approved to share", "Private parts removed", "Blocked by private-path rule" |
+| Publication/outbox | "Has anything been sent outside this install?" | "Not queued", "Waiting to send when online", "Backed up to your private repo", "Sent to community project", "Needs attention", "Send blocked by policy" |
+| Upstream acceptance | "Did the community project accept it?" | "Under review", "Accepted by community", "Needs changes", "Rejected", "Withdrawn" |
+
+Default screens use those plain-language states and short consequence text. Technical details such as PR URL, forge provider, branch, commit SHA, DCO trailer, payload hash, and retry attempts are available behind "Details" for operators and support, not in the first sentence shown to normal users.
+
+The report must include at least three default filters:
+
+- **Kept here:** features, changes, and learnings present on this install, including private changes and imported/community-origin items.
+- **Private backups:** own-repo publication attempts that leave the install but remain in the operator's private home, including queued, sent, failed, and policy-blocked payloads.
+- **Shared with community:** public-hive publication attempts, including queued, sent, accepted, failed, withdrawn, and policy-blocked payloads.
+
+That split is load-bearing for the current confusion: a row can appear in both "Kept here" and "Shared with community" when a locally active feature was also contributed upstream. In that case the default copy should say, for example, "Active on this system; contribution sent to the community project and currently under review." It must not say only "local" or only "contributed." If a row appears in "Private backups" only, the copy must say it was backed up to the operator's private repo, not shared with the community.
+
+Offline behavior is explicit:
+
+- queued-but-unsent: "Waiting to send when online";
+- sent-but-unconfirmed: "Sent; confirmation is pending";
+- accepted from cached state: "Last confirmed accepted at <time>; cannot refresh while offline";
+- unknown/legacy rows: "Needs provenance review" rather than guessing.
+
+For hive/common learning, the report distinguishes the source artifact from derived artifacts. A private source change can show "Kept on this system" while a derived principle/skill/fact shows "Shared outward" after its own review, redaction, DCO/consent, and contribution ledger entry. No derived artifact inherits shareability from the source change.
+
 ## 6. Rollout
 
-1. Contract inventory and GitHub adapter with behavior parity.
-2. Decouple local CI from push and record local candidates/evidence by SHA.
-3. Add local admission ledger/ref and serialized promotion in shadow mode; compare verdicts with GitHub.
-4. Add durable GitHub outbox/reconciliation; tolerate outages without declaring remote completion.
-5. Project local admission, contribution, and reconciliation state into the portal Hive Mind work surface.
-6. Make local admission authoritative for approved scopes after parity evidence and operator ratification.
-7. Adapt self-upgrade source acquisition plus outbound and inbound Hive synchronization.
-8. Evaluate Forgejo/Gitea and signed bundle exchange.
+The phases below are the ratified sequence. The implementation plan (`docs/superpowers/plans/2026-07-11-forge-neutral-offline-integration-plan.md`) carries the per-phase BIs, exit criteria, and verification matrix; phase numbers here match the plan.
+
+0. **Ratify boundaries.** Local-admission target, bundled-vs-adapter Forgejo scope, and bundle/release provenance authority. (`DI-14811CE8E7ED` resolves the bundled bare-core boundary; the remaining two are decisions gated before Phase 3/6 cutover work.)
+1. **Forge contracts + GitHub parity.** Capability-scoped contracts; move GitHub call sites behind an adapter with behavior parity.
+2. **Local verification without publication.** Decouple local CI from push; record candidate/base/synthesized-tree SHA evidence with toolchain fingerprint and expiry.
+3. **Local admission + serialized integration.** Add the admission ledger/ref and compare-and-swap promotion in shadow mode; compare verdicts with GitHub; never auto-advance public `main`.
+4. **Durable remote outbox.** Idempotent retry and reconciliation; an outage changes projection state, not the local verdict.
+5. **Portal Hive Mind projection.** Project local admission, contribution, and reconciliation state — including the four-axis provenance model — into the existing context envelope.
+6. **Self-upgrade source neutrality.** Forge-neutral upstream refs and verified cached/imported release provenance.
+7. **Hive/public egress preservation.** Preserve disposition, DCO identity, private-path stripping, and derived-learning independence across adapters.
+8. **Network-tolerant commons ingress/propagation.** Durable inbound/outbound cursors; offline retrieval stays local; no auto-activation on reconnect.
+9. **Optional Forgejo/Gitea + air-gap bundle exchange.** Adapter conformance and threat model; `git bundle` staging under an import namespace.
+10. **Authority cutover (separate operator approval).** Make local admission authoritative only for an approved scope, with one-command rollback to GitHub-authoritative operation.
 
 Rollback keeps GitHub authoritative until the separately approved authority cutover in Phase 10. Each phase must be independently reversible. No bidirectional mirroring is enabled during shadow mode.
 
@@ -264,6 +322,9 @@ Rollback keeps GitHub authoritative until the separately approved authority cuto
 - A private local change can produce a separately reviewed generic learning without exposing its private source payload.
 - Portal Hive Mind coworkers can review, verify, and diagnose a change during a forge outage using the same Work Capsule/task/evidence substrate.
 - Same-install WWMD/WWWD/WSID retrieval remains available offline; inbound Hive freshness and queued outbound propagation are visible and reconcile idempotently.
+- Contribution reports answer "kept here", "private backup", and "shared with community" separately, use plain-language states by default, and never infer non-contribution from a `local` status string alone.
+- A locally active feature that has also been contributed upstream is rendered as both local/active and shared/sent-or-accepted, not as a mutually exclusive local-vs-contributed choice.
+- Queued, failed, and policy-blocked contribution attempts are visible without requiring the user to understand GitHub, PRs, branches, or remotes.
 - Self-upgrade reports offline/stale truthfully and accepts only verified cached/imported artifacts.
 - GitHub and optional Forgejo outages are covered by deterministic contract tests.
 
