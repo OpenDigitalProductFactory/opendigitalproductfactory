@@ -287,24 +287,28 @@ export async function runDiscoveryTriagePass(
   const thresholds = options.thresholds ?? DEFAULT_DISCOVERY_TRIAGE_THRESHOLDS;
   const processedAt = (options.now ?? new Date()).toISOString();
 
-  const [entities, issues] = await Promise.all([
-    db.inventoryEntity.findMany({
-      where: {
-        OR: [
-          { attributionStatus: "needs_review" },
-          { attributionConfidence: { lt: thresholds.coworkerAutoApply } },
-        ],
-      },
-      orderBy: [{ lastSeenAt: "desc" }],
-    }),
-    db.portfolioQualityIssue.findMany({
-      where: {
-        status: "open",
-        inventoryEntityId: { not: null },
-      },
-      orderBy: [{ lastDetectedAt: "desc" }],
-    }),
-  ]);
+  const issues = await db.portfolioQualityIssue.findMany({
+    where: {
+      status: "open",
+      inventoryEntityId: { not: null },
+    },
+    orderBy: [{ lastDetectedAt: "desc" }],
+  });
+  const issueEntityIds = Array.from(new Set(
+    issues
+      .map((issue) => issue.inventoryEntityId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  ));
+  const entities = await db.inventoryEntity.findMany({
+    where: {
+      OR: [
+        { attributionStatus: "needs_review" },
+        { attributionConfidence: { lt: thresholds.coworkerAutoApply } },
+        ...(issueEntityIds.length > 0 ? [{ id: { in: issueEntityIds } }] : []),
+      ],
+    },
+    orderBy: [{ lastSeenAt: "desc" }],
+  });
 
   const taxonomyNodeIdByCandidate = await loadTaxonomyNodeLookup(db, entities);
   const issueByEntityId = new Map(

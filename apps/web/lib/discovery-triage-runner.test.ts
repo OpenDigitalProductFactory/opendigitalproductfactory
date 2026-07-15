@@ -190,6 +190,42 @@ describe("runDiscoveryTriagePass", () => {
     expect(result.metrics.repeatUnresolved).toBe(1);
   });
 
+  it("triages entities referenced by open quality issues even when their attribution status is not already queued", async () => {
+    const db = createRunnerDb();
+    db.inventoryEntity.findMany.mockResolvedValue([
+      makeAmbiguousEntity("issue-backed-entity", {
+        attributionStatus: "attributed",
+        attributionConfidence: 0.97,
+      }),
+    ]);
+    db.portfolioQualityIssue.findMany.mockResolvedValue([
+      {
+        id: "issue-backed-1",
+        issueType: "name_not_promotable",
+        inventoryEntityId: "issue-backed-entity",
+        summary: "Name cannot be promoted without triage.",
+      },
+    ]);
+
+    const result = await runDiscoveryTriagePass(db);
+
+    expect(db.inventoryEntity.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: expect.arrayContaining([
+          { id: { in: ["issue-backed-entity"] } },
+        ]),
+      }),
+    }));
+    expect(db.discoveryTriageDecision.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inventoryEntityId: "issue-backed-entity",
+        qualityIssueId: "issue-backed-1",
+      }),
+    });
+    expect(result.metrics.processed).toBe(1);
+    expect(result.metrics.repeatUnresolved).toBe(1);
+  });
+
   it("uses bounded review for ambiguous packets and records schema drops without blocking deterministic decisions", async () => {
     const db = createRunnerDb();
     db.inventoryEntity.findMany.mockResolvedValue([
