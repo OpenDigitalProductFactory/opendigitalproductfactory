@@ -37,12 +37,20 @@ Not "assign to a coworker" — **coworkers volunteer**. Crossing the bet trigger
 Same `BacklogItem`; `demandStage`/`status`/scoring inputs/`demandScore`/`investmentBucket` already exist. Surfaces: `apps/web/app/(shell)/ops/page.tsx` (OpsClient), `apps/web/app/(shell)/ops/demand/page.tsx` (DemandBoard), nav `apps/web/components/ops/ops-nav.ts`. Volunteering wires the demand→ready seam to the proactivity/self-task engine.
 
 ## Phased build (EP-DELIVERY-FLOW)
-1. **BI-E731A6C1** — estimate **provenance + agreement** facets on `BacklogItem` (human/AI/agreed/divergent), additive nullable, feeds `demandScore`. *(write-model first)*
+1. **BI-E731A6C1** — estimate **provenance + agreement** facets on `BacklogItem` (human/AI/agreed/divergent), additive nullable, feeds `demandScore`. *(write-model first — **built**, see below)*
 2. **BI-1DE21746** — the **Delivery Flow surface**: funnel→bet→board, two visual languages, one-item-two-faces, nav collapse to one Flow with lens sub-views.
 3. **BI-A6648529** — **AI-led volunteering**: funding the bet triggers a proactive coworker to self-task/claim → advance status; governed per proactivity.
 4. **BI-AA1763CD** — **collaborative estimation UX**: AI proposes on arrival, human confirm/overrule, reconcile divergence.
 
 Mockup (private): the Delivery Flow board with the funnel, the amber "bet · a coworker volunteers" gate, estimate chips (AI/human/agreed/diverge), and the AI-led-execution callout.
+
+## Write-model as built (BI-E731A6C1)
+The estimate is the score's `jobSize` denominator; `jobSize` stays the effective value scoring reads, and the provenance facets attribute *how it was arrived at*.
+
+- **Schema (`BacklogItem`, additive-nullable, migration `20260715210000_add_estimate_provenance`):** `estimateAiJobSize` / `estimateAiById` / `estimateAiAt` (the AI coworker's first-pass proposal + attribution), `estimateHumanJobSize` / `estimateHumanById` / `estimateHumanAt` (the human's set/overrule), `estimateSource` (`ai`|`human`|`agreed` — provenance of the effective estimate), `estimateAgreed` (reconciled flag). No index, no backfill, no destructive change.
+- **Pure resolver** `apps/web/lib/demand/estimate-provenance.ts` — `resolveEstimateProvenance({aiJobSize, humanJobSize, agreed})` returns `{effectiveJobSize, source, diverged, agreed}`. Rules: a human number overrules an AI number (humans lead and decide); `agreed` when a human confirms or both numbers are identical; `diverged` only when both sides estimated, the numbers differ, and they are not agreed (the `⇄ reconcile` state). Unit-tested.
+- **Governed write door** `record_effort_estimate` (demand-scoring pack, `backlog_write`): `{itemId, by: "ai"|"human", jobSize?, agentId?, agree?}`. Records the attributed estimate, resolves provenance, mirrors the effective estimate into `jobSize`, and recomputes `demandScore` under the active framework — so the agreed estimate feeds the score. `by=human, agree=true` confirms/adopts the current AI estimate.
+- **Read exposure:** `DemandItemView` + `getDemandItems` now carry `estimateAiJobSize` / `estimateHumanJobSize` / `estimateSource` / `estimateAgreed` for the surface (BI-1DE21746) and estimation UX (BI-AA1763CD) to render the estimate chip and reconcile affordance.
 
 ## Success criterion
 Demand and Backlog no longer read as two duplicate boards — they read as **one continuous investment-funnel → execution-board flow**, where funding a bet visibly pulls a coworker forward to build it, and every estimate shows whose judgment it carries.
