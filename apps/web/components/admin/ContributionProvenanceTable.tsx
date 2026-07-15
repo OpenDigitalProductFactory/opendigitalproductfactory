@@ -6,34 +6,14 @@ import {
   EmptyState,
   StatusBadge,
   type Column,
-  type Intent,
 } from "@/components/ui/report-kit";
-
-const AXIS_INTENTS: Record<string, Intent> = {
-  "accepted": "success",
-  "approved-to-share": "accent",
-  "blocked-policy": "warning",
-  "blocked-private-path": "warning",
-  "kept-here": "neutral",
-  "needs-attention": "warning",
-  "needs-review": "warning",
-  "not-queued": "neutral",
-  "not-sent": "neutral",
-  "private-backup": "accent",
-  "private-parts-removed": "success",
-  "rejected": "warning",
-  "saved-locally": "neutral",
-  "sent-community": "accent",
-  "under-review": "accent",
-  "waiting-online": "warning",
-  "withdrawn": "neutral",
-};
 
 function AxisBadge({ axis }: { axis: ContributionProvenanceAxis }) {
   return (
     <div className="min-w-36">
       <StatusBadge
-        intent={AXIS_INTENTS[axis.status] ?? "neutral"}
+        domain="contributionProvenance"
+        status={axis.status}
         label={axis.label}
         uppercase={false}
         variant="soft"

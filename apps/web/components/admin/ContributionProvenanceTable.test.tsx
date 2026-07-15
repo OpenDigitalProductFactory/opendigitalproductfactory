@@ -31,6 +31,13 @@ describe("ContributionProvenanceTable", () => {
     expect(html).toContain("Open contribution");
   });
 
+  it("resolves provenance statuses through the shared report-kit intent registry", () => {
+    const html = renderToStaticMarkup(<ContributionProvenanceTable rows={[row({})]} />);
+
+    expect(html).toContain('data-intent="neutral"');
+    expect(html).toContain('data-intent="accent"');
+  });
+
   it("renders ambiguous legacy contributions as review work, not as confirmed community acceptance", () => {
     const html = renderToStaticMarkup(<ContributionProvenanceTable rows={[row({
       id: "feature-pack:FP-AMBIGUOUS",
