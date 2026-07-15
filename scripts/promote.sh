@@ -73,6 +73,48 @@ emit_step() {
   fi
 }
 
+# BET-5 (BI-A1E864A5): does this Postgres container's IMAGE provide the pgvector
+# extension? Image-agnostic — query pg_available_extensions (which reflects the
+# on-disk control file wherever it lives) instead of probing a hard-coded path.
+# The Debian-based pgvector/pgvector image keeps vector.control at
+# /usr/share/postgresql/16/extension, NOT /usr/local/share/postgresql/extension
+# (a source build's path), so a path probe wrongly reports "absent" on the very
+# image we recreate onto — making the idempotent skip never fire and recreating
+# Postgres on every upgrade. `psql -U` connects over the local socket (trust), so
+# no password is needed. Returns 0 (yes) / non-zero (no).
+_pg_provides_vector() {
+  local _c="$1" _out
+  _out="$(docker exec "$_c" psql -U "${POSTGRES_USER:-dpf}" -d "${POSTGRES_DB:-dpf}" -tAc \
+    "select 1 from pg_available_extensions where name = 'vector' limit 1" 2>/dev/null | tr -d '[:space:]')"
+  [[ "$_out" == "1" ]]
+}
+
+# BET-5 (BI-A1E864A5): recreate a Postgres service onto the pgvector image WITHOUT
+# dragging any host bind mount. The promoter runs compose with
+# --project-directory="$PROMOTE_SOURCE" (its in-container /host-source mount), so a
+# service's RELATIVE host bind — the main postgres mounts ./scripts/init-inngest-db.sh
+# — resolves to /host-source/scripts/..., a path the HOST docker daemon cannot share,
+# stranding the container in `Created` (DB offline, migrate never runs). The init
+# script only runs on an EMPTY data dir (never on an upgrade), so recreate with a
+# compose override that pins the pgvector image and replaces the service volumes with
+# only its named data volume. Data-preserving: the named volume is never touched.
+# Args: <service> <named-data-volume>.
+_recreate_pg_onto_pgvector() {
+  local _svc="$1" _datavol="$2" _ov _rc=0
+  _ov="$(mktemp)" || return 1
+  cat > "$_ov" <<YAML
+services:
+  ${_svc}:
+    image: pgvector/pgvector:pg16
+    volumes: !override
+      - ${_datavol}:/var/lib/postgresql/data
+YAML
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    "${_f_args[@]}" -f "$_ov" up -d --no-deps --force-recreate "$_svc" || _rc=1
+  rm -f "$_ov"
+  return "$_rc"
+}
+
 # --- Step 1: prepare ---
 # Ensure backup parent directory exists and source is present.
 emit_step prepare
@@ -174,19 +216,19 @@ fi
 # `migrate deploy` fails with "extension \"vector\" is not available" and the upgrade aborts
 # before the swap. Recreate postgres onto the compose-pinned pgvector image BEFORE migrate.
 #
-# IDEMPOTENT: skips when the running container already provides vector.control (a fresh install
-# built from the new compose, or an install already upgraded). DATA-PRESERVING: pgvector/pgvector
-# is the same PG16 engine as postgres:16 on the same pgdata volume (a strict superset image), so
-# the recreate keeps all data — no dump/restore. FAIL-CLOSED like migrate: if the recreate or the
-# readiness wait fails, abort before the swap so the old portal keeps serving the old code.
+# IDEMPOTENT: skips when the running container's image already provides pgvector (a fresh install
+# built from the new compose, or an install already upgraded), detected image-agnostically via
+# pg_available_extensions. DATA-PRESERVING: pgvector/pgvector is the same PG16 engine as postgres:16
+# on the same pgdata volume (a strict superset image), so the recreate keeps all data — no
+# dump/restore. FAIL-CLOSED like migrate: if the recreate or the readiness wait fails, abort before
+# the swap so the old portal keeps serving the old code.
 emit_step ensure-pgvector
 if [[ $_dry_run -eq 0 ]]; then
   _pg_container="${DPF_PRODUCTION_DB_CONTAINER:-${_project}-postgres-1}"
-  _has_vector="$(docker exec "$_pg_container" sh -lc 'test -f /usr/local/share/postgresql/extension/vector.control && echo yes || echo no' 2>/dev/null || echo no)"
+  if _pg_provides_vector "$_pg_container"; then _has_vector=yes; else _has_vector=no; fi
   if [[ "$_has_vector" != "yes" ]]; then
     printf 'step=ensure-pgvector-recreate target=%s\n' "$PROMOTE_TARGET_SHA"
-    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
-      "${_f_args[@]}" up -d --no-deps --force-recreate postgres || {
+    _recreate_pg_onto_pgvector postgres pgdata || {
         printf 'error: could not recreate postgres onto the pgvector image — the BET-5 vector migration cannot apply\n' >&2
         exit 1
       }
@@ -368,15 +410,14 @@ if [[ $_dry_run -eq 0 ]]; then
   _sandbox_ok=1
   # BET-5 (BI-A1E864A5): the sandbox runs the same schema, so its Postgres also needs pgvector
   # for `CREATE EXTENSION vector`. Recreate sandbox-postgres onto the pgvector image first — same
-  # idempotent (skip if vector.control present), data-preserving contract as step 3a. Fail-LOUD-
-  # not-ABORT like the rest of 7b: a sandbox-postgres it cannot upgrade degrades Build Studio, it
-  # never reverts the already-promoted portal.
+  # image-agnostic idempotency check (pg_available_extensions) and host-bind-safe recreate as
+  # step 3a. Fail-LOUD-not-ABORT like the rest of 7b: a sandbox-postgres it cannot upgrade degrades
+  # Build Studio, it never reverts the already-promoted portal.
   _sbx_pg="${_project}-sandbox-postgres-1"
   if docker inspect "$_sbx_pg" >/dev/null 2>&1; then
-    _sbx_has_vector="$(docker exec "$_sbx_pg" sh -lc 'test -f /usr/local/share/postgresql/extension/vector.control && echo yes || echo no' 2>/dev/null || echo no)"
+    if _pg_provides_vector "$_sbx_pg"; then _sbx_has_vector=yes; else _sbx_has_vector=no; fi
     if [[ "$_sbx_has_vector" != "yes" ]]; then
-      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
-        "${_f_args[@]}" up -d --no-deps --force-recreate sandbox-postgres || _sandbox_ok=0
+      _recreate_pg_onto_pgvector sandbox-postgres sandbox_pgdata || _sandbox_ok=0
     fi
   fi
   if [[ $_sandbox_ok -eq 1 ]]; then

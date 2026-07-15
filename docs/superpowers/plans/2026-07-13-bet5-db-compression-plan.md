@@ -202,3 +202,51 @@ whose portal AND promoter both predate the fix — the orchestrating portal is t
 install (this Mac, and Windows) needs ONE manual bootstrap — rebuild `dpf-promoter` from the target
 source, which then carries the fixed `promote.sh` — after which `ensure-pgvector` + the P3009
 self-heal complete the upgrade automatically. From then on the always-rebuild keeps it self-sustaining.
+
+## Fix 3 — ensure-pgvector is fleet-fatal (recreate strands postgres) — 2026-07-14
+
+The live re-trigger on the Mac box (with the always-rebuild promoter from Fix 2) got past
+`docker-build`, entered `ensure-pgvector`, recreated `dpf-postgres-1` onto the pgvector image — and
+**left it dead in `Created` state**, taking the whole DB offline and aborting the run before migrate.
+Root cause = **two bugs in `promote.sh` step 3a `ensure-pgvector`** (both fleet-fatal — they would
+brick postgres on the FIRST BET-5 upgrade of every existing install, and a non-technical operator
+cannot recover a `Created` postgres at fleet scale):
+
+1. **Wrong `vector.control` path.** The idempotency check tested
+   `/usr/local/share/postgresql/extension/vector.control`, but the Debian-based
+   `pgvector/pgvector:pg16` image keeps it at `/usr/share/postgresql/16/extension/vector.control`.
+   So the "already pgvector, skip" branch NEVER fired → it `--force-recreate`d postgres on every run.
+2. **The recreate stranded postgres.** It ran `docker compose --project-directory "$PROMOTE_SOURCE"
+   up -d --force-recreate postgres` from INSIDE the promoter, where `PROMOTE_SOURCE`=`/host-source`
+   (the promoter's in-container mount). The postgres service's RELATIVE host bind
+   `./scripts/init-inngest-db.sh` therefore resolved to `/host-source/scripts/...` — a path the HOST
+   docker daemon can't share → `mounts denied` → container stuck in `Created`. (The portal recreate
+   escapes this because its only host bind uses the ABSOLUTE `${DPF_HOST_INSTALL_PATH:-.}` env, not a
+   relative `./`.) Same bug in step 7b's `sandbox-postgres` recreate.
+
+Fix (this PR):
+- **Image-agnostic vector detection** — new `_pg_provides_vector()` helper queries
+  `pg_available_extensions` (reflects the on-disk control file wherever it lives) instead of a
+  hard-coded path. Used by both step 3a and step 7b.
+- **Host-bind-safe recreate** — new `_recreate_pg_onto_pgvector()` helper recreates the service with
+  an extra compose override (`!override`) that pins the pgvector image and resets volumes to ONLY the
+  named data volume (`pgdata` / `sandbox_pgdata`), dropping the init-script host bind. The init script
+  only runs on an empty data dir (never on an upgrade), so this is behaviourally a no-op AND fully
+  data-preserving (the named volume is untouched).
+- **Regression tests** (`promote-script-functional.test.ts`, run against the REAL script): (a) SKIPS
+  the recreate when `pg_available_extensions` reports vector present; (b) when a recreate IS needed,
+  the postgres recreate line carries a SECOND `-f` (the override) — a regression to the bare
+  `up --force-recreate postgres` that dragged the host bind would carry only one.
+
+**Live recovery of the Mac box** (data never at risk — the named `dpf_pgdata` volume was intact): the
+stranded container already had the right image (pgvector) + volume, so `docker rm dpf-postgres-1` then
+`docker compose -p dpf -f <host compose files> -f <override pinning pgvector image> up -d --no-deps
+--no-build postgres` from the REAL host path brought it back Up (healthy) with all data. Portal kept
+serving on the old sha throughout (fail-closed held). P3009 left in place so the fixed promoter's
+self-heal is exercised on the next re-trigger.
+
+**Fleet-readiness decision (kernel-routed, 2026-07-14):** this fix unblocks the Mac + Windows boxes
+but BET-5 is NOT declared fleet-ready on it alone — the machinery-first Wave-1/Wave-2 re-sequencing
+remains a tracked follow-up (a self-upgrade must never ship a step the currently-deployed machinery
+can't execute). principle_decide ledger: fix-verify-hold-fleet 8.90 / fold-resequence 8.73 /
+minimal-now 7.86 (confidence low; operator confirmed fix-verify-hold-fleet).
