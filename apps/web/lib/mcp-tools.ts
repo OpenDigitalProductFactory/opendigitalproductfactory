@@ -554,7 +554,14 @@ export async function getAvailableTools(
 function redactFunctionalFailureText(text: string): string {
   return text
     .replace(/\bdpfmcp_[A-Za-z0-9_-]+/g, "[redacted-token]")
-    .replace(/\bBearer\s+[A-Za-z0-9._-]+/g, "[redacted-token]");
+    .replace(/\bBearer\s+[A-Za-z0-9._-]+/g, "[redacted-token]")
+    // BI-1291B677: Anthropic OAuth tokens (sk-ant-oat01-*) and API keys
+    // (sk-ant-api03-*) in raw form.
+    .replace(/\bsk-ant-[A-Za-z0-9_-]{8,}/g, "[redacted-token]")
+    // BI-1291B677: a secret staged into the sandbox as `echo '<base64>' | base64 -d`
+    // (the CLI dispatch token / mcp-config write). Redact the base64 payload so a
+    // surfaced docker command can't be reversed back to the secret.
+    .replace(/echo '[A-Za-z0-9+\/=]{20,}'(\s*\|\s*base64\s+-d)/g, "echo '[redacted-token]'$1");
 }
 
 // BI-F4A30FCB (Dale dogfood 2026-05-24): see ideate-build-resolution.ts for

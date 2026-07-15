@@ -492,10 +492,19 @@ export const cliAdapter: ExecutionAdapterHandler = {
       let bareFlag = "";
       if (auth.mode === "oauth") {
         const tokenB64 = Buffer.from(auth.token).toString("base64");
-        await execAsync(
-          `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > ${tokenFile} && chmod 644 ${tokenFile}"`,
-          { timeout: 5_000 },
-        );
+        try {
+          await execAsync(
+            `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > ${tokenFile} && chmod 644 ${tokenFile}"`,
+            { timeout: 5_000 },
+          );
+        } catch {
+          // BI-1291B677: this command embeds the base64-encoded OAuth token, and a
+          // rejected exec Error carries the full command (.cmd / .message) — which
+          // would otherwise propagate the token into the dispatch error and the
+          // BuildActivity / ideate_dispatch summary. Swallow the original and
+          // re-throw a token-free error so the secret never reaches a log surface.
+          throw new Error("Failed to stage the CLI OAuth token into the sandbox.");
+        }
         authExportLine = `export CLAUDE_CODE_OAUTH_TOKEN=$(cat ${tokenFile})`;
       } else {
         authExportLine = `export ANTHROPIC_API_KEY=${auth.apiKey}`;
