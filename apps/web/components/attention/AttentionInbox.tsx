@@ -29,6 +29,7 @@ const SOURCE_LABEL: Record<AttentionSource, string> = {
   "research-proposal": "Research",
   "ai-readiness-blocker": "AI readiness",
   "platform-health": "Platform health",
+  "provider-credential": "Reconnect provider",
 };
 
 export function AttentionInbox({
