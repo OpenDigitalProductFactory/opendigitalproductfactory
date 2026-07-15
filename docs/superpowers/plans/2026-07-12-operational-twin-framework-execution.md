@@ -57,8 +57,31 @@ operator inputs). The fixture is intentionally **not** linked from the admin nav
 it is a developer preview, reachable directly and gated by the admin `view_admin`
 guard.
 
-## P3 — first templates live
-FLOOR, TERRITORY, YARD as template compositions bound via `TwinProfile`, replacing the three hand-built prototypes with framework-rendered equivalents wired to `LivingBusinessSnapshot` + `agent-event-bus` (parent spec P1–P2). Registers as a workspace-home contribution per archetype.
+## P3 — the profile-driven renderer · DONE (first increment)
+`TwinView` (`apps/web/components/twin/TwinView.tsx`) renders **any** archetype's
+twin by composing the P2 kit from a `TwinProfile` (merged P1) + a `TwinSnapshot` —
+one component for every template, physical or board. The profile supplies the
+template, vocabulary (`resourceNoun`/`workItemNoun`), zone/queue labels, and cog
+signals; the snapshot supplies the live values. `TwinSnapshot` (`snapshot.ts`) is
+the render contract the future `LivingBusinessSnapshot` projection (P4) fills; until
+then `buildDemoTwinSnapshot` (`demo-snapshot.ts`) fills it deterministically. The
+`/admin/twin-kit` fixture now renders six archetypes through the *same* `TwinView`
+— restaurant FLOOR, trades TERRITORY, rental YARD, SaaS TENANTS, prof-svcs PIPELINE,
+nonprofit PROGRAMS — via an archetype switcher, proving one renderer serves both
+lenses.
+
+Tests (`twin-view.test.tsx`): demo-snapshot **totality** over all seeded archetypes
+(every profile → a renderable snapshot whose zones bind to real profile keys and
+whose presence includes an AI coworker), determinism, and `TwinView` rendering a
+physical FLOOR and a non-physical TENANTS board from the one component with the
+correct profile vocabulary. Verification: typecheck clean; `vitest components/twin/`
+12/12 green; route manifest current.
+
+**Next P3 increment (not in this PR):** bind the snapshot to real substrate —
+`LivingBusinessSnapshot` over `deriveOperationalValueStream`, `agent_registry`/`Agent`
++ `agent-event-bus`, the finance spine — and register `TwinView` as a workspace-home
+contribution per archetype (workspace-home registry). The demo snapshot is explicitly
+a placeholder that the projection replaces wholesale behind the same shape.
 
 ## P4 — remaining templates by install demand
 BOOK, BAYS, ROOMS, STORE, VENUE, COUNTER + the TENANTS/PIPELINE/PROGRAMS boards, each a template + bindings (not a bespoke build). Certification: a golden-journey per template exercising queue → cog → confirm. PHI-class ROOMS (healthcare) gets the presence/feed redaction mode (role, not patient identity) keyed off `privacyClass` (open question §9.2).
