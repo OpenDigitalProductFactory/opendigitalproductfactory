@@ -1,0 +1,58 @@
+// apps/web/components/twin/snapshot.ts
+//
+// The render contract for a live operational twin (EP-LIVING-BUSINESS-VIZ P3).
+// A `TwinProfile` (@dpf/storefront-templates, merged P1) says WHICH template and
+// WHAT the nouns/zones/queues/cog are; a `TwinSnapshot` supplies the live VALUES
+// that fill them at a moment in time. `TwinView` composes the grammar kit from
+// the two.
+//
+// A future projection (`LivingBusinessSnapshot`, parent spec P4) will produce this
+// shape from real substrate — agent_registry/Agent + agent-event-bus, the finance
+// spine, scheduling — keyed by the profile. Until then `buildDemoTwinSnapshot`
+// (demo-snapshot.ts) fills it deterministically for the fixture.
+
+import type {
+  CapacityChipData,
+  FeedEventData,
+  QuestData,
+  QueueItemData,
+  ResourceUnitData,
+  TwinActor,
+  UtilityMeterData,
+  WorkItemData,
+} from "./types";
+
+/** Live units for one of the profile's zones (keyed to `TwinProfile.zones[].key`). */
+export interface TwinZoneSnapshot {
+  key: string;
+  units: ResourceUnitData[];
+  /** Right-aligned zone summary ("6 / 8 seated"). */
+  meta?: string;
+}
+
+/** Live demand for one of the profile's queues (keyed to `TwinProfile.queues[].key`). */
+export interface TwinQueueSnapshot {
+  key: string;
+  items: QueueItemData[];
+  emptyLabel?: string;
+}
+
+/** The cog's current proposal over live state (constraint → proposal → confirm). */
+export interface TwinCogSnapshot {
+  proposal: string;
+  confirmLabel?: string;
+  /** Overrides the profile's default cog signals for this specific proposal. */
+  signals?: string[];
+}
+
+export interface TwinSnapshot {
+  capacityChips: CapacityChipData[];
+  zones: TwinZoneSnapshot[];
+  workItems: WorkItemData[];
+  queues: TwinQueueSnapshot[];
+  cog?: TwinCogSnapshot;
+  presence: TwinActor[];
+  feed: FeedEventData[];
+  quests: QuestData[];
+  utility: UtilityMeterData[];
+}

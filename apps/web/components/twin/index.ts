@@ -24,3 +24,13 @@ export { UtilityBand, type UtilityBandProps } from "./UtilityBand";
 export { PresenceRow, type PresenceRowProps } from "./PresenceRow";
 export { AttributedFeed, type AttributedFeedProps } from "./AttributedFeed";
 export { NeedsYouQuests, type NeedsYouQuestsProps } from "./NeedsYouQuests";
+
+// P3 — the profile-driven renderer + its live-data contract.
+export { TwinView, type TwinViewProps } from "./TwinView";
+export {
+  type TwinSnapshot,
+  type TwinZoneSnapshot,
+  type TwinQueueSnapshot,
+  type TwinCogSnapshot,
+} from "./snapshot";
+export { buildDemoTwinSnapshot } from "./demo-snapshot";
