@@ -4,10 +4,12 @@ const {
   platformDevConfigFindUnique,
   hiveContributionLedgerFindMany,
   featurePackFindMany,
+  improvementProposalFindMany,
 } = vi.hoisted(() => ({
   platformDevConfigFindUnique: vi.fn(),
   hiveContributionLedgerFindMany: vi.fn(),
   featurePackFindMany: vi.fn(),
+  improvementProposalFindMany: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -15,6 +17,7 @@ vi.mock("@dpf/db", () => ({
     platformDevConfig: { findUnique: platformDevConfigFindUnique, upsert: vi.fn() },
     hiveContributionLedger: { findMany: hiveContributionLedgerFindMany },
     featurePack: { findMany: featurePackFindMany },
+    improvementProposal: { findMany: improvementProposalFindMany },
   },
   resolveHiveContributionStatuses: vi.fn(() => []),
 }));
@@ -32,6 +35,7 @@ describe("getHiveContributionsView seed reviews", () => {
     vi.clearAllMocks();
     platformDevConfigFindUnique.mockResolvedValue(null);
     hiveContributionLedgerFindMany.mockResolvedValue([]);
+    improvementProposalFindMany.mockResolvedValue([]);
   });
 
   it("maps reviewed seed-fit evidence from FeaturePack.reviewReport", async () => {
@@ -96,6 +100,103 @@ describe("getHiveContributionsView seed reviews", () => {
       mergeEligible: false,
       changedSeedPaths: ["prompts/reviewer/code-review.prompt.md"],
       rationale: "Seed-fit evidence is unavailable; review is required.",
+    });
+  });
+});
+
+describe("getHiveContributionsView contribution provenance", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    platformDevConfigFindUnique.mockResolvedValue(null);
+    hiveContributionLedgerFindMany.mockResolvedValue([]);
+    improvementProposalFindMany.mockResolvedValue([]);
+  });
+
+  it("does not treat FeaturePack.status=local as proof that nothing was shared", async () => {
+    featurePackFindMany.mockResolvedValue([{
+      packId: "FP-SHARED",
+      title: "Shared dispatch workflow",
+      status: "local",
+      prUrl: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/42",
+      prNumber: 42,
+      mergeReadiness: null,
+      reviewedAt: null,
+      createdAt: new Date("2026-07-15T12:00:00.000Z"),
+      manifest: {},
+      reviewReport: null,
+    }]);
+
+    const view = await getHiveContributionsView();
+
+    expect(view.contributionProvenance).toEqual([
+      expect.objectContaining({
+        id: "feature-pack:FP-SHARED",
+        title: "Shared dispatch workflow",
+        localAvailability: expect.objectContaining({ label: "Saved locally" }),
+        privacyDisposition: expect.objectContaining({ label: "Approved to share" }),
+        publication: expect.objectContaining({
+          label: "Sent to community project",
+          detail: "PR #42",
+          url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/42",
+        }),
+        upstreamAcceptance: expect.objectContaining({ label: "Under review" }),
+      }),
+    ]);
+  });
+
+  it("flags contributed FeaturePacks without PR or outbox evidence for provenance review", async () => {
+    featurePackFindMany.mockResolvedValue([{
+      packId: "FP-AMBIGUOUS",
+      title: "Ambiguous contribution",
+      status: "contributed",
+      prUrl: null,
+      prNumber: null,
+      mergeReadiness: null,
+      reviewedAt: null,
+      createdAt: new Date("2026-07-15T12:00:00.000Z"),
+      manifest: {},
+      reviewReport: null,
+    }]);
+
+    const view = await getHiveContributionsView();
+
+    expect(view.contributionProvenance[0]).toMatchObject({
+      id: "feature-pack:FP-AMBIGUOUS",
+      publication: {
+        status: "needs-attention",
+        label: "Needs attention",
+        detail: "Marked contributed, but no sent-community proof was found.",
+      },
+      upstreamAcceptance: {
+        status: "needs-review",
+        label: "Needs provenance review",
+        detail: "Legacy status cannot prove whether the community accepted it.",
+      },
+    });
+  });
+
+  it("shows local-only FeaturePacks as kept here and not queued", async () => {
+    featurePackFindMany.mockResolvedValue([{
+      packId: "FP-LOCAL",
+      title: "Private workflow",
+      status: "local",
+      prUrl: null,
+      prNumber: null,
+      mergeReadiness: null,
+      reviewedAt: null,
+      createdAt: new Date("2026-07-15T12:00:00.000Z"),
+      manifest: {},
+      reviewReport: null,
+    }]);
+
+    const view = await getHiveContributionsView();
+
+    expect(view.contributionProvenance[0]).toMatchObject({
+      id: "feature-pack:FP-LOCAL",
+      localAvailability: { status: "saved-locally", label: "Saved locally", detail: "Feature Pack exists on this install." },
+      privacyDisposition: { status: "kept-here", label: "Kept on this system", detail: "No public contribution evidence was found." },
+      publication: { status: "not-queued", label: "Not queued", detail: "Nothing has been sent outside this install." },
+      upstreamAcceptance: { status: "not-sent", label: "Not sent", detail: "No community review exists." },
     });
   });
 });
