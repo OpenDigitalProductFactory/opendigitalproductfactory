@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   AgentMessageBubble,
   formatProviderBadge,
+  referencesProviderRoutingSurface,
   stripSystemPromptPrefix,
+  PROVIDER_ROUTING_ROUTE,
 } from "./AgentMessageBubble";
 
 describe("formatProviderBadge", () => {
@@ -211,6 +213,67 @@ describe("AgentMessageBubble", () => {
     expect(html).not.toContain('data-testid="agent-message-provider"');
   });
 
+  it("renders a one-click reconnect CTA when an assistant message names Providers & Routing (BI-282C39D5)", () => {
+    // The exact honest-failure string from describeToolRouteFailure (agentic-loop.ts).
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "msg-cta",
+          role: "assistant",
+          content:
+            "No AI model can handle this request right now. This usually means your cloud AI providers are disconnected or their sign-in has expired, and the built-in local model can't fit this assistant's larger requests on its own. Open Platform > AI Operations > Providers & Routing to reconnect a provider — waiting won't clear this on its own.",
+          agentId: "scrum-master",
+          routeContext: "/platform/ai/providers",
+          createdAt: "2026-07-14T12:00:00.000Z",
+        }}
+        showAgentLabel={true}
+        agentName="Scrum Master"
+      />,
+    );
+
+    expect(html).toContain('data-testid="agent-provider-reconnect-cta"');
+    expect(html).toContain(`href="${PROVIDER_ROUTING_ROUTE}"`);
+    expect(html).toContain("Open Providers");
+  });
+
+  it("does NOT render the reconnect CTA for a normal assistant message", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "msg-no-cta",
+          role: "assistant",
+          content: "Here's a summary of today's standup and the three blockers.",
+          agentId: "scrum-master",
+          routeContext: "/ops",
+          createdAt: "2026-07-14T12:00:00.000Z",
+        }}
+        showAgentLabel={true}
+        agentName="Scrum Master"
+      />,
+    );
+
+    expect(html).not.toContain('data-testid="agent-provider-reconnect-cta"');
+  });
+
+  it("does NOT render the reconnect CTA on a user message that happens to name the surface", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "msg-user-cta",
+          role: "user",
+          content: "where is Providers & Routing?",
+          agentId: null,
+          routeContext: "/ops",
+          createdAt: "2026-07-14T12:00:00.000Z",
+        }}
+        showAgentLabel={false}
+        agentName={null}
+      />,
+    );
+
+    expect(html).not.toContain('data-testid="agent-provider-reconnect-cta"');
+  });
+
   it("renders managed document chips for assistant messages with stable document ids", () => {
     const html = renderToStaticMarkup(
       <AgentMessageBubble
@@ -229,6 +292,19 @@ describe("AgentMessageBubble", () => {
 
     expect(html).toContain("/workspace/documents/DOC-ABC12345");
     expect(html).toContain("DOC-ABC12345");
+  });
+});
+
+describe("referencesProviderRoutingSurface (BI-282C39D5)", () => {
+  it("matches every provider-config remediation phrasing", () => {
+    expect(referencesProviderRoutingSurface("Open Platform > AI > Providers & Routing to activate a tool-capable provider, then try again.")).toBe(true);
+    expect(referencesProviderRoutingSurface("Open Platform › AI Operations › Providers & Routing, connect a cloud provider")).toBe(true);
+    expect(referencesProviderRoutingSurface("… Open Platform > AI Operations > Providers & Routing to reconnect a provider — waiting won't clear this on its own.")).toBe(true);
+  });
+
+  it("does not match normal conversation", () => {
+    expect(referencesProviderRoutingSurface("Here are the three standup blockers.")).toBe(false);
+    expect(referencesProviderRoutingSurface("")).toBe(false);
   });
 });
 
