@@ -176,3 +176,29 @@ data-preserving (`pgvector/pgvector:pg16` is the same PG16 engine on the same `p
 strict superset image — no dump/restore). Step 3a is fail-closed (abort before swap); the
 sandbox-postgres recreate is fail-loud-not-abort like the rest of 7b. This makes every existing
 install (Mac + Windows) upgrade cleanly with no manual DB step.
+
+### Self-upgrade promoter-staleness (the deeper gap the live test exposed, 2026-07-14)
+
+The first live re-trigger still failed — and revealed a THIRD, more fundamental gap. The promoter
+**bakes `promote.sh` into its image** (`Dockerfile.promoter` ENTRYPOINT), and the self-upgrade
+pre-drain check only (re)built the promoter when its image was **absent** — a stale-but-present
+`dpf-promoter` (built before BET-5) was reused as-is. So the `ensure-pgvector` (3a) and decommission
+(7c) steps in the fixed `promote.sh` **never ran** — the promoter executed its old baked copy, went
+straight to migrate, and died on `CREATE EXTENSION vector`. That first (pre-fix) attempt also left
+the `20260714110000_bet5_pgvector_foundation` migration in a FAILED state, so every later attempt
+then hit **P3009** ("failed migrations… new migrations will not be applied").
+
+Fix (this PR):
+- **Always rebuild the promoter before a swap** (`self-upgrade.ts` precheck now calls
+  `ensurePromoterImage` unconditionally for JIT-buildable images, not only when absent), keeping the
+  promoter's `promote.sh` in lock-step with the running portal. Custom/registry promoter images are
+  still left to the operator's pull.
+- **P3009 self-heal** in `promote.sh` step 3a: once pgvector is guaranteed present, `migrate resolve
+  --rolled-back` the pgvector-foundation migration if a prior pre-fix attempt left it failed — scoped
+  to that one migration (which fails at its first statement, so rolling it back is a data no-op).
+
+**Bootstrap caveat:** a fix to the self-upgrade machinery can't retroactively un-stick an install
+whose portal AND promoter both predate the fix — the orchestrating portal is the old one. Such an
+install (this Mac, and Windows) needs ONE manual bootstrap — rebuild `dpf-promoter` from the target
+source, which then carries the fixed `promote.sh` — after which `ensure-pgvector` + the P3009
+self-heal complete the upgrade automatically. From then on the always-rebuild keeps it self-sustaining.

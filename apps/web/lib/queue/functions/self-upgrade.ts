@@ -211,13 +211,19 @@ export async function runSelfUpgrade(
   // fails (or a custom/registry image is configured, which the operator pulls).
   // A skip here remains a clean no-op: no cooldown, and the next tick re-checks.
   if (!params.dryRun) {
-    const { isPromoterAvailable, ensurePromoterImage } = await loadPromoterRuntime();
-    let promoterReady = await isPromoterAvailable(config.promoterImage);
-    if (!promoterReady) {
-      const healed = await ensurePromoterImage(config.promoterImage);
-      promoterReady = healed.ok;
-    }
-    if (!promoterReady) {
+    const { ensurePromoterImage } = await loadPromoterRuntime();
+    // ALWAYS rebuild the promoter before a swap, not only when its image is absent.
+    // The promoter bakes promote.sh into its image (Dockerfile.promoter ENTRYPOINT), so a
+    // promoter image built by an EARLIER portal version carries THAT version's promote.sh.
+    // Reusing a stale-but-present image means a promote.sh fix shipped in the portal never
+    // reaches the promoter that runs it — the live symptom: an install whose dpf-promoter
+    // predated BET-5 ran the old promote.sh, so the pgvector-recreate (step 3a) and the
+    // Neo4j/Qdrant decommission (step 7c) silently never executed and the upgrade died at
+    // migrate. ensurePromoterImage() rebuilds JIT-buildable images from the portal's baked
+    // /promoter/ files every time (custom/registry images are still left to the operator's
+    // pull), keeping the promoter's promote.sh in lock-step with the running portal.
+    const ensured = await ensurePromoterImage(config.promoterImage);
+    if (!ensured.ok) {
       const promoterImage = config.promoterImage ?? "dpf-promoter";
       return await skipAttempt(
         "promoter-unavailable",

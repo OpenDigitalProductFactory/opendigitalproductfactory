@@ -21,13 +21,13 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   runPromoter: vi.fn(),
-  // Skip-before-drain guard: promoter image present by default in every setup.
+  // Retained for back-compat; the precheck no longer calls it (it always rebuilds).
   isPromoterAvailable: vi.fn().mockResolvedValue(true),
-  // Auto-heal: default to "couldn't build" so a test that flips the image to
-  // absent still exercises the skip path unless it opts into a successful build.
+  // The precheck ALWAYS rebuilds the promoter before a swap, so the default is a
+  // successful rebuild; a test opts into failure to exercise the skip path.
   ensurePromoterImage: vi
     .fn()
-    .mockResolvedValue({ ok: false, alreadyPresent: false, built: false, skipReason: "build-failed" }),
+    .mockResolvedValue({ ok: true, alreadyPresent: false, built: true }),
   // Cooldown backoff (this fix): no active cooldown by default.
   getCooldownUntil: vi.fn().mockResolvedValue(null),
   recordCooldown: vi.fn().mockResolvedValue(undefined),
@@ -1116,12 +1116,13 @@ describe("skip-before-drain guards", () => {
     // clearAllMocks resets call history but NOT implementations, so re-assert
     // the gate defaults each test (a prior describe can leave them flipped).
     mocks.isCheckIntervalElapsed.mockReturnValue(true);
+    // The precheck ALWAYS rebuilds the promoter (ensurePromoterImage) before a swap, so the
+    // happy-path default is a successful rebuild; individual tests override to a failure.
     mocks.isPromoterAvailable.mockResolvedValue(true);
     mocks.ensurePromoterImage.mockResolvedValue({
-      ok: false,
+      ok: true,
       alreadyPresent: false,
-      built: false,
-      skipReason: "build-failed",
+      built: true,
     });
     mocks.getCooldownUntil.mockResolvedValue(null);
     mocks.recordCooldown.mockResolvedValue(undefined);
@@ -1137,9 +1138,9 @@ describe("skip-before-drain guards", () => {
     mocks.completeRun.mockResolvedValue({});
   });
 
-  it("skips with promoter-unavailable BEFORE draining when the image is absent AND unbuildable", async () => {
-    mocks.isPromoterAvailable.mockResolvedValue(false);
-    // Auto-heal is attempted first; skip only survives when the build fails.
+  it("skips with promoter-unavailable BEFORE draining when the promoter cannot be built", async () => {
+    // The precheck always rebuilds the promoter; the skip survives only when that build fails
+    // (or a custom/registry image is configured that we cannot synthesise locally).
     mocks.ensurePromoterImage.mockResolvedValue({
       ok: false,
       alreadyPresent: false,
@@ -1179,7 +1180,13 @@ describe("skip-before-drain guards", () => {
   });
 
   it("marks a pre-created queued run skipped when a pre-drain guard stops the attempt", async () => {
-    mocks.isPromoterAvailable.mockResolvedValue(false);
+    // The promoter rebuild fails → the pre-drain promoter-unavailable guard stops the attempt.
+    mocks.ensurePromoterImage.mockResolvedValue({
+      ok: false,
+      alreadyPresent: false,
+      built: false,
+      skipReason: "build-failed",
+    });
 
     const result = await runSelfUpgrade({
       triggeredBy: "manual:ops",
@@ -1199,14 +1206,14 @@ describe("skip-before-drain guards", () => {
     expect(mocks.createRun).not.toHaveBeenCalled();
   });
 
-  it("checks promoter availability against the configured image", async () => {
+  it("rebuilds the promoter against the configured image", async () => {
     await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
-    expect(mocks.isPromoterAvailable).toHaveBeenCalledWith("dpf-promoter");
+    expect(mocks.ensurePromoterImage).toHaveBeenCalledWith("dpf-promoter");
   });
 
-  it("does NOT check the promoter on a dryRun (it never swaps)", async () => {
+  it("does NOT touch the promoter on a dryRun (it never swaps)", async () => {
     await runSelfUpgrade({ triggeredBy: "ops", dryRun: true });
-    expect(mocks.isPromoterAvailable).not.toHaveBeenCalled();
+    expect(mocks.ensurePromoterImage).not.toHaveBeenCalled();
   });
 
   it("skips with up-to-date (no drain) when the built stamp already matches the deployed SHA", async () => {
