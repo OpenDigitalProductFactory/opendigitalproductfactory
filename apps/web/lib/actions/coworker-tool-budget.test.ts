@@ -4,12 +4,15 @@ import {
   selectCoworkerToolBudget,
   selectLoadableTools,
   deriveCoworkerToolCap,
+  deriveSkillCatalogCap,
+  capSkillCatalog,
   scoreToolIntentRelevance,
   tokenizeIntent,
   LOAD_TOOLS_TOOL,
   LOAD_TOOLS_TOOL_NAME,
   MAX_COWORKER_ATTACHED_TOOLS,
   MIN_COWORKER_ATTACHED_TOOLS,
+  SKILL_CATALOG_CLIFF_CAP,
 } from "./coworker-tool-budget";
 
 describe("deriveCoworkerToolCap", () => {
@@ -66,6 +69,63 @@ const tool = (name: string, description = ""): ToolDefinition => ({
 //   create_backlog_item  -> requires backlog_write  => tier 1 (role) under ["backlog_write"]
 //   search_code_graph    -> in CORE, requires code_graph_read => tier 2 (core, not role)
 //   wiki_query           -> requires registry_read, not in CORE => tier 3 (breadth tail)
+describe("deriveSkillCatalogCap", () => {
+  it("caps to the selection cliff on a cliff-prone small local window", () => {
+    expect(deriveSkillCatalogCap(24_576)).toBe(SKILL_CATALOG_CLIFF_CAP);
+    expect(deriveSkillCatalogCap(32_768)).toBe(SKILL_CATALOG_CLIFF_CAP);
+    expect(deriveSkillCatalogCap(31_999)).toBe(SKILL_CATALOG_CLIFF_CAP);
+  });
+
+  it("is uncapped (Infinity) on a capable window — cloud/large installs unchanged", () => {
+    expect(deriveSkillCatalogCap(32_769)).toBe(Number.POSITIVE_INFINITY);
+    expect(deriveSkillCatalogCap(131_072)).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("is uncapped when the served context is unknown (no local model / cloud)", () => {
+    expect(deriveSkillCatalogCap(null)).toBe(Number.POSITIVE_INFINITY);
+    expect(deriveSkillCatalogCap(undefined)).toBe(Number.POSITIVE_INFINITY);
+    expect(deriveSkillCatalogCap(0)).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe("capSkillCatalog", () => {
+  const skills = Array.from({ length: 38 }, (_, i) => ({ skillId: `skill-${i}`, n: i }));
+
+  it("returns a copy unchanged when the cap is Infinity (capable/cloud window)", () => {
+    const out = capSkillCatalog(skills, Number.POSITIVE_INFINITY);
+    expect(out).toHaveLength(38);
+    expect(out).not.toBe(skills); // copy, not the same reference
+    expect(out.map((s) => s.skillId)).toEqual(skills.map((s) => s.skillId));
+  });
+
+  it("keeps the top-N (relevance order preserved) when over the cap", () => {
+    const out = capSkillCatalog(skills, 15);
+    expect(out).toHaveLength(15);
+    expect(out[0]?.skillId).toBe("skill-0");
+    expect(out[14]?.skillId).toBe("skill-14");
+  });
+
+  it("never drops an explicitly-invoked skill even when it falls beyond the cap", () => {
+    const out = capSkillCatalog(skills, 15, "skill-30");
+    expect(out.some((s) => s.skillId === "skill-30")).toBe(true);
+    // top-15 are retained plus the pinned one appended.
+    expect(out).toHaveLength(16);
+  });
+
+  it("does not duplicate a pinned skill that is already within the cap", () => {
+    const out = capSkillCatalog(skills, 15, "skill-3");
+    expect(out).toHaveLength(15);
+    expect(out.filter((s) => s.skillId === "skill-3")).toHaveLength(1);
+  });
+
+  it("is a no-op copy when the list is already within the cap", () => {
+    const few = skills.slice(0, 10);
+    const out = capSkillCatalog(few, 15);
+    expect(out).toHaveLength(10);
+    expect(out).not.toBe(few);
+  });
+});
+
 describe("selectCoworkerToolBudget", () => {
   it("always attaches tier-0 (load_tools + page actions) even past the cap", () => {
     const tools = [

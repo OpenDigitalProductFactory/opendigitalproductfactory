@@ -773,6 +773,25 @@ export async function sendMessage(input: {
     () => null,
   );
 
+  // Resolve the LOCAL model's served context ONCE up front — it sizes BOTH the
+  // per-turn tool-attachment cap (below) and the skills-catalog cap (in each
+  // prompt branch). The skills catalog is the largest UNCAPPED non-tool block, so
+  // on a small local window it must be bounded like the tool schemas are, or a
+  // heavy coworker (36-38 skills) can still overflow after the tool cap. Reads the
+  // DMR served-context truth; null/unknown (or a capable window) → Infinity cap =
+  // no change (cloud + large-window installs are byte-identical).
+  const { resolveLocalServedContextTokens } = await import(
+    "@/lib/inference/local-model-context-reconcile"
+  );
+  const { deriveSkillCatalogCap, capSkillCatalog } = await import(
+    "@/lib/actions/coworker-tool-budget"
+  );
+  const localServedContext = await resolveLocalServedContextTokens();
+  const skillCatalogCap = deriveSkillCatalogCap(localServedContext);
+  // Computed once; an explicitly-invoked skill is pinned into the catalog so the
+  // cap never breaks a `Use the <id> skill.` request (reused for telemetry below).
+  const invokedSkillId = extractInvokedSkillId(input.content);
+
   if (useUnified) {
     // ── Unified prompt path: composable blocks from route-context-map + prompt-assembler ──
     // EP-CTX-001: Context sources are submitted to the arbitrator, which enforces
@@ -940,9 +959,10 @@ export async function sendMessage(input: {
     // each eligible skill (and again as `loaded` once the skills block is
     // included in the composed prompt). Telemetry failures are swallowed
     // inside recordSkillUsageEvents — they must never break the response.
-    const coworkerSkills = rankSkillsByRelevance(
-      await getSkillsForAgent(agent.agentId),
-      trimmedContent,
+    const coworkerSkills = capSkillCatalog(
+      rankSkillsByRelevance(await getSkillsForAgent(agent.agentId), trimmedContent),
+      skillCatalogCap,
+      invokedSkillId,
     );
     const skillSummaries = toSkillSummariesForPrompt(coworkerSkills);
     const eligibleSkillIds = skillSummaries.map((s) => s.skillId);
@@ -1010,10 +1030,9 @@ export async function sendMessage(input: {
     // an `invoked` event so reflection and metrics can distinguish offered
     // vs. selected skills. The active skill id is also propagated through
     // the autonomous loop in Task 7 so ToolExecution.skillId gets populated.
-    const candidateSkillId = extractInvokedSkillId(input.content);
     activeSkillId =
-      candidateSkillId && eligibleSkillIds.includes(candidateSkillId)
-        ? candidateSkillId
+      invokedSkillId && eligibleSkillIds.includes(invokedSkillId)
+        ? invokedSkillId
         : null;
     if (activeSkillId) {
       void recordSkillUsageEvents({
@@ -1193,9 +1212,10 @@ export async function sendMessage(input: {
     // skills (dpf-decision-via-kernel, dpf-retrieve-decision-context,
     // dpf-record-decision-outcome) the governance block above tells the coworker
     // to run. Telemetry mirrors the unified path so eligibility is observable.
-    const legacyCoworkerSkills = rankSkillsByRelevance(
-      await getSkillsForAgent(agent.agentId),
-      trimmedContent,
+    const legacyCoworkerSkills = capSkillCatalog(
+      rankSkillsByRelevance(await getSkillsForAgent(agent.agentId), trimmedContent),
+      skillCatalogCap,
+      invokedSkillId,
     );
     const legacySkillSummaries = toSkillSummariesForPrompt(legacyCoworkerSkills);
     if (legacySkillSummaries.length > 0) {
@@ -1339,11 +1359,8 @@ export async function sendMessage(input: {
   // provider is preferred — the cloud→local FALLBACK is exactly where the overflow
   // bites — at the cost of only a few extra load_tools round-trips on a cloud turn.
   // Reads the DMR served-context TRUTH (not ModelProfile, which model discovery can
-  // reset to null); no reachable local generation model → the full 48.
-  const { resolveLocalServedContextTokens } = await import(
-    "@/lib/inference/local-model-context-reconcile"
-  );
-  const localServedContext = await resolveLocalServedContextTokens();
+  // reset to null); no reachable local generation model → the full 48. Resolved
+  // once up front (localServedContext) and reused here + for the skills-catalog cap.
   const toolCap = deriveCoworkerToolCap(localServedContext);
   const { attached: budgetedTools, deferred: deferredTools } = selectCoworkerToolBudget({
     tools: availableTools,
