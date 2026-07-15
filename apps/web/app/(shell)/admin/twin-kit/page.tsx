@@ -41,6 +41,14 @@ function firstInCategory(category: string): ArchetypeDefinition | undefined {
   return ALL_ARCHETYPES.find((a) => a.category === category);
 }
 
+// BAYS and COUNTER have no seeded leaf — every automotive / public-sector seed is
+// field-dispatch (mobile) → TERRITORY. A fixed-location config (dispatch off) is the
+// legitimate way `chooseTemplate` reaches them, so the preview browses all 12.
+const FIXED_LOCATION_EXAMPLES: Array<{ category: string; kind: string; label: string }> = [
+  { category: "automotive-services", kind: "physical · bays", label: "Fixed-location repair shop" },
+  { category: "public-sector", kind: "physical · counter", label: "Service counter (permits/licensing)" },
+];
+
 export default async function AdminTwinKitPage() {
   const demoExamples: TwinExample[] = SHOWCASE_CATEGORIES.flatMap(({ category, kind }) => {
     const archetype = firstInCategory(category);
@@ -50,6 +58,23 @@ export default async function AdminTwinKitPage() {
       {
         id: archetype.archetypeId,
         label: archetype.name,
+        kind,
+        template: profile.template,
+        profile,
+        snapshot: buildDemoTwinSnapshot(profile),
+      },
+    ];
+  });
+
+  // Append fixed-location BAYS/COUNTER so all 12 templates are browsable.
+  const fixedLocationExamples: TwinExample[] = FIXED_LOCATION_EXAMPLES.flatMap(({ category, kind, label }) => {
+    const base = firstInCategory(category);
+    if (!base) return [];
+    const profile = deriveTwinProfile({ ...base, fieldDispatch: { enabled: false } });
+    return [
+      {
+        id: `fixed:${category}`,
+        label,
         kind,
         template: profile.template,
         profile,
@@ -75,7 +100,8 @@ export default async function AdminTwinKitPage() {
         }
       : null;
 
-  const examples: TwinExample[] = liveExample ? [liveExample, ...demoExamples] : demoExamples;
+  const allDemo = [...demoExamples, ...fixedLocationExamples];
+  const examples: TwinExample[] = liveExample ? [liveExample, ...allDemo] : allDemo;
 
   return (
     <div>
