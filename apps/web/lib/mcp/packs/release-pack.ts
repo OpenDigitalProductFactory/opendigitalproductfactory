@@ -17,7 +17,6 @@ import { prisma } from "@dpf/db";
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { logBuildActivity } from "@/lib/mcp/build-tool-helpers";
 
 const definitions: ToolDefinition[] = [
@@ -276,108 +275,40 @@ async function executePromotion(params: Record<string, unknown>): Promise<ToolRe
     }
   }
 
-  // Resolve sandbox and build ID
+  // Resolve the originating build (for activity logging + fork reconciliation).
   const promoDetail = await prisma.changePromotion.findFirst({
     where: { promotionId },
-    include: { productVersion: { include: { featureBuild: { select: { sandboxId: true, buildId: true } } } } },
+    include: { productVersion: { include: { featureBuild: { select: { buildId: true } } } } },
   });
-  const sandboxId = promoDetail?.productVersion?.featureBuild?.sandboxId;
   const promoBuildId = promoDetail?.productVersion?.featureBuild?.buildId;
-  if (!sandboxId) return { success: false, error: "No sandbox", message: "No sandbox linked to this promotion." };
 
-  const { execFile: execFileCb } = lazyChildProcess();
-  const { promisify } = lazyUtil();
-  const execFileAsync = promisify(execFileCb);
-  const execAsync = promisify((lazyChildProcess()).exec);
-
-  // Preflight: the promoter image has to exist locally for `docker run
-  // dpf-promoter` to work. On most installs today it doesn't — the image
-  // is built separately and isn't on the default compose path. Detect
-  // that up front and hand off to the operator UI instead of attempting
-  // the run and returning a scary "Could not start the promoter
-  // container." message. The promotion stays approved; the operator
-  // triggers it from Operations > Promotions.
-  try {
-    await execAsync("docker image inspect dpf-promoter");
-  } catch {
-    // Persist the awaiting_operator state so getBuildFlowState reads it
-    // from the ChangePromotion column directly (no BuildActivity detour)
-    // and the reconciler can treat the fork as dispositioned. The prior
-    // version returned awaiting_operator only in the tool response, which
-    // the fork state machine couldn't see.
-    await prisma.changePromotion.update({
-      where: { promotionId },
-      data: { status: "awaiting_operator" },
-    }).catch(() => {});
-    logBuildActivity(promoBuildId ?? promotionId, "execute_promotion", "Promoter image not present — handing off to operator");
-    if (promoBuildId) {
-      const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
-      await reconcileBuildCompletion(promoBuildId).catch(() => {});
-    }
-    return {
-      success: true,
-      message: `Promotion ${promotionId} is approved and ready. This install doesn't have the "dpf-promoter" container image built locally, so automatic deployment is disabled here. An operator needs to run the promotion manually from Operations > Promotions, which will stream the deployment log and handle rollback. The promotion stays in "awaiting_operator" status until then.`,
-      data: { status: "awaiting_operator", reason: "promoter_image_missing", promotionId },
-    };
-  }
-
-  // Start promoter container (array form — no shell injection)
-  try {
-    await execAsync("docker rm dpf-promoter-1 2>/dev/null || true");
-    const dockerArgs = [
-      "run", "-d",
-      "--name", "dpf-promoter-1",
-      "--network", `${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}_default`,
-      "-v", "/var/run/docker.sock:/var/run/docker.sock",
-      "-v", "dpf_backups:/backups",
-      "-e", `PROMOTION_ID=${promotionId}`,
-      "-e", `DPF_PRODUCTION_DB_CONTAINER=${process.env.DPF_PRODUCTION_DB_CONTAINER ?? "dpf-postgres-1"}`,
-      "-e", "DPF_PORTAL_CONTAINER=dpf-portal-1",
-      "-e", `DPF_COMPOSE_PROJECT=${process.env.DPF_COMPOSE_PROJECT ?? "dpf"}`,
-      "-e", `DPF_SANDBOX_CONTAINER=${sandboxId}`,
-      "-e", `POSTGRES_USER=${process.env.POSTGRES_USER ?? "dpf"}`,
-    ];
-    if (overrideReason) {
-      dockerArgs.push("-e", `DPF_WINDOW_OVERRIDE=${overrideReason}`);
-    }
-    dockerArgs.push("dpf-promoter");
-    await execFileAsync("docker", dockerArgs);
-  } catch (err) {
-    return {
-      success: false,
-      error: `Failed to start promoter: ${(err as Error).message?.slice(0, 200)}`,
-      message: `Could not start the promoter container. An operator can run this promotion manually from Operations > Promotions — the promotion stays in "approved" status until deployed.`,
-    };
-  }
-
-  // Poll for completion (max 10 minutes)
-  const maxWaitMs = 10 * 60 * 1000;
-  const pollIntervalMs = 10_000;
-  const startTime = Date.now();
-  let exitCode: number | null = null;
-
-  while (Date.now() - startTime < maxWaitMs) {
-    await new Promise(r => setTimeout(r, pollIntervalMs));
-    try {
-      const { stdout } = await execAsync("docker inspect dpf-promoter-1 --format='{{.State.Status}} {{.State.ExitCode}}'");
-      const parts = stdout.trim().replace(/'/g, "").split(" ");
-      if (parts[0] === "exited") {
-        exitCode = parseInt(parts[1] ?? "1", 10);
-        break;
-      }
-    } catch { /* container may not exist yet */ }
-  }
-
-  if (exitCode === null) {
-    await execAsync("docker stop dpf-promoter-1 2>/dev/null || true").catch(() => {});
-    return { success: false, error: "Timeout (10 min)", message: "Promoter did not complete. Check ops dashboard." };
-  }
+  // Deploy through the in-portal ChangePromotion pipeline: backup production
+  // DB → scan destructive migrations → apply patch → post-deploy health check →
+  // mark deployed, or roll back (restore DB + revert code) with a recorded
+  // rollbackReason. This is the deployer that actually services a change
+  // promotion. The `dpf-promoter` image is a SELF-UPGRADE-ONLY contract:
+  // its promote.sh hard-requires the `--self-upgrade` flag and the
+  // PROMOTE_SOURCE/PROMOTE_TARGET_SHA/… env, so launching it for a
+  // ChangePromotion (PROMOTION_ID env, no flag) made promote.sh exit 1 at its
+  // guard — the container died non-zero, the promotion never reached
+  // "deployed", and no rollbackReason was ever set, so this tool logged the
+  // bare "Rolled back: unknown". BI-B8A6E80B routes change promotions to the
+  // deployer whose contract matches the operation.
+  const { executePromotion: runInPortalPromotion } = await import("@/lib/sandbox-promotion");
+  const result = await runInPortalPromotion(promotionId, overrideReason);
 
   const finalPromo = await prisma.changePromotion.findFirst({ where: { promotionId } });
-  const promoSuccess = exitCode === 0 && finalPromo?.status === "deployed";
+  const rolledBack = finalPromo?.status === "rolled_back";
 
-  await execAsync("docker rm dpf-promoter-1 2>/dev/null || true").catch(() => {});
-  logBuildActivity(promoBuildId ?? promotionId, "execute_promotion", promoSuccess ? "Deployed successfully" : `Rolled back: ${finalPromo?.rollbackReason ?? "unknown"}`);
+  logBuildActivity(
+    promoBuildId ?? promotionId,
+    "execute_promotion",
+    result.success
+      ? "Deployed successfully"
+      : rolledBack
+        ? `Rolled back: ${finalPromo?.rollbackReason ?? result.message ?? "see deployment log"}`
+        : `Not deployed: ${result.message}`,
+  );
 
   if (promoBuildId) {
     const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
@@ -385,10 +316,10 @@ async function executePromotion(params: Record<string, unknown>): Promise<ToolRe
   }
 
   return {
-    success: promoSuccess,
-    message: promoSuccess
+    success: result.success,
+    message: result.success
       ? `Promotion ${promotionId} deployed. Health check passed.`
-      : `Rolled back. ${finalPromo?.rollbackReason ?? "Check deployment log."}`,
+      : result.message,
     data: { promotionId, status: finalPromo?.status, deploymentLog: finalPromo?.deploymentLog?.slice(0, 1000) },
   };
 }
