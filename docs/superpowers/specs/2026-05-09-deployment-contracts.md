@@ -418,6 +418,38 @@ addendum: `User`, `CustomerContact`, `Agent`, `EdgeNode`,
 single `Principal` / `PrincipalAlias` model. New surfaces must not
 become parallel identity islands.
 
+### 11. Agent-to-agent coordination constraints
+
+Coworker-to-coworker delegation (`request_coworker` / `summon_coworker` /
+`spawn_subagents`) is a **runtime operational contract**, not only a product
+feature. Wrappers and capacity planning must assume the platform enforces
+these hard bounds (BI-IMP-285B5B1C / IP-38698). Code SSOT:
+
+| Constraint | Bound | Source |
+|---|---|---|
+| Recursive delegation | **Allowed**, authority-narrowing only | `apps/web/lib/tak/delegation-authority.ts` |
+| Hard chain depth | **4** (refuse new link at `newDepth >= 4`) | `MAX_DELEGATION_DEPTH` in `delegation-authority.ts` |
+| Policy depth (prefer inline) | **3** (mode switch before hard refuse) | `MAX_DELEGATION_DEPTH` in `delegation-policy.ts` |
+| Fan-out width per spawn | **8** parallel sub-tasks | `MAX_FANOUT_WIDTH` in `subagent-fanout.ts` |
+| Self-delegation | **Forbidden** | same authority module |
+| Tool-script recursion | **Forbidden** (`tool_script_exec` never nested) | `apps/web/lib/tak/tool-script.ts` |
+
+**Timeout / orphan behavior.** Child TaskRuns inherit platform TaskRun /
+Inngest lease heartbeats; a blocked or orphaned delegation does **not**
+extend parent wall-clock forever — the parent loop remains under agentic-loop
+duration/iteration ceilings. Operators observe chain depth and fan-out via
+delegation audit rows and TaskRun parent/child links (not a separate A2A
+control plane per install).
+
+**Monitoring expectations for ops wrappers.** Emit / retain:
+
+1. Active delegation-chain depth histograms (alert if approach hard cap).
+2. Fan-out refusals (`depth`, `self`, `authority`, width drop).
+3. Orphaned child TaskRuns past lease TTL.
+
+Wrappers must **not** raise these caps via env without a platform release —
+the constants are product doctrine, not install knobs.
+
 **Ingress requirements** (substrate-specific; cloud-deployment
 spec carries the matrix):
 
