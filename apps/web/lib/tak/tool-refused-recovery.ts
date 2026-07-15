@@ -3,6 +3,7 @@
 // module does not grow (module-size ratchet).
 
 import type { ChatMessage } from "@/lib/ai-inference";
+import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "@/lib/quality/issue-report-status";
 
 /**
  * Clause 2.6 platform path: detect when the agent's text asserts a tool
@@ -69,4 +70,30 @@ export function appendToolRefusedRecoveryMessages(args: {
       }),
     },
   ];
+}
+
+/**
+ * Severity + status for the PlatformIssueReport a tool-refused-despite-
+ * availability detection files (BI-09C2480B).
+ *
+ * The root-cause cluster already shipped (skip local fallback above the tool
+ * threshold, cap the local tool surface, and issue an in-loop corrective
+ * nudge). What remained was noise: the detector filed a high-severity OPEN
+ * report on EVERY self-refusal, so a refusal the loop immediately self-corrected
+ * still became one of the ~24 duplicate BI-PIR-* backlog items — the
+ * issue-report-triage cron only projects OPEN reports into the backlog.
+ *
+ * When recovery ran, downgrade to a low-severity `resolved_locally` record: a
+ * terminal status the triage runner and the dedupe-key path both skip, so it
+ * survives for trend analysis without escalating to an operator-facing BI. An
+ * unrecovered refusal (tools already executed, or tools stripped) still stands
+ * as a high-severity OPEN contract issue.
+ */
+export function classifyToolRefusedIssue(args: { recovered: boolean }): {
+  severity: "high" | "low";
+  status: IssueReportStatus;
+} {
+  return args.recovered
+    ? { severity: "low", status: ISSUE_REPORT_STATUS.RESOLVED_LOCALLY }
+    : { severity: "high", status: ISSUE_REPORT_STATUS.OPEN };
 }

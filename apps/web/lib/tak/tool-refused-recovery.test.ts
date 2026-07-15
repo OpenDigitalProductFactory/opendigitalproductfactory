@@ -3,7 +3,9 @@ import {
   detectToolRefusedDespiteAvailability,
   buildToolRefusedDespiteAvailableNudge,
   appendToolRefusedRecoveryMessages,
+  classifyToolRefusedIssue,
 } from "./tool-refused-recovery";
+import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
 
 describe("detectToolRefusedDespiteAvailability (clause 2.6)", () => {
   const tools = [{ name: "start_ideate_research" }, { name: "saveBuildEvidence" }];
@@ -107,5 +109,25 @@ describe("appendToolRefusedRecoveryMessages (BI-PIR-6de01e8d)", () => {
         toolsStripped: true,
       }),
     ).toBeNull();
+  });
+});
+
+describe("classifyToolRefusedIssue (BI-09C2480B)", () => {
+  it("downgrades a recovered self-refusal to a low-severity, non-open trend record", () => {
+    const c = classifyToolRefusedIssue({ recovered: true });
+    expect(c.severity).toBe("low");
+    // The issue-report-triage cron only projects OPEN reports into BI-PIR
+    // backlog items, so a refusal the loop self-corrected must never be OPEN —
+    // that is the ~24-duplicate-PIR noise this BI removes.
+    expect(c.status).not.toBe(ISSUE_REPORT_STATUS.OPEN);
+    // A terminal/resolved status both the triage runner and the dedupe-key
+    // path skip, so the record survives for trend analysis without escalating.
+    expect(c.status).toBe(ISSUE_REPORT_STATUS.RESOLVED_LOCALLY);
+  });
+
+  it("keeps an unrecovered self-refusal as a high-severity open contract issue", () => {
+    const c = classifyToolRefusedIssue({ recovered: false });
+    expect(c.severity).toBe("high");
+    expect(c.status).toBe(ISSUE_REPORT_STATUS.OPEN);
   });
 });
