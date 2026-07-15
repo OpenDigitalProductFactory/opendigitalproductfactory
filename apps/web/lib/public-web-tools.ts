@@ -543,6 +543,10 @@ const ARCHETYPE_CATALOG: Array<{ id: string; name: string; keywords: string[]; c
   { id: "nonprofit", name: "Non-Profit / Charity", keywords: ["charity", "nonprofit", "non-profit", "donation", "fundraising", "volunteer", "community interest"] },
   { id: "plumber", name: "Plumber", keywords: ["plumber", "plumbing", "pipe", "drain", "leak repair", "water heater", "boiler", "toilet", "bathroom fitting"], category: "trades-maintenance" },
   { id: "electrician", name: "Electrician", keywords: ["electrician", "electrical", "wiring", "fuse box", "circuit", "ev charging", "rewire", "lighting installation"], category: "trades-maintenance" },
+  // BI-85A1E175: HVAC contractor. Keywords are HVAC-specific and deliberately
+  // avoid "boiler"/"water heater" (owned by plumber above) so scoring stays
+  // distinct. Slug matches the mobile trades-maintenance/hvac-contractor archetype.
+  { id: "hvac-contractor", name: "HVAC Contractor", keywords: ["hvac", "heating and cooling", "air conditioning", "aircon", "furnace", "heat pump", "ac repair", "ac installation", "ventilation", "climate control"], category: "trades-maintenance" },
 ];
 
 type ArchetypeMatch = { id: string; name: string; score: number };
