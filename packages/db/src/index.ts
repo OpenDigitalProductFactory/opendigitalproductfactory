@@ -6,8 +6,6 @@ export { Prisma } from "../generated/client/client";
 export type { PrismaClient } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
 
-export { neo4jSession, closeNeo4j, runCypher } from "./neo4j";
-
 // Qdrant vector database
 export {
   ensureCollections as ensureQdrantCollections,

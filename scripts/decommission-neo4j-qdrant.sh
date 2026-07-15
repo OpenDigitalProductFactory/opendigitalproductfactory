@@ -3,8 +3,8 @@
 # BET-5 (BI-922EBB99): remove the Neo4j + Qdrant containers and their data volumes AFTER
 # their data has been copied into the Postgres mirror. DATA-SAFETY GATED and idempotent.
 #
-# Per-store gate (the copy is staged on portal boot by portal-migrate-boot.sh →
-# bet5-decommission-backfill.ts):
+# Per-store gate (the one-time boot backfill that staged the copy was retired once the
+# fleet finished migrating — BI-2A3BE4D7; this teardown remains as a gated no-op safety net):
 #   * Neo4j is removed only once the Postgres graph mirror holds InfraCI nodes — the ONLY
 #     non-regenerable payload (InfraCI has no Prisma source of truth). Its presence proves
 #     the graph backfill ran.

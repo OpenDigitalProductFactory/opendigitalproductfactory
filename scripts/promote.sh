@@ -435,13 +435,13 @@ if [[ $_dry_run -eq 0 ]]; then
 fi
 
 # --- Step 7c: legacy-datastore decommission ---
-# BET-5 (BI-922EBB99): the portal now runs on Postgres only (pgvector for vectors, a graph
-# mirror for the graph), so retire the Neo4j + Qdrant containers and their volumes. The
-# portal's boot (portal-migrate-boot.sh → bet5-decommission-backfill.ts) copies their data
-# into Postgres BEFORE its server starts, and health passing above proves boot completed — so
-# the data is already mirrored when we get here. The teardown script is DATA-SAFETY GATED (it
-# refuses to delete a store until its data is confirmed in the mirror) and IDEMPOTENT (a no-op
-# once the containers are gone — e.g. fresh installs, or subsequent upgrades).
+# BET-5 (BI-922EBB99 / BI-2A3BE4D7): the portal now runs on Postgres only (pgvector for
+# vectors, a graph mirror for the graph). The one-time boot backfill that staged legacy data
+# into Postgres was retired once the fleet finished migrating; the platform is Postgres-only
+# and new installs never provision Neo4j/Qdrant. This teardown remains DATA-SAFETY GATED (it
+# refuses to delete a store until its data is confirmed in the mirror) and IDEMPOTENT — now a
+# no-op on every current install (containers already gone, or never present), kept as a safety
+# net that removes any lingering legacy container/volume it finds.
 #
 # Fail-LOUD but NOT fail-ABORT, exactly like sandbox-refresh: the portal swap already
 # succeeded, so a hiccup here (or data not yet mirrored) must never mislabel a good upgrade. A
