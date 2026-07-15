@@ -70,6 +70,17 @@
         ]
       }
     ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/run-hook.mjs\" hooks/worktree-freshness",
+            "async": false
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "hooks": [
