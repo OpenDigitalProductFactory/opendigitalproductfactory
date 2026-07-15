@@ -15,20 +15,30 @@ build. Scalability is the constraint (spec §2, §5).
 The pure, DB-free foundation, mirroring the twin's `demo-snapshot.ts` discipline (deterministic,
 no `Math.random`/`Date` in the core).
 
-- `packages/storefront-templates/src/demo-business.ts` — `deriveDemoBusiness(archetype, { seed, flavor? })`
-  → `DemoBusiness` (spec §3). Pure; composes `deriveTwinProfile`, `deriveOperationalValueStream`,
-  `getPlaybook`, `resolveBusinessProfile`-equivalent signal already in the definition. The fifth
-  member of the derive-with-override family.
-- `packages/storefront-templates/src/demo-business.test.ts` — **golden snapshot over all 94**
-  (deterministic) + the **delight oracle** (spec §5.3): every archetype's demo is non-degenerate —
-  every zone has resources, the primary queue has demand with sane wait-times, the cog has a real
-  move, presence has humans + AI, finance shows money in-flight.
-- `apps/web/lib/demo/load-demo-business.ts` — `loadDemoBusiness(archetypeId, { flavor? })` /
-  `unloadDemoBusiness()`: upsert the generated `DemoBusiness` into the real tables tagged
-  `source:"demo"` (idempotent, reversible), set the org archetype via the existing reset path, run
-  setup-completion seeds. Guardrail: never load over non-demo data.
-- Verification: `deriveDemoBusiness` exercised over `ALL_ARCHETYPES`; a loaded demo renders through
-  the **live** `loadLivingBusinessSnapshot` (same code path, not a fixture) on a seeded test org.
+- ✅ **Landed** — `packages/storefront-templates/src/demo-business.ts` — `deriveDemoBusiness(archetype, options)`
+  → `DemoBusiness` (spec §3). Pure; composes `deriveTwinProfile` + `deriveOperationalValueStream` +
+  the archetype definition's own item prices / scheduling. The fifth member of the derive-with-override
+  family. **Architecture note:** `getPlaybook` / `resolveBusinessProfile` live in `apps/web/lib` and a
+  package cannot import the app, so they are passed as *optional injected enrichment*
+  (`options.playbook` / `options.businessProfile`) that the load path wires in; the core is valid
+  (94/94) from package-local signal alone. The thin `DemoFlavor` (shared with the Excellence Corpus)
+  overrides company name / staff / customers / notes.
+- ✅ **Landed** — `packages/storefront-templates/src/demo-business.test.ts` — **golden digest snapshot
+  over all 94** (deterministic) + the **delight oracle** `evaluateDemoDelight` (spec §5.3), run as a
+  per-archetype test: every archetype's demo is non-degenerate — every zone has resources, the primary
+  queue has demand with sane wait-times, the cog has a real move, presence has humans + AI, finance
+  shows money in-flight *and* revenue accruing. `evaluateDemoDelight` is exported for reuse as the P4
+  CI gate. **Verified:** 100 tests green (94 oracle + determinism/flavor/enrichment/grounding/golden);
+  full package suite 238/238.
+- ⏳ **Next** — `apps/web/lib/demo/load-demo-business.ts` — `loadDemoBusiness(archetypeId, { flavor? })` /
+  `unloadDemoBusiness()`: upsert the generated `DemoBusiness` into the real tables, set the org
+  archetype via the existing reset path (`resetStorefrontArchetype`), run `runSetupCompletionSeeds`.
+  Provenance/teardown: most target models (`StorefrontBooking`, `ServiceProvider`, `Bill`,
+  `TaxObligationPeriod`, `Obligation`) have **no** `source` column, so demo rows are tagged with a
+  stable `demo-` prefix on their `@unique` refs (`bookingRef`/`providerId`/`billRef`/…) for a
+  `deleteMany({ startsWith: "demo-" })` teardown (resolves spec §9.1). Guardrail: never load over
+  non-demo data. Verified against the **live** `loadLivingBusinessSnapshot` (same code path, not a
+  fixture).
 
 ## P2 — the gallery (founder review surface)
 
