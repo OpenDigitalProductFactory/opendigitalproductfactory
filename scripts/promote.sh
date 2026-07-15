@@ -483,6 +483,19 @@ emit_step cleanup
 if [[ $_dry_run -eq 0 ]]; then
   docker image prune -f >/dev/null 2>&1 || true
   docker builder prune -f --keep-storage "${PROMOTE_BUILD_CACHE_KEEP:-10GB}" >/dev/null 2>&1 || true
+  # BI-9B7FC928: `image prune` above only removes DANGLING images. The TAGGED
+  # throwaway images left by Build Studio's content-verify / main-compare /
+  # local-integration flows (dpf-*-build-test:*, dpf-*-build-compare:*,
+  # dpf-*:verify) survive it and leaked ~3.7 GB per successful upgrade until the
+  # disk filled. Reclaim them by exact ephemeral naming: the running
+  # dpf-portal / dpf-promoter images NEVER carry a -build-test / -build-compare
+  # suffix or a :verify tag, so removing these cannot touch the already-deployed
+  # portal (and this runs only after every verify passed). Best-effort — never
+  # fails the upgrade. Volumes are still never touched.
+  for _ref in 'dpf-*-build-test' 'dpf-*-build-compare' 'dpf-*:verify'; do
+    _imgs="$(docker images --filter "reference=${_ref}" -q 2>/dev/null | sort -u)"
+    [[ -n "${_imgs}" ]] && docker rmi -f ${_imgs} >/dev/null 2>&1 || true
+  done
 fi
 
 # Terminal success marker — emitted only after every verify AND the cleanup sweep, so
