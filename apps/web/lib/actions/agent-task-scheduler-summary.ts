@@ -77,6 +77,12 @@ function asBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
+function unwrapToolData(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  if (isRecord(value.metrics)) return value;
+  return isRecord(value.data) ? value.data : value;
+}
+
 function asPositiveNumberRecord(value: unknown): Record<string, number> | null {
   if (!isRecord(value)) return null;
   const entries = Object.entries(value)
@@ -101,18 +107,19 @@ export function extractDiscoveryTriageSummary(
 ): ScheduledTaskSummary | null {
   const triageTool = [...executedTools]
     .reverse()
-    .find((entry) => entry.name === "run_discovery_triage" && entry.result.success && isRecord(entry.result.data));
+    .find((entry) => entry.name === "run_discovery_triage" && entry.result.success && Boolean(unwrapToolData(entry.result.data)));
 
-  if (!triageTool || !isRecord(triageTool.result.data)) {
+  const triageData = unwrapToolData(triageTool?.result.data);
+  if (!triageData) {
     return null;
   }
 
-  const trigger = triageTool.result.data.trigger === "volume" ? "volume" : "cadence";
-  const processedAt = asString(triageTool.result.data.processedAt) ?? new Date().toISOString();
-  const runIdempotencyKey = asString(triageTool.result.data.runIdempotencyKey);
-  const skipped = asBoolean(triageTool.result.data.skipped) ?? false;
-  const skipReason = asString(triageTool.result.data.skipReason);
-  const metrics = isRecord(triageTool.result.data.metrics) ? triageTool.result.data.metrics : {};
+  const trigger = triageData.trigger === "volume" ? "volume" : "cadence";
+  const processedAt = asString(triageData.processedAt) ?? new Date().toISOString();
+  const runIdempotencyKey = asString(triageData.runIdempotencyKey);
+  const skipped = asBoolean(triageData.skipped) ?? false;
+  const skipReason = asString(triageData.skipReason);
+  const metrics = isRecord(triageData.metrics) ? triageData.metrics : {};
 
   const payload: DiscoveryTriageSummaryPayload = {
     trigger,
