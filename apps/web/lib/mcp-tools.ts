@@ -10,7 +10,7 @@ import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import { slugify } from "@/lib/shared/slugify";
 import {
-  logBuildActivity,
+  logBuildActivity, recordAutoIntakeFailure,
   extractBuildIdHint,
   resolveActiveBuildId,
   updateBuildHappyPathState,
@@ -1327,7 +1327,7 @@ export async function executeTool(
               happyPathState = { ...happyPathState, intake: { ...happyPathState.intake, epicId: createdEpic.epicId } };
               logBuildActivity(buildId, "auto-intake:epic", `Auto-created epic ${createdEpic.epicId} (${epicTitle})`);
             } catch (err) {
-              console.warn("[reviewDesignDoc] auto-create epic failed:", err);
+              recordAutoIntakeFailure(buildId, "epic", err);
             }
           }
 
@@ -1371,7 +1371,7 @@ export async function executeTool(
               happyPathState = { ...happyPathState, intake: { ...happyPathState.intake, backlogItemId: itemId } };
               logBuildActivity(buildId, "auto-intake:backlog", `Auto-created backlog item ${itemId} (${title})`);
             } catch (err) {
-              console.warn("[reviewDesignDoc] auto-create backlog item failed:", err);
+              recordAutoIntakeFailure(buildId, "backlog", err);
             }
           }
 
@@ -1399,7 +1399,7 @@ export async function executeTool(
               };
               logBuildActivity(buildId, "auto-intake:constrained-goal", `Auto-set constrainedGoal from build title`);
             } catch (err) {
-              console.warn("[reviewDesignDoc] auto-set constrainedGoal failed:", err);
+              recordAutoIntakeFailure(buildId, "constrained-goal", err);
             }
           }
 
@@ -1421,7 +1421,7 @@ export async function executeTool(
               };
               logBuildActivity(buildId, "auto-intake:taxonomy-anchor", `Auto-set taxonomyNodeId=${anchor}`);
             } catch (err) {
-              console.warn("[reviewDesignDoc] auto-set taxonomyNodeId failed:", err);
+              recordAutoIntakeFailure(buildId, "taxonomy-anchor", err);
             }
           }
 
