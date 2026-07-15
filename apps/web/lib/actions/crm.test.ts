@@ -561,7 +561,13 @@ describe("updateCustomerConfigurationItem", () => {
       ciType: "linux-server",
       supportModel: "lts",
       normalizedVersion: "22.04 LTS",
-      endOfSupportAt: "2026-07-15",
+      // BI-435905C1: keep end-of-support ~60 days out RELATIVE to now, so it
+      // stays inside evaluateTechnologyLifecycle's REVIEW_WINDOW_DAYS (120) band
+      // ("approaching_end") no matter when CI runs. A hardcoded "2026-07-15"
+      // silently flipped to "expired"/"upgrade_due" the moment the clock passed
+      // it (2026-07-15T00:00 UTC), failing this test deterministically post-
+      // midnight — a time-bomb, not a mock-bleed flake.
+      endOfSupportAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
       evidenceSource: "Ubuntu LTS release calendar",
       evidenceNotes: "Verified against vendor-supported LTS timeline.",
       reviewCadenceDays: 45,
