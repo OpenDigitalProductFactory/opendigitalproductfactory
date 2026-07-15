@@ -100,22 +100,40 @@ export async function establishCoworker(
     };
   }
 
-  const agent = await prisma.agent.create({
-    data: {
-      agentId,
-      slugId: agentId,
-      name: input.name.trim(),
-      displayName: input.name.trim(),
-      kind: "specialist",
-      tier: 2,
-      type: "coworker",
-      description: input.description.trim(),
-      valueStream: input.valueStream ?? null,
-      sensitivity: input.sensitivity ?? "internal",
-      status: "active",
-      lifecycleStage: "draft",
-    },
-  });
+  let agent: { id: string };
+  try {
+    agent = await prisma.agent.create({
+      data: {
+        agentId,
+        slugId: agentId,
+        name: input.name.trim(),
+        displayName: input.name.trim(),
+        kind: "specialist",
+        tier: 2,
+        type: "coworker",
+        description: input.description.trim(),
+        valueStream: input.valueStream ?? null,
+        sensitivity: input.sensitivity ?? "internal",
+        status: "active",
+        lifecycleStage: "draft",
+      },
+    });
+  } catch (err: unknown) {
+    // The findFirst guard above is a TOCTOU check: two concurrent
+    // establishCoworker calls for the same id both pass it, then both create,
+    // and the loser trips the Agent_agentId / Agent_slugId_key unique index
+    // (Prisma P2002). Collapse that race onto the same already_exists result
+    // the guard returns, rather than surfacing a raw constraint crash.
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "P2002") {
+      return {
+        ok: false,
+        code: "already_exists",
+        message: `${agentId} already exists (lost a concurrent creation race).`,
+      };
+    }
+    throw err;
+  }
 
   // Tombstone-honoring grant writes (BI-4FA040D5 pattern from bootstrap-first-run).
   const revoked = await prisma.agentToolGrantRevocation.findMany({

@@ -10,7 +10,7 @@
 // and must NOT swallow non-P2002 errors.
 
 import { describe, it, expect } from "vitest";
-import { seedCityOnce } from "./seed-geographic-data";
+import { seedCityOnce, seedRegionOnce } from "./seed-geographic-data";
 import type { PrismaClient } from "../generated/client/client";
 
 type CityFindFirst = (args: {
@@ -126,6 +126,113 @@ describe("seedCityOnce", () => {
 
     await expect(seedCityOnce(prisma, "region-1", cityRecord("Toronto"))).rejects.toThrow(
       /unrelated failure/,
+    );
+  });
+});
+
+type RegionFindFirst = (args: {
+  where: {
+    countryId: string;
+    name: string | { equals: string; mode: "insensitive" };
+  };
+  select: { id: true };
+}) => Promise<{ id: string } | null>;
+
+type RegionCreate = (args: {
+  data: { name: string; code: string | null; countryId: string };
+}) => Promise<{ id: string }>;
+
+function buildRegionStub(opts: {
+  findFirst: RegionFindFirst;
+  create: RegionCreate;
+}): PrismaClient {
+  return {
+    region: { findFirst: opts.findFirst, create: opts.create },
+  } as unknown as PrismaClient;
+}
+
+const regionRecord = (name: string) => ({ name, code: "CA", countryCode: "US" });
+
+describe("seedRegionOnce", () => {
+  it("creates the region and returns its id when findFirst misses and create succeeds", async () => {
+    let captured: Parameters<RegionCreate>[0] | null = null;
+    const prisma = buildRegionStub({
+      findFirst: async () => null,
+      create: async (args) => {
+        captured = args;
+        return { id: "region-new" };
+      },
+    });
+
+    const result = await seedRegionOnce(prisma, "country-1", regionRecord("California"));
+
+    expect(result).toEqual({ outcome: "created", id: "region-new" });
+    expect(captured!.data).toMatchObject({ name: "California", code: "CA", countryId: "country-1" });
+  });
+
+  it("reports 'existing' with the found id and does not call create", async () => {
+    let createCalls = 0;
+    const prisma = buildRegionStub({
+      findFirst: async () => ({ id: "region-existing" }),
+      create: async () => {
+        createCalls++;
+        return { id: "region-x" };
+      },
+    });
+
+    const result = await seedRegionOnce(prisma, "country-1", regionRecord("Ontario"));
+
+    expect(result).toEqual({ outcome: "existing", id: "region-existing" });
+    expect(createCalls).toBe(0);
+  });
+
+  it("swallows P2002 as 'skipped_duplicate' and re-resolves the winning row's id", async () => {
+    // findFirst is case-sensitive (misses "québec"); the case-insensitive
+    // unique index rejects the create; the P2002 branch re-queries insensitively.
+    let findCalls = 0;
+    const prisma = buildRegionStub({
+      findFirst: async (args) => {
+        findCalls++;
+        // First (case-sensitive) lookup misses; second (insensitive) hits.
+        return typeof args.where.name === "object" ? { id: "region-dup" } : null;
+      },
+      create: async () => {
+        throw Object.assign(new Error("Unique constraint failed"), {
+          code: "P2002",
+          meta: { target: ["countryId", "name"] },
+        });
+      },
+    });
+
+    const result = await seedRegionOnce(prisma, "country-1", regionRecord("Québec"));
+
+    expect(result).toEqual({ outcome: "skipped_duplicate", id: "region-dup" });
+    expect(findCalls).toBe(2);
+  });
+
+  it("returns a null id (not a crash) if the duplicate row cannot be re-resolved", async () => {
+    const prisma = buildRegionStub({
+      findFirst: async () => null,
+      create: async () => {
+        throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+      },
+    });
+
+    const result = await seedRegionOnce(prisma, "country-1", regionRecord("Ghost"));
+
+    expect(result).toEqual({ outcome: "skipped_duplicate", id: null });
+  });
+
+  it("re-throws non-P2002 errors so genuine failures surface", async () => {
+    const prisma = buildRegionStub({
+      findFirst: async () => null,
+      create: async () => {
+        throw Object.assign(new Error("connection lost"), { code: "P1001" });
+      },
+    });
+
+    await expect(seedRegionOnce(prisma, "country-1", regionRecord("Boston"))).rejects.toThrow(
+      /connection lost/,
     );
   });
 });
