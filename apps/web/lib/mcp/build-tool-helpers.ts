@@ -13,6 +13,24 @@ export function logBuildActivity(buildId: string, tool: string, summary: string)
   prisma.buildActivity.create({ data: { buildId, tool, summary } }).catch(() => {});
 }
 
+export type AutoIntakeStep = "epic" | "backlog" | "constrained-goal" | "taxonomy-anchor";
+
+function summarizeAutoIntakeError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === "string" && error.trim()) return error.trim();
+  return "Unknown error";
+}
+
+export function recordAutoIntakeFailure(
+  buildId: string,
+  step: AutoIntakeStep,
+  error: unknown,
+  logger: Pick<Console, "warn"> = console,
+): void {
+  logBuildActivity(buildId, `auto-intake:${step}:failed`, `Auto-intake ${step} failed: ${summarizeAutoIntakeError(error)}`);
+  logger.warn(`[reviewDesignDoc] auto-intake ${step} failed:`, error);
+}
+
 /**
  * Phases that exclude a FeatureBuild from "active" auto-resolution.
  * `abandoned` is included because abandoned builds from prior runs would
