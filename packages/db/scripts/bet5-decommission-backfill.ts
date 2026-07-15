@@ -44,4 +44,14 @@ main()
     // is what enforces safety. Log and exit 0 so portal boot is never blocked.
     console.warn("[bet5-backfill] unexpected error (non-fatal):", err);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect().catch(() => {});
+    // Force a clean exit. The Neo4j driver and Qdrant client this script opens keep
+    // pooled sockets / keep-alive timers on the event loop, and neither exposes a close
+    // handle here — so after `main()` resolves the process would otherwise hang with the
+    // work already done. portal-migrate-boot.sh runs THIS SCRIPT SYNCHRONOUSLY before
+    // `exec node server.js`, so a non-exiting backfill blocks the portal from EVER serving
+    // (BI-A1E864A5 — observed live: boot wedged at "[bet5-backfill] done." with the server
+    // never bound). All copies are awaited above, so exiting here loses nothing.
+    process.exit(0);
+  });

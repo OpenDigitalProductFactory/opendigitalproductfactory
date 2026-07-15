@@ -250,3 +250,38 @@ but BET-5 is NOT declared fleet-ready on it alone — the machinery-first Wave-1
 remains a tracked follow-up (a self-upgrade must never ship a step the currently-deployed machinery
 can't execute). principle_decide ledger: fix-verify-hold-fleet 8.90 / fold-resequence 8.73 /
 minimal-now 7.86 (confidence low; operator confirmed fix-verify-hold-fleet).
+
+## Fix 4 — boot backfill never exits → blocks the portal from serving — 2026-07-14
+
+With Fix 3 in place, the live re-trigger (SUR-FIXVER01) ran the FULL chain correctly for the first
+time: `ensure-pgvector` SKIPPED the recreate (postgres stayed up, image-agnostic detection worked),
+the P3009 self-heal cleared the failed migration, both BET-5 migrations applied
+(`bet5_pgvector_foundation` + `bet5_graph_mirror`), `vector` 0.8.5 installed, and the boot backfill
+copied all data into Postgres (87 Qdrant vectors, 207 Neo4j nodes, 626 edges). But the **portal then
+never came up**: it wedged at `[bet5-backfill] done.` with the Next server never bound → `unhealthy`.
+
+Root cause: `scripts/bet5-decommission-backfill.ts` opens a Neo4j driver + Qdrant client whose pooled
+sockets / keep-alive timers keep the Node event loop alive, and its `.finally()` only
+`prisma.$disconnect()`s — neither legacy client is closed and there's no `process.exit`. So after
+`main()` resolves (work done), the process **hangs**. `scripts/portal-migrate-boot.sh` runs the
+backfill SYNCHRONOUSLY (`if ! ...; then WARN; fi`) before `exec "$@"`, so a non-exiting backfill
+blocks the server start forever. This was latent until now — every prior attempt died at migrate
+(before the swap), so the boot backfill had never run to completion on a real install. It would hang
+the FIRST successful BET-5 boot on **every** install (a silent wedge, worse than a fail-closed abort).
+
+Fix (this PR, `fix/bet5-boot-backfill-exit`):
+- `bet5-decommission-backfill.ts`: after the awaited work + `prisma.$disconnect()`, **`process.exit(0)`**
+  so the lingering driver/client handles can't keep the process alive. All copies are awaited, so
+  exiting loses nothing.
+- `portal-migrate-boot.sh`: wrap the backfill in **`timeout 300`** (with a `command -v timeout`
+  fallback for minimal images) as a belt-and-suspenders backstop — a future hang gets killed and boot
+  proceeds (the backfill is best-effort + idempotent; the separately-gated teardown enforces safety).
+- Regression test: `portal-migrate-boot.test.ts` — a non-zero backfill result **degrades open** to the
+  server start (never fail-closed on the backfill).
+
+**Live recovery of the Mac box:** killed the wedged backfill process → boot proceeded to `exec node
+server.js` → portal came up healthy on the new sha just as the promoter's health step was still
+waiting → the run completed `succeeded`, then trailing steps recreated sandbox-postgres onto pgvector
+and **decommissioned Neo4j + Qdrant** (containers AND volumes now gone). BET-5 is fully verified
+end-to-end on the Mac box: Postgres-only, `vector` 0.8.5, graph mirror = 207 nodes / 626 edges,
+vector_embedding = 87.

@@ -64,8 +64,18 @@ fi
 # only stages the data — the actual container/volume removal is the separately-gated
 # scripts/decommission-neo4j-qdrant.{sh,ps1}, which refuses to delete anything until the
 # mirror is confirmed populated.
-if ! pnpm --filter @dpf/db exec tsx scripts/bet5-decommission-backfill.ts; then
-  echo "[portal-boot] WARN: BET-5 datastore backfill reported an error — legacy stores left intact (see error above)" >&2
+# Guard the boot on a wall-clock timeout: the backfill is best-effort and idempotent, so it
+# must NEVER be able to block the server from starting. The script force-exits when done
+# (see bet5-decommission-backfill.ts), but `timeout` is the belt-and-suspenders backstop —
+# a future hang (a wedged Neo4j/Qdrant read, a driver that won't drain) gets killed and boot
+# proceeds. `timeout` may be absent on a minimal image; fall back to a plain run if so.
+if command -v timeout >/dev/null 2>&1; then
+  _bet5_backfill() { timeout 300 pnpm --filter @dpf/db exec tsx scripts/bet5-decommission-backfill.ts; }
+else
+  _bet5_backfill() { pnpm --filter @dpf/db exec tsx scripts/bet5-decommission-backfill.ts; }
+fi
+if ! _bet5_backfill; then
+  echo "[portal-boot] WARN: BET-5 datastore backfill reported an error or timed out — legacy stores left intact (see error above)" >&2
 fi
 
 echo "[portal-boot] provider catalog reconciled (or degraded); starting server"
