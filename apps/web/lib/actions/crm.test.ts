@@ -561,7 +561,13 @@ describe("updateCustomerConfigurationItem", () => {
       ciType: "linux-server",
       supportModel: "lts",
       normalizedVersion: "22.04 LTS",
-      endOfSupportAt: "2026-07-15",
+      // Relative to now (~60 days out, inside the 120-day REVIEW_WINDOW_DAYS) so the computed
+      // "approaching_end" posture is stable across the calendar-day boundary. A hardcoded date
+      // ("2026-07-15") flipped to the "expired" branch once "today" reached it — a date-boundary
+      // flake that failed every run on/after that date.
+      endOfSupportAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10),
       evidenceSource: "Ubuntu LTS release calendar",
       evidenceNotes: "Verified against vendor-supported LTS timeline.",
       reviewCadenceDays: 45,
