@@ -27,6 +27,7 @@ import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 import { BuildListItem } from "./BuildListItem";
 import { EpicRollupListItem } from "./EpicRollupListItem";
 import {
+  deriveCoworkerActivityCount,
   deriveFleetCounts,
   deriveNeedsAttention,
   deriveQueueState,
@@ -1577,11 +1578,16 @@ function FleetRailZone({
     rollup.status === "in-progress"
     && rollup.children.some((child) => child.phase === "build" || child.phase === "review"),
   ).length;
+  // Coworker-custody work (ideate/plan) is off the operator focus rail by design,
+  // so it never shows in "Working". Surface it as a distinct "Coworker" count so
+  // the header reflects that the coworker is active, not that nothing is happening.
+  const coworkerCount = deriveCoworkerActivityCount(buildRows);
   const focusHeaderLabel = formatOperatorFocusHeader({
     needsYouCount,
     workingCount: counts.runningCount + workingEpicCount,
     blockedCount,
     queuedCount: counts.queuedCount,
+    coworkerCount,
     parkedCount: parkedItemCount,
   });
   const totalFocusItemCount = focusEpicRollups.length + focusEntries.length;

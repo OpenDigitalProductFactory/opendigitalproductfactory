@@ -515,7 +515,7 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Needs you: 1 · Working: 2 · Parked: 5");
+    expect(html).toContain("Needs you: 1 · Working: 2 · Coworker: 6 · Parked: 5");
     expect(html).not.toContain("WIP slots");
     expect(html).toContain("Review customer entry gate");
     expect(html).toContain("Ship provider readiness check");

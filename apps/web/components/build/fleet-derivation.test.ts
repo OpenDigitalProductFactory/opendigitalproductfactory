@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  deriveCoworkerActivityCount,
   deriveFleetCounts,
   deriveNeedsAttention,
   deriveQueueState,
@@ -335,5 +336,34 @@ describe("formatOperatorFocusHeader", () => {
         parkedCount: 8,
       }),
     ).toBe("Needs you: 1 · Working: 2 · Parked: 8");
+  });
+
+  it("omits the Coworker segment when no coworker-custody work is active", () => {
+    expect(
+      formatOperatorFocusHeader({ needsYouCount: 0, workingCount: 0, parkedCount: 3, coworkerCount: 0 }),
+    ).toBe("Needs you: 0 · Working: 0 · Parked: 3");
+  });
+
+  it("shows a distinct Coworker segment (between Working and Parked) when > 0", () => {
+    expect(
+      formatOperatorFocusHeader({ needsYouCount: 0, workingCount: 0, parkedCount: 1, coworkerCount: 2 }),
+    ).toBe("Needs you: 0 · Working: 0 · Coworker: 2 · Parked: 1");
+  });
+});
+
+describe("deriveCoworkerActivityCount", () => {
+  it("counts only ideate/plan builds (the coworker's off-rail custody), not build/review/idle", () => {
+    const builds = [
+      { phase: "ideate" as const },
+      { phase: "plan" as const },
+      { phase: "plan" as const },
+      { phase: "build" as const },
+      { phase: "review" as const },
+      { phase: "ship" as const },
+      { phase: "complete" as const },
+      { phase: "failed" as const },
+    ];
+    expect(deriveCoworkerActivityCount(builds)).toBe(3);
+    expect(deriveCoworkerActivityCount([])).toBe(0);
   });
 });
