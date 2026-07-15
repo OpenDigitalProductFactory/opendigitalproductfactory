@@ -35,6 +35,7 @@ import type {
   QueueItemData,
   ResourceUnitData,
   TwinActor,
+  TwinCogSnapshot,
   TwinQueueSnapshot,
   TwinSnapshot,
   TwinZoneSnapshot,
@@ -326,6 +327,53 @@ export function liveCapacityChips(input: {
   return chips;
 }
 
+/**
+ * The cog's live allocation proposal — the real `constraint → proposal → confirm`
+ * loop the founder asked for ("a suggested table seating cog"). Takes the
+ * longest-waiting unassigned demand and proposes the least-loaded active resource
+ * (fewest in-flight items), naming the actual item + resource. Returns `undefined`
+ * when there is nothing to allocate — the cog only speaks when it has a real move.
+ */
+export function proposeCogAllocation(
+  bookings: BookingRow[],
+  providers: ProviderRow[],
+  members: WorkforceMember[],
+  workNoun: string,
+  resourceNoun: string,
+  signals: string[],
+  now: Date,
+): TwinCogSnapshot | undefined {
+  const next = bookings
+    .filter((b) => b.status.toLowerCase() === "pending" || b.provider == null)
+    .sort((a, b) => (a.createdAt?.getTime() ?? Infinity) - (b.createdAt?.getTime() ?? Infinity))[0];
+  if (!next) return undefined;
+
+  // In-flight load per named resource, from the bookings already assigned.
+  const load = new Map<string, number>();
+  for (const b of bookings) {
+    if (b.provider?.name) load.set(b.provider.name, (load.get(b.provider.name) ?? 0) + 1);
+  }
+
+  let resource: string | undefined;
+  if (providers.length > 0) {
+    resource = [...providers].sort(
+      (a, b) => (load.get(a.name) ?? 0) - (load.get(b.name) ?? 0),
+    )[0]?.name;
+  } else {
+    const active = members.filter((m) => m.status.toLowerCase() === "active");
+    resource = (active.find((m) => m.kind === "agent") ?? active[0])?.displayName;
+  }
+
+  const waited = next.createdAt ? humanizeWait(now.getTime() - next.createdAt.getTime()) : null;
+  return {
+    proposal: resource
+      ? `Assign the ${waited ? `${waited}-waiting ` : "next "}${workNoun} to ${resource} (lowest load)`
+      : `Route the longest-waiting ${workNoun} to an available ${resourceNoun}`,
+    confirmLabel: `Assign ${workNoun}`,
+    signals: signals.slice(0, 3),
+  };
+}
+
 /** A bounded attributed feed from the demand rows we already read. The persisted
  *  human+AI event log (parent spec §4 live-delta plane) is a later increment; for
  *  now the feed reflects real booking activity, attributed to its provider. */
@@ -431,14 +479,15 @@ export async function loadLivingBusinessSnapshot(opts?: {
     emptyLabel: i === 0 ? "No demand waiting" : "Clear",
   }));
 
-  const cog =
-    queueItems.length > 0
-      ? {
-          proposal: `Route the next ${profile.workItemNoun.singular} to the best ${profile.resourceNoun.singular} by ${profile.cog.signals[0]}`,
-          confirmLabel: `Assign ${profile.workItemNoun.singular}`,
-          signals: profile.cog.signals.slice(0, 3),
-        }
-      : undefined;
+  const cog = proposeCogAllocation(
+    bookings,
+    providers,
+    members,
+    profile.workItemNoun.singular,
+    profile.resourceNoun.singular,
+    profile.cog.signals,
+    now,
+  );
 
   return {
     live: true,

@@ -118,15 +118,23 @@ awaits it. Added **real queue wait-time** flow metrics — the founder's origina
 ("if we know the queue and wait times"): `bookingsToQueueItems` orders longest-waiting
 first and shows each item's true age (from `createdAt`), and a **Longest wait**
 capacity chip leads the board when demand is waiting (`humanizeWait`/`longestWaitMs`).
-Tests: live-overlay + demo-fallback (`twin-panel-data.test.ts`) and the wait-metric
-helpers (`living-business-snapshot.test.ts`); 33 twin assertions green.
+A **live cog optimizer** (`proposeCogAllocation`) realizes the founder's
+`constraint → proposal → confirm` cog ("a suggested table seating cog"): it takes the
+longest-waiting unassigned demand and proposes the least-loaded active resource
+(fewest in-flight items), naming the actual item + resource, and stays silent when
+there is nothing to allocate. It shows on the admin/twin-kit live tab and any
+non-home mount (the workspace home condenses the cog out, keeping `OperatorCockpit`
+the single attention surface).
+
+Tests: live-overlay + demo-fallback (`twin-panel-data.test.ts`); wait-metric + cog
+helpers (`living-business-snapshot.test.ts`); 37 twin assertions green.
 
 **Still deferred (each behind the same `TwinSnapshot` shape, no contract change):**
 a *persisted* human+AI event log for a richer live feed (needs a new table +
 write-path instrumentation — a migration-class change, out of scope here; the feed
-stays derived-from-bookings until then); per-value-stream-stage WIP over
-`deriveOperationalValueStream`; and a live cog *optimizer* (the home strips the cog —
-this benefits the admin/non-home mounts).
+stays derived-from-bookings until then), and per-value-stream-stage WIP over
+`deriveOperationalValueStream` (the value-stream *lens*, a distinct render surface
+from the twin's spatial "now" lens).
 
 ## P4 — remaining templates by install demand
 BOOK, BAYS, ROOMS, STORE, VENUE, COUNTER + the TENANTS/PIPELINE/PROGRAMS boards, each a template + bindings (not a bespoke build). Certification: a golden-journey per template exercising queue → cog → confirm. PHI-class ROOMS (healthcare) gets the presence/feed redaction mode (role, not patient identity) keyed off `privacyClass` (open question §9.2).

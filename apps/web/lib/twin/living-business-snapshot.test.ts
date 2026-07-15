@@ -9,6 +9,7 @@ import {
   liveCapacityChips,
   loadLivingBusinessSnapshot,
   longestWaitMs,
+  proposeCogAllocation,
   resourceUnits,
   rosterToPresence,
   statusIntent,
@@ -132,6 +133,43 @@ describe("living-business-snapshot — pure helpers", () => {
     expect(longestWaitMs(bookings, NOW)).toBe(86_400_000);
     const chips = liveCapacityChips({ teamTotal: 3, aiCount: 1, openDemand: 2, billsDueCount: 0, longestWaitMs: 86_400_000 });
     expect(chips[0]).toMatchObject({ key: "wait", value: "24h" });
+  });
+
+  it("proposeCogAllocation names the longest-waiting item and least-loaded provider", () => {
+    const bookings = [
+      { id: "old", scheduledAt: null, createdAt: new Date("2026-07-14T09:00:00Z"), status: "pending", provider: null },
+      { id: "new", scheduledAt: null, createdAt: new Date("2026-07-15T08:00:00Z"), status: "pending", provider: null },
+      // Dr Lee already carries an in-flight booking → higher load than Dr Fox.
+      { id: "busy", scheduledAt: null, createdAt: null, status: "confirmed", provider: { name: "Dr Lee" } },
+    ];
+    const providers = [
+      { id: "p1", name: "Dr Lee", isActive: true },
+      { id: "p2", name: "Dr Fox", isActive: true },
+    ];
+    const cog = proposeCogAllocation(bookings, providers, [], "appointment", "provider", ["skill", "availability"], NOW);
+    expect(cog).toBeTruthy();
+    expect(cog!.proposal).toContain("Dr Fox"); // lowest load wins
+    expect(cog!.proposal).toContain("appointment");
+    expect(cog!.confirmLabel).toBe("Assign appointment");
+    expect(cog!.signals).toEqual(["skill", "availability"]);
+  });
+
+  it("proposeCogAllocation falls back to an active AI coworker when no providers exist", () => {
+    const bookings = [{ id: "x", scheduledAt: null, createdAt: new Date("2026-07-14T09:00:00Z"), status: "pending", provider: null }];
+    const cog = proposeCogAllocation(
+      bookings,
+      [],
+      [member({ id: "AGT-1", displayName: "Aria", kind: "agent", status: "active" })],
+      "case",
+      "reviewer",
+      ["workload"],
+      NOW,
+    );
+    expect(cog!.proposal).toContain("Aria");
+  });
+
+  it("proposeCogAllocation stays silent when there is nothing to allocate", () => {
+    expect(proposeCogAllocation([], [], [], "job", "tech", ["skill"], NOW)).toBeUndefined();
   });
 
   it("liveCapacityChips are all real counts", () => {
