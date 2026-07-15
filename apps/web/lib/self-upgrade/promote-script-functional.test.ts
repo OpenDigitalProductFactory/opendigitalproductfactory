@@ -298,4 +298,68 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       rmSync(root, { recursive: true, force: true });
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
+
+  // BET-5 (BI-A1E864A5): ensure-pgvector must detect pgvector image-agnostically
+  // via pg_available_extensions. A container already on the pgvector image answers
+  // the probe with "1", so the recreate is SKIPPED — no churn, no risk. (The
+  // original bug probed a hard-coded control-file path that the Debian pgvector
+  // image doesn't use, so the skip never fired and it recreated on every upgrade.)
+  it("SKIPS the pgvector recreate when the image already provides vector (pg_available_extensions=1)", () => {
+    const { root, source, backup, head } = makeScratch();
+    try {
+      const bin = join(root, "vecbin");
+      mkdirSync(bin, { recursive: true });
+      const dockerLog = join(root, "docker.log");
+      // A docker shim whose `psql ... pg_available_extensions` probe reports vector
+      // present ("1"); everything else behaves like the default fake.
+      writeFileSync(
+        join(bin, "docker"),
+        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *pg_available_extensions*) printf "1" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+      );
+      writeFileSync(
+        join(bin, "curl"),
+        '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "%s" "$DPF_VERSION" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
+      );
+      chmodSync(join(bin, "docker"), 0o755);
+      chmodSync(join(bin, "curl"), 0o755);
+
+      const r = runPromote({ source, backup, targetSha: head, fakeBin: bin, dockerLog });
+
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain(`step=done target=${head}`);
+      // The recreate marker never prints and no postgres/sandbox-postgres recreate runs.
+      expect(r.stdout).not.toContain("ensure-pgvector-recreate");
+      const log = readFileSync(dockerLog, "utf8");
+      expect(log).not.toContain("force-recreate postgres");
+      expect(log).not.toContain("force-recreate sandbox-postgres");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  // BET-5 (BI-A1E864A5): when a recreate IS needed, it must be host-bind-safe. The
+  // promoter runs compose with --project-directory=/host-source, so the postgres
+  // service's relative ./scripts/init-inngest-db.sh bind would resolve to an
+  // unshareable /host-source path and strand the container. The fix recreates via an
+  // extra override compose file (pins the pgvector image, resets volumes to the named
+  // data volume only) — so the recreate line carries a SECOND `-f`, not the bare
+  // base-only `up --force-recreate postgres` that dragged the host bind.
+  it("recreates postgres onto pgvector host-bind-safe (via an override compose file)", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      const dockerLog = join(root, "docker.log");
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog });
+
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("step=ensure-pgvector-recreate");
+      const log = readFileSync(dockerLog, "utf8");
+      const pgLine = log.split("\n").find((l) => l.includes("force-recreate postgres"));
+      expect(pgLine).toBeDefined();
+      // Base compose contributes one `-f`; the host-bind-safe override adds a second.
+      // A regression to the bare `up --force-recreate postgres` would carry only one.
+      expect((pgLine!.match(/ -f /g) ?? []).length).toBeGreaterThanOrEqual(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
 });
