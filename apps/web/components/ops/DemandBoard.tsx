@@ -13,6 +13,8 @@ import {
 } from "@/lib/demand/board";
 import type { ValueEffortQuadrant } from "@/lib/demand/scoring";
 import { bucketBalance, BUCKET_LABELS, computeBucketMix } from "@/lib/demand/buckets";
+import { groupByFlowLane, FLOW_LANE_LABELS, type FlowColumn } from "@/lib/demand/flow";
+import { resolveEstimateProvenance } from "@/lib/demand/estimate-provenance";
 
 const VALUE_BAND_LABEL: Record<ReturnType<typeof valueBand>, string> = {
   high: "High value",
@@ -35,6 +37,42 @@ const QUADRANT_TOKEN: Record<ValueEffortQuadrant, string> = {
   time_sink: "var(--dpf-warning)",
 };
 
+/**
+ * Estimate-provenance chip (EP-DELIVERY-FLOW). Shows WHOSE effort estimate the
+ * value/effort score carries, and surfaces the ⇄ reconcile affordance when the AI
+ * and human numbers still diverge. Display-only here — the interactive
+ * confirm/overrule/reconcile flow is BI-AA1763CD. Returns null when no attributed
+ * estimate exists yet (the plain effort line covers that case).
+ */
+function EstimateChip({ item }: { item: DemandItemView }) {
+  const prov = resolveEstimateProvenance({
+    aiJobSize: item.estimateAiJobSize,
+    humanJobSize: item.estimateHumanJobSize,
+    agreed: item.estimateAgreed,
+  });
+  if (prov.source === null) return null;
+  if (prov.diverged) {
+    return (
+      <span
+        className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+        style={{ color: "var(--dpf-warning)", borderColor: "var(--dpf-warning)" }}
+        title="AI and human estimates diverge — reconcile to trust the score"
+      >
+        ⇄ {item.estimateAiJobSize} ↔ {item.estimateHumanJobSize} · reconcile
+      </span>
+    );
+  }
+  const SOURCE_LABEL: Record<string, string> = { ai: "AI", human: "human", agreed: "agreed" };
+  return (
+    <span
+      className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-muted)]"
+      title={`Effort estimate: ${prov.effectiveJobSize} (${SOURCE_LABEL[prov.source] ?? prov.source})`}
+    >
+      est {prov.effectiveJobSize} · {SOURCE_LABEL[prov.source] ?? prov.source}
+    </span>
+  );
+}
+
 function DemandCard({ item }: { item: DemandItemView }) {
   const [open, setOpen] = useState(false);
   const band = valueBand(item);
@@ -53,6 +91,7 @@ function DemandCard({ item }: { item: DemandItemView }) {
         <span className="text-[10px] text-[var(--dpf-muted)]">
           {item.effortSize ? `${item.effortSize} effort` : effort !== null ? `effort ${effort}` : "unsized"}
         </span>
+        <EstimateChip item={item} />
         <span className="ml-auto font-mono text-[var(--dpf-muted-foreground)]">{item.itemId}</span>
       </div>
       <button
@@ -99,6 +138,71 @@ function FunnelView({ items }: { items: DemandItemView[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// The Flow lens (EP-DELIVERY-FLOW BI-1DE21746): the whole river in one view —
+// investment funnel → the bet → execution board — so Demand and Backlog stop
+// reading as two duplicate boards. Two deliberately different visual languages:
+// the funnel lanes are score-tinted and narrowing (invest); the board lane reads
+// as execution; the amber bet seam is the funded crossing between them.
+function FlowLaneColumn({ col }: { col: FlowColumn }) {
+  const isBet = col.half === "bet";
+  const isBoard = col.half === "board";
+  const accent = isBet ? "var(--dpf-warning)" : isBoard ? "var(--dpf-success)" : "var(--dpf-border)";
+  return (
+    <div
+      className="min-w-0 rounded-lg border bg-[var(--dpf-surface-2)] p-2"
+      style={{ borderColor: accent, ...(isBet ? { backgroundColor: "color-mix(in srgb, var(--dpf-warning) 8%, var(--dpf-surface-2))" } : {}) }}
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
+          {isBet ? "⟐ " : ""}
+          {FLOW_LANE_LABELS[col.lane]}
+        </h3>
+        <span className="text-xs text-[var(--dpf-muted)]">{col.items.length}</span>
+      </div>
+      {isBet && (
+        <p className="mb-2 text-[10px] leading-snug text-[var(--dpf-warning)]">
+          Funded — a coworker volunteers to build it.
+        </p>
+      )}
+      <div className="space-y-2">
+        {col.items.length === 0 ? (
+          <p className="text-xs text-[var(--dpf-muted)]">{isBet ? "No bets on the table." : "Nothing here yet."}</p>
+        ) : (
+          col.items.map((item) => <DemandCard key={item.itemId} item={item} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FlowView({ items }: { items: DemandItemView[] }) {
+  const columns = useMemo(() => groupByFlowLane(items), [items]);
+  const funnel = columns.filter((c) => c.half === "funnel");
+  const bet = columns.find((c) => c.half === "bet");
+  const board = columns.filter((c) => c.half === "board");
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-wide text-[var(--dpf-muted)]">
+        <span>← Invest · value ÷ effort</span>
+        <span>Execute · owner + burn-down →</span>
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-5">
+        {funnel.map((col) => (
+          <FlowLaneColumn key={col.lane} col={col} />
+        ))}
+        {bet && <FlowLaneColumn col={bet} />}
+        {board.map((col) => (
+          <FlowLaneColumn key={col.lane} col={col} />
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-[var(--dpf-muted)]">
+        One flow, one item two faces: a score + estimate upstream, an owner + burn-down once it crosses the bet.
+        Same dataset as Prioritize and Execute — just a different lens.
+      </p>
     </div>
   );
 }
@@ -217,7 +321,14 @@ function BalanceView({
   );
 }
 
-type Tab = "funnel" | "matrix" | "balance";
+type Tab = "flow" | "funnel" | "matrix" | "balance";
+
+const TAB_LABELS: Record<Tab, string> = {
+  flow: "Flow",
+  funnel: "Funnel",
+  matrix: "Value × effort",
+  balance: "Balance",
+};
 
 export function DemandBoard({
   items,
@@ -228,7 +339,7 @@ export function DemandBoard({
   bucketTargets?: Partial<Record<"run" | "grow" | "transform", number>> | null;
   activeFramework?: string;
 }) {
-  const [tab, setTab] = useState<Tab>("funnel");
+  const [tab, setTab] = useState<Tab>("flow");
   const scored = items.filter((i) => i.demandScore !== null).length;
 
   if (items.length === 0) {
@@ -246,7 +357,7 @@ export function DemandBoard({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <div className="inline-flex rounded-md border border-[var(--dpf-border)] p-0.5">
-          {(["funnel", "matrix", "balance"] as const).map((t) => (
+          {(["flow", "funnel", "matrix", "balance"] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -257,7 +368,7 @@ export function DemandBoard({
                   : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               }`}
             >
-              {t === "funnel" ? "Funnel" : t === "matrix" ? "Value × effort" : "Balance"}
+              {TAB_LABELS[t]}
             </button>
           ))}
         </div>
@@ -266,7 +377,9 @@ export function DemandBoard({
           {activeFramework ? ` · ${activeFramework} policy` : ""}
         </span>
       </div>
-      {tab === "funnel" ? (
+      {tab === "flow" ? (
+        <FlowView items={items} />
+      ) : tab === "funnel" ? (
         <FunnelView items={items} />
       ) : tab === "matrix" ? (
         <MatrixView items={items} />

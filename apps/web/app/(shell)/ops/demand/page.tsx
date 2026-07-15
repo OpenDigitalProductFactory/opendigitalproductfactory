@@ -18,10 +18,11 @@ export default async function DemandPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Demand</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Delivery Flow</h1>
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-          What&apos;s being asked for, how valuable, and how big — ranked so the highest value-per-effort
-          work is drawn first.
+          One flow from investment to execution: what&apos;s asked for, how valuable and how big, funded at
+          the bet, then built. The Flow lens shows the whole river; Funnel, Value × effort and Balance zoom
+          into the invest half.
         </p>
       </div>
       <OpsTabNav />
