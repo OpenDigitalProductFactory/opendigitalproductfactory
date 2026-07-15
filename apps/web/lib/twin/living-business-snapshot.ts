@@ -73,6 +73,7 @@ interface ObligationRow {
 interface BookingRow {
   id: string;
   scheduledAt: Date | null;
+  createdAt: Date | null;
   status: string;
   provider: { name: string } | null;
 }
@@ -101,6 +102,14 @@ function titleCase(s: string): string {
 }
 function daysBetween(from: Date, to: Date): number {
   return Math.ceil((to.getTime() - from.getTime()) / 86_400_000);
+}
+/** Humanize an elapsed duration for a queue-wait chip ("8m", "3h", "2d"). */
+export function humanizeWait(ms: number): string {
+  const mins = Math.max(0, Math.round(ms / 60_000));
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs}h`;
+  return `${Math.round(hrs / 24)}d`;
 }
 const CURRENCY_SYMBOL: Record<string, string> = { GBP: "£", USD: "$", EUR: "€" };
 function currencySymbol(code: string | null): string {
@@ -163,17 +172,30 @@ export function resourceUnits(
     }));
 }
 
-/** Pending, unstarted demand → queue items (the primary queue's live contents). */
+/** Pending, unstarted demand → queue items with a REAL wait time (age in the
+ *  queue, measured from when the booking was created — the flow metric the founder
+ *  asked for: "if we know the queue and wait times"). Ordered longest-waiting first. */
 export function bookingsToQueueItems(bookings: BookingRow[], now: Date, limit = 6): QueueItemData[] {
   return bookings
     .filter((b) => b.status.toLowerCase() === "pending" || b.provider == null)
+    .sort((a, b) => (a.createdAt?.getTime() ?? Infinity) - (b.createdAt?.getTime() ?? Infinity))
     .slice(0, limit)
     .map((b) => ({
       key: b.id,
       label: b.provider?.name ? `With ${b.provider.name}` : "Unassigned",
-      meta: b.scheduledAt ? undefined : "awaiting schedule",
-      waiting: b.scheduledAt ? `${Math.max(0, daysBetween(now, b.scheduledAt))}d` : undefined,
+      meta: b.scheduledAt ? `booked for ${b.scheduledAt.toISOString().slice(5, 10)}` : "awaiting schedule",
+      waiting: b.createdAt ? humanizeWait(now.getTime() - b.createdAt.getTime()) : undefined,
     }));
+}
+
+/** The longest a pending item has waited — the queue's headline flow metric. */
+export function longestWaitMs(bookings: BookingRow[], now: Date): number {
+  const pending = bookings.filter((b) => b.status.toLowerCase() === "pending" || b.provider == null);
+  let max = 0;
+  for (const b of pending) {
+    if (b.createdAt) max = Math.max(max, now.getTime() - b.createdAt.getTime());
+  }
+  return max;
 }
 
 /** In-flight demand → work items, attributed to the assigned provider (human). */
@@ -276,19 +298,32 @@ export function buildQuests(input: {
   return quests;
 }
 
-/** Live, archetype-agnostic capacity counters — each is a true number. */
+/** Live, archetype-agnostic capacity counters — each is a true number. When any
+ *  demand is waiting, the longest wait leads as the headline flow metric. */
 export function liveCapacityChips(input: {
   teamTotal: number;
   aiCount: number;
   openDemand: number;
   billsDueCount: number;
+  longestWaitMs?: number;
 }): CapacityChipData[] {
-  return [
+  const chips: CapacityChipData[] = [];
+  if (input.longestWaitMs && input.longestWaitMs > 0) {
+    chips.push({
+      key: "wait",
+      label: "Longest wait",
+      value: humanizeWait(input.longestWaitMs),
+      intent: input.longestWaitMs > 86_400_000 ? "danger" : "warning",
+      live: true,
+    });
+  }
+  chips.push(
     { key: "team", label: "Workforce", value: input.teamTotal, intent: "info", live: true },
     { key: "ai", label: "AI coworkers", value: input.aiCount, intent: "accent" },
     { key: "demand", label: "Open demand", value: input.openDemand, intent: input.openDemand > 0 ? "warning" : "success", live: true },
     { key: "bills", label: "Bills due", value: input.billsDueCount, intent: input.billsDueCount > 0 ? "warning" : "success" },
-  ];
+  );
+  return chips;
 }
 
 /** A bounded attributed feed from the demand rows we already read. The persisted
@@ -358,7 +393,13 @@ export async function loadLivingBusinessSnapshot(opts?: {
         where: { status: { notIn: ["completed", "cancelled"] } },
         orderBy: { scheduledAt: "asc" },
         take: 24,
-        select: { id: true, scheduledAt: true, status: true, provider: { select: { name: true } } },
+        select: {
+          id: true,
+          scheduledAt: true,
+          createdAt: true,
+          status: true,
+          provider: { select: { name: true } },
+        },
       })
       .catch(() => []) as Promise<BookingRow[]>,
     db.serviceProvider
@@ -409,6 +450,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
       aiCount: roster.summary.agents,
       openDemand: bookings.length,
       billsDueCount: bills.length,
+      longestWaitMs: longestWaitMs(bookings, now),
     }),
     zones,
     workItems: bookingsToWorkItems(bookings, profile.workItemNoun.singular),

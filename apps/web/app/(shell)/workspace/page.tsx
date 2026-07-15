@@ -11,7 +11,7 @@ import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyPr
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 import { resolveWorkspaceHomeContribution } from "@/lib/workspace-home/registry";
-import { resolveWorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
+import { loadWorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
 import { recordWorkspaceHomeResolution } from "@/lib/workspace-home/telemetry";
 import {
   isSimpleNavMode,
@@ -38,9 +38,11 @@ export default async function WorkspacePage() {
   // The operational twin becomes the main workspace view (EP-LIVING-BUSINESS-VIZ
   // P3). It derives for every archetype with a definition, independent of whether
   // a workspace-home registry contribution is seeded; a resolution miss falls back
-  // to the existing home. Snapshot is DEMO behind the twin-panel-data seam.
+  // to the existing home. Now wired to the LIVE `LivingBusinessSnapshot` projection
+  // (increment 2a) — real business data where the org has it, deterministic demo
+  // otherwise.
   const archetypeRef = platformHomeData.storefrontConfig?.archetype ?? null;
-  const twinPresentation = resolveWorkspaceTwinPresentation(
+  const twinPresentation = await loadWorkspaceTwinPresentation(
     archetypeRef?.archetypeId ?? null,
     archetypeRef?.name ?? null,
   );

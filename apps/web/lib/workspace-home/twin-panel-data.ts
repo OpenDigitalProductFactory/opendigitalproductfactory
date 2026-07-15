@@ -2,9 +2,14 @@
 //
 // The workspace-home twin seam (EP-LIVING-BUSINESS-VIZ P3, increment 2). Resolves
 // the org's archetype into a rendered operational twin for the /workspace hero:
-// slug -> ALL_ARCHETYPES -> deriveTwinProfile -> snapshot. Pure, total (returns
-// null rather than throwing when no definition resolves), and DB-free — the page
-// already loads StorefrontConfig.archetype and hands the slug + name in.
+// slug -> ALL_ARCHETYPES -> deriveTwinProfile -> snapshot.
+//
+// Two resolvers share one presentation shape:
+//   - resolveWorkspaceTwinPresentation — pure, total, DB-free; deterministic DEMO
+//     snapshot (used by tests and as the always-available fallback).
+//   - loadWorkspaceTwinPresentation — async; overlays the real
+//     `LivingBusinessSnapshot` projection when an org is configured, else falls
+//     back to the demo. This is the wired demo -> real path.
 //
 // Plan: docs/superpowers/plans/2026-07-15-twin-workspace-home-placement-execution.md
 // Renderer (sibling-owned, not edited here): apps/web/components/twin/TwinView.tsx
@@ -16,6 +21,7 @@ import {
 } from "@dpf/storefront-templates";
 
 import { buildDemoTwinSnapshot, type TwinSnapshot } from "@/components/twin";
+import { loadLivingBusinessSnapshot } from "@/lib/twin/living-business-snapshot";
 
 export interface WorkspaceTwinPresentation {
   archetypeId: string;
@@ -79,4 +85,32 @@ export function resolveWorkspaceTwinPresentation(
     snapshot: condenseForWorkspaceHome(snapshot),
     demo,
   };
+}
+
+/**
+ * The LIVE workspace-home twin (EP-LIVING-BUSINESS-VIZ P3, increment 2 — wired).
+ * Overlays the real `LivingBusinessSnapshot` projection onto the resolved
+ * presentation: when an org is configured and its archetype matches, the panel
+ * renders live business data (`demo: false`); otherwise it falls back to the
+ * deterministic demo above. Never throws — a projection failure degrades to demo,
+ * so the home always renders. The home-mount condensing (drop the twin's rival
+ * `cog`/`quests` so `OperatorCockpit` stays the single attention surface) applies
+ * to the live snapshot too.
+ */
+export async function loadWorkspaceTwinPresentation(
+  archetypeId: string | null | undefined,
+  archetypeName?: string | null,
+  opts?: Parameters<typeof loadLivingBusinessSnapshot>[0],
+): Promise<WorkspaceTwinPresentation | null> {
+  const base = resolveWorkspaceTwinPresentation(archetypeId, archetypeName);
+  if (!base) return null;
+  try {
+    const live = await loadLivingBusinessSnapshot(opts);
+    if (live && live.archetypeId === base.archetypeId) {
+      return { ...base, snapshot: condenseForWorkspaceHome(live), demo: false };
+    }
+  } catch {
+    // Projection failed (no DB in this context, transient error) — keep the demo.
+  }
+  return base;
 }

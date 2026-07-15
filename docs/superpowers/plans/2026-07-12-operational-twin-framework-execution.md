@@ -101,15 +101,32 @@ ahead of the demo archetypes. Pure mapping helpers are unit-tested
 (`living-business-snapshot.test.ts`, 11 assertions incl. a fake-client loader run);
 what has no substrate yet is left empty with its calm-state label, not faked.
 
-**Still to come:** a persisted human+AI event log for a richer live feed, per-stage
-flow metrics (queue depth / WIP / wait) over `deriveOperationalValueStream`, and a
-live cog optimizer — each lands behind this same `TwinSnapshot` shape.
+### P3 increment 2b — workspace-home placement · DONE (merged, sibling PR)
+`TwinView` is the main `/workspace` view — a dedicated hero (`WorkspaceTwinHero`,
+parent viz spec §9 option c) that folds `OperatorCockpit` in as its HUD so exactly
+one attention surface renders, with the platform launcher demoted below. The
+`twin-panel-data` seam (`resolveWorkspaceTwinPresentation`) resolves the org's
+archetype → profile → snapshot and condenses for the home mount (strips the twin's
+rival `cog`/`quests`).
 
-### P3 increment 2b — workspace-home placement · IN A SIBLING PR
-Register `TwinView` as a per-archetype workspace-home contribution and render it on
-the real `/workspace` home (relative to `OperatorCockpit`; the placement is the open
-question in the parent viz design spec §9). Built in parallel on its own branch,
-rendering via this projection behind the shared `TwinSnapshot` seam.
+### P3 increment 2c — wire the home to LIVE data + real flow metrics · DONE
+The home seam now renders the **real** projection. `loadWorkspaceTwinPresentation`
+(async) overlays `loadLivingBusinessSnapshot` onto the resolved presentation:
+`demo: false` with live business data when the org is configured, deterministic demo
+otherwise, never throwing (a projection failure degrades to demo). The workspace page
+awaits it. Added **real queue wait-time** flow metrics — the founder's original ask
+("if we know the queue and wait times"): `bookingsToQueueItems` orders longest-waiting
+first and shows each item's true age (from `createdAt`), and a **Longest wait**
+capacity chip leads the board when demand is waiting (`humanizeWait`/`longestWaitMs`).
+Tests: live-overlay + demo-fallback (`twin-panel-data.test.ts`) and the wait-metric
+helpers (`living-business-snapshot.test.ts`); 33 twin assertions green.
+
+**Still deferred (each behind the same `TwinSnapshot` shape, no contract change):**
+a *persisted* human+AI event log for a richer live feed (needs a new table +
+write-path instrumentation — a migration-class change, out of scope here; the feed
+stays derived-from-bookings until then); per-value-stream-stage WIP over
+`deriveOperationalValueStream`; and a live cog *optimizer* (the home strips the cog —
+this benefits the admin/non-home mounts).
 
 ## P4 — remaining templates by install demand
 BOOK, BAYS, ROOMS, STORE, VENUE, COUNTER + the TENANTS/PIPELINE/PROGRAMS boards, each a template + bindings (not a bespoke build). Certification: a golden-journey per template exercising queue → cog → confirm. PHI-class ROOMS (healthcare) gets the presence/feed redaction mode (role, not patient identity) keyed off `privacyClass` (open question §9.2).
