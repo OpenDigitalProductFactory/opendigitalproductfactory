@@ -457,7 +457,7 @@ async function principleDecide(
 
   // Persist the consult to the DecisionInteraction ledger so the decision
   // governance hub can audit that the gate is in use (per-tier log at
-  // /wiki/decisions). Fail-open: a ledger outage never blocks the
+  // /coworker-decisions/decisions). Fail-open: a ledger outage never blocks the
   // decision, but the outcome is named in the response either way.
   // This is audit observability, not a business mutation — the tool's
   // read-only annotation stays as-is (ToolExecution already logs calls;

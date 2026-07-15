@@ -256,7 +256,7 @@ export async function saveWikiOverlayEdit(
       title: input.title.trim(),
       body: input.body,
       changeKind: "manual",
-      changeSummary: input.changeSummary ?? "Manual edit via /wiki/<slug>/edit",
+      changeSummary: input.changeSummary ?? "Manual edit via /coworker-decisions/<slug>/edit",
       createdById: user.id,
     });
 

@@ -40,7 +40,7 @@ const MODE_TITLES: Record<WikiPageEditorProps["mode"], string> = {
 };
 
 const MODE_HELPERS: Record<WikiPageEditorProps["mode"], string> = {
-  create: "Creates a new org-scoped overlay page. It will appear on /wiki?status=all until you flip status to Published.",
+  create: "Creates a new org-scoped overlay page. It will appear on /coworker-decisions?status=all until you flip status to Published.",
   update: "Saves a new revision on this overlay page. The viewer route revalidates on save.",
   override:
     "Creates an org override for this kernel page. The override masks the kernel content for your org only; kernel content is untouched.",

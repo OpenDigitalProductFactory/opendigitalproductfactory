@@ -62,7 +62,7 @@ export const STANCE_VECTOR_BUNDLES: Record<StanceVectorKey, DecisionDomainClass[
   "spend-authority": ["risk-assessment", "architecture-tradeoff"],
 };
 
-/** Org-overlay slug for a stance vector page (matches the /wiki/stance prefix). */
+/** Org-overlay slug for a stance vector page (shown under /coworker-decisions/stance). */
 export function stanceVectorSlug(key: StanceVectorKey): string {
   return `stances/${key}`;
 }

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 548,
+  "routeCount": 550,
   "routes": [
     {
       "routePath": "/",
@@ -6322,6 +6322,28 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/welcome/page.tsx"
+    },
+    {
+      "routePath": "/wiki",
+      "kind": "page",
+      "segments": [
+        "wiki"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/wiki/page.tsx",
+      "redirectTo": "/coworker-decisions"
+    },
+    {
+      "routePath": "/wiki/[...slug]",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "[...slug]"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(shell)/wiki/[...slug]/page.tsx"
     },
     {
       "routePath": "/workbooks",

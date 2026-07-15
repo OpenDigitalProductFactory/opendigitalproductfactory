@@ -1,5 +1,5 @@
 // EP-WIKI-001 Phase 6a: Decision Perspective Profiles index.
-// Route: /wiki/perspectives
+// Route: /coworker-decisions/perspectives
 //
 // Lists all active decision perspective profiles with links to each
 // profile's voice configuration page. Entry point for voice admin.

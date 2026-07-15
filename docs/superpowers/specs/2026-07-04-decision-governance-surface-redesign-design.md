@@ -128,8 +128,8 @@ authoring but no decision loop.
 
 ### 4.1 Rename / reframe the top-level surface
 
-- **Route:** keep `/wiki` working (redirect / alias) but introduce the surface under a
-  business-legible name. Working title **"Decision Governance"** (nav label candidates, to be
+- **Route:** keep `/wiki` working as a redirect alias, with the canonical surface under
+  `/coworker-decisions`. Working title **"Decision Governance"** (nav label candidates, to be
   confirmed with the operator: *"How Your AI Decides"*, *"Decision Center"*). The nav entry
   ([portal-navigation-model.ts:845](../../../apps/web/lib/navigation/portal-navigation-model.ts))
   changes from *"Founder kernel and per-org overlay — stances, heuristics, decisions"* to a
@@ -225,15 +225,16 @@ any phase.
   "Wiki" → "Decision governance", raw material retained as a drill-in. (PR #2575)
 - **Phase 2 — Decision Review & Adjust workspace.** ✅ (conflict + gap, PR #2575) → completion:
   `staleness` findings (stale-but-cited material) + the read-only decision **matrix** view
-  (`/wiki/matrix`). Drift (golden-decision flips) remains the one open sub-slice.
-- **Phase 3 — WWWD business-stance editor.** ✅ `/wiki/stance` — a plain-language draft authoring
+  (`/coworker-decisions/matrix`). Drift (golden-decision flips) remains the one open sub-slice.
+- **Phase 3 — WWWD business-stance editor.** ✅ `/coworker-decisions/stance` — a plain-language draft authoring
   form that writes an org-overlay `stance` page (the WWWD corpus the decision-routing block grounds
   business calls in). Closes the confirmed "no adjust UI" gap. Draft by default.
-- **Phase 4 — WSID per-role craft view + org override.** ✅ `/wiki/craft` + `/wiki/craft/[key]` —
+- **Phase 4 — WSID per-role craft view + org override.** ✅ `/coworker-decisions/craft` + `/coworker-decisions/craft/[key]` —
   per-profession view with a draft org-overlay `heuristic` override form. Does **not** depend on the
   WSID pilot-three corpus completion — it authors org overrides on top of whatever baseline exists.
-- **Phase 5 — Rename + nav + redirects + docs.** ◻ Nav label + on-page framing flipped in Phase 1;
-  the full route rename / `/wiki` alias awaits the operator's name choice (§8 Q1).
+- **Phase 5 — Rename + nav + redirects + docs.** ✅ Canonical route family renamed to
+  `/coworker-decisions`; `/wiki` remains as a thin redirect alias for legacy bookmarks and generated
+  links; active setup/tool copy now points at the canonical route.
 
 Dependency note (corrected during build): the WWWD/WSID **authoring** surfaces write org-overlay
 material and are useful immediately — the org's WWWD answers are grounded in its own org-overlay

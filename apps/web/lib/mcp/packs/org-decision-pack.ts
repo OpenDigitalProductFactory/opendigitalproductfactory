@@ -150,7 +150,7 @@ async function evaluateOrgBusinessDecision(
 // every other source uses (enrichOrgCorpus) — qa provenance, first-party
 // trust, draft-by-default per BI-1378. This closes the elicitation half of the
 // review loop: evaluate_org_business_decision surfaces where the org is silent
-// (gap findings on /wiki/review), and this tool captures the operator's answer
+// (gap findings on /coworker-decisions/review), and this tool captures the operator's answer
 // once so the silence doesn't repeat.
 async function recordOrgBusinessAnswer(
   params: Record<string, unknown>,

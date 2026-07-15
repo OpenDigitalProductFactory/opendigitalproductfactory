@@ -77,7 +77,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "wiki_ingest",
     description:
-      "Ingest a raw source (markdown file on disk) into the wiki: upsert the RawSource row, run the three-pass LLM extraction (abstract, claim, stance/heuristic), and optionally commit the proposal as draft overlay pages under the requesting org. Kernel pages stay PR-only (spec §4). Use when the user wants to import an article into the kernel knowledge surface, or to preview what the LLM would extract from a source without writing anything. Two modes: 'propose' returns the structured proposal for review without DB writes; 'commit' runs the full pipeline and lands drafts on /wiki?status=all.",
+      "Ingest a raw source (markdown file on disk) into the wiki: upsert the RawSource row, run the three-pass LLM extraction (abstract, claim, stance/heuristic), and optionally commit the proposal as draft overlay pages under the requesting org. Kernel pages stay PR-only (spec §4). Use when the user wants to import an article into the kernel knowledge surface, or to preview what the LLM would extract from a source without writing anything. Two modes: 'propose' returns the structured proposal for review without DB writes; 'commit' runs the full pipeline and lands drafts on /coworker-decisions?status=all.",
     inputSchema: {
       type: "object",
       properties: {

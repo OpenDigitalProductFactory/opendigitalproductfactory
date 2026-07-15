@@ -6,4 +6,8 @@ describe("STEP_ROUTES", () => {
     expect(STEP_ROUTES["business-context"]).toBe("/storefront/settings/business");
     expect(STEP_ROUTES["operating-hours"]).toBe("/storefront/settings/operations");
   });
+
+  it("points the decision-style setup step at the renamed coworker decisions surface", () => {
+    expect(STEP_ROUTES["how-you-decide"]).toBe("/coworker-decisions/stance");
+  });
 });

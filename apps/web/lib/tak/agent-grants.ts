@@ -229,7 +229,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // draft WikiPage/WikiPageRevision rows under the org's overlay.
   record_org_business_answer: ["registry_write"],
 
-  // Open decision reviews — the /wiki governance hub's queue of deferred/escalated
+  // Open decision reviews — the /coworker-decisions governance hub's queue of deferred/escalated
   // decisions awaiting a human. Read-only tool on the `registry_read` baseline: any
   // coworker may read and recommend on the queue; resolving stays a human action
   // in the owning workflow after reviewing Decision Canvas evidence.

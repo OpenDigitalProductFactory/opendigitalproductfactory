@@ -1,5 +1,5 @@
 // Voice profile admin page — wiki context.
-// Route: /wiki/perspectives/[profileId]/voice
+// Route: /coworker-decisions/perspectives/[profileId]/voice
 //
 // Surfaces consent capture, reference audio upload, and enable/disable
 // toggle for WWMD/WWTD decision perspective personas.
@@ -51,7 +51,7 @@ export default async function VoiceProfileAdminPage({ params }: { params: Params
     <div className="mx-auto max-w-2xl px-4 py-8">
       {/* Breadcrumb */}
       <nav className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/coworker-decisions" className="hover:text-foreground">Wiki</Link>
+        <Link href="/coworker-decisions" className="hover:text-foreground">Coworker Decisions</Link>
         <span>/</span>
         <Link href="/coworker-decisions/perspectives" className="hover:text-foreground">Perspectives</Link>
         <span>/</span>

@@ -1,6 +1,6 @@
 "use client";
 
-// Decision-ledger table for /wiki/decisions. Server page fetches the rows;
+// Decision-ledger table for /coworker-decisions/decisions. Server page fetches the rows;
 // this client child composes the report-kit DataTable per its server-page →
 // client-table contract.
 

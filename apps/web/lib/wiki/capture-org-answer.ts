@@ -2,7 +2,7 @@
 //
 // One path shared by the two surfaces that elicit first-party business
 // knowledge: the `record_org_business_answer` MCP tool (a coworker captures an
-// answer mid-conversation) and the /wiki/review answer-once affordance (the
+// answer mid-conversation) and the /coworker-decisions/review answer-once affordance (the
 // operator answers a gap the gate deferred on). Both route the confirmed answer
 // through enrichOrgCorpus with qa provenance + first-party trust, landing
 // draft-by-default per BI-1378 — so nothing becomes authoritative without human
