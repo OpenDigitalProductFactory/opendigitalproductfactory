@@ -198,6 +198,16 @@ if [[ $_dry_run -eq 0 ]]; then
     done
     [[ $_pg_ready -eq 1 ]] || { printf 'error: postgres did not become ready after the pgvector recreate\n' >&2; exit 1; }
   fi
+  # P3009 recovery (BET-5): an install that attempted this upgrade on a pre-fix promoter (no
+  # pgvector) left the pgvector-foundation migration in a FAILED state, which then blocks ALL
+  # subsequent `migrate deploy` with P3009 — even after pgvector is present. Now that pgvector
+  # is guaranteed available above, clear that ONE failed record so deploy can re-apply it.
+  # Scoped to this single migration, which fails at its first statement (CREATE EXTENSION), so
+  # nothing was applied and rolling it back is a no-op on data. Best-effort (`|| true`): a
+  # clean install has no such record and this is a harmless miss.
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+    -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation' >/dev/null 2>&1 || true
 fi
 
 # --- Step 3b: migrate ---
