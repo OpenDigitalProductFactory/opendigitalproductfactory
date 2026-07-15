@@ -2,9 +2,48 @@ import { describe, it, expect } from "vitest";
 
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
-import { resolveWorkspaceTwinPresentation } from "./twin-panel-data";
+import {
+  loadWorkspaceTwinPresentation,
+  resolveWorkspaceTwinPresentation,
+} from "./twin-panel-data";
 
 const SAMPLE = ALL_ARCHETYPES[0];
+const NOW = new Date("2026-07-15T09:00:00Z");
+
+// A fake client for the live projection path. `configured` toggles whether an org
+// (with the given archetype) resolves — driving live vs demo fallback.
+function fakeDb(configured: { archetypeId: string; name: string } | null) {
+  return {
+    employeeProfile: {
+      findMany: async () => [
+        { id: "E-1", displayName: "Sam", status: "active", position: { title: "Server" }, department: { name: "Floor" } },
+      ],
+    },
+    agent: {
+      findMany: async () => [
+        {
+          agentId: "AGT-HOST",
+          name: "AI host",
+          status: "active",
+          valueStream: "operate",
+          humanSupervisorId: null,
+          portfolioId: null,
+          hitlTierDefault: "tier2",
+          lifecycleStage: "active",
+          executionConfig: null,
+          _count: { toolGrants: 0, skills: 0 },
+          coworkerNeeds: [],
+        },
+      ],
+    },
+    storefrontConfig: { findFirst: async () => (configured ? { archetype: configured } : null) },
+    bill: { findMany: async () => [{ amountDue: 500, dueDate: NOW, status: "open", currency: "GBP" }] },
+    taxObligationPeriod: { findMany: async () => [] },
+    obligation: { findMany: async () => [] },
+    storefrontBooking: { findMany: async () => [] },
+    serviceProvider: { findMany: async () => [] },
+  } as never;
+}
 
 describe("resolveWorkspaceTwinPresentation", () => {
   it("resolves a profile + snapshot for a real archetype slug", () => {
@@ -55,5 +94,38 @@ describe("resolveWorkspaceTwinPresentation", () => {
       const result = resolveWorkspaceTwinPresentation(arch.archetypeId);
       expect(result, arch.archetypeId).not.toBeNull();
     }
+  });
+});
+
+describe("loadWorkspaceTwinPresentation — live overlay", () => {
+  it("uses the live projection (demo: false) when the org is configured", async () => {
+    const result = await loadWorkspaceTwinPresentation(SAMPLE.archetypeId, null, {
+      db: fakeDb({ archetypeId: SAMPLE.archetypeId, name: "Acme Co" }),
+      now: NOW,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.demo).toBe(false);
+    // live presence carries the real workforce (a human + an AI coworker)
+    expect(result!.snapshot.presence.some((p) => p.kind === "ai")).toBe(true);
+    // real finance flows through
+    expect(result!.snapshot.utility.find((m) => m.key === "bills")!.value).toContain("£500");
+    // home-mount condensing still applies to the live snapshot
+    expect(result!.snapshot.cog).toBeUndefined();
+    expect(result!.snapshot.quests).toEqual([]);
+  });
+
+  it("falls back to the demo (demo: true) when no org is configured", async () => {
+    const result = await loadWorkspaceTwinPresentation(SAMPLE.archetypeId, null, {
+      db: fakeDb(null),
+      now: NOW,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.demo).toBe(true);
+    expect(result!.snapshot.cog).toBeUndefined();
+  });
+
+  it("returns null for an unresolvable slug regardless of live data", async () => {
+    expect(await loadWorkspaceTwinPresentation(null)).toBeNull();
+    expect(await loadWorkspaceTwinPresentation("not-a-real-archetype-slug")).toBeNull();
   });
 });

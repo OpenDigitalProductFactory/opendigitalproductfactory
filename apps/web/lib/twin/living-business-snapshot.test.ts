@@ -5,8 +5,11 @@ import {
   bookingsToWorkItems,
   buildQuests,
   financeToUtility,
+  humanizeWait,
   liveCapacityChips,
   loadLivingBusinessSnapshot,
+  longestWaitMs,
+  proposeCogAllocation,
   resourceUnits,
   rosterToPresence,
   statusIntent,
@@ -91,17 +94,82 @@ describe("living-business-snapshot — pure helpers", () => {
 
   it("bookings map to queue (pending/unassigned) and work items (in flight)", () => {
     const bookings = [
-      { id: "b1", scheduledAt: new Date("2026-07-18T09:00:00Z"), status: "pending", provider: null },
-      { id: "b2", scheduledAt: new Date("2026-07-16T09:00:00Z"), status: "confirmed", provider: { name: "Dr Lee" } },
+      {
+        id: "b1",
+        scheduledAt: new Date("2026-07-18T09:00:00Z"),
+        createdAt: new Date("2026-07-15T06:00:00Z"), // 3h before NOW
+        status: "pending",
+        provider: null,
+      },
+      {
+        id: "b2",
+        scheduledAt: new Date("2026-07-16T09:00:00Z"),
+        createdAt: new Date("2026-07-14T09:00:00Z"),
+        status: "confirmed",
+        provider: { name: "Dr Lee" },
+      },
     ];
     const queue = bookingsToQueueItems(bookings, NOW);
     expect(queue).toHaveLength(1);
     expect(queue[0]).toMatchObject({ key: "b1", label: "Unassigned" });
+    // real wait time, measured from createdAt (3h before NOW)
+    expect(queue[0].waiting).toBe("3h");
 
     const work = bookingsToWorkItems(bookings, "appointment");
     expect(work).toHaveLength(1);
     expect(work[0]).toMatchObject({ owner: { name: "Dr Lee", kind: "human" } });
     expect(work[0].label).toContain("Appointment");
+  });
+
+  it("humanizeWait + longestWaitMs surface the queue's flow metric", () => {
+    expect(humanizeWait(8 * 60_000)).toBe("8m");
+    expect(humanizeWait(3 * 3_600_000)).toBe("3h");
+    expect(humanizeWait(2 * 86_400_000)).toBe("2d");
+    const bookings = [
+      { id: "a", scheduledAt: null, createdAt: new Date("2026-07-14T09:00:00Z"), status: "pending", provider: null },
+      { id: "b", scheduledAt: null, createdAt: new Date("2026-07-15T06:00:00Z"), status: "pending", provider: null },
+    ];
+    // longest wait = the older item (1 day before NOW)
+    expect(longestWaitMs(bookings, NOW)).toBe(86_400_000);
+    const chips = liveCapacityChips({ teamTotal: 3, aiCount: 1, openDemand: 2, billsDueCount: 0, longestWaitMs: 86_400_000 });
+    expect(chips[0]).toMatchObject({ key: "wait", value: "24h" });
+  });
+
+  it("proposeCogAllocation names the longest-waiting item and least-loaded provider", () => {
+    const bookings = [
+      { id: "old", scheduledAt: null, createdAt: new Date("2026-07-14T09:00:00Z"), status: "pending", provider: null },
+      { id: "new", scheduledAt: null, createdAt: new Date("2026-07-15T08:00:00Z"), status: "pending", provider: null },
+      // Dr Lee already carries an in-flight booking → higher load than Dr Fox.
+      { id: "busy", scheduledAt: null, createdAt: null, status: "confirmed", provider: { name: "Dr Lee" } },
+    ];
+    const providers = [
+      { id: "p1", name: "Dr Lee", isActive: true },
+      { id: "p2", name: "Dr Fox", isActive: true },
+    ];
+    const cog = proposeCogAllocation(bookings, providers, [], "appointment", "provider", ["skill", "availability"], NOW);
+    expect(cog).toBeTruthy();
+    expect(cog!.proposal).toContain("Dr Fox"); // lowest load wins
+    expect(cog!.proposal).toContain("appointment");
+    expect(cog!.confirmLabel).toBe("Assign appointment");
+    expect(cog!.signals).toEqual(["skill", "availability"]);
+  });
+
+  it("proposeCogAllocation falls back to an active AI coworker when no providers exist", () => {
+    const bookings = [{ id: "x", scheduledAt: null, createdAt: new Date("2026-07-14T09:00:00Z"), status: "pending", provider: null }];
+    const cog = proposeCogAllocation(
+      bookings,
+      [],
+      [member({ id: "AGT-1", displayName: "Aria", kind: "agent", status: "active" })],
+      "case",
+      "reviewer",
+      ["workload"],
+      NOW,
+    );
+    expect(cog!.proposal).toContain("Aria");
+  });
+
+  it("proposeCogAllocation stays silent when there is nothing to allocate", () => {
+    expect(proposeCogAllocation([], [], [], "job", "tech", ["skill"], NOW)).toBeUndefined();
   });
 
   it("liveCapacityChips are all real counts", () => {
@@ -171,7 +239,15 @@ describe("loadLivingBusinessSnapshot — loader", () => {
       taxObligationPeriod: { findMany: async () => [{ dueDate: new Date("2026-07-20T00:00:00Z"), status: "open", filedAt: null }] },
       obligation: { findMany: async () => [] },
       storefrontBooking: {
-        findMany: async () => [{ id: "bk1", scheduledAt: new Date("2026-07-15T18:00:00Z"), status: "pending", provider: null }],
+        findMany: async () => [
+          {
+            id: "bk1",
+            scheduledAt: new Date("2026-07-15T18:00:00Z"),
+            createdAt: new Date("2026-07-15T07:00:00Z"),
+            status: "pending",
+            provider: null,
+          },
+        ],
       },
       serviceProvider: { findMany: async () => [] },
     } as unknown as LivingBusinessClient;
