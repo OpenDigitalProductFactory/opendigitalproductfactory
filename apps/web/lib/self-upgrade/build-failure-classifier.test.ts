@@ -100,6 +100,14 @@ const P3009_BLOCKED_LOG = `Error: P3009
 migrate found failed migrations in the target database, new migrations will not be applied. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
 The \`20260714110000_bet5_pgvector_foundation\` migration started at 2026-07-14 11:02:03 UTC failed`;
 
+// Verbatim shape from BI-D8C0D045 (run SUR-C8BC533B, 2026-07-15): postgres was
+// unreachable during the upgrade (stranded in `Created` by the pre-#2978
+// ensure-pgvector bug), so the boot backfill's Prisma write hit P1001.
+const DB_UNREACHABLE_LOG = `[bet5-backfill] starting projection backfill
+Invalid \`prisma.selfUpgradeRun.update()\` invocation:
+Error querying the database: Can't reach database server at \`postgres\`:\`5432\`
+Please make sure your database server is running at \`postgres\`:\`5432\`.`;
+
 describe("classifyBuildFailure", () => {
   it("classifies the real @opentelemetry host-vs-Docker hoist divergence", () => {
     const c = classifyBuildFailure({ log: HOIST_LOG, hostBuildPassed: true });
@@ -221,6 +229,22 @@ describe("classifyBuildFailure", () => {
     expect(c.class).toBe("unknown");
   });
 
+  it("classifies a Prisma P1001 database-unreachable failure as environment", () => {
+    const c = classifyBuildFailure({ log: DB_UNREACHABLE_LOG });
+    expect(c.class).toBe("database-unreachable");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.summary).toContain("Can't reach database server");
+    expect(c.playbookLink).toMatch(/bet5-windows-self-upgrade/);
+    expect(c.failingTrace).toContain("Can't reach database server");
+  });
+
+  it("discriminates P1001 (database-unreachable) from a bare ECONNREFUSED (unknown)", () => {
+    // The specific Prisma phrasing is classified; the ambiguous bare errno is not
+    // (UNKNOWN_LOG is `connect ECONNREFUSED 127.0.0.1:5432` with no P1001 text).
+    expect(classifyBuildFailure({ log: DB_UNREACHABLE_LOG }).class).toBe("database-unreachable");
+    expect(classifyBuildFailure({ log: UNKNOWN_LOG }).class).toBe("unknown");
+  });
+
   it("keeps a non-pnpm ECONNREFUSED (e.g. prisma → postgres) unclassified", () => {
     const c = classifyBuildFailure({ log: UNKNOWN_LOG });
     expect(c.class).toBe("unknown");
@@ -234,7 +258,7 @@ describe("classifyBuildFailure", () => {
   });
 
   it("is total — every input yields a populated summary and playbook", () => {
-    for (const log of [HOIST_LOG, NFT_LOG, BUNDLE_BOUNDARY_LOG, DOCKER_CONTEXT_MISS_LOG, PGVECTOR_MISSING_LOG, P3009_BLOCKED_LOG, UNKNOWN_LOG, ""]) {
+    for (const log of [HOIST_LOG, NFT_LOG, BUNDLE_BOUNDARY_LOG, DOCKER_CONTEXT_MISS_LOG, PGVECTOR_MISSING_LOG, P3009_BLOCKED_LOG, DB_UNREACHABLE_LOG, UNKNOWN_LOG, ""]) {
       const c = classifyBuildFailure({ log });
       expect(c.summary.length).toBeGreaterThan(0);
       expect(c.playbookLink.length).toBeGreaterThan(0);
