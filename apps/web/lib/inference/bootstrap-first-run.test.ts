@@ -14,6 +14,7 @@ vi.mock("@dpf/db", () => ({
     },
     agentToolGrant: {
       upsert: vi.fn(),
+      createMany: vi.fn(),
     },
     agentToolGrantRevocation: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -96,6 +97,39 @@ describe("bootstrap-first-run", () => {
         }),
       );
       expect(syncAgentPrincipal).toHaveBeenCalledWith("onboarding-coo");
+    });
+
+    // BI-25A1ADF7: the tool grants must be seeded via a single race-safe
+    // createMany({ skipDuplicates }) — not a per-grant upsert loop that races
+    // the (agentId, grantKey) composite unique on concurrent cold-install runs.
+    it("seeds tool grants via a single idempotent createMany with skipDuplicates", async () => {
+      (prisma.agent.upsert as any).mockResolvedValue({ id: "cuid-coo", agentId: "onboarding-coo" });
+      (prisma.agentModelConfig.upsert as any).mockResolvedValue({ agentId: "onboarding-coo" });
+      await seedOnboardingAgent();
+      expect(prisma.agentToolGrant.upsert).not.toHaveBeenCalled();
+      expect(prisma.agentToolGrant.createMany).toHaveBeenCalledTimes(1);
+      const arg = (prisma.agentToolGrant.createMany as any).mock.calls[0][0];
+      expect(arg.skipDuplicates).toBe(true);
+      expect(arg.data).toEqual(
+        expect.arrayContaining([
+          { agentId: "cuid-coo", grantKey: "registry_write" },
+          { agentId: "cuid-coo", grantKey: "email_config" },
+        ]),
+      );
+      // Every row is scoped to the resolved agent PK (not the semantic agentId).
+      for (const row of arg.data) expect(row.agentId).toBe("cuid-coo");
+    });
+
+    it("omits revoked grants (BI-4FA040D5 tombstones) from the createMany insert", async () => {
+      (prisma.agent.upsert as any).mockResolvedValue({ id: "cuid-coo", agentId: "onboarding-coo" });
+      (prisma.agentModelConfig.upsert as any).mockResolvedValue({ agentId: "onboarding-coo" });
+      (prisma.agentToolGrantRevocation.findMany as any).mockResolvedValueOnce([
+        { grantKey: "web_search" },
+      ]);
+      await seedOnboardingAgent();
+      const arg = (prisma.agentToolGrant.createMany as any).mock.calls[0][0];
+      expect(arg.data.map((r: { grantKey: string }) => r.grantKey)).not.toContain("web_search");
+      expect(arg.data.map((r: { grantKey: string }) => r.grantKey)).toContain("file_read");
     });
   });
 });

@@ -65,14 +65,19 @@ export async function seedOnboardingAgent(): Promise<void> {
     select: { grantKey: true },
   });
   const revokedKeys = new Set(revoked.map((r) => r.grantKey));
-  for (const grantKey of grants) {
-    if (revokedKeys.has(grantKey)) continue;
-    await prisma.agentToolGrant.upsert({
-      where: { agentId_grantKey: { agentId: agent.id, grantKey } },
-      update: {},
-      create: { agentId: agent.id, grantKey },
-    });
-  }
+  // BI-25A1ADF7: two concurrent cold-install setup-init passes raced this
+  // per-grant loop on the agentToolGrant (agentId, grantKey) composite unique —
+  // each upsert does read-then-write, so both could miss the row and one insert
+  // lost the race with P2002. A single createMany with skipDuplicates is an
+  // atomic insert that DB-side no-ops on existing rows (ON CONFLICT DO NOTHING),
+  // so it is idempotent AND race-safe. The upsert's update was a no-op ({}), so
+  // there is no lost mutation. Revocation tombstones (BI-4FA040D5) still honored.
+  await prisma.agentToolGrant.createMany({
+    data: grants
+      .filter((grantKey) => !revokedKeys.has(grantKey))
+      .map((grantKey) => ({ agentId: agent.id, grantKey })),
+    skipDuplicates: true,
+  });
 
   // EP-AI-WORKFORCE-001: Provider selection via capability requirements (not pinning).
   // Uses capability-based routing: router picks best available provider meeting floor.
