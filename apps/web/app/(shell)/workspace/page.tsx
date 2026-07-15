@@ -6,10 +6,12 @@ import { prisma } from "@dpf/db";
 import { PlatformWorkspaceHome } from "@/components/workspace-home/PlatformWorkspaceHome";
 import { VerticalWorkspaceHome } from "@/components/workspace-home/VerticalWorkspaceHome";
 import { OperatorCockpit } from "@/components/workspace-home/OperatorCockpit";
+import { WorkspaceTwinHero } from "@/components/workspace-home/WorkspaceTwinHero";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 import { resolveWorkspaceHomeContribution } from "@/lib/workspace-home/registry";
+import { resolveWorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
 import { recordWorkspaceHomeResolution } from "@/lib/workspace-home/telemetry";
 import {
   isSimpleNavMode,
@@ -33,6 +35,16 @@ export default async function WorkspacePage() {
     storefrontConfig: platformHomeData.storefrontConfig,
   });
 
+  // The operational twin becomes the main workspace view (EP-LIVING-BUSINESS-VIZ
+  // P3). It derives for every archetype with a definition, independent of whether
+  // a workspace-home registry contribution is seeded; a resolution miss falls back
+  // to the existing home. Snapshot is DEMO behind the twin-panel-data seam.
+  const archetypeRef = platformHomeData.storefrontConfig?.archetype ?? null;
+  const twinPresentation = resolveWorkspaceTwinPresentation(
+    archetypeRef?.archetypeId ?? null,
+    archetypeRef?.name ?? null,
+  );
+
   const hasCloudProvider =
     (await prisma.modelProvider.count({
       where: { status: "active", NOT: { providerId: "local" } },
@@ -46,28 +58,55 @@ export default async function WorkspacePage() {
     // Swallow — counter recording must not affect the response.
   });
 
+  // The operator cockpit — the ONE consolidated "what needs you now" surface,
+  // organized OUTSIDE-IN from the customer inward, with a single attention count
+  // and honest customer-impact ranking (BI-8C3EB52C, BI-2651043B, BI-D35DE119).
+  // Supersedes the old "Needs you" band; it always states its state, so no other
+  // panel can contradict its count. On the twin hero it folds in as the HUD rail so
+  // there is still exactly ONE attention surface.
+  const cockpit = <OperatorCockpit userId={session.user.id} />;
+
   return (
     <div data-nav-mode={navMode}>
       {workspaceHomeResolution.mode === "unconfigured" && <UnconfiguredWorkspaceHomeNotice />}
       {workspaceHomeResolution.mode !== "unconfigured" && !hasCloudProvider && (
         <LocalOnlyProviderNotice />
       )}
-      {/* The operator cockpit — the ONE consolidated "what needs you now" surface,
-          organized OUTSIDE-IN from the customer inward, with a single attention count
-          and honest customer-impact ranking (BI-8C3EB52C, BI-2651043B, BI-D35DE119).
-          Supersedes the old "Needs you" band; it always states its state, so no other
-          panel can contradict its count. */}
-      <OperatorCockpit userId={session.user.id} />
-      {workspaceHomeResolution.mode === "vertical" ? (
-        <VerticalWorkspaceHome
-          contribution={workspaceHomeResolution.contribution}
-          data={platformHomeData}
+      {twinPresentation ? (
+        // Operator-confirmed placement (parent spec §9 option c): the operational
+        // twin is the main workspace view, a dedicated hero with the cockpit folded
+        // in as its HUD and the platform launcher demoted below.
+        <WorkspaceTwinHero
+          cockpit={cockpit}
+          presentation={twinPresentation}
+          contribution={
+            workspaceHomeResolution.mode === "vertical"
+              ? workspaceHomeResolution.contribution
+              : null
+          }
+          platformBody={
+            <PlatformWorkspaceHome
+              data={platformHomeData}
+              heading="All workspace areas"
+              density="simple"
+            />
+          }
         />
       ) : (
-        <PlatformWorkspaceHome
-          data={platformHomeData}
-          density={simpleHome ? "simple" : "full"}
-        />
+        <>
+          {cockpit}
+          {workspaceHomeResolution.mode === "vertical" ? (
+            <VerticalWorkspaceHome
+              contribution={workspaceHomeResolution.contribution}
+              data={platformHomeData}
+            />
+          ) : (
+            <PlatformWorkspaceHome
+              data={platformHomeData}
+              density={simpleHome ? "simple" : "full"}
+            />
+          )}
+        </>
       )}
     </div>
   );
