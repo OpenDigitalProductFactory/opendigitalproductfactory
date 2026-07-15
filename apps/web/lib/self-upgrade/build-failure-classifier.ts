@@ -50,6 +50,18 @@ export type BuildFailureClass =
   // `apk add` that crawled 52 min). Retry the upgrade; only dig deeper if it
   // times out the same way twice. Environment, not a main defect.
   | "promoter-timeout"
+  // A migrate-step failure where the target Postgres lacks pgvector, so
+  // `CREATE EXTENSION vector` cannot open `vector.control`. A pre-BET-5 install
+  // on postgres:16-alpine hits this until its promoter is current; the promoter's
+  // ensure-pgvector step recreates Postgres onto pgvector/pgvector:pg16 before
+  // migrate (data-preserving). Environment/image gap, not a main defect
+  // (SUR-* 2026-07-14; fixed by PR #2969/#2978).
+  | "pgvector-extension-missing"
+  // A prior failed migration left Prisma's P3009 state, which blocks ALL later
+  // migrations until the failed record is resolved (migrate resolve
+  // --rolled-back). Environment state from an earlier aborted attempt — often the
+  // pgvector failure above — not a main defect (promoter step-3a self-heals it).
+  | "p3009-failed-migration"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -107,6 +119,17 @@ const PNPM_OUTDATED_LOCKFILE = /ERR_PNPM_(OUTDATED_)?LOCKFILE|specifiers in the 
 const PNPM_FETCH_ERROR = /ERR_PNPM_FETCH|ERR_PNPM_META_FETCH_FAIL|GET https:\/\/registry\.npmjs\.org\/[^\s]+: (?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|socket hang up)/i;
 // runPromoter's marker when it kills a promoter that blew its wall-clock budget.
 const PROMOTER_TIMEOUT = /\[promoter-timeout\]/i;
+// BET-5 migrate-step failures. Both recovery procedures live in the runbook.
+const BET5_PLAYBOOK = "docs/runbooks/bet5-windows-self-upgrade.md";
+// `CREATE EXTENSION vector` on a Postgres image without pgvector: the canonical
+// Postgres errors are `extension "vector" is not available` and a `DETAIL: Could
+// not open extension control file ".../vector.control"`. Deliberately anchored on
+// the word "vector" so a generic missing-extension error stays unclassified.
+const PGVECTOR_MISSING = /extension\s+"?vector"?\s+is not available|could not open extension control file[^\n]*vector|vector\.control/i;
+// Prisma's P3009: a prior migration is recorded failed and blocks all later ones.
+// Anchored on the P3009 code / its exact phrasing — NOT a bare "migrate failed",
+// which is a different (unknown) failure that must not be mislabeled.
+const P3009_FAILED_MIGRATION = /\bP3009\b|migrate found failed migrations in the target database|following migrations? have failed/i;
 
 /** Up to ~6 lines around the first matching line, capped, for the agent. */
 function traceAround(log: string, re: RegExp): string {
@@ -230,6 +253,31 @@ export function classifyBuildFailure(
         "pnpm install failed inside the Docker build — most likely a transient registry fetch failure (SUR-73668D5C: one flaky package fetch, identical tree built clean on retry). Retry the upgrade first; only diagnose further if it fails the same way twice.",
       playbookLink: SPEC,
       failingTrace: traceAround(log, matched),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
+  // Migrate-step failures (checked after the build-output classes — a migrate
+  // failure means the build already succeeded). pgvector first: when a retry
+  // shows P3009 it is the downstream symptom of this root cause.
+  if (PGVECTOR_MISSING.test(log)) {
+    return {
+      class: "pgvector-extension-missing",
+      summary:
+        "The target Postgres lacks the pgvector extension — `CREATE EXTENSION vector` cannot open `vector.control`. A pre-BET-5 install on postgres:16-alpine hits this until its promoter is current; the promoter's ensure-pgvector step recreates Postgres onto pgvector/pgvector:pg16 before migrate (data-preserving — same PG16 engine + volume). Environment/image gap, not a main defect — do NOT hand-rebuild the portal; rebuild the promoter from current main and re-trigger.",
+      playbookLink: BET5_PLAYBOOK,
+      failingTrace: traceAround(log, PGVECTOR_MISSING),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
+  if (P3009_FAILED_MIGRATION.test(log)) {
+    return {
+      class: "p3009-failed-migration",
+      summary:
+        "A prior failed migration left Prisma's P3009 state, which blocks ALL later migrations. Resolve the failed migration (`prisma migrate resolve --rolled-back <name>`) once its precondition is fixed — the promoter's step-3a self-heals the BET-5 pgvector migration automatically. Environment state from an earlier aborted attempt, not a main defect.",
+      playbookLink: BET5_PLAYBOOK,
+      failingTrace: traceAround(log, P3009_FAILED_MIGRATION),
       isMainDefectVsEnvironment: "environment",
     };
   }
