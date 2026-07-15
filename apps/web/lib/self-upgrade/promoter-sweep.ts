@@ -25,21 +25,32 @@ export function isPromoterContainerStale(
   return now.getTime() - started >= maxAgeMs;
 }
 
+/** Minimal shape of a promisified execFile, so tests can inject a fake docker. */
+export type DockerRun = (
+  file: string,
+  args: string[],
+  options: { timeout: number },
+) => Promise<{ stdout: string }>;
+
+async function defaultDockerRun(): Promise<DockerRun> {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  return promisify(execFile) as unknown as DockerRun;
+}
+
 /**
  * Force-remove any `dpf-promoter-*` container older than `maxAgeMs` — well past
  * both runPromoter's self-timeout and a normal ~7-min swap, so a legitimately
  * in-flight promoter is never touched. Non-fatal; never throws.
  */
 export async function sweepOrphanedPromoterContainers(
-  opts: { maxAgeMs?: number; now?: () => Date } = {},
+  opts: { maxAgeMs?: number; now?: () => Date; run?: DockerRun } = {},
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<{ removed: number } | null> {
   const maxAgeMs = opts.maxAgeMs ?? 30 * 60 * 1000;
   const now = opts.now?.() ?? new Date();
   try {
-    const { execFile } = await import("node:child_process");
-    const { promisify } = await import("node:util");
-    const run = promisify(execFile);
+    const run = opts.run ?? (await defaultDockerRun());
     const { stdout } = await run(
       "docker",
       ["ps", "--filter", "name=dpf-promoter-", "--format", "{{.Names}}\t{{.CreatedAt}}"],
@@ -62,7 +73,15 @@ export async function sweepOrphanedPromoterContainers(
     }
     return { removed };
   } catch (err) {
-    // `docker ps` unreachable (no daemon in this env) — nothing to sweep.
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "ENOENT") {
+      // The docker CLI isn't on PATH — an entirely expected state on Docker-less
+      // runtimes. Log it quietly (info, no stack) so this benign "skip" doesn't
+      // trip the error-log PIR scanner on every sweep interval (BI-PIR-ae7f19b6).
+      logger.log("[promoter-sweep] docker CLI unavailable (ENOENT); nothing to sweep");
+      return null;
+    }
+    // A real docker/daemon failure (timeout, permission, daemon down) — surface it.
     logger.error("[promoter-sweep] failed (non-fatal):", err);
     return null;
   }
