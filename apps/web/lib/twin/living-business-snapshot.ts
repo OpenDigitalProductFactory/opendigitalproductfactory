@@ -1,0 +1,433 @@
+// apps/web/lib/twin/living-business-snapshot.ts
+//
+// The live projection for the operational twin (EP-LIVING-BUSINESS-VIZ P3,
+// increment 2 — data). Reads a running org's real substrate and produces a
+// `TwinSnapshot` — the exact shape `demo-snapshot.ts` invents — so `TwinView`
+// renders live where the data exists and the demo fills in only where a live
+// source genuinely does not (yet).
+//
+// Honesty policy (parent spec §4, "staff = work owned"): every field here is
+// backed by a real query or clearly derived from one. Where no substrate exists
+// yet — a persisted human+AI event log, per-stage flow metrics, a live cog
+// optimizer — the field is left empty (with its calm-state label) or omitted
+// rather than faked. Those become the next increments, behind this same shape.
+//
+// DPF is single-org-per-deployment: "the org" is the one `StorefrontConfig` row.
+
+import {
+  ALL_ARCHETYPES,
+  deriveTwinProfile,
+  type ArchetypeDefinition,
+  type TwinProfile,
+  type TwinTemplate,
+} from "@dpf/storefront-templates";
+
+import type { Intent } from "@/components/ui/report-kit";
+import {
+  loadWorkforceRoster,
+  type WorkforceMember,
+  type WorkforceRosterClient,
+} from "@/lib/workforce/workforce-roster";
+import type {
+  CapacityChipData,
+  FeedEventData,
+  QuestData,
+  QueueItemData,
+  ResourceUnitData,
+  TwinActor,
+  TwinQueueSnapshot,
+  TwinSnapshot,
+  TwinZoneSnapshot,
+  UtilityMeterData,
+  WorkItemData,
+} from "@/components/twin";
+
+// ── Structural client (satisfied by the real PrismaClient and by test fakes) ──
+type FindMany = (args: unknown) => Promise<unknown>;
+export type LivingBusinessClient = WorkforceRosterClient & {
+  storefrontConfig: { findFirst: (args: unknown) => Promise<unknown> };
+  bill: { findMany: FindMany };
+  taxObligationPeriod: { findMany: FindMany };
+  obligation: { findMany: FindMany };
+  storefrontBooking: { findMany: FindMany };
+  serviceProvider: { findMany: FindMany };
+};
+
+// ── Row shapes we select (kept narrow; amounts may arrive as Prisma.Decimal) ──
+type Money = number | string | { toString(): string } | null;
+interface BillRow {
+  amountDue: Money;
+  dueDate: Date | null;
+  status: string;
+  currency: string | null;
+}
+interface TaxPeriodRow {
+  dueDate: Date | null;
+  status: string;
+  filedAt: Date | null;
+}
+interface ObligationRow {
+  status: string;
+  reviewDate: Date | null;
+}
+interface BookingRow {
+  id: string;
+  scheduledAt: Date | null;
+  status: string;
+  provider: { name: string } | null;
+}
+interface ProviderRow {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface LiveTwinSnapshot extends TwinSnapshot {
+  live: true;
+  archetypeId: string;
+  archetypeName: string;
+  template: TwinTemplate;
+}
+
+// ── small pure utilities ──
+function toNum(v: Money): number {
+  if (v == null) return 0;
+  if (typeof v === "number") return v;
+  const n = Number(typeof v === "string" ? v : v.toString());
+  return Number.isFinite(n) ? n : 0;
+}
+function titleCase(s: string): string {
+  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
+}
+function daysBetween(from: Date, to: Date): number {
+  return Math.ceil((to.getTime() - from.getTime()) / 86_400_000);
+}
+const CURRENCY_SYMBOL: Record<string, string> = { GBP: "£", USD: "$", EUR: "€" };
+function currencySymbol(code: string | null): string {
+  return (code && CURRENCY_SYMBOL[code]) ?? "";
+}
+
+// ─────────────────────────── pure mapping helpers ───────────────────────────
+
+/** State → intent for a resource unit / booking. */
+export function statusIntent(status: string): Intent {
+  const s = status.toLowerCase();
+  if (["active", "confirmed", "completed", "paid", "healthy"].some((k) => s.includes(k))) return "success";
+  if (["pending", "scheduled", "in_progress", "inprogress", "onboarding"].some((k) => s.includes(k))) return "info";
+  if (["overdue", "failed", "at_risk", "at-risk", "blocked", "cancelled"].some((k) => s.includes(k))) return "danger";
+  if (["hold", "review", "draft", "stale", "watch"].some((k) => s.includes(k))) return "warning";
+  return "neutral";
+}
+
+/** Humans + AI coworkers on one plane — the roster IS the presence row. */
+export function rosterToPresence(members: WorkforceMember[], limit = 8): TwinActor[] {
+  return members
+    .filter((m) => m.status.toLowerCase() !== "archived" && m.status.toLowerCase() !== "inactive")
+    // AI coworkers first (they're the differentiator), then humans.
+    .sort((a, b) => Number(b.kind === "agent") - Number(a.kind === "agent"))
+    .slice(0, limit)
+    .map((m) => ({
+      name: m.displayName,
+      kind: m.kind === "agent" ? "ai" : "human",
+      focus: m.role ?? undefined,
+    }));
+}
+
+/**
+ * The countable resource units. Prefer real service providers (the archetype's
+ * service capacity); otherwise the workforce itself is the resource
+ * ("staff = work owned"). Never invents units.
+ */
+export function resourceUnits(
+  providers: ProviderRow[],
+  members: WorkforceMember[],
+  limit = 8,
+): ResourceUnitData[] {
+  if (providers.length > 0) {
+    return providers.slice(0, limit).map((p) => ({
+      key: p.id,
+      label: p.name,
+      state: p.isActive ? "Available" : "Off",
+      intent: p.isActive ? "success" : "neutral",
+    }));
+  }
+  return members
+    .filter((m) => m.status.toLowerCase() !== "archived")
+    .slice(0, limit)
+    .map((m) => ({
+      key: m.id,
+      label: m.displayName,
+      state: titleCase(m.status),
+      intent: statusIntent(m.status),
+      owner: m.kind === "agent" ? { name: m.displayName, kind: "ai" } : undefined,
+    }));
+}
+
+/** Pending, unstarted demand → queue items (the primary queue's live contents). */
+export function bookingsToQueueItems(bookings: BookingRow[], now: Date, limit = 6): QueueItemData[] {
+  return bookings
+    .filter((b) => b.status.toLowerCase() === "pending" || b.provider == null)
+    .slice(0, limit)
+    .map((b) => ({
+      key: b.id,
+      label: b.provider?.name ? `With ${b.provider.name}` : "Unassigned",
+      meta: b.scheduledAt ? undefined : "awaiting schedule",
+      waiting: b.scheduledAt ? `${Math.max(0, daysBetween(now, b.scheduledAt))}d` : undefined,
+    }));
+}
+
+/** In-flight demand → work items, attributed to the assigned provider (human). */
+export function bookingsToWorkItems(bookings: BookingRow[], workNoun: string, limit = 5): WorkItemData[] {
+  return bookings
+    .filter((b) => ["confirmed", "scheduled", "in_progress", "inprogress"].includes(b.status.toLowerCase()))
+    .slice(0, limit)
+    .map((b) => ({
+      key: b.id,
+      label: `${titleCase(workNoun)}${b.provider?.name ? ` · ${b.provider.name}` : ""}`,
+      owner: b.provider?.name ? { name: b.provider.name, kind: "human" } : undefined,
+      sublabel: b.scheduledAt ? b.scheduledAt.toISOString().slice(0, 10) : undefined,
+    }));
+}
+
+/** The supporting-activity meters — all backed by the finance spine. */
+export function financeToUtility(input: {
+  billsDueCount: number;
+  billsDueAmount: number;
+  currency: string | null;
+  nextTaxDueDays: number | null;
+  complianceOpenCount: number;
+  coworkerGaps: number;
+}): UtilityMeterData[] {
+  const sym = currencySymbol(input.currency);
+  const taxIntent: Intent =
+    input.nextTaxDueDays == null
+      ? "success"
+      : input.nextTaxDueDays <= 7
+        ? "danger"
+        : input.nextTaxDueDays <= 14
+          ? "warning"
+          : "info";
+  return [
+    {
+      key: "bills",
+      label: "Bills due",
+      value:
+        input.billsDueCount > 0
+          ? `${input.billsDueCount} · ${sym}${Math.round(input.billsDueAmount).toLocaleString("en-GB")}`
+          : "None due",
+      intent: input.billsDueCount > 0 ? "warning" : "success",
+      hint: "Next 7 days",
+    },
+    {
+      key: "tax",
+      label: "Tax filing",
+      value: input.nextTaxDueDays == null ? "Up to date" : `${input.nextTaxDueDays} days`,
+      intent: taxIntent,
+    },
+    {
+      key: "compliance",
+      label: "Compliance",
+      value: input.complianceOpenCount > 0 ? `${input.complianceOpenCount} to review` : "All clear",
+      intent: input.complianceOpenCount > 0 ? "warning" : "success",
+    },
+    {
+      key: "improve",
+      label: "Coworker gaps",
+      value: input.coworkerGaps > 0 ? `${input.coworkerGaps} to close` : "None",
+      intent: input.coworkerGaps > 0 ? "accent" : "success",
+    },
+  ];
+}
+
+/** What genuinely needs a human — every quest is a real attention signal. */
+export function buildQuests(input: {
+  billsDueCount: number;
+  nextTaxDueDays: number | null;
+  unassignedCount: number;
+}): QuestData[] {
+  const quests: QuestData[] = [];
+  if (input.nextTaxDueDays != null && input.nextTaxDueDays <= 14) {
+    quests.push({
+      key: "tax",
+      title: `Tax filing due in ${input.nextTaxDueDays} days`,
+      detail: "Review and submit the next return",
+      intent: input.nextTaxDueDays <= 7 ? "danger" : "warning",
+      cta: "Review",
+    });
+  }
+  if (input.unassignedCount > 0) {
+    quests.push({
+      key: "unassigned",
+      title: `${input.unassignedCount} unassigned`,
+      detail: "Demand waiting to be routed to a resource",
+      intent: "warning",
+      cta: "Assign",
+    });
+  }
+  if (input.billsDueCount > 0) {
+    quests.push({
+      key: "bills",
+      title: `${input.billsDueCount} bill${input.billsDueCount === 1 ? "" : "s"} due this week`,
+      detail: "Approve or schedule payment",
+      intent: "warning",
+      cta: "Pay",
+    });
+  }
+  return quests;
+}
+
+/** Live, archetype-agnostic capacity counters — each is a true number. */
+export function liveCapacityChips(input: {
+  teamTotal: number;
+  aiCount: number;
+  openDemand: number;
+  billsDueCount: number;
+}): CapacityChipData[] {
+  return [
+    { key: "team", label: "Workforce", value: input.teamTotal, intent: "info", live: true },
+    { key: "ai", label: "AI coworkers", value: input.aiCount, intent: "accent" },
+    { key: "demand", label: "Open demand", value: input.openDemand, intent: input.openDemand > 0 ? "warning" : "success", live: true },
+    { key: "bills", label: "Bills due", value: input.billsDueCount, intent: input.billsDueCount > 0 ? "warning" : "success" },
+  ];
+}
+
+/** A bounded attributed feed from the demand rows we already read. The persisted
+ *  human+AI event log (parent spec §4 live-delta plane) is a later increment; for
+ *  now the feed reflects real booking activity, attributed to its provider. */
+export function bookingsToFeed(bookings: BookingRow[], workNoun: string, limit = 4): FeedEventData[] {
+  return bookings.slice(0, limit).map((b, i) => ({
+    key: `bk-${b.id}-${i}`,
+    actor: b.provider?.name ? { name: b.provider.name, kind: "human" } : { name: "Front desk", kind: "human" },
+    action: `${b.status.toLowerCase() === "pending" ? "took a new" : "is handling a"} ${workNoun}`,
+    at: b.scheduledAt ? b.scheduledAt.toISOString().slice(5, 10) : undefined,
+  }));
+}
+
+// ─────────────────────────────── the loader ────────────────────────────────
+
+function resolveTemplateDef(archetypeId: string): ArchetypeDefinition | undefined {
+  return ALL_ARCHETYPES.find((a) => a.archetypeId === archetypeId);
+}
+
+/**
+ * Load the live twin snapshot for the deployment's single org. Returns `null`
+ * when no org is configured (or its archetype has no template definition) — the
+ * caller falls back to `buildDemoTwinSnapshot`. Mirrors the `platform-loader`
+ * idiom: injected client, `Promise.all` fan-out, fail-soft reads.
+ */
+export async function loadLivingBusinessSnapshot(opts?: {
+  db?: LivingBusinessClient;
+  now?: Date;
+}): Promise<LiveTwinSnapshot | null> {
+  const db = opts?.db ?? ((await import("@dpf/db")).prisma as unknown as LivingBusinessClient);
+  const now = opts?.now ?? new Date();
+  const in7 = new Date(now.getTime() + 7 * 86_400_000);
+
+  const config = (await db.storefrontConfig.findFirst({
+    select: { archetype: { select: { archetypeId: true, name: true } } },
+  })) as { archetype: { archetypeId: string; name: string } | null } | null;
+
+  const archetypeId = config?.archetype?.archetypeId;
+  if (!archetypeId) return null;
+  const def = resolveTemplateDef(archetypeId);
+  if (!def) return null;
+
+  const profile: TwinProfile = deriveTwinProfile(def);
+
+  const [roster, bills, taxPeriods, obligations, bookings, providers] = await Promise.all([
+    loadWorkforceRoster({ db }).catch(() => ({ members: [], summary: { total: 0, humans: 0, agents: 0, agentsWithUnmetNeeds: 0 } })),
+    db.bill
+      .findMany({
+        where: { status: { notIn: ["paid", "void"] }, dueDate: { gte: now, lte: in7 } },
+        select: { amountDue: true, dueDate: true, status: true, currency: true },
+      })
+      .catch(() => []) as Promise<BillRow[]>,
+    db.taxObligationPeriod
+      .findMany({
+        where: { filedAt: null },
+        orderBy: { dueDate: "asc" },
+        take: 1,
+        select: { dueDate: true, status: true, filedAt: true },
+      })
+      .catch(() => []) as Promise<TaxPeriodRow[]>,
+    db.obligation
+      .findMany({ where: { status: "active" }, select: { status: true, reviewDate: true } })
+      .catch(() => []) as Promise<ObligationRow[]>,
+    db.storefrontBooking
+      .findMany({
+        where: { status: { notIn: ["completed", "cancelled"] } },
+        orderBy: { scheduledAt: "asc" },
+        take: 24,
+        select: { id: true, scheduledAt: true, status: true, provider: { select: { name: true } } },
+      })
+      .catch(() => []) as Promise<BookingRow[]>,
+    db.serviceProvider
+      .findMany({ where: { isActive: true }, take: 12, select: { id: true, name: true, isActive: true } })
+      .catch(() => []) as Promise<ProviderRow[]>,
+  ]);
+
+  const members = roster.members;
+  const billsDueAmount = bills.reduce((sum, b) => sum + toNum(b.amountDue), 0);
+  const currency = bills.find((b) => b.currency)?.currency ?? null;
+  const nextTaxDueDays =
+    taxPeriods[0]?.dueDate != null ? Math.max(0, daysBetween(now, taxPeriods[0].dueDate)) : null;
+  const complianceOpenCount = obligations.filter(
+    (o) => o.reviewDate != null && o.reviewDate.getTime() <= in7.getTime(),
+  ).length;
+  const unassigned = bookings.filter((b) => b.provider == null || b.status.toLowerCase() === "pending");
+
+  const zones: TwinZoneSnapshot[] = [
+    {
+      key: profile.zones[0]?.key ?? "board",
+      units: resourceUnits(providers, members),
+    },
+  ];
+
+  const queueItems = bookingsToQueueItems(bookings, now);
+  const queues: TwinQueueSnapshot[] = profile.queues.map((qs, i) => ({
+    key: qs.key,
+    items: i === 0 ? queueItems : [],
+    emptyLabel: i === 0 ? "No demand waiting" : "Clear",
+  }));
+
+  const cog =
+    queueItems.length > 0
+      ? {
+          proposal: `Route the next ${profile.workItemNoun.singular} to the best ${profile.resourceNoun.singular} by ${profile.cog.signals[0]}`,
+          confirmLabel: `Assign ${profile.workItemNoun.singular}`,
+          signals: profile.cog.signals.slice(0, 3),
+        }
+      : undefined;
+
+  return {
+    live: true,
+    archetypeId,
+    archetypeName: config?.archetype?.name ?? def.name,
+    template: profile.template,
+    capacityChips: liveCapacityChips({
+      teamTotal: roster.summary.total,
+      aiCount: roster.summary.agents,
+      openDemand: bookings.length,
+      billsDueCount: bills.length,
+    }),
+    zones,
+    workItems: bookingsToWorkItems(bookings, profile.workItemNoun.singular),
+    queues,
+    cog,
+    presence: rosterToPresence(members),
+    feed: bookingsToFeed(bookings, profile.workItemNoun.singular),
+    quests: buildQuests({
+      billsDueCount: bills.length,
+      nextTaxDueDays,
+      unassignedCount: unassigned.length,
+    }),
+    utility: financeToUtility({
+      billsDueCount: bills.length,
+      billsDueAmount,
+      currency,
+      nextTaxDueDays,
+      complianceOpenCount,
+      coworkerGaps: roster.summary.agentsWithUnmetNeeds,
+    }),
+  };
+}

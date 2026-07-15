@@ -77,11 +77,39 @@ physical FLOOR and a non-physical TENANTS board from the one component with the
 correct profile vocabulary. Verification: typecheck clean; `vitest components/twin/`
 12/12 green; route manifest current.
 
-**Next P3 increment (not in this PR):** bind the snapshot to real substrate —
-`LivingBusinessSnapshot` over `deriveOperationalValueStream`, `agent_registry`/`Agent`
-+ `agent-event-bus`, the finance spine — and register `TwinView` as a workspace-home
-contribution per archetype (workspace-home registry). The demo snapshot is explicitly
-a placeholder that the projection replaces wholesale behind the same shape.
+### P3 increment 2a — the live data projection · DONE
+`loadLivingBusinessSnapshot` (`apps/web/lib/twin/living-business-snapshot.ts`)
+projects the deployment's single org into a real `TwinSnapshot` — the same shape
+`buildDemoTwinSnapshot` invents — so `TwinView` renders live where the substrate
+exists. Sources, honest by policy (every field backed by a query or clearly derived;
+nothing faked):
+- **presence** ← the workforce roster (`loadWorkforceRoster`) — humans + AI coworkers
+  on one plane, AI first, `kind` from the roster discriminator.
+- **utility** ← the finance spine — bills due ≤7d (count + amount), next unfiled
+  `TaxObligationPeriod`, open `Obligation` reviews, coworker capability gaps.
+- **capacityChips** ← real counts (workforce, AI coworkers, open demand, bills due).
+- **zones / units** ← active `ServiceProvider`s, else the workforce ("staff = work
+  owned").
+- **queues / workItems** ← `StorefrontBooking` (pending → primary queue; in-flight →
+  work items attributed to the provider).
+- **quests** ← real attention only (tax due ≤14d, unassigned demand, bills due).
+- **cog** ← a proposal shell raised only when there is real pending demand.
+
+Returns `null` when no org is configured → the caller falls back to the demo.
+`/admin/twin-kit` now leads with a **live · this business** tab (the real projection)
+ahead of the demo archetypes. Pure mapping helpers are unit-tested
+(`living-business-snapshot.test.ts`, 11 assertions incl. a fake-client loader run);
+what has no substrate yet is left empty with its calm-state label, not faked.
+
+**Still to come:** a persisted human+AI event log for a richer live feed, per-stage
+flow metrics (queue depth / WIP / wait) over `deriveOperationalValueStream`, and a
+live cog optimizer — each lands behind this same `TwinSnapshot` shape.
+
+### P3 increment 2b — workspace-home placement · IN A SIBLING PR
+Register `TwinView` as a per-archetype workspace-home contribution and render it on
+the real `/workspace` home (relative to `OperatorCockpit`; the placement is the open
+question in the parent viz design spec §9). Built in parallel on its own branch,
+rendering via this projection behind the shared `TwinSnapshot` seam.
 
 ## P4 — remaining templates by install demand
 BOOK, BAYS, ROOMS, STORE, VENUE, COUNTER + the TENANTS/PIPELINE/PROGRAMS boards, each a template + bindings (not a bespoke build). Certification: a golden-journey per template exercising queue → cog → confirm. PHI-class ROOMS (healthcare) gets the presence/feed redaction mode (role, not patient identity) keyed off `privacyClass` (open question §9.2).

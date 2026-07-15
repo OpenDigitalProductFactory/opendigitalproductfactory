@@ -8,10 +8,14 @@ import {
 
 import { buildDemoTwinSnapshot } from "@/components/twin";
 import { TwinKitShowcase, type TwinExample } from "@/components/twin/TwinKitShowcase";
+import { loadLivingBusinessSnapshot } from "@/lib/twin/living-business-snapshot";
 
 export const metadata: Metadata = {
   title: "Operational Twin Kit — preview",
 };
+
+// The projection queries the live org — render at request time, never prerender.
+export const dynamic = "force-dynamic";
 
 // Fixture/reference surface for the Operational Twin renderer (P3). Not linked
 // from the admin nav — it is a developer preview reachable directly at
@@ -37,8 +41,8 @@ function firstInCategory(category: string): ArchetypeDefinition | undefined {
   return ALL_ARCHETYPES.find((a) => a.category === category);
 }
 
-export default function AdminTwinKitPage() {
-  const examples: TwinExample[] = SHOWCASE_CATEGORIES.flatMap(({ category, kind }) => {
+export default async function AdminTwinKitPage() {
+  const demoExamples: TwinExample[] = SHOWCASE_CATEGORIES.flatMap(({ category, kind }) => {
     const archetype = firstInCategory(category);
     if (!archetype) return [];
     const profile = deriveTwinProfile(archetype);
@@ -53,6 +57,25 @@ export default function AdminTwinKitPage() {
       },
     ];
   });
+
+  // The live twin for THIS deployment's org, projected from real substrate
+  // (workforce roster, finance spine, bookings). Null when no org is configured —
+  // then only the demo archetypes show. When present it leads as the default tab.
+  const live = await loadLivingBusinessSnapshot();
+  const liveDef = live ? ALL_ARCHETYPES.find((a) => a.archetypeId === live.archetypeId) : undefined;
+  const liveExample: TwinExample | null =
+    live && liveDef
+      ? {
+          id: `live:${live.archetypeId}`,
+          label: `${live.archetypeName}`,
+          kind: "live · this business",
+          template: live.template,
+          profile: deriveTwinProfile(liveDef),
+          snapshot: live,
+        }
+      : null;
+
+  const examples: TwinExample[] = liveExample ? [liveExample, ...demoExamples] : demoExamples;
 
   return (
     <div>
