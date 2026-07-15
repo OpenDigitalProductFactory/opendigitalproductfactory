@@ -16,6 +16,7 @@ import {
 } from "react";
 import {
   DataGrid,
+  TreeDataGrid,
   SelectColumn,
   renderTextEditor,
   type Column,
@@ -88,6 +89,12 @@ import {
   parseViewState,
   type SortState,
 } from "./grid-view-state";
+import {
+  reorderColumnIds,
+  applyColumnOrder,
+  groupRowsByColumn,
+  groupKeys,
+} from "./grid-reorder-group";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -120,6 +127,8 @@ function buildColumn(
     name: label,
     resizable: true,
     sortable: true,
+    // Drag the header to reorder columns (onColumnsReorder on the grid).
+    draggable: true,
     width: col.width,
     minWidth: 80,
     // Progressive disclosure (Dale review): provenance is hidden until the user
@@ -270,6 +279,13 @@ export function WorkbookGrid({
   const [summaryChart, setSummaryChart] = useState(false);
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const activeFilterCount = Object.values(columnFilters).filter((v) => v.trim()).length;
+  // Drag-to-reorder column order (column ids) + in-grid collapsible grouping.
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [groupBy, setGroupBy] = useState<string[]>([]);
+  const [showGroup, setShowGroup] = useState(false);
+  // Which groups the user has collapsed (session-scoped); everything else is
+  // expanded by default so the grouped grid reads like Smartsheet on open.
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
   // Multi-step undo/redo of cell edits (distinct from the audit history). Each
   // entry's inverse replays through the same validated dispatch as a normal edit.
   const [history, setHistory] = useState<GridHistory>(EMPTY_HISTORY);
@@ -287,6 +303,8 @@ export function WorkbookGrid({
         if (parsed.sort) setSortColumns(parsed.sort);
         if (parsed.cfRules) setCfRules(parsed.cfRules);
         if (parsed.showProvenance !== undefined) setShowProvenance(parsed.showProvenance);
+        if (parsed.columnOrder) setColumnOrder(parsed.columnOrder);
+        if (parsed.groupBy) setGroupBy(parsed.groupBy);
       }
     } catch {
       // ignore unreadable storage
@@ -303,17 +321,48 @@ export function WorkbookGrid({
       }));
       localStorage.setItem(
         viewStorageKey(tableId),
-        serializeViewState({ filterQuery, columnFilters, sort, cfRules, showProvenance }),
+        serializeViewState({
+          filterQuery,
+          columnFilters,
+          sort,
+          cfRules,
+          showProvenance,
+          columnOrder,
+          groupBy,
+        }),
       );
     } catch {
       // ignore quota / unavailable storage
     }
-  }, [tableId, filterQuery, columnFilters, sortColumns, cfRules, showProvenance]);
+  }, [tableId, filterQuery, columnFilters, sortColumns, cfRules, showProvenance, columnOrder, groupBy]);
+
+  // Columns in the user's saved drag order; new columns append, stale ids drop.
+  const orderedColumns = useMemo(
+    () => applyColumnOrder(columns, columnOrder),
+    [columns, columnOrder],
+  );
 
   const gridColumns = useMemo<Column<GridRowData>[]>(() => {
-    const cols = columns.map((c) => buildColumn(c, capabilities.canEditCell, showProvenance));
+    const cols = orderedColumns.map((c) => buildColumn(c, capabilities.canEditCell, showProvenance));
     return capabilities.canDeleteRow ? [SelectColumn, ...cols] : cols;
-  }, [columns, capabilities, showProvenance]);
+  }, [orderedColumns, capabilities, showProvenance]);
+
+  const onColumnsReorder = useCallback(
+    (sourceKey: string, targetKey: string) => {
+      setColumnOrder((prev) =>
+        reorderColumnIds(prev.length ? prev : columns.map((c) => c.columnId), sourceKey, targetKey),
+      );
+    },
+    [columns],
+  );
+
+  // In-grid grouping (v1: single column). Drop stale ids so a deleted grouping
+  // column can't wedge the grid into an empty TreeDataGrid.
+  const effectiveGroupBy = useMemo(
+    () => groupBy.filter((id) => columns.some((c) => c.columnId === id)),
+    [groupBy, columns],
+  );
+  const groupColumnId = effectiveGroupBy[0];
 
   const sortedRows = useMemo<GridRowData[]>(() => {
     const filtered = applyColumnFilters(
@@ -331,6 +380,32 @@ export function WorkbookGrid({
     });
     return sorted;
   }, [rowData, columns, filterQuery, columnFilters, sortColumns]);
+
+  // Grouping is grid-only; gallery renders flat cards regardless.
+  const grouping = Boolean(groupColumnId) && !gallery && columns.length > 0;
+
+  const rowGrouper = useCallback(
+    (rows: readonly GridRowData[], columnKey: string) => groupRowsByColumn(rows, columnKey),
+    [],
+  );
+
+  // Every group starts expanded; the user's collapses are remembered and applied
+  // as a subtraction so new groups (from edits/filtering) still open by default.
+  const allGroupIds = useMemo(
+    () => (groupColumnId ? groupKeys(sortedRows, groupColumnId) : []),
+    [sortedRows, groupColumnId],
+  );
+  const expandedGroupIds = useMemo(
+    () => new Set<unknown>(allGroupIds.filter((id) => !collapsedGroups.has(id))),
+    [allGroupIds, collapsedGroups],
+  );
+  const onExpandedGroupIdsChange = useCallback(
+    (ids: Set<unknown>) => {
+      const expanded = new Set(Array.from(ids, String));
+      setCollapsedGroups(new Set(allGroupIds.filter((id) => !expanded.has(id))));
+    },
+    [allGroupIds],
+  );
 
   const persistCell = useCallback(
     async (
@@ -566,6 +641,16 @@ export function WorkbookGrid({
           title="Group rows and summarize"
         >
           {showSummary ? "Hide summary" : "Summary"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowGroup((v) => !v)}
+          aria-pressed={showGroup}
+          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          title="Collapse rows into groups by a column"
+        >
+          {showGroup ? "Hide grouping" : "Group"}
+          {groupColumnId ? ` (1)` : ""}
         </button>
         <button
           type="button"
@@ -864,6 +949,49 @@ export function WorkbookGrid({
         );
       })()}
 
+      {showGroup && columns.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+          <span className="text-sm text-[var(--dpf-muted)]">Group by</span>
+          <select
+            value={groupColumnId ?? ""}
+            onChange={(e) => {
+              setGroupBy(e.target.value ? [e.target.value] : []);
+              setCollapsedGroups(new Set());
+            }}
+            aria-label="Group by column"
+            className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]"
+          >
+            <option value="">none</option>
+            {columns.map((c) => (
+              <option key={c.columnId} value={c.columnId}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {grouping && (
+            <>
+              <button
+                type="button"
+                onClick={() => setCollapsedGroups(new Set())}
+                className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+              >
+                Expand all
+              </button>
+              <button
+                type="button"
+                onClick={() => setCollapsedGroups(new Set(allGroupIds))}
+                className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+              >
+                Collapse all
+              </button>
+              <span className="text-xs text-[var(--dpf-muted)]">
+                {allGroupIds.length} group{allGroupIds.length === 1 ? "" : "s"}
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
       {columns.length === 0 ? (
         <div className="rounded-md border border-dashed border-[var(--dpf-border)] p-8 text-center text-[var(--dpf-muted)]">
           This table has no columns yet. Add a column to start entering data.
@@ -900,22 +1028,47 @@ export function WorkbookGrid({
         </div>
       ) : (
         <div className="min-h-0 flex-1">
-          <DataGrid
-            className="dpf-workbook-grid"
-            columns={gridColumns}
-            rows={sortedRows}
-            rowKeyGetter={(row) => row.rowId}
-            onRowsChange={onRowsChange}
-            sortColumns={sortColumns}
-            onSortColumnsChange={setSortColumns}
-            selectedRows={selectedRows}
-            onSelectedRowsChange={setSelectedRows}
-            rowClass={(row) => {
-              const color = rowColor(row, cfRules);
-              return color ? rowColorClass(color) : undefined;
-            }}
-            defaultColumnOptions={{ resizable: true, sortable: true }}
-          />
+          {grouping ? (
+            <TreeDataGrid
+              className="dpf-workbook-grid"
+              columns={gridColumns}
+              rows={sortedRows}
+              rowKeyGetter={(row) => row.rowId}
+              onRowsChange={onRowsChange}
+              sortColumns={sortColumns}
+              onSortColumnsChange={setSortColumns}
+              selectedRows={selectedRows}
+              onSelectedRowsChange={setSelectedRows}
+              onColumnsReorder={onColumnsReorder}
+              groupBy={effectiveGroupBy}
+              rowGrouper={rowGrouper}
+              expandedGroupIds={expandedGroupIds}
+              onExpandedGroupIdsChange={onExpandedGroupIdsChange}
+              rowClass={(row) => {
+                const color = rowColor(row, cfRules);
+                return color ? rowColorClass(color) : undefined;
+              }}
+              defaultColumnOptions={{ resizable: true, sortable: true }}
+            />
+          ) : (
+            <DataGrid
+              className="dpf-workbook-grid"
+              columns={gridColumns}
+              rows={sortedRows}
+              rowKeyGetter={(row) => row.rowId}
+              onRowsChange={onRowsChange}
+              sortColumns={sortColumns}
+              onSortColumnsChange={setSortColumns}
+              selectedRows={selectedRows}
+              onSelectedRowsChange={setSelectedRows}
+              onColumnsReorder={onColumnsReorder}
+              rowClass={(row) => {
+                const color = rowColor(row, cfRules);
+                return color ? rowColorClass(color) : undefined;
+              }}
+              defaultColumnOptions={{ resizable: true, sortable: true }}
+            />
+          )}
         </div>
       )}
     </div>

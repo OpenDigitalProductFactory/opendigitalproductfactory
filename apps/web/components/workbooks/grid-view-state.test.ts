@@ -12,6 +12,8 @@ const sample: GridViewState = {
   sort: [{ columnKey: "name", direction: "ASC" }],
   cfRules: [{ id: "r1", columnId: "status", operator: "eq", value: "overdue", color: "red" }],
   showProvenance: true,
+  columnOrder: ["name", "status", "amount"],
+  groupBy: ["status"],
 };
 
 describe("viewStorageKey", () => {
@@ -64,5 +66,19 @@ describe("parseViewState — defensive", () => {
       JSON.stringify({ sort: [{ columnKey: "a", direction: "ASC" }, { columnKey: "b", direction: "sideways" }, {}] }),
     );
     expect(parsed!.sort).toEqual([{ columnKey: "a", direction: "ASC" }]);
+  });
+
+  it("keeps only string ids in columnOrder and groupBy", () => {
+    const parsed = parseViewState(
+      JSON.stringify({ columnOrder: ["a", 2, "b", null], groupBy: ["status", 7] }),
+    );
+    expect(parsed!.columnOrder).toEqual(["a", "b"]);
+    expect(parsed!.groupBy).toEqual(["status"]);
+  });
+
+  it("ignores columnOrder / groupBy that are not arrays", () => {
+    const parsed = parseViewState(JSON.stringify({ columnOrder: "a,b", groupBy: {} }));
+    expect(parsed!.columnOrder).toBeUndefined();
+    expect(parsed!.groupBy).toBeUndefined();
   });
 });

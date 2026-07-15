@@ -20,6 +20,10 @@ export interface GridViewState {
   sort: SortState[];
   cfRules: ConditionalRule[];
   showProvenance: boolean;
+  /** User-chosen column order (column ids); empty = natural order. */
+  columnOrder: string[];
+  /** Column ids the grid is grouped by (in-grid collapsible groups). */
+  groupBy: string[];
 }
 
 export function viewStorageKey(tableId: string): string {
@@ -43,6 +47,12 @@ function parseSort(raw: unknown): SortState[] {
     }
   }
   return out;
+}
+
+/** Keep only the string entries of a would-be `string[]` (ids). */
+function parseStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === "string");
 }
 
 function parseColumnFilters(raw: unknown): Record<string, string> {
@@ -95,5 +105,7 @@ export function parseViewState(raw: string | null | undefined): Partial<GridView
   if (Array.isArray(data.sort)) out.sort = parseSort(data.sort);
   if (Array.isArray(data.cfRules)) out.cfRules = parseCfRules(data.cfRules);
   if (typeof data.showProvenance === "boolean") out.showProvenance = data.showProvenance;
+  if (Array.isArray(data.columnOrder)) out.columnOrder = parseStringArray(data.columnOrder);
+  if (Array.isArray(data.groupBy)) out.groupBy = parseStringArray(data.groupBy);
   return out;
 }
