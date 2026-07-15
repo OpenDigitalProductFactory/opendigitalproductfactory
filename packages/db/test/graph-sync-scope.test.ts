@@ -13,7 +13,7 @@ vi.mock("../src/client", () => ({
   },
 }));
 
-import { syncInventoryEntityAsInfraCI } from "../src/neo4j-sync";
+import { syncInventoryEntityAsInfraCI } from "../src/graph-sync";
 
 beforeEach(() => {
   execMock.mockReset();

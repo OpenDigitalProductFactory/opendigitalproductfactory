@@ -237,7 +237,7 @@ export {
   syncDocumentReference,
   syncEaElement,
   syncEaRelationship,
-} from "./neo4j-sync";
+} from "./graph-sync";
 export {
   readCanonicalPrismaSchema,
   CANONICAL_PRISMA_SCHEMA_PATH,

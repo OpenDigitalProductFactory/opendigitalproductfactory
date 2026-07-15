@@ -9,7 +9,7 @@
 //  3. Name matching: DigitalProduct DEPENDS_ON containers/services matched by name
 
 import type { CollectorOutput } from "./discovery-types";
-import { syncDependsOn } from "./neo4j-sync";
+import { syncDependsOn } from "./graph-sync";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

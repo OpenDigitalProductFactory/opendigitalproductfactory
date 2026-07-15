@@ -17,7 +17,7 @@ import {
   syncEaRelationship,
   deleteEaElement as neo4jDeleteEaElement,
   deleteEaRelationship as neo4jDeleteEaRelationship,
-} from "@dpf/db/neo4j-sync";
+} from "@dpf/db/graph-sync";
 
 const REFERENCE_COVERAGE_STATUSES = [
   "implemented",

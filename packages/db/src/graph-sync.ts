@@ -1,4 +1,4 @@
-// packages/db/src/neo4j-sync.ts
+// packages/db/src/graph-sync.ts
 // Projection sync: push Prisma records into the Postgres graph mirror after writes.
 // BET-5 (BI-A1E864A5): the writes formerly ran Cypher MERGE against Neo4j; they now
 // UPSERT into the `graph_node` / `graph_edge` tables (see 20260714120000_bet5_graph_mirror)

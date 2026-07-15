@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // BET-5: the sync writers now UPSERT into the Postgres graph mirror via
-// prisma.$executeRawUnsafe (see neo4j-sync.ts) instead of running Cypher.
+// prisma.$executeRawUnsafe (see graph-sync.ts) instead of running Cypher.
 // Mock the prisma client seam and assert against the SQL + positional params.
 vi.mock("./client", () => ({
   prisma: {
@@ -12,7 +12,7 @@ vi.mock("./client", () => ({
 }));
 
 import { prisma } from "./client";
-import { syncDocumentReference, syncInfraCI, syncInventoryRelationship } from "./neo4j-sync";
+import { syncDocumentReference, syncInfraCI, syncInventoryRelationship } from "./graph-sync";
 
 const exec = vi.mocked(prisma.$executeRawUnsafe);
 

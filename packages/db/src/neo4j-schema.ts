@@ -6,7 +6,7 @@
 // init script and barrel keep working across the cutover.
 //
 // Node labels (graph_node.labels) and relationship types (graph_edge.rel_type) mirror
-// the former Neo4j model 1:1 — see neo4j-sync.ts / pg-graph.ts for the write & read sides.
+// the former Neo4j model 1:1 — see graph-sync.ts / pg-graph.ts for the write & read sides.
 
 import { prisma } from "./client";
 
