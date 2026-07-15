@@ -40,6 +40,7 @@ import { summarizeDroppedMessages } from "./compaction-digest";
 import {
   detectToolRefusedDespiteAvailability,
   appendToolRefusedRecoveryMessages,
+  classifyToolRefusedIssue,
 } from "./tool-refused-recovery";
 // Re-export for importers (certification-oracles, tests) that pull from agentic-loop.
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
@@ -1768,14 +1769,15 @@ export async function runAgenticLoop(params: {
         category: "tool-refused-despite-availability" | "zero-tool-call" | "unsaved-evidence",
         title: string,
         description: string,
-        severity: "high" | "medium" = "high",
+        severity: "high" | "medium" | "low" = "high",
+        status: string = "open",
       ): void => {
         prisma.platformIssueReport.create({
           data: {
             reportId: `coworker-process-${Date.now()}-${threadId.slice(0, 8)}-${category}`,
             type: "runtime_error",
             severity,
-            status: "open",
+            status,
             title: `[coworker-process] ${title}`,
             description,
             routeContext,
@@ -1791,17 +1793,34 @@ export async function runAgenticLoop(params: {
       // 2.6a: tool-refused-despite-availability
       const refusedToolName = runContractGuards ? detectToolRefusedDespiteAvailability(trimmed, tools) : null;
       if (refusedToolName) {
-        console.warn(`[agentic-loop] contract-violation tool-refused-despite-availability: ${refusedToolName}`);
-        writeContractIssue(
-          "tool-refused-despite-availability",
-          `tool-refused-despite-availability: ${refusedToolName}`,
-          `Agent ${agentId} on route ${routeContext} asserted that ${refusedToolName} is unavailable in iteration ${iteration}, but the tool was in the delivered tool list. Response excerpt: ${trimmed.slice(0, 500)}`,
-        );
-        // BI-PIR-6de01e8d: recover in-loop when model closed with no tools.
+        // BI-PIR-6de01e8d: recover in-loop when the model closed with no tools.
         const recovered = appendToolRefusedRecoveryMessages({
           messages, assistantContent: result.content, refusedToolName, deliveredTools: tools,
           executedToolCount: executedTools.length, toolsStripped: Boolean(result.toolsStripped),
         });
+        // BI-09C2480B: a refusal the loop self-corrects is a low-severity,
+        // resolved_locally trend record — not one of the ~24 duplicate OPEN
+        // BI-PIR-* items the triage cron would project. An unrecovered refusal
+        // stays a high-severity OPEN contract issue.
+        const { severity: refusedSeverity, status: refusedStatus } =
+          classifyToolRefusedIssue({ recovered: Boolean(recovered) });
+        console.warn(
+          `[agentic-loop] contract-violation tool-refused-despite-availability: ${refusedToolName}` +
+            (recovered ? " (recovered in-loop)" : ""),
+        );
+        writeContractIssue(
+          "tool-refused-despite-availability",
+          recovered
+            ? `tool-refused-despite-availability (recovered): ${refusedToolName}`
+            : `tool-refused-despite-availability: ${refusedToolName}`,
+          `Agent ${agentId} on route ${routeContext} asserted that ${refusedToolName} is unavailable in iteration ${iteration}, but the tool was in the delivered tool list.` +
+            (recovered
+              ? " The loop issued a corrective nudge and continued; recorded for trend analysis, not operator action."
+              : "") +
+            ` Response excerpt: ${trimmed.slice(0, 500)}`,
+          refusedSeverity,
+          refusedStatus,
+        );
         if (recovered) { continuationNudges++; messages = recovered; continue; }
       }
 
