@@ -4,7 +4,9 @@
 // Reads from static JSON data files in packages/db/data/.
 //
 // Idempotent: safe to run multiple times. Uses upsert for countries (unique iso2),
-// and findFirst + create for regions/cities (no unique constraint on composite keys).
+// and findFirst + P2002-tolerant create for regions/cities — both carry a
+// case-insensitive unique index that a case-sensitive findFirst can disagree
+// with (see seedRegionOnce / seedCityOnce).
 
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -85,6 +87,63 @@ async function seedCountries(prisma: PrismaClient): Promise<Map<string, string>>
   return iso2ToDbId;
 }
 
+/**
+ * Outcome of attempting to seed a single region, plus the row's db id (so the
+ * caller can build the region-key map even when our findFirst missed the row).
+ */
+export type SeedRegionOutcome = "created" | "existing" | "skipped_duplicate";
+
+/**
+ * Idempotently seed one region, tolerating both findFirst-doesn't-see-it
+ * (cold path, normal create) and P2002 (the row exists but our lookup index
+ * disagreed with the unique constraint).
+ *
+ * The Region model carries a case-insensitive unique index
+ *   Region_countryId_name_ci ON (LOWER("name"), "countryId")
+ * while the findFirst below matches "name" case-sensitively. Source data with
+ * near-duplicate casing/accents — or a concurrent cold-install seeder racing on
+ * the same row — passes the case-sensitive lookup but collides on the index, so
+ * the bare create throws P2002 and (previously) aborted the whole seed run.
+ * This mirrors seedCityOnce, which hardened the identical failure for cities
+ * (BI-E4E21A7F). On a swallowed duplicate we re-resolve the row case-
+ * insensitively so the region-key map still gets a usable id.
+ */
+export async function seedRegionOnce(
+  prisma: PrismaClient,
+  countryDbId: string,
+  region: RegionRecord,
+): Promise<{ outcome: SeedRegionOutcome; id: string | null }> {
+  const found = await prisma.region.findFirst({
+    where: { countryId: countryDbId, name: region.name },
+    select: { id: true },
+  });
+
+  if (found) return { outcome: "existing", id: found.id };
+
+  try {
+    const record = await prisma.region.create({
+      data: {
+        name: region.name,
+        code: region.code || null,
+        countryId: countryDbId,
+      },
+    });
+    return { outcome: "created", id: record.id };
+  } catch (err: unknown) {
+    // Prisma P2002 = unique constraint violation. Anything else re-throws.
+    const code = (err as { code?: string } | null)?.code;
+    if (code !== "P2002") throw err;
+    // The case-insensitive unique index rejected a case/accent variant our
+    // case-sensitive findFirst missed (or a concurrent seeder won the race).
+    // Re-resolve the winning row so the region key still maps to a real id.
+    const dup = await prisma.region.findFirst({
+      where: { countryId: countryDbId, name: { equals: region.name, mode: "insensitive" } },
+      select: { id: true },
+    });
+    return { outcome: "skipped_duplicate", id: dup?.id ?? null };
+  }
+}
+
 async function seedRegions(
   prisma: PrismaClient,
   countryIdMap: Map<string, string>,
@@ -96,34 +155,23 @@ async function seedRegions(
 
   let created = 0;
   let existing = 0;
+  let skippedDuplicate = 0;
 
   for (const r of regions) {
     const countryDbId = countryIdMap.get(r.countryCode);
     if (!countryDbId) continue;
 
-    const found = await prisma.region.findFirst({
-      where: { countryId: countryDbId, name: r.name },
-      select: { id: true },
-    });
-
-    if (found) {
-      regionKeyToDbId.set(`${r.countryCode}::${r.code}`, found.id);
-      existing++;
-    } else {
-      const record = await prisma.region.create({
-        data: {
-          name: r.name,
-          code: r.code || null,
-          countryId: countryDbId,
-        },
-      });
-      regionKeyToDbId.set(`${r.countryCode}::${r.code}`, record.id);
-      created++;
-    }
+    const { outcome, id } = await seedRegionOnce(prisma, countryDbId, r);
+    if (id) regionKeyToDbId.set(`${r.countryCode}::${r.code}`, id);
+    if (outcome === "created") created++;
+    else if (outcome === "existing") existing++;
+    else skippedDuplicate++;
   }
 
-  const regionCount = created + existing;
-  log(`  Regions: ${created} created, ${existing} already existed. Total: ${regionCount}`);
+  const regionCount = created + existing + skippedDuplicate;
+  log(
+    `  Regions: ${created} created, ${existing} already existed, ${skippedDuplicate} skipped (duplicate index). Total: ${regionCount}`,
+  );
   return { regionKeyToDbId, regionCount };
 }
 

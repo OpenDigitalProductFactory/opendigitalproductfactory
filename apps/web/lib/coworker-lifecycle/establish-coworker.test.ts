@@ -77,6 +77,30 @@ describe("establishCoworker (EP-COWORKER-LIFECYCLE Phase 3 factory door)", () =>
     if (!result.ok) expect(result.code).toBe("already_exists");
   });
 
+  it("collapses a P2002 slugId race onto already_exists (TOCTOU loser)", async () => {
+    // findFirst sees nothing (both concurrent callers passed the guard), then
+    // create trips Agent_slugId_key. The loser must resolve to already_exists,
+    // not a raw unique-constraint crash.
+    asMock(prisma.agent.findFirst).mockResolvedValue(null);
+    asMock(prisma.agent.create).mockRejectedValue(
+      Object.assign(new Error("Unique constraint failed"), {
+        code: "P2002",
+        meta: { target: ["slugId"] },
+      }),
+    );
+    const result = await establishCoworker(VALID_INPUT, "usr-1");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("already_exists");
+  });
+
+  it("re-throws non-P2002 create failures so genuine bugs surface", async () => {
+    asMock(prisma.agent.findFirst).mockResolvedValue(null);
+    asMock(prisma.agent.create).mockRejectedValue(
+      Object.assign(new Error("connection lost"), { code: "P1001" }),
+    );
+    await expect(establishCoworker(VALID_INPUT, "usr-1")).rejects.toThrow(/connection lost/);
+  });
+
   it("rejects malformed agentIds and missing fields", async () => {
     expect((await establishCoworker({ ...VALID_INPUT, agentId: "Bad_ID!" }, "u")).ok).toBe(false);
     expect((await establishCoworker({ ...VALID_INPUT, name: " " }, "u")).ok).toBe(false);
