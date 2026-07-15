@@ -5,6 +5,7 @@ const { mockAuth, mockPrisma, mockPromote } = vi.hoisted(() => ({
   mockPrisma: {
     backlogItem: {
       findUnique: vi.fn(),
+      update: vi.fn(),
     },
     platformDevConfig: {
       findUnique: vi.fn(),
@@ -92,5 +93,57 @@ describe("startBacklogBuild", () => {
 
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     expect(mockPromote).not.toHaveBeenCalled();
+    // A live build must never have its link cleared.
+    expect(mockPrisma.backlogItem.update).not.toHaveBeenCalled();
+  });
+
+  // BI-08AE51DC: a terminal (complete/failed/abandoned) activeBuild previously
+  // wedged the item — Start-build routed to the corpse forever. It must instead
+  // detach the stale 1:1 link and create a fresh draft.
+  it("re-promotes a fresh draft when the active build is terminal/abandoned", async () => {
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({
+      itemId: "BI-123",
+      activeBuild: { buildId: "FB-ABANDONED", phase: "abandoned" },
+    });
+    mockPrisma.backlogItem.update.mockResolvedValue({});
+    mockPromote.mockResolvedValue({
+      kind: "success",
+      build: { id: "row-2", buildId: "FB-NEW" },
+      backlogItemId: "BI-123",
+    });
+
+    await expect(startBacklogBuild("BI-123")).resolves.toEqual({
+      status: "created",
+      buildId: "FB-NEW",
+      href: "/build?buildId=FB-NEW",
+    });
+
+    // The stale terminal link is cleared inside the promote transaction, before
+    // promote (which refuses when activeBuildId is set) runs.
+    expect(mockPrisma.backlogItem.update).toHaveBeenCalledWith({
+      where: { itemId: "BI-123" },
+      data: { activeBuildId: null },
+    });
+    expect(mockPromote).toHaveBeenCalled();
+  });
+
+  it("treats a completed build as re-promotable too", async () => {
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({
+      itemId: "BI-123",
+      activeBuild: { buildId: "FB-DONE", phase: "complete" },
+    });
+    mockPrisma.backlogItem.update.mockResolvedValue({});
+    mockPromote.mockResolvedValue({
+      kind: "success",
+      build: { id: "row-3", buildId: "FB-FRESH" },
+      backlogItemId: "BI-123",
+    });
+
+    const res = await startBacklogBuild("BI-123");
+    expect(res.status).toBe("created");
+    expect(mockPrisma.backlogItem.update).toHaveBeenCalledWith({
+      where: { itemId: "BI-123" },
+      data: { activeBuildId: null },
+    });
   });
 });
