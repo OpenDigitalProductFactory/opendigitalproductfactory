@@ -2,7 +2,8 @@
 
 **Spec:** [2026-07-15-archetype-demo-factory-design.md](../specs/2026-07-15-archetype-demo-factory-design.md)
 **Program:** [Living Business Excellence Program](../specs/2026-07-15-living-business-excellence-program-design.md)
-**Epic:** EP-ARCHETYPE-DEMO (workstream A) — the test-bench for EP-LIVING-BUSINESS-EXCELLENCE
+**Epic:** EP-ARCHETYPE-DEMO (workstream A, registered 2026-07-15) — the test-bench for EP-LIVING-BUSINESS-EXCELLENCE
+**Backlog items:** P1 `BI-7C95BEF6` · P2 `BI-1C26FCD5` · P3 `BI-7308C27E` · P4 `BI-7067BF90`
 **Started:** 2026-07-15
 
 Standing up a realistic business per archetype — for all 94 — from **one deterministic generator
@@ -35,11 +36,12 @@ no `Math.random`/`Date` in the core).
 from its generated demo through `TwinView`, grouped by category, click-through to `/workspace`.
 Carries a recorded `UX-Fit-Decision` (new admin surface).
 
-## P3 — the flavor registry (shared with EP-EXCELLENCE-CORPUS)
+## P3 — the flavor registry (shared with the Excellence Corpus, `BI-44EF78DE`)
 
 Per-archetype `DemoFlavor` (spec §2.2): category defaults + the ~8 flagship slugs first, then fan
 out. Each entry raises fidelity without touching the generator. Authored once, consumed by both the
-demo factory and WWWD priming (the epics converge here).
+demo factory and WWWD priming — workstream A·P3 (`BI-7308C27E`) and workstream B (`BI-44EF78DE`,
+under `EP-LIVING-BUSINESS-EXCELLENCE`) converge here.
 
 ## P4 — CI gate + simulator convergence
 

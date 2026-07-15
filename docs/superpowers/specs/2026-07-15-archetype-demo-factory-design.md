@@ -1,9 +1,10 @@
 # Archetype Demo Factory — a realistic business per archetype, at scale (design)
 
-**Status:** proposed
-**Epic:** EP-ARCHETYPE-DEMO (proposed) · workstream **A** of [EP-LIVING-BUSINESS-EXCELLENCE](2026-07-15-living-business-excellence-program-design.md)
-**Parent program:** [Living Business Excellence Program](2026-07-15-living-business-excellence-program-design.md)
-**Also realizes:** the unbuilt P2–P4 of [Business Activity Simulator](2026-07-04-business-activity-simulator-design.md)
+**Status:** registered
+**Epic:** EP-ARCHETYPE-DEMO (registered in the backlog 2026-07-15) · workstream **A** of EP-LIVING-BUSINESS-EXCELLENCE
+**Backlog items:** A·P1 `BI-7C95BEF6` · A·P2 `BI-1C26FCD5` · A·P3 `BI-7308C27E` · A·P4 `BI-7067BF90`
+**Parent program:** [Living Business Excellence Program](2026-07-15-living-business-excellence-program-design.md) (epic `EP-LIVING-BUSINESS-EXCELLENCE`)
+**Also realizes:** the unbuilt P2–P4 of [Business Activity Simulator](2026-07-04-business-activity-simulator-design.md) (never filed as its own epic; A·P4 `BI-7067BF90` folds it in)
 **Started:** 2026-07-15
 
 ## 1. Problem

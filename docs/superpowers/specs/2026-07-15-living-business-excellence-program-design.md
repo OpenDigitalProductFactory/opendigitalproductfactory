@@ -1,7 +1,7 @@
 # The Living Business Excellence Program — grounded, primed, rehearsable twins (design)
 
-**Status:** proposed (parent program spec)
-**Epic:** EP-LIVING-BUSINESS-EXCELLENCE (proposed)
+**Status:** registered (parent program spec)
+**Epic:** EP-LIVING-BUSINESS-EXCELLENCE (registered in the backlog 2026-07-15)
 **Parent:** [Operational Twin Framework](2026-07-12-operational-twin-framework-design.md) · [The Living Business — value-stream workforce visualization](2026-07-11-living-business-workforce-visualization-design.md)
 **Started:** 2026-07-15
 
@@ -45,12 +45,22 @@ delight; a curated exemplar is the delight.
 These are one program. Each depends on and reinforces the others; sequencing is about the most
 effective *test-bench-first* order, not independence.
 
-| Epic | What it delivers | Depends on | Enables |
-|---|---|---|---|
-| **A — Archetype Demo Factory** (`EP-ARCHETYPE-DEMO`) | Deterministic per-archetype demo businesses (staff/customers/bookings/finance) + a load path + a review-at-scale harness. The **test-bench** for the whole program. | twin (shipped), the excellence corpus (B) for flavor | Rehearse & regression-test A/C/D across all 94 |
-| **B — Excellence Corpus** (`EP-EXCELLENCE-CORPUS`) | Per-archetype "what great looks like": mission, stance vectors + ceilings, north-star KPIs, good-operator moves — seeded through the existing `seedOrgWwwdCorpus` path at B/0.6. **Priming, not blank slate.** | existing stance-seed substrate (shipped) | Flavor for A; primed cog for D; grounded metrics for C |
-| **C — Ground the Twin in the Process** (`EP-TWIN-GROUNDING`) | Bind `deriveTwinProfile` zones/queues to `deriveOperationalValueStream` stages so the twin's tiles map to the archetype's real value-stream stages (queue depth + wait *per stage* — the factory-automation lens). Unifies architecture-view and animation-view. | twin + OVSM (both shipped) | Per-stage flow in A's demos; per-stage outcomes in D |
-| **D — WWWD Outcomes Loop** (`EP-TWIN-WWWD-OUTCOMES`) | Wire the twin's cog/quests through the real WWWD gate (`evaluate_org_business_decision`); add a customer-outcome surface (`Invoice.paidAt` revenue, work completed) so decisions are stance-gated and outcomes are visible. | WWWD gate (shipped), B (primed stance), A (demo to exercise it) | "Real customer outcomes being delivered" made visible |
+| Workstream | Backlog registration | What it delivers | Depends on | Enables |
+|---|---|---|---|---|
+| **A — Archetype Demo Factory** | epic `EP-ARCHETYPE-DEMO` (its own spec + plan) | Deterministic per-archetype demo businesses (staff/customers/bookings/finance) + a load path + a review-at-scale harness. The **test-bench** for the whole program. | twin (shipped), the excellence corpus (B) for flavor | Rehearse & regression-test A/C/D across all 94 |
+| **B — Excellence Corpus** | `BI-44EF78DE` under `EP-LIVING-BUSINESS-EXCELLENCE` | Per-archetype "what great looks like": mission, stance vectors + ceilings, north-star KPIs, good-operator moves — seeded through the existing `seedOrgWwwdCorpus` path at B/0.6. **Priming, not blank slate.** | existing stance-seed substrate (shipped) | Flavor for A; primed cog for D; grounded metrics for C |
+| **C — Ground the Twin in the Process** | `BI-DE577C43` under `EP-LIVING-BUSINESS-EXCELLENCE` | Bind `deriveTwinProfile` zones/queues to `deriveOperationalValueStream` stages so the twin's tiles map to the archetype's real value-stream stages (queue depth + wait *per stage* — the factory-automation lens). Unifies architecture-view and animation-view. | twin + OVSM (both shipped) | Per-stage flow in A's demos; per-stage outcomes in D |
+| **D — WWWD Outcomes Loop** | `BI-36815303` (gate) + `BI-08C23C85` (outcome surface) under `EP-LIVING-BUSINESS-EXCELLENCE` | Wire the twin's cog/quests through the real WWWD gate (`evaluate_org_business_decision`); add a customer-outcome surface (`Invoice.paidAt` revenue, work completed) so decisions are stance-gated and outcomes are visible. | WWWD gate (shipped), B (primed stance), A (demo to exercise it) | "Real customer outcomes being delivered" made visible |
+
+> **Backlog registration (2026-07-15).** The program is registered as the epic
+> **`EP-LIVING-BUSINESS-EXCELLENCE`**. Workstream **A** — the test-bench, which carries its own
+> spec and execution plan — is its own epic **`EP-ARCHETYPE-DEMO`** (phases A·P1–A·P4). Workstreams
+> **B, C, D** have no separate spec of their own (they are sections of this program spec), so they
+> are registered as backlog items **under the program epic** rather than as separate near-empty
+> epics: B = `BI-44EF78DE`, C = `BI-DE577C43`, D = `BI-36815303` + `BI-08C23C85`. The earlier
+> proposed labels `EP-EXCELLENCE-CORPUS` / `EP-TWIN-GROUNDING` / `EP-TWIN-WWWD-OUTCOMES` were **not**
+> filed as epics; extend the seed substrate (B) and the shipped twin/OVSM/WWWD gate (C/D) rather
+> than duplicating them. No prior WWWD/stance or Business-Activity-Simulator epic exists to extend.
 
 Dependency shape: **B feeds A** (flavor) **and D** (primed stance); **A is the test-bench for
 C and D**; **C and D enrich what A rehearses**. So B and A are the load-bearing first moves, with
