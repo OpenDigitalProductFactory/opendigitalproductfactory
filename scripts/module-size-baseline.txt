@@ -33,7 +33,7 @@ apps/web/lib/actions/tax-remittance.ts	1788
 apps/web/lib/ai-operations-map/load-map-data.test.ts	943
 apps/web/lib/deliberation/orchestrator.ts	808
 apps/web/lib/explore/build-process-matrix.ts	811
-apps/web/lib/explore/feature-build-types.ts	1106
+apps/web/lib/explore/feature-build-types.ts	1109
 apps/web/lib/finance/ai-provider-finance.ts	1309
 apps/web/lib/inference/ai-provider-internals.ts	1228
 apps/web/lib/integrate/build-agent-prompts.ts	1054

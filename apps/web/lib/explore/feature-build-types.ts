@@ -696,7 +696,10 @@ export function describePlanReviewFailure(planReview: ReviewResult): string {
  *  the design path (BI-CE49D82E). Same convergence/oscillation language so the
  *  operator's mental model is consistent across phase gates. */
 export function describeDesignReviewFailure(designReview: ReviewResult): string {
-  const base = "Design review failed. Revise the design document and re-run reviewDesignDoc before advancing.";
+  // BI-62442F75: operator vocabulary, not the raw camelCase tool name. Mirrors
+  // the plan sibling's "re-run plan review" so the D33 banner never leaks
+  // "reviewDesignDoc" into human-facing copy.
+  const base = "Design review failed. Revise the design document and re-run the design review before advancing.";
   const iter = designReview.iteration;
   if (!iter) return base;
   const round = `Round ${iter.round}`;

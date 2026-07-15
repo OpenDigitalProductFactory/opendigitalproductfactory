@@ -601,7 +601,9 @@ describe("describeDesignReviewFailure (BI-CE49D82E)", () => {
   it("returns base reason when no iteration metadata is attached", () => {
     const reason = describeDesignReviewFailure(review());
     expect(reason).toContain("Design review failed");
-    expect(reason).toContain("re-run reviewDesignDoc");
+    // BI-62442F75: operator vocabulary — must NOT leak the raw camelCase tool name.
+    expect(reason).toContain("re-run the design review");
+    expect(reason).not.toContain("reviewDesignDoc");
     expect(reason).not.toContain("Round");
   });
 
