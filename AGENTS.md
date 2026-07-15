@@ -210,6 +210,13 @@ Every new feature spec must include a "Research & Benchmarking" section before f
 3. **No parallel utilities** — before adding a helper, verify the substrate (grep + code graph / `search_code_graph`) so existing shared modules are extended rather than duplicated. → [verify-substrate-before-proposing-new](docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md).
 4. **This rulebook** — the change does not invent a second home for a rule already stated here or in a kernel principle; use pointers, not copies. → [single-source-of-truth](docs/founder-kernel/wiki/principles/single-source-of-truth.md).
 
+**Validating prioritization against archetype load-bearing stages (BI-IMP-3EC2E558).** Specs that change global order, default priority, cockpit ranking, or storefront activation sequence for an industry archetype must check the **operational value stream** for that archetype — not invent a parallel stage list.
+
+1. **Read the SSOT** — [`docs/architecture/archetype-business-value-streams.md`](docs/architecture/archetype-business-value-streams.md). Stable stage family: `attract · capture · qualify · deliver · settle · retain` (per-archetype load-bearing emphasis is named in that doc, not here).
+2. **Checklist before shipping a global priority change** — (a) name the archetype(s) affected; (b) list which stream stages the change reorders or demotes; (c) confirm no **load-bearing** stage for those archetypes is pushed behind a non-load-bearing one without an explicit per-archetype policy override; (d) cite the section of the value-stream doc you checked.
+3. **Per-archetype overrides** — when one industry must differ from the global default, document the override in the design (and seed/config owner), do not hardcode a second ranking table in a random page helper.
+4. **Do not duplicate stage names** in AGENTS.md or feature specs — always point at the value-stream doc so stage vocabulary stays single-source.
+
 ## 11. Data Model Stewardship
 
 Before adding any large feature, audit the existing schema for refactoring opportunities. Indicators that refactoring is needed: a domain model being reused as a shared concept; the same logical data appearing in two+ existing models; a new feature needing meta-data with no canonical home. → [kernel principle](docs/founder-kernel/wiki/principles/schema-audit-before-features.md)
