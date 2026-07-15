@@ -172,6 +172,25 @@ export function describeToolRouteFailure(
     );
   }
 
+  // Config/capacity gap: routing eliminated EVERY candidate (e.g. the cloud
+  // provider's sign-in expired AND the bundled local model's context window is
+  // too small for this coworker's larger requests). This reaches here as a plain
+  // "No eligible endpoints for task type '…'" with no `toolUse` token, so the
+  // branch above misses it and — before this fix — it fell through to the generic
+  // "temporarily unavailable, try again in 30 seconds" below. That is a LIE for a
+  // config gap: nothing changes on retry. Tell the operator the truth and the one
+  // lever that actually clears it. Check AFTER the tool-capability branch so its
+  // more specific wording still wins for the capability-floor case.
+  if (/No eligible endpoints/i.test(msg)) {
+    return (
+      "No AI model can handle this request right now. This usually means your cloud " +
+      "AI providers are disconnected or their sign-in has expired, and the built-in " +
+      "local model can't fit this assistant's larger requests on its own. Open " +
+      "Platform > AI Operations > Providers & Routing to reconnect a provider — " +
+      "waiting won't clear this on its own."
+    );
+  }
+
   // Endpoints exist but all transiently failed (rate-limit / overload / network).
   if (/All endpoints failed/i.test(msg)) {
     return (
