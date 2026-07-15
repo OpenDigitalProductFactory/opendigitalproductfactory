@@ -80,6 +80,26 @@ const PNPM_LOCKFILE_DRIFT_LOG = `#12 [deps 9/9] RUN pnpm install --frozen-lockfi
 #12 2.1 ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up to date with apps/web/package.json
 The command '/bin/sh -c pnpm install --frozen-lockfile' returned a non-zero code: 1`;
 
+// Verbatim shape from the BET-5 live upgrades (SUR-*, 2026-07-14): a pre-BET-5
+// install on postgres:16-alpine failed the vector migration at CREATE EXTENSION.
+const PGVECTOR_MISSING_LOG = `Applying migration \`20260714110000_bet5_pgvector_foundation\`
+Error: P3018
+A migration failed to apply. New migrations cannot be applied before the error is recovered from.
+Migration name: 20260714110000_bet5_pgvector_foundation
+Database error code: 0A000
+Database error:
+ERROR: extension "vector" is not available
+DETAIL: Could not open extension control file "/usr/local/share/postgresql/extension/vector.control": No such file or directory.
+HINT: The extension must first be installed on the system where PostgreSQL is running.`;
+
+// The downstream symptom on a RETRY after the pgvector failure above: Prisma's
+// P3009 now blocks every migration until the failed record is resolved. Note it
+// carries NO "extension vector" text — only the P3009 state — so it must classify
+// as p3009-failed-migration in its own right.
+const P3009_BLOCKED_LOG = `Error: P3009
+migrate found failed migrations in the target database, new migrations will not be applied. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
+The \`20260714110000_bet5_pgvector_foundation\` migration started at 2026-07-14 11:02:03 UTC failed`;
+
 describe("classifyBuildFailure", () => {
   it("classifies the real @opentelemetry host-vs-Docker hoist divergence", () => {
     const c = classifyBuildFailure({ log: HOIST_LOG, hostBuildPassed: true });
@@ -171,6 +191,36 @@ describe("classifyBuildFailure", () => {
     expect(c.failingTrace).toContain("[promoter-timeout]");
   });
 
+  it("classifies a pgvector-missing migrate failure as environment, pointing at the recreate playbook", () => {
+    const c = classifyBuildFailure({ log: PGVECTOR_MISSING_LOG });
+    expect(c.class).toBe("pgvector-extension-missing");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.summary).toContain("ensure-pgvector");
+    expect(c.summary).toContain("rebuild the promoter");
+    expect(c.playbookLink).toMatch(/bet5-windows-self-upgrade/);
+    expect(c.failingTrace).toContain("vector");
+  });
+
+  it("classifies a P3009 blocked-migration state as environment, pointing at resolve --rolled-back", () => {
+    const c = classifyBuildFailure({ log: P3009_BLOCKED_LOG });
+    expect(c.class).toBe("p3009-failed-migration");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.summary).toContain("resolve --rolled-back");
+    expect(c.playbookLink).toMatch(/bet5-windows-self-upgrade/);
+  });
+
+  it("prefers the pgvector root cause over P3009 when a log carries both", () => {
+    const c = classifyBuildFailure({ log: `${P3009_BLOCKED_LOG}\n${PGVECTOR_MISSING_LOG}` });
+    expect(c.class).toBe("pgvector-extension-missing");
+  });
+
+  it("keeps a bare 'prisma migrate failed' (no P3009/pgvector signature) unclassified", () => {
+    // Guards the specificity: the generic UNKNOWN_LOG must NOT be swept up by the
+    // new migrate-failure classes.
+    const c = classifyBuildFailure({ log: UNKNOWN_LOG });
+    expect(c.class).toBe("unknown");
+  });
+
   it("keeps a non-pnpm ECONNREFUSED (e.g. prisma → postgres) unclassified", () => {
     const c = classifyBuildFailure({ log: UNKNOWN_LOG });
     expect(c.class).toBe("unknown");
@@ -184,7 +234,7 @@ describe("classifyBuildFailure", () => {
   });
 
   it("is total — every input yields a populated summary and playbook", () => {
-    for (const log of [HOIST_LOG, NFT_LOG, BUNDLE_BOUNDARY_LOG, DOCKER_CONTEXT_MISS_LOG, UNKNOWN_LOG, ""]) {
+    for (const log of [HOIST_LOG, NFT_LOG, BUNDLE_BOUNDARY_LOG, DOCKER_CONTEXT_MISS_LOG, PGVECTOR_MISSING_LOG, P3009_BLOCKED_LOG, UNKNOWN_LOG, ""]) {
       const c = classifyBuildFailure({ log });
       expect(c.summary.length).toBeGreaterThan(0);
       expect(c.playbookLink.length).toBeGreaterThan(0);
