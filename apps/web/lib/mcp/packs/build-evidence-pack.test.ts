@@ -158,7 +158,9 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
         suite: "smoke",
         route: "/build",
         expected: "loads",
-        actual: "500 Bearer abc.def.ghi",
+        actual:
+          "500 Bearer abc.def.ghi; token sk-ant-oat01-DEADbeef01234567890ABCDEF; " +
+          "cmd: docker exec dpf-sandbox-1 sh -c \"echo 'c2stYW50LW9hdDAxLURFQURiZWVmMDEyMzQ1Njc4OTA' | base64 -d > /tmp/cli-token.txt\"",
         userRole: "operator",
         routeContext: "/build",
         reproCommand: "pnpm test",
@@ -172,6 +174,10 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     const createArg = db.backlogItemCreate.mock.calls[0][0];
     expect(createArg.data.body).toContain("[redacted-token]");
     expect(createArg.data.body).not.toContain("Bearer abc.def.ghi");
+    // BI-1291B677: Anthropic OAuth token — neither the raw sk-ant form nor the
+    // base64-staged `echo '<b64>' | base64 -d` command may survive redaction.
+    expect(createArg.data.body).not.toContain("sk-ant-oat01-DEADbeef01234567890ABCDEF");
+    expect(createArg.data.body).not.toContain("c2stYW50LW9hdDAxLURFQURiZWVmMDEyMzQ1Njc4OTA");
   });
 
   it("record_functional_failure_evidence increments an existing deduped item", async () => {
