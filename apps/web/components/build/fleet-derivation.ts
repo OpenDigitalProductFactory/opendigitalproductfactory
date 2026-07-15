@@ -141,6 +141,19 @@ export function deriveFleetCounts(states: readonly BuildQueueState[]): {
   return { runningCount: running, queuedCount: queued, blockedCount: blocked };
 }
 
+/**
+ * How many builds the AI coworker is actively carrying in its own custody —
+ * ideate/plan phases that stay OFF the operator focus rail (isOperatorFocusEntry)
+ * but are genuinely in progress. Surfaced as a distinct "Coworker" header count so
+ * the operator sees activity is happening without those probes cluttering the rail
+ * or being conflated with operator-actionable "Working" builds (BI-5939B62F).
+ */
+export function deriveCoworkerActivityCount(
+  builds: ReadonlyArray<Pick<FeatureBuildRow, "phase">>,
+): number {
+  return builds.filter((b) => b.phase === "ideate" || b.phase === "plan").length;
+}
+
 export type OperatorFocusEntry = {
   build: Pick<FeatureBuildRow, "buildId" | "phase">;
   queueState: BuildQueueState;
@@ -174,12 +187,16 @@ export function formatOperatorFocusHeader({
   parkedCount,
   blockedCount = 0,
   queuedCount = 0,
+  coworkerCount = 0,
 }: {
   needsYouCount: number;
   workingCount: number;
   parkedCount: number;
   blockedCount?: number;
   queuedCount?: number;
+  /** Builds the coworker is actively working off-rail (ideate/plan). Shown only
+   *  when > 0 so it never adds noise on a quiet fleet. */
+  coworkerCount?: number;
 }): string {
   const parts = [
     `Needs you: ${needsYouCount}`,
@@ -190,6 +207,9 @@ export function formatOperatorFocusHeader({
   }
   if (queuedCount > 0) {
     parts.push(`Waiting: ${queuedCount}`);
+  }
+  if (coworkerCount > 0) {
+    parts.push(`Coworker: ${coworkerCount}`);
   }
   parts.push(`Parked: ${parkedCount}`);
   return parts.join(" · ");
