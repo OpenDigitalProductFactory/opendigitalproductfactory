@@ -34,11 +34,17 @@ import type { ToolPack, ToolPackHandler } from "../tool-pack";
 const definitions: ToolDefinition[] = [
   {
     name: "promote_to_build_studio",
-    description: "Promote a triaged backlog item (status=open, triageOutcome=build) to a FeatureBuild in Build Studio. Runs the Definition of Ready capacity check under an advisory-lock transaction. Authority-gated via the build_promote grant category.",
+    description:
+      "Promote a triaged backlog item (status=open, triageOutcome=build) to a FeatureBuild in Build Studio. Runs the Definition of Ready capacity check under an advisory-lock transaction. Refuses core-platform / architecturally-heavy items (schema, datastore, cross-cutting substrate, BET refactors) unless force=true — those route to a direct expert build. Authority-gated via the build_promote grant category.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "The item ID to promote" },
+        force: {
+          type: "boolean",
+          description:
+            "Override the Build Studio suitability boundary for a core-platform item after explicit human confirmation (default false).",
+        },
       },
       required: ["itemId"],
     },
@@ -137,11 +143,41 @@ const definitions: ToolDefinition[] = [
 
 async function promoteToBuildStudioHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const itemId = String(params["itemId"] ?? "");
+  const force = params["force"] === true;
   const governedConfig = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
     select: { governedBacklogEnabled: true },
   });
   const governedBacklogEnabled = governedConfig?.governedBacklogEnabled === true;
+
+  // Build Studio suitability boundary (BI-4A30D8AC): refuse core-platform /
+  // architecturally-heavy items unless force=true after human confirmation.
+  {
+    const item = await prisma.backlogItem.findFirst({
+      where: { itemId },
+      select: { title: true, body: true, workType: true },
+    });
+    if (item) {
+      const { classifyArchitectureAltitude } = await import("@/lib/explore/architecture-altitude");
+      const verdict = classifyArchitectureAltitude({
+        title: item.title,
+        body: item.body,
+        workType: item.workType,
+      });
+      if (verdict.altitude === "core-platform" && !force) {
+        return {
+          success: false,
+          error: "unsuitable_for_build_studio",
+          message: verdict.reason ?? "Unsuitable for Build Studio",
+          data: {
+            architectureAltitude: verdict.altitude,
+            signals: verdict.signals,
+            route: "direct-expert-build",
+          },
+        };
+      }
+    }
+  }
 
   // WIP cap (shared with the createFeatureBuild start path): refuse to
   // promote another build into Build Studio while too many are unfinished.
