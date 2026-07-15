@@ -33,7 +33,7 @@ export type ReviewFinding = {
   actionHref: string;
   /**
    * When set, the finding is answerable inline: the operator answers the
-   * representative question once on /wiki/review and it flows through the qa
+   * representative question once on /coworker-decisions/review and it flows through the qa
    * enricher (the record_org_business_answer path) into the org's WWWD corpus
    * as draft — closing the ask-when-silent loop instead of dead-ending at the
    * manual stance editor. Only org-business gaps (the org's own profile) are

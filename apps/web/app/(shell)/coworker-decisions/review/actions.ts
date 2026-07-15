@@ -1,6 +1,6 @@
 "use server";
 
-// Answer-once action behind the /wiki/review ask-when-silent loop (BI-3AAB96E9).
+// Answer-once action behind the /coworker-decisions/review ask-when-silent loop (BI-3AAB96E9).
 //
 // When evaluate_org_business_decision defers because the org has no recorded
 // stance, the gap surfaces here. Answering it once routes the confirmed answer

@@ -5,8 +5,9 @@
 // scenario cards, every one pre-answered from the archetype, one-click
 // "Confirm all" fast path (<60s), per-card inline adjust as the only second
 // level. No platform vocabulary — no classes, weights, or grades. Mounted in
-// two places: the "how-you-decide" setup step routes to /wiki/stance, and the
-// same cards stay there afterwards for later adjustment.
+// two places: the "how-you-decide" setup step routes to
+// /coworker-decisions/stance, and the same cards stay there afterwards for
+// later adjustment.
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";

@@ -159,8 +159,8 @@ export async function confirmStanceVectors(input: {
       if (promoted.ok) upgradedIdentityPages += 1;
     }
 
-    revalidatePath("/wiki/stance");
-    revalidatePath("/wiki");
+    revalidatePath("/coworker-decisions/stance");
+    revalidatePath("/coworker-decisions");
     return { ok: true, confirmedVectors: v.vectors.length, upgradedIdentityPages };
   } catch (err) {
     return { ok: false, error: (err as Error).message || "Could not confirm the stances." };

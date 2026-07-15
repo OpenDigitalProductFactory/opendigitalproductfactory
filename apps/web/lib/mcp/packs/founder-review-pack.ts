@@ -1,6 +1,6 @@
 // Founder / decision-review reads (BI-3786CF82, EP-0AF96937 review-and-adjust loop).
 //
-// The /wiki Decision Governance hub shows counts of "open reviews" — unresolved
+// The /coworker-decisions Decision Governance hub shows counts of "open reviews" — unresolved
 // DecisionInteraction rows (outcomeType defer/escalate) awaiting a human — but no
 // coworker-callable tool surfaced them, so a coworker asked "what should we do
 // about these open reviews?" had nothing to read and told the user to paste the
@@ -34,7 +34,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "list_open_decision_reviews",
     description:
-      "List the OPEN DECISION REVIEWS shown on the /wiki Decision Governance hub — decisions your AI workforce deferred or escalated to a human and that are still unresolved. Returns each review's question, discipline (WWMD platform / WWWD business / WSID craft), why it is unresolved, the gap detail, a suggested next action, and a decision-canvas link. Use this to answer 'what should we do about these open reviews?' by reading and recommending on the actual queue instead of asking the user to paste the screen. Read-only: resolving a review is a human action taken in the owning workflow after reviewing the Decision Canvas evidence; this tool lets you understand and recommend.",
+      "List the OPEN DECISION REVIEWS shown on the /coworker-decisions Decision Governance hub — decisions your AI workforce deferred or escalated to a human and that are still unresolved. Returns each review's question, discipline (WWMD platform / WWWD business / WSID craft), why it is unresolved, the gap detail, a suggested next action, and a decision-canvas link. Use this to answer 'what should we do about these open reviews?' by reading and recommending on the actual queue instead of asking the user to paste the screen. Read-only: resolving a review is a human action taken in the owning workflow after reviewing the Decision Canvas evidence; this tool lets you understand and recommend.",
     inputSchema: {
       type: "object",
       properties: {
@@ -82,7 +82,7 @@ async function listOpenDecisionReviews(
     ? Math.min(Math.max(Math.trunc(rawLimit), 1), 50)
     : 20;
 
-  // Scope by discipline, mirroring the /wiki hub counts. WWWD reads off the org's
+  // Scope by discipline, mirroring the /coworker-decisions hub counts. WWWD reads off the org's
   // OWN profile (seeded at onboarding) plus the platform fallback id.
   let profileFilter: string | { startsWith: string } | { in: string[] } | undefined;
   if (discipline === "wwmd") {

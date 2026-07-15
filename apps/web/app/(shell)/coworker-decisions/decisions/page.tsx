@@ -2,7 +2,7 @@
 // split by governance tier (WWMD / WWWD / WSID). Answers "is the decision
 // gate actually being used, and what did it decide?" — per-tier usage stats
 // up top, the decision timeline below, drill-in per row.
-// Server component; queries Prisma directly (same pattern as /wiki).
+// Server component; queries Prisma directly (same pattern as the decision-governance hub).
 
 import Link from "next/link";
 import { prisma } from "@dpf/db";

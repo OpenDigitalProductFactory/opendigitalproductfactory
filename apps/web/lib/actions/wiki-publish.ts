@@ -13,7 +13,7 @@
 //     session's organization are publishable.
 //
 // Every flip appends a `WikiPageRevision` with `changeKind = "manual"` and
-// `changeSummary = "Publish via /wiki?status=all batch"` so the revision log
+// `changeSummary = "Publish via /coworker-decisions?status=all batch"` so the revision log
 // records who approved each page.
 
 import { prisma } from "@dpf/db";

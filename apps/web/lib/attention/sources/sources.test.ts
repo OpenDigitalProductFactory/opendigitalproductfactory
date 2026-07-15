@@ -78,7 +78,7 @@ describe("aiDecisionToAttentionItem", () => {
       isAgentInternalKernelConsult({
         buildId: null,
         taskRunId: null,
-        routeContext: "/wiki/decisions",
+        routeContext: "/coworker-decisions/decisions",
         domainClass: "plan-readiness",
       }),
     ).toBe(false);

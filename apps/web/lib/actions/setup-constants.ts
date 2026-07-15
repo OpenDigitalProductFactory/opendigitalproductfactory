@@ -8,7 +8,7 @@ export const SETUP_STEPS = [
   "ai-providers",        // /platform/ai/providers — configure AI providers
   "branding",            // /admin/branding — logo, colors, tagline
   "business-context",    // /storefront/settings/business — tell us about your business
-  "how-you-decide",      // /wiki/stance — confirm the archetype-prefilled stance cards (BI-D6DC2432)
+  "how-you-decide",      // /coworker-decisions/stance — confirm the archetype-prefilled stance cards (BI-D6DC2432)
   "operating-hours",     // /storefront/settings/operations — business hours
   "storefront",          // /storefront — customer-facing portal setup
   "platform-development",// /admin/platform-development — contribution mode
@@ -21,7 +21,7 @@ export const STEP_ROUTES: Record<string, string> = {
   "ai-providers": "/platform/ai/providers",
   "branding": "/admin/branding",
   "business-context": "/storefront/settings/business",
-  "how-you-decide": "/wiki/stance",
+  "how-you-decide": "/coworker-decisions/stance",
   "operating-hours": "/storefront/settings/operations",
   "storefront": "/storefront",
   "platform-development": "/admin/platform-development",
