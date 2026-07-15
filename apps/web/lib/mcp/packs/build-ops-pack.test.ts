@@ -9,6 +9,7 @@ const db = vi.hoisted(() => ({
   digitalProductUpdate: vi.fn(),
   modelProfileFindFirst: vi.fn(),
   agentActionProposalUpdateMany: vi.fn(),
+  backlogItemFindFirst: vi.fn(),
   transaction: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
@@ -25,6 +26,7 @@ vi.mock("@dpf/db", () => ({
     },
     modelProfile: { findFirst: (...a: unknown[]) => db.modelProfileFindFirst(...a) },
     agentActionProposal: { updateMany: (...a: unknown[]) => db.agentActionProposalUpdateMany(...a) },
+    backlogItem: { findFirst: (...a: unknown[]) => db.backlogItemFindFirst(...a) },
     $transaction: (...a: unknown[]) => db.transaction(...a),
   },
 }));
@@ -230,6 +232,11 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
 
   it("promote_to_build_studio promotes a triaged item through the transaction", async () => {
     db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
+    db.backlogItemFindFirst.mockResolvedValue({
+      title: "Add invoice CSV export",
+      body: "Customer feature",
+      workType: "feature",
+    });
     db.featureBuildCount.mockResolvedValue(0);
     db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb({}));
     teeUp.promoteBacklogItemToBuildDraft.mockResolvedValue({
@@ -243,8 +250,49 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
     expect(teeUp.promoteBacklogItemToBuildDraft).toHaveBeenCalled();
   });
 
+  it("promote_to_build_studio refuses core-platform altitude without force (BI-4A30D8AC)", async () => {
+    db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
+    db.backlogItemFindFirst.mockResolvedValue({
+      title: "BET-5 · Hybridize Neo4j + Qdrant onto Postgres",
+      body: "Retire Neo4j; use pgvector.",
+      workType: "refactor",
+    });
+    const res = await buildOpsPack.handlers.promote_to_build_studio({ itemId: "BI-BET5" }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("unsuitable_for_build_studio");
+    expect(String(res.message)).toMatch(/direct expert build/i);
+    expect(teeUp.promoteBacklogItemToBuildDraft).not.toHaveBeenCalled();
+  });
+
+  it("promote_to_build_studio allows core-platform when force=true", async () => {
+    db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
+    db.backlogItemFindFirst.mockResolvedValue({
+      title: "BET-5 · Hybridize Neo4j + Qdrant onto Postgres",
+      body: "Retire Neo4j; use pgvector.",
+      workType: "refactor",
+    });
+    db.featureBuildCount.mockResolvedValue(0);
+    db.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb({}));
+    teeUp.promoteBacklogItemToBuildDraft.mockResolvedValue({
+      kind: "ok",
+      build: { buildId: "FB-FORCE" },
+      autoApprovedDispatchEligible: false,
+    });
+    const res = await buildOpsPack.handlers.promote_to_build_studio(
+      { itemId: "BI-BET5", force: true },
+      "u1",
+    );
+    expect(res.success).toBe(true);
+    expect(res.entityId).toBe("FB-FORCE");
+  });
+
   it("promote_to_build_studio refuses when the WIP cap is reached", async () => {
     db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
+    db.backlogItemFindFirst.mockResolvedValue({
+      title: "Add invoice CSV export",
+      body: "Customer feature",
+      workType: "feature",
+    });
     db.featureBuildCount.mockResolvedValue(99);
     wipCap.wipCapReached.mockReturnValue(true);
     const res = await buildOpsPack.handlers.promote_to_build_studio({ itemId: "BI-1" }, "u1");
