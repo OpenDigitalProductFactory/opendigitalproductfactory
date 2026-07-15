@@ -176,8 +176,25 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
 - **Slice 15 — gallery (card) view — SHIPPED.** A Grid/Gallery toggle on the WorkbookGrid renders
   rows as cards (one card per row, each column as a label/value pair), honoring the active filters,
   sort, and conditional-format colour (a left-border accent). No new dependency, like the kanban board.
-- **Remaining (not built):** named/shareable views; calendar view (fullcalendar — needs a date
-  column); full pivots + richer charts; metrics/semantic layer; operationalization lifecycle.
+- **Slice 16 — drag-to-reorder columns — SHIPPED (BI-FFBDE996).** Every WorkbookGrid header is
+  `draggable`; dropping one onto another fires react-data-grid's `onColumnsReorder`, which updates a
+  saved `columnOrder` (column ids) applied through the pure, unit-tested `applyColumnOrder`
+  (`grid-reorder-group.ts`): new columns append, deleted ids drop — a column is never lost or
+  duplicated. `columnOrder` persists in the per-tableId view state (localStorage, no migration), so
+  it works for every custom + platform grid.
+- **Slice 17 — in-grid collapsible row grouping — SHIPPED (BI-198281FC).** A "Group" toolbar panel
+  (progressive disclosure, parallel to Summary) with a single "Group by [column]" select renders the
+  grid via react-data-grid's `TreeDataGrid` (`groupBy` + `rowGrouper` + `expandedGroupIds`). Distinct
+  from the Summary panel: Summary *aggregates* a group-by into a separate table/chart; this collapses
+  the *rows themselves* into groups (the Smartsheet affordance). Groups start expanded; user collapses
+  are remembered as a subtraction (`collapsedGroups`) so new groups from edits/filtering still open by
+  default. Grid-only (gallery stays flat); the group-by column persists in the view state. Bucketing
+  is the pure, unit-tested `groupRowsByColumn`. **Multi-level grouping** is a documented follow-up —
+  `groupBy` is already an array end-to-end and `TreeDataGrid` supports nesting; only the panel UI
+  (add/remove ordered group levels) and expand-id handling for nested ids remain.
+- **Remaining (not built):** multi-level (nested) grouping UI; named/shareable views; calendar view
+  (fullcalendar — needs a date column); full pivots + richer charts; metrics/semantic layer;
+  operationalization lifecycle.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 
