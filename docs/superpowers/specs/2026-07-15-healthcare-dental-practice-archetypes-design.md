@@ -576,7 +576,7 @@ or staff workload.
 
 | Risk | Mitigation |
 | --- | --- |
-| Scope expands into an unsafe Epic clone. | Deliver the six gated slices; require a separate BI and intended-use decision for every high-risk clinical capability. |
+| Scope expands into an unsafe Epic clone. | Deliver the seven gated slices; require a separate BI and intended-use decision for every high-risk clinical capability. |
 | Existing identity/booking/finance concepts are duplicated. | Data architecture gate and explicit dependency on `BI-75B31594`; architecture review before migration. |
 | HIPAA is mistaken for global compliance. | Versioned jurisdiction, funding, privacy, and professional-participation profiles. |
 | Patient portal leaks unreleased or staff-only information. | Separate external projections, release policy, proxy scope, negative authorization tests, and audit. |
