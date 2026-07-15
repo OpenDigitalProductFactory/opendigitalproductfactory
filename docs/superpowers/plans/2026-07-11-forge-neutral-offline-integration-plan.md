@@ -1,7 +1,7 @@
 # Forge-Neutral, Offline-Capable Git Integration Plan
 
 **Date:** 2026-07-11
-**Status:** Ratified — Phase 1 implementation in progress
+**Status:** Ratified — early phases underway (Phase 0 partially ratified; Phase 2 local-verification substrate landed; remaining phases pending)
 **Epic:** EP-5410E8EA
 **Spec:** `docs/superpowers/specs/2026-07-11-forge-neutral-offline-integration-design.md`
 **Kernel ledger:** DI-C6483F614871
@@ -18,6 +18,24 @@
 - Public-hive publication always re-evaluates live contribution policy at dispatch; queued intent is not durable consent.
 - Local/own-repo refs may contain private bytes and are never mirrored wholesale to a public forge.
 - Contribution reporting must separate "kept here", "private backup", and "shared with community"; a `local` status string is not proof that nothing was queued, sent, or accepted upstream.
+
+## Phase map
+
+Each phase implements the correspondingly numbered rollout step in the spec (`§6`). Primary spec sections per phase:
+
+| Phase | Spec sections |
+|---|---|
+| 0 — Ratify boundaries | §9 open operator reactions; boundary decision `DI-14811CE8E7ED` |
+| 1 — Forge contracts + GitHub parity | §5.1 contracts; §2.2 GitHub-specific authority |
+| 2 — Local verification without publication | §2.1 current coupling; §5.3 offline merge-queue equivalent |
+| 3 — Local admission + serialized integration | §5.0 source-of-truth split; §5.2 admission record; §5.3 |
+| 4 — Durable remote outbox | §5.4 network operation outbox |
+| 5 — Portal Hive Mind projection | §5.8 portal integration; §5.10 provenance report model |
+| 6 — Self-upgrade source neutrality | §5.5 self-upgrade; §2.3 self-upgrade coupling |
+| 7 — Hive/public egress preservation | §2.4 contribution substrate; §2.5 provenance confusion; §5.9 |
+| 8 — Network-tolerant commons ingress/propagation | §5.9 cross-install commons |
+| 9 — Optional forge and air-gap exchange | §5.6 Forgejo/Gitea; §5.7 git bundle |
+| 10 — Authority cutover | §6 rollout; §9 open operator reactions |
 
 ## Phase 0 — Ratify boundaries
 

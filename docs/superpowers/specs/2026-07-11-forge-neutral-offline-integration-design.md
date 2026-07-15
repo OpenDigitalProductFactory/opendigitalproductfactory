@@ -1,8 +1,9 @@
 # Forge-Neutral, Offline-Capable Git Integration Design
 
 **Date:** 2026-07-11
-**Status:** Ratified — Phase 1 implementation in progress
+**Status:** Ratified — early phases underway (Phase 2 local-verification substrate landed; boundary ratification partial)
 **Epic:** EP-5410E8EA
+**Plan:** `docs/superpowers/plans/2026-07-11-forge-neutral-offline-integration-plan.md`
 **Kernel decision:** `DI-C6483F614871` — `forge_abstraction_local_first`, composite 11.302, margin 1.785, high confidence, no commandment conflict, structured coverage strong
 **Boundary decision:** `DI-14811CE8E7ED` — bundle a bare local Git/ref-store core; keep full forges as external adapters
 **Decision population:** `external_coding_agent`
@@ -46,6 +47,8 @@ Forge resilience must strengthen both. It must not reduce “Hive” to GitHub P
 | Private/public boundary | `FeatureBuild` disposition, `apps/web/lib/integrate/contribution-egress.ts`, and the private-home design | Public change requests and issue escalation use GitHub-specific transports. |
 
 The present system is therefore not “remote CI only.” Most expensive verification is already local. The avoidable coupling is orchestration: remote publication precedes local evidence, and merge readiness is represented only by GitHub PR/check/review state.
+
+_Update (2026-07-14): Phase 2 has since landed. `scripts/gate-worktree.sh` now defaults to `--no-push` and records SHA-bound, offline-capable evidence (`publicationMode`, `acceptedBaseMode`, `networkTolerance`), closing the gate-orchestration coupling described in the row above. The table remains as the authoring-time baseline the design addresses._
 
 ### 2.2 GitHub-specific integration authority
 
@@ -291,14 +294,19 @@ For hive/common learning, the report distinguishes the source artifact from deri
 
 ## 6. Rollout
 
-1. Contract inventory and GitHub adapter with behavior parity.
-2. Decouple local CI from push and record local candidates/evidence by SHA.
-3. Add local admission ledger/ref and serialized promotion in shadow mode; compare verdicts with GitHub.
-4. Add durable GitHub outbox/reconciliation; tolerate outages without declaring remote completion.
-5. Project local admission, contribution, and reconciliation state into the portal Hive Mind work surface.
-6. Make local admission authoritative for approved scopes after parity evidence and operator ratification.
-7. Adapt self-upgrade source acquisition plus outbound and inbound Hive synchronization.
-8. Evaluate Forgejo/Gitea and signed bundle exchange.
+The phases below are the ratified sequence. The implementation plan (`docs/superpowers/plans/2026-07-11-forge-neutral-offline-integration-plan.md`) carries the per-phase BIs, exit criteria, and verification matrix; phase numbers here match the plan.
+
+0. **Ratify boundaries.** Local-admission target, bundled-vs-adapter Forgejo scope, and bundle/release provenance authority. (`DI-14811CE8E7ED` resolves the bundled bare-core boundary; the remaining two are decisions gated before Phase 3/6 cutover work.)
+1. **Forge contracts + GitHub parity.** Capability-scoped contracts; move GitHub call sites behind an adapter with behavior parity.
+2. **Local verification without publication.** Decouple local CI from push; record candidate/base/synthesized-tree SHA evidence with toolchain fingerprint and expiry.
+3. **Local admission + serialized integration.** Add the admission ledger/ref and compare-and-swap promotion in shadow mode; compare verdicts with GitHub; never auto-advance public `main`.
+4. **Durable remote outbox.** Idempotent retry and reconciliation; an outage changes projection state, not the local verdict.
+5. **Portal Hive Mind projection.** Project local admission, contribution, and reconciliation state — including the four-axis provenance model — into the existing context envelope.
+6. **Self-upgrade source neutrality.** Forge-neutral upstream refs and verified cached/imported release provenance.
+7. **Hive/public egress preservation.** Preserve disposition, DCO identity, private-path stripping, and derived-learning independence across adapters.
+8. **Network-tolerant commons ingress/propagation.** Durable inbound/outbound cursors; offline retrieval stays local; no auto-activation on reconnect.
+9. **Optional Forgejo/Gitea + air-gap bundle exchange.** Adapter conformance and threat model; `git bundle` staging under an import namespace.
+10. **Authority cutover (separate operator approval).** Make local admission authoritative only for an approved scope, with one-command rollback to GitHub-authoritative operation.
 
 Rollback keeps GitHub authoritative until the separately approved authority cutover in Phase 10. Each phase must be independently reversible. No bidirectional mirroring is enabled during shadow mode.
 
