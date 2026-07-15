@@ -188,7 +188,7 @@ export const CONSOLIDATION_BETS: readonly ConsolidationBet[] = [
       models: [],
       tools: [],
       files: [
-        "packages/db/src/neo4j.ts",
+        "packages/db/src/pg-graph.ts",
         "packages/db/src/qdrant.ts",
         "apps/web/lib/wiki/ppr.ts",
         "apps/web/lib/inference/embedding.ts",
