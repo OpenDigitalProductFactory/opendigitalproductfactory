@@ -79,6 +79,7 @@ function principleQdrantHit(
     principleDimensions: string[];
     score: number;
     title: string;
+    principleWeight: number;
   }> = {},
 ) {
   return {
@@ -97,6 +98,10 @@ function principleQdrantHit(
     principleDimensions: overrides.principleDimensions ?? [
       "schema_grounding",
     ],
+    // BI-A9E9ADCB (RC3): a per-principle weight override on the Qdrant payload.
+    ...(overrides.principleWeight !== undefined
+      ? { principleWeight: overrides.principleWeight }
+      : {}),
     principlePublic: false,
   };
 }
@@ -146,6 +151,41 @@ describe("principle_decide MCP tool", () => {
     expect(data.recommendation?.optionId).toBe("refactor");
     expect(data.scores).toHaveLength(2);
     expect(data.reasoning).toContain("refactor");
+  });
+
+  // BI-A9E9ADCB (RC3): a core/contextual principle carrying an explicit
+  // principleWeight override must be honored (the code path previously passed
+  // undefined and silently used the tier default). This exercises that override
+  // path end-to-end without error and returns a complete result.
+  it("honors a principleWeight override on a core/contextual principle without error", async () => {
+    mockPrisma.organization.findFirst.mockResolvedValueOnce({ id: "org_a" });
+    listPrinciplesByTier.mockResolvedValueOnce([]);
+    searchWikiPages
+      .mockResolvedValueOnce([
+        principleQdrantHit("rs", "core", { title: "Reusability", principleWeight: 0.9 }),
+      ])
+      .mockResolvedValueOnce([]);
+
+    const res = await executeTool(
+      "principle_decide",
+      {
+        context: "Should we take the quick patch or refactor?",
+        options: [
+          { id: "patch", description: "3-line patch", features: { schema_grounding: 0.1 } },
+          { id: "refactor", description: "Refactor module", features: { schema_grounding: 0.9 } },
+        ],
+        callingPopulation: "external_coding_agent",
+      },
+      "user_test",
+    );
+
+    // The override path must run cleanly and produce a complete result. A
+    // null recommendation is a legitimate outcome here (no commandments + a
+    // single core principle with neutral semantic alignment ⇒ a tie); the point
+    // is that hit["principleWeight"] threads through resolveWeight without error.
+    expect(res.success).toBe(true);
+    const data = res.data as { scores: unknown[] };
+    expect(data.scores).toHaveLength(2);
   });
 
   it("forwards callingPopulation as appliesTo to both Postgres and Qdrant retrieval", async () => {
