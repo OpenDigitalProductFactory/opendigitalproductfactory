@@ -125,12 +125,14 @@ export async function runSkillCurator(
       ? currentRaw
       : "active";
     const usage30d = usageMap.get(s.skillId) ?? { invoked: 0, failed: 0 };
+    const hasContent =
+      typeof s.skillMdContent === "string" && s.skillMdContent.trim().length > 0;
     const result = classifySkillLifecycle({
       current,
       usage30d,
       assignmentCount: s.assignments.length,
       lastUsedAt: lastUsedMap.get(s.skillId) ?? null,
-      hasContent: typeof s.skillMdContent === "string" && s.skillMdContent.trim().length > 0,
+      hasContent,
     });
 
     const next = isCuratorImmutable(current) ? current : result.next;
@@ -165,7 +167,18 @@ export async function runSkillCurator(
     // — surfacing them every day would be noise. (sourceType, sourceId)
     // dedupe means re-runs on the same population increment recurrenceCount
     // rather than producing parallel signals.
-    if (next !== "active" && !isCuratorImmutable(next)) {
+    //
+    // BI-509FF31E: a "stale" skill that still HAS content is idle-but-healthy —
+    // classifySkillLifecycle rule 4 (has content + assignments, zero invocations
+    // in 30 days). Most DPF skills are situational (dpf-tdd, review-inbox, …), so
+    // 30-day idleness is the expected steady state, not a defect. Raising a
+    // per-skill backlog signal for it floods the backlog (~76 BI-SIG-* items
+    // filed at once). Such skills stay classified stale in the report
+    // (findings/totals above) but do NOT raise a backlog signal. Content-
+    // incomplete stale (rule 3, !hasContent) and archived remain actionable and
+    // still signal.
+    const idleButHealthyStale = next === "stale" && hasContent;
+    if (next !== "active" && !isCuratorImmutable(next) && !idleButHealthyStale) {
       await createOrTouchImprovementSignal({
         sourceType: "curator-finding",
         sourceId: `${s.skillId}:${next}`,

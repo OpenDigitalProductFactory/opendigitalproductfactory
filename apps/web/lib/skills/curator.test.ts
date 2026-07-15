@@ -99,9 +99,15 @@ function addSkill(partial: Partial<(typeof state.skills)[number]> & { skillId: s
 }
 
 describe("runSkillCurator — happy path", () => {
-  it("classifies, emits one signal per non-active finding, writes one report", async () => {
+  it("classifies all skills but signals only actionable findings — not idle-but-healthy skills (BI-509FF31E)", async () => {
     addSkill({ skillId: "active-skill", skillMdContent: "body" });
-    addSkill({ skillId: "stale-skill", skillMdContent: "body" });
+    // Idle-but-healthy: has a SKILL.md body, just no invocations in 30 days →
+    // classifySkillLifecycle rule 4 → "stale", but NOT a defect (situational
+    // skill). Must be classified stale in the report yet raise NO backlog signal.
+    addSkill({ skillId: "idle-skill", skillMdContent: "body" });
+    // Content-incomplete: empty SKILL.md body but has an assignment → rule 3
+    // "stale" — genuinely actionable → still raises a signal.
+    addSkill({ skillId: "incomplete-skill", skillMdContent: "", assignments: [{ id: "a1" }] });
     state.usageEvents.push({
       skillId: "active-skill",
       phase: "invoked",
@@ -110,11 +116,16 @@ describe("runSkillCurator — happy path", () => {
 
     const report = await runSkillCurator({ invokedByUserId: "usr_owner" });
 
-    // The stale skill produced a finding and a signal.
-    expect(report.findings.find((f) => f.skillId === "stale-skill")?.toState).toBe("stale");
+    // Both stale skills still appear in the curator report (classification is
+    // unchanged — only the backlog-signal disposition differs).
+    expect(report.findings.find((f) => f.skillId === "idle-skill")?.toState).toBe("stale");
+    expect(report.findings.find((f) => f.skillId === "incomplete-skill")?.toState).toBe("stale");
+    // Only the actionable (content-incomplete) finding raises a backlog signal;
+    // the idle-but-healthy skill does not.
     expect(state.signalsTouched).toHaveLength(1);
     expect(state.signalsTouched[0]?.sourceType).toBe("curator-finding");
-    expect(state.signalsTouched[0]?.sourceId).toBe("stale-skill:stale");
+    expect(state.signalsTouched[0]?.sourceId).toBe("incomplete-skill:stale");
+    expect(state.signalsTouched.find((s) => s.sourceId === "idle-skill:stale")).toBeUndefined();
 
     // Exactly one TaskArtifact with the right metadata kind.
     expect(state.artifactsCreated).toHaveLength(1);
@@ -201,10 +212,14 @@ describe("runSkillCurator — no skillMdContent mutation", () => {
 
 describe("runSkillCurator — dedupe", () => {
   it("re-running the curator over the same population produces the same signal sourceIds", async () => {
-    addSkill({ skillId: "stale-skill" });
+    // Use a content-incomplete (actionable) skill so a real signal is emitted —
+    // an idle-but-healthy skill no longer signals (BI-509FF31E), which would
+    // make this a vacuous empty-set comparison.
+    addSkill({ skillId: "incomplete-skill", skillMdContent: "", assignments: [{ id: "a1" }] });
 
     await runSkillCurator({ invokedByUserId: "usr_owner" });
     const firstIds = state.signalsTouched.map((s) => s.sourceId);
+    expect(firstIds).toEqual(["incomplete-skill:stale"]);
 
     state.signalsTouched.length = 0;
     state.skillUpdates.length = 0;
