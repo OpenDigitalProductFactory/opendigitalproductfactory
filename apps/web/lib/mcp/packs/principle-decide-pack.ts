@@ -353,9 +353,16 @@ async function principleDecide(
       id: String(hit["pageId"] ?? ""),
       name: String(hit["title"] ?? hit["slug"] ?? "principle"),
       tier: String(hit["principleTier"] ?? "core"),
+      // BI-A9E9ADCB (RC3): pass the per-principle override, mirroring the
+      // commandment branch above (which passes row["principleWeight"]). Passing
+      // undefined here silently ignored any principleWeight override on a
+      // core/contextual principle's Qdrant payload, always using the tier
+      // default (0.4/0.1) — so a deliberately re-weighted principle carried no
+      // extra pull in the decision. resolveWeight still falls back to the tier
+      // default when the override is absent/non-numeric.
       weight: resolveWeight(
         String(hit["principleTier"] ?? "core"),
-        undefined,
+        hit["principleWeight"],
       ),
       dimensionVector: {}, // Qdrant payload omits the signed vector
       directionText: String(hit["contentPreview"] ?? ""),
