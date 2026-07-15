@@ -307,11 +307,14 @@ enrollment, CAQH/payer application evidence, credentialing status, network
 contract, fee schedule, product/panel/location state, recredentialing, roster,
 and directory reconciliation. Never display "in network" from licensure alone.
 
-### BI-HEALTHCARE-050 - Patient Access and Reception AI coworkers
+### BI-HEALTHCARE-050 - Patient Access, Reception, and Recall AI coworkers
 
 Deliver governed scheduling, confirmation, intake completeness, waitlist,
 arrival exception, room/resource, checkout, and FAQ assistance using explicit
-patient/staff confirmations and safety escalation.
+patient/staff confirmations and safety escalation. Includes the Recall &
+Care-Gap Coordinator (recall lists, overdue follow-up, outreach drafts,
+failed-contact escalation) operating on clinician-configured rules only, with no
+independent diagnosis or urgency triage.
 
 ### BI-HEALTHCARE-051 - Clinical Documentation AI coworker
 
@@ -326,12 +329,20 @@ Deliver evidence-packet assembly, completeness checks, status follow-up,
 denial/exception classification, and communication drafts. Human staff approve
 submissions, attestations, adjustments, write-offs, appeals, and contracts.
 
-### BI-HEALTHCARE-053 - Healthcare AI policy, evaluation, and monitoring harness
+### BI-HEALTHCARE-053 - Privacy & Safety Steward and healthcare AI policy harness
 
 Add PHI-capable provider/model registry, BAA/processor/residency policy,
 purpose/tool grants, draft/sign/release/submit guards, test corpora, wrong-patient
 and clinical-negation cases, tooth/surface cases, coverage/proxy cases, override
-and incident monitoring, rollback, and audit reports.
+and incident monitoring, rollback, and audit reports. This BI also delivers the
+Privacy & Safety Steward coworker surface (access-anomaly, missing-purpose,
+disclosure-review, risky-draft, and downtime/breach-checklist assistance); the
+privacy/security officer decides all incidents, disclosures, and sanctions.
+
+**Design coworker coverage (§9.1):** Patient Access, Reception, and Recall &
+Care-Gap -> BI-050; Clinical Documentation -> BI-051; Referral & Authorization,
+Revenue Cycle, and Credentialing & Network -> BI-052; Privacy & Safety Steward ->
+BI-053. All eight design coworkers are accounted for.
 
 **Phase 5 release gate:** role/purpose/PHI tool tests; no self-sign/release/submit;
 clinician/staff acceptance and override review; evaluation thresholds approved;
@@ -411,4 +422,4 @@ access, resources, intake, arrival, and checkout. Phase 2 is the regulatory and
 clinical authority inflection point and must not begin migrations until its
 intended-use and data-architecture gates are approved. Dental depth and funding
 can then proceed in parallel where independent, while credentialing and the AI
-pack reuse the stable authority boundaries established below them.
+pack reuse the stable authority boundaries established in the earlier phases.

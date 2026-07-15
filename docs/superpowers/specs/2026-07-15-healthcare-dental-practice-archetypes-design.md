@@ -495,6 +495,11 @@ substrate. This spec is target-state architecture context, not a parallel model.
 
 ## 13. Delivery slices and release gates
 
+Each Slice N below maps one-to-one to Phase N in the implementation plan
+(`docs/superpowers/plans/2026-07-15-healthcare-dental-practice-archetypes.md`),
+where the slice is decomposed into `BI-HEALTHCARE-*` child items and per-phase
+release gates.
+
 ### Slice 0 - Architecture, threat model, and archetype activation
 
 Add the `medical-practice` leaf, correct care activation axes/isolation, define
