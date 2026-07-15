@@ -154,6 +154,12 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       expect(dockerCalls).not.toContain("image prune -a");
       // Volumes are operator state — cleanup must never touch them.
       expect(dockerCalls).not.toContain("volume");
+      // BI-9B7FC928: also reclaims the TAGGED ephemeral verify/compare/build-test
+      // images that dangling-prune misses (the ~3.7 GB/upgrade leak). It queries
+      // by exact ephemeral naming so the running dpf-portal image is never hit.
+      expect(dockerCalls).toContain("images --filter reference=dpf-*-build-test");
+      expect(dockerCalls).toContain("images --filter reference=dpf-*-build-compare");
+      expect(dockerCalls).toContain("images --filter reference=dpf-*:verify");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
