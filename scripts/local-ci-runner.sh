@@ -136,10 +136,21 @@ resolve_database_url() {
     return
   fi
   if command -v docker >/dev/null 2>&1; then
+    # BET-5 (BI-032B49EB): the provisioned Postgres MUST ship pgvector — migrations run
+    # `CREATE EXTENSION vector`, which plain postgres:16-alpine lacks (every branch pregate
+    # then fails at that migration). A pre-BET-5 sandbox container is on the alpine image, so
+    # recreate it onto pgvector. Image-based check (no readiness race); the sandbox DB is
+    # ephemeral (no volume) so recreating loses nothing — migrations re-run each pregate.
+    if docker inspect dpf-local-ci-postgres >/dev/null 2>&1; then
+      case "$(docker inspect dpf-local-ci-postgres --format '{{.Config.Image}}' 2>/dev/null || true)" in
+        *pgvector*) : ;;
+        *) docker rm -f dpf-local-ci-postgres >/dev/null 2>&1 || true ;;
+      esac
+    fi
     if ! docker inspect dpf-local-ci-postgres >/dev/null 2>&1; then
       docker run -d --name dpf-local-ci-postgres -p 54329:5432 \
         -e POSTGRES_USER=dpf -e POSTGRES_PASSWORD=dpf_dev -e POSTGRES_DB=dpf \
-        postgres:16-alpine >/dev/null 2>&1 || return 0
+        pgvector/pgvector:pg16 >/dev/null 2>&1 || return 0
     else
       docker start dpf-local-ci-postgres >/dev/null 2>&1 || true
     fi
