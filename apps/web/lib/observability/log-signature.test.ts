@@ -73,6 +73,40 @@ describe("toTemplate", () => {
   it("masks uuids", () => {
     expect(toTemplate("session 4f9c1a2b-1111-2222-3333-444455556666 dropped")).toContain("<uuid>");
   });
+
+  it("masks URLs so requests to different endpoints collapse (BI-51F6A428)", () => {
+    const a = toTemplate("Error: POST https://api.openai.com/v1/responses failed");
+    const b = toTemplate("Error: POST https://api.anthropic.com/v1/messages failed");
+    expect(a).toBe(b);
+    expect(a).toContain("<url>");
+    expect(a).not.toContain("openai.com");
+  });
+
+  it("masks AI model names so per-model variants collapse (BI-51F6A428)", () => {
+    const a = toTemplate("inference failed for model gpt-5.4 rate limited");
+    const b = toTemplate("inference failed for model claude-opus-4-8 rate limited");
+    const c = toTemplate("inference failed for model qwen3-coder rate limited");
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+    expect(a).toContain("<model>");
+    // version suffixes must not survive as their own <n> fragments
+    expect(a).not.toMatch(/gpt|<n>/);
+  });
+
+  it("does NOT mask a bare English word that merely starts like a hyphenated model family", () => {
+    // 'claude'/'grok'/'gpt' only fold when followed by a version, so prose stays intact.
+    expect(toTemplate("the claude assistant returned an error")).toContain("claude");
+    expect(toTemplate("the claude assistant returned an error")).not.toContain("<model>");
+  });
+
+  it("masks embedded platform entity ids so per-id variants collapse (BI-51F6A428)", () => {
+    const a = toTemplate("failed to project PIR-Y8EA8 into the backlog");
+    const b = toTemplate("failed to project PIR-A1B2C into the backlog");
+    expect(a).toBe(b);
+    expect(a).toContain("<id>");
+    // BI-PIR-* compound ids fold to a single <id>, not <id>-<id>.
+    expect(toTemplate("BI-PIR-3c6ed25d unique violation")).toBe("<id> unique violation");
+  });
 });
 
 describe("signatureId / dedupeKeyFor", () => {

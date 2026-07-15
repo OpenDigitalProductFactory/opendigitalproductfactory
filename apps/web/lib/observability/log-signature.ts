@@ -62,6 +62,22 @@ export function isErrorLine(line: string): boolean {
 /** Collapse a log line to a stable template by masking variable tokens. */
 export function toTemplate(line: string): string {
   return line
+    // URLs first — before the path/number masks would chew their slashes and
+    // digits. Two errors that differ only by endpoint/query collapse to one.
+    .replace(/https?:\/\/\S+/gi, "<url>")
+    // Platform entity ids (PIR-…, BI-…, BI-PIR-…, FB-…, SUR-…, EP-…, WC-…,
+    // AGT-…). An error line that embeds a fresh report/build/run id would
+    // otherwise mint a distinct signature per occurrence.
+    .replace(/\b(?:BI|PIR|FB|SUR|EP|WC|AGT)-[A-Za-z0-9-]+/g, "<id>")
+    // AI model / engine names — masked before the number pass so version
+    // suffixes (gpt-5.4, claude-opus-4-8, grok-4.3) don't fragment first. The
+    // hyphen-bearing families (gpt-/o1-/o3-/claude-/grok-) require a version so
+    // bare English words aren't touched; local families (qwen/gemma/llama/
+    // mistral/deepseek/codex) appear bare as model ids and are safe to fold.
+    .replace(
+      /\b(?:gpt-[\w.]+|o[13]-[\w.]+|claude-[\w.-]+|grok-[\w.]+|qwen[\w.-]*|gemma[\w.-]*|llama[\w.-]*|mistral[\w.-]*|deepseek[\w.-]*|codex[\w.-]*)\b/gi,
+      "<model>",
+    )
     .replace(/\d{4}-\d{2}-\d{2}[T ][\d:.]+Z?/g, "<ts>") // ISO timestamps
     .replace(/\b[0-9a-fA-F]{8}-[0-9a-fA-F-]{20,}\b/g, "<uuid>") // uuids
     .replace(/\b0x[0-9a-fA-F]+\b/g, "<hex>") // hex addresses
