@@ -140,7 +140,13 @@ export async function createSandboxDbStack(
       "-e POSTGRES_USER=dpf",
       "-e POSTGRES_PASSWORD=dpf_sandbox",
       "-e POSTGRES_DB=dpf",
-      "postgres:16-alpine",
+      // BET-5 (BI-28D31FB7): the sandboxed portal runs `prisma migrate deploy` on
+      // boot, which includes `CREATE EXTENSION vector` — the plain alpine Postgres
+      // image lacks pgvector, so every sandbox build failed at that migration.
+      // Provision on pgvector (same PG16 engine, superset image), matching the
+      // platform + local-CI Postgres. GENERAL RULE: every Postgres-provisioning
+      // site must ship pgvector — enforced by postgres-pgvector-provisioning.guard.
+      "pgvector/pgvector:pg16",
     ].join(" "),
   );
   const dbContainerId = dbOut.trim();
