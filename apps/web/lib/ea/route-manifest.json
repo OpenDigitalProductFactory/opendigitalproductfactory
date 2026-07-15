@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 547,
+  "routeCount": 548,
   "routes": [
     {
       "routePath": "/",
@@ -317,6 +317,16 @@
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/storefront/team/page.tsx",
       "redirectTo": "/storefront/team"
+    },
+    {
+      "routePath": "/admin/twin-kit",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "twin-kit"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/twin-kit/page.tsx"
     },
     {
       "routePath": "/admin/wiki/lint",
