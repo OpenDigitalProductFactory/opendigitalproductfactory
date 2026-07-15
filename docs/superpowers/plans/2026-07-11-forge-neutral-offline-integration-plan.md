@@ -17,6 +17,7 @@
 - Each phase records outage-path evidence, not only happy-path structural tests.
 - Public-hive publication always re-evaluates live contribution policy at dispatch; queued intent is not durable consent.
 - Local/own-repo refs may contain private bytes and are never mirrored wholesale to a public forge.
+- Contribution reporting must separate "kept here", "private backup", and "shared with community"; a `local` status string is not proof that nothing was queued, sent, or accepted upstream.
 
 ## Phase 0 — Ratify boundaries
 
@@ -115,8 +116,9 @@ Verification: deterministic fault injection at every request boundary, restart r
 4. Persist coworker work through existing Work Capsule, `TaskRun`, `TaskArtifact`, activity, and evidence records.
 5. Synchronize forge comments/reviews as projections with principal mapping and idempotency; local review remains usable during outage.
 6. Add plain-language states: “Saved and verified locally; community sharing is waiting for connectivity” and “Kept on this system; nothing is queued publicly.”
+7. Add a contribution-provenance projection that separates local availability, privacy/disposition, publication/outbox, and upstream acceptance state so user-facing summaries never present "local" and "contributed" as mutually exclusive, and never label an own-repo private backup as a community contribution.
 
-Verification: disconnect all forge access; drive architect/reviewer/tester work from the portal; confirm artifacts and admission evidence persist and remote lag is truthful.
+Verification: disconnect all forge access; drive architect/reviewer/tester work from the portal; confirm artifacts and admission evidence persist and remote lag is truthful. Seed/report cases must cover: active-local-only, active-local-plus-sent-upstream, queued-while-offline, public send failed, public send blocked by policy, and legacy rows whose provenance cannot be inferred.
 
 ## Phase 6 — Self-upgrade source neutrality
 
@@ -141,8 +143,10 @@ Verification: GitHub unavailable, cache present/absent/corrupt, bundle valid/inv
 5. Ensure private changes have no public outbox entry, mirror ref, or public payload.
 6. Allow a private implementation to produce a separately classified, reviewed, and sanitized generic learning; never inherit shareability from the source change.
 7. Reconcile GitHub PR state without making it the source of contribution disposition.
+8. Replace any user-facing local/contributed binary with the four-axis provenance report: local availability, privacy/disposition, publication/outbox, and upstream acceptance.
+9. Treat legacy `FeaturePack.status` and `ImprovementProposal.contributionStatus` as migration inputs, not sufficient report truth; infer only when backed by PR/outbox/ledger evidence, otherwise show "Needs provenance review."
 
-Verification: private, shareable, paused, credential-expired, timeout, retry, duplicate, and post-publication audit cases.
+Verification: private, shareable, paused, credential-expired, timeout, retry, duplicate, post-publication audit, local-plus-contributed, contributed-but-not-accepted, and unknown-legacy-provenance cases.
 
 ## Phase 8 — Network-tolerant commons ingress and propagation
 
@@ -154,8 +158,9 @@ Verification: private, shareable, paused, credential-expired, timeout, retry, du
 4. Add durable inbound adapter cursor and idempotent reconciliation after outages.
 5. Route reconnected inbound findings through existing review/backlog gates; no automatic knowledge/code activation.
 6. Prove org overlays, install-specific config, and proprietary source context never enter a public artifact.
+7. Report derived-learning provenance separately from the source change: a private source can remain "kept here" while a sanitized principle/fact/skill is "shared outward" under its own ledger entry.
 
-Verification: offline retrieval, stale indicator, reconnect cursor resume, duplicate inbound event, changed contribution policy, private-derived generic learning, and rejected/tampered Feature Pack.
+Verification: offline retrieval, stale indicator, reconnect cursor resume, duplicate inbound event, changed contribution policy, private-derived generic learning, rejected/tampered Feature Pack, and user-facing copy that distinguishes imported commons from locally authored/private content.
 
 ## Phase 9 — Optional forge and air-gap exchange
 
@@ -193,6 +198,7 @@ No BI advances to this phase automatically.
 | Self-upgrade | cached/imported provenance, conflict defer, identity, rollback |
 | Hive boundary | private bytes absent from all public refs/outbox payloads |
 | Contribution mode | private/paused/withdrawn/changed-disposition entries blocked at dispatch |
+| Contribution provenance | "kept here", "private backup", and "shared with community" reports populated from separate provenance axes; active-local-plus-contributed rows render truthfully |
 | Portal Hive Mind | offline coworker review/test/architecture artifacts persist through canonical task/evidence records |
 | Commons propagation | local retrieval offline; inbound/outbound resume from durable cursors without duplicates or policy bypass |
 
@@ -202,5 +208,6 @@ No BI advances to this phase automatically.
 - `docs/testing/pre-pr-gate.md` and `docs/testing/pr-health.md`;
 - deployment Contract 1 if release distribution changes;
 - self-upgrade and contribution specs;
+- contribution provenance/user reporting copy and operator runbook;
 - install/platform-support watchlist for new host coupling;
 - operator runbooks for outage, queue reconciliation, and bundle import/export.
