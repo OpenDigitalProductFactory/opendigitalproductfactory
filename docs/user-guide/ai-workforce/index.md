@@ -88,4 +88,4 @@ Approved tools are version-pinned with conditions and scheduled for periodic re-
 
 Build Studio is the guided in-product development surface. Claude, Codex, and Grok are first-class external agent surfaces for contributors who need direct source access. All of them use the same DPF MCP coordination plane, branch/worktree isolation, evidence gates, documentation impact check, DCO-signed PR process, and release-readiness rules.
 
-Use [Agent Development Environments](../getting-started/agent-dev-environments) to set up those external clients, and [Build Studio](../build-studio/) for the guided operator workflow.
+Use [Agent Development Environments](../getting-started/agent-dev-environments.md) to set up those external clients, and [Build Studio](../build-studio/index.md) for the guided operator workflow.

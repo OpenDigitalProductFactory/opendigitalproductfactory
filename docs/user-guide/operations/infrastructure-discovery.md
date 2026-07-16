@@ -131,7 +131,7 @@ access to a remote customer-site node, and metric labels stay low-cardinality (s
 capability, trust state, version family) — raw identifiers (MACs, hostnames, SSIDs, VLANs) live in
 inventory tables, not labels. See [edge-node security & sovereignty](../../edge-node/security-and-sovereignty.md)
 and [fleet operations](../../edge-node/fleet-operations.md); design rationale in
-[topology spec §8A.4](../../superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md).
+[topology spec §8A.4](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md).
 
 ## OSI Layer Model
 

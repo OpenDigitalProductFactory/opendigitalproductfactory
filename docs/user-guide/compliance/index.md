@@ -25,4 +25,4 @@ The Compliance area manages your organization's regulatory posture end-to-end. F
 - Run a gap assessment and create corrective actions for identified gaps
 - Manage risk assessments, incidents, audits, and regulatory submissions
 - Maintain your policy library and link policies to the obligations they address
-- Track [licensing readiness](licensing-readiness) before starting, expanding, or changing regulated activity
+- Track [licensing readiness](licensing-readiness.md) before starting, expanding, or changing regulated activity

@@ -58,13 +58,13 @@ Quality gates verify the feature is ready: documentation evidence is present, al
 
 ### Ship
 
-The AI Coworker prepares the promotion record and evidence. Where promotion is enabled, the platform backs up the database, builds a new version with the feature, swaps it into production, and verifies health. Where the surface is still hardening, keep the promotion record honest and finish through the supported source workflow. See [Feature Deployment](deployment) for the full process.
+The AI Coworker prepares the promotion record and evidence. Where promotion is enabled, the platform backs up the database, builds a new version with the feature, swaps it into production, and verifies health. Where the surface is still hardening, keep the promotion record honest and finish through the supported source workflow. See [Feature Deployment](deployment.md) for the full process.
 
 ## Related
 
-- [Feature Deployment](deployment) — How the deployment pipeline works, safety guarantees, and rollback
-- [Development Workspace](../development-workspace) — How Build Studio, VS Code, policy states, and validation environments fit together
-- [Market Archetypes And Coworkers](../market-archetypes) — Why user-facing docs should lead with business work before Build Studio internals
+- [Feature Deployment](deployment.md) — How the deployment pipeline works, safety guarantees, and rollback
+- [Development Workspace](../development-workspace.md) — How Build Studio, VS Code, policy states, and validation environments fit together
+- [Market Archetypes And Coworkers](../market-archetypes.md) — Why user-facing docs should lead with business work before Build Studio internals
 
 ## Documentation Deliverables
 

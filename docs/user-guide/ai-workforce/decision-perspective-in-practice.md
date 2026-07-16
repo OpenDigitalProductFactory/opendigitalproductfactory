@@ -7,8 +7,8 @@ order: 6
 ## What this page adds
 
 The [Decision Perspective & Persona Voice](decision-perspective.md) page describes *what* the
-three decision scopes are. The platform [index](/) and the
-[architecture note](/architecture/autonomy-and-wwmd) describe *how the machinery is wired*. This
+three decision scopes are. The platform [overview](../../architecture/platform-overview.md) and the
+[architecture note](../../architecture/autonomy-and-wwmd.md) describe *how the machinery is wired*. This
 page closes the gap they both leave: it walks a **real question end-to-end through the gate** for
 each scope — the situation, the options the coworker framed, the **decision vectors that were
 scored**, the outcome the gate returned, and the ledger row it wrote — and then shows how
@@ -202,8 +202,8 @@ Two rules make this trustworthy rather than theatrical:
   (informational) gate *whether the coworker may act at all*; the Decision Perspective outcome only
   decides *what the coworker recommends doing*. A Tier-1 coworker with a `recommend` outcome still
   routes its resulting action through manager approval. See
-  [authority and audit](/user-guide/platform/authority-and-audit) and the AI Workforce
-  [Authority tab](/user-guide/ai-workforce/).
+  [authority and audit](../platform/authority-and-audit.md) and the AI Workforce
+  [Authority tab](index.md).
 
 The **confidence model** is what lets the human surface appear less often over time without lowering the
 bar: *confidence is earned in drops and lost in buckets.* A recommendation that is made, observed, and
@@ -234,8 +234,8 @@ evidence?":
 This ledger is one strand of the platform's broader **append-only authorization decision log and
 chain-of-custody traces**, which link principal → agent → tool call → approval → outcome for *any*
 governed action, not just gate calls (see the
-[Observability & evidence](/) section of the overview and
-[authority and audit](/user-guide/platform/authority-and-audit)). The operator-facing projections of a
+[Observability & evidence](../../architecture/platform-overview.md) section of the overview and
+[authority and audit](../platform/authority-and-audit.md)). The operator-facing projections of a
 gate decision are:
 
 - **Decision Canvas** — a read view of one `DecisionInteraction`: the question, options, recommendation
@@ -269,9 +269,9 @@ reconstructable.
 
 - [Decision Perspective & Persona Voice](decision-perspective.md) — the capability reference (profile
   kinds, inheritance chain, voice layer)
-- [Autonomy, WWMD, and trusted coworker decisions](/architecture/autonomy-and-wwmd) — the architecture
+- [Autonomy, WWMD, and trusted coworker decisions](../../architecture/autonomy-and-wwmd.md) — the architecture
   note and code references
-- [Authority and audit](/user-guide/platform/authority-and-audit) — HITL tiers, tool grants, and the
+- [Authority and audit](../platform/authority-and-audit.md) — HITL tiers, tool grants, and the
   authorization decision log
 - Specs: `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md`,
   `docs/superpowers/specs/2026-06-09-wsid-coworker-professional-corpus-design.md`

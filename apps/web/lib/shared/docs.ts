@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import { slugifyHeading } from "../docs/doc-link-resolver.mjs";
 
 // Re-export everything from docs-types so server code can import from one place
 export { AREA_META, AREA_ORDER } from "./docs-types";
@@ -36,11 +37,7 @@ export function extractHeadings(markdown: string): DocHeading[] {
   while ((match = regex.exec(markdown)) !== null) {
     const level = match[1]!.length;
     const text = match[2]!.trim();
-    const slug = text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-");
-    headings.push({ level, text, slug });
+    headings.push({ level, text, slug: slugifyHeading(text) });
   }
   return headings;
 }

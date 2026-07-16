@@ -90,7 +90,7 @@ function DocContent({
   doc,
   sourceRoute,
 }: {
-  doc: { title: string; content: string; area: string };
+  doc: { title: string; content: string; area: string; slug: string };
   sourceRoute?: string;
 }) {
   const areaLabel = AREA_META[doc.area]?.label ?? doc.area;
@@ -105,7 +105,7 @@ function DocContent({
         <span className="text-xs text-[var(--dpf-text)]">{doc.title}</span>
       </div>
       <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-6">{doc.title}</h1>
-      <DocRenderer content={doc.content} currentArea={doc.area} />
+      <DocRenderer content={doc.content} sourcePath={`docs/user-guide/${doc.slug}.md`} />
     </div>
   );
 }
