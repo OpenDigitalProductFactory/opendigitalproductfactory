@@ -33,22 +33,32 @@ function resolvePortalLink(href: string | undefined, sourcePath: string): { href
   }
 }
 
-function heading(level: 2 | 3 | 4, children: ReactNode, className: string) {
-  const id = slugifyHeading(String(children));
-  const Tag = `h${level}` as const;
-  return (
-    <Tag id={id} className={className}>
-      {children}
-    </Tag>
-  );
-}
-
 function buildComponents(sourcePath: string) {
   return {
-    h2: ({ children }: C) =>
-      heading(2, children, "text-base font-bold text-[var(--dpf-text)] mt-8 mb-3 pb-1 border-b border-[var(--dpf-border)]"),
-    h3: ({ children }: C) => heading(3, children, "text-sm font-semibold text-[var(--dpf-text)] mt-6 mb-2"),
-    h4: ({ children }: C) => heading(4, children, "text-sm font-semibold text-[var(--dpf-muted)] mt-4 mb-2"),
+    h2: ({ children }: C) => (
+      <h2
+        id={slugifyHeading(String(children))}
+        className="text-base font-bold text-[var(--dpf-text)] mt-8 mb-3 pb-1 border-b border-[var(--dpf-border)]"
+      >
+        {children}
+      </h2>
+    ),
+    h3: ({ children }: C) => (
+      <h3
+        id={slugifyHeading(String(children))}
+        className="text-sm font-semibold text-[var(--dpf-text)] mt-6 mb-2"
+      >
+        {children}
+      </h3>
+    ),
+    h4: ({ children }: C) => (
+      <h4
+        id={slugifyHeading(String(children))}
+        className="text-sm font-semibold text-[var(--dpf-muted)] mt-4 mb-2"
+      >
+        {children}
+      </h4>
+    ),
     p: ({ children }: C) => (
       <p className="text-sm text-[var(--dpf-text)] leading-relaxed mb-3">{children}</p>
     ),
@@ -72,17 +82,6 @@ function buildComponents(sourcePath: string) {
         >
           {children}
         </a>
-      );
-    },
-    img: ({ src, alt }: { src?: string; alt?: string }) => {
-      const { href } = resolvePortalLink(typeof src === "string" ? src : undefined, sourcePath);
-      // eslint-disable-next-line @next/next/no-img-element
-      return (
-        <img
-          src={href}
-          alt={alt ?? ""}
-          className="my-4 max-w-full rounded-md border border-[var(--dpf-border)]"
-        />
       );
     },
     code: ({ children, className }: C & { className?: string }) => {
