@@ -4,6 +4,8 @@ import {
   applyColumnOrder,
   groupRowsByColumn,
   groupKeys,
+  expandedGroupSet,
+  splitExpandedGroupIds,
   EMPTY_GROUP_LABEL,
 } from "./grid-reorder-group";
 import type { ColumnDefinition } from "@/lib/workbooks/types";
@@ -113,5 +115,68 @@ describe("groupRowsByColumn", () => {
 
   it("exposes the group keys in first-seen order", () => {
     expect(groupKeys(rows, "status")).toEqual(["open", "done", EMPTY_GROUP_LABEL]);
+  });
+});
+
+describe("expandedGroupSet", () => {
+  const top = ["open", "done", "blocked"];
+
+  it("opens every top-level group by default", () => {
+    expect(expandedGroupSet(top, new Set(), new Set())).toEqual(
+      new Set(["open", "done", "blocked"]),
+    );
+  });
+
+  it("omits top-level groups the user collapsed", () => {
+    expect(expandedGroupSet(top, new Set(["done"]), new Set())).toEqual(
+      new Set(["open", "blocked"]),
+    );
+  });
+
+  it("adds the user's deeper (nested) expansions", () => {
+    // a level-2 group under "open" is opened on demand
+    expect(expandedGroupSet(top, new Set(), new Set(["open__alice"]))).toEqual(
+      new Set(["open", "done", "blocked", "open__alice"]),
+    );
+  });
+
+  it("retains a nested expansion under a collapsed parent (TreeDataGrid hides it; state survives a re-open)", () => {
+    // Collapsing the top-level "open" group hides everything under it in the
+    // grid, so keeping the remembered nested "open__alice" expansion in the set
+    // is harmless — and restores it if the user re-opens "open".
+    expect(expandedGroupSet(top, new Set(["open"]), new Set(["open__alice"]))).toEqual(
+      new Set(["done", "blocked", "open__alice"]),
+    );
+  });
+});
+
+describe("splitExpandedGroupIds", () => {
+  const top = ["open", "done", "blocked"];
+
+  it("records top-level ids absent from the set as collapses", () => {
+    const { collapsedGroups, extraExpanded } = splitExpandedGroupIds(
+      new Set(["open", "blocked"]),
+      top,
+    );
+    expect(collapsedGroups).toEqual(new Set(["done"]));
+    expect(extraExpanded).toEqual(new Set());
+  });
+
+  it("records non-top ids present in the set as deeper expansions", () => {
+    const { collapsedGroups, extraExpanded } = splitExpandedGroupIds(
+      new Set(["open", "done", "blocked", "open__alice"]),
+      top,
+    );
+    expect(collapsedGroups).toEqual(new Set());
+    expect(extraExpanded).toEqual(new Set(["open__alice"]));
+  });
+
+  it("round-trips with expandedGroupSet", () => {
+    const collapsed = new Set<unknown>(["done"]);
+    const extra = new Set<unknown>(["open__alice"]);
+    const ids = expandedGroupSet(top, collapsed, extra);
+    const split = splitExpandedGroupIds(ids, top);
+    expect(split.collapsedGroups).toEqual(collapsed);
+    expect(split.extraExpanded).toEqual(extra);
   });
 });

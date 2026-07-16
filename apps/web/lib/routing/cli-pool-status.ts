@@ -398,9 +398,12 @@ export async function captureAnthropicWeeklyQuota(
  * confirmed. Left unimplemented so nothing hard-codes an unverified path.
  */
 export async function collectCliWeeklyQuota(_adapterType: CliAdapterType): Promise<void> {
-  // Intentionally unimplemented — see the doc comment above. A follow-up wires
-  // the provider-native read + parse + recordCliWeeklyQuota once topology is
-  // confirmed. Until then, the topology-free direct-SDK capture path feeds the
-  // signal, and the policy falls back to the proxy when no fresh snapshot exists.
+  // UPDATE (BI-779FA953): the claude-cli oauth/usage read is now implemented as
+  // an opt-in, fail-closed collector in weekly-quota-collector.ts
+  // (collectClaudeCliWeeklyQuota) — off by default, driven by operator-declared
+  // config. The codex-cli read (a `codex app-server` subprocess spawn) remains
+  // unimplemented here pending topology confirmation, so nothing hard-codes an
+  // unverified subprocess path. The topology-free direct-SDK capture still feeds
+  // the signal, and the policy falls back to the proxy without a fresh snapshot.
   return;
 }

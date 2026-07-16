@@ -5,6 +5,7 @@ const db = vi.hoisted(() => ({
     featureBuild: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       count: vi.fn(),
       update: vi.fn(),
     },
@@ -31,6 +32,12 @@ describe("build-tool-helpers", () => {
     expect(extractBuildIdHint({ buildId: "nope" })).toBeNull();
     expect(extractBuildIdHint({ buildId: 42 })).toBeNull();
     expect(extractBuildIdHint({})).toBeNull();
+  });
+
+  it("extractBuildIdHint also reads featureBuildId and FB tokens in routeContext (BI-PIR-9a75015d)", () => {
+    expect(extractBuildIdHint({ featureBuildId: "FB-ALT1" })).toBe("FB-ALT1");
+    expect(extractBuildIdHint({ routeContext: "/build/FB-041879CD" })).toBe("FB-041879CD");
+    expect(extractBuildIdHint({ path: "working on FB-DEADBEEF now" })).toBe("FB-DEADBEEF");
   });
 
   it("TERMINAL_BUILD_PHASES excludes terminal builds from active resolution", () => {
@@ -63,10 +70,25 @@ describe("build-tool-helpers", () => {
 
   // BI-F82915D7: refuse to guess when the fallback is ambiguous rather than
   // silently returning the most-recent build (cross-build contamination).
-  it("resolveActiveBuildId refuses (returns null) when the user has >1 non-terminal build and no hint", async () => {
+  it("resolveActiveBuildId refuses (returns null) when many non-terminal builds share sandbox-hot phases", async () => {
     db.prisma.featureBuild.findFirst.mockResolvedValue({ buildId: "FB-A" });
     db.prisma.featureBuild.count.mockResolvedValue(2);
+    db.prisma.featureBuild.findMany.mockResolvedValue([
+      { buildId: "FB-A", phase: "build" },
+      { buildId: "FB-B", phase: "review" },
+    ]);
     expect(await resolveActiveBuildId("u1")).toBeNull();
+  });
+
+  it("resolveActiveBuildId picks the sole sandbox-hot build among drafts (BI-PIR-9a75015d)", async () => {
+    db.prisma.featureBuild.findFirst.mockResolvedValue({ buildId: "FB-STALE" });
+    db.prisma.featureBuild.count.mockResolvedValue(3);
+    db.prisma.featureBuild.findMany.mockResolvedValue([
+      { buildId: "FB-STALE", phase: "ideate" },
+      { buildId: "FB-041879CD", phase: "review" },
+      { buildId: "FB-OTHER", phase: "plan" },
+    ]);
+    expect(await resolveActiveBuildId("u1")).toBe("FB-041879CD");
   });
 
   // Back-compat: a mock without `count` (the common single-build pack test) must

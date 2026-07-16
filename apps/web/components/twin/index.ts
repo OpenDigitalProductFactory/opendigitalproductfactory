@@ -28,11 +28,13 @@ export { NeedsYouQuests, type NeedsYouQuestsProps } from "./NeedsYouQuests";
 // P3 — the profile-driven renderer + its live-data contract.
 export { TwinView, type TwinViewProps } from "./TwinView";
 export { ValueStreamStrip, type ValueStreamStripProps } from "./ValueStreamStrip";
+export { OutcomesStrip, type OutcomesStripProps } from "./OutcomesStrip";
 export {
   type TwinSnapshot,
   type TwinZoneSnapshot,
   type TwinQueueSnapshot,
   type TwinCogSnapshot,
   type TwinStageFlow,
+  type TwinOutcome,
 } from "./snapshot";
 export { buildDemoTwinSnapshot } from "./demo-snapshot";

@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Hoisted Prisma mock — must be declared before the import under test
 const prismaMock = vi.hoisted(() => ({
-  platformIssueReport: { create: vi.fn(), findFirst: vi.fn() },
+  platformIssueReport: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
   portfolio: { findUnique: vi.fn() },
   digitalProduct: { findUnique: vi.fn() },
 }));
@@ -18,9 +18,11 @@ import { ISSUE_REPORT_STATUS } from "./issue-report-status";
 beforeEach(() => {
   prismaMock.platformIssueReport.create.mockReset();
   prismaMock.platformIssueReport.findFirst.mockReset();
+  prismaMock.platformIssueReport.update.mockReset();
   prismaMock.portfolio.findUnique.mockReset();
   prismaMock.digitalProduct.findUnique.mockReset();
   prismaMock.platformIssueReport.create.mockResolvedValue({});
+  prismaMock.platformIssueReport.update.mockResolvedValue({});
   prismaMock.digitalProduct.findUnique.mockResolvedValue({ id: "dp-portal" });
   inngestMock.send.mockReset();
   inngestMock.send.mockResolvedValue(undefined);
@@ -308,7 +310,7 @@ describe("createPlatformIssueReport", () => {
     prismaMock.platformIssueReport.create.mockRejectedValueOnce(
       p2002("PlatformIssueReport_dedupeKey_open_key"),
     );
-    prismaMock.platformIssueReport.findFirst.mockResolvedValue({ reportId: "PIR-EXIST" });
+    prismaMock.platformIssueReport.findFirst.mockResolvedValue({ id: "row-1", reportId: "PIR-EXIST" });
     const result = await createPlatformIssueReport({
       type: "runtime_error",
       title: "Recurring signature",
@@ -325,6 +327,31 @@ describe("createPlatformIssueReport", () => {
       }),
     );
     // The surviving report already projected when first filed — no re-projection.
+    expect(inngestMock.send).not.toHaveBeenCalled();
+  });
+
+  // BI-51F6A428: the dedupeKey race is a re-occurrence — accrue onto the survivor.
+  it("accrues occurrenceCount + lastSeenAt onto the surviving report on a dedupeKey race", async () => {
+    const NOW = new Date("2026-07-16T12:00:00.000Z");
+    prismaMock.platformIssueReport.create.mockRejectedValueOnce(
+      p2002("PlatformIssueReport_dedupeKey_open_key"),
+    );
+    prismaMock.platformIssueReport.findFirst.mockResolvedValue({ id: "row-1", reportId: "PIR-EXIST" });
+    const result = await createPlatformIssueReport(
+      {
+        type: "log_signature",
+        title: "Recurring signature",
+        source: "log-signature-scanner",
+        severity: "low",
+        dedupeKey: "log-sig:portal:abc1234567",
+      },
+      { now: () => NOW },
+    );
+    expect(result.reportId).toBe("PIR-EXIST");
+    expect(prismaMock.platformIssueReport.update).toHaveBeenCalledWith({
+      where: { id: "row-1" },
+      data: { occurrenceCount: { increment: 1 }, lastSeenAt: NOW },
+    });
     expect(inngestMock.send).not.toHaveBeenCalled();
   });
 
@@ -364,5 +391,73 @@ describe("createPlatformIssueReport", () => {
       source: "crash_boundary",
     });
     expect(result.reportId).toMatch(/^PIR-/);
+  });
+
+  // BI-51F6A428: reach-threshold + staging gate at the front door.
+  describe("reach-threshold + staging gate (BI-51F6A428)", () => {
+    const NOW = new Date("2026-07-16T12:00:00.000Z");
+
+    it("births a low-severity log signature staged and does NOT emit (reach-gated)", async () => {
+      const { reportId } = await createPlatformIssueReport(
+        {
+          type: "log_signature",
+          source: "log-signature-scanner",
+          severity: "low",
+          title: "New error signature in portal: something",
+          dedupeKey: "log-sig:portal:abc1234567",
+        },
+        { now: () => NOW },
+      );
+      const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+      expect(args?.data.stagedUntilPromoted).toBe(true);
+      expect(args?.data.firstSeenAt).toEqual(NOW);
+      expect(args?.data.lastSeenAt).toEqual(NOW);
+      expect(args?.data.status).toBeUndefined(); // still OPEN (schema default)
+      // Held in staging — no immediate projection.
+      expect(inngestMock.send).not.toHaveBeenCalled();
+      expect(reportId).toMatch(/^PIR-/);
+    });
+
+    it("projects a HIGH-severity log signature immediately (loud incident bypasses the bar)", async () => {
+      const { reportId } = await createPlatformIssueReport(
+        {
+          type: "log_signature",
+          source: "log-signature-scanner",
+          severity: "high",
+          title: "New error signature in portal: loud",
+          dedupeKey: "log-sig:portal:def",
+        },
+        { now: () => NOW },
+      );
+      const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+      expect(args?.data.stagedUntilPromoted).toBe(false);
+      expect(inngestMock.send).toHaveBeenCalledWith({
+        name: "quality/issue-report.created",
+        data: { reportId },
+      });
+    });
+
+    it("does NOT stage a human/manual report — it projects on first occurrence", async () => {
+      const { reportId } = await createPlatformIssueReport(
+        { type: "user_report", source: "manual", severity: "low", title: "Human report" },
+        { now: () => NOW },
+      );
+      const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+      expect(args?.data.stagedUntilPromoted).toBe(false);
+      expect(inngestMock.send).toHaveBeenCalledWith({
+        name: "quality/issue-report.created",
+        data: { reportId },
+      });
+    });
+
+    it("seeds firstSeenAt/lastSeenAt on every created report", async () => {
+      await createPlatformIssueReport(
+        { type: "user_report", source: "manual", title: "Test" },
+        { now: () => NOW },
+      );
+      const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+      expect(args?.data.firstSeenAt).toEqual(NOW);
+      expect(args?.data.lastSeenAt).toEqual(NOW);
+    });
   });
 });

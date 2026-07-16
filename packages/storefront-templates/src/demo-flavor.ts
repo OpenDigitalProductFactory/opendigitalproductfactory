@@ -116,6 +116,84 @@ export const DEMO_FLAVORS: Record<string, DemoFlavor> = {
     signatureOfferings: ["Bespoke new builds", "Architect-led extensions", "Full project management"],
     notes: "One client, one crew, a clear budget line — the build stays on programme and the finish is the one they pictured.",
   },
+  florist: {
+    companyName: "Petal & Stem",
+    staff: [
+      { name: "Rosa Delacroix", role: "Lead Florist" },
+      { name: "Kai Nakamura", role: "Florist" },
+      { name: "Bea Hollis", role: "Shop & Online" },
+    ],
+    customers: ["Wedding — the Okonkwos", "Weekly office order", "Sympathy arrangement", "Online bouquet — next-day", "Subscription — bi-weekly"],
+    signatureOfferings: ["Wedding & event flowers", "Same-day local delivery", "Seasonal subscription"],
+    notes: "Fresh stock turns before it wilts, online orders go out same-day, and every event arrangement lands exactly as pictured.",
+  },
+  gym: {
+    companyName: "Ironworks Gym",
+    staff: [
+      { name: "Marcus Vane", role: "Head Coach" },
+      { name: "Priya Anand", role: "Class Instructor" },
+      { name: "Del Roberts", role: "Personal Trainer" },
+      { name: "Sasha Kerr", role: "Front Desk" },
+    ],
+    customers: ["6am HIIT regulars", "New member — 3-month plan", "PT client — strength block", "Class no-show follow-up", "Renewal — annual"],
+    signatureOfferings: ["Unlimited classes", "1:1 personal training", "Beginner strength programme"],
+    notes: "Classes fill from the waitlist, members keep their streak, and slipping attendees get a nudge before they cancel.",
+  },
+  tutoring: {
+    companyName: "Bright Minds Tutoring",
+    staff: [
+      { name: "Elena Fteros", role: "Lead Tutor" },
+      { name: "Sam Whitfield", role: "Maths Tutor" },
+      { name: "Aditi Rao", role: "Coordinator" },
+    ],
+    customers: ["GCSE maths — the Balogun family", "11+ prep", "A-level chemistry", "New enquiry — Year 9", "Weekly slot — Tuesdays"],
+    signatureOfferings: ["Exam prep", "Weekly 1:1 sessions", "Small-group revision"],
+    notes: "Every student has a plan and a slot, results move term on term, and parents see progress they can point to.",
+  },
+  "moving-company": {
+    companyName: "Sure-Hands Movers",
+    staff: [
+      { name: "Gus Petrov", role: "Crew Lead" },
+      { name: "Malik Osei", role: "Mover" },
+      { name: "Trina Boyd", role: "Dispatcher" },
+    ],
+    customers: ["3-bed house move — the Ahmeds", "Office relocation", "Packing-only quote", "Long-distance — booked", "Same-week local move"],
+    signatureOfferings: ["Local & long-distance moves", "Packing service", "Storage handoff"],
+    notes: "Crews routed to the day's jobs, nothing turns up short-handed, and month-end peaks are quoted and booked in advance.",
+  },
+  "animal-shelter": {
+    companyName: "Second Chance Animal Shelter",
+    staff: [
+      { name: "Nadia Sowande", role: "Shelter Manager" },
+      { name: "Elliot Rush", role: "Animal Care Lead" },
+      { name: "Fran Delgado", role: "Volunteer Coordinator" },
+    ],
+    customers: ["Adoption — Bella the collie", "Foster application", "Monthly donor — the Kims", "Volunteer shift signup", "Grant deadline — Q3"],
+    signatureOfferings: ["Rehoming & adoption", "Foster programme", "Monthly giving"],
+    notes: "Animals find homes quickly, donors see the impact of their gift, and volunteer shifts stay filled and thanked.",
+  },
+  "software-platform": {
+    companyName: "Cadence",
+    staff: [
+      { name: "Yuki Tanaka", role: "Account Manager" },
+      { name: "Omar Haddad", role: "Customer Success Lead" },
+      { name: "Priti Shah", role: "Onboarding Specialist" },
+    ],
+    customers: ["Northwind Ltd — renewal ≤60d", "At-risk: Acme (usage down)", "New account onboarding", "Expansion — added seats", "Open CTA — QBR"],
+    signatureOfferings: ["Team & enterprise plans", "Guided onboarding", "Usage-based add-ons"],
+    notes: "Renewals land early, at-risk accounts are caught before they churn, and every new account reaches value fast.",
+  },
+  "small-town-municipality": {
+    companyName: "Riverside Town Hall",
+    staff: [
+      { name: "Councillor Dana Lowe", role: "Services Lead" },
+      { name: "Pat Nkemelu", role: "Senior Case Officer" },
+      { name: "Wei Chen", role: "Intake Clerk" },
+    ],
+    customers: ["Building permit — 14 Vale Rd", "Business licence renewal", "Noise complaint — case open", "Planning inspection", "Rates enquiry"],
+    signatureOfferings: ["Permits & licensing", "Planning & inspections", "Resident services"],
+    notes: "Cases move within their SLA, nothing sits past its deadline, and residents get a clear answer the first time.",
+  },
 };
 
 /** Category-level "what a great one feels like" — the incremental fidelity floor
@@ -133,6 +211,17 @@ export const CATEGORY_FLAVOR_DEFAULTS: Partial<Record<ArchetypeCategory, Pick<De
   "real-estate-construction": { notes: "Delivered on the promised date, snags closed fast, and the client kept in the loop throughout." },
   "fitness-recreation": { notes: "Classes fill, members keep their streak, and the timetable flexes to demand." },
   "nonprofit-community": { notes: "Donors feel the impact, volunteers show up, and every programme hits its goal." },
+  "software-platform": { notes: "Renewals land early, at-risk accounts are caught before they churn, and every account reaches value fast." },
+  "education-training": { notes: "Every learner has a plan and a slot, cohorts fill, and progress is something you can point to." },
+  "automotive-services": { notes: "Cars in and out on time, the right parts on hand, and no comeback jobs." },
+  "moving-and-logistics": { notes: "Crews routed to the day's jobs, nothing turns up short-handed, and peaks are booked in advance." },
+  "public-sector": { notes: "Cases move within their SLA, nothing sits past its deadline, and residents get a clear answer first time." },
+  "banking-financial-services": { notes: "Applications move through cleanly, disclosures are never missed, and members' money is handled with care." },
+  "live-events-venues": { notes: "Dates fill, holds convert to contracts, and every event runs to its run-of-show." },
+  "media-production": { notes: "Projects ship on schedule, the pipeline stays full, and unbilled work never piles up." },
+  "asset-rental": { notes: "Assets turn quickly, returns are inspected and back on the line, and nothing sits idle or overdue." },
+  "security-services": { notes: "Every post and patrol is covered, incidents are logged and answered fast, and contracts renew on trust." },
+  "hoa-property-management": { notes: "Requests are actioned, dues stay current, and the community sees the place well kept." },
 };
 
 /** Resolve the default flavor for an archetype: its own entry merged over its

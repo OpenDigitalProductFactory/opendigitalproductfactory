@@ -11,6 +11,8 @@
 // spine, scheduling — keyed by the profile. Until then `buildDemoTwinSnapshot`
 // (demo-snapshot.ts) fills it deterministically for the fixture.
 
+import type { Intent } from "@/components/ui/report-kit";
+
 import type {
   CapacityChipData,
   FeedEventData,
@@ -52,6 +54,16 @@ export interface TwinStageFlow {
   longestWait?: string;
 }
 
+/** A realized customer outcome — revenue in, work delivered (workstream D). The
+ *  proof that the machine is producing, not just busy. */
+export interface TwinOutcome {
+  key: string;
+  label: string;
+  value: string;
+  intent?: Intent;
+  hint?: string;
+}
+
 /** The cog's current proposal over live state (constraint → proposal → confirm). */
 export interface TwinCogSnapshot {
   proposal: string;
@@ -65,6 +77,9 @@ export interface TwinSnapshot {
   /** The archetype's value-stream backbone with demand counts overlaid (workstream
    *  C). Optional — a fixture without grounding simply omits it. */
   stageFlow?: TwinStageFlow[];
+  /** Realized customer outcomes — revenue in, work delivered (workstream D).
+   *  Optional; omitted when there is no outcome data. */
+  outcomes?: TwinOutcome[];
   zones: TwinZoneSnapshot[];
   workItems: WorkItemData[];
   queues: TwinQueueSnapshot[];

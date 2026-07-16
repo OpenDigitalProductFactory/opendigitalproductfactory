@@ -63,6 +63,15 @@ export type ApproveDecompositionInput = {
   db?: ApproveDecompositionDb;
   /** Test seam: override id generators so tests can assert deterministic ids. */
   idGen?: { epicId: () => string; childBuildId: () => string };
+  /**
+   * Test seam / override: plan dispatch for children that have no unsatisfied
+   * sibling deps (BI-E49DDE47). Default fire-and-forgets
+   * `dispatchPlanForApprovedBuild` so the head-of-chain does not strand in plan.
+   */
+  dispatchPlanForChild?: (params: {
+    buildId: string;
+    userId: string;
+  }) => Promise<unknown>;
 };
 
 export type ApproveDecompositionResult =
@@ -70,12 +79,31 @@ export type ApproveDecompositionResult =
       ok: true;
       epicId: string;
       childBuildIds: string[];
+      /** Children with empty dependsOn — plan_dispatch was (or will be) fired. */
+      unblockedChildBuildIds: string[];
     }
   | {
       ok: false;
       error: string;
       code: ApproveDecompositionErrorCode;
     };
+
+/**
+ * Pure: among newly-created children, which have no sibling dependency edges
+ * and can start plan generation immediately after approve_decomposition.
+ */
+export function selectUnblockedChildBuildIds(
+  childScopes: ReadonlyArray<{ childOrder: number; dependsOn: readonly number[] }>,
+  orderToBuildId: ReadonlyMap<number, string>,
+): string[] {
+  const ids: string[] = [];
+  for (const scope of childScopes) {
+    if (scope.dependsOn.length > 0) continue;
+    const id = orderToBuildId.get(scope.childOrder);
+    if (typeof id === "string" && id.length > 0) ids.push(id);
+  }
+  return ids;
+}
 
 export type ApproveDecompositionErrorCode =
   | "build-not-found"
@@ -400,15 +428,42 @@ export async function approveDecomposition(
       });
     }
 
+    const unblockedChildBuildIds = selectUnblockedChildBuildIds(
+      args.candidate.childScopes,
+      orderToRealBuildId,
+    );
+
     return {
       epicId: createdEpic.epicId,
       childBuildIds: Array.from(orderToRealBuildId.values()),
+      unblockedChildBuildIds,
     };
   });
+
+  // BI-E49DDE47: children land in plan with designDoc copied, but nothing
+  // previously fired plan_dispatch — they sat "gone quiet" forever. Kick
+  // unblocked heads (empty dependsOn) the same way ideate→plan approval does.
+  // Dependency-chained siblings still wait on completion + dependency:ready.
+  if (txResult.unblockedChildBuildIds.length > 0) {
+    const dispatch =
+      args.dispatchPlanForChild ??
+      (async (params: { buildId: string; userId: string }) => {
+        const { dispatchPlanForApprovedBuild } = await import(
+          "@/lib/integrate/plan-on-approval"
+        );
+        return dispatchPlanForApprovedBuild(params);
+      });
+    for (const childBuildId of txResult.unblockedChildBuildIds) {
+      void dispatch({ buildId: childBuildId, userId: args.userId }).catch(() => {
+        // never block approve on plan-dispatch failure; activity log lives inside dispatcher
+      });
+    }
+  }
 
   return {
     ok: true,
     epicId: txResult.epicId,
     childBuildIds: txResult.childBuildIds,
+    unblockedChildBuildIds: txResult.unblockedChildBuildIds,
   };
 }

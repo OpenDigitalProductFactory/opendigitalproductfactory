@@ -2344,6 +2344,13 @@ model Agent {
   portfolioId String?
   archived    Boolean  @default(false)
 
+  // BI-REFACTOR-B6A61421: typed portal hive-mind role, authored in
+  // packages/db/data/agent_registry.json and loaded by the seed. The
+  // portal-context hive-mind resolver prefers this over keyword role inference
+  // (inferRole). Nullable + backfilled by the seed → @migration-safety: data-safe.
+  // Values: "builder"|"reviewer"|"architect"|"tester"|"operator"|"specialist".
+  role String?
+
   // EP-AI-WORKFORCE-001: Unified agent lifecycle fields
   valueStream       String? // "evaluate"|"explore"|"integrate"|"deploy"|"release"|"consume"|"operate"|"cross-cutting"
   it4itSections     String[] @default([])
@@ -5271,6 +5278,18 @@ model PlatformIssueReport {
   // that produced them so reflection can avoid route/time-window heuristics.
   threadId            String?
   taskRunId           String?
+  // BI-51F6A428 (reach-threshold + staging gate): accrual + staging fields that
+  // stop the PIR treadmill. A reach-gated automated signal (the log-signature
+  // "noise-digest" stream) is born `stagedUntilPromoted=true` instead of minting
+  // a BI on first sight; each re-occurrence bumps occurrenceCount + lastSeenAt,
+  // and it is projected into the backlog only once it crosses the reach+recency
+  // bar (apps/web/lib/quality/issue-report-promotion.ts). A staged signal that
+  // stops recurring is aged out (status→suppressed) with no BI. High/critical
+  // signals bypass the gate and project on first occurrence.
+  occurrenceCount     Int           @default(1)
+  firstSeenAt         DateTime?
+  lastSeenAt          DateTime?
+  stagedUntilPromoted Boolean       @default(false)
   // BI-0ACD9AB2 §5.3/§14 dial-up: the autonomous responder sweep pre-computes a
   // WWMD recommendation (status / recommended action / reason) here so the /ops
   // attention lens shows it without an operator click. Advisory only — the human

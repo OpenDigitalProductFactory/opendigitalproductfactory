@@ -9,6 +9,12 @@
 import { prisma } from "@dpf/db";
 
 import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
+import { classifyIssueReportStream } from "@/lib/quality/issue-report-stream";
+import {
+  shouldPromoteIssueReport,
+  shouldExpireStagedReport,
+  MAX_NEW_PROMOTIONS_PER_WINDOW,
+} from "@/lib/quality/issue-report-promotion";
 
 import { triageIssueReports } from "./issue-report-triage";
 import { escalatePriorityForOccurrences } from "./process-observer-triage";
@@ -61,6 +67,10 @@ export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
           source: true,
           errorDigest: true,
           selfFixClass: true,
+          // BI-51F6A428: accrual fields the reach gate evaluates.
+          occurrenceCount: true,
+          firstSeenAt: true,
+          lastSeenAt: true,
         },
       }),
 
@@ -101,9 +111,53 @@ export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
     acknowledgeReport: async (id) => {
       await prisma.platformIssueReport.update({
         where: { id },
-        data: { status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL },
+        // BI-51F6A428: clear the staging flag on promotion — the report has left
+        // the OPEN pool and been minted, so it is no longer held.
+        data: { status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL, stagedUntilPromoted: false },
       });
     },
+
+    // ── Reach-threshold + staging gate wiring (BI-51F6A428) ─────────────────
+    // The gate applies ONLY to the reach-gated "noise-digest" stream (the
+    // automated log-signature treadmill). Every other stream — human/manual
+    // reports, crash-boundary, runtime faults — returns true here and projects
+    // immediately, exactly as before. shouldPromoteIssueReport itself always
+    // returns true for high/critical, so a loud signal is never held.
+    shouldPromote: (report) =>
+      classifyIssueReportStream(report) !== "noise-digest" ||
+      shouldPromoteIssueReport({
+        occurrenceCount: report.occurrenceCount ?? 1,
+        firstSeenAt: report.firstSeenAt ?? null,
+        lastSeenAt: report.lastSeenAt ?? null,
+        severity: report.severity,
+        now: new Date(),
+      }),
+
+    shouldExpire: (report) =>
+      shouldExpireStagedReport({
+        firstSeenAt: report.firstSeenAt ?? null,
+        lastSeenAt: report.lastSeenAt ?? null,
+        now: new Date(),
+      }),
+
+    stageReport: async (id) => {
+      await prisma.platformIssueReport.update({
+        where: { id },
+        data: { stagedUntilPromoted: true },
+      });
+    },
+
+    // Aging-out: a genuinely-stopped one-off is closed WITHOUT a BI. suppressed
+    // is the "closed, never became work" terminal status (also excluded from the
+    // scanner's open-dedupe check, so a true recurrence later can re-file).
+    expireStagedReport: async (id) => {
+      await prisma.platformIssueReport.update({
+        where: { id },
+        data: { status: ISSUE_REPORT_STATUS.SUPPRESSED, stagedUntilPromoted: false },
+      });
+    },
+
+    maxNewPromotions: MAX_NEW_PROMOTIONS_PER_WINDOW,
 
     // BI-0ACD9AB2 §5.2: a self-fix escalation is held for the responder, never
     // generic-projected. Move any legacy OPEN self-fix row into the support-flow

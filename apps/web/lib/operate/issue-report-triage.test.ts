@@ -380,6 +380,118 @@ describe("triageIssueReports — crash_boundary gate (BI-B4F401B3)", () => {
   });
 });
 
+describe("triageIssueReports — reach-threshold + staging gate (BI-51F6A428)", () => {
+  // A reach-gated "noise-digest" signal (log-signature scanner output).
+  const logSig = {
+    id: "ls1",
+    reportId: "PIR-LS001",
+    type: "log_signature",
+    severity: "low",
+    title: "New error signature in portal: transient blip",
+    description: "Occurrences (last 20m): 1",
+    routeContext: "/platform",
+    errorStack: null,
+    source: "log-signature-scanner",
+    occurrenceCount: 1,
+    firstSeenAt: new Date("2026-07-16T11:00:00.000Z"),
+    lastSeenAt: new Date("2026-07-16T11:00:00.000Z"),
+  };
+
+  it("holds a below-bar reach-gated report staged — no BI, no acknowledge", async () => {
+    const created: unknown[] = [];
+    const acknowledged: string[] = [];
+    const stagedIds: string[] = [];
+
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [logSig],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      acknowledgeReport: async (id: string) => { acknowledged.push(id); },
+      shouldPromote: () => false,
+      stageReport: async (id: string) => { stagedIds.push(id); },
+    }));
+
+    expect(result.created).toBe(0);
+    expect(result.staged).toBe(1);
+    expect(created).toHaveLength(0);
+    expect(acknowledged).toEqual([]);
+    expect(stagedIds).toEqual(["ls1"]);
+  });
+
+  it("ages out a staged report that stopped recurring — expire, never a BI", async () => {
+    const created: unknown[] = [];
+    const expiredIds: string[] = [];
+    const stagedIds: string[] = [];
+
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [logSig],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      shouldPromote: () => false,
+      shouldExpire: () => true,
+      expireStagedReport: async (id: string) => { expiredIds.push(id); },
+      stageReport: async (id: string) => { stagedIds.push(id); },
+    }));
+
+    expect(result.created).toBe(0);
+    expect(result.expired).toBe(1);
+    expect(expiredIds).toEqual(["ls1"]);
+    expect(stagedIds).toEqual([]); // expired, not re-staged
+    expect(created).toHaveLength(0);
+  });
+
+  it("promotes a reach-gated report once it clears the bar (shouldPromote true)", async () => {
+    const created: unknown[] = [];
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [logSig],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      shouldPromote: () => true,
+    }));
+    expect(result.created).toBe(1);
+    expect(created).toHaveLength(1);
+  });
+
+  it("caps NEW reach-gated promotions per window — extra low signals defer to staging", async () => {
+    const created: unknown[] = [];
+    const stagedIds: string[] = [];
+    // `report` (source manual → runtime-fault) promotes and consumes the cap of 1;
+    // the reach-gated low log signal is then deferred (staged) this window.
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [report, logSig],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      shouldPromote: () => true,
+      stageReport: async (id: string) => { stagedIds.push(id); },
+      maxNewPromotions: 1,
+    }));
+    expect(result.created).toBe(1);
+    expect(result.staged).toBe(1);
+    expect(stagedIds).toEqual(["ls1"]);
+  });
+
+  it("high-severity reach-gated signals bypass the per-window cap (never held)", async () => {
+    const created: unknown[] = [];
+    const stagedIds: string[] = [];
+    const highLogSig = { ...logSig, id: "ls2", reportId: "PIR-LS002", severity: "high" };
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [report, highLogSig],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+      shouldPromote: () => true,
+      stageReport: async (id: string) => { stagedIds.push(id); },
+      maxNewPromotions: 1,
+    }));
+    expect(result.created).toBe(2); // high bypasses the cap
+    expect(stagedIds).toEqual([]);
+  });
+
+  it("without gate deps, behaviour is unchanged — reports always project", async () => {
+    const created: unknown[] = [];
+    const result = await triageIssueReports(triageDeps({
+      getOpenReports: async () => [logSig],
+      createBacklogItem: async (d: unknown) => { created.push(d); },
+    }));
+    expect(result.created).toBe(1); // no shouldPromote → today's always-project path
+    expect(created).toHaveLength(1);
+  });
+});
+
 describe("llmTriageReport", () => {
   it("parses valid LLM JSON response", async () => {
     const mockLlm = vi.fn().mockResolvedValue({

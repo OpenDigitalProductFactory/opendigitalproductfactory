@@ -38,17 +38,41 @@ export function recordAutoIntakeFailure(
  */
 export const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
 
+const FB_ID_RE = /\b(FB-[A-Za-z0-9]+)\b/;
+
+function asFbId(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (/^FB-[A-Za-z0-9]+$/.test(trimmed)) return trimmed;
+  const m = trimmed.match(FB_ID_RE);
+  return m ? m[1]! : null;
+}
+
 /**
  * Pull a well-formed `buildId` hint out of a tool's params bag.
- * Returns null when the hint is missing, non-string, or doesn't have the
- * `FB-` prefix that all real FeatureBuild IDs carry.
+ * Accepts `buildId` / `featureBuildId`, and FB-* tokens embedded in
+ * routeContext/strings (BI-PIR-9a75015d — agents often omit explicit buildId
+ * after start_build while still carrying FB-* in route context).
  */
 export function extractBuildIdHint(params: Record<string, unknown>): string | null {
-  const v = params["buildId"];
-  if (typeof v !== "string") return null;
-  const trimmed = v.trim();
-  return trimmed.startsWith("FB-") ? trimmed : null;
+  for (const key of ["buildId", "featureBuildId", "build_id"]) {
+    const v = params[key];
+    if (typeof v === "string") {
+      const id = asFbId(v);
+      if (id) return id;
+    }
+  }
+  for (const key of ["routeContext", "route", "path", "url", "message", "summary"]) {
+    const v = params[key];
+    if (typeof v === "string") {
+      const id = asFbId(v);
+      if (id) return id;
+    }
+  }
+  return null;
 }
+
+/** Phases where sandbox tools are expected to work — prefer these when disambiguating. */
+export const SANDBOX_HOT_PHASES = ["build", "review", "ship"] as const;
 
 /**
  * Resolve the active FeatureBuild for the current user.
@@ -101,13 +125,43 @@ export async function resolveActiveBuildId(
     }
   ).count;
   const nonTerminalCount = countFn ? await countFn({ where }) : 1;
-  if (nonTerminalCount > 1) {
+  if (nonTerminalCount <= 1) return build.buildId;
+
+  // BI-PIR-9a75015d: when multiple non-terminal builds exist, still resolve if
+  // exactly one is in a sandbox-hot phase (build/review/ship). That is the
+  // build after start_build, not a stale ideate draft. If zero or many are hot,
+  // keep refusing (BI-F82915D7 cross-build contamination guard).
+  const findManyFn = (
+    prisma.featureBuild as unknown as {
+      findMany?: (args: {
+        where: typeof where;
+        orderBy: { updatedAt: "desc" };
+        select: { buildId: true; phase: true };
+        take: number;
+      }) => Promise<Array<{ buildId: string; phase: string }>>;
+    }
+  ).findMany;
+  if (!findManyFn) {
     console.warn(
       `[resolveActiveBuildId] ambiguous: user has multiple non-terminal builds and no buildId hint — refusing to guess. Pass an explicit FB-id.`,
     );
     return null;
   }
-  return build.buildId;
+  const candidates = await findManyFn({
+    where,
+    orderBy: { updatedAt: "desc" },
+    select: { buildId: true, phase: true },
+    take: 25,
+  });
+  const hot = candidates.filter((c) =>
+    (SANDBOX_HOT_PHASES as readonly string[]).includes(c.phase),
+  );
+  if (hot.length === 1) return hot[0]!.buildId;
+  console.warn(
+    `[resolveActiveBuildId] ambiguous: user has ${nonTerminalCount} non-terminal builds` +
+      ` (${hot.length} in sandbox-hot phases) and no buildId hint — refusing to guess. Pass an explicit FB-id.`,
+  );
+  return null;
 }
 
 export async function updateBuildHappyPathState(

@@ -11,6 +11,7 @@ import {
   summarizeDiscoveryHealth,
 } from "@/lib/discovery-data";
 import { getFullGraphData } from "@/lib/actions/graph";
+import { DataEnrichmentHelpNote } from "@/components/inventory/DataEnrichmentHelpNote";
 import { DiscoveryRunSummary } from "@/components/inventory/DiscoveryRunSummary";
 import { InventoryExceptionQueue } from "@/components/inventory/InventoryExceptionQueue";
 import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQualityIssuesPanel";
@@ -113,6 +114,8 @@ export async function DiscoveryOperationsPage({
             Treat discovery as evidence. Use it to understand purpose, ownership, and dependencies across the product estate.
           </p>
         </div>
+
+        <DataEnrichmentHelpNote />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">

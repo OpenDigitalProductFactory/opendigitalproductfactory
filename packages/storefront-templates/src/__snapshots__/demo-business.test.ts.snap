@@ -1023,7 +1023,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "software-platform",
     "cogProposal": "Allocate the next engagement to the best account by health-score",
-    "companyName": "Northgate Software Platform",
+    "companyName": "Cadence",
     "currency": "GBP",
     "customers": 10,
     "demand": {
@@ -1085,7 +1085,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "tutoring",
     "cogProposal": "Allocate the next appointment to the best provider by availability",
-    "companyName": "Westbourne Tutoring",
+    "companyName": "Bright Minds Tutoring",
     "currency": "GBP",
     "customers": 9,
     "demand": {
@@ -1488,7 +1488,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "florist",
     "cogProposal": "Allocate the next order to the best shelf by availability",
-    "companyName": "Cedar Park Florist",
+    "companyName": "Petal & Stem",
     "currency": "GBP",
     "customers": 8,
     "demand": {
@@ -1581,7 +1581,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "gym",
     "cogProposal": "Allocate the next appointment to the best provider by availability",
-    "companyName": "Harborview Gym",
+    "companyName": "Ironworks Gym",
     "currency": "GBP",
     "customers": 9,
     "demand": {
@@ -1705,7 +1705,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "animal-shelter",
     "cogProposal": "Allocate the next campaign to the best program by engagement-score",
-    "companyName": "Kingsley Animal Shelter",
+    "companyName": "Second Chance Animal Shelter",
     "currency": "GBP",
     "customers": 10,
     "demand": {
@@ -2111,7 +2111,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "small-town-municipality",
     "cogProposal": "Allocate the next job to the best technician by travel-time",
-    "companyName": "Cedar Park Small Town / Municipality",
+    "companyName": "Riverside Town Hall",
     "currency": "GBP",
     "customers": 8,
     "demand": {
@@ -2545,7 +2545,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "moving-company",
     "cogProposal": "Allocate the next job to the best technician by travel-time",
-    "companyName": "Riverside Moving Company",
+    "companyName": "Sure-Hands Movers",
     "currency": "GBP",
     "customers": 10,
     "demand": {

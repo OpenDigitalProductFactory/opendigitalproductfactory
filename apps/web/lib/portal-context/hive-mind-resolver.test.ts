@@ -46,6 +46,40 @@ describe("resolveHiveMindCandidates", () => {
     expect(candidates[0]?.requiredGrantKeys).toEqual([]);
   });
 
+  it("prefers the typed agent role over keyword inference and does not warn", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const candidates = await resolveHiveMindCandidates({
+      routeDomain: "Build Studio",
+      work: activeBuildWork(),
+      attention: [
+        {
+          kind: "missing_evidence",
+          severity: "warning",
+          message: "Evidence is missing.",
+        },
+      ],
+      db: dbWithAgents([
+        {
+          agentId: "AGT-TYPED-ROLE",
+          // Description is deliberately loaded with keywords ("review", "evidence",
+          // "promotion") that inferRole would map to "reviewer" — the typed role
+          // must win regardless.
+          name: "Context Review Specialist",
+          description: "Reviews Build Studio evidence and promotion handoffs.",
+          valueStream: "integrate",
+          role: "architect",
+          skills: [],
+          toolGrants: [],
+        },
+      ]),
+    });
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.role).toBe("architect");
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
   it("logs transitional keyword role inference once per agent when no typed role is present", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const db = dbWithAgents([

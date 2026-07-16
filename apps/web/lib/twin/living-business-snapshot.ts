@@ -39,6 +39,7 @@ import type {
   ResourceUnitData,
   TwinActor,
   TwinCogSnapshot,
+  TwinOutcome,
   TwinQueueSnapshot,
   TwinSnapshot,
   TwinZoneSnapshot,
@@ -51,6 +52,8 @@ type FindMany = (args: unknown) => Promise<unknown>;
 export type LivingBusinessClient = WorkforceRosterClient & {
   storefrontConfig: { findFirst: (args: unknown) => Promise<unknown> };
   bill: { findMany: FindMany };
+  /** Optional — outcomes (paid-invoice revenue) degrade to empty if absent. */
+  invoice?: { findMany: FindMany };
   taxObligationPeriod: { findMany: FindMany };
   obligation: { findMany: FindMany };
   storefrontBooking: { findMany: FindMany };
@@ -85,6 +88,10 @@ interface ProviderRow {
   id: string;
   name: string;
   isActive: boolean;
+}
+interface InvoiceRow {
+  totalAmount: Money;
+  currency: string | null;
 }
 
 export interface LiveTwinSnapshot extends TwinSnapshot {
@@ -420,7 +427,8 @@ export async function loadLivingBusinessSnapshot(opts?: {
 
   const profile: TwinProfile = deriveTwinProfile(def);
 
-  const [roster, bills, taxPeriods, obligations, bookings, providers] = await Promise.all([
+  const in90 = new Date(now.getTime() - 90 * 86_400_000);
+  const [roster, bills, taxPeriods, obligations, bookings, providers, paidInvoices] = await Promise.all([
     loadWorkforceRoster({ db }).catch(() => ({ members: [], summary: { total: 0, humans: 0, agents: 0, agentsWithUnmetNeeds: 0 } })),
     db.bill
       .findMany({
@@ -456,6 +464,14 @@ export async function loadLivingBusinessSnapshot(opts?: {
     db.serviceProvider
       .findMany({ where: { isActive: true }, take: 12, select: { id: true, name: true, isActive: true } })
       .catch(() => []) as Promise<ProviderRow[]>,
+    (db.invoice?.findMany
+      ? db.invoice
+          .findMany({
+            where: { paidAt: { not: null, gte: in90 } },
+            select: { totalAmount: true, currency: true },
+          })
+          .catch(() => [])
+      : Promise.resolve([])) as Promise<InvoiceRow[]>,
   ]);
 
   const members = roster.members;
@@ -511,6 +527,27 @@ export async function loadLivingBusinessSnapshot(opts?: {
   }
   const stageFlow = buildStageFlow(binding, stageDemand);
 
+  // Customer outcomes (workstream D): revenue realized in the last 90 days + the
+  // count of settled+paid work — the proof the business is producing.
+  const paidRevenue = paidInvoices.reduce((sum, inv) => sum + toNum(inv.totalAmount), 0);
+  const revenueCurrency = paidInvoices.find((i) => i.currency)?.currency ?? currency;
+  const outcomes: TwinOutcome[] = [
+    {
+      key: "revenue",
+      label: "Revenue in",
+      value: `${currencySymbol(revenueCurrency)}${Math.round(paidRevenue).toLocaleString("en-GB")}`,
+      intent: "success",
+      hint: "Paid · 90 days",
+    },
+    {
+      key: "delivered",
+      label: "Delivered",
+      value: `${paidInvoices.length} job${paidInvoices.length === 1 ? "" : "s"}`,
+      intent: "info",
+      hint: "Settled & paid",
+    },
+  ];
+
   return {
     live: true,
     archetypeId,
@@ -524,6 +561,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
       longestWaitMs: longestWaitMs(bookings, now),
     }),
     stageFlow,
+    outcomes,
     zones,
     workItems: bookingsToWorkItems(bookings, profile.workItemNoun.singular),
     queues,

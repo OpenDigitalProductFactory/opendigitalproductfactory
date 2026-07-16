@@ -24,6 +24,7 @@ import { PresenceRow } from "./PresenceRow";
 import { ResourceUnitGrid } from "./ResourceUnit";
 import { TwinQueue } from "./TwinQueue";
 import { TwinZone } from "./TwinZone";
+import { OutcomesStrip } from "./OutcomesStrip";
 import { UtilityBand } from "./UtilityBand";
 import { ValueStreamStrip } from "./ValueStreamStrip";
 import { WorkItem } from "./WorkItem";
@@ -65,6 +66,10 @@ export function TwinView({ profile, snapshot, className = "" }: TwinViewProps) {
 
       {snapshot.stageFlow && snapshot.stageFlow.length > 0 ? (
         <ValueStreamStrip stages={snapshot.stageFlow} />
+      ) : null}
+
+      {snapshot.outcomes && snapshot.outcomes.length > 0 ? (
+        <OutcomesStrip outcomes={snapshot.outcomes} />
       ) : null}
 
       <PresenceRow members={snapshot.presence} />

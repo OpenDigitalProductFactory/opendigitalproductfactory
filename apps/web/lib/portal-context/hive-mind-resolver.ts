@@ -38,6 +38,9 @@ async function safelyReadAgentRegistry(db: PortalContextDb): Promise<AgentRegist
         name: true,
         description: true,
         valueStream: true,
+        // BI-REFACTOR-B6A61421: typed hive-mind role. Preferred over keyword
+        // inference (inferRole) when present; see resolveAgentRole below.
+        role: true,
         skills: {
           select: {
             label: true,
@@ -128,6 +131,9 @@ function searchableAgentText(agent: AgentRegistryRow): string {
 }
 
 function resolveAgentRole(agent: AgentRegistryRow, text: string): HiveRole {
+  // BI-REFACTOR-B6A61421: prefer the typed role authored in agent_registry.json
+  // (Agent.role) and loaded by the seed. Only fall back to keyword sniffing when
+  // an agent has no typed role yet (e.g. live-created agents pending population).
   const typedRole = normalizeRole(agent.role);
   if (typedRole) return typedRole;
 
@@ -147,6 +153,10 @@ function warnOnceForInferredRole(agentId: string) {
   );
 }
 
+// BI-REFACTOR-B6A61421: keyword-sniffing fallback. Removal is DEFERRED until
+// seed + live agent data is fully populated with the typed Agent.role (the seed
+// backfills every registry agent; live-created agents may still be unpopulated).
+// Do not delete until that population is confirmed — see resolveAgentRole above.
 function inferRole(text: string): HiveRole {
   if (text.includes("architect") || text.includes("context")) return "architect";
   if (text.includes("review") || text.includes("evidence") || text.includes("promotion")) return "reviewer";
