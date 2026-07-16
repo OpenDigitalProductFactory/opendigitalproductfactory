@@ -149,7 +149,11 @@ export async function runManagedRestore(
       parts.map((p) => JSON.stringify(p)).join(" "),
     );
   };
-  const summarize = (outcome: { stderr: string; exitCode: number }) =>
+  const summarize = (outcome: {
+    stdout?: string;
+    stderr: string;
+    exitCode: number;
+  }) =>
     summarizeScriptFailure(outcome, {
       marker: spec.failureMarker,
       strip: spec.failureStrip,

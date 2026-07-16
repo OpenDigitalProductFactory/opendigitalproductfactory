@@ -51,6 +51,10 @@ import type {
   QdrantBackupManifest,
 } from "./types";
 import type { PrismaLike } from "./managed-backup";
+import {
+  postgresExtensionPreflight,
+  type BackupPreflightResult,
+} from "./extension-preflight";
 import { RestoreIntegrityError } from "./managed-restore";
 import { buildNeo4jBackupScriptEnv } from "./neo4j-backup-runner";
 import { buildNeo4jRestoreScriptEnv } from "./neo4j-restore-runner";
@@ -105,6 +109,18 @@ export interface BackupEngineSpec {
   buildEnv(ctx: BackupScriptEnvContext): NodeJS.ProcessEnv;
   /** Extra BackupRun fields written on success (postgres: pgVersion). */
   successRowExtras?(manifest: AnyBackupManifest): Record<string, unknown>;
+  /**
+   * Optional pre-dump capability check. Runs before the backup script and,
+   * when it returns `{ ok: false }`, short-circuits the run to a failed
+   * BackupRun carrying the actionable `error` — the script is never spawned.
+   * Postgres uses it to catch a container image missing a required extension
+   * library (pgvector) before pg_dump fails opaquely (BI-A35347E4). Must be
+   * fail-open on any inconclusive signal so it never becomes a new failure
+   * source. Never mutates infrastructure.
+   */
+  preflight?(ctx: {
+    composeProject: string;
+  }): Promise<BackupPreflightResult>;
 }
 
 /** Inputs the shared restore engine hands to a spec's env builder. */
@@ -207,6 +223,7 @@ export const POSTGRES_BACKUP_SPEC: BackupEngineSpec = {
   successRowExtras(manifest) {
     return { pgVersion: (manifest as BackupManifest).pgVersion };
   },
+  preflight: (ctx) => postgresExtensionPreflight(ctx),
 };
 
 export const NEO4J_BACKUP_SPEC: BackupEngineSpec = {
