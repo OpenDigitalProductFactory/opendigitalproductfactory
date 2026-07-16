@@ -134,6 +134,12 @@ interface RegistryAgent {
   kind?: string;
   tier?: string;
   value_stream?: string;
+  /**
+   * BI-REFACTOR-B6A61421: typed portal hive-mind role
+   * (builder|reviewer|architect|tester|operator|specialist). Source of truth for
+   * the role the portal-context hive-mind resolver prefers over keyword inference.
+   */
+  role?: string;
   capability_domain?: string;
   status?: string;
   human_supervisor_id?: string;
@@ -223,6 +229,9 @@ async function seedAgents(): Promise<void> {
       portfolioId,
       // EP-AI-WORKFORCE-001: Unified lifecycle fields
       valueStream: a.value_stream ?? null,
+      // BI-REFACTOR-B6A61421: typed hive-mind role carried from agent_registry.json
+      // so resolveHiveMindCandidates prefers it over keyword inference.
+      role: a.role ?? null,
       it4itSections: a.it4it_sections ?? [],
       humanSupervisorId: a.human_supervisor_id ?? null,
       hitlTierDefault: a.hitl_tier_default ?? 3,

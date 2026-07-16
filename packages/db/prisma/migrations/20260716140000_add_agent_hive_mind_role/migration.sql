@@ -1,0 +1,15 @@
+-- BI-REFACTOR-B6A61421 (replace portal hive-mind keyword role inference with
+-- typed agent role metadata): add a typed `role` column to Agent. The
+-- portal-context hive-mind resolver (apps/web/lib/portal-context/hive-mind-resolver.ts)
+-- now prefers this typed role over the `inferRole` keyword sniffing fallback.
+-- The role is authored in packages/db/data/agent_registry.json and backfilled by
+-- the seed (packages/db/src/seed.ts). Values:
+-- "builder"|"reviewer"|"architect"|"tester"|"operator"|"specialist".
+--
+-- @migration-safety: data-safe: the column is nullable with no default, so
+-- Postgres adds it as a metadata-only change with no table rewrite and no
+-- existing row can violate it. Every registry agent is populated on the next
+-- seed run; any not-yet-populated (e.g. live-created) agent keeps role = NULL and
+-- transparently falls through to the retained keyword-inference fallback. No new
+-- constraints, uniques, or indexes are tightened over existing data.
+ALTER TABLE "Agent" ADD COLUMN "role" TEXT;
