@@ -124,6 +124,46 @@ describe("ServiceRow eligibility surface (BI-1C4AAE1E)", () => {
   });
 });
 
+describe("ServiceRow weekly allocation hint (BI-779FA953)", () => {
+  it("renders the real remaining weekly allocation when a hint is provided", () => {
+    const html = renderToStaticMarkup(
+      <ServiceRow
+        pw={pw(provider({ providerId: "anthropic", name: "Anthropic", authMethod: "oauth" }))}
+        eligibility={routable}
+        weeklyAllocationHint="63% weekly left · resets ~2d 4h"
+      />,
+    );
+    expect(html).toContain("63% weekly left · resets ~2d 4h");
+    // Informational only — it never replaces the routing answer.
+    expect(html).toContain("Routable");
+  });
+
+  it("shows the weekly hint even when the pool is rate-limited (independent of the 429 gate)", () => {
+    const rateLimited: RoutingEligibility = {
+      state: "rate_limited",
+      eligible: false,
+      label: "Rate-limited",
+      reason: "Temporarily rate-limited at the provider. Recovers in ~5min.",
+    };
+    const html = renderToStaticMarkup(
+      <ServiceRow
+        pw={pw(provider({ providerId: "anthropic", name: "Anthropic", authMethod: "oauth" }))}
+        eligibility={rateLimited}
+        weeklyAllocationHint="12% weekly left · resets ~18h"
+      />,
+    );
+    expect(html).toContain("12% weekly left · resets ~18h");
+    expect(html).toContain("Rate-limited");
+  });
+
+  it("renders nothing extra when no hint is provided", () => {
+    const html = renderToStaticMarkup(
+      <ServiceRow pw={pw(provider())} eligibility={routable} />,
+    );
+    expect(html).not.toContain("weekly left");
+  });
+});
+
 describe("ServiceRow calibrated routing scores (BI-1B46967D)", () => {
   it("renders the calibrated ModelProfile rollup scores, not a placeholder 50", () => {
     const html = renderToStaticMarkup(

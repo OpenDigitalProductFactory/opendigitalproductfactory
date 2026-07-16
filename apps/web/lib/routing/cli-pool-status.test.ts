@@ -38,6 +38,7 @@ import {
   recordCliRateLimit,
   recordCliWeeklyQuota,
   captureAnthropicWeeklyQuota,
+  formatWeeklyAllocationHint,
   getCliPoolStatus,
   getAllCliPoolStatuses,
   clearCliRateLimit,
@@ -300,5 +301,43 @@ describe("captureAnthropicWeeklyQuota", () => {
     await captureAnthropicWeeklyQuota("anthropic", new Headers({ "x-ratelimit-remaining-tokens": "5000" }));
     expect(prisma.cliPoolStatus.upsert).not.toHaveBeenCalled();
     expect(await getCliPoolStatus("claude-cli")).toBeNull();
+  });
+});
+
+describe("formatWeeklyAllocationHint", () => {
+  const NOW = new Date("2026-07-16T12:00:00Z");
+
+  it("returns null when there is no weekly reading", () => {
+    expect(formatWeeklyAllocationHint({ weeklyUtilization: null, weeklyResetAt: null, weeklyObservedAt: null }, NOW)).toBeNull();
+  });
+
+  it("formats remaining % with a day+hour reset hint", () => {
+    const hint = formatWeeklyAllocationHint(
+      { weeklyUtilization: 0.37, weeklyResetAt: new Date("2026-07-18T16:00:00Z"), weeklyObservedAt: NOW },
+      NOW,
+    );
+    expect(hint).toBe("63% weekly left · resets ~2d 4h");
+  });
+
+  it("uses hour granularity under a day", () => {
+    const hint = formatWeeklyAllocationHint(
+      { weeklyUtilization: 0.1, weeklyResetAt: new Date("2026-07-16T17:00:00Z"), weeklyObservedAt: NOW },
+      NOW,
+    );
+    expect(hint).toBe("90% weekly left · resets ~5h");
+  });
+
+  it("omits the reset hint when no reset is known", () => {
+    expect(
+      formatWeeklyAllocationHint({ weeklyUtilization: 0.5, weeklyResetAt: null, weeklyObservedAt: NOW }, NOW),
+    ).toBe("50% weekly left");
+  });
+
+  it("returns null for a stale reading (older than the display window)", () => {
+    const hint = formatWeeklyAllocationHint(
+      { weeklyUtilization: 0.2, weeklyResetAt: new Date("2026-07-18T12:00:00Z"), weeklyObservedAt: new Date("2026-07-15T00:00:00Z") },
+      NOW,
+    );
+    expect(hint).toBeNull();
   });
 });

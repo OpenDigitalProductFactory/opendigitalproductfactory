@@ -314,6 +314,44 @@ export async function clearCliRateLimit(adapterType: CliAdapterType): Promise<vo
 }
 
 /**
+ * Human-readable relative time until a future instant: "any moment", "~5min",
+ * "~3h", "~2d 4h". Returns null for a null date.
+ */
+function humanizeUntil(target: Date | null, now: Date): string | null {
+  if (!target) return null;
+  const secs = Math.round((target.getTime() - now.getTime()) / 1000);
+  if (secs <= 0) return "any moment";
+  if (secs < 3_600) return `~${Math.max(1, Math.round(secs / 60))}min`;
+  if (secs < 86_400) return `~${Math.round(secs / 3_600)}h`;
+  const days = Math.floor(secs / 86_400);
+  const hours = Math.round((secs % 86_400) / 3_600);
+  return hours > 0 ? `~${days}d ${hours}h` : `~${days}d`;
+}
+
+/**
+ * Operator-facing weekly-allocation hint for a CLI pool — "63% weekly left ·
+ * resets ~2d 4h" — from the real quota snapshot. The same number every
+ * subscription client renders, surfaced on the provider row so the operator can
+ * SEE remaining allocation (tell-don't-act), not just infer it from a 429.
+ *
+ * Returns null when there is no snapshot, or when the reading is older than
+ * `maxAgeMs` (default 24h) — a display can tolerate a staler value than the drain
+ * policy, but a wildly stale number should not masquerade as current.
+ */
+export function formatWeeklyAllocationHint(
+  state: Pick<CliPoolState, "weeklyUtilization" | "weeklyResetAt" | "weeklyObservedAt">,
+  now: Date = new Date(),
+  maxAgeMs = 24 * 60 * 60 * 1000,
+): string | null {
+  if (state.weeklyUtilization == null || state.weeklyObservedAt == null) return null;
+  const age = now.getTime() - state.weeklyObservedAt.getTime();
+  if (age < 0 || age > maxAgeMs) return null;
+  const remainingPct = Math.round(Math.min(1, Math.max(0, 1 - state.weeklyUtilization)) * 100);
+  const resetHint = humanizeUntil(state.weeklyResetAt, now);
+  return resetHint ? `${remainingPct}% weekly left · resets ${resetHint}` : `${remainingPct}% weekly left`;
+}
+
+/**
  * Topology-free LIVE capture: extract the weekly-quota signal from a successful
  * Anthropic HTTP response's `anthropic-ratelimit-unified-7d-*` headers and persist
  * it against the claude-cli subscription pool. A real subscription/OAuth response
