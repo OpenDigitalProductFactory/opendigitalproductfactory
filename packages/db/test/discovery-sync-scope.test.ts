@@ -34,10 +34,16 @@ function buildStubDb() {
         discoveredSoftwareEvidence: { upsert: async () => ({}) },
         inventoryRelationship: {
           findMany: relationshipFindMany,
-          upsert: async ({ where }: { where: { relationshipKey: string } }) => ({
-            id: `relationship:${where.relationshipKey}`,
-            relationshipKey: where.relationshipKey,
-          }),
+          upsert: async ({ where, create }: {
+            where: { fromEntityId_toEntityId_relationshipType: { fromEntityId: string; toEntityId: string; relationshipType: string } };
+            create: { relationshipKey: string };
+          }) => {
+            const { fromEntityId, toEntityId, relationshipType } = where.fromEntityId_toEntityId_relationshipType;
+            return {
+              id: `relationship:${fromEntityId}|${toEntityId}|${relationshipType}`,
+              relationshipKey: create.relationshipKey,
+            };
+          },
           updateMany: relationshipUpdateMany,
         },
         discoveredRelationship: { create: async () => ({}) },
@@ -113,7 +119,15 @@ describe("persistBootstrapDiscoveryRun customer-scope isolation", () => {
         scopeKey: "customer:cust_a:site:site_austin",
         lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
       },
-      select: { relationshipKey: true },
+      // BI-PIR-7d69a445 (part 2): existing relationships are read by their
+      // canonical tuple columns (+ id for the stale sweep, + relationshipKey).
+      select: {
+        id: true,
+        relationshipKey: true,
+        fromEntityId: true,
+        toEntityId: true,
+        relationshipType: true,
+      },
     });
 
     // Stale detection only marks entities in the same scope stale.

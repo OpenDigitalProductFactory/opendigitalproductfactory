@@ -95,16 +95,40 @@ type DiscoverySyncTx = {
         scopeKey?: string;
         lastConfirmedRun?: { sourceSlug?: string };
       };
-      select: { relationshipKey: true };
-    }): Promise<Array<{ relationshipKey: string }>>;
+      // BI-PIR-7d69a445 (part 2): the tuple is the canonical identity, so the
+      // existing-relationship read pulls the tuple columns (+ id for the stale
+      // sweep, + relationshipKey for the stale-relationship quality issue).
+      select: {
+        id: true;
+        relationshipKey: true;
+        fromEntityId: true;
+        toEntityId: true;
+        relationshipType: true;
+      };
+    }): Promise<Array<{
+      id: string;
+      relationshipKey: string;
+      fromEntityId: string;
+      toEntityId: string;
+      relationshipType: string;
+    }>>;
     upsert(args: {
-      where: { relationshipKey: string };
+      // Conflict target is the compound @@unique, NOT relationshipKey, so a tuple
+      // persisted by a prior run under a different relationshipKey UPDATES rather
+      // than crashing on the create path (P2002).
+      where: {
+        fromEntityId_toEntityId_relationshipType: {
+          fromEntityId: string;
+          toEntityId: string;
+          relationshipType: string;
+        };
+      };
       create: Record<string, unknown>;
       update: Record<string, unknown>;
       select: { id: true; relationshipKey: true };
     }): Promise<{ id: string; relationshipKey: string }>;
     updateMany(args: {
-      where: { scopeKey?: string; relationshipKey: { in: string[] } };
+      where: { id: { in: string[] } };
       data: { status: string; lastSeenAt: Date };
     }): Promise<{ count: number }>;
   };
@@ -244,12 +268,29 @@ export async function persistBootstrapDiscoveryRun(
         select: { entityKey: true },
       })).map((entity) => entity.entityKey),
     );
-    const existingRelationshipKeys = new Set(
-      (await tx.inventoryRelationship.findMany({
-        where: { ...scopeWhere, ...sourceFilter },
-        select: { relationshipKey: true },
-      })).map((relationship) => relationship.relationshipKey),
-    );
+    // BI-PIR-7d69a445 (part 2): key existing relationships by their canonical
+    // tuple (fromEntityId, toEntityId, relationshipType) rather than by
+    // relationshipKey. relationshipKey is source-scoped provenance that can differ
+    // across runs for the same real relationship, so keying created-vs-updated
+    // accounting and the stale sweep on it double-counts and mis-sweeps across
+    // runs. The tuple is the compound @@unique — the real identity. relationshipKey
+    // is retained per row so the stale-relationship quality issue can still name it.
+    const existingRelationshipByTuple = new Map<string, { id: string; relationshipKey: string }>();
+    for (const existing of await tx.inventoryRelationship.findMany({
+      where: { ...scopeWhere, ...sourceFilter },
+      select: {
+        id: true,
+        relationshipKey: true,
+        fromEntityId: true,
+        toEntityId: true,
+        relationshipType: true,
+      },
+    })) {
+      existingRelationshipByTuple.set(
+        relationshipTupleKey(existing.fromEntityId, existing.toEntityId, existing.relationshipType),
+        { id: existing.id, relationshipKey: existing.relationshipKey },
+      );
+    }
     const existingIssueKeys = new Set(
       (await tx.portfolioQualityIssue.findMany({ select: { issueKey: true } }))
         .map((issue) => issue.issueKey),
@@ -510,16 +551,14 @@ export async function persistBootstrapDiscoveryRun(
       // BI-PIR-7d69a445: entity dedup can map two distinct discovered refs onto
       // one persisted entity id, so two relationships with DISTINCT
       // relationshipKeys can resolve to the SAME (fromEntityId, toEntityId,
-      // relationshipType) tuple. The upsert's conflict target is relationshipKey,
-      // so the second one misses, takes the create path, and violates the compound
-      // @@unique — a P2002 that (inside this $transaction) aborts the entire
-      // persistence run. Reuse the row already upserted for this tuple in the
-      // current run rather than re-entering the create path. The
-      // DiscoveredRelationship below is still written for every relationship, so
-      // each source key keeps its own provenance row linked to the shared
-      // InventoryRelationship. (Cross-run collisions, where the tuple was
-      // persisted by a PRIOR run under a different relationshipKey, still need a
-      // canonical-key decision — tracked on BI-PIR-7d69a445.)
+      // relationshipType) tuple. This in-run map (part 1) collapses same-run tuple
+      // collisions so only the first relationship for a tuple upserts and later
+      // colliding keys reuse its id. Part 2 re-points the upsert conflict target
+      // itself at the tuple @@unique, so a tuple persisted by a PRIOR run (under a
+      // different relationshipKey) now UPDATES rather than crashing on the create
+      // path. The DiscoveredRelationship below is still written for every
+      // relationship, so each source key keeps its own provenance row linked to
+      // the shared InventoryRelationship.
       const tupleKey = relationshipTupleKey(
         fromEntityId,
         toEntityId,
@@ -527,9 +566,21 @@ export async function persistBootstrapDiscoveryRun(
       );
       let persistedRelationshipId = persistedRelationshipIdByTuple.get(tupleKey);
       if (!persistedRelationshipId) {
-        const existed = existingRelationshipKeys.has(relationship.relationshipKey);
+        const existed = existingRelationshipByTuple.has(tupleKey);
         const persistedRelationship = await tx.inventoryRelationship.upsert({
-          where: { relationshipKey: relationship.relationshipKey },
+          // BI-PIR-7d69a445 (part 2): conflict target is the compound @@unique,
+          // not relationshipKey. When a PRIOR run already persisted this tuple
+          // (under any relationshipKey), the upsert now UPDATES that row instead
+          // of taking the create path and violating the tuple @@unique (the
+          // cross-run P2002). The in-run persistedRelationshipIdByTuple guard above
+          // still collapses same-run tuple collisions (part 1).
+          where: {
+            fromEntityId_toEntityId_relationshipType: {
+              fromEntityId,
+              toEntityId,
+              relationshipType: relationship.relationshipType,
+            },
+          },
           create: {
             relationshipKey: relationship.relationshipKey,
             relationshipType: relationship.relationshipType,
@@ -550,6 +601,11 @@ export async function persistBootstrapDiscoveryRun(
             toEntity: { connect: { id: toEntityId } },
           },
           update: {
+            // Refresh relationshipKey to the latest observed source key. The
+            // per-run provenance history is preserved on DiscoveredRelationship;
+            // this column just carries the most-recent source key for the shared
+            // canonical row (now non-unique, so no P2002 on this write).
+            relationshipKey: relationship.relationshipKey,
             relationshipType: relationship.relationshipType,
             status: "active",
             confidence: relationship.confidence ?? null,
@@ -592,18 +648,23 @@ export async function persistBootstrapDiscoveryRun(
       });
     }
 
-    const currentRelationshipKeys = new Set(
-      normalized.inventoryRelationships.map((relationship) => relationship.relationshipKey),
-    );
-    // Same column-based source attribution as entities above — the
-    // sweep only sees relationships it previously confirmed, so it can
-    // only mark its own rows stale.
-    const staleRelationshipKeys = [...existingRelationshipKeys]
-      .filter((relationshipKey) => !currentRelationshipKeys.has(relationshipKey));
-    const staleRelationships = staleRelationshipKeys.length === 0
+    // BI-PIR-7d69a445 (part 2): staleness is tuple-identity based. Any tuple this
+    // source previously confirmed (existingRelationshipByTuple — already scope +
+    // source filtered, same column-based source attribution as entities above)
+    // that was NOT re-persisted this run (persistedRelationshipIdByTuple holds
+    // every tuple resolved in the loop) is stale, and is marked by row id. Keying
+    // on the tuple rather than relationshipKey means a prior run's row re-observed
+    // this run under a DIFFERENT relationshipKey is correctly treated as confirmed
+    // (its tuple is in persistedRelationshipIdByTuple), not swept stale.
+    const staleExistingRelationships = [...existingRelationshipByTuple.entries()]
+      .filter(([tupleKey]) => !persistedRelationshipIdByTuple.has(tupleKey))
+      .map(([, value]) => value);
+    // relationshipKey of each stale row, for the stale-relationship quality issue.
+    const staleRelationshipKeys = staleExistingRelationships.map((value) => value.relationshipKey);
+    const staleRelationships = staleExistingRelationships.length === 0
       ? 0
       : (await tx.inventoryRelationship.updateMany({
-          where: { ...scopeWhere, relationshipKey: { in: staleRelationshipKeys } },
+          where: { id: { in: staleExistingRelationships.map((value) => value.id) } },
           data: { status: "stale", lastSeenAt: now },
         })).count;
 

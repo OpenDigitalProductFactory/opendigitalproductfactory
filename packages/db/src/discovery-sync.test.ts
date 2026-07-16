@@ -56,10 +56,16 @@ describe("persistBootstrapDiscoveryRun", () => {
         },
         inventoryRelationship: {
           findMany: async () => [],
-          upsert: async ({ where }: { where: { relationshipKey: string } }) => ({
-            id: `relationship:${where.relationshipKey}`,
-            relationshipKey: where.relationshipKey,
-          }),
+          upsert: async ({ where, create }: {
+            where: { fromEntityId_toEntityId_relationshipType: { fromEntityId: string; toEntityId: string; relationshipType: string } };
+            create: { relationshipKey: string };
+          }) => {
+            const { fromEntityId, toEntityId, relationshipType } = where.fromEntityId_toEntityId_relationshipType;
+            return {
+              id: `relationship:${fromEntityId}|${toEntityId}|${relationshipType}`,
+              relationshipKey: create.relationshipKey,
+            };
+          },
           updateMany: async () => ({ count: 0 }),
         },
         discoveredRelationship: {
@@ -245,10 +251,16 @@ describe("persistBootstrapDiscoveryRun", () => {
         },
         inventoryRelationship: {
           findMany: async () => [],
-          upsert: async ({ where }: { where: { relationshipKey: string } }) => ({
-            id: `relationship:${where.relationshipKey}`,
-            relationshipKey: where.relationshipKey,
-          }),
+          upsert: async ({ where, create }: {
+            where: { fromEntityId_toEntityId_relationshipType: { fromEntityId: string; toEntityId: string; relationshipType: string } };
+            create: { relationshipKey: string };
+          }) => {
+            const { fromEntityId, toEntityId, relationshipType } = where.fromEntityId_toEntityId_relationshipType;
+            return {
+              id: `relationship:${fromEntityId}|${toEntityId}|${relationshipType}`,
+              relationshipKey: create.relationshipKey,
+            };
+          },
           updateMany: async () => ({ count: 0 }),
         },
         discoveredRelationship: {
@@ -342,9 +354,18 @@ describe("persistBootstrapDiscoveryRun", () => {
         discoveredSoftwareEvidence: { upsert: async () => ({}) },
         inventoryRelationship: {
           findMany: async () => [],
-          upsert: async ({ where }: { where: { relationshipKey: string } }) => {
-            relationshipUpsertKeys.push(where.relationshipKey);
-            return { id: `relationship:${where.relationshipKey}`, relationshipKey: where.relationshipKey };
+          upsert: async ({ where, create }: {
+            where: { fromEntityId_toEntityId_relationshipType: { fromEntityId: string; toEntityId: string; relationshipType: string } };
+            create: { relationshipKey: string };
+          }) => {
+            // The upsert conflict target is the tuple; record the source key it
+            // carried so the assertion can prove the single upsert used rel:k1.
+            relationshipUpsertKeys.push(create.relationshipKey);
+            const { fromEntityId, toEntityId, relationshipType } = where.fromEntityId_toEntityId_relationshipType;
+            return {
+              id: `relationship:${fromEntityId}|${toEntityId}|${relationshipType}`,
+              relationshipKey: create.relationshipKey,
+            };
           },
           updateMany: async () => ({ count: 0 }),
         },
@@ -421,10 +442,147 @@ describe("persistBootstrapDiscoveryRun", () => {
     // reused it instead of taking the crashing create path)...
     expect(relationshipUpsertKeys).toEqual(["rel:k1"]);
     // ...but BOTH relationships kept their own provenance row, linked to the one
-    // shared InventoryRelationship.
+    // shared InventoryRelationship (identified by its resolved tuple, since the
+    // upsert now keys on the tuple, not relationshipKey).
+    const sharedTupleId = "relationship:entity:host:shared|entity:runtime:target|hosts";
     expect(discoveredRelationshipCreates).toEqual([
-      { relationshipKey: "rel:k1", connectId: "relationship:rel:k1" },
-      { relationshipKey: "rel:k2", connectId: "relationship:rel:k1" },
+      { relationshipKey: "rel:k1", connectId: sharedTupleId },
+      { relationshipKey: "rel:k2", connectId: sharedTupleId },
+    ]);
+  });
+
+  it("UPDATES a tuple persisted by a PRIOR run under a different relationshipKey — no cross-run P2002 (BI-PIR-7d69a445 part 2)", async () => {
+    // Part 2 cross-run repro. A PRIOR run persisted the (from, to, "hosts") tuple
+    // under relationshipKey "rel:k1" (returned here by findMany as an existing
+    // row). This NEW run presents the SAME tuple under a DIFFERENT relationshipKey
+    // "rel:k2". With relationshipKey as the upsert conflict target, the create path
+    // would fire and violate the compound @@unique (the cross-run P2002). With the
+    // tuple as the conflict target, the upsert UPDATES the existing row instead:
+    // exactly one upsert, counted as UPDATED (not created), and the new run still
+    // records its own DiscoveredRelationship provenance under "rel:k2".
+    const fromEntityId = "entity:host:shared";
+    const toEntityId = "entity:runtime:target";
+    const relationshipType = "hosts";
+    const tupleId = "prior-run-relationship-id";
+
+    const upsertCalls: Array<{
+      where: { fromEntityId_toEntityId_relationshipType: { fromEntityId: string; toEntityId: string; relationshipType: string } };
+      create: { relationshipKey: string };
+      update: { relationshipKey: string };
+    }> = [];
+    const discoveredRelationshipCreates: Array<{ relationshipKey: string; connectId: string }> = [];
+
+    const db = {
+      $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        discoveryRun: { create: async () => ({ id: "run-cross" }) },
+        inventoryEntity: {
+          findMany: async () => [],
+          upsert: async ({ where }: { where: { entityKey: string } }) => ({
+            id: `entity:${where.entityKey}`,
+            entityKey: where.entityKey,
+          }),
+          updateMany: async () => ({ count: 0 }),
+        },
+        discoveredItem: {
+          create: async ({ data }: { data: { observedKey: string } }) => ({
+            id: `discovered:${data.observedKey}`,
+          }),
+        },
+        discoveredSoftwareEvidence: { upsert: async () => ({}) },
+        inventoryRelationship: {
+          // The prior run's row for this tuple, under the OLD relationshipKey.
+          findMany: async () => [
+            { id: tupleId, relationshipKey: "rel:k1", fromEntityId, toEntityId, relationshipType },
+          ],
+          upsert: async (args: {
+            where: { fromEntityId_toEntityId_relationshipType: { fromEntityId: string; toEntityId: string; relationshipType: string } };
+            create: { relationshipKey: string };
+            update: { relationshipKey: string };
+          }) => {
+            upsertCalls.push(args);
+            // A tuple-keyed upsert against an existing tuple returns that same row.
+            return { id: tupleId, relationshipKey: args.create.relationshipKey };
+          },
+          updateMany: async () => ({ count: 0 }),
+        },
+        discoveredRelationship: {
+          create: async ({ data }: { data: { relationshipKey: string; inventoryRelationship: { connect: { id: string } } } }) => {
+            discoveredRelationshipCreates.push({
+              relationshipKey: data.relationshipKey,
+              connectId: data.inventoryRelationship.connect.id,
+            });
+            return {};
+          },
+        },
+        portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}) },
+      }),
+    };
+
+    const entity = (discoveredKey: string, entityKey: string) => ({
+      entityKey,
+      entityType: "host",
+      name: entityKey,
+      discoveredKey,
+      portfolioSlug: "foundational",
+      taxonomyNodeId: "foundational/compute/servers",
+      attributionStatus: "attributed" as const,
+      attributionMethod: "rule" as const,
+      attributionConfidence: 0.98,
+      providerView: "foundational",
+      properties: {},
+    });
+    const item = (discoveredKey: string) => ({
+      discoveredKey,
+      sourceKind: "dpf_bootstrap",
+      itemType: "host",
+      name: discoveredKey,
+      externalRef: discoveredKey,
+      attributes: {},
+    });
+
+    const summary = await persistBootstrapDiscoveryRun(
+      db,
+      {
+        discoveredItems: [item("dk:from"), item("dk:to")],
+        inventoryEntities: [
+          entity("dk:from", "host:shared"),
+          entity("dk:to", "runtime:target"),
+        ],
+        inventoryRelationships: [
+          {
+            // Same tuple as the prior run, but a NEW relationshipKey.
+            relationshipKey: "rel:k2",
+            relationshipType,
+            fromDiscoveredKey: "dk:from",
+            toDiscoveredKey: "dk:to",
+            properties: {},
+          },
+        ],
+        softwareEvidence: [],
+      },
+      { runKey: "run-cross", sourceSlug: "dpf_bootstrap" },
+      {
+        projectInventoryEntity: async () => undefined,
+        projectInventoryRelationship: async () => undefined,
+      },
+    );
+
+    // Exactly one upsert, and its conflict target is the tuple (not relationshipKey).
+    expect(upsertCalls).toHaveLength(1);
+    expect(upsertCalls[0]?.where).toEqual({
+      fromEntityId_toEntityId_relationshipType: { fromEntityId, toEntityId, relationshipType },
+    });
+    // The upsert's update block refreshes relationshipKey to the new run's key.
+    expect(upsertCalls[0]?.update.relationshipKey).toBe("rel:k2");
+    // The prior tuple existed, so it counts as UPDATED, not created — and it is
+    // NOT swept stale (its tuple was re-observed this run).
+    expect(summary.updatedRelationships).toBe(1);
+    expect(summary.createdRelationships).toBe(0);
+    expect(summary.staleRelationships).toBe(0);
+    // The new run still records its own provenance row under rel:k2, linked to the
+    // one shared canonical InventoryRelationship.
+    expect(discoveredRelationshipCreates).toEqual([
+      { relationshipKey: "rel:k2", connectId: tupleId },
     ]);
   });
 });
