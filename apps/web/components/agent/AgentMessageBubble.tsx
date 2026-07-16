@@ -278,10 +278,12 @@ function DecisionButtons({
   const buttonStyle = (option: CoworkerDecisionOption) => {
     const negative = option.kind === "reject";
     if (option.recommended) {
+      // Primary — accent-tinted, matching the proposal Approve button's
+      // token-only treatment (no hardcoded hex; theme-safe in light/dark).
       return {
-        background: "var(--dpf-accent)",
-        border: "1px solid var(--dpf-accent)",
-        color: "#fff",
+        background: "color-mix(in srgb, var(--dpf-accent) 22%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--dpf-accent) 45%, transparent)",
+        color: "var(--dpf-accent)",
         fontWeight: 600,
       };
     }
