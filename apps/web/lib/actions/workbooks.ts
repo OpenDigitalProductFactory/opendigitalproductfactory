@@ -28,7 +28,13 @@ import {
   getTableGridData as svcGetTableGridData,
   getTableSchema as svcGetTableSchema,
   queryRows as svcQueryRows,
+  listViews as svcListViews,
+  saveView as svcSaveView,
+  deleteView as svcDeleteView,
+  setDefaultView as svcSetDefaultView,
+  type SavedView,
 } from "@/lib/workbooks/workbook-service";
+import type { Prisma } from "@dpf/db";
 import {
   type PlatformUser,
   type ReferenceTarget,
@@ -211,6 +217,63 @@ export async function getTableGridDataAction(tableId: string): Promise<
   try {
     const user = await requireUser("view_workbooks");
     return ok(await svcGetTableGridData(user, tableId));
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ── Saved views (Phase 3) ───────────────────────────────────────────────────
+// Named views on custom workbook tables persist server-side (shared across
+// everyone with table access). Platform grids use a client-side (localStorage)
+// store instead — same UI, different backend — so these actions are only invoked
+// for custom tables. `config` is the opaque grid view-state blob.
+
+export async function listViewsAction(tableId: string): Promise<ActionResult<SavedView[]>> {
+  try {
+    const user = await requireUser("view_workbooks");
+    return ok(await svcListViews(user, tableId));
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function saveViewAction(
+  tableId: string,
+  input: { name: string; config: unknown; viewType?: string; isDefault?: boolean },
+): Promise<ActionResult<{ viewId: string }>> {
+  try {
+    const user = await requireUser("manage_workbooks");
+    return ok(
+      await svcSaveView(user, tableId, {
+        name: input.name,
+        config: input.config as Prisma.InputJsonValue,
+        viewType: input.viewType,
+        isDefault: input.isDefault,
+      }),
+    );
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function deleteViewAction(tableId: string, viewId: string): Promise<ActionResult> {
+  try {
+    const user = await requireUser("manage_workbooks");
+    await svcDeleteView(user, tableId, viewId);
+    return ok();
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function setDefaultViewAction(
+  tableId: string,
+  viewId: string | null,
+): Promise<ActionResult> {
+  try {
+    const user = await requireUser("manage_workbooks");
+    await svcSetDefaultView(user, tableId, viewId);
+    return ok();
   } catch (e) {
     return fail(e);
   }

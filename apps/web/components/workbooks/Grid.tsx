@@ -67,6 +67,10 @@ import {
   createRowAction,
   updateCellsAction,
   deleteRowAction,
+  listViewsAction,
+  saveViewAction,
+  deleteViewAction,
+  setDefaultViewAction,
 } from "@/lib/actions/workbooks";
 import { updatePlatformCellsAction } from "@/lib/actions/platform-grid";
 import {
@@ -102,8 +106,20 @@ import {
   viewStorageKey,
   serializeViewState,
   parseViewState,
-  type SortState,
+  type GridViewState,
 } from "./grid-view-state";
+import {
+  type NamedView,
+  localViewsKey,
+  parseNamedViews,
+  serializeNamedViews,
+  upsertNamedView,
+  removeNamedView,
+  setDefaultNamedView,
+  defaultNamedView,
+  normalizeViewState,
+} from "./grid-named-views";
+import { GridViewsMenu } from "./GridViewsMenu";
 import {
   reorderColumnIds,
   applyColumnOrder,
@@ -382,65 +398,217 @@ export function WorkbookGrid({
   // entry's inverse replays through the same validated dispatch as a normal edit.
   const [history, setHistory] = useState<GridHistory>(EMPTY_HISTORY);
 
+  // --- Named/saved views ---------------------------------------------------
+  // A named snapshot of the full grid view-state. Custom tables persist views
+  // server-side (WorkbookView, shared across table users); platform grids persist
+  // to localStorage (personal). Same UI (GridViewsMenu); backend chosen by source.
+  const serverBacked = source === "custom";
+  const [views, setViews] = useState<NamedView[]>([]);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+
+  const buildCurrentViewState = useCallback(
+    (): GridViewState => ({
+      filterQuery,
+      filterGroup,
+      sort: sortColumns.map((s) => ({ columnKey: s.columnKey, direction: s.direction })),
+      cfRules,
+      showProvenance,
+      columnOrder,
+      groupBy,
+      hiddenColumns,
+      frozenCount,
+      rowHeight,
+      footerAgg,
+      showFooter,
+    }),
+    [
+      filterQuery,
+      filterGroup,
+      sortColumns,
+      cfRules,
+      showProvenance,
+      columnOrder,
+      groupBy,
+      hiddenColumns,
+      frozenCount,
+      rowHeight,
+      footerAgg,
+      showFooter,
+    ],
+  );
+
+  // Apply a full saved view-state to the grid (every field, so a view is a clean
+  // reset — not a merge). Group expansion resets to the default for the new grouping.
+  const applyViewState = useCallback((s: GridViewState) => {
+    setFilterQuery(s.filterQuery);
+    setFilterGroup(s.filterGroup);
+    setSortColumns(s.sort);
+    setCfRules(s.cfRules);
+    setShowProvenance(s.showProvenance);
+    setColumnOrder(s.columnOrder);
+    setGroupBy(s.groupBy);
+    setHiddenColumns(s.hiddenColumns);
+    setFrozenCount(s.frozenCount);
+    setRowHeight(s.rowHeight);
+    const coerced: Record<string, FooterAgg> = {};
+    for (const [k, v] of Object.entries(s.footerAgg)) coerced[k] = toFooterAgg(v);
+    setFooterAgg(coerced);
+    setShowFooter(s.showFooter);
+    setCollapsedGroups(new Set());
+    setExtraExpanded(new Set());
+  }, []);
+
+  const loadViews = useCallback(async (): Promise<NamedView[]> => {
+    if (serverBacked) {
+      const res = await listViewsAction(tableId);
+      if (!res.ok) return [];
+      return res.data.map((sv) => {
+        const parsed = parseViewState(
+          typeof sv.config === "string" ? sv.config : JSON.stringify(sv.config),
+        );
+        return {
+          viewId: sv.viewId,
+          name: sv.name,
+          state: normalizeViewState(parsed ?? {}),
+          isDefault: sv.isDefault,
+        };
+      });
+    }
+    try {
+      return parseNamedViews(localStorage.getItem(localViewsKey(tableId)));
+    } catch {
+      return [];
+    }
+  }, [serverBacked, tableId]);
+
+  const persistLocalViews = useCallback(
+    (next: NamedView[]) => {
+      if (serverBacked) return;
+      try {
+        localStorage.setItem(localViewsKey(tableId), serializeNamedViews(next));
+      } catch {
+        // ignore quota / unavailable storage
+      }
+    },
+    [serverBacked, tableId],
+  );
+
+  const handleApplyView = useCallback(
+    (v: NamedView) => {
+      applyViewState(v.state);
+      setActiveViewId(v.viewId);
+    },
+    [applyViewState],
+  );
+
+  const handleSaveView = useCallback(
+    async (name: string) => {
+      const state = buildCurrentViewState();
+      const match = (v: NamedView) => v.name.trim().toLowerCase() === name.trim().toLowerCase();
+      if (serverBacked) {
+        const res = await saveViewAction(tableId, { name, config: state });
+        if (!res.ok) return setError(res.error);
+        const loaded = await loadViews();
+        setViews(loaded);
+        setActiveViewId(loaded.find(match)?.viewId ?? null);
+      } else {
+        const id = `lv-${globalThis.crypto?.randomUUID?.() ?? String(views.length + 1)}`;
+        const next = upsertNamedView(views, name, state, id);
+        setViews(next);
+        persistLocalViews(next);
+        setActiveViewId(next.find(match)?.viewId ?? null);
+      }
+    },
+    [serverBacked, tableId, views, buildCurrentViewState, loadViews, persistLocalViews],
+  );
+
+  const handleDeleteView = useCallback(
+    async (viewId: string) => {
+      if (serverBacked) {
+        const res = await deleteViewAction(tableId, viewId);
+        if (!res.ok) return setError(res.error);
+        setViews(await loadViews());
+      } else {
+        const next = removeNamedView(views, viewId);
+        setViews(next);
+        persistLocalViews(next);
+      }
+      setActiveViewId((cur) => (cur === viewId ? null : cur));
+    },
+    [serverBacked, tableId, views, loadViews, persistLocalViews],
+  );
+
+  const handleSetDefaultView = useCallback(
+    async (viewId: string | null) => {
+      if (serverBacked) {
+        const res = await setDefaultViewAction(tableId, viewId);
+        if (!res.ok) return setError(res.error);
+        setViews(await loadViews());
+      } else {
+        const next = setDefaultNamedView(views, viewId);
+        setViews(next);
+        persistLocalViews(next);
+      }
+    },
+    [serverBacked, tableId, views, loadViews, persistLocalViews],
+  );
+
   // Persist the per-grid view (filters/sort/formatting/provenance) per tableId so
   // it survives reloads. Client-only (localStorage); hydrate once, then save on change.
   const viewHydratedRef = useRef(false);
   useEffect(() => {
     viewHydratedRef.current = false;
-    try {
-      const parsed = parseViewState(localStorage.getItem(viewStorageKey(tableId)));
-      if (parsed) {
-        if (parsed.filterQuery !== undefined) setFilterQuery(parsed.filterQuery);
-        if (parsed.filterGroup) setFilterGroup(parsed.filterGroup);
-        if (parsed.sort) setSortColumns(parsed.sort);
-        if (parsed.cfRules) setCfRules(parsed.cfRules);
-        if (parsed.showProvenance !== undefined) setShowProvenance(parsed.showProvenance);
-        if (parsed.columnOrder) setColumnOrder(parsed.columnOrder);
-        if (parsed.groupBy) setGroupBy(parsed.groupBy);
-        if (parsed.hiddenColumns) setHiddenColumns(parsed.hiddenColumns);
-        if (parsed.frozenCount !== undefined) setFrozenCount(parsed.frozenCount);
-        if (parsed.rowHeight) setRowHeight(parsed.rowHeight);
-        if (parsed.footerAgg) {
-          const coerced: Record<string, FooterAgg> = {};
-          for (const [k, v] of Object.entries(parsed.footerAgg)) coerced[k] = toFooterAgg(v);
-          setFooterAgg(coerced);
+    let cancelled = false;
+    void (async () => {
+      const loaded = await loadViews();
+      if (cancelled) return;
+      setViews(loaded);
+      // A saved default view wins over the last-used layout; else restore the
+      // last-used single-view state (field-by-field, so absent fields are kept).
+      const def = defaultNamedView(loaded);
+      if (def) {
+        applyViewState(def.state);
+        setActiveViewId(def.viewId);
+      } else {
+        try {
+          const parsed = parseViewState(localStorage.getItem(viewStorageKey(tableId)));
+          if (parsed) {
+            if (parsed.filterQuery !== undefined) setFilterQuery(parsed.filterQuery);
+            if (parsed.filterGroup) setFilterGroup(parsed.filterGroup);
+            if (parsed.sort) setSortColumns(parsed.sort);
+            if (parsed.cfRules) setCfRules(parsed.cfRules);
+            if (parsed.showProvenance !== undefined) setShowProvenance(parsed.showProvenance);
+            if (parsed.columnOrder) setColumnOrder(parsed.columnOrder);
+            if (parsed.groupBy) setGroupBy(parsed.groupBy);
+            if (parsed.hiddenColumns) setHiddenColumns(parsed.hiddenColumns);
+            if (parsed.frozenCount !== undefined) setFrozenCount(parsed.frozenCount);
+            if (parsed.rowHeight) setRowHeight(parsed.rowHeight);
+            if (parsed.footerAgg) {
+              const coerced: Record<string, FooterAgg> = {};
+              for (const [k, v] of Object.entries(parsed.footerAgg)) coerced[k] = toFooterAgg(v);
+              setFooterAgg(coerced);
+            }
+            if (parsed.showFooter !== undefined) setShowFooter(parsed.showFooter);
+          }
+        } catch {
+          // ignore unreadable storage
         }
-        if (parsed.showFooter !== undefined) setShowFooter(parsed.showFooter);
       }
-    } catch {
-      // ignore unreadable storage
-    }
-    viewHydratedRef.current = true;
-  }, [tableId]);
+      if (!cancelled) viewHydratedRef.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tableId, loadViews, applyViewState]);
 
   useEffect(() => {
     if (!viewHydratedRef.current) return;
     try {
-      const sort: SortState[] = sortColumns.map((s) => ({
-        columnKey: s.columnKey,
-        direction: s.direction,
-      }));
-      localStorage.setItem(
-        viewStorageKey(tableId),
-        serializeViewState({
-          filterQuery,
-          filterGroup,
-          sort,
-          cfRules,
-          showProvenance,
-          columnOrder,
-          groupBy,
-          hiddenColumns,
-          frozenCount,
-          rowHeight,
-          footerAgg,
-          showFooter,
-        }),
-      );
+      localStorage.setItem(viewStorageKey(tableId), serializeViewState(buildCurrentViewState()));
     } catch {
       // ignore quota / unavailable storage
     }
-  }, [tableId, filterQuery, filterGroup, sortColumns, cfRules, showProvenance, columnOrder, groupBy, hiddenColumns, frozenCount, rowHeight, footerAgg, showFooter]);
+  }, [tableId, buildCurrentViewState]);
 
   // Columns in the user's saved drag order; new columns append, stale ids drop.
   const orderedColumns = useMemo(
@@ -842,11 +1010,22 @@ export function WorkbookGrid({
             </button>
           </>
         )}
+        <div className="ml-auto">
+          <GridViewsMenu
+            views={views}
+            activeViewId={activeViewId}
+            shared={serverBacked}
+            onApply={handleApplyView}
+            onSaveAs={handleSaveView}
+            onDelete={handleDeleteView}
+            onSetDefault={handleSetDefaultView}
+          />
+        </div>
         <button
           type="button"
           onClick={onExportCsv}
           disabled={columns.length === 0}
-          className="ml-auto rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-40"
+          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-40"
           title="Export the current view to CSV"
         >
           Export CSV

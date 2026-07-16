@@ -455,10 +455,19 @@ export async function deleteRow(
 // Views
 // ---------------------------------------------------------------------------
 
-export async function listViews(
-  user: ServiceUser,
-  tableId: string,
-): Promise<{ viewId: string; name: string; viewType: string; config: ViewConfig; isDefault: boolean }[]> {
+/** A saved view as the client consumes it. `config` is the opaque grid
+ * view-state blob (the client owns its shape); the server just persists it. */
+export interface SavedView {
+  viewId: string;
+  name: string;
+  viewType: string;
+  config: unknown;
+  isDefault: boolean;
+}
+
+/** Views are table-scoped and shared across everyone with table access
+ * (creator recorded for attribution) — the "shareable" half of named views. */
+export async function listViews(user: ServiceUser, tableId: string): Promise<SavedView[]> {
   const t = await resolveTable(user, tableId, "viewer");
   const views = await prisma.workbookView.findMany({
     where: { tableId: t.internalId },
@@ -468,29 +477,91 @@ export async function listViews(
     viewId: v.viewId,
     name: v.name,
     viewType: v.viewType,
-    config: v.config as unknown as ViewConfig,
+    config: v.config,
     isDefault: v.isDefault,
   }));
 }
 
+/**
+ * Create or overwrite a saved view. Upserts by (table, case-insensitive name) so
+ * re-saving a name updates it in place — matching the client's local-view store.
+ * When `isDefault`, every other view on the table is cleared first so at most one
+ * default exists. `config` is the opaque grid view-state blob.
+ */
 export async function saveView(
   user: ServiceUser,
   tableId: string,
-  input: { name: string; config: ViewConfig; viewType?: string; isDefault?: boolean },
+  input: { name: string; config: Prisma.InputJsonValue; viewType?: string; isDefault?: boolean },
 ): Promise<{ viewId: string }> {
   const t = await resolveTable(user, tableId, "editor");
-  const view = await prisma.workbookView.create({
-    data: {
-      viewId: genSemanticId("VW"),
-      name: input.name,
-      tableId: t.internalId,
-      viewType: input.viewType ?? "grid",
-      config: input.config as unknown as Prisma.InputJsonValue,
-      isDefault: input.isDefault ?? false,
-      createdById: user.id,
-    },
+  const name = input.name.trim();
+  if (!name) throw new WorkbookError("A view name is required", 400);
+  const existing = await prisma.workbookView.findFirst({
+    where: { tableId: t.internalId, name: { equals: name, mode: "insensitive" } },
   });
-  return { viewId: view.viewId };
+  return prisma.$transaction(async (tx) => {
+    if (input.isDefault) {
+      await tx.workbookView.updateMany({
+        where: { tableId: t.internalId, isDefault: true },
+        data: { isDefault: false },
+      });
+    }
+    if (existing) {
+      const v = await tx.workbookView.update({
+        where: { id: existing.id },
+        data: {
+          name,
+          viewType: input.viewType ?? existing.viewType,
+          config: input.config,
+          ...(input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
+        },
+      });
+      return { viewId: v.viewId };
+    }
+    const v = await tx.workbookView.create({
+      data: {
+        viewId: genSemanticId("VW"),
+        name,
+        tableId: t.internalId,
+        viewType: input.viewType ?? "grid",
+        config: input.config,
+        isDefault: input.isDefault ?? false,
+        createdById: user.id,
+      },
+    });
+    return { viewId: v.viewId };
+  });
+}
+
+/** Delete a saved view by its public viewId (scoped to the table). */
+export async function deleteView(
+  user: ServiceUser,
+  tableId: string,
+  viewId: string,
+): Promise<void> {
+  const t = await resolveTable(user, tableId, "editor");
+  await prisma.workbookView.deleteMany({ where: { viewId, tableId: t.internalId } });
+}
+
+/** Make one view the table's default (or clear all defaults with viewId=null). */
+export async function setDefaultView(
+  user: ServiceUser,
+  tableId: string,
+  viewId: string | null,
+): Promise<void> {
+  const t = await resolveTable(user, tableId, "editor");
+  await prisma.$transaction(async (tx) => {
+    await tx.workbookView.updateMany({
+      where: { tableId: t.internalId, isDefault: true },
+      data: { isDefault: false },
+    });
+    if (viewId) {
+      await tx.workbookView.updateMany({
+        where: { tableId: t.internalId, viewId },
+        data: { isDefault: true },
+      });
+    }
+  });
 }
 
 /**
