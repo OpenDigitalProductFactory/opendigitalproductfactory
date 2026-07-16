@@ -4,7 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import {
   getPlatformTable,
-  getPlatformTableGridData,
+  getAllPlatformTableRows,
   type PlatformUser,
 } from "@/lib/workbooks/platform-tables";
 import { WorkbookError } from "@/lib/workbooks/workbook-service";
@@ -37,7 +37,7 @@ export default async function PlatformTablePage({ params, searchParams }: Props)
 
   let grid;
   try {
-    grid = await getPlatformTableGridData(svcUser, entityType);
+    grid = await getAllPlatformTableRows(svcUser, entityType);
   } catch (e) {
     if (e instanceof WorkbookError && e.status === 403) redirect("/workbooks");
     if (e instanceof WorkbookError && e.status === 404) notFound();

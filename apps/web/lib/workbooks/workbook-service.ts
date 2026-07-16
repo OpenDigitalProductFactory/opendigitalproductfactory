@@ -25,6 +25,7 @@ import {
   FIELD_TYPES,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
+  MAX_GRID_ROWS,
   emptyViewConfig,
 } from "./types";
 
@@ -492,7 +493,13 @@ export async function saveView(
   return { viewId: view.viewId };
 }
 
-/** Convenience for the UI: schema + first page of rows + a default view config. */
+/**
+ * Convenience for the UI: schema + EVERY row + a default view config. Loads all
+ * rows (paginating through cursors, capped at MAX_GRID_ROWS) so the client grid —
+ * which filters, sorts, groups and exports over the rows it holds — reflects the
+ * whole table, not just the first page. `nextCursor` is non-null only if the cap
+ * was hit.
+ */
 export async function getTableGridData(
   user: ServiceUser,
   tableId: string,
@@ -503,6 +510,14 @@ export async function getTableGridData(
   view: ViewConfig;
 }> {
   const schema = await getTableSchema(user, tableId);
-  const { data, nextCursor } = await queryRows(user, tableId, {});
-  return { schema, rows: data, nextCursor, view: emptyViewConfig(schema.columns) };
+  const rows: GridRow[] = [];
+  let cursor: string | null = null;
+  do {
+    const { data, nextCursor } = await queryRows(user, tableId, { cursor, limit: MAX_PAGE_SIZE });
+    rows.push(...data);
+    cursor = nextCursor;
+    // Guard against a stuck cursor that never returns rows or never clears.
+    if (data.length === 0) break;
+  } while (cursor && rows.length < MAX_GRID_ROWS);
+  return { schema, rows, nextCursor: cursor, view: emptyViewConfig(schema.columns) };
 }
