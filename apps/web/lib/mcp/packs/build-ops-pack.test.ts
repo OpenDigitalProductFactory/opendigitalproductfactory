@@ -39,6 +39,13 @@ vi.mock("@/lib/ai-provider-route-context", () => routeCtx);
 
 const wipCap = vi.hoisted(() => ({
   wipCapReached: vi.fn(() => false),
+  // BI-937128F6: the promote gate now derives from the unified, pool-aware model.
+  decideUnifiedWip: vi.fn(() => ({
+    pool: "bs-sandbox",
+    pressure: 0,
+    capacity: 3,
+    admitted: true,
+  })),
   BUILD_WIP_CAP: 8,
   BuildWipCapError: class extends Error {
     constructor() {
@@ -48,6 +55,18 @@ const wipCap = vi.hoisted(() => ({
   TERMINAL_BUILD_PHASES: ["ship"],
 }));
 vi.mock("@/lib/build/wip-cap", () => wipCap);
+
+const unifiedWipQuery = vi.hoisted(() => ({
+  loadActiveUnifiedWip: vi.fn(async () => ({
+    total: 0,
+    perSurface: {},
+    bsSandboxContending: 0,
+    sharedLeaseContending: 0,
+    hostWorktreeOnly: 0,
+  })),
+  poolPressure: vi.fn(() => 0),
+}));
+vi.mock("@/lib/build/unified-wip-query", () => unifiedWipQuery);
 
 const ideateOnApproval = vi.hoisted(() => ({ dispatchIdeateForApprovedBuild: vi.fn() }));
 vi.mock("@/lib/integrate/ideate-on-approval", () => ideateOnApproval);
@@ -102,6 +121,20 @@ const EXPECTED_GRANTS: Record<string, string[]> = {
 beforeEach(() => {
   vi.clearAllMocks();
   wipCap.wipCapReached.mockReturnValue(false);
+  wipCap.decideUnifiedWip.mockReturnValue({
+    pool: "bs-sandbox",
+    pressure: 0,
+    capacity: 3,
+    admitted: true,
+  });
+  unifiedWipQuery.loadActiveUnifiedWip.mockResolvedValue({
+    total: 0,
+    perSurface: {},
+    bsSandboxContending: 0,
+    sharedLeaseContending: 0,
+    hostWorktreeOnly: 0,
+  });
+  unifiedWipQuery.poolPressure.mockReturnValue(0);
   routeCtx.inferProviderIdFromRouteContext.mockReturnValue(null);
   gitUtils.isGitAvailable.mockResolvedValue(false);
 });
@@ -294,7 +327,14 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
       workType: "feature",
     });
     db.featureBuildCount.mockResolvedValue(99);
-    wipCap.wipCapReached.mockReturnValue(true);
+    // BI-937128F6: the bs-sandbox pool is saturated across all surfaces.
+    unifiedWipQuery.poolPressure.mockReturnValue(3);
+    wipCap.decideUnifiedWip.mockReturnValue({
+      pool: "bs-sandbox",
+      pressure: 3,
+      capacity: 3,
+      admitted: false,
+    });
     const res = await buildOpsPack.handlers.promote_to_build_studio({ itemId: "BI-1" }, "u1");
     expect(res.success).toBe(false);
     expect(res.error).toBe("wip_cap_reached");
