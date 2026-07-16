@@ -53,6 +53,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
 
 vi.mock("@/lib/self-upgrade/impact", () => ({
   getCurrentImpactSummaryId: vi.fn().mockResolvedValue(null),
+  loadRunImpactDigest: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/self-upgrade/window", () => ({

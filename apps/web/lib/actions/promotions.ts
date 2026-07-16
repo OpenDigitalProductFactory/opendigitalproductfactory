@@ -14,7 +14,7 @@ import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { createRun, failRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
-import { getCurrentImpactSummaryId } from "@/lib/self-upgrade/impact";
+import { getCurrentImpactSummaryId, loadRunImpactDigest } from "@/lib/self-upgrade/impact";
 import {
   isStoreOpen,
   isUpgradeWindowOpen,
@@ -605,6 +605,12 @@ export async function getSelfUpgradeStatus() {
     getActiveSelfUpgradeBlackout(),
   ]);
 
+  // Human-readable "what did this run carry?" for the Latest Run card, loaded by
+  // the run's OWN impactSummaryId (the summary the operator reviewed at launch).
+  // Null when the run recorded no summary (e.g. a scheduled run, or one launched
+  // before a summary was generated) — the card then shows the SHA pair alone.
+  const latestRunImpact = await loadRunImpactDigest(latestRun?.impactSummaryId ?? null);
+
   // Upgrade timing follows the storefront's open/closed state (single source of
   // truth: operating hours). inMaintenanceWindow = "upgrades may run now" = store
   // closed (or inside an explicit override / auto-overnight window). storeOpen
@@ -726,6 +732,7 @@ export async function getSelfUpgradeStatus() {
       summary: releaseBatch.summary,
     },
     latestRun,
+    latestRunImpact,
     quiescence,
     // §4.5 admission observability — derived from the lane config + the
     // quiescence blockers already captured above (no extra query).

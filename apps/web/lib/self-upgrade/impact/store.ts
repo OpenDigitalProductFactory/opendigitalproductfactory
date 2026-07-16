@@ -30,6 +30,22 @@ export async function getPersistedSummary(
 }
 
 /**
+ * Read the persisted summary by its row id, or null. A SelfUpgradeRun records
+ * the summary it carried via `impactSummaryId`, so the run card can show
+ * exactly the changes THIS run applied — no (lineage, target) re-derivation,
+ * which would drift once the upstream target advances past the run's endpoints.
+ */
+export async function getPersistedSummaryById(
+  id: string,
+): Promise<UpgradeImpactSummary | null> {
+  const row = await prisma.upgradeImpactSummary.findUnique({
+    where: { id },
+    select: { summary: true },
+  });
+  return (row?.summary as UpgradeImpactSummary | undefined) ?? null;
+}
+
+/**
  * Read the persisted row id + summary for a pair — used to attach a
  * SelfUpgradeRun to the summary the operator reviewed. Null when none exists.
  */

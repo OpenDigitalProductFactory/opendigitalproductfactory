@@ -77,6 +77,18 @@ export type ImpactCategoryCounts = {
 };
 
 /**
+ * Compact impact digest for the Latest Run card — the human-readable "what did
+ * this run carry?" the raw SHA pair never gave. Assembled server-side from the
+ * run's own persisted summary; kept minimal so it serializes cleanly into the
+ * client component. See `loadRunImpactDigest` in ./index.
+ */
+export type RunImpactDigest = {
+  counts: ImpactCategoryCounts;
+  /** LLM one-line headline, or null when phrasing was skipped/empty. */
+  headline: string | null;
+};
+
+/**
  * Signals about THIS install used to score relevance of each upstream commit.
  *
  * These are intentionally narrow and observable from live DB state — no
