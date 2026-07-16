@@ -34,6 +34,11 @@ describe("demoBusinessToTwinSnapshot", () => {
       expect(snap.capacityChips.length).toBeGreaterThan(0);
       expect(snap.utility.some((u) => u.key === "revenue")).toBe(true);
       expect(snap.utility.some((u) => u.key === "bills")).toBe(true);
+
+      // Customer outcomes (workstream D): revenue in + work delivered.
+      expect(snap.outcomes).toBeDefined();
+      expect(snap.outcomes!.some((o) => o.key === "revenue")).toBe(true);
+      expect(snap.outcomes!.some((o) => o.key === "delivered")).toBe(true);
     }
   });
 

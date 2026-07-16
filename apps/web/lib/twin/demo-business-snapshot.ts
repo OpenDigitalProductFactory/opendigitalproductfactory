@@ -19,7 +19,12 @@ import type { DemoBusiness, TwinProfile, TwinValueStreamBinding } from "@dpf/sto
 import type { Intent } from "@/components/ui/report-kit";
 
 import { buildStageFlow, type StageDemand } from "./stage-flow";
-import type { TwinSnapshot, TwinZoneSnapshot, TwinQueueSnapshot } from "@/components/twin/snapshot";
+import type {
+  TwinSnapshot,
+  TwinZoneSnapshot,
+  TwinQueueSnapshot,
+  TwinOutcome,
+} from "@/components/twin/snapshot";
 import type {
   CapacityChipData,
   QueueItemData,
@@ -142,6 +147,25 @@ export function demoBusinessToTwinSnapshot(
     },
   ];
 
+  // Customer outcomes (workstream D): revenue realized + work delivered.
+  const paidInvoices = demo.finance.invoices.filter((v) => v.paid);
+  const outcomes: TwinOutcome[] = [
+    {
+      key: "revenue",
+      label: "Revenue in",
+      value: money(demo.currency, paidRevenue),
+      intent: "success",
+      hint: "Paid invoices",
+    },
+    {
+      key: "delivered",
+      label: "Delivered",
+      value: `${paidInvoices.length} job${paidInvoices.length === 1 ? "" : "s"}`,
+      intent: "info",
+      hint: "Settled & paid",
+    },
+  ];
+
   // Value-stream flow lane (workstream C): demand grouped by its stage.
   let stageFlow;
   if (binding) {
@@ -158,6 +182,7 @@ export function demoBusinessToTwinSnapshot(
   return {
     capacityChips,
     ...(stageFlow ? { stageFlow } : {}),
+    outcomes,
     zones,
     workItems,
     queues,
