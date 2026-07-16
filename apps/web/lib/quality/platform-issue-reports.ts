@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 import { inngest } from "@/lib/queue/inngest-client";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "./issue-report-status";
 import { classifyIssueReportStream, isResponderStream } from "./issue-report-stream";
+import { shouldPromoteIssueReport } from "./issue-report-promotion";
 
 // Field length limits — matched to existing writers and Prisma schema column widths.
 const LIMITS = {
@@ -44,6 +45,25 @@ function resolvePortfolioSlug(routeContext: string | null | undefined): string |
 
 function generateReportId(): string {
   return "PIR-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+}
+
+/**
+ * Record a re-occurrence of an already-open issue report: bump occurrenceCount
+ * and refresh lastSeenAt (BI-51F6A428). This is what lets a reach-gated report
+ * accrue toward its promotion bar across scan windows instead of being minted
+ * into a BI on first sight — and it lets a staged report's aging-out sweep see
+ * that it is still recurring. Called by (a) the log-signature scanner when a
+ * signature recurs while its report is still open, and (b) the P2002 dedupeKey
+ * idempotency race in createPlatformIssueReport.
+ */
+export async function accrueIssueReportOccurrence(
+  reportRowId: string,
+  now: () => Date = () => new Date(),
+): Promise<void> {
+  await prisma.platformIssueReport.update({
+    where: { id: reportRowId },
+    data: { occurrenceCount: { increment: 1 }, lastSeenAt: now() },
+  });
 }
 
 const VALID_STATUSES = new Set<string>(Object.values(ISSUE_REPORT_STATUS));
@@ -117,10 +137,24 @@ export interface CreatePlatformIssueReportInput {
  */
 export async function createPlatformIssueReport(
   input: CreatePlatformIssueReportInput,
+  opts?: { now?: () => Date },
 ): Promise<{ reportId: string }> {
   if (input.status !== undefined && !VALID_STATUSES.has(input.status)) {
     throw new Error(`createPlatformIssueReport: unknown status "${input.status}"`);
   }
+
+  const now = opts?.now ?? (() => new Date());
+  const nowDate = now();
+
+  // Classify the report's handling stream once — reused for the escalation
+  // projection guard (below) and the reach-threshold staging gate (BI-51F6A428).
+  const stream = classifyIssueReportStream({
+    type: input.type,
+    source: input.source,
+    severity: input.severity,
+    selfFixClass: input.selfFixClass,
+    errorDigest: input.errorDigest,
+  });
 
   // Projection guard (BI-0ACD9AB2 §5.2 — trusted escalation routing): a self-fix
   // escalation (type="build-stall-escalation" / selfFixClass set) is attended by
@@ -132,17 +166,7 @@ export async function createPlatformIssueReport(
   // report" partial-unique. Every writer is guarded at this one front door.
   const status: IssueReportStatus | undefined =
     input.status ??
-    (isResponderStream(
-      classifyIssueReportStream({
-        type: input.type,
-        source: input.source,
-        severity: input.severity,
-        selfFixClass: input.selfFixClass,
-        errorDigest: input.errorDigest,
-      }),
-    )
-      ? ISSUE_REPORT_STATUS.AWAITING_ESCALATION_ACK
-      : undefined);
+    (isResponderStream(stream) ? ISSUE_REPORT_STATUS.AWAITING_ESCALATION_ACK : undefined);
 
   const digitalProductId =
     input.digitalProductId ??
@@ -164,6 +188,28 @@ export async function createPlatformIssueReport(
 
   const reportId = generateReportId();
   const dedupeKey = trimTo(input.dedupeKey ?? null, LIMITS.dedupeKey);
+
+  // Reach-threshold + staging gate (BI-51F6A428). The "noise-digest" stream is
+  // the automated log-signature treadmill: a single transient signature must not
+  // mint a BI on first sight. An OPEN reach-gated signal is born staged (held,
+  // not projected) UNLESS it already clears the promotion bar — high/critical
+  // clear it on first occurrence (shouldPromoteIssueReport). Non-gated reports
+  // (human/manual, crash-boundary, runtime faults) are never held: they project
+  // immediately as before. Support-flow reports (status != open) never project.
+  const effectiveStatus = status ?? ISSUE_REPORT_STATUS.OPEN;
+  const reachGated = stream === "noise-digest";
+  const promoteOnCreate =
+    effectiveStatus === ISSUE_REPORT_STATUS.OPEN &&
+    (!reachGated ||
+      shouldPromoteIssueReport({
+        occurrenceCount: 1,
+        firstSeenAt: nowDate,
+        lastSeenAt: nowDate,
+        severity: input.severity ?? "medium",
+        now: nowDate,
+      }));
+  const stagedUntilPromoted =
+    effectiveStatus === ISSUE_REPORT_STATUS.OPEN && reachGated && !promoteOnCreate;
 
   try {
     await prisma.platformIssueReport.create({
@@ -190,6 +236,11 @@ export async function createPlatformIssueReport(
         source: input.source.slice(0, LIMITS.source),
         portfolioId,
         digitalProductId,
+        // BI-51F6A428: seed accrual/staging fields. occurrenceCount defaults to
+        // 1 via the schema; firstSeenAt/lastSeenAt anchor the promotion math.
+        firstSeenAt: nowDate,
+        lastSeenAt: nowDate,
+        stagedUntilPromoted,
         ...(status !== undefined ? { status } : {}),
       },
     });
@@ -201,8 +252,12 @@ export async function createPlatformIssueReport(
     // violating PlatformIssueReport_dedupeKey_open_key (UNIQUE WHERE status NOT
     // IN resolved_locally/resolved_upstream/suppressed). Previously that P2002
     // escaped this shared front door, got logged, and was itself re-scanned.
-    // Treat it as idempotent success: return the surviving open report's id and
-    // skip re-projection (that report already projected when first filed).
+    // Treat it as idempotent success: accrue the re-occurrence onto the surviving
+    // open report and return its id. BI-51F6A428: the re-occurrence bumps
+    // occurrenceCount + lastSeenAt (instead of being silently swallowed) so a
+    // staged signal accrues toward its promotion bar; the triage cron promotes it
+    // once it crosses the bar. No re-projection here — a report already above the
+    // bar projected when first filed, and a staged one is promoted by the cron.
     const code = (err as { code?: string } | null)?.code;
     const target = JSON.stringify((err as { meta?: { target?: unknown } } | null)?.meta?.target ?? "");
     if (code === "P2002" && dedupeKey && target.includes("dedupeKey")) {
@@ -212,9 +267,12 @@ export async function createPlatformIssueReport(
           status: { notIn: ["resolved_locally", "resolved_upstream", "suppressed"] },
         },
         orderBy: { createdAt: "desc" },
-        select: { reportId: true },
+        select: { id: true, reportId: true },
       });
-      if (existing) return { reportId: existing.reportId };
+      if (existing) {
+        await accrueIssueReportOccurrence(existing.id, now);
+        return { reportId: existing.reportId };
+      }
     }
     throw err;
   }
@@ -224,8 +282,12 @@ export async function createPlatformIssueReport(
   // triage cron. Support-flow reports (status !== open) are owned by the support
   // pipeline and skipped. Best-effort — the cron remains the safety net, so a
   // send failure never loses the projection.
-  const effectiveStatus = status ?? ISSUE_REPORT_STATUS.OPEN;
-  if (effectiveStatus === ISSUE_REPORT_STATUS.OPEN) {
+  //
+  // BI-51F6A428: a reach-gated signal born staged (promoteOnCreate=false) does
+  // NOT fire the immediate event — it stays OPEN + stagedUntilPromoted so it can
+  // accrue. The 15-min triage cron re-evaluates staged reports and projects them
+  // once they cross the bar (or ages out the ones that stopped recurring).
+  if (promoteOnCreate) {
     try {
       await inngest.send({ name: "quality/issue-report.created", data: { reportId } });
     } catch (err) {
