@@ -9,6 +9,13 @@ import type { RenderEditCellProps, RenderCellProps } from "react-data-grid";
 import type { CellValue, SelectOption, ReferenceValue, AttachmentValue } from "@/lib/workbooks/types";
 import { ReferenceTypeahead } from "@/components/ui/ReferenceTypeahead";
 import { searchReferencesAction } from "@/lib/actions/workbooks";
+import {
+  formatCurrency,
+  formatPercent,
+  formatDuration,
+  ratingStars,
+  clampProgress,
+} from "./grid-field-format";
 
 /** Flat row shape react-data-grid consumes: rowId + a value per columnId. */
 export type GridRowData = { rowId: string } & Record<string, CellValue>;
@@ -394,6 +401,68 @@ export function renderEmailCell({ row, column }: RenderCellProps<GridRowData>): 
   if (!v) return null;
   return (
     <a className="dpf-grid-link" href={`mailto:${v}`}>
+      {v}
+    </a>
+  );
+}
+
+// --- Numeric/text-backed display field types -------------------------------
+// Values are stored as a plain number (or string, for phone); only the cell
+// renderer differs. Editing reuses the number / text editors, so there is no
+// custom editor to get wrong. Config comes from the DPF ColumnDefinition, so
+// each renderer is a factory closing over the relevant config.
+
+export function makeCurrencyRenderer(symbol: string, precision?: number) {
+  return function CurrencyCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+    return formatCurrency(row[column.key], symbol || "$", precision ?? 2) || null;
+  };
+}
+
+export function makePercentRenderer(precision?: number) {
+  return function PercentCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+    return formatPercent(row[column.key], precision ?? 0) || null;
+  };
+}
+
+export function makeDurationRenderer(unit: "minutes" | "seconds") {
+  return function DurationCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+    return formatDuration(row[column.key], unit) || null;
+  };
+}
+
+export function makeRatingRenderer(max: number) {
+  return function RatingCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+    const value = row[column.key];
+    if (value === null || value === undefined || value === "") return null;
+    const { filled, total } = ratingStars(value, max);
+    return (
+      <span className="dpf-grid-rating" aria-label={`${filled} of ${total}`}>
+        <span className="dpf-grid-rating-on">{"★".repeat(filled)}</span>
+        <span className="dpf-grid-rating-off">{"☆".repeat(total - filled)}</span>
+      </span>
+    );
+  };
+}
+
+export function renderProgressCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+  const value = row[column.key];
+  if (value === null || value === undefined || value === "") return null;
+  const pct = clampProgress(value);
+  return (
+    <span className="dpf-grid-progress" title={`${pct}%`}>
+      <span className="dpf-grid-progress-track">
+        <span className="dpf-grid-progress-fill" style={{ width: `${pct}%` }} />
+      </span>
+      <span className="dpf-grid-progress-label">{pct}%</span>
+    </span>
+  );
+}
+
+export function renderPhoneCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+  const v = asString(row[column.key]);
+  if (!v) return null;
+  return (
+    <a className="dpf-grid-link" href={`tel:${v.replace(/[^+\d]/g, "")}`}>
       {v}
     </a>
   );

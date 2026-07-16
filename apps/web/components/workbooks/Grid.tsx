@@ -55,6 +55,12 @@ import {
   renderLinkCell,
   makeReferenceEditor,
   makeLinkEditor,
+  makeCurrencyRenderer,
+  makePercentRenderer,
+  makeDurationRenderer,
+  makeRatingRenderer,
+  renderProgressCell,
+  renderPhoneCell,
 } from "./cell-editors";
 import {
   createRowAction,
@@ -248,6 +254,43 @@ function buildColumn(
         editorOptions: { commitOnOutsideClick: false },
       };
     }
+    // Numeric-backed display types — edit as a number, render specially.
+    case "currency":
+      return {
+        ...base,
+        renderCell: makeCurrencyRenderer(col.config?.currencySymbol ?? "$", col.config?.precision),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "percent":
+      return {
+        ...base,
+        renderCell: makePercentRenderer(col.config?.precision),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "progress":
+      return {
+        ...base,
+        renderCell: renderProgressCell,
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "duration":
+      return {
+        ...base,
+        renderCell: makeDurationRenderer(col.config?.durationUnit ?? "minutes"),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "rating":
+      return {
+        ...base,
+        renderCell: makeRatingRenderer(col.config?.max ?? 5),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "phone":
+      return {
+        ...base,
+        renderCell: renderPhoneCell,
+        renderEditCell: editable ? renderTextEditor : undefined,
+      };
     default:
       return base;
   }

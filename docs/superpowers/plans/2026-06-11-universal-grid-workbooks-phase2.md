@@ -205,6 +205,14 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   / empty / unique for any field; sum / average / min / max for numbers) plus the value, recomputed
   over the filtered rows. Per-column selection + on/off persist in the view state. Pure, unit-tested
   `grid-footer-summary.ts` (`computeFooter`/`computeFooterRow`/`availableAggs`).
+- **Slice 20 — richer field types (rating / percent / currency / progress / duration / phone) — SHIPPED.**
+  Six Airtable-class field types added to `FIELD_TYPES`. Each is numeric-backed (stored as a plain
+  number; `phone` as text), so validation reuses the number/text paths and editing reuses the existing
+  number/text editors — no custom editor to get wrong. Only the display renderer differs: stars, `%`,
+  a currency symbol, a progress bar, `Xh Ym`, a `tel:` link. Pure, unit-tested `grid-field-format.ts`.
+  A shared `isNumericFieldType` (types.ts) makes the new numeric types summable everywhere (footer bar,
+  group summary). Offered in the Add-column picker with sensible config defaults (5 stars, `$`, minutes);
+  per-column config UI (star count, currency symbol) is a follow-up.
 - **Remaining (not built):** rich filter
   operators + AND/OR builder; row-expand record modal; more field types (rating/percent/currency/
   progress/duration/phone); multi-level (nested) grouping UI + inline group subtotals; named/
