@@ -17,6 +17,12 @@ import { readImageVersion } from "@/lib/platform/image-version";
  *
  * Returns null only when neither source is available (e.g. local `next dev`
  * outside a built image).
+ *
+ * @example
+ * // In a promoted self-upgrade runtime (DEPLOYED_SHA set by the pipeline):
+ * await getDeployedSha(); // "a1b2c3d4e5f6…" (40-char git SHA)
+ * // Under local `next dev`, outside any built image:
+ * await getDeployedSha(); // null
  */
 export async function getDeployedSha(): Promise<string | null> {
   const envSha = process.env.DEPLOYED_SHA;
@@ -29,6 +35,11 @@ export async function getDeployedSha(): Promise<string | null> {
  * Returns true if deployedSha is the same commit as mergeSha (including
  * short-SHA prefix matches) or is a git descendant of mergeSha — meaning
  * the deployed runtime's codebase includes the build's merged changes.
+ *
+ * @example
+ * shaContains("a1b2c3d4e5f6…full-40", "a1b2c3d"); // true — abbreviated-SHA prefix match
+ * shaContains(deployedSha, ancestorMergeSha);      // true — deployed descends from mergeSha
+ * shaContains("a1b2c3d…", "9f8e7d6…");             // false — unrelated commits
  */
 export function shaContains(deployedSha: string, mergeSha: string): boolean {
   if (!deployedSha || !mergeSha) return false;
@@ -49,6 +60,10 @@ export function shaContains(deployedSha: string, mergeSha: string): boolean {
 /**
  * Returns the gitCommitHash on the most-recent ProductVersion for the build —
  * the SHA that was merged to main and tagged for this feature.
+ *
+ * @example
+ * await getBuildMergeSha("FB-AD454C98"); // "a1b2c3d4…" — merged + tagged SHA
+ * await getBuildMergeSha("FB-no-version"); // null — build has no ProductVersion yet
  */
 export async function getBuildMergeSha(buildId: string): Promise<string | null> {
   const build = await prisma.featureBuild.findUnique({
