@@ -46,6 +46,26 @@ Before implementing, ask: is this the sound fix, or am I dodging a refactor I sh
 - **Positive:** Faced with "the seed walker silently skips a file when frontmatter is malformed," the sound fix is to throw with a clear message. The quick fix would be to add a `try/catch` that logs and continues. The sound fix lands; the seed regresses loudly and gets fixed instead of accumulating silent skips.
 - **Counterexample:** A hypothetical world where `principle_decide` accepts a `tier` filter via a top-level `principleTier` field AND a legacy `tier` field that maps to the same thing, "to avoid breaking callers." Two code paths to maintain, an inevitable drift in validation logic, and every future filter addition has to think about both surfaces. The chief-architect review caught this exact case and forced canonical names everywhere.
 
+
+## Regulatory & interoperability boundaries
+
+When the sound path is a healthcare / regulated substrate, architecture-over-shortcuts
+includes **boundary enforcement as architecture**, not as a late bolt-on (BI-IMP-6DF60418):
+
+1. **Payload integrity** — external clinical interchange (e.g. FHIR R4 resources) must
+   validate against the declared profile and carry integrity hashing / signature where
+   the jurisdiction requires non-repudiation; do not ship a "parse and store free-form JSON"
+   shortcut past the validator.
+2. **Residency gates** — HIPAA / GDPR / provincial residency constraints are **routing and
+   storage architecture**. Cross-border or cloud-region placement is a design decision with
+   an explicit gate, not an env default left for ops to discover.
+3. **Immutable provenance** — care-critical writes keep an append-only trail (who / when /
+   what changed) co-designed with the primary model; do not add provenance as a parallel
+   table after the feature ships.
+
+Canonical patterns live with the healthcare program specs and validators; this principle
+forbids skipping them for speed. Future healthcare substrates inherit this baseline.
+
 ## Sources
 
 (Rendered from the `sources:` frontmatter by `WikiSourceCitations` — do not duplicate citation prose here.)
