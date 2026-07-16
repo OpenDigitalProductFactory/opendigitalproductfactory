@@ -1,5 +1,49 @@
-import { describe, it, expect } from "vitest";
-import { buildResearchPrompt, deriveSearchTerms } from "./ideate-dispatch";
+import { describe, it, expect, vi } from "vitest";
+import {
+  buildResearchPrompt,
+  deriveSearchTerms,
+  runLocalIdeateWithRetry,
+  LOCAL_IDEATE_MAX_ATTEMPTS,
+} from "./ideate-dispatch";
+
+describe("runLocalIdeateWithRetry", () => {
+  const VALID = '```json\n{"title":"X","summary":"ok"}\n```';
+  const MALFORMED = "Sure! Here is the design: it should do stuff (no JSON at all)";
+
+  it("parses on the first attempt without a reformat call", async () => {
+    const call = vi.fn(async () => VALID);
+    const { designDoc, attempts } = await runLocalIdeateWithRetry(call, "base prompt");
+    expect(designDoc).toEqual({ title: "X", summary: "ok" });
+    expect(attempts).toBe(1);
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers when a malformed first turn is reformatted into valid JSON", async () => {
+    const call = vi
+      .fn()
+      .mockResolvedValueOnce(MALFORMED)
+      .mockResolvedValueOnce(VALID);
+    const onAttempt = vi.fn();
+    const { designDoc, attempts } = await runLocalIdeateWithRetry(call, "base prompt", 2, onAttempt);
+    expect(designDoc).toEqual({ title: "X", summary: "ok" });
+    expect(attempts).toBe(2);
+    expect(call).toHaveBeenCalledTimes(2);
+    // The reformat turn feeds the model its own prior output + a strict instruction.
+    const secondCallMessages = call.mock.calls[1]![0] as Array<{ role: string; content: string }>;
+    expect(secondCallMessages).toHaveLength(3);
+    expect(secondCallMessages[1]).toEqual({ role: "assistant", content: MALFORMED });
+    expect(secondCallMessages[2]!.content).toContain("valid JSON object");
+    expect(onAttempt).toHaveBeenCalledWith(2);
+  });
+
+  it("gives up after the attempt cap and returns no design doc", async () => {
+    const call = vi.fn(async () => MALFORMED);
+    const { designDoc, attempts } = await runLocalIdeateWithRetry(call, "base prompt", LOCAL_IDEATE_MAX_ATTEMPTS);
+    expect(designDoc).toBeNull();
+    expect(attempts).toBe(LOCAL_IDEATE_MAX_ATTEMPTS);
+    expect(call).toHaveBeenCalledTimes(LOCAL_IDEATE_MAX_ATTEMPTS);
+  });
+});
 
 describe("deriveSearchTerms", () => {
   it("splits camelCase and drops boilerplate stopwords", () => {
