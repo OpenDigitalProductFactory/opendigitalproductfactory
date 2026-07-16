@@ -13,7 +13,7 @@ class BookingHoldInvalidError extends Error {}
 async function getPublishedStorefront(slug: string) {
   const config = await prisma.storefrontConfig.findFirst({
     where: { organization: { slug }, isPublished: true },
-    select: { id: true },
+    select: { id: true, organizationId: true },
   });
   return config ?? null;
 }
@@ -143,6 +143,7 @@ export async function submitBooking(
       const booking = await tx.storefrontBooking.create({
         data: {
           bookingRef: ref,
+          organizationId: storefront.organizationId,
           storefrontId: storefront.id,
           itemId: data.itemId,
           customerEmail: data.customerEmail,
@@ -174,6 +175,7 @@ export async function submitBooking(
           await tx.storefrontBooking.create({
             data: {
               bookingRef: makeRef("BK"),
+              organizationId: storefront.organizationId,
               storefrontId: storefront.id,
               itemId: data.itemId,
               customerEmail: data.customerEmail,

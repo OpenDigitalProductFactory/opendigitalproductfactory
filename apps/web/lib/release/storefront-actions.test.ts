@@ -26,7 +26,7 @@ vi.mock("@dpf/db", () => {
 import { submitInquiry, submitDonation, submitBooking } from "./storefront-actions";
 import { prisma } from "@dpf/db";
 
-const mockPublishedStorefront = { id: "sf-1" };
+const mockPublishedStorefront = { id: "sf-1", organizationId: "org-1" };
 
 describe("submitInquiry", () => {
   beforeEach(() => { vi.clearAllMocks(); });
@@ -79,7 +79,7 @@ describe("submitBooking (enhanced)", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it("validates hold token before creating booking", async () => {
-    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(mockPublishedStorefront as never);
     vi.mocked(prisma.bookingHold.findFirst).mockResolvedValue({
       id: "hold-1", holderToken: "tok-abc", providerId: "prov-1",
       slotStart: new Date("2026-03-23T09:00:00Z"), slotEnd: new Date("2026-03-23T09:45:00Z"),
@@ -98,7 +98,7 @@ describe("submitBooking (enhanced)", () => {
   });
 
   it("rejects booking when hold token is invalid", async () => {
-    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(mockPublishedStorefront as never);
     vi.mocked(prisma.bookingHold.findFirst).mockResolvedValue(null as never);
 
     const result = await submitBooking("acme", {
@@ -111,7 +111,7 @@ describe("submitBooking (enhanced)", () => {
   });
 
   it("rejects duplicate submission via idempotency key", async () => {
-    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(mockPublishedStorefront as never);
     vi.mocked(prisma.bookingHold.findFirst).mockResolvedValue({
       id: "hold-2", holderToken: "tok-def", expiresAt: new Date(Date.now() + 600_000),
     } as never);
@@ -130,7 +130,7 @@ describe("submitBooking (enhanced)", () => {
   });
 
   it("runs booking creation inside a transaction", async () => {
-    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(mockPublishedStorefront as never);
     vi.mocked(prisma.storefrontBooking.create).mockResolvedValue({ id: "bk-1", bookingRef: "BK-TESTREF" } as never);
 
     await submitBooking("acme", {
@@ -141,7 +141,7 @@ describe("submitBooking (enhanced)", () => {
   });
 
   it("rejects an overlapping slot on an exclusion-constraint violation (23P01)", async () => {
-    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(mockPublishedStorefront as never);
     // Simulate Postgres 23P01 surfaced through Prisma on the create.
     const exclusionError = new Error(
       'conflicting key value violates exclusion constraint "StorefrontBooking_no_overlap"'
@@ -163,7 +163,7 @@ describe("submitBooking (recurring)", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it("creates child bookings for weekly recurrence", async () => {
-    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({ id: "sf-1" } as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(mockPublishedStorefront as never);
     vi.mocked(prisma.storefrontBooking.create).mockResolvedValue({ id: "bk-parent", bookingRef: "BK-TESTREF" } as never);
 
     const result = await submitBooking("acme", {

@@ -348,6 +348,9 @@ model Principal {
   patientConsentDirectivesVerified    PatientConsentDirective[]           @relation("PatientConsentDirectiveVerifier")
   patientConsentDirectivesRevoked     PatientConsentDirective[]           @relation("PatientConsentDirectiveRevoker")
   patientAuthorizationDecisions       AuthorizationDecisionLog[]          @relation("PatientAuthorizationSubject")
+  careAppointmentsCreated             CareAppointment[]                   @relation("CareAppointmentCreator")
+  careAppointmentsOverbooked          CareAppointment[]                   @relation("CareAppointmentOverbookAuthorizer")
+  careAppointmentStatusEvents         CareAppointmentStatusEvent[]        @relation("CareAppointmentStatusActor")
   createdAt                           DateTime                            @default(now())
   updatedAt                           DateTime                            @updatedAt
 
@@ -1196,9 +1199,10 @@ model RecurrenceSchedule {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  supersededBy    RecurrenceSchedule?  @relation("RecurrenceSupersede", fields: [supersededByScheduleId], references: [id], onDelete: SetNull)
-  supersedes      RecurrenceSchedule[] @relation("RecurrenceSupersede")
-  workEngagements WorkEngagement[]
+  supersededBy     RecurrenceSchedule?  @relation("RecurrenceSupersede", fields: [supersededByScheduleId], references: [id], onDelete: SetNull)
+  supersedes       RecurrenceSchedule[] @relation("RecurrenceSupersede")
+  workEngagements  WorkEngagement[]
+  careAppointments CareAppointment[]
 
   @@index([active])
   @@index([supersededByScheduleId])
@@ -2825,6 +2829,7 @@ model PatientProfile {
   mergedPatientProfiles      PatientProfile[]          @relation("PatientProfileMerge")
   authorities                PatientAuthority[]
   consentDirectives          PatientConsentDirective[]
+  careAppointments           CareAppointment[]
 
   @@unique([organizationId, principalId])
   @@unique([id, organizationId])
@@ -3648,6 +3653,12 @@ model Organization {
   journalEntries                JournalEntry[]
   patientProfiles               PatientProfile[]
   patientAuthorizationDecisions AuthorizationDecisionLog[]
+  storefrontBookings            StorefrontBooking[]                @relation("StorefrontBookingOrganization")
+  careVisitTypes                CareVisitType[]
+  careLocations                 CareLocation[]
+  careResources                 CareResource[]
+  careSchedulingPolicies        CareSchedulingPolicy[]
+  careAppointments              CareAppointment[]
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -8828,6 +8839,7 @@ model StorefrontItem {
 model StorefrontBooking {
   id                   String              @id @default(cuid())
   bookingRef           String              @unique
+  organizationId       String
   storefrontId         String
   itemId               String
   customerContactId    String?
@@ -8857,10 +8869,13 @@ model StorefrontBooking {
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
   storefront           StorefrontConfig    @relation(fields: [storefrontId], references: [id])
+  organization         Organization        @relation("StorefrontBookingOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
   provider             ServiceProvider?    @relation(fields: [providerId], references: [id])
   parentBooking        StorefrontBooking?  @relation("BookingRecurrence", fields: [parentBookingId], references: [id])
   childBookings        StorefrontBooking[] @relation("BookingRecurrence")
+  careAppointment      CareAppointment?
 
+  @@unique([id, organizationId])
   @@index([storefrontId, status])
   @@index([customerEmail])
   @@index([scheduledAt])
@@ -8882,12 +8897,13 @@ model ServiceProvider {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  storefront   StorefrontConfig       @relation(fields: [storefrontId], references: [id])
-  employee     EmployeeProfile?       @relation(fields: [employeeId], references: [id])
-  services     ProviderService[]
-  availability ProviderAvailability[]
-  bookings     StorefrontBooking[]
-  bookingHolds BookingHold[]
+  storefront                  StorefrontConfig             @relation(fields: [storefrontId], references: [id])
+  employee                    EmployeeProfile?             @relation(fields: [employeeId], references: [id])
+  services                    ProviderService[]
+  availability                ProviderAvailability[]
+  bookings                    StorefrontBooking[]
+  bookingHolds                BookingHold[]
+  careAppointmentParticipants CareAppointmentParticipant[]
 
   @@index([storefrontId])
 }
@@ -8939,6 +8955,248 @@ model BookingHold {
 
   @@index([storefrontId, slotStart, slotEnd])
   @@index([expiresAt])
+}
+
+/// Organization-owned definition of a clinical or dental visit. StorefrontItem
+/// remains the public offering; this record owns care-specific duration,
+/// preparation, recovery, and recall defaults after acceptance.
+model CareVisitType {
+  id                        String            @id @default(cuid())
+  visitTypeId               String            @unique
+  organizationId            String
+  code                      String
+  codeSystem                String?
+  codeVersion               String?
+  name                      String
+  description               String?
+  defaultDurationMinutes    Int
+  preparationMinutes        Int               @default(0)
+  recoveryMinutes           Int               @default(0)
+  defaultRecallIntervalDays Int?
+  mode                      String            @default("in-person")
+  isActive                  Boolean           @default(true)
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+  organization              Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  appointments              CareAppointment[]
+
+  @@unique([organizationId, code])
+  @@unique([id, organizationId])
+  @@index([organizationId, isActive])
+}
+
+/// A care-delivery site owned by the healthcare organization. This is distinct
+/// from the workforce WorkLocation lookup, which is not tenant scoped.
+model CareLocation {
+  id                 String                 @id @default(cuid())
+  locationId         String                 @unique
+  organizationId     String
+  code               String
+  name               String
+  timezone           String
+  address            Json?
+  accessibilityNotes String?
+  isActive           Boolean                @default(true)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  resources          CareResource[]
+  policies           CareSchedulingPolicy[]
+  appointments       CareAppointment[]
+
+  @@unique([organizationId, code])
+  @@unique([id, organizationId])
+  @@index([organizationId, isActive])
+}
+
+/// A schedulable room or item of equipment. Human practitioners continue to use
+/// ServiceProvider as the existing scheduling projection.
+model CareResource {
+  id             String                    @id @default(cuid())
+  resourceId     String                    @unique
+  organizationId String
+  locationId     String
+  code           String
+  name           String
+  resourceType   String
+  capacity       Int                       @default(1)
+  isActive       Boolean                   @default(true)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  location       CareLocation              @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  allocations    CareAppointmentResource[]
+
+  @@unique([organizationId, code])
+  @@unique([id, organizationId])
+  @@index([organizationId, locationId, isActive])
+}
+
+/// Human-approved controls for collision handling. The default is fail-closed:
+/// overbooking is unavailable unless a matching active policy permits it.
+model CareSchedulingPolicy {
+  id                         String        @id @default(cuid())
+  policyId                   String        @unique
+  organizationId             String
+  locationId                 String?
+  allowControlledOverbooking Boolean       @default(false)
+  maxConcurrentAppointments  Int           @default(1)
+  requiresHumanApproval      Boolean       @default(true)
+  isActive                   Boolean       @default(true)
+  effectiveFrom              DateTime      @default(now())
+  effectiveUntil             DateTime?
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
+  organization               Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  location                   CareLocation? @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([organizationId, locationId])
+  @@index([organizationId, isActive])
+}
+
+/// Clinical workflow authority created from an accepted StorefrontBooking.
+/// Patient-visible scheduling remains projected through StorefrontBooking.
+model CareAppointment {
+  id                              String                       @id @default(cuid())
+  appointmentId                   String                       @unique
+  organizationId                  String
+  storefrontBookingId             String?                      @unique
+  patientProfileId                String
+  visitTypeId                     String
+  locationId                      String
+  status                          String                       @default("pending")
+  scheduledStart                  DateTime
+  scheduledEnd                    DateTime
+  preparationMinutes              Int                          @default(0)
+  recoveryMinutes                 Int                          @default(0)
+  footprintStart                  DateTime
+  footprintEnd                    DateTime
+  version                         Int                          @default(1)
+  recurrenceScheduleId            String?
+  recallAt                        DateTime?
+  rescheduledFromAppointmentId    String?
+  encounterRef                    String?
+  overbookAuthorizedByPrincipalId String?
+  overbookReason                  String?
+  cancellationReason              String?
+  cancelledAt                     DateTime?
+  enteredInErrorAt                DateTime?
+  createdByPrincipalId            String
+  createdAt                       DateTime                     @default(now())
+  updatedAt                       DateTime                     @updatedAt
+  organization                    Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  storefrontBooking               StorefrontBooking?           @relation(fields: [storefrontBookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  patientProfile                  PatientProfile               @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  visitType                       CareVisitType                @relation(fields: [visitTypeId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  location                        CareLocation                 @relation(fields: [locationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  recurrenceSchedule              RecurrenceSchedule?          @relation(fields: [recurrenceScheduleId], references: [id], onDelete: Restrict)
+  rescheduledFrom                 CareAppointment?             @relation("CareAppointmentReschedule", fields: [rescheduledFromAppointmentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  rescheduledTo                   CareAppointment[]            @relation("CareAppointmentReschedule")
+  overbookAuthorizedByPrincipal   Principal?                   @relation("CareAppointmentOverbookAuthorizer", fields: [overbookAuthorizedByPrincipalId], references: [id], onDelete: Restrict)
+  createdByPrincipal              Principal                    @relation("CareAppointmentCreator", fields: [createdByPrincipalId], references: [id], onDelete: Restrict)
+  participants                    CareAppointmentParticipant[]
+  resources                       CareAppointmentResource[]
+  statusEvents                    CareAppointmentStatusEvent[]
+  syncEvents                      AppointmentSyncEvent[]
+
+  @@unique([id, organizationId])
+  @@unique([storefrontBookingId, organizationId])
+  @@index([organizationId, patientProfileId, scheduledStart])
+  @@index([organizationId, locationId, scheduledStart])
+  @@index([organizationId, status, scheduledStart])
+  @@index([recallAt])
+  @@index([rescheduledFromAppointmentId])
+}
+
+/// Practitioner allocation with a denormalized immutable-at-version footprint.
+/// PostgreSQL exclusion constraints arbitrate concurrent ordinary allocations.
+model CareAppointmentParticipant {
+  id                  String          @id @default(cuid())
+  organizationId      String
+  appointmentId       String
+  providerId          String
+  role                String
+  participationStatus String          @default("needs-action")
+  isRequired          Boolean         @default(true)
+  allocationState     String          @default("active")
+  footprintStart      DateTime
+  footprintEnd        DateTime
+  overbooked          Boolean         @default(false)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  appointment         CareAppointment @relation(fields: [appointmentId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  provider            ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+
+  @@unique([appointmentId, providerId])
+  @@index([organizationId, providerId, footprintStart])
+}
+
+/// Room/equipment allocation with the same collision semantics as practitioner
+/// allocation. Capacity greater than one is handled only through an explicit
+/// controlled-overbooking authorization in this first slice.
+model CareAppointmentResource {
+  id              String          @id @default(cuid())
+  organizationId  String
+  appointmentId   String
+  resourceId      String
+  allocationState String          @default("active")
+  footprintStart  DateTime
+  footprintEnd    DateTime
+  overbooked      Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  appointment     CareAppointment @relation(fields: [appointmentId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  resource        CareResource    @relation(fields: [resourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([appointmentId, resourceId])
+  @@index([organizationId, resourceId, footprintStart])
+}
+
+/// Append-only lifecycle evidence. appointmentVersion is the optimistic version
+/// after the transition and is unique within the appointment.
+model CareAppointmentStatusEvent {
+  id                 String          @id @default(cuid())
+  eventId            String          @unique
+  organizationId     String
+  appointmentId      String
+  appointmentVersion Int
+  fromStatus         String?
+  toStatus           String
+  reason             String?
+  actorPrincipalId   String
+  occurredAt         DateTime        @default(now())
+  appointment        CareAppointment @relation(fields: [appointmentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  actorPrincipal     Principal       @relation("CareAppointmentStatusActor", fields: [actorPrincipalId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, appointmentId, appointmentVersion])
+  @@index([organizationId, appointmentId, occurredAt])
+}
+
+/// Append-only storefront ↔ care synchronization outbox and reconciliation
+/// evidence. Conflicts remain visible for human resolution.
+model AppointmentSyncEvent {
+  id                  String          @id @default(cuid())
+  syncEventId         String          @unique
+  organizationId      String
+  appointmentId       String
+  storefrontBookingId String?
+  correlationId       String
+  sourceChannel       String
+  requestedTransition String?
+  sourceVersion       String?
+  expectedVersion     Int?
+  resultingVersion    Int?
+  outcome             String
+  conflictCode        String?
+  detail              Json?
+  actorType           String
+  actorRef            String
+  occurredAt          DateTime        @default(now())
+  appointment         CareAppointment @relation(fields: [appointmentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([organizationId, correlationId])
+  @@index([organizationId, appointmentId, occurredAt])
+  @@index([organizationId, outcome, occurredAt])
 }
 
 model StorefrontOrder {

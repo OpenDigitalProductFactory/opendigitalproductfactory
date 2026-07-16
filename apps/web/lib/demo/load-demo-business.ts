@@ -133,7 +133,7 @@ export async function loadDemoBusiness(
   const supplierIdByRef = await upsertSuppliers(db, plan);
   const providerIdByRef = await upsertProviders(db, plan, storefrontId);
   await upsertBills(db, plan, supplierIdByRef, now);
-  await upsertBookings(db, plan, storefrontId, providerIdByRef, now);
+  await upsertBookings(db, plan, org.id, storefrontId, providerIdByRef, now);
 
   // 4. Setup-completion seeds (WWWD priming corpus etc.) — best-effort. The demo's
   //    operational-twin data (steps 1–3) is the deliverable; priming is enrichment,
@@ -239,6 +239,7 @@ async function upsertBills(
 async function upsertBookings(
   db: Db,
   plan: DemoLoadPlan,
+  organizationId: string,
   storefrontId: string,
   providerIdByRef: Map<string, string>,
   now: Date,
@@ -251,6 +252,7 @@ async function upsertBookings(
       where: { bookingRef: bk.bookingRef },
       create: {
         bookingRef: bk.bookingRef,
+        organizationId,
         storefrontId,
         itemId: bk.itemId,
         providerId,
