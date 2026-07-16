@@ -34,10 +34,6 @@ const RESOURCE_STATES: Array<{ state: string; intent: Intent }> = [
   { state: "Needs attention", intent: "warning" },
 ];
 
-function titleCase(s: string): string {
-  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
-}
-
 function money(currency: string, amount: number): string {
   const symbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : currency === "EUR" ? "€" : "";
   return `${symbol}${Math.round(amount).toLocaleString("en-US")}`;
