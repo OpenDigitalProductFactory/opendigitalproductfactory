@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   DPF_PLATFORM_SKILL_SOURCE_TYPE,
   LEGACY_SKILL_SOURCE_TYPE,
+  SKILL_WILDCARD_AGENT_IDS,
   discoverDpfPlatformSkillFiles,
   normalizeSkillFrontmatterForSeed,
   parseAllowedTools,
@@ -120,6 +121,46 @@ describe("reconcileSkillAssignments", () => {
     expect(skillAssignment.delete).toHaveBeenCalledTimes(1);
     expect(skillAssignment.create).not.toHaveBeenCalled();
     expect(result).toEqual({ created: 0, removed: 1 });
+  });
+});
+
+describe("decision-skill assignment coverage (BI-5E8E231E)", () => {
+  // User-facing personas must inherit the decision stack via assignTo:["*"].
+  // Narrow assignTo here would silently leave CRM/ops/marketing coworkers
+  // without WWMD/WWWD decision skills.
+  const DECISION_SKILL_SLUGS = [
+    "dpf-decision-via-kernel",
+    "dpf-retrieve-decision-context",
+    "dpf-compare-options",
+    "dpf-record-decision-outcome",
+  ] as const;
+
+  const USER_FACING_PERSONAS = [
+    "customer-advisor",
+    "marketing-specialist",
+    "storefront-advisor",
+    "ops-coordinator",
+    "platform-engineer",
+    "admin-assistant",
+    "coo",
+    "hr-specialist",
+    "finance-controller",
+    "dispatcher",
+  ] as const;
+
+  it("decision skills assignTo * so every roster persona inherits them", () => {
+    const skillsRoot = join(__dirname, "..", "..", "..", "packages", "dpf-skill-pack", "skills");
+    for (const slug of DECISION_SKILL_SLUGS) {
+      const raw = readFileSync(join(skillsRoot, slug, "SKILL.md"), "utf8");
+      const { frontmatter } = parseFrontmatter(raw);
+      expect(frontmatter.assignTo, slug).toEqual(["*"]);
+    }
+  });
+
+  it("wildcard agent id list includes user-facing personas (wildcard expand target)", () => {
+    for (const agentId of USER_FACING_PERSONAS) {
+      expect(SKILL_WILDCARD_AGENT_IDS).toContain(agentId);
+    }
   });
 });
 
