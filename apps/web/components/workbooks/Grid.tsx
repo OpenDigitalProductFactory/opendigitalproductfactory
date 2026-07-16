@@ -123,7 +123,6 @@ import {
 } from "./grid-view-options";
 import {
   computeFooterRow,
-  hasFooterAggs,
   availableAggs,
   toFooterAgg,
   FOOTER_AGG_LABELS,
