@@ -29,6 +29,15 @@ describe("coworker interaction contract", () => {
     expect(prompt).toMatch(/Act on your own recommendation/i);
   });
 
+  it("instructs the coworker to offer button decisions via the dpf-decision sentinel", () => {
+    const prompt = withCoworkerInteractionContract("Base prompt");
+    expect(prompt).toContain("BUTTON DECISIONS");
+    expect(prompt).toContain("dpf-decision");
+    // The degenerate proceed-case must map to a single recommended "Go" button.
+    expect(prompt).toContain('"label":"Go"');
+    expect(prompt).toContain('"recommended":true');
+  });
+
   it("formats deterministic closeouts with the required four fields", () => {
     expect(formatCoworkerOperationalCloseout({
       status: "ready for PR",
