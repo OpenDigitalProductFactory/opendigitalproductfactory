@@ -49,6 +49,27 @@ Before adding a new model, search the existing schema for the same conceptual en
 - **Positive:** EP-WIKI-001 absorbed `KnowledgeArticle` into `WikiPage` instead of shipping both. The audit revealed the underlying domain was the same; the convergent model has one source of truth, one revision chain, one retrieval surface.
 - **Counterexample:** A hypothetical world where `PrincipleEntry` shipped as a new table parallel to `WikiPage` because "principles are different." Two retrieval surfaces, two lint pipelines, two seed paths — three months later someone has to converge them anyway, by then with twice the call sites to update.
 
+
+## Jurisdiction policy compilation & immutable compliance evidence
+
+Before adding models for **jurisdiction-aware policy** or **compliance evidence**
+(BI-IMP-FAA93020), audit for reuse:
+
+1. **Jurisdiction profile → policy runtime** — compile jurisdiction/funding profiles into
+   the existing policy / rule runtime (do not invent a second rule engine per country).
+   Prefer versioned profile rows + deterministic compilation into the decision gate the
+   platform already uses.
+2. **Immutable evidence schema** — compliance evidence (consents, access logs, care-record
+   amendments) should extend an append-only / revisioned pattern already on the platform
+   (activity events, wiki revisions, audit rows) rather than a one-off `EvidenceBlob` table
+   per feature.
+3. **Schema checklist** — (a) one identity for the subject (Principal/Patient alias), (b)
+   jurisdiction key as a first-class field or profile FK, (c) evidence rows content-addressed
+   or hash-chained when non-repudiation is required, (d) no dual-write to a parallel log.
+
+If a new table is still required, name why existing audit/activity/revision models cannot
+hold the evidence and document the convergence path.
+
 ## Sources
 
 (Rendered from the `sources:` frontmatter by `WikiSourceCitations`.)
