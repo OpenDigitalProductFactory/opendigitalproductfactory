@@ -82,3 +82,40 @@ export function groupRowsByColumn(
 export function groupKeys(rows: readonly GridRowData[], columnId: string): string[] {
   return Object.keys(groupRowsByColumn(rows, columnId));
 }
+
+// --- Nested-grouping expansion model -------------------------------------
+// TreeDataGrid is a controlled component: it renders exactly the group ids in
+// `expandedGroupIds` and reports the full new set on every toggle. For nested
+// grouping we want Smartsheet/Airtable defaults — top-level groups open, deeper
+// levels closed — while remembering the user's overrides. We keep two intents:
+//   collapsedGroups: top-level ids the user closed (top defaults open)
+//   extraExpanded:   deeper-level ids the user opened (deeper defaults closed)
+// and reconcile them against the current top-level ids each render, so groups
+// that newly appear (from a filter/edit) still open by default.
+
+/** Build the controlled expanded set from the two override intents. */
+export function expandedGroupSet(
+  topGroupIds: readonly unknown[],
+  collapsedGroups: ReadonlySet<unknown>,
+  extraExpanded: ReadonlySet<unknown>,
+): Set<unknown> {
+  const s = new Set<unknown>(topGroupIds.filter((id) => !collapsedGroups.has(id)));
+  for (const id of extraExpanded) if (!collapsedGroups.has(id)) s.add(id);
+  return s;
+}
+
+/**
+ * Split the full expanded set TreeDataGrid reports back into the two intents:
+ * top-level ids absent from it are collapses; any non-top ids present are the
+ * user's deeper expansions to preserve verbatim.
+ */
+export function splitExpandedGroupIds(
+  ids: ReadonlySet<unknown>,
+  topGroupIds: readonly unknown[],
+): { collapsedGroups: Set<unknown>; extraExpanded: Set<unknown> } {
+  const topSet = new Set<unknown>(topGroupIds);
+  return {
+    collapsedGroups: new Set<unknown>(topGroupIds.filter((id) => !ids.has(id))),
+    extraExpanded: new Set<unknown>(Array.from(ids).filter((id) => !topSet.has(id))),
+  };
+}
