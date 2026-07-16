@@ -14,6 +14,7 @@ import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult } from "@/lib/self-upgrade/impact/types";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
+import { formatUpgradeScope, shortSha } from "@/lib/self-upgrade/format-upgrade-scope";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type LatestRun = {
@@ -136,11 +137,6 @@ type Props = {
     note: string | null;
   };
 };
-
-function shortSha(value: string | null | undefined): string {
-  if (!value) return "";
-  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
-}
 
 function sourceLabel(source: ImageVersionSource | undefined): string {
   switch (source) {
@@ -1129,11 +1125,13 @@ export default function SelfUpgradeClient({
             </div>
           )}
 
-          {latestRun.currentSha && latestRun.targetSha && (
-            <div className="text-xs text-[var(--dpf-muted)]">
-              <span className="font-mono">{latestRun.currentSha}</span>
-              {" → "}
-              <span className="font-mono">{latestRun.targetSha}</span>
+          {formatUpgradeScope(latestRun.currentSha, latestRun.targetSha) && (
+            <div
+              className="text-xs text-[var(--dpf-muted)]"
+              data-upgrade-scope="true"
+              title={`${latestRun.currentSha} → ${latestRun.targetSha}`}
+            >
+              {formatUpgradeScope(latestRun.currentSha, latestRun.targetSha)}
             </div>
           )}
 
@@ -1327,12 +1325,13 @@ export default function SelfUpgradeClient({
                   </td>
                   <td className="px-3 py-2 font-mono text-[var(--dpf-muted)]">{run.runId}</td>
                   <td className="px-3 py-2 text-[var(--dpf-muted)]">
-                    {run.currentSha && run.targetSha ? (
-                      <>
-                        <span className="font-mono">{run.currentSha}</span>
-                        {" → "}
-                        <span className="font-mono">{run.targetSha}</span>
-                      </>
+                    {formatUpgradeScope(run.currentSha, run.targetSha) ? (
+                      <span
+                        title={`${run.currentSha} → ${run.targetSha}`}
+                        data-upgrade-scope="true"
+                      >
+                        {formatUpgradeScope(run.currentSha, run.targetSha)}
+                      </span>
                     ) : null}
                   </td>
                   <td className="px-3 py-2 text-right text-[var(--dpf-muted)] whitespace-nowrap align-top">
