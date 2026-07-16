@@ -1,6 +1,7 @@
 // apps/web/lib/sandbox-db.ts
-// Sandbox database stack management — creates and destroys PostgreSQL, Neo4j,
-// and Qdrant containers for isolated sandbox environments.
+// Sandbox database stack management — creates and destroys PostgreSQL for
+// isolated sandbox environments. BET-5 (BI-28D31FB7): Neo4j + Qdrant containers
+// are no longer provisioned; vectors/graph live in Postgres (pgvector).
 
 import { lazyExec } from "@/lib/shared/lazy-node";
 import { Prisma, prisma } from "@dpf/db";
@@ -10,8 +11,6 @@ const exec = lazyExec();
 // ─── Resource Limit Constants ─────────────────────────────────────────────────
 
 export const DB_RESOURCE_LIMITS = { memoryMb: 512, cpus: 1 } as const;
-export const NEO4J_RESOURCE_LIMITS = { memoryMb: 512, cpus: 1 } as const;
-export const QDRANT_RESOURCE_LIMITS = { memoryMb: 256, cpus: 0.5 } as const;
 
 // ─── Container Naming Helpers ─────────────────────────────────────────────────
 
@@ -19,23 +18,16 @@ export function buildDbContainerName(buildId: string): string {
   return `dpf-sandbox-db-${buildId}`;
 }
 
-export function buildNeo4jContainerName(buildId: string): string {
-  return `dpf-sandbox-neo4j-${buildId}`;
-}
-
-export function buildQdrantContainerName(buildId: string): string {
-  return `dpf-sandbox-qdrant-${buildId}`;
-}
-
 // ─── Environment Variable Builder ─────────────────────────────────────────────
 
+/**
+ * Env for the sandboxed portal. BET-5: only Postgres is provisioned. Legacy
+ * NEO4J_/QDRANT_ URLs are intentionally omitted so the portal cannot reach
+ * retired services even if code still reads those env names.
+ */
 export function buildSandboxDbEnvVars(buildId: string): Record<string, string> {
   return {
     DATABASE_URL: `postgresql://dpf:dpf_sandbox@${buildDbContainerName(buildId)}:5432/dpf`,
-    NEO4J_URI: `bolt://${buildNeo4jContainerName(buildId)}:7687`,
-    NEO4J_USER: "neo4j",
-    NEO4J_PASSWORD: "dpf_sandbox",
-    QDRANT_INTERNAL_URL: `http://${buildQdrantContainerName(buildId)}:6333`,
   };
 }
 
@@ -97,21 +89,6 @@ async function pollUntilReady(
   throw new Error(`${label} did not become ready within ${POLL_TIMEOUT_MS / 1000}s`);
 }
 
-async function pollUntilHealthy(containerId: string, label: string): Promise<void> {
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
-  const command = buildDockerHealthInspectCommand(containerId);
-  while (Date.now() < deadline) {
-    try {
-      await exec(command);
-      return;
-    } catch {
-      // not healthy yet
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-  throw new Error(`${label} did not become ready within ${POLL_TIMEOUT_MS / 1000}s`);
-}
-
 // ─── Lifecycle — Create ───────────────────────────────────────────────────────
 
 export async function createSandboxDbStack(
@@ -119,17 +96,13 @@ export async function createSandboxDbStack(
   networkName: string,
 ): Promise<{
   dbContainerId: string;
-  neo4jContainerId: string;
-  qdrantContainerId: string;
 }> {
   if (process.env.DPF_ENVIRONMENT === "dev") {
     throw new Error("Sandbox database stack creation is disabled in the dev environment");
   }
   const dbName = buildDbContainerName(buildId);
-  const neo4jName = buildNeo4jContainerName(buildId);
-  const qdrantName = buildQdrantContainerName(buildId);
 
-  // PostgreSQL
+  // PostgreSQL only (BET-5 BI-28D31FB7 — no Neo4j/Qdrant sidecars).
   const { stdout: dbOut } = await exec(
     [
       "docker run -d",
@@ -140,45 +113,13 @@ export async function createSandboxDbStack(
       "-e POSTGRES_USER=dpf",
       "-e POSTGRES_PASSWORD=dpf_sandbox",
       "-e POSTGRES_DB=dpf",
-      // BET-5 (BI-28D31FB7): the sandboxed portal runs `prisma migrate deploy` on
-      // boot, which includes `CREATE EXTENSION vector` — the plain alpine Postgres
-      // image lacks pgvector, so every sandbox build failed at that migration.
-      // Provision on pgvector (same PG16 engine, superset image), matching the
-      // platform + local-CI Postgres. GENERAL RULE: every Postgres-provisioning
-      // site must ship pgvector — enforced by postgres-pgvector-provisioning.guard.
+      // BET-5: prisma migrate needs CREATE EXTENSION vector.
       "pgvector/pgvector:pg16",
     ].join(" "),
   );
   const dbContainerId = dbOut.trim();
 
-  // Neo4j
-  const { stdout: neo4jOut } = await exec(
-    [
-      "docker run -d",
-      `--name ${neo4jName}`,
-      `--network=${networkName}`,
-      `--cpus=${NEO4J_RESOURCE_LIMITS.cpus}`,
-      `--memory=${NEO4J_RESOURCE_LIMITS.memoryMb}m`,
-      "-e NEO4J_AUTH=neo4j/dpf_sandbox",
-      "neo4j:5-community",
-    ].join(" "),
-  );
-  const neo4jContainerId = neo4jOut.trim();
-
-  // Qdrant
-  const { stdout: qdrantOut } = await exec(
-    [
-      "docker run -d",
-      `--name ${qdrantName}`,
-      `--network=${networkName}`,
-      `--cpus=${QDRANT_RESOURCE_LIMITS.cpus}`,
-      `--memory=${QDRANT_RESOURCE_LIMITS.memoryMb}m`,
-      "qdrant/qdrant:latest",
-    ].join(" "),
-  );
-  const qdrantContainerId = qdrantOut.trim();
-
-  return { dbContainerId, neo4jContainerId, qdrantContainerId };
+  return { dbContainerId };
 }
 
 // ─── Lifecycle — Health Checks ────────────────────────────────────────────────
@@ -189,18 +130,6 @@ export async function waitForSandboxDb(dbContainerId: string): Promise<void> {
     "pg_isready -U dpf",
     "PostgreSQL",
   );
-}
-
-export async function waitForSandboxNeo4j(neo4jContainerId: string): Promise<void> {
-  await pollUntilReady(
-    neo4jContainerId,
-    "wget -qO /dev/null http://localhost:7474",
-    "Neo4j",
-  );
-}
-
-export async function waitForSandboxQdrant(qdrantContainerId: string): Promise<void> {
-  await pollUntilHealthy(qdrantContainerId, "Qdrant");
 }
 
 // ─── Lifecycle — Seed ─────────────────────────────────────────────────────────
@@ -235,16 +164,18 @@ export async function destroySandboxDbStack(
   buildId: string,
   state: {
     dbContainerId?: string;
+    /** @deprecated BET-5 — ignored; leftover containers still force-removed by name */
     neo4jContainerId?: string;
+    /** @deprecated BET-5 — ignored; leftover containers still force-removed by name */
     qdrantContainerId?: string;
   },
 ): Promise<void> {
-  // Destroy by stored container ID when available, fall back to well-known name.
-  // The app container and network are handled by destroyFullSandboxStack in sandbox.ts.
+  // Always remove Postgres; also force-remove any leftover neo4j/qdrant names
+  // from pre-retirement sandboxes so destroy stays idempotent.
   const targets = [
     state.dbContainerId ?? buildDbContainerName(buildId),
-    state.neo4jContainerId ?? buildNeo4jContainerName(buildId),
-    state.qdrantContainerId ?? buildQdrantContainerName(buildId),
+    state.neo4jContainerId ?? `dpf-sandbox-neo4j-${buildId}`,
+    state.qdrantContainerId ?? `dpf-sandbox-qdrant-${buildId}`,
   ];
 
   await Promise.all(
