@@ -11,4 +11,5 @@ export * from "./operational-value-stream";
 export * from "./twin-profile";
 export * from "./demo-business";
 export * from "./demo-business-load";
+export * from "./demo-flavor";
 export * from "./sections/schemas";

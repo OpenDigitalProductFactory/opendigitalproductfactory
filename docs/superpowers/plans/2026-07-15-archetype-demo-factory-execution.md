@@ -70,10 +70,22 @@ nav — a reviewer/developer surface, like `/admin/twin-kit`).
 
 ## P3 — the flavor registry (shared with the Excellence Corpus, `BI-44EF78DE`)
 
-Per-archetype `DemoFlavor` (spec §2.2): category defaults + the ~8 flagship slugs first, then fan
-out. Each entry raises fidelity without touching the generator. Authored once, consumed by both the
-demo factory and WWWD priming — workstream A·P3 (`BI-7308C27E`) and workstream B (`BI-44EF78DE`,
-under `EP-LIVING-BUSINESS-EXCELLENCE`) converge here.
+✅ **Landed** (BI-7308C27E). `packages/storefront-templates/src/demo-flavor.ts`:
+
+- `DEMO_FLAVORS` — authored `DemoFlavor` for the **8 flagship archetypes** (dental-practice,
+  restaurant, veterinary-clinic, hair-salon, plumber, accounting, new-home-builder,
+  custom-home-builder): company character, real staff/customers, signature offerings, and the
+  one-line **"what a great one feels like"** (`notes`).
+- `CATEGORY_FLAVOR_DEFAULTS` — the per-category `notes` **floor** (10 categories), merged UNDER any
+  per-archetype entry so the derived name/roster still varies per archetype.
+- `resolveDemoFlavor(archetypeId, category)` — own entry over category floor. `deriveDemoBusiness`
+  now consults it **by default** (`options.flavor ?? resolveDemoFlavor(...)`), so fidelity is
+  incremental and coverage stays 94/94; an explicit `flavor` still wins.
+
+The `notes` field is the **shared Excellence-Corpus seed** — authored once here, consumed by demo
+fidelity (A) and WWWD priming (B, `BI-44EF78DE`). **Verified:** flavor + resolver unit tests;
+golden snapshot regenerated (flagships now render real company names); delight oracle still green
+over all 94; package suite 254/254; typecheck clean.
 
 ## P4 — CI gate + simulator convergence
 

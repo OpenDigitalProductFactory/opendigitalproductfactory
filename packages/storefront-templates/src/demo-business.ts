@@ -4,6 +4,7 @@ import {
   type OperationalValueStreamStageKey,
 } from "./operational-value-stream";
 import { deriveTwinProfile, type TwinProfile, type TwinTemplate } from "./twin-profile";
+import { resolveDemoFlavor } from "./demo-flavor";
 
 /**
  * Archetype Demo Factory — `deriveDemoBusiness` (EP-ARCHETYPE-DEMO, workstream A
@@ -296,7 +297,9 @@ export function deriveDemoBusiness(
   options: DeriveDemoBusinessOptions = {},
 ): DemoBusiness {
   const seed = options.seed ?? archetype.archetypeId;
-  const flavor = options.flavor;
+  // Default to the authored flavor registry (raises fidelity for curated
+  // archetypes); an explicit options.flavor still wins.
+  const flavor = options.flavor ?? resolveDemoFlavor(archetype.archetypeId, archetype.category);
   const profile = deriveTwinProfile(archetype);
   const ovs = deriveOperationalValueStream(archetype);
 
