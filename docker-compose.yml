@@ -42,7 +42,15 @@ x-dev-workspace-volumes: &dev-workspace-volumes
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    # Built from docker/postgres/Dockerfile (FROM pgvector + baked-in inngest
+    # init script) rather than the stock pgvector image with a host bind mount.
+    # The bind mount made postgres un-startable when the self-upgrade promoter
+    # recreated it under `--project-directory /host-source` (BI-4796D52B); the
+    # baked image has no host-path dependency, and pgvector can never drift out
+    # of the image (BI-A35347E4). Compose auto-tags this `${project}-postgres`.
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     restart: unless-stopped
     logging: *default-logging
     environment:
@@ -51,7 +59,6 @@ services:
       POSTGRES_DB: dpf
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./scripts/init-inngest-db.sh:/docker-entrypoint-initdb.d/20-create-inngest-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dpf}"]
       interval: 5s
