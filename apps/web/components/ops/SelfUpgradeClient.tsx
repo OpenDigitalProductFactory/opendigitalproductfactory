@@ -12,7 +12,7 @@ import {
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
-import { formatImpactCounts } from "@/lib/self-upgrade/impact/format";
+import { UpgradeScopeRibbon } from "@/components/ops/UpgradeScopeRibbon";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -1003,6 +1003,22 @@ export default function SelfUpgradeClient({
             {!isFresh && targetSha && deployedShaSource !== "content-hash" && (
               <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
             )}
+            {/* At-a-glance scope of the available update, so "how big / what
+                kind" is answered on the banner without opening the elaborate
+                "What's in this update?" panel below. Auto-generated on load
+                (page.tsx) and cached; renders only when the summary resolved. */}
+            {!isFresh &&
+              targetSha &&
+              deployedShaSource !== "content-hash" &&
+              initialImpactSummary?.ok && (
+                <div className="mt-1 space-y-1" data-update-glance="true">
+                  <UpgradeScopeRibbon
+                    surface="available"
+                    counts={initialImpactSummary.summary.counts}
+                    headline={initialImpactSummary.summary.phrased?.headline ?? null}
+                  />
+                </div>
+              )}
             {!isFresh &&
               targetSha &&
               releaseBatch?.applicable &&
@@ -1138,31 +1154,12 @@ export default function SelfUpgradeClient({
               plain-language headline + counts ribbon (breaking/new/fix) drawn
               from the impact summary this run recorded, and keep the shortened
               SHAs as the precise-but-secondary identity line. */}
-          {latestRunImpact?.headline && (
-            <div className="text-sm text-[var(--dpf-text)]" data-run-impact-headline>
-              {latestRunImpact.headline}
-            </div>
-          )}
-
           {latestRunImpact && (
-            <div className="text-xs" data-run-impact-counts>
-              <span className="text-[var(--dpf-text)]">
-                {latestRunImpact.counts.total} change
-                {latestRunImpact.counts.total === 1 ? "" : "s"}
-              </span>
-              <span className="text-[var(--dpf-muted)]"> · </span>
-              {/* Breaking changes are the risk signal an operator most needs to
-                  see, so color the ribbon destructive when any are present. */}
-              <span
-                className={
-                  latestRunImpact.counts.breaking > 0
-                    ? "text-[var(--dpf-destructive)]"
-                    : "text-[var(--dpf-muted)]"
-                }
-              >
-                {formatImpactCounts(latestRunImpact.counts)}
-              </span>
-            </div>
+            <UpgradeScopeRibbon
+              surface="run"
+              counts={latestRunImpact.counts}
+              headline={latestRunImpact.headline}
+            />
           )}
 
           {latestRun.currentSha && latestRun.targetSha && (
