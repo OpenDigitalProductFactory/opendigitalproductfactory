@@ -297,24 +297,16 @@ async function stepInitDb(
 ): Promise<BuildExecutionState> {
   const {
     waitForSandboxDb,
-    waitForSandboxNeo4j,
-    waitForSandboxQdrant,
     seedSandboxDb,
   } = await import("./sandbox/sandbox-db");
   const { execInSandbox } = await import("./sandbox/sandbox");
 
   // Pool sandboxes use a shared sandbox-postgres managed by compose.
   // Per-build DB containers are only created for dynamic sandboxes.
+  // BET-5 (BI-28D31FB7): Postgres only — Neo4j/Qdrant sidecars retired.
   const dbContainer = state.dbContainerId ?? "dpf-sandbox-postgres-1";
-  const neo4jContainer = state.neo4jContainerId ?? "dpf-neo4j-1";
-  const qdrantContainer = state.qdrantContainerId ?? "dpf-qdrant-1";
 
-  // Wait for databases to become ready in parallel.
-  await Promise.all([
-    waitForSandboxDb(dbContainer),
-    waitForSandboxNeo4j(neo4jContainer),
-    waitForSandboxQdrant(qdrantContainer),
-  ]);
+  await waitForSandboxDb(dbContainer);
 
   // Run prisma migrate deploy inside the sandbox container.
   // The sandbox has DATABASE_URL pointing to its own postgres.
