@@ -10,7 +10,10 @@ import type {
   ApproveDecompositionDb,
   TxShape,
 } from "./approve-decomposition";
-import { approveDecomposition } from "./approve-decomposition";
+import {
+  approveDecomposition,
+  selectUnblockedChildBuildIds,
+} from "./approve-decomposition";
 import type { DecompositionCandidate } from "./decomposition-candidates";
 
 // --- Fake DB harness -------------------------------------------------------
@@ -460,5 +463,98 @@ describe("approveDecomposition — happy path (Dale scenario)", () => {
     expect(writes.activities[0]!.tool).toBe("approveDecomposition");
     const childBuildIds = writes.activities.slice(1).map((a) => a.buildId);
     expect(childBuildIds).toEqual(["FB-CHILD1", "FB-CHILD2", "FB-CHILD3"]);
+  });
+
+  it("returns unblocked head-of-chain children and plan-dispatches only those (BI-E49DDE47)", async () => {
+    const { db } = makeFakeDb(makeBuild());
+    const dispatchPlanForChild = vi.fn(async () => ({ kind: "dispatched-success" }));
+    const result = await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: makeCandidate(),
+      userId: "user-1",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+      dispatchPlanForChild,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    // Dale fixture: child 1 has dependsOn=[], 2 depends on 1, 3 on 1+2
+    expect(result.unblockedChildBuildIds).toEqual(["FB-CHILD1"]);
+    // fire-and-forget — flush microtasks
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(dispatchPlanForChild).toHaveBeenCalledTimes(1);
+    expect(dispatchPlanForChild).toHaveBeenCalledWith({
+      buildId: "FB-CHILD1",
+      userId: "user-1",
+    });
+  });
+
+  it("plan-dispatches every child when the partition has no dependency edges", async () => {
+    const { db } = makeFakeDb(makeBuild());
+    const dispatchPlanForChild = vi.fn(async () => ({ kind: "dispatched-success" }));
+    const result = await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: {
+        ...makeCandidate(),
+        childScopes: [
+          {
+            childOrder: 1,
+            title: "Solo-A",
+            summary: "",
+            acceptanceCriteriaIndices: [0, 1],
+            dependsOn: [],
+          },
+          {
+            childOrder: 2,
+            title: "Solo-B",
+            summary: "",
+            acceptanceCriteriaIndices: [2, 3, 4],
+            dependsOn: [],
+          },
+        ],
+      },
+      userId: "user-9",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+      dispatchPlanForChild,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.unblockedChildBuildIds).toEqual(["FB-CHILD1", "FB-CHILD2"]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(dispatchPlanForChild).toHaveBeenCalledTimes(2);
+    expect(dispatchPlanForChild).toHaveBeenCalledWith({
+      buildId: "FB-CHILD1",
+      userId: "user-9",
+    });
+    expect(dispatchPlanForChild).toHaveBeenCalledWith({
+      buildId: "FB-CHILD2",
+      userId: "user-9",
+    });
+  });
+});
+
+describe("selectUnblockedChildBuildIds", () => {
+  it("keeps only scopes with empty dependsOn that resolve in the order map", () => {
+    const map = new Map<number, string>([
+      [1, "FB-A"],
+      [2, "FB-B"],
+      [3, "FB-C"],
+    ]);
+    expect(
+      selectUnblockedChildBuildIds(
+        [
+          { childOrder: 1, dependsOn: [] },
+          { childOrder: 2, dependsOn: [1] },
+          { childOrder: 3, dependsOn: [] },
+          { childOrder: 99, dependsOn: [] }, // missing from map
+        ],
+        map,
+      ),
+    ).toEqual(["FB-A", "FB-C"]);
   });
 });
