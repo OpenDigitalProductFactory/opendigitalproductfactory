@@ -16,8 +16,8 @@ type DemandRow = {
   demandScore: number | null;
   demandScoreFramework: string | null;
   effortSize: string | null;
-  jobSize: string | null;
-  impact: string | null;
+  jobSize: number | null;
+  impact: number | null;
   investmentBucket: string | null;
   estimateAiJobSize: number | null;
   estimateHumanJobSize: number | null;
