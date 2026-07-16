@@ -154,11 +154,97 @@ export function sandboxExec(): (cmd: string, opts?: { timeout?: number }) => Pro
 }
 
 /**
+ * Stream `input` to the stdin of a `docker exec -i` running `innerCommand`
+ * inside the sandbox. The payload NEVER enters argv, so a rejected exec, a `ps`
+ * / /proc listing, or a container exec log cannot echo it back — the fix for
+ * BI-AFEF038A (follow-up to the BI-1291B677 OAuth-token leak) and the same
+ * `docker exec -i … base64 -d > file` shape already proven in
+ * codex-cli-adapter.ts (BI-2685C1E5). `innerCommand` MUST be secret-free; the
+ * real content flows only over stdin.
+ *
+ * Rejects (secret-free) on spawn error, non-zero exit, or timeout — the error
+ * carries stderr/exit code but never `input`.
+ */
+export function dockerExecWriteStdin(params: {
+  containerId: string;
+  /** Secret-free `sh -c` payload; reads the real content from stdin. */
+  innerCommand: string;
+  /** Bytes streamed to the child's stdin — the ONLY channel the content uses. */
+  input: string;
+  asNodeUser?: boolean;
+  timeoutMs?: number;
+}): Promise<{ stdout: string; stderr: string }> {
+  const { containerId, innerCommand, input, asNodeUser } = params;
+  const timeoutMs = params.timeoutMs ?? 5_000;
+  const spawn = lazyChildProcess().spawn;
+  const args = [
+    "exec",
+    "-i",
+    ...(asNodeUser ? ["--user", "node"] : []),
+    containerId,
+    "sh",
+    "-c",
+    innerCommand,
+  ];
+  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    const proc = spawn("docker", args, { stdio: ["pipe", "pipe", "pipe"] });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+
+    const timer = setTimeout(() => {
+      proc.kill("SIGTERM");
+      settle(() => reject(new Error(`Sandbox file write timed out after ${timeoutMs / 1000}s`)));
+    }, timeoutMs);
+
+    proc.stdout?.on("data", (d: Buffer) => { stdout += d.toString(); });
+    proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+
+    // stdin may EPIPE if the container command exits before draining; the close
+    // handler owns the real outcome, so a stream-level error is not fatal here.
+    proc.stdin?.on("error", () => {});
+    proc.stdin?.write(input, (writeErr?: Error | null) => {
+      if (writeErr) settle(() => reject(new Error(`Sandbox file write stdin error: ${writeErr.message}`)));
+    });
+    proc.stdin?.end();
+
+    proc.on("close", (code: number | null) => {
+      settle(() => {
+        if (code === 0) {
+          resolve({ stdout, stderr });
+        } else {
+          // NB: never attach `input` — the rejection must stay secret-free.
+          reject(Object.assign(new Error(`Sandbox file write failed (exit ${code ?? "?"}): ${stderr.slice(0, 200)}`), { code }));
+        }
+      });
+    });
+
+    proc.on("error", (err: Error) => {
+      settle(() => reject(err));
+    });
+  });
+}
+
+/**
  * Write `content` to `path` inside the sandbox via a base64 round-trip (avoids
  * all shell-escaping issues), chmod it, and optionally run as the `node` user.
  * This is the temp-file / runner-script write every surface repeats; perms and
  * the exec user stay caller-controlled because they are a real per-surface
  * choice (644 readable prompt vs 600 secret; root vs node).
+ *
+ * SECURITY (BI-AFEF038A): the base64 payload is streamed via the child's stdin,
+ * NOT embedded in the `docker exec` command. When `content` is a secret (OAuth
+ * token, JWT, codex auth.json) it therefore never appears in argv, a process
+ * listing, or an exec log, and a rejected write cannot echo it into an error.
+ * The target `path` (and any `mkdirParents`) are single-quoted so a path can
+ * never break out of the `sh -c` command either.
  */
 export async function writeSandboxFile(params: {
   containerId: string;
@@ -170,18 +256,26 @@ export async function writeSandboxFile(params: {
    *  this. */
   mode?: string;
   asNodeUser?: boolean;
+  /** `chown node:node <path>` after writing (root-written file the node-user CLI
+   *  must read, e.g. the per-call mcp-config). */
+  chownNodeUser?: boolean;
   timeoutMs?: number;
   mkdirParents?: string;   // optional `mkdir -p <dir> &&` prefix target
 }): Promise<void> {
-  const { containerId, path, content, mode, asNodeUser, mkdirParents } = params;
-  const userFlag = asNodeUser ? "--user node " : "";
+  const { containerId, path, content, mode, asNodeUser, chownNodeUser, mkdirParents } = params;
   const b64 = Buffer.from(content).toString("base64");
-  const mkdir = mkdirParents ? `mkdir -p ${mkdirParents} && ` : "";
-  const chmod = mode ? ` && chmod ${mode} ${path}` : "";
-  await sandboxExec()(
-    `docker exec ${userFlag}${containerId} sh -c "${mkdir}echo '${b64}' | base64 -d > ${path}${chmod}"`,
-    { timeout: params.timeoutMs ?? 5_000 },
-  );
+  const mkdir = mkdirParents ? `mkdir -p '${mkdirParents}' && ` : "";
+  const chown = chownNodeUser ? ` && chown node:node '${path}'` : "";
+  const chmod = mode ? ` && chmod ${mode} '${path}'` : "";
+  // Content flows over stdin (see dockerExecWriteStdin); the command string is
+  // secret-free. `base64 -d` reads the payload from stdin when given no file arg.
+  await dockerExecWriteStdin({
+    containerId,
+    innerCommand: `${mkdir}base64 -d > '${path}'${chown}${chmod}`,
+    input: b64,
+    asNodeUser,
+    timeoutMs: params.timeoutMs ?? 5_000,
+  });
 }
 
 /** Ensure /workspace is writable by the node user (uid 1000) and git is

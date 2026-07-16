@@ -21,6 +21,7 @@ import { InferenceError } from "@/lib/ai-inference";
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { writeSandboxFile } from "@/lib/integrate/sandbox/agent-cli-runtime";
 import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-calls";
 import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
@@ -446,19 +447,14 @@ export const cliAdapter: ExecutionAdapterHandler = {
     const spawnCb = cp.spawn;
 
     try {
-      // Write prompt and system prompt to sandbox
-      const promptB64 = Buffer.from(prompt).toString("base64");
-      const systemB64 = Buffer.from(fullSystemPrompt).toString("base64");
-
+      // Write prompt and system prompt to sandbox. Content is streamed via the
+      // child's stdin (writeSandboxFile → dockerExecWriteStdin), NOT embedded in
+      // the docker exec command — so secrets staged this way (the OAuth token /
+      // mcp-config JWT below) never enter argv, a `ps` listing, or an exec log
+      // (BI-AFEF038A).
       const writes: Promise<unknown>[] = [
-        execAsync(
-          `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > ${promptFile} && chmod 644 ${promptFile}"`,
-          { timeout: 5_000 },
-        ),
-        execAsync(
-          `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${systemB64}' | base64 -d > ${systemFile} && chmod 644 ${systemFile}"`,
-          { timeout: 5_000 },
-        ),
+        writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: promptFile, content: prompt, mode: "644", timeoutMs: 5_000 }),
+        writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: systemFile, content: fullSystemPrompt, mode: "644", timeoutMs: 5_000 }),
       ];
 
       if (mcpJwt) {
@@ -476,12 +472,15 @@ export const cliAdapter: ExecutionAdapterHandler = {
             },
           },
         };
-        const mcpB64 = Buffer.from(JSON.stringify(mcpConfig)).toString("base64");
         writes.push(
-          execAsync(
-            `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${mcpB64}' | base64 -d > ${mcpConfigFile} && chown node:node ${mcpConfigFile} && chmod 644 ${mcpConfigFile}"`,
-            { timeout: 5_000 },
-          ),
+          writeSandboxFile({
+            containerId: SANDBOX_CONTAINER,
+            path: mcpConfigFile,
+            content: JSON.stringify(mcpConfig),
+            chownNodeUser: true,
+            mode: "644",
+            timeoutMs: 5_000,
+          }),
         );
       }
 
@@ -491,18 +490,14 @@ export const cliAdapter: ExecutionAdapterHandler = {
       let authExportLine: string;
       let bareFlag = "";
       if (auth.mode === "oauth") {
-        const tokenB64 = Buffer.from(auth.token).toString("base64");
         try {
-          await execAsync(
-            `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${tokenB64}' | base64 -d > ${tokenFile} && chmod 644 ${tokenFile}"`,
-            { timeout: 5_000 },
-          );
+          await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: auth.token, mode: "644", timeoutMs: 5_000 });
         } catch {
-          // BI-1291B677: this command embeds the base64-encoded OAuth token, and a
-          // rejected exec Error carries the full command (.cmd / .message) — which
-          // would otherwise propagate the token into the dispatch error and the
-          // BuildActivity / ideate_dispatch summary. Swallow the original and
-          // re-throw a token-free error so the secret never reaches a log surface.
+          // BI-1291B677 / BI-AFEF038A: the token now streams via stdin so it no
+          // longer enters the command surface, but keep this belt-and-suspenders
+          // catch so any failure surfaces a token-free error rather than a raw
+          // exec rejection that could carry stderr detail into the dispatch
+          // error and the BuildActivity / ideate_dispatch summary.
           throw new Error("Failed to stage the CLI OAuth token into the sandbox.");
         }
         authExportLine = `export CLAUDE_CODE_OAUTH_TOKEN=$(cat ${tokenFile})`;
@@ -543,11 +538,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
         `wait "$CLIPID"`,
       ].join("\n");
 
-      const scriptB64 = Buffer.from(script).toString("base64");
-      await execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > ${runnerScript} && chmod 755 ${runnerScript}"`,
-        { timeout: 5_000 },
-      );
+      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755", timeoutMs: 5_000 });
 
       // 6. Spawn the CLI process
       console.log(
