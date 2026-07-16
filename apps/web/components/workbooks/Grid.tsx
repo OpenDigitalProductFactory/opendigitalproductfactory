@@ -128,6 +128,7 @@ import {
   FOOTER_AGG_LABELS,
   type FooterAgg,
 } from "./grid-footer-summary";
+import { RecordDetailModal } from "./RecordDetailModal";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -369,6 +370,8 @@ export function WorkbookGrid({
   // Per-column footer aggregate (Airtable-style summary bar): columnId → agg.
   const [footerAgg, setFooterAgg] = useState<Record<string, FooterAgg>>({});
   const [showFooter, setShowFooter] = useState(false);
+  // Which row is expanded into the record detail modal (null = closed).
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
   // Which groups the user has collapsed (session-scoped); everything else is
   // expanded by default so the grouped grid reads like Smartsheet on open.
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
@@ -486,9 +489,31 @@ export function WorkbookGrid({
         ),
       } as Column<GridRowData, SummaryRow>;
     });
+    // Leading "expand" column: opens the full-record modal for its row.
+    const expandCol: Column<GridRowData, SummaryRow> = {
+      key: "__expand__",
+      name: "",
+      width: 36,
+      minWidth: 36,
+      maxWidth: 36,
+      frozen: true,
+      resizable: false,
+      sortable: false,
+      renderCell: ({ row }) => (
+        <button
+          type="button"
+          className="dpf-grid-expand"
+          onClick={() => setOpenRowId(row.rowId)}
+          aria-label="Expand record"
+          title="Expand record"
+        >
+          ⤢
+        </button>
+      ),
+    };
     return capabilities.canDeleteRow
-      ? [SelectColumn as Column<GridRowData, SummaryRow>, ...cols]
-      : cols;
+      ? [SelectColumn as Column<GridRowData, SummaryRow>, expandCol, ...cols]
+      : [expandCol, ...cols];
   }, [visibleCols, capabilities, showProvenance, effectiveFrozen, showFooter, footerAgg]);
 
   const onColumnsReorder = useCallback(
@@ -585,6 +610,26 @@ export function WorkbookGrid({
       return true;
     },
     [tableId, source],
+  );
+
+  // Persist one field edited in the record modal, through the same validated
+  // dispatch (+ optimistic update + undo history) as an in-grid edit.
+  const onModalSave = useCallback(
+    (columnId: string, value: CellValue) => {
+      const rid = openRowId;
+      if (!rid) return;
+      const prevRow = rowData.find((r) => r.rowId === rid);
+      const prevValue: CellValue = prevRow ? prevRow[columnId] ?? null : null;
+      setRowData((prev) =>
+        prev.map((r) => (r.rowId === rid ? { ...r, [columnId]: value } : r)),
+      );
+      void persistCell(rid, columnId, value, prevValue).then((ok) => {
+        if (ok) {
+          setHistory((h) => recordEdit(h, { rowId: rid, columnId, prevValue, nextValue: value }));
+        }
+      });
+    },
+    [openRowId, rowData, persistCell],
   );
 
   const onRowsChange = useCallback(
@@ -1372,6 +1417,20 @@ export function WorkbookGrid({
           )}
         </div>
       )}
+
+      {openRowId &&
+        (() => {
+          const openRow = rowData.find((r) => r.rowId === openRowId);
+          return openRow ? (
+            <RecordDetailModal
+              row={openRow}
+              columns={columns}
+              canEdit={capabilities.canEditCell}
+              onClose={() => setOpenRowId(null)}
+              onSave={onModalSave}
+            />
+          ) : null;
+        })()}
     </div>
   );
 }

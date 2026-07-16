@@ -242,3 +242,12 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
 - **Semantic layer (Phase 4):** `WorkbookMetric` (unique/owned/versioned, lineage-required).
 - **Operationalization lifecycle (Phase 5):** promote column → metric → schema field / page-visual,
   with gates + blast-radius + governed retirement; derived-column lineage edges (fail-closed).
+
+## Slice 22 — row-expand record detail modal — SHIPPED (BI-90971F1F)
+
+A leading expand button on each grid row opens `RecordDetailModal` — every field on its own line for
+viewing/editing. Simple types (text/url/email/phone/number + numeric-backed/checkbox/select/date)
+edit inline in the modal through the **same** validated `persistCell` path (+ optimistic update + undo
+history) as an in-grid edit; complex types (reference/link/attachment/formula/lookup/rollup/
+multi_select) render read-only (edit in-grid). Self-contained component; `Grid.tsx` adds only an
+`openRowId` state, a 36px frozen expand column, and the modal render. Escape / backdrop-click closes.
