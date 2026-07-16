@@ -668,14 +668,35 @@ async function stepComplete(
   if (!state.containerId) return state;
 
   const { prisma } = await import("@dpf/db");
-  const { extractDiff, listSandboxCommitsAheadOfBase } = await import("./sandbox/sandbox");
-  const { getClientIdentity, resolveBuildWorkdir } = await import("./sandbox/build-branch");
+  const { extractDiff, execInSandbox, listSandboxCommitsAheadOfBase } = await import(
+    "./sandbox/sandbox"
+  );
+  const { getClientIdentity, resolveBuildWorkdir, buildSandboxCommitInFlightWorkCommand } =
+    await import("./sandbox/build-branch");
 
   const identity = await getClientIdentity();
   const baseRef = identity.clientBranch;
   // Extract the diff from the build's working dir: its own worktree when
   // isolation is on, else /workspace (default — byte-identical). BI-98B723C0 2c.
   const buildWorkdir = resolveBuildWorkdir(buildId);
+
+  // BI-53C14D19: the per-task coding agents WRITE files into the working tree
+  // but do not COMMIT them, so listSandboxCommitsAheadOfBase() below would
+  // capture 0 commits and the build would strand at deploy/ship with "no
+  // releasable source changes" (working tree dirty) — the generated code sat
+  // uncommitted and was lost on the next branch scrub. Commit any in-flight
+  // task output onto the build branch here, before capture. Best-effort and
+  // build/-branch-scoped (the helper no-ops off a build/ branch and excludes
+  // generated artifacts), so a no-op or failure never blocks completion.
+  await execInSandbox(
+    state.containerId,
+    buildSandboxCommitInFlightWorkCommand(buildWorkdir),
+  ).catch((err: unknown) => {
+    console.warn(
+      "[build-pipeline] pre-capture in-flight commit failed (best-effort):",
+      (err as Error)?.message,
+    );
+  });
 
   const [fullDiff, commitHashes] = await Promise.all([
     extractDiff(state.containerId, { baseRef, workspace: buildWorkdir }),
