@@ -62,11 +62,31 @@ Pure spine + corrected policy + one topology-free live path + one documented sea
 
 `collectCliWeeklyQuota(adapterType)` in `cli-pool-status.ts` is a documented stub for
 the two CLI-native collectors (read container OAuth creds → `/api/oauth/usage`;
-spawn `codex app-server` → `account/rateLimits/read`). Left unwired because live
-collection depends on per-install container/credential topology that could not be
-verified in this autonomous build. Both endpoints are undocumented and their auth
-headers have changed before, so the collector must treat a failed/parse-less read as
-"no signal," never "plenty of quota."
+spawn `codex app-server` → `account/rateLimits/read`). Live collection depends on
+per-install container/credential topology that could not be verified in this
+autonomous build. Both endpoints are undocumented and their auth headers have
+changed before, so the collector must treat a failed/parse-less read as "no signal,"
+never "plenty of quota."
+
+### Update (PR #3072 / follow-up) — operator UI + claude-cli collector
+
+- **Operator visibility (PR #3072, BI-779FA953):** `formatWeeklyAllocationHint(pool)`
+  + a `ServiceRow` `weeklyAllocationHint` prop render the real remaining allocation
+  on CLI-backed provider rows ("63% weekly left · resets ~2d 4h"). Informational —
+  never gates routing.
+- **claude-cli collector (this follow-up):** `weekly-quota-collector.ts` →
+  `collectClaudeCliWeeklyQuota()` implements the claude-cli oauth/usage read as an
+  **opt-in, fail-closed** collector — OFF by default, driven entirely by
+  operator-declared config:
+  - `DPF_WEEKLY_QUOTA_COLLECT_ENABLED=true` (master switch),
+  - `DPF_CLAUDE_OAUTH_CREDS_PATH=<path>` (where the CLI OAuth token lives),
+  - `DPF_CLAUDE_CODE_UA` (optional User-Agent override; the endpoint REQUIRES a
+    `claude-code/*` UA or it 429s).
+  Wired into the hourly capacity-drain job before `evaluateAndDrainCapacity`, so a
+  fresh snapshot precedes the policy read — a strict no-op until the operator opts
+  in. This honours *Never Assume — Verify* by making the operator **declare** the
+  topology rather than the build assuming it. The **codex-cli** read (subprocess
+  spawn) stays a documented stub pending confirmation.
 
 ## Tests
 
