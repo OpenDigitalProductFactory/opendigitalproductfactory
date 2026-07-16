@@ -32,6 +32,14 @@ export const FIELD_TYPES = [
   "lookup",
   "rollup",
   "link",
+  // Numeric-backed display types (stored as a number; only the renderer differs).
+  "rating",
+  "percent",
+  "currency",
+  "progress",
+  "duration",
+  // Text-backed display type.
+  "phone",
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number];
@@ -41,6 +49,20 @@ export const COMPUTED_FIELD_TYPES: readonly FieldType[] = ["formula", "lookup", 
 
 export function isComputedFieldType(fieldType: FieldType): boolean {
   return COMPUTED_FIELD_TYPES.includes(fieldType);
+}
+
+/** Field types whose stored value is a plain number (for sums/averages/etc.). */
+export const NUMERIC_FIELD_TYPES: readonly FieldType[] = [
+  "number",
+  "currency",
+  "percent",
+  "progress",
+  "rating",
+  "duration",
+];
+
+export function isNumericFieldType(fieldType: FieldType): boolean {
+  return NUMERIC_FIELD_TYPES.includes(fieldType);
 }
 
 /** Option for select / multi_select columns, stored in WorkbookColumn.fieldConfig.options. */
@@ -82,6 +104,12 @@ export interface FieldConfig {
   multiline?: boolean;
   /** number fields: decimal places hint for display */
   precision?: number;
+  /** rating fields: number of stars (default 5) */
+  max?: number;
+  /** currency fields: symbol to prefix (default "$") */
+  currencySymbol?: string;
+  /** duration fields: the stored unit — minutes (default) or seconds */
+  durationUnit?: "minutes" | "seconds";
   /** formula columns: an Excel-style expression over other columns in the row */
   formula?: string;
   /** formula columns: how to render/coerce the computed result (defaults to text) */

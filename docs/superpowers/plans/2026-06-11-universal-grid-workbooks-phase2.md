@@ -199,11 +199,31 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   grid, gallery, and CSV export together. All three persist in the per-tableId view state. Pure,
   unit-tested `grid-view-options.ts` (`visibleColumns`/`clampFrozenCount`/`rowHeightPx`; freeze is
   clamped to leave one column scrollable).
-- **Remaining (not built):** column footer summary bar (per-column aggregations); rich filter
-  operators + AND/OR builder; row-expand record modal; more field types (rating/percent/currency/
-  progress/duration/phone); multi-level (nested) grouping UI + inline group subtotals; named/
-  shareable server-side views; calendar view (fullcalendar — needs a date column); manual row
-  reordering; full pivots + richer charts; metrics/semantic layer; operationalization lifecycle.
+- **Slice 19 — column footer summary bar — SHIPPED.** A per-column aggregate bar pinned to the
+  bottom of the grid (react-data-grid `bottomSummaryRows` + `renderSummaryCell`), gated by a
+  "Summary bar" toggle in the Columns panel. Each footer cell is an aggregate picker (count / filled
+  / empty / unique for any field; sum / average / min / max for numbers) plus the value, recomputed
+  over the filtered rows. Per-column selection + on/off persist in the view state. Pure, unit-tested
+  `grid-footer-summary.ts` (`computeFooter`/`computeFooterRow`/`availableAggs`).
+- **Slice 20 — richer field types (rating / percent / currency / progress / duration / phone) — SHIPPED.**
+  Six Airtable-class field types added to `FIELD_TYPES`. Each is numeric-backed (stored as a plain
+  number; `phone` as text), so validation reuses the number/text paths and editing reuses the existing
+  number/text editors — no custom editor to get wrong. Only the display renderer differs: stars, `%`,
+  a currency symbol, a progress bar, `Xh Ym`, a `tel:` link. Pure, unit-tested `grid-field-format.ts`.
+  A shared `isNumericFieldType` (types.ts) makes the new numeric types summable everywhere (footer bar,
+  group summary). Offered in the Add-column picker with sensible config defaults (5 stars, `$`, minutes);
+  per-column config UI (star count, currency symbol) is a follow-up.
+- **Slice 21 — structured filter builder (typed operators + AND/OR) — SHIPPED.** Replaces the
+  substring-only per-column filter with a real filter builder: each condition is column + operator +
+  value, where the operators offered adapt to the field type (`is`/`is not`/`contains`/`starts with`/
+  `is empty` for text; `=`/`≠`/`>`/`<`/`between` for numbers/dates; `is`/`is not` for choices).
+  Conditions combine with a single AND/OR toggle. Pure, unit-tested `grid-filter-builder.ts`
+  (`applyFilterGroup`/`evaluateCondition`/`opsForField`); half-typed conditions never hide rows.
+  Persisted as `filterGroup` in the view state (old `columnFilters` still parsed for back-compat).
+- **Remaining (not built):** row-expand record modal; multi-level (nested) grouping UI + inline
+  group subtotals; named/shareable server-side views; calendar view (fullcalendar — needs a date
+  column); manual row reordering; full pivots + richer charts; metrics/semantic layer;
+  operationalization lifecycle.
   **Debt:** `Grid.tsx` is over the 1000-LOC hard cap — decompose the toolbar/panels into
   subcomponents before the next feature increment.
 

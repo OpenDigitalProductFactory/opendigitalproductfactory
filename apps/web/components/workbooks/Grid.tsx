@@ -22,6 +22,7 @@ import {
   type Column,
   type RowsChangeData,
   type SortColumn,
+  type RenderSummaryCellProps,
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import "./dpf-grid.css";
@@ -54,6 +55,12 @@ import {
   renderLinkCell,
   makeReferenceEditor,
   makeLinkEditor,
+  makeCurrencyRenderer,
+  makePercentRenderer,
+  makeDurationRenderer,
+  makeRatingRenderer,
+  renderProgressCell,
+  renderPhoneCell,
 } from "./cell-editors";
 import {
   createRowAction,
@@ -70,7 +77,19 @@ import {
   commitUndo,
   commitRedo,
 } from "./grid-history";
-import { quickFilterRows, applyColumnFilters, cellSearchText, type ColumnFilters } from "./grid-filter";
+import { quickFilterRows, cellSearchText } from "./grid-filter";
+import {
+  applyFilterGroup,
+  activeConditionCount,
+  opsForField,
+  isUnaryOp,
+  isRangeOp,
+  FILTER_OP_LABELS,
+  EMPTY_FILTER_GROUP,
+  type FilterGroup,
+  type FilterCondition,
+  type FilterOp,
+} from "./grid-filter-builder";
 import { rowsToCsv } from "./grid-csv";
 import {
   type ConditionalRule,
@@ -102,6 +121,13 @@ import {
   ROW_HEIGHTS,
   type RowHeight,
 } from "./grid-view-options";
+import {
+  computeFooterRow,
+  availableAggs,
+  toFooterAgg,
+  FOOTER_AGG_LABELS,
+  type FooterAgg,
+} from "./grid-footer-summary";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -120,6 +146,10 @@ export interface WorkbookGridProps {
 function toRowData(rows: GridRow[]): GridRowData[] {
   return rows.map((r) => ({ rowId: r.rowId, ...r.cells }));
 }
+
+// The footer summary row is a plain columnId -> display-string map (see
+// grid-footer-summary.ts); react-data-grid renders it as a pinned bottom row.
+type SummaryRow = Record<string, string>;
 
 function buildColumn(
   col: ColumnDefinition,
@@ -235,6 +265,43 @@ function buildColumn(
         editorOptions: { commitOnOutsideClick: false },
       };
     }
+    // Numeric-backed display types — edit as a number, render specially.
+    case "currency":
+      return {
+        ...base,
+        renderCell: makeCurrencyRenderer(col.config?.currencySymbol ?? "$", col.config?.precision),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "percent":
+      return {
+        ...base,
+        renderCell: makePercentRenderer(col.config?.precision),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "progress":
+      return {
+        ...base,
+        renderCell: renderProgressCell,
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "duration":
+      return {
+        ...base,
+        renderCell: makeDurationRenderer(col.config?.durationUnit ?? "minutes"),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "rating":
+      return {
+        ...base,
+        renderCell: makeRatingRenderer(col.config?.max ?? 5),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "phone":
+      return {
+        ...base,
+        renderCell: renderPhoneCell,
+        renderEditCell: editable ? renderTextEditor : undefined,
+      };
     default:
       return base;
   }
@@ -283,12 +350,13 @@ export function WorkbookGrid({
   const [showFormat, setShowFormat] = useState(false);
   const [cfRules, setCfRules] = useState<ConditionalRule[]>([]);
   const cfIdRef = useRef(0);
+  const fcIdRef = useRef(0);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryGroupBy, setSummaryGroupBy] = useState("");
   const [summaryValue, setSummaryValue] = useState("");
   const [summaryChart, setSummaryChart] = useState(false);
-  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
-  const activeFilterCount = Object.values(columnFilters).filter((v) => v.trim()).length;
+  const [filterGroup, setFilterGroup] = useState<FilterGroup>(EMPTY_FILTER_GROUP);
+  const activeFilterCount = activeConditionCount(filterGroup);
   // Drag-to-reorder column order (column ids) + in-grid collapsible grouping.
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [groupBy, setGroupBy] = useState<string[]>([]);
@@ -298,6 +366,9 @@ export function WorkbookGrid({
   const [frozenCount, setFrozenCount] = useState(0);
   const [rowHeight, setRowHeight] = useState<RowHeight>("medium");
   const [showColumns, setShowColumns] = useState(false);
+  // Per-column footer aggregate (Airtable-style summary bar): columnId → agg.
+  const [footerAgg, setFooterAgg] = useState<Record<string, FooterAgg>>({});
+  const [showFooter, setShowFooter] = useState(false);
   // Which groups the user has collapsed (session-scoped); everything else is
   // expanded by default so the grouped grid reads like Smartsheet on open.
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
@@ -314,7 +385,7 @@ export function WorkbookGrid({
       const parsed = parseViewState(localStorage.getItem(viewStorageKey(tableId)));
       if (parsed) {
         if (parsed.filterQuery !== undefined) setFilterQuery(parsed.filterQuery);
-        if (parsed.columnFilters) setColumnFilters(parsed.columnFilters);
+        if (parsed.filterGroup) setFilterGroup(parsed.filterGroup);
         if (parsed.sort) setSortColumns(parsed.sort);
         if (parsed.cfRules) setCfRules(parsed.cfRules);
         if (parsed.showProvenance !== undefined) setShowProvenance(parsed.showProvenance);
@@ -323,6 +394,12 @@ export function WorkbookGrid({
         if (parsed.hiddenColumns) setHiddenColumns(parsed.hiddenColumns);
         if (parsed.frozenCount !== undefined) setFrozenCount(parsed.frozenCount);
         if (parsed.rowHeight) setRowHeight(parsed.rowHeight);
+        if (parsed.footerAgg) {
+          const coerced: Record<string, FooterAgg> = {};
+          for (const [k, v] of Object.entries(parsed.footerAgg)) coerced[k] = toFooterAgg(v);
+          setFooterAgg(coerced);
+        }
+        if (parsed.showFooter !== undefined) setShowFooter(parsed.showFooter);
       }
     } catch {
       // ignore unreadable storage
@@ -341,7 +418,7 @@ export function WorkbookGrid({
         viewStorageKey(tableId),
         serializeViewState({
           filterQuery,
-          columnFilters,
+          filterGroup,
           sort,
           cfRules,
           showProvenance,
@@ -350,12 +427,14 @@ export function WorkbookGrid({
           hiddenColumns,
           frozenCount,
           rowHeight,
+          footerAgg,
+          showFooter,
         }),
       );
     } catch {
       // ignore quota / unavailable storage
     }
-  }, [tableId, filterQuery, columnFilters, sortColumns, cfRules, showProvenance, columnOrder, groupBy, hiddenColumns, frozenCount, rowHeight]);
+  }, [tableId, filterQuery, filterGroup, sortColumns, cfRules, showProvenance, columnOrder, groupBy, hiddenColumns, frozenCount, rowHeight, footerAgg, showFooter]);
 
   // Columns in the user's saved drag order; new columns append, stale ids drop.
   const orderedColumns = useMemo(
@@ -373,12 +452,44 @@ export function WorkbookGrid({
   // Pin the leftmost N visible columns (clamped to leave one scrollable).
   const effectiveFrozen = clampFrozenCount(frozenCount, visibleCols.length);
 
-  const gridColumns = useMemo<Column<GridRowData>[]>(() => {
-    const cols = visibleCols.map((c, i) =>
-      buildColumn(c, capabilities.canEditCell, showProvenance, i < effectiveFrozen),
-    );
-    return capabilities.canDeleteRow ? [SelectColumn, ...cols] : cols;
-  }, [visibleCols, capabilities, showProvenance, effectiveFrozen]);
+  const gridColumns = useMemo<Column<GridRowData, SummaryRow>[]>(() => {
+    const cols = visibleCols.map((c, i) => {
+      const built = buildColumn(
+        c,
+        capabilities.canEditCell,
+        showProvenance,
+        i < effectiveFrozen,
+      ) as Column<GridRowData, SummaryRow>;
+      if (!showFooter) return built;
+      // Footer cell: an aggregate picker + the computed value (Airtable-style).
+      return {
+        ...built,
+        renderSummaryCell: ({ row }: RenderSummaryCellProps<SummaryRow, GridRowData>) => (
+          <div className="dpf-grid-footer-cell">
+            <select
+              className="dpf-grid-footer-select"
+              value={footerAgg[c.columnId] ?? "none"}
+              onChange={(e) =>
+                setFooterAgg((prev) => ({ ...prev, [c.columnId]: toFooterAgg(e.target.value) }))
+              }
+              aria-label={`Summarize ${c.name}`}
+              title={`Summarize ${c.name}`}
+            >
+              {availableAggs(c.fieldType).map((a) => (
+                <option key={a} value={a}>
+                  {FOOTER_AGG_LABELS[a]}
+                </option>
+              ))}
+            </select>
+            <span className="dpf-grid-footer-value">{row[c.columnId] ?? ""}</span>
+          </div>
+        ),
+      } as Column<GridRowData, SummaryRow>;
+    });
+    return capabilities.canDeleteRow
+      ? [SelectColumn as Column<GridRowData, SummaryRow>, ...cols]
+      : cols;
+  }, [visibleCols, capabilities, showProvenance, effectiveFrozen, showFooter, footerAgg]);
 
   const onColumnsReorder = useCallback(
     (sourceKey: string, targetKey: string) => {
@@ -398,9 +509,9 @@ export function WorkbookGrid({
   const groupColumnId = effectiveGroupBy[0];
 
   const sortedRows = useMemo<GridRowData[]>(() => {
-    const filtered = applyColumnFilters(
+    const filtered = applyFilterGroup(
       quickFilterRows(rowData, columns, filterQuery),
-      columnFilters,
+      filterGroup,
     );
     if (sortColumns.length === 0) return filtered;
     const sorted = [...filtered];
@@ -412,10 +523,21 @@ export function WorkbookGrid({
       return 0;
     });
     return sorted;
-  }, [rowData, columns, filterQuery, columnFilters, sortColumns]);
+  }, [rowData, columns, filterQuery, filterGroup, sortColumns]);
 
   // Grouping is grid-only; gallery renders flat cards regardless.
   const grouping = Boolean(groupColumnId) && !gallery && columns.length > 0;
+
+  // Footer summary bar: one pinned bottom row of per-column aggregates over the
+  // filtered rows. Empty object when off; react-data-grid still needs a row so
+  // the picker cells render, so we always pass one row when showFooter is on.
+  const footerRow = useMemo<SummaryRow>(
+    () => (showFooter ? computeFooterRow(sortedRows, visibleCols, footerAgg) : {}),
+    [showFooter, sortedRows, visibleCols, footerAgg],
+  );
+  // Footer bar renders on the flat grid only; the tree (grouped) grid's row model
+  // does not support summary rows, so it always receives undefined.
+  const bottomSummaryRows = showFooter && !grouping ? [footerRow] : undefined;
 
   const rowGrouper = useCallback(
     (rows: readonly GridRowData[], columnKey: string) => groupRowsByColumn(rows, columnKey),
@@ -466,7 +588,7 @@ export function WorkbookGrid({
   );
 
   const onRowsChange = useCallback(
-    (newRows: GridRowData[], data: RowsChangeData<GridRowData>) => {
+    (newRows: GridRowData[], data: RowsChangeData<GridRowData, SummaryRow>) => {
       // newRows are in sorted order; map back into the canonical rowData by rowId.
       const byId = new Map(newRows.map((r) => [r.rowId, r]));
       const columnId = data.column.key;
@@ -732,66 +854,124 @@ export function WorkbookGrid({
       </div>
 
       {showFilters && columns.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
-          {columns.map((col) => {
-            const value = columnFilters[col.columnId] ?? "";
-            const set = (v: string) =>
-              setColumnFilters((f) => ({ ...f, [col.columnId]: v }));
+        <div className="flex flex-col gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+          {(() => {
             const ctrlClass =
               "rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]";
-            if (col.fieldType === "select") {
-              return (
-                <select
-                  key={col.columnId}
-                  value={value}
-                  onChange={(e) => set(e.target.value)}
-                  aria-label={`Filter ${col.name}`}
-                  className={ctrlClass}
-                >
-                  <option value="">{col.name}: any</option>
-                  {(col.config?.options ?? []).map((o) => (
-                    <option key={o.key} value={o.key}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              );
-            }
-            if (col.fieldType === "checkbox") {
-              return (
-                <select
-                  key={col.columnId}
-                  value={value}
-                  onChange={(e) => set(e.target.value)}
-                  aria-label={`Filter ${col.name}`}
-                  className={ctrlClass}
-                >
-                  <option value="">{col.name}: any</option>
-                  <option value="true">Checked</option>
-                  <option value="false">Unchecked</option>
-                </select>
-              );
-            }
+            const update = (id: string, patch: Partial<FilterCondition>) =>
+              setFilterGroup((g) => ({
+                ...g,
+                conditions: g.conditions.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+              }));
+            const colOf = (id: string) => columns.find((c) => c.columnId === id) ?? columns[0]!;
             return (
-              <input
-                key={col.columnId}
-                value={value}
-                onChange={(e) => set(e.target.value)}
-                placeholder={col.name}
-                aria-label={`Filter ${col.name}`}
-                className={ctrlClass}
-              />
+              <>
+                {filterGroup.conditions.map((cond, i) => {
+                  const col = colOf(cond.columnId);
+                  const ops = opsForField(col.fieldType);
+                  return (
+                    <div key={cond.id} className="flex flex-wrap items-center gap-2">
+                      <span className="w-12 text-sm text-[var(--dpf-muted)]">
+                        {i === 0 ? "Where" : (
+                          <select
+                            value={filterGroup.combinator}
+                            onChange={(e) =>
+                              setFilterGroup((g) => ({ ...g, combinator: e.target.value as FilterGroup["combinator"] }))
+                            }
+                            aria-label="Combine conditions"
+                            className={ctrlClass}
+                            disabled={i > 1}
+                          >
+                            <option value="and">and</option>
+                            <option value="or">or</option>
+                          </select>
+                        )}
+                      </span>
+                      <select
+                        value={cond.columnId}
+                        onChange={(e) => {
+                          const next = colOf(e.target.value);
+                          update(cond.id, { columnId: e.target.value, op: opsForField(next.fieldType)[0]! });
+                        }}
+                        aria-label="Filter column"
+                        className={ctrlClass}
+                      >
+                        {columns.map((c) => (
+                          <option key={c.columnId} value={c.columnId}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={cond.op}
+                        onChange={(e) => update(cond.id, { op: e.target.value as FilterOp })}
+                        aria-label="Filter operator"
+                        className={ctrlClass}
+                      >
+                        {ops.map((op) => (
+                          <option key={op} value={op}>
+                            {FILTER_OP_LABELS[op]}
+                          </option>
+                        ))}
+                      </select>
+                      {!isUnaryOp(cond.op) && (
+                        <input
+                          value={cond.value}
+                          onChange={(e) => update(cond.id, { value: e.target.value })}
+                          placeholder="value"
+                          aria-label="Filter value"
+                          className={ctrlClass}
+                        />
+                      )}
+                      {isRangeOp(cond.op) && (
+                        <input
+                          value={cond.value2 ?? ""}
+                          onChange={(e) => update(cond.id, { value2: e.target.value })}
+                          placeholder="and"
+                          aria-label="Filter upper value"
+                          className={ctrlClass}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFilterGroup((g) => ({
+                            ...g,
+                            conditions: g.conditions.filter((c) => c.id !== cond.id),
+                          }))
+                        }
+                        aria-label="Remove condition"
+                        className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const col = columns[0]!;
+                    setFilterGroup((g) => ({
+                      ...g,
+                      conditions: [
+                        ...g.conditions,
+                        {
+                          id: `fc-${(fcIdRef.current += 1)}`,
+                          columnId: col.columnId,
+                          op: opsForField(col.fieldType)[0]!,
+                          value: "",
+                        },
+                      ],
+                    }));
+                  }}
+                  className="w-fit rounded-md border border-[var(--dpf-border)] px-3 py-1 text-sm text-[var(--dpf-text)]"
+                >
+                  + Add condition
+                </button>
+              </>
             );
-          })}
-          {activeFilterCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setColumnFilters({})}
-              className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-            >
-              Clear
-            </button>
-          )}
+          })()}
         </div>
       )}
 
@@ -1068,6 +1248,14 @@ export function WorkbookGrid({
                 </option>
               ))}
             </select>
+            <label className="inline-flex items-center gap-1 text-sm text-[var(--dpf-text)]">
+              <input
+                type="checkbox"
+                checked={showFooter}
+                onChange={() => setShowFooter((v) => !v)}
+              />
+              Summary bar
+            </label>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-sm text-[var(--dpf-muted)]">Fields</span>
@@ -1158,6 +1346,7 @@ export function WorkbookGrid({
                 return color ? rowColorClass(color) : undefined;
               }}
               rowHeight={rowHeightPx(rowHeight)}
+              bottomSummaryRows={bottomSummaryRows}
               defaultColumnOptions={{ resizable: true, sortable: true }}
             />
           ) : (
@@ -1177,6 +1366,7 @@ export function WorkbookGrid({
                 return color ? rowColorClass(color) : undefined;
               }}
               rowHeight={rowHeightPx(rowHeight)}
+              bottomSummaryRows={bottomSummaryRows}
               defaultColumnOptions={{ resizable: true, sortable: true }}
             />
           )}

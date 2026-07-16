@@ -29,6 +29,12 @@ const OFFERED_TYPES: { value: FieldType; label: string }[] = [
   { value: "attachment", label: "Attachment" },
   { value: "link", label: "Link to records" },
   { value: "rollup", label: "Rollup (count links)" },
+  { value: "rating", label: "Rating (stars)" },
+  { value: "percent", label: "Percent" },
+  { value: "currency", label: "Currency" },
+  { value: "progress", label: "Progress bar" },
+  { value: "duration", label: "Duration" },
+  { value: "phone", label: "Phone" },
 ];
 
 const RESULT_TYPES: { value: FieldType; label: string }[] = [

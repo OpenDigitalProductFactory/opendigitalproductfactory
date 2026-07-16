@@ -230,3 +230,71 @@
 .dpf-gallery-card.dpf-cf-blue {
   border-inline-start: 3px solid var(--dpf-accent);
 }
+
+/* Footer summary bar — a per-column aggregate picker + computed value. */
+.dpf-grid-footer-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  inline-size: 100%;
+  block-size: 100%;
+  padding-inline: 0.4rem;
+}
+.dpf-grid-footer-select {
+  flex: none;
+  max-inline-size: 6rem;
+  border: none;
+  background: transparent;
+  color: var(--dpf-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.dpf-grid-footer-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--dpf-text);
+}
+
+/* Rating field — filled/empty stars. */
+.dpf-grid-rating {
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.dpf-grid-rating-on {
+  color: var(--dpf-warning, #e0a400);
+}
+.dpf-grid-rating-off {
+  color: var(--dpf-border);
+}
+
+/* Progress field — a small bar + percent label. */
+.dpf-grid-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  inline-size: 100%;
+}
+.dpf-grid-progress-track {
+  flex: 1 1 auto;
+  block-size: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--dpf-surface-2);
+  border: 1px solid var(--dpf-border);
+  overflow: hidden;
+}
+.dpf-grid-progress-fill {
+  display: block;
+  block-size: 100%;
+  min-inline-size: 2px;
+  background-color: var(--dpf-accent);
+}
+.dpf-grid-progress-label {
+  flex: none;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--dpf-muted);
+}

@@ -9,6 +9,12 @@
 import type { ConditionalRule, CfOperator, CfColor } from "./grid-conditional-format";
 import { CF_OPERATORS, CF_COLORS } from "./grid-conditional-format";
 import { isRowHeight, type RowHeight } from "./grid-view-options";
+import {
+  FILTER_OP_LABELS,
+  type FilterGroup,
+  type FilterCondition,
+  type FilterOp,
+} from "./grid-filter-builder";
 
 export interface SortState {
   columnKey: string;
@@ -17,7 +23,10 @@ export interface SortState {
 
 export interface GridViewState {
   filterQuery: string;
-  columnFilters: Record<string, string>;
+  /** Structured filter (typed operators + AND/OR). */
+  filterGroup: FilterGroup;
+  /** @deprecated superseded by filterGroup; still parsed for old saved views. */
+  columnFilters?: Record<string, string>;
   sort: SortState[];
   cfRules: ConditionalRule[];
   showProvenance: boolean;
@@ -31,6 +40,10 @@ export interface GridViewState {
   frozenCount: number;
   /** Row density preset. */
   rowHeight: RowHeight;
+  /** Per-column footer aggregate (columnId → FooterAgg name). */
+  footerAgg: Record<string, string>;
+  /** Whether the per-column footer summary bar is shown. */
+  showFooter: boolean;
 }
 
 export function viewStorageKey(tableId: string): string {
@@ -93,6 +106,33 @@ function parseCfRules(raw: unknown): ConditionalRule[] {
   return out;
 }
 
+const FILTER_OPS = Object.keys(FILTER_OP_LABELS) as FilterOp[];
+
+function parseFilterGroup(raw: unknown): FilterGroup | undefined {
+  if (!isRecord(raw)) return undefined;
+  const combinator = raw.combinator === "or" ? "or" : "and";
+  if (!Array.isArray(raw.conditions)) return undefined;
+  const conditions: FilterCondition[] = [];
+  for (const c of raw.conditions) {
+    if (
+      isRecord(c) &&
+      typeof c.id === "string" &&
+      typeof c.columnId === "string" &&
+      FILTER_OPS.includes(c.op as FilterOp) &&
+      typeof c.value === "string"
+    ) {
+      conditions.push({
+        id: c.id,
+        columnId: c.columnId,
+        op: c.op as FilterOp,
+        value: c.value,
+        ...(typeof c.value2 === "string" ? { value2: c.value2 } : {}),
+      });
+    }
+  }
+  return { combinator, conditions };
+}
+
 /**
  * Defensively parse a stored view payload. Each field is validated independently;
  * anything malformed is dropped. Returns null only when the JSON itself is bad.
@@ -108,6 +148,8 @@ export function parseViewState(raw: string | null | undefined): Partial<GridView
   if (!isRecord(data)) return null;
   const out: Partial<GridViewState> = {};
   if (typeof data.filterQuery === "string") out.filterQuery = data.filterQuery;
+  const fg = parseFilterGroup(data.filterGroup);
+  if (fg) out.filterGroup = fg;
   if (isRecord(data.columnFilters)) out.columnFilters = parseColumnFilters(data.columnFilters);
   if (Array.isArray(data.sort)) out.sort = parseSort(data.sort);
   if (Array.isArray(data.cfRules)) out.cfRules = parseCfRules(data.cfRules);
@@ -119,5 +161,7 @@ export function parseViewState(raw: string | null | undefined): Partial<GridView
     out.frozenCount = data.frozenCount;
   }
   if (isRowHeight(data.rowHeight)) out.rowHeight = data.rowHeight;
+  if (isRecord(data.footerAgg)) out.footerAgg = parseColumnFilters(data.footerAgg);
+  if (typeof data.showFooter === "boolean") out.showFooter = data.showFooter;
   return out;
 }

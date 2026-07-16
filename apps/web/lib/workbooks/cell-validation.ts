@@ -101,7 +101,8 @@ export function validateCell(
   switch (column.fieldType) {
     case "text":
     case "url":
-    case "email": {
+    case "email":
+    case "phone": {
       if (typeof value !== "string") {
         return { ok: false, error: `Expected text for ${column.name}` };
       }
@@ -165,7 +166,14 @@ export function validateCell(
       return { ok: true, storage };
     }
 
-    case "number": {
+    case "number":
+    // Numeric-backed display types: stored as a plain number, only the cell
+    // renderer differs (stars, %, currency, a progress bar, a duration).
+    case "currency":
+    case "percent":
+    case "progress":
+    case "rating":
+    case "duration": {
       const num = typeof value === "number" ? value : Number(value);
       if (typeof value === "boolean" || Number.isNaN(num)) {
         return {
