@@ -8,7 +8,10 @@ import {
 
 const sample: GridViewState = {
   filterQuery: "open",
-  columnFilters: { status: "active" },
+  filterGroup: {
+    combinator: "and",
+    conditions: [{ id: "f1", columnId: "status", op: "equals", value: "open" }],
+  },
   sort: [{ columnKey: "name", direction: "ASC" }],
   cfRules: [{ id: "r1", columnId: "status", operator: "eq", value: "overdue", color: "red" }],
   showProvenance: true,
@@ -85,6 +88,24 @@ describe("parseViewState — defensive", () => {
     const parsed = parseViewState(JSON.stringify({ columnOrder: "a,b", groupBy: {} }));
     expect(parsed!.columnOrder).toBeUndefined();
     expect(parsed!.groupBy).toBeUndefined();
+  });
+
+  it("parses a filterGroup, dropping malformed conditions", () => {
+    const parsed = parseViewState(
+      JSON.stringify({
+        filterGroup: {
+          combinator: "or",
+          conditions: [
+            { id: "a", columnId: "amount", op: "gt", value: "10" },
+            { id: "b", columnId: "x", op: "bogus_op", value: "y" },
+            { id: "c", columnId: "name", op: "between", value: "1", value2: "9" },
+          ],
+        },
+      }),
+    );
+    expect(parsed!.filterGroup!.combinator).toBe("or");
+    expect(parsed!.filterGroup!.conditions.map((c) => c.id)).toEqual(["a", "c"]);
+    expect(parsed!.filterGroup!.conditions[1]!.value2).toBe("9");
   });
 
   it("parses hiddenColumns, a finite frozenCount, and a valid rowHeight", () => {
