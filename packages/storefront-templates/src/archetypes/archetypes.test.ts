@@ -128,6 +128,55 @@ describe("archetype catalog", () => {
     expect(getCapabilityApplicability(normalized, "customer-estate")).toBe("not-applicable");
   });
 
+  it("activates medical and dental practices as strictly isolated care practices (BI-HEALTHCARE-002)", () => {
+    const carePractices = ["medical-practice", "dental-practice"].map((id) =>
+      ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === id),
+    );
+
+    for (const practice of carePractices) {
+      expect(practice, "both care-practice leaves should be registered").toBeDefined();
+      expect(practice?.category).toBe("healthcare-wellness");
+      expect(practice?.ctaType).toBe("booking");
+      expect(practice?.schedulingDefaults).toBeDefined();
+      expect(practice?.activationProfile?.axes).toMatchObject({
+        form: "services",
+        delivery: "hybrid",
+        primaryConsumer: "patient-and-payer",
+        consumptionChannel: "multi-channel",
+        commercialModel: "encounter-based",
+        provisioning: "episode-of-care",
+        platform: "no",
+      });
+      expect(practice?.activationProfile?.customerGraph).toBe("separate-customer-projection");
+      expect(practice?.activationProfile?.estateSeparation).toBe("strict");
+      expect(practice?.vocabulary).toMatchObject({
+        stakeholderLabel: "Patients",
+        inboxLabel: "Patient Appointments",
+      });
+      expect(practice?.vocabulary?.teamLabel).toMatch(/Team$/);
+      expect(practice?.vocabulary?.agentName).toMatch(/Front Desk Coordinator$/);
+
+      const normalized = readActivationProfile(practice?.activationProfile);
+      const patientAccounts = normalized?.capabilityActivations.find(
+        (activation) => activation.capabilityKey === "customer-accounts",
+      );
+      expect(patientAccounts).toMatchObject({
+        applicability: "required",
+        ownershipScopes: ["customer-account"],
+        transactionContexts: ["appointment", "episode-of-care"],
+        isolation: "strict-customer-scope",
+      });
+      const billing = normalized?.capabilityActivations.find(
+        (activation) => activation.capabilityKey === "billing-readiness",
+      );
+      expect(billing).toMatchObject({
+        applicability: "required",
+        transactionContexts: ["appointment", "episode-of-care"],
+        isolation: "strict-customer-scope",
+      });
+    }
+  });
+
   it("includes a software-platform archetype for DPF-style product sellers", () => {
     const softwarePlatform = ALL_ARCHETYPES.find((a) => a.archetypeId === "software-platform");
     expect(softwarePlatform).toBeDefined();

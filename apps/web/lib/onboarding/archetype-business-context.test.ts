@@ -29,8 +29,23 @@ describe("resolveBusinessProfile", () => {
     // Override specialises missionTheme + businessModel...
     expect(dental.missionTheme).not.toBe(industry.missionTheme);
     expect(dental.missionTheme.toLowerCase()).toContain("smile");
-    // ...but inherits the non-overridden fields from the industry profile.
-    expect(dental.whoWeServe).toBe(industry.whoWeServe);
+    // ...and now specializes the patient/care-team stance while continuing to
+    // inherit fields the leaf does not override.
+    expect(dental.whoWeServe).not.toBe(industry.whoWeServe);
+    expect(dental.whoWeServe).toMatch(/dentist|hygienist/i);
+    expect(dental.supplyChain).toBe(industry.supplyChain);
+  });
+
+  it("specializes medical-practice onboarding around ambulatory care", () => {
+    const medical = resolveBusinessProfile({
+      archetypeId: "medical-practice",
+      industry: "healthcare-wellness",
+    });
+
+    expect(medical.missionTheme).toMatch(/patient|care/i);
+    expect(medical.businessModel).toMatch(/appointment|encounter/i);
+    expect(medical.whoWeServe).toMatch(/patient|family/i);
+    expect(medical.howWeDecide).toMatch(/clinical|safety/i);
   });
 
   it("ignores an unknown archetypeId and uses the industry profile", () => {

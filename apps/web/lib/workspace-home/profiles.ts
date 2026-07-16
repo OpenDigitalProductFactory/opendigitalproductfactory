@@ -71,6 +71,31 @@ const configurationItem = {
 
 export const DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS: WorkspaceHomeContribution[] = [
   profile({
+    id: "home-care-practice",
+    label: "Care practice command home",
+    description:
+      "Patient arrival, care-team schedule, communication, and clinical handoff attention for small medical and dental practices.",
+    primaryOperatingQuestion: "which patient, appointment, or care-team handoff needs attention now?",
+    topConcerns: [
+      "patients waiting or not yet checked in",
+      "unconfirmed or changed appointments",
+      "clinical handoffs awaiting acknowledgement",
+      "patient communication failures",
+      "rooms, practitioners, or hygienists not ready",
+    ],
+    semanticArchetypeIds: ["medical-practice", "dental-practice"],
+    archetypeCategories: [],
+    primitives: ["appointment-schedule", "case-board", "communication-exceptions", "handoff-queue"],
+    requiredCanonicalData: ["customer-account", "work-item", "calendar-event"],
+    requiredSignals: ["scheduled-work", "urgent-exception", "communication-failed", "coworker-handoff"],
+    components: [
+      { key: "today-schedule", slotId: "today-now", primitiveKey: "appointment-schedule", title: "Patient appointments and care-team schedule", dataRefs: [calendarEvent, scheduledWork] },
+      { key: "patient-queue", slotId: "exceptions-needs-review", primitiveKey: "case-board", title: "Patients waiting or needing front-desk review", dataRefs: [customerAccount, workItem, urgentException] },
+      { key: "notification-status", slotId: "exceptions-needs-review", primitiveKey: "communication-exceptions", title: "Appointment and patient communication exceptions", dataRefs: [failedCommunication] },
+      { key: "coworker-handoffs", slotId: "coworker-handoffs", primitiveKey: "handoff-queue", title: "Clinical and front-desk handoffs", dataRefs: [coworkerHandoff] },
+    ],
+  }),
+  profile({
     id: "home-trades-maintenance",
     label: "Field service command home",
     description:

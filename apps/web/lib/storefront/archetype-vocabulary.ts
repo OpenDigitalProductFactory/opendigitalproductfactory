@@ -196,6 +196,7 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
   // Healthcare
   "veterinary-clinic": ["Consultations", "Vaccinations", "Surgery", "Dental"],
   "dental-practice": ["Check-ups", "Treatments", "Cosmetic"],
+  "medical-practice": ["New Patients", "Routine Care", "Preventive Care", "Follow-up", "Telehealth"],
   "physiotherapy": ["Assessment", "Treatment", "Rehabilitation"],
   "counselling-therapy": ["Individual", "Couples", "Group"],
   "optician": ["Eye Tests", "Glasses", "Contact Lenses"],

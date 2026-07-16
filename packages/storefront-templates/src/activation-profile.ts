@@ -24,12 +24,15 @@ import type {
   OperatingModelAxes,
   OperatingModelDelivery,
   OperatingModelForm,
+  OwnershipScope,
   PartnerProgramProfile,
   PlatformEcosystem,
   PortfolioDecomposition,
   PortfolioScope,
   PrimaryConsumer,
   ProvisioningModel,
+  TransactionContext,
+  CapabilityIsolation,
 } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -115,6 +118,28 @@ const APPLICABILITY_VALUES = new Set<CapabilityApplicability>([
   "optional",
   "hidden",
   "not-applicable",
+]);
+const OWNERSHIP_SCOPE_VALUES = new Set<OwnershipScope>([
+  "organization",
+  "customer-account",
+  "customer-site",
+  "configuration-item",
+  "edge-node",
+  "partner-account",
+]);
+const TRANSACTION_CONTEXT_VALUES = new Set<TransactionContext>([
+  "service-agreement",
+  "engagement",
+  "appointment",
+  "order",
+  "billing-period",
+  "episode-of-care",
+]);
+const ISOLATION_VALUES = new Set<CapabilityIsolation>([
+  "organization-scope",
+  "strict-customer-scope",
+  "shared",
+  "strict-partner-scope",
 ]);
 
 /**
@@ -240,9 +265,44 @@ function readCapabilityOverrides(raw: unknown): CapabilityOverride[] | null {
       return null;
     }
 
+    const ownershipScopes = item.ownershipScopes;
+    const transactionContexts = item.transactionContexts;
+    const isolation = item.isolation;
+    const surfaces = item.surfaces;
+    if (
+      (ownershipScopes !== undefined &&
+        (!Array.isArray(ownershipScopes) ||
+          ownershipScopes.some(
+            (scope) => typeof scope !== "string" || !OWNERSHIP_SCOPE_VALUES.has(scope as OwnershipScope),
+          ))) ||
+      (transactionContexts !== undefined &&
+        (!Array.isArray(transactionContexts) ||
+          transactionContexts.some(
+            (context) =>
+              typeof context !== "string" ||
+              !TRANSACTION_CONTEXT_VALUES.has(context as TransactionContext),
+          ))) ||
+      (isolation !== undefined &&
+        (typeof isolation !== "string" ||
+          !ISOLATION_VALUES.has(isolation as CapabilityIsolation))) ||
+      (surfaces !== undefined && !isStringArray(surfaces))
+    ) {
+      return null;
+    }
+
     overrides.push({
       capabilityKey: item.capabilityKey,
       applicability: item.applicability as CapabilityApplicability,
+      ...(ownershipScopes !== undefined
+        ? { ownershipScopes: ownershipScopes as OwnershipScope[] }
+        : {}),
+      ...(transactionContexts !== undefined
+        ? { transactionContexts: transactionContexts as TransactionContext[] }
+        : {}),
+      ...(isolation !== undefined
+        ? { isolation: isolation as CapabilityIsolation }
+        : {}),
+      ...(surfaces !== undefined ? { surfaces } : {}),
       reason: item.reason,
     });
   }

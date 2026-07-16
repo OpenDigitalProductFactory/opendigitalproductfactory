@@ -17,6 +17,77 @@ const BOOKING_CONTACT_FIELDS = [
   { name: "notes", label: "Additional notes", type: "textarea" as const, required: false },
 ];
 
+const CARE_BOOKING_CONTACT_FIELDS = [
+  { name: "name", label: "Patient name", type: "text" as const, required: true },
+  { name: "email", label: "Email", type: "email" as const, required: true },
+  { name: "phone", label: "Phone", type: "tel" as const, required: true },
+];
+
+const CARE_PRACTICE_ACTIVATION: ArchetypeDefinition["activationProfile"] = {
+  profileType: "standard",
+  modules: ["service-operations", "billing-readiness", "lifecycle-signals", "integrations"],
+  billingReadinessMode: "prepared-not-prescribed",
+  customerGraph: "separate-customer-projection",
+  estateSeparation: "strict",
+  axes: {
+    form: "services",
+    delivery: "hybrid",
+    primaryConsumer: "patient-and-payer",
+    consumptionChannel: "multi-channel",
+    commercialModel: "encounter-based",
+    provisioning: "episode-of-care",
+    platform: "no",
+  },
+  portfolios: {
+    foundational: { scope: "standard" },
+    manufactureAndDeliver: {
+      scope: "primary",
+      it4itStages: ["request-to-fulfill", "detect-to-correct"],
+    },
+    forEmployees: { scope: "standard" },
+    productsAndServicesSold: { scope: "primary" },
+  },
+  capabilityOverrides: [
+    {
+      capabilityKey: "customer-accounts",
+      applicability: "required",
+      ownershipScopes: ["customer-account"],
+      transactionContexts: ["appointment", "episode-of-care"],
+      isolation: "strict-customer-scope",
+      surfaces: ["patients", "patient-portal", "appointments"],
+      reason: "Patient identity and care relationships require a strictly patient-scoped projection.",
+    },
+    {
+      capabilityKey: "billing-readiness",
+      applicability: "required",
+      ownershipScopes: ["customer-account"],
+      transactionContexts: ["appointment", "episode-of-care"],
+      isolation: "strict-customer-scope",
+      surfaces: ["finance", "patient-accounts", "payer-work"],
+      reason: "Patient, payer, and public-funding responsibility must remain linked to the care context.",
+    },
+    {
+      capabilityKey: "appointment-checkout",
+      applicability: "optional",
+      ownershipScopes: ["customer-account"],
+      transactionContexts: ["appointment"],
+      isolation: "strict-customer-scope",
+      surfaces: ["appointments", "patient-accounts"],
+      reason: "Patient collection may occur at an appointment but is not universal across funding models.",
+    },
+    {
+      capabilityKey: "point-of-sale",
+      applicability: "optional",
+      ownershipScopes: ["customer-account"],
+      transactionContexts: ["appointment"],
+      isolation: "strict-customer-scope",
+      surfaces: ["payments", "patient-accounts"],
+      reason: "Private or cost-share collection is optional and must remain patient scoped.",
+    },
+  ],
+  seededServiceCategories: ["patient-access", "care-delivery", "patient-accounts", "practice-operations"],
+};
+
 // Mobile / in-home healthcare sends a clinician to the patient rather than the
 // patient to a clinic. form=services + delivery=physical + onsite-plus-portal
 // (with episode-of-care provisioning) is what the forthcoming Field Dispatch
@@ -114,10 +185,62 @@ export const healthcareWellnessArchetypes: ArchetypeDefinition[] = [
       { type: "contact", title: "Find Us", sortOrder: 5 },
     ],
     formSchema: [
-      ...BOOKING_CONTACT_FIELDS,
+      ...CARE_BOOKING_CONTACT_FIELDS,
       { name: "patientType", label: "Patient type", type: "select" as const, required: true, options: ["New patient", "Existing patient"] },
+      { name: "visitReason", label: "Visit type", type: "select" as const, required: true, options: ["Routine check-up", "Hygiene visit", "Treatment follow-up", "Dental concern", "Emergency"] },
     ],
     schedulingDefaults: HEALTHCARE_SCHEDULING,
+    activationProfile: CARE_PRACTICE_ACTIVATION,
+    fieldDispatch: {
+      enabled: false,
+    },
+    vocabulary: {
+      portalLabel: "Dental Patient Portal",
+      stakeholderLabel: "Patients",
+      teamLabel: "Dental Team",
+      inboxLabel: "Patient Appointments",
+      agentName: "Dental Front Desk Coordinator",
+    },
+  },
+  {
+    archetypeId: "medical-practice",
+    name: "Medical Practice",
+    category: "healthcare-wellness",
+    ctaType: "booking",
+    tags: ["medical", "healthcare", "clinic", "doctor", "nurse", "appointment"],
+    itemTemplates: [
+      { name: "New Patient Visit", description: "Initial appointment to establish care", priceType: "quote", bookingDurationMinutes: 45 },
+      { name: "Routine Office Visit", description: "Scheduled visit with the care team", priceType: "quote", bookingDurationMinutes: 30 },
+      { name: "Preventive Care Visit", description: "Age-appropriate preventive care appointment", priceType: "quote", bookingDurationMinutes: 45 },
+      { name: "Follow-up Visit", description: "Follow-up on an existing care plan", priceType: "quote", bookingDurationMinutes: 20 },
+      { name: "Nurse Visit", description: "Short appointment with a member of the nursing team", priceType: "quote", bookingDurationMinutes: 20 },
+      { name: "Telehealth Visit", description: "Remote appointment where clinically appropriate", priceType: "quote", bookingDurationMinutes: 30 },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Appointments & Services", sortOrder: 1 },
+      { type: "about", title: "About the Practice", sortOrder: 2 },
+      { type: "team", title: "Our Care Team", sortOrder: 3 },
+      { type: "contact", title: "Contact & Location", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CARE_BOOKING_CONTACT_FIELDS,
+      { name: "patientType", label: "Patient type", type: "select" as const, required: true, options: ["New patient", "Existing patient"] },
+      { name: "visitType", label: "Visit type", type: "select" as const, required: true, options: ["Routine visit", "Preventive care", "Follow-up", "Nurse visit", "Telehealth", "Other"] },
+      { name: "preferredPractitioner", label: "Preferred care team member (optional)", type: "text" as const, required: false },
+    ],
+    schedulingDefaults: HEALTHCARE_SCHEDULING,
+    activationProfile: CARE_PRACTICE_ACTIVATION,
+    fieldDispatch: {
+      enabled: false,
+    },
+    vocabulary: {
+      portalLabel: "Medical Patient Portal",
+      stakeholderLabel: "Patients",
+      teamLabel: "Medical Care Team",
+      inboxLabel: "Patient Appointments",
+      agentName: "Medical Front Desk Coordinator",
+    },
   },
   {
     archetypeId: "physiotherapy",

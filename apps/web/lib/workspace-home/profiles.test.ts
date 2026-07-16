@@ -71,4 +71,23 @@ describe("default workspace home profiles", () => {
       "client decisions awaiting executive input",
     );
   });
+
+  it("uses an exact care-practice home for medical and dental offices", () => {
+    for (const archetypeId of ["medical-practice", "dental-practice"]) {
+      const resolution = resolveWorkspaceHomeContribution({
+        storefrontConfig: {
+          archetype: {
+            archetypeId,
+            category: "healthcare-wellness",
+            name: archetypeId === "medical-practice" ? "Medical Practice" : "Dental Practice",
+          },
+        },
+      });
+
+      expect(resolution.match).toBe("exact");
+      expect(resolution.contribution?.id).toBe("home-care-practice");
+      expect(resolution.contribution?.topConcerns).toContain("patients waiting or not yet checked in");
+      expect(resolution.contribution?.topConcerns).toContain("clinical handoffs awaiting acknowledgement");
+    }
+  });
 });

@@ -309,11 +309,25 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
 // fields you want to specialise; the rest inherit from the industry profile.
 
 const ARCHETYPE_PROFILES: Record<string, Partial<ArchetypeBusinessProfile>> = {
+  "medical-practice": {
+    missionTheme:
+      "provide safe, attentive medical care that helps every patient live healthier",
+    businessModel:
+      "Appointment- and encounter-based ambulatory care, with continuity across preventive, routine, and follow-up visits and a mix of patient, payer, or public funding.",
+    whoWeServe:
+      "We serve patients and families who rely on accessible, coordinated care over time. Each encounter belongs to a continuing care relationship, not an isolated transaction.",
+    howWeDecide:
+      "Clinical safety, patient consent, and professional standards come first. We coordinate across doctors, nurses, and front-desk staff, protect private health information, and escalate consequential or uncertain decisions to the responsible clinician.",
+  },
   "dental-practice": {
     missionTheme:
       "keep our patients' smiles healthy with gentle, expert dental care they trust",
     businessModel:
       "Recurring check-ups plus planned treatment; long-term patient relationships and gentle, anxiety-aware care drive retention and referrals.",
+    whoWeServe:
+      "We serve patients and families across routine prevention, hygiene, treatment, and urgent dental needs, coordinating dentists, hygienists, assistants, and the front desk around a continuing oral-health relationship.",
+    howWeDecide:
+      "Patient safety, informed consent, clinical quality, and anxiety-aware care come first. We protect private health information and keep treatment decisions with the responsible licensed dental professional.",
   },
   restaurant: {
     missionTheme:
