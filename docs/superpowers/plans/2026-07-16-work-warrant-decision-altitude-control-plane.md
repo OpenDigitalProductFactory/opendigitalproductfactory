@@ -75,6 +75,27 @@ never trust corpus it doesn't have.
 4. **BI-EE211BFA** — WWWD org stance parameterizes evidence/reporting/decomposition
    AC-groups by industry + jurisdiction (extends the compliance-archetype pattern).
 
+## Update — `deriveWarrant` mapping core landed (Phase 2 partial)
+
+`apps/web/lib/decision/work-warrant.ts`: the pure `deriveWarrant(verdict, blastRadius?, context?)`
+→ `WorkWarrant` mapping — where the decision-end (altitude) and diff-end (blast radius)
+meet. Design decisions baked in:
+
+- **Altitude base map:** WSID → autonomous-bs / economical / collapsed gates / minimal
+  evidence / one-line; WWWD → governed-interactive / standard / business; WWMD →
+  governed-interactive / strong / full gates / architectural / ledger.
+- **Blast radius only ESCALATES (monotonic).** A warrant is safe to compute from
+  altitude alone; blast radius (a-priori from code-graph+EA, a-posteriori from the diff
+  — BI-22250BA2) can raise lane/evidence but never relax them. A small WSID change with
+  a large blast radius is pulled off the autonomous lane + flagged for confirm; a tiny
+  blast radius never softens a WWMD warrant. This is the "risk = what could break"
+  override, and it reconciles with EP-QUALITY-RIGHTSIZING (diff-end sensitivity).
+- **Context overlay:** a WWWD industry/jurisdiction obligation raises evidence to
+  `compliance` and carries `contextScope` for the evidence collector + reporter
+  (BI-EE211BFA).
+- `budget.tokenCeiling` is `null` (advisory) until metering lands (BI-0A6B8B38); the
+  `effortLevel`/`gateProfile`/`modelTier` knobs deliver the immediate token win.
+
 ## Reuse (migration, not green-field)
 
 Right-sizing matrix (`build-process-matrix.ts`), decision tables
