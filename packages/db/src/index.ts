@@ -5,6 +5,7 @@ export { prisma } from "./client";
 export { Prisma } from "../generated/client/client";
 export type { PrismaClient } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
+export * from "./healthcare-patient-authority";
 
 // Qdrant vector database
 export {
