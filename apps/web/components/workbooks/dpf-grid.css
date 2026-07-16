@@ -298,3 +298,59 @@
   font-variant-numeric: tabular-nums;
   color: var(--dpf-muted);
 }
+
+/* Expand-row affordance in the grid's leading action cell. */
+.dpf-grid-expand {
+  border: none;
+  background: transparent;
+  color: var(--dpf-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.dpf-grid-expand:hover {
+  color: var(--dpf-text);
+}
+
+/* Record detail modal — expand a row into a full-record editor. */
+.dpf-record-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: color-mix(in srgb, #000 45%, transparent);
+}
+.dpf-record-modal {
+  inline-size: min(40rem, 100%);
+  max-block-size: 85vh;
+  overflow: auto;
+  border-radius: 0.75rem;
+  border: 1px solid var(--dpf-border);
+  background-color: var(--dpf-surface-1);
+  box-shadow: 0 10px 40px color-mix(in srgb, #000 30%, transparent);
+}
+.dpf-record-modal-header {
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-block-end: 1px solid var(--dpf-border);
+  background-color: var(--dpf-surface-2);
+}
+.dpf-record-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+.dpf-record-modal-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) 1fr;
+  gap: 0.75rem;
+  align-items: center;
+}
