@@ -95,6 +95,13 @@ import {
   groupRowsByColumn,
   groupKeys,
 } from "./grid-reorder-group";
+import {
+  visibleColumns as computeVisibleColumns,
+  clampFrozenCount,
+  rowHeightPx,
+  ROW_HEIGHTS,
+  type RowHeight,
+} from "./grid-view-options";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -118,6 +125,7 @@ function buildColumn(
   col: ColumnDefinition,
   canEdit: boolean,
   showProvenance: boolean,
+  frozen: boolean,
 ): Column<GridRowData> {
   const options = col.config?.options ?? [];
   const label = col.required ? `${col.name} *` : col.name;
@@ -129,6 +137,8 @@ function buildColumn(
     sortable: true,
     // Drag the header to reorder columns (onColumnsReorder on the grid).
     draggable: true,
+    // Pinned: the leftmost N columns stay put on horizontal scroll.
+    frozen,
     width: col.width,
     minWidth: 80,
     // Progressive disclosure (Dale review): provenance is hidden until the user
@@ -283,6 +293,11 @@ export function WorkbookGrid({
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [groupBy, setGroupBy] = useState<string[]>([]);
   const [showGroup, setShowGroup] = useState(false);
+  // Table ergonomics: hidden fields, pinned leftmost columns, row density.
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [frozenCount, setFrozenCount] = useState(0);
+  const [rowHeight, setRowHeight] = useState<RowHeight>("medium");
+  const [showColumns, setShowColumns] = useState(false);
   // Which groups the user has collapsed (session-scoped); everything else is
   // expanded by default so the grouped grid reads like Smartsheet on open.
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
@@ -305,6 +320,9 @@ export function WorkbookGrid({
         if (parsed.showProvenance !== undefined) setShowProvenance(parsed.showProvenance);
         if (parsed.columnOrder) setColumnOrder(parsed.columnOrder);
         if (parsed.groupBy) setGroupBy(parsed.groupBy);
+        if (parsed.hiddenColumns) setHiddenColumns(parsed.hiddenColumns);
+        if (parsed.frozenCount !== undefined) setFrozenCount(parsed.frozenCount);
+        if (parsed.rowHeight) setRowHeight(parsed.rowHeight);
       }
     } catch {
       // ignore unreadable storage
@@ -329,12 +347,15 @@ export function WorkbookGrid({
           showProvenance,
           columnOrder,
           groupBy,
+          hiddenColumns,
+          frozenCount,
+          rowHeight,
         }),
       );
     } catch {
       // ignore quota / unavailable storage
     }
-  }, [tableId, filterQuery, columnFilters, sortColumns, cfRules, showProvenance, columnOrder, groupBy]);
+  }, [tableId, filterQuery, columnFilters, sortColumns, cfRules, showProvenance, columnOrder, groupBy, hiddenColumns, frozenCount, rowHeight]);
 
   // Columns in the user's saved drag order; new columns append, stale ids drop.
   const orderedColumns = useMemo(
@@ -342,10 +363,22 @@ export function WorkbookGrid({
     [columns, columnOrder],
   );
 
+  // Visible = ordered minus hidden. This is the set the grid, gallery, and CSV
+  // export all render, so hiding a field hides it everywhere the view is shown.
+  const visibleCols = useMemo(
+    () => computeVisibleColumns(orderedColumns, hiddenColumns),
+    [orderedColumns, hiddenColumns],
+  );
+
+  // Pin the leftmost N visible columns (clamped to leave one scrollable).
+  const effectiveFrozen = clampFrozenCount(frozenCount, visibleCols.length);
+
   const gridColumns = useMemo<Column<GridRowData>[]>(() => {
-    const cols = orderedColumns.map((c) => buildColumn(c, capabilities.canEditCell, showProvenance));
+    const cols = visibleCols.map((c, i) =>
+      buildColumn(c, capabilities.canEditCell, showProvenance, i < effectiveFrozen),
+    );
     return capabilities.canDeleteRow ? [SelectColumn, ...cols] : cols;
-  }, [orderedColumns, capabilities, showProvenance]);
+  }, [visibleCols, capabilities, showProvenance, effectiveFrozen]);
 
   const onColumnsReorder = useCallback(
     (sourceKey: string, targetKey: string) => {
@@ -534,7 +567,7 @@ export function WorkbookGrid({
 
   const onExportCsv = useCallback(() => {
     if (typeof document === "undefined") return;
-    const csv = rowsToCsv(columns, sortedRows);
+    const csv = rowsToCsv(visibleCols, sortedRows);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -651,6 +684,16 @@ export function WorkbookGrid({
         >
           {showGroup ? "Hide grouping" : "Group"}
           {groupColumnId ? ` (1)` : ""}
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowColumns((v) => !v)}
+          aria-pressed={showColumns}
+          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          title="Hide fields, pin columns, and set row height"
+        >
+          {showColumns ? "Hide options" : "Columns"}
+          {hiddenColumns.length > 0 ? ` (${hiddenColumns.length} hidden)` : ""}
         </button>
         <button
           type="button"
@@ -992,6 +1035,72 @@ export function WorkbookGrid({
         </div>
       )}
 
+      {showColumns && columns.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-[var(--dpf-muted)]">Row height</span>
+            <div className="inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)] text-sm">
+              {(Object.keys(ROW_HEIGHTS) as RowHeight[]).map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => setRowHeight(h)}
+                  className={
+                    rowHeight === h
+                      ? "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium capitalize text-[var(--dpf-text)]"
+                      : "px-2 py-1 capitalize text-[var(--dpf-muted)]"
+                  }
+                >
+                  {h}
+                </button>
+              ))}
+            </div>
+            <span className="text-sm text-[var(--dpf-muted)]">Freeze first</span>
+            <select
+              value={effectiveFrozen}
+              onChange={(e) => setFrozenCount(Number(e.target.value))}
+              aria-label="Freeze first N columns"
+              className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]"
+            >
+              {Array.from({ length: Math.max(1, visibleCols.length) }, (_, i) => i).map((n) => (
+                <option key={n} value={n}>
+                  {n === 0 ? "no columns" : `${n} column${n === 1 ? "" : "s"}`}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-sm text-[var(--dpf-muted)]">Fields</span>
+            {orderedColumns.map((col) => {
+              const hidden = hiddenColumns.includes(col.columnId);
+              return (
+                <label key={col.columnId} className="inline-flex items-center gap-1 text-sm text-[var(--dpf-text)]">
+                  <input
+                    type="checkbox"
+                    checked={!hidden}
+                    onChange={() =>
+                      setHiddenColumns((prev) =>
+                        hidden ? prev.filter((id) => id !== col.columnId) : [...prev, col.columnId],
+                      )
+                    }
+                  />
+                  {col.name}
+                </label>
+              );
+            })}
+            {hiddenColumns.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setHiddenColumns([])}
+                className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+              >
+                Show all
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {columns.length === 0 ? (
         <div className="rounded-md border border-dashed border-[var(--dpf-border)] p-8 text-center text-[var(--dpf-muted)]">
           This table has no columns yet. Add a column to start entering data.
@@ -1009,7 +1118,7 @@ export function WorkbookGrid({
                   }`}
                 >
                   <dl className="flex flex-col gap-1">
-                    {columns.map((col) => (
+                    {visibleCols.map((col) => (
                       <div key={col.columnId} className="flex justify-between gap-2 text-sm">
                         <dt className="shrink-0 text-[var(--dpf-muted)]">{col.name}</dt>
                         <dd className="truncate text-right text-[var(--dpf-text)]" title={cellSearchText(row[col.columnId] ?? null)}>
@@ -1048,6 +1157,7 @@ export function WorkbookGrid({
                 const color = rowColor(row, cfRules);
                 return color ? rowColorClass(color) : undefined;
               }}
+              rowHeight={rowHeightPx(rowHeight)}
               defaultColumnOptions={{ resizable: true, sortable: true }}
             />
           ) : (
@@ -1066,6 +1176,7 @@ export function WorkbookGrid({
                 const color = rowColor(row, cfRules);
                 return color ? rowColorClass(color) : undefined;
               }}
+              rowHeight={rowHeightPx(rowHeight)}
               defaultColumnOptions={{ resizable: true, sortable: true }}
             />
           )}

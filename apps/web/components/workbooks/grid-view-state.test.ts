@@ -14,6 +14,9 @@ const sample: GridViewState = {
   showProvenance: true,
   columnOrder: ["name", "status", "amount"],
   groupBy: ["status"],
+  hiddenColumns: ["amount"],
+  frozenCount: 2,
+  rowHeight: "tall",
 };
 
 describe("viewStorageKey", () => {
@@ -80,5 +83,22 @@ describe("parseViewState — defensive", () => {
     const parsed = parseViewState(JSON.stringify({ columnOrder: "a,b", groupBy: {} }));
     expect(parsed!.columnOrder).toBeUndefined();
     expect(parsed!.groupBy).toBeUndefined();
+  });
+
+  it("parses hiddenColumns, a finite frozenCount, and a valid rowHeight", () => {
+    const parsed = parseViewState(
+      JSON.stringify({ hiddenColumns: ["a", 1, "b"], frozenCount: 2, rowHeight: "short" }),
+    );
+    expect(parsed!.hiddenColumns).toEqual(["a", "b"]);
+    expect(parsed!.frozenCount).toBe(2);
+    expect(parsed!.rowHeight).toBe("short");
+  });
+
+  it("drops a non-finite frozenCount and an invalid rowHeight", () => {
+    const parsed = parseViewState(
+      JSON.stringify({ frozenCount: "two", rowHeight: "gigantic" }),
+    );
+    expect(parsed!.frozenCount).toBeUndefined();
+    expect(parsed!.rowHeight).toBeUndefined();
   });
 });

@@ -8,6 +8,7 @@
 
 import type { ConditionalRule, CfOperator, CfColor } from "./grid-conditional-format";
 import { CF_OPERATORS, CF_COLORS } from "./grid-conditional-format";
+import { isRowHeight, type RowHeight } from "./grid-view-options";
 
 export interface SortState {
   columnKey: string;
@@ -24,6 +25,12 @@ export interface GridViewState {
   columnOrder: string[];
   /** Column ids the grid is grouped by (in-grid collapsible groups). */
   groupBy: string[];
+  /** Column ids hidden from the grid/gallery/export. */
+  hiddenColumns: string[];
+  /** Number of leftmost visible columns pinned on horizontal scroll. */
+  frozenCount: number;
+  /** Row density preset. */
+  rowHeight: RowHeight;
 }
 
 export function viewStorageKey(tableId: string): string {
@@ -107,5 +114,10 @@ export function parseViewState(raw: string | null | undefined): Partial<GridView
   if (typeof data.showProvenance === "boolean") out.showProvenance = data.showProvenance;
   if (Array.isArray(data.columnOrder)) out.columnOrder = parseStringArray(data.columnOrder);
   if (Array.isArray(data.groupBy)) out.groupBy = parseStringArray(data.groupBy);
+  if (Array.isArray(data.hiddenColumns)) out.hiddenColumns = parseStringArray(data.hiddenColumns);
+  if (typeof data.frozenCount === "number" && Number.isFinite(data.frozenCount)) {
+    out.frozenCount = data.frozenCount;
+  }
+  if (isRowHeight(data.rowHeight)) out.rowHeight = data.rowHeight;
   return out;
 }

@@ -192,9 +192,20 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   is the pure, unit-tested `groupRowsByColumn`. **Multi-level grouping** is a documented follow-up —
   `groupBy` is already an array end-to-end and `TreeDataGrid` supports nesting; only the panel UI
   (add/remove ordered group levels) and expand-id handling for nested ids remain.
-- **Remaining (not built):** multi-level (nested) grouping UI; named/shareable views; calendar view
-  (fullcalendar — needs a date column); full pivots + richer charts; metrics/semantic layer;
-  operationalization lifecycle.
+- **Slice 18 — table ergonomics: hide fields + frozen columns + row height — SHIPPED.** A "Columns"
+  toolbar panel (progressive disclosure) with per-field show/hide checkboxes, a "Freeze first N
+  columns" selector (pins the leftmost visible columns on horizontal scroll via react-data-grid
+  `frozen`), and a short/medium/tall row-density toggle (`rowHeight`). Hidden fields drop out of the
+  grid, gallery, and CSV export together. All three persist in the per-tableId view state. Pure,
+  unit-tested `grid-view-options.ts` (`visibleColumns`/`clampFrozenCount`/`rowHeightPx`; freeze is
+  clamped to leave one column scrollable).
+- **Remaining (not built):** column footer summary bar (per-column aggregations); rich filter
+  operators + AND/OR builder; row-expand record modal; more field types (rating/percent/currency/
+  progress/duration/phone); multi-level (nested) grouping UI + inline group subtotals; named/
+  shareable server-side views; calendar view (fullcalendar — needs a date column); manual row
+  reordering; full pivots + richer charts; metrics/semantic layer; operationalization lifecycle.
+  **Debt:** `Grid.tsx` is over the 1000-LOC hard cap — decompose the toolbar/panels into
+  subcomponents before the next feature increment.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 
