@@ -59,6 +59,12 @@ const FIXED_NOW = new Date("2026-07-09T05:00:00.000Z");
 const EXPECTED_TS_KEY = "2026-07-09T05-00-00Z";
 const EXPECTED_NEXT_RUN = new Date("2026-07-10T03:00:00.000Z");
 
+// These tests exercise the SCRIPT lifecycle, not the capability preflight.
+// POSTGRES_BACKUP_SPEC.preflight would otherwise shell out to `docker exec`;
+// inject a no-op so the runs are deterministic. Preflight behaviour has its
+// own suite (extension-preflight.test.ts + the short-circuit test below).
+const NOOP_PREFLIGHT = async () => ({ ok: true as const });
+
 interface EngineCase {
   spec: BackupEngineSpec;
   /** stderr line the shell script emits on failure. */
@@ -149,6 +155,7 @@ describe.each(ENGINES)("runManagedBackup — $spec.target", ({ spec, failLine, e
       backupsRoot,
       composeProject: "dpf",
       prismaClient: prisma as never,
+      preflight: NOOP_PREFLIGHT,
       now: () => FIXED_NOW,
     });
 
@@ -246,6 +253,7 @@ describe.each(ENGINES)("runManagedBackup — $spec.target", ({ spec, failLine, e
       trigger: "manual",
       backupsRoot,
       prismaClient: prisma as never,
+      preflight: NOOP_PREFLIGHT,
       now: () => FIXED_NOW,
     });
 
@@ -294,11 +302,80 @@ describe.each(ENGINES)("runManagedBackup — $spec.target", ({ spec, failLine, e
       trigger: "manual",
       backupsRoot,
       prismaClient: prisma as never,
+      preflight: NOOP_PREFLIGHT,
       now: () => FIXED_NOW,
     });
 
     expect(result.status).toBe("failed");
     expect(result.error).toBe(spec.failureFallback);
+
+    await fs.rm(backupsRoot, { recursive: true, force: true });
+  });
+});
+
+describe("runManagedBackup — preflight short-circuit", () => {
+  it("fails with the preflight's actionable error and never spawns the script", async () => {
+    const backupsRoot = await makeBackupsRoot();
+    const prisma = makePrisma();
+    const remedy =
+      "The Postgres container is running an image that does not provide the extension the database requires: vector. …docker compose up -d --no-deps postgres";
+
+    const result = await runManagedBackup(POSTGRES_BACKUP_SPEC, {
+      trigger: "pre-upgrade-recovery",
+      backupsRoot,
+      prismaClient: prisma as never,
+      preflight: async () => ({ ok: false, error: remedy }),
+      now: () => FIXED_NOW,
+    });
+
+    expect(result).toEqual({
+      runId: "run-1",
+      status: "failed",
+      error: remedy,
+    });
+    // The whole point: the opaque pg_dump path is never reached.
+    expect(runScriptMock).not.toHaveBeenCalled();
+    // The failed BackupRun carries the actionable remedy, not a generic message.
+    expect(prisma.backupRun.update).toHaveBeenCalledWith({
+      where: { id: "run-1" },
+      data: expect.objectContaining({
+        status: "failed",
+        errorMessage: remedy,
+      }),
+    });
+    // Failure heartbeat + metric still recorded through the shared path.
+    expect(POSTGRES_BACKUP_SPEC.metrics.runsTotal.inc).toHaveBeenCalledWith({
+      status: "failed",
+      trigger: "pre-upgrade-recovery",
+    });
+
+    await fs.rm(backupsRoot, { recursive: true, force: true });
+  });
+
+  it("proceeds to the script when the preflight passes", async () => {
+    const backupsRoot = await makeBackupsRoot();
+    const targetDir = path.posix.join(backupsRoot, "postgres", EXPECTED_TS_KEY);
+    const prisma = makePrisma({ retainedRows: [{ sizeBytes: BigInt(1024) }] });
+
+    runScriptMock.mockImplementation(async () => {
+      await fs.mkdir(targetDir, { recursive: true });
+      await fs.writeFile(
+        path.posix.join(targetDir, "manifest.json"),
+        JSON.stringify({ sizeBytes: 1024, sha256: "abc", pgVersion: "16.3" }),
+      );
+      return { ok: true, stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    const result = await runManagedBackup(POSTGRES_BACKUP_SPEC, {
+      trigger: "manual",
+      backupsRoot,
+      prismaClient: prisma as never,
+      preflight: async () => ({ ok: true }),
+      now: () => FIXED_NOW,
+    });
+
+    expect(result.status).toBe("ok");
+    expect(runScriptMock).toHaveBeenCalledTimes(1);
 
     await fs.rm(backupsRoot, { recursive: true, force: true });
   });
@@ -351,6 +428,7 @@ describe("runManagedBackup — retention pruning", () => {
       backupsRoot,
       retention: { daily: 1, weekly: 1, monthly: 1 },
       prismaClient: prisma as never,
+      preflight: NOOP_PREFLIGHT,
       now: () => FIXED_NOW,
     });
 

@@ -40,6 +40,7 @@ import {
 } from "./types";
 import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 import type { AnyBackupManifest, BackupEngineSpec } from "./engine-specs";
+import type { BackupPreflightResult } from "./extension-preflight";
 
 const BACKUPS_ROOT = "/backups";
 
@@ -71,6 +72,14 @@ export interface ManagedBackupArgs {
   prismaClient?: PrismaLike;
   /** Inject a clock for deterministic testing. */
   now?: () => Date;
+  /**
+   * Override the spec's pre-dump capability check (for tests). When provided,
+   * takes precedence over `spec.preflight`. Pass `() => Promise.resolve({ ok:
+   * true })` to skip the real (docker-spawning) preflight in unit tests.
+   */
+  preflight?: (ctx: {
+    composeProject: string;
+  }) => Promise<BackupPreflightResult>;
 }
 
 /**
@@ -136,7 +145,8 @@ export async function recordJobHeartbeat(
  * back to the last stderr line, then the exit code, then the engine fallback.
  */
 export function summarizeScriptFailure(
-  outcome: Pick<ScriptOutcome, "stderr" | "exitCode">,
+  outcome: Pick<ScriptOutcome, "stderr" | "exitCode"> &
+    Partial<Pick<ScriptOutcome, "stdout">>,
   opts: {
     /** Marker the shell script prints on failure, e.g. "[backup-trace] failed:". */
     marker: string;
@@ -148,10 +158,12 @@ export function summarizeScriptFailure(
     fallback: string;
   },
 ): string {
-  const traceLine = outcome.stderr
-    .split("\n")
-    .reverse()
-    .find((line) => line.includes(opts.marker));
+  // The managed scripts print their curated `[backup-trace] failed:` line to
+  // STDOUT (the log/fail helpers use printf without >&2), so search both
+  // streams — searching stderr alone silently missed the human-authored
+  // reason and fell through to the raw last-stderr line.
+  const lines = `${outcome.stdout ?? ""}\n${outcome.stderr}`.split("\n");
+  const traceLine = lines.reverse().find((line) => line.includes(opts.marker));
   if (traceLine) {
     return traceLine.replace(opts.strip, "").trim();
   }
@@ -308,6 +320,47 @@ export async function runManagedBackup(
     lastError: null,
   });
 
+  // Record a failed run: BackupRun row + heartbeat + metrics + trace. Shared by
+  // the preflight short-circuit and the script-failure path so both surface the
+  // same operator-facing shape.
+  const recordFailure = async (
+    errorSummary: string,
+  ): Promise<{ runId: string; status: "failed"; error: string }> => {
+    const finishedAt = now();
+    const durationMs = finishedAt.getTime() - startedAt.getTime();
+    await prisma.backupRun.update({
+      where: { id: created.id },
+      data: {
+        status: "failed",
+        finishedAt,
+        durationMs,
+        errorMessage: errorSummary,
+      },
+    });
+    await recordJobHeartbeat(prisma, spec.jobId, {
+      lastRunAt: startedAt,
+      lastStatus: "failed",
+      lastError: errorSummary,
+      nextRunAt: nextDailyRunAt(finishedAt),
+    });
+    spec.metrics.runsTotal.inc({ status: "failed", trigger });
+    spec.metrics.durationSeconds.observe({ trigger }, durationMs / 1000);
+    trace(`run failed id=${created.id} reason=${errorSummary}`);
+    return { runId: created.id, status: "failed", error: errorSummary };
+  };
+
+  // Pre-dump capability check. Catches a DB container whose image lacks a
+  // required extension library (e.g. pgvector) BEFORE pg_dump fails opaquely,
+  // and fails with an actionable remedy instead. Fail-open by contract, so it
+  // never blocks a run pg_dump could complete (BI-A35347E4).
+  const preflight = args.preflight ?? spec.preflight;
+  if (preflight) {
+    const verdict = await preflight({ composeProject });
+    if (!verdict.ok) {
+      return recordFailure(verdict.error);
+    }
+  }
+
   // Ensure the parent /backups/<subdir> directory exists. The target itself
   // is created by the shell script.
   await fs.mkdir(path.posix.join(backupsRoot, spec.subdir), { recursive: true });
@@ -367,26 +420,5 @@ export async function runManagedBackup(
     exitLabel: "runner",
     fallback: spec.failureFallback,
   });
-  await prisma.backupRun.update({
-    where: { id: created.id },
-    data: {
-      status: "failed",
-      finishedAt,
-      durationMs,
-      errorMessage: errorSummary,
-    },
-  });
-
-  await recordJobHeartbeat(prisma, spec.jobId, {
-    lastRunAt: startedAt,
-    lastStatus: "failed",
-    lastError: errorSummary,
-    nextRunAt: nextDailyRunAt(finishedAt),
-  });
-
-  spec.metrics.runsTotal.inc({ status: "failed", trigger });
-  spec.metrics.durationSeconds.observe({ trigger }, durationMs / 1000);
-
-  trace(`run failed id=${created.id} reason=${errorSummary}`);
-  return { runId: created.id, status: "failed", error: errorSummary };
+  return recordFailure(errorSummary);
 }

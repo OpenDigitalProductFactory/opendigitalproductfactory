@@ -103,3 +103,33 @@ that layer waits for the Claude-Inside-Out workflow primitive
 substrate instead of a backup-only mini-framework. The specs introduced here
 are the intended input to that primitive: a fourth engine should be a spec
 entry + one workflow registration, nothing more.
+
+## Pre-dump extension preflight (BI-A35347E4)
+
+`runManagedBackup` runs an optional `spec.preflight` capability check before it
+spawns the backup script. `POSTGRES_BACKUP_SPEC.preflight`
+(`extension-preflight.ts`) catches a Postgres container whose **image** does
+not provide an extension the **database catalog** depends on — the canonical
+case being pgvector's `vector.so` after the container was recreated onto a
+plain `postgres:16-alpine` image while the BET-5 schema carries `vector`
+objects. Without the preflight, `pg_dump` dies with
+`could not access file "$libdir/vector"` and the self-upgrade recovery point
+aborts with an opaque `pg_dump exit=1` and no remedy.
+
+Detection is general, not vector-specific: an extension in `pg_extension`
+(catalog, lives in the data volume) but absent from `pg_available_extensions`
+(control files the image ships) is installed-but-unprovided. On a definitive
+miss the preflight fails the run with an actionable message naming the
+extension(s) and the one-command remedy —
+`docker compose up -d --no-deps postgres` (data preserved in the pgdata
+volume). It is **fail-open** on any inconclusive signal (DB unreachable, query
+error) so it never becomes a new failure source, and it **never recreates the
+container** — the self-upgrade deploy deliberately uses `--no-deps` and never
+touches postgres (fleet-safety invariant); recreating the DB mid-upgrade is a
+destructive action requiring explicit operator go. (Kernel decision via
+`principle_decide`: fail-fast-with-remedy over auto-heal, high confidence.)
+
+Companion fix: `summarizeScriptFailure` now scans **stdout and stderr** for the
+curated `[backup-trace] failed:` line (the managed scripts print it to stdout),
+so the residual pg_dump failure path also surfaces the human-authored reason
+instead of the raw last-stderr line.
