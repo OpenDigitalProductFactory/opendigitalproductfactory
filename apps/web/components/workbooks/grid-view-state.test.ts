@@ -17,6 +17,8 @@ const sample: GridViewState = {
   hiddenColumns: ["amount"],
   frozenCount: 2,
   rowHeight: "tall",
+  footerAgg: { amount: "sum" },
+  showFooter: true,
 };
 
 describe("viewStorageKey", () => {
@@ -100,5 +102,12 @@ describe("parseViewState — defensive", () => {
     );
     expect(parsed!.frozenCount).toBeUndefined();
     expect(parsed!.rowHeight).toBeUndefined();
+  });
+
+  it("parses footerAgg as a string record, dropping non-string values", () => {
+    const parsed = parseViewState(
+      JSON.stringify({ footerAgg: { amount: "sum", bad: 3, status: "count" } }),
+    );
+    expect(parsed!.footerAgg).toEqual({ amount: "sum", status: "count" });
   });
 });

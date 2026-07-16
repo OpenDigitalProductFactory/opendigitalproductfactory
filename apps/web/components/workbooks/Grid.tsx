@@ -22,6 +22,7 @@ import {
   type Column,
   type RowsChangeData,
   type SortColumn,
+  type RenderSummaryCellProps,
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import "./dpf-grid.css";
@@ -102,6 +103,14 @@ import {
   ROW_HEIGHTS,
   type RowHeight,
 } from "./grid-view-options";
+import {
+  computeFooterRow,
+  hasFooterAggs,
+  availableAggs,
+  toFooterAgg,
+  FOOTER_AGG_LABELS,
+  type FooterAgg,
+} from "./grid-footer-summary";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -120,6 +129,10 @@ export interface WorkbookGridProps {
 function toRowData(rows: GridRow[]): GridRowData[] {
   return rows.map((r) => ({ rowId: r.rowId, ...r.cells }));
 }
+
+// The footer summary row is a plain columnId -> display-string map (see
+// grid-footer-summary.ts); react-data-grid renders it as a pinned bottom row.
+type SummaryRow = Record<string, string>;
 
 function buildColumn(
   col: ColumnDefinition,
@@ -298,6 +311,9 @@ export function WorkbookGrid({
   const [frozenCount, setFrozenCount] = useState(0);
   const [rowHeight, setRowHeight] = useState<RowHeight>("medium");
   const [showColumns, setShowColumns] = useState(false);
+  // Per-column footer aggregate (Airtable-style summary bar): columnId → agg.
+  const [footerAgg, setFooterAgg] = useState<Record<string, FooterAgg>>({});
+  const [showFooter, setShowFooter] = useState(false);
   // Which groups the user has collapsed (session-scoped); everything else is
   // expanded by default so the grouped grid reads like Smartsheet on open.
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
@@ -323,6 +339,12 @@ export function WorkbookGrid({
         if (parsed.hiddenColumns) setHiddenColumns(parsed.hiddenColumns);
         if (parsed.frozenCount !== undefined) setFrozenCount(parsed.frozenCount);
         if (parsed.rowHeight) setRowHeight(parsed.rowHeight);
+        if (parsed.footerAgg) {
+          const coerced: Record<string, FooterAgg> = {};
+          for (const [k, v] of Object.entries(parsed.footerAgg)) coerced[k] = toFooterAgg(v);
+          setFooterAgg(coerced);
+        }
+        if (parsed.showFooter !== undefined) setShowFooter(parsed.showFooter);
       }
     } catch {
       // ignore unreadable storage
@@ -350,12 +372,14 @@ export function WorkbookGrid({
           hiddenColumns,
           frozenCount,
           rowHeight,
+          footerAgg,
+          showFooter,
         }),
       );
     } catch {
       // ignore quota / unavailable storage
     }
-  }, [tableId, filterQuery, columnFilters, sortColumns, cfRules, showProvenance, columnOrder, groupBy, hiddenColumns, frozenCount, rowHeight]);
+  }, [tableId, filterQuery, columnFilters, sortColumns, cfRules, showProvenance, columnOrder, groupBy, hiddenColumns, frozenCount, rowHeight, footerAgg, showFooter]);
 
   // Columns in the user's saved drag order; new columns append, stale ids drop.
   const orderedColumns = useMemo(
@@ -373,12 +397,44 @@ export function WorkbookGrid({
   // Pin the leftmost N visible columns (clamped to leave one scrollable).
   const effectiveFrozen = clampFrozenCount(frozenCount, visibleCols.length);
 
-  const gridColumns = useMemo<Column<GridRowData>[]>(() => {
-    const cols = visibleCols.map((c, i) =>
-      buildColumn(c, capabilities.canEditCell, showProvenance, i < effectiveFrozen),
-    );
-    return capabilities.canDeleteRow ? [SelectColumn, ...cols] : cols;
-  }, [visibleCols, capabilities, showProvenance, effectiveFrozen]);
+  const gridColumns = useMemo<Column<GridRowData, SummaryRow>[]>(() => {
+    const cols = visibleCols.map((c, i) => {
+      const built = buildColumn(
+        c,
+        capabilities.canEditCell,
+        showProvenance,
+        i < effectiveFrozen,
+      ) as Column<GridRowData, SummaryRow>;
+      if (!showFooter) return built;
+      // Footer cell: an aggregate picker + the computed value (Airtable-style).
+      return {
+        ...built,
+        renderSummaryCell: ({ row }: RenderSummaryCellProps<SummaryRow, GridRowData>) => (
+          <div className="dpf-grid-footer-cell">
+            <select
+              className="dpf-grid-footer-select"
+              value={footerAgg[c.columnId] ?? "none"}
+              onChange={(e) =>
+                setFooterAgg((prev) => ({ ...prev, [c.columnId]: toFooterAgg(e.target.value) }))
+              }
+              aria-label={`Summarize ${c.name}`}
+              title={`Summarize ${c.name}`}
+            >
+              {availableAggs(c.fieldType).map((a) => (
+                <option key={a} value={a}>
+                  {FOOTER_AGG_LABELS[a]}
+                </option>
+              ))}
+            </select>
+            <span className="dpf-grid-footer-value">{row[c.columnId] ?? ""}</span>
+          </div>
+        ),
+      } as Column<GridRowData, SummaryRow>;
+    });
+    return capabilities.canDeleteRow
+      ? [SelectColumn as Column<GridRowData, SummaryRow>, ...cols]
+      : cols;
+  }, [visibleCols, capabilities, showProvenance, effectiveFrozen, showFooter, footerAgg]);
 
   const onColumnsReorder = useCallback(
     (sourceKey: string, targetKey: string) => {
@@ -416,6 +472,17 @@ export function WorkbookGrid({
 
   // Grouping is grid-only; gallery renders flat cards regardless.
   const grouping = Boolean(groupColumnId) && !gallery && columns.length > 0;
+
+  // Footer summary bar: one pinned bottom row of per-column aggregates over the
+  // filtered rows. Empty object when off; react-data-grid still needs a row so
+  // the picker cells render, so we always pass one row when showFooter is on.
+  const footerRow = useMemo<SummaryRow>(
+    () => (showFooter ? computeFooterRow(sortedRows, visibleCols, footerAgg) : {}),
+    [showFooter, sortedRows, visibleCols, footerAgg],
+  );
+  // Footer bar renders on the flat grid only; the tree (grouped) grid's row model
+  // does not support summary rows, so it always receives undefined.
+  const bottomSummaryRows = showFooter && !grouping ? [footerRow] : undefined;
 
   const rowGrouper = useCallback(
     (rows: readonly GridRowData[], columnKey: string) => groupRowsByColumn(rows, columnKey),
@@ -1068,6 +1135,14 @@ export function WorkbookGrid({
                 </option>
               ))}
             </select>
+            <label className="inline-flex items-center gap-1 text-sm text-[var(--dpf-text)]">
+              <input
+                type="checkbox"
+                checked={showFooter}
+                onChange={() => setShowFooter((v) => !v)}
+              />
+              Summary bar
+            </label>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-sm text-[var(--dpf-muted)]">Fields</span>
@@ -1158,6 +1233,7 @@ export function WorkbookGrid({
                 return color ? rowColorClass(color) : undefined;
               }}
               rowHeight={rowHeightPx(rowHeight)}
+              bottomSummaryRows={bottomSummaryRows}
               defaultColumnOptions={{ resizable: true, sortable: true }}
             />
           ) : (
@@ -1177,6 +1253,7 @@ export function WorkbookGrid({
                 return color ? rowColorClass(color) : undefined;
               }}
               rowHeight={rowHeightPx(rowHeight)}
+              bottomSummaryRows={bottomSummaryRows}
               defaultColumnOptions={{ resizable: true, sortable: true }}
             />
           )}

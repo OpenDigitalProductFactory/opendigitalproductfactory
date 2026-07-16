@@ -230,3 +230,31 @@
 .dpf-gallery-card.dpf-cf-blue {
   border-inline-start: 3px solid var(--dpf-accent);
 }
+
+/* Footer summary bar — a per-column aggregate picker + computed value. */
+.dpf-grid-footer-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  inline-size: 100%;
+  block-size: 100%;
+  padding-inline: 0.4rem;
+}
+.dpf-grid-footer-select {
+  flex: none;
+  max-inline-size: 6rem;
+  border: none;
+  background: transparent;
+  color: var(--dpf-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.dpf-grid-footer-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--dpf-text);
+}

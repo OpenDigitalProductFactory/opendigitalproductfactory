@@ -31,6 +31,10 @@ export interface GridViewState {
   frozenCount: number;
   /** Row density preset. */
   rowHeight: RowHeight;
+  /** Per-column footer aggregate (columnId → FooterAgg name). */
+  footerAgg: Record<string, string>;
+  /** Whether the per-column footer summary bar is shown. */
+  showFooter: boolean;
 }
 
 export function viewStorageKey(tableId: string): string {
@@ -119,5 +123,7 @@ export function parseViewState(raw: string | null | undefined): Partial<GridView
     out.frozenCount = data.frozenCount;
   }
   if (isRowHeight(data.rowHeight)) out.rowHeight = data.rowHeight;
+  if (isRecord(data.footerAgg)) out.footerAgg = parseColumnFilters(data.footerAgg);
+  if (typeof data.showFooter === "boolean") out.showFooter = data.showFooter;
   return out;
 }

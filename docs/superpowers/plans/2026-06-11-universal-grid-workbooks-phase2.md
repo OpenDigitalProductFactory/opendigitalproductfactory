@@ -199,7 +199,13 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   grid, gallery, and CSV export together. All three persist in the per-tableId view state. Pure,
   unit-tested `grid-view-options.ts` (`visibleColumns`/`clampFrozenCount`/`rowHeightPx`; freeze is
   clamped to leave one column scrollable).
-- **Remaining (not built):** column footer summary bar (per-column aggregations); rich filter
+- **Slice 19 — column footer summary bar — SHIPPED.** A per-column aggregate bar pinned to the
+  bottom of the grid (react-data-grid `bottomSummaryRows` + `renderSummaryCell`), gated by a
+  "Summary bar" toggle in the Columns panel. Each footer cell is an aggregate picker (count / filled
+  / empty / unique for any field; sum / average / min / max for numbers) plus the value, recomputed
+  over the filtered rows. Per-column selection + on/off persist in the view state. Pure, unit-tested
+  `grid-footer-summary.ts` (`computeFooter`/`computeFooterRow`/`availableAggs`).
+- **Remaining (not built):** rich filter
   operators + AND/OR builder; row-expand record modal; more field types (rating/percent/currency/
   progress/duration/phone); multi-level (nested) grouping UI + inline group subtotals; named/
   shareable server-side views; calendar view (fullcalendar — needs a date column); manual row
