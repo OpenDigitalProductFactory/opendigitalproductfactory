@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeOpeningBriefing, surfacePrefixFromRouteContext } from "./opening-briefing";
+import { composeOpeningBriefing, detailRestatesTitle, surfacePrefixFromRouteContext } from "./opening-briefing";
 import type { AttentionItem } from "@/lib/attention/types";
 
 function makeItem(overrides: Partial<AttentionItem> = {}): AttentionItem {
@@ -23,6 +23,30 @@ function makeItem(overrides: Partial<AttentionItem> = {}): AttentionItem {
     ...overrides,
   };
 }
+
+describe("detailRestatesTitle", () => {
+  it("treats a detail that only restates the headline as redundant", () => {
+    // The exact BI-49C4EA5D case: title vs a synonymous detail.
+    expect(detailRestatesTitle("The knowledge graph is down", "The knowledge graph is unavailable.")).toBe(true);
+    expect(detailRestatesTitle("AI memory search is down", "AI memory search is offline")).toBe(true);
+  });
+
+  it("keeps a detail that names a real downstream consequence", () => {
+    expect(
+      detailRestatesTitle(
+        "The platform database is down",
+        "The platform database is unreachable — most features will fail.",
+      ),
+    ).toBe(false);
+    expect(detailRestatesTitle("Voice input is unavailable", "Dictation won't work until it's back.")).toBe(false);
+  });
+
+  it("treats empty or whitespace context as redundant (nothing to add)", () => {
+    expect(detailRestatesTitle("Anything", "")).toBe(true);
+    expect(detailRestatesTitle("Anything", "   ")).toBe(true);
+    expect(detailRestatesTitle("Anything", null)).toBe(true);
+  });
+});
 
 describe("surfacePrefixFromRouteContext", () => {
   it("keeps the first two segments and drops build fragments", () => {
@@ -102,6 +126,42 @@ describe("composeOpeningBriefing", () => {
     expect(briefing?.content).toContain("Launch email awaits your approval");
     expect(briefing?.content).toContain("1 more item is waiting for your review");
     expect(briefing?.content).toContain("[open your Needs-you inbox](/workspace/inbox)");
+  });
+
+  it("omits a redundant detail so the headline doesn't restate itself (BI-49C4EA5D)", () => {
+    const briefing = composeOpeningBriefing({
+      routeContext: "/workspace",
+      proactivityLevel: "balanced",
+      items: [
+        makeItem({
+          id: "platform-health:neo4j",
+          source: "platform-health",
+          title: "The knowledge graph is down",
+          context: "The knowledge graph is unavailable.",
+          deepLink: "/platform/health",
+        }),
+      ],
+    });
+    expect(briefing?.content).toContain("[The knowledge graph is down](/platform/health)");
+    // The em-dash-joined restatement must NOT appear.
+    expect(briefing?.content).not.toContain("— The knowledge graph is unavailable");
+  });
+
+  it("keeps a detail that adds a real consequence", () => {
+    const briefing = composeOpeningBriefing({
+      routeContext: "/workspace",
+      proactivityLevel: "balanced",
+      items: [
+        makeItem({
+          id: "platform-health:postgres",
+          source: "platform-health",
+          title: "The platform database is down",
+          context: "The platform database is unreachable — most features will fail.",
+          deepLink: "/platform/health",
+        }),
+      ],
+    });
+    expect(briefing?.content).toContain("— The platform database is unreachable — most features will fail.");
   });
 
   it("falls back to the triage-top item when nothing is surface-local", () => {

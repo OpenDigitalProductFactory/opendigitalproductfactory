@@ -69,7 +69,10 @@ export function CoworkerHealthStatus() {
       );
 
       const modelRunnerUp = results.find((r) => r.job === "model-runner")?.up ?? true;
-      const memoryUp = results.find((r) => r.job === "qdrant")?.up ?? true;
+      // BET-5 retired Qdrant: coworker memory is now pgvector inside Postgres.
+      // The old up{job="qdrant"} target is decommissioned and permanently reads
+      // 0, which produced a phantom "Memory offline" banner (BI-31FDC859).
+      const memoryUp = results.find((r) => r.job === "postgres")?.up ?? true;
 
       setHealth(
         deriveCoworkerHealthState({

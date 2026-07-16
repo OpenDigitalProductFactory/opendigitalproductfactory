@@ -6,7 +6,10 @@ import { TONE_COLOR } from "./health-summary";
 
 export function AiCoworkerHealthPanel() {
   const { data: inferenceUp, offline } = useMetricQuery('up{job="model-runner"}');
-  const { data: qdrantUp } = useMetricQuery('up{job="qdrant"}');
+  // BET-5 retired Qdrant: coworker memory is pgvector inside Postgres, so the
+  // memory store is reachable iff Postgres is up (BI-31FDC859). Semantic-memory
+  // health is refined below by dpf_semantic_memory_errors_total.
+  const { data: memoryStoreUp } = useMetricQuery('up{job="postgres"}');
   const { data: memErrors } = useMetricQuery(
     "rate(dpf_semantic_memory_errors_total[5m])",
   );
@@ -27,7 +30,7 @@ export function AiCoworkerHealthPanel() {
 
   const modelRunnerScraped = (inferenceUp?.length ?? 0) > 0;
   const inferenceAvailable = !modelRunnerScraped || parseFloat(inferenceUp?.[0]?.value?.[1] ?? "0") === 1;
-  const memoryAvailable = parseFloat(qdrantUp?.[0]?.value?.[1] ?? "0") === 1;
+  const memoryAvailable = parseFloat(memoryStoreUp?.[0]?.value?.[1] ?? "0") === 1;
   const hasMemErrors = parseFloat(memErrors?.[0]?.value?.[1] ?? "0") > 0;
   const p95Value = parseFloat(inferenceP95?.[0]?.value?.[1] ?? "0");
 
