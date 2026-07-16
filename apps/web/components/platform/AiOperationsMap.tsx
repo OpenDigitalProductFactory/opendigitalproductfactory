@@ -16,6 +16,7 @@ import type {
   StationedOperationsMapAgent,
 } from "@/lib/ai-operations-map/types";
 import {
+  buildStationProjectionTiles,
   filterOperationsMapProjections,
   getOperationsMapQuickViewFilters,
   OPERATIONS_MAP_QUICK_VIEWS,
@@ -100,6 +101,9 @@ const SOURCE_OPTIONS: OperationsMapProjectionSource[] = [
 ];
 
 const SEVERITY_OPTIONS: OperationsMapSeverity[] = ["normal", "attention", "warning", "critical"];
+// BI-62c4197e — how many projection tiles a station band shows inline before an
+// overflow "+N more" control routes the rest to the station inspector list.
+const STATION_TILE_VISIBLE_LIMIT = 4;
 const DEFAULT_QUICK_VIEW_ID: OperationsMapQuickViewId = "all";
 const DEFAULT_QUICK_VIEW_FILTERS = getOperationsMapQuickViewFilters(DEFAULT_QUICK_VIEW_ID);
 
@@ -542,23 +546,35 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
                         const station = template.stations.find((candidate) => candidate.id === stationId);
                         if (!station) return null;
                         const stationAgents = agents.filter((agent) => agent.stationId === station.id);
-                        const stationProjections = filteredProjections.filter((projection) => projection.location.stationId === station.id);
-                        const isSelected = selected.kind === "station" && selected.id === station.id;
+                        // BI-62c4197e — pure band assignment. Actionable severities
+                        // (stalled/failed) sort first so the visible cap surfaces
+                        // them instead of burying them behind routine activity.
+                        const stationTiles = buildStationProjectionTiles(filteredProjections, station.id);
+                        const visibleTiles = stationTiles.slice(0, STATION_TILE_VISIBLE_LIMIT);
+                        const hiddenTileCount = stationTiles.length - visibleTiles.length;
+                        const stationSelected = selected.kind === "station" && selected.id === station.id;
+                        const projectionSelectedHere =
+                          selected.kind === "projection" &&
+                          stationTiles.some((tile) => tile.projectionId === selected.id);
+                        const isSelected = stationSelected || projectionSelectedHere;
 
                         return (
-                          <button
+                          <div
                             key={station.id}
-                            type="button"
-                            aria-pressed={isSelected}
-                            onClick={() => setSelected({ kind: "station", id: station.id })}
+                            data-station-card={station.id}
                             className={[
-                              "min-h-44 rounded-lg border p-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]",
+                              "min-h-44 rounded-lg border p-3 text-left transition-colors",
                               isSelected
                                 ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)]"
-                                : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] hover:border-[var(--dpf-accent)]",
+                                : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]",
                             ].join(" ")}
                           >
-                            <div className="flex items-start justify-between gap-2">
+                            <button
+                              type="button"
+                              aria-pressed={stationSelected}
+                              onClick={() => setSelected({ kind: "station", id: station.id })}
+                              className="flex w-full items-start justify-between gap-2 rounded text-left transition-colors hover:text-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
+                            >
                               <div>
                                 <h4 className="text-sm font-semibold text-[var(--dpf-text)]">{station.label}</h4>
                                 <p className="mt-1 line-clamp-3 text-xs leading-5 text-[var(--dpf-muted)]">
@@ -566,9 +582,9 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
                                 </p>
                               </div>
                               <span className="rounded border border-[var(--dpf-border)] px-1.5 py-0.5 text-[10px] text-[var(--dpf-muted)]">
-                                {stationProjections.length}
+                                {stationTiles.length}
                               </span>
-                            </div>
+                            </button>
 
                             <div className="mt-3 flex flex-wrap gap-1.5">
                               {stationAgents.slice(0, 3).map((agent) => (
@@ -587,19 +603,35 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
                             </div>
 
                             <div className="mt-3 space-y-1">
-                              {stationProjections.slice(0, 2).map((projection) => (
-                                <span
-                                  key={projection.id}
+                              {visibleTiles.map((tile) => (
+                                <button
+                                  key={tile.projectionId}
+                                  type="button"
+                                  data-projection-tile
+                                  aria-pressed={selected.kind === "projection" && selected.id === tile.projectionId}
+                                  aria-label={tile.accessibleLabel}
+                                  title={tile.accessibleLabel}
+                                  onClick={() => setSelected({ kind: "projection", id: tile.projectionId })}
                                   className={[
-                                    "block rounded border px-2 py-1 text-[10px]",
-                                    SEVERITY_CLASS[projection.severity],
+                                    "block w-full truncate rounded border px-2 py-1 text-left text-[10px] transition-colors hover:border-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]",
+                                    SEVERITY_CLASS[tile.severity],
                                   ].join(" ")}
                                 >
-                                  {projection.label}: {projection.severity}
-                                </span>
+                                  {tile.summary}
+                                </button>
                               ))}
+                              {hiddenTileCount > 0 ? (
+                                <button
+                                  type="button"
+                                  data-projection-overflow
+                                  onClick={() => setSelected({ kind: "station", id: station.id })}
+                                  className="block w-full rounded border border-dashed border-[var(--dpf-border)] px-2 py-1 text-left text-[10px] text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
+                                >
+                                  +{hiddenTileCount} more — open station
+                                </button>
+                              ) : null}
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>

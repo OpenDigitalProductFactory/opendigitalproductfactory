@@ -367,6 +367,70 @@ export function filterOperationsMapProjections(
   return projections.filter((projection) => sources.has(projection.source) && severities.has(projection.severity));
 }
 
+/**
+ * A single clickable band tile derived from a projection that has been placed
+ * on a station. This is the pure "band assignment" step that the station-band
+ * renderer consumes so the placement logic is testable without a DOM.
+ */
+export type OperationsMapStationProjectionTile = {
+  projectionId: string;
+  stationId: string;
+  /** Short chip label (projection.label, e.g. "Scheduled task run"). */
+  label: string;
+  /** Full projection summary — carries the row title, e.g. "Deliberation: debate/review (stalled)". */
+  summary: string;
+  /**
+   * Accessible label for the band tile. Combines the short label with the
+   * summary so the row title is present in the accessibility tree and the tile
+   * is addressable by title text. BI-62c4197e: stalled proactive TaskRun
+   * deliberations were counted in the station header but never surfaced as a
+   * title-bearing, clickable band tile — the body rendered only the short
+   * `label` on a non-interactive span.
+   */
+  accessibleLabel: string;
+  severity: OperationsMapSeverity;
+};
+
+// Operator-actionable severities sort ahead of normal so a per-station display
+// cap can never bury a stalled/failed row behind routine activity. The header
+// count is uncapped; the body previously sliced the first two in occurredAt
+// order, which hid the actionable tiles (BI-62c4197e).
+const STATION_TILE_SEVERITY_PRIORITY: Record<OperationsMapSeverity, number> = {
+  critical: 0,
+  warning: 1,
+  attention: 2,
+  normal: 3,
+};
+
+/**
+ * Assign the projections that resolved onto `stationId` into ordered, clickable
+ * band tiles. Pure (no React, no Prisma). Operator-actionable severities come
+ * first (stable within a severity band on the incoming occurredAt order) so a
+ * downstream visible cap surfaces the actionable rows rather than hiding them.
+ */
+export function buildStationProjectionTiles(
+  projections: OperationsMapProjection[],
+  stationId: string,
+): OperationsMapStationProjectionTile[] {
+  return projections
+    .map((projection, index) => ({ projection, index }))
+    .filter(({ projection }) => projection.location.stationId === stationId)
+    .sort((left, right) => {
+      const bySeverity =
+        STATION_TILE_SEVERITY_PRIORITY[left.projection.severity] -
+        STATION_TILE_SEVERITY_PRIORITY[right.projection.severity];
+      return bySeverity !== 0 ? bySeverity : left.index - right.index;
+    })
+    .map(({ projection }) => ({
+      projectionId: projection.id,
+      stationId,
+      label: projection.label,
+      summary: projection.summary,
+      accessibleLabel: `${projection.label}: ${projection.summary}`,
+      severity: projection.severity,
+    }));
+}
+
 function resolveAgentStationId(agent: OperationsMapAgent, template: OperationsMapTemplate): string {
   const stationIds = new Set(template.stations.map((station) => station.id));
   const byValueStream = agent.valueStream ? resolveValueStreamStationId(agent.valueStream, template) : null;

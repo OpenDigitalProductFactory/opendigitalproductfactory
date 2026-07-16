@@ -8,6 +8,7 @@ import {
   validateMapTemplate,
 } from "./templates";
 import {
+  buildStationProjectionTiles,
   deriveProjectionSeverityFromTaskState,
   filterOperationsMapProjections,
   getOperationsMapQuickViewFilters,
@@ -256,6 +257,73 @@ describe("AI operations map projection", () => {
       "backlog-evidence:activity-1",
       "external-evidence:external-1",
     ]);
+  });
+
+  it("places a stalled proactive TaskRun as a clickable band tile whose accessible label carries the row title (BI-62c4197e)", () => {
+    // A proactive deliberation with no FB-routable route context falls back to
+    // the "unplaced" station (never null). Before this fix it was counted in the
+    // header but the band body sliced the first two projections in occurredAt
+    // order and rendered only the short label on a non-interactive span, so the
+    // "Deliberation: ..." title never reached the band's accessibility tree.
+    const stalled = projectTaskRun(
+      makeTaskRun({
+        id: "tr-stalled",
+        taskRunId: "TR-STALL-00001",
+        title: "Deliberation: debate/review",
+        status: "stalled",
+        source: "proactive",
+        currentAgentId: null,
+        routeContext: null,
+      }),
+      SOFTWARE_PLATFORM_MAP_TEMPLATE,
+    );
+
+    expect(stalled.location.stationId).toBe("unplaced");
+    expect(stalled.severity).toBe("attention");
+
+    const tiles = buildStationProjectionTiles([stalled], "unplaced");
+
+    expect(tiles.length).toBeGreaterThanOrEqual(1);
+    const titled = tiles.find((tile) => tile.accessibleLabel.includes("Deliberation: debate/review"));
+    expect(titled).toBeDefined();
+    expect(titled?.projectionId).toBe("task-run:tr-stalled");
+    // The tile carries the "(stalled)" suffix the ProjectionInspector keys on to
+    // reveal the Retry/Abandon/Escalate recovery panel once clicked.
+    expect(titled?.summary).toContain("(stalled)");
+    expect(titled?.accessibleLabel).toContain("(stalled)");
+  });
+
+  it("orders operator-actionable band tiles ahead of routine activity so a display cap cannot bury them (BI-62c4197e)", () => {
+    const routine = projectTaskRun(
+      makeTaskRun({
+        id: "tr-routine",
+        taskRunId: "TR-OK-00001",
+        title: "Routine deliberation",
+        status: "working",
+        source: "proactive",
+        currentAgentId: null,
+        routeContext: null,
+      }),
+      SOFTWARE_PLATFORM_MAP_TEMPLATE,
+    );
+    const stalled = projectTaskRun(
+      makeTaskRun({
+        id: "tr-stalled",
+        taskRunId: "TR-STALL-00002",
+        title: "Deliberation: debate/review",
+        status: "stalled",
+        source: "proactive",
+        currentAgentId: null,
+        routeContext: null,
+      }),
+      SOFTWARE_PLATFORM_MAP_TEMPLATE,
+    );
+
+    // Routine (normal) precedes stalled (attention) in the incoming stream, so a
+    // naive first-N slice would show the routine row and hide the stalled one.
+    const tiles = buildStationProjectionTiles([routine, stalled], "unplaced");
+
+    expect(tiles.map((tile) => tile.projectionId)).toEqual(["task-run:tr-stalled", "task-run:tr-routine"]);
   });
 
   it("returns no projections when a filter group has no enabled options", () => {
