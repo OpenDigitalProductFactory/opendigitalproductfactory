@@ -5,7 +5,7 @@
 // grid code. Capability is enforced by getPlatformTableGridData (domain view/manage).
 import { auth } from "@/lib/auth";
 import {
-  getPlatformTableGridData,
+  getAllPlatformTableRows,
   type PlatformUser,
 } from "@/lib/workbooks/platform-tables";
 import { WorkbookError } from "@/lib/workbooks/workbook-service";
@@ -31,7 +31,7 @@ export async function SurfacePlatformGrid({
 
   let grid;
   try {
-    grid = await getPlatformTableGridData(svcUser, entityType);
+    grid = await getAllPlatformTableRows(svcUser, entityType);
   } catch (e) {
     if (e instanceof WorkbookError) {
       return <p className="text-sm text-[var(--dpf-muted)]">{e.message}</p>;

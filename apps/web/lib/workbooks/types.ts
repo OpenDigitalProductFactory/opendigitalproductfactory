@@ -264,6 +264,14 @@ export interface PagedRows {
 
 export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 200;
+/**
+ * Safety ceiling for "load every row into the client grid" — the grid filters,
+ * sorts, groups, and exports over the rows it holds, so it must hold them all.
+ * react-data-grid virtualizes rendering, so thousands of rows are cheap; this cap
+ * only guards against unbounded memory on pathologically large tables (those need
+ * server-side pagination, tracked separately).
+ */
+export const MAX_GRID_ROWS = 20_000;
 export const TEXT_MAX_LENGTH = 10_000;
 
 /** The default empty view config applied to a freshly created table. */

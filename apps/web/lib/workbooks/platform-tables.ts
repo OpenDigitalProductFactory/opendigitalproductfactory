@@ -23,6 +23,7 @@ import {
   type SortSpec,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
+  MAX_GRID_ROWS,
   emptyViewConfig,
   type ViewConfig,
 } from "./types";
@@ -801,6 +802,51 @@ export async function getPlatformTableGridData(
     },
     rows: data,
     nextCursor,
+    view: emptyViewConfig(columns),
+  };
+}
+
+/**
+ * Like getPlatformTableGridData but loads EVERY row (paginating through the
+ * adapter's cursors, capped at MAX_GRID_ROWS) so the client grid — which filters,
+ * sorts, groups and exports over the rows it holds — reflects the whole table, not
+ * just the first page. `nextCursor` is non-null only if the cap was hit.
+ */
+export async function getAllPlatformTableRows(
+  user: PlatformUser,
+  entityType: string,
+  opts: { filters?: DataSourceFilter; sort?: SortSpec[] } = {},
+): Promise<PlatformGridData> {
+  const def = requireTable(user, entityType);
+  const adapter = gridRegistry.require(entityType);
+  const ctx: AdapterContext = {
+    userId: user.id,
+    canManage: can(userCtx(user), def.manageCapability),
+  };
+  const columns = await adapter.getColumns(entityType);
+  const rows: GridRow[] = [];
+  let cursor: string | null = null;
+  do {
+    const { data, nextCursor } = await adapter.queryRows(entityType, {
+      filters: opts.filters ?? { conditions: [], logic: "and" },
+      sort: opts.sort ?? [],
+      pagination: { cursor, limit: MAX_PAGE_SIZE },
+    });
+    rows.push(...data);
+    cursor = nextCursor;
+    // Guard against a stuck cursor that never returns rows or never clears.
+    if (data.length === 0) break;
+  } while (cursor && rows.length < MAX_GRID_ROWS);
+  return {
+    schema: {
+      tableId: entityType,
+      name: def.label,
+      dataSource: entityType,
+      columns,
+      capabilities: adapter.getCapabilities(ctx),
+    },
+    rows,
+    nextCursor: cursor,
     view: emptyViewConfig(columns),
   };
 }
