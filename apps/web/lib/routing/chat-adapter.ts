@@ -24,6 +24,7 @@ import {
   formatMessageForResponses,
 } from "@/lib/ai-inference";
 import { isAnthropic } from "./provider-utils";
+import { captureAnthropicWeeklyQuota } from "./cli-pool-status";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
 // BI-98572A51: the single-GPU admission lane is canonical in resource-lane.ts so
@@ -380,6 +381,14 @@ export const chatAdapter: ExecutionAdapterHandler = {
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
       throw classifyHttpError(res.status, providerId, errBody, res.headers);
+    }
+
+    // Topology-free REAL weekly-quota capture: a subscription/OAuth Anthropic
+    // response carries anthropic-ratelimit-unified-7d-* headers with the true
+    // remaining weekly allocation. Persist them for the capacity-drain policy.
+    // No-op when absent (API-key traffic isn't on the weekly meter).
+    if (isAnthropic(providerId)) {
+      void captureAnthropicWeeklyQuota(providerId, res.headers);
     }
 
     // ChatGPT Responses API requires stream:true — collect SSE into final response

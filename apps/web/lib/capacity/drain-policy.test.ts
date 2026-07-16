@@ -70,4 +70,53 @@ describe("evaluateDrain", () => {
     expect(d.drain).toBe(false);
     expect(d.reason).toMatch(/WIP cap reached/);
   });
+
+  it("reports the proxy signal when no fresh snapshot is present", () => {
+    const d = evaluateDrain(base());
+    expect(d.signal).toBe("proxy");
+  });
+});
+
+describe("evaluateDrain — real weekly-quota signal", () => {
+  it("drains and reports the real signal when remaining is high", () => {
+    const d = evaluateDrain(base({ weeklyRemainingRatio: 0.8 }));
+    expect(d.drain).toBe(true);
+    expect(d.signal).toBe("real");
+    expect(d.reason).toMatch(/real/);
+    expect(d.reason).toMatch(/80% weekly allocation remaining/);
+  });
+
+  it("stops when the weekly allocation is essentially spent — even in-window with a healthy pool", () => {
+    const d = evaluateDrain(base({ weeklyRemainingRatio: 0.02 }));
+    expect(d.drain).toBe(false);
+    expect(d.signal).toBe("real");
+    expect(d.reason).toMatch(/allocation spent/);
+  });
+
+  it("respects a custom minRemainingToDrain floor", () => {
+    // 15% remaining, but the floor is 20% → don't drain.
+    const d = evaluateDrain(base({ weeklyRemainingRatio: 0.15, minRemainingToDrain: 0.2 }));
+    expect(d.drain).toBe(false);
+    expect(d.reason).toMatch(/allocation spent/);
+  });
+
+  it("scales targetDispatch down as remaining shrinks", () => {
+    // wipCap 8, activeBuilds 0 → headroom 8; maxDispatch 4.
+    const plenty = evaluateDrain(base({ weeklyRemainingRatio: 0.95, activeBuilds: 0, wipCap: 8, maxDispatch: 4 }));
+    const little = evaluateDrain(base({ weeklyRemainingRatio: 0.15, activeBuilds: 0, wipCap: 8, maxDispatch: 4 }));
+    expect(plenty.targetDispatch).toBe(4); // ceil(4 * 0.95) = 4, bounded by cap
+    expect(little.targetDispatch).toBe(1); // ceil(4 * 0.15) = 1
+  });
+
+  it("still hard-stops on a 429 in flight even with plenty remaining", () => {
+    const d = evaluateDrain(base({ weeklyRemainingRatio: 0.9, poolExhausted: true }));
+    expect(d.drain).toBe(false);
+    expect(d.reason).toMatch(/429 in flight/);
+  });
+
+  it("still respects the drain window with the real signal", () => {
+    const d = evaluateDrain(base({ weeklyRemainingRatio: 0.9, windowResetAt: new Date("2026-07-14T12:00:00Z") })); // 48h out
+    expect(d.drain).toBe(false);
+    expect(d.reason).toMatch(/not in drain window/);
+  });
 });

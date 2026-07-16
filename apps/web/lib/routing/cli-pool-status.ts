@@ -11,6 +11,7 @@
 // Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §4d
 
 import { prisma } from "@dpf/db";
+import { parseUnifiedRateLimitHeaders, type WeeklyQuotaSnapshot } from "./weekly-quota";
 
 export type CliAdapterType = "claude-cli" | "codex-cli";
 
@@ -48,6 +49,33 @@ export interface CliPoolState {
   isExhausted: boolean;
   /** Seconds until the pool is expected to be available again. Null if unknown. */
   secondsUntilReset: number | null;
+  /**
+   * Real remaining-weekly-allocation signal (the honest replacement for the
+   * exhaustion proxy). Fraction 0..1 of the weekly subscription window consumed;
+   * null until a snapshot has been collected. See weekly-quota.ts.
+   */
+  weeklyUtilization: number | null;
+  /** Provider-authoritative weekly reset time. Null when unknown. */
+  weeklyResetAt: Date | null;
+  /** Which provider signal produced weeklyUtilization. Null when unknown. */
+  weeklySource: string | null;
+  /** When the weekly snapshot was taken (staleness gate). Null when unknown. */
+  weeklyObservedAt: Date | null;
+}
+
+/** Map a raw CliPoolStatus row's weekly-quota columns onto the state shape. */
+function weeklyFields(row: {
+  weeklyUtilization: number | null;
+  weeklyResetAt: Date | null;
+  weeklySource: string | null;
+  weeklyObservedAt: Date | null;
+}): Pick<CliPoolState, "weeklyUtilization" | "weeklyResetAt" | "weeklySource" | "weeklyObservedAt"> {
+  return {
+    weeklyUtilization: row.weeklyUtilization,
+    weeklyResetAt: row.weeklyResetAt,
+    weeklySource: row.weeklySource,
+    weeklyObservedAt: row.weeklyObservedAt,
+  };
 }
 
 /**
@@ -173,6 +201,7 @@ export async function getCliPoolStatus(
       errorSnippet: row.errorSnippet,
       isExhausted,
       secondsUntilReset,
+      ...weeklyFields(row),
     };
   } catch (err) {
     console.warn("[cli-pool-status] Failed to read pool status:", { adapterType }, err);
@@ -202,6 +231,7 @@ export async function getAllCliPoolStatuses(): Promise<CliPoolState[]> {
         errorSnippet: row.errorSnippet,
         isExhausted,
         secondsUntilReset: isExhausted && resetMs != null ? Math.ceil((resetMs - now) / 1_000) : null,
+        ...weeklyFields(row),
       };
     });
   } catch (err) {
@@ -211,13 +241,128 @@ export async function getAllCliPoolStatuses(): Promise<CliPoolState[]> {
 }
 
 /**
+ * Record a weekly-quota snapshot for a CLI adapter — the REAL remaining-weekly-
+ * allocation signal that replaces the exhaustion proxy in the drain policy.
+ *
+ * Writes onto the same CliPoolStatus row (one per adapter), leaving the
+ * exhaustion fields (resetAt / retryAfterSeconds) untouched. A snapshot is not a
+ * rate-limit event: `resetAt` stays whatever it was, so `isExhausted` is
+ * unaffected. On first-ever write the row needs a `rateLimitedAt` (schema-
+ * required); we use the snapshot's observedAt as a neutral create timestamp
+ * while leaving `resetAt` null, so a quota-only row reads as NOT exhausted.
+ *
+ * Fire-and-forget: swallows errors so quota tracking never breaks a caller.
+ */
+export async function recordCliWeeklyQuota(
+  adapterType: CliAdapterType,
+  providerId: string,
+  snapshot: WeeklyQuotaSnapshot,
+): Promise<void> {
+  try {
+    await prisma.cliPoolStatus.upsert({
+      where: { adapterType },
+      create: {
+        adapterType,
+        providerId,
+        // Neutral create timestamp; resetAt stays null → not exhausted.
+        rateLimitedAt: snapshot.observedAt,
+        weeklyUtilization: snapshot.utilization,
+        weeklyResetAt: snapshot.resetAt,
+        weeklySource: snapshot.source,
+        weeklyObservedAt: snapshot.observedAt,
+        updatedAt: snapshot.observedAt,
+      },
+      update: {
+        providerId,
+        weeklyUtilization: snapshot.utilization,
+        weeklyResetAt: snapshot.resetAt,
+        weeklySource: snapshot.source,
+        weeklyObservedAt: snapshot.observedAt,
+        updatedAt: snapshot.observedAt,
+      },
+    });
+  } catch (err) {
+    console.warn("[cli-pool-status] Failed to record weekly quota:", { adapterType }, err);
+  }
+}
+
+/**
  * Clear the rate-limit record for a given adapter (e.g. after a successful call
  * proves the pool is available again).
+ *
+ * Preserves the weekly-quota snapshot when one is present: a successful call
+ * clears *exhaustion*, but must NOT wipe the real remaining-allocation reading
+ * the drain policy depends on. When the row carries no weekly snapshot, we delete
+ * it (original behaviour) so an idle adapter leaves no residual row.
  */
 export async function clearCliRateLimit(adapterType: CliAdapterType): Promise<void> {
   try {
-    await prisma.cliPoolStatus.deleteMany({ where: { adapterType } });
+    const row = await prisma.cliPoolStatus.findUnique({ where: { adapterType } });
+    if (!row) return;
+    if (row.weeklyUtilization == null) {
+      await prisma.cliPoolStatus.deleteMany({ where: { adapterType } });
+      return;
+    }
+    // Preserve the weekly snapshot; clear only the exhaustion fields.
+    await prisma.cliPoolStatus.update({
+      where: { adapterType },
+      data: { resetAt: null, retryAfterSeconds: null, errorSnippet: null, updatedAt: new Date() },
+    });
   } catch (err) {
     console.warn("[cli-pool-status] Failed to clear rate limit:", { adapterType }, err);
   }
+}
+
+/**
+ * Topology-free LIVE capture: extract the weekly-quota signal from a successful
+ * Anthropic HTTP response's `anthropic-ratelimit-unified-7d-*` headers and persist
+ * it against the claude-cli subscription pool. A real subscription/OAuth response
+ * carries these headers; API-key traffic (not on the weekly meter) does not, so
+ * this is a NO-OP unless the headers are present. Fire-and-forget from the adapter
+ * success path — never throws into the response flow.
+ */
+export async function captureAnthropicWeeklyQuota(
+  providerId: string,
+  headers: Headers | Record<string, string>,
+): Promise<void> {
+  try {
+    const snapshot = parseUnifiedRateLimitHeaders(headers);
+    if (!snapshot) return; // no weekly header → nothing to record (API-key path)
+    await recordCliWeeklyQuota("claude-cli", providerId, snapshot);
+  } catch (err) {
+    console.warn("[cli-pool-status] Failed to capture Anthropic weekly quota:", { providerId }, err);
+  }
+}
+
+/**
+ * SEAM — live weekly-quota collection for the CLI adapters.
+ *
+ * The pure parsers in weekly-quota.ts turn a provider reading into a snapshot;
+ * this is where a real reading would be *fetched* and handed to
+ * recordCliWeeklyQuota. It is intentionally a stub because live collection
+ * depends on runtime/credential topology that varies per install and could not
+ * be verified in the build that introduced it (autonomous, no operator):
+ *
+ *   • claude-cli:  read the CLI's OAuth token (e.g. ~/.claude/.credentials.json,
+ *     inside the adapter's container) → GET https://api.anthropic.com/api/oauth/usage
+ *     with headers `anthropic-beta: oauth-2025-04-20` and
+ *     `User-Agent: claude-code/<version>` (the User-Agent is REQUIRED — without it
+ *     the endpoint drops you into an aggressively rate-limited bucket) →
+ *     parseOAuthUsageJson(body).
+ *   • codex-cli:  spawn `codex app-server` (JSON-RPC): send `initialize`, wait
+ *     ~500ms for readiness, then `account/rateLimits/read` → parseCodexRateLimitsJson.
+ *
+ * Both endpoints are undocumented and their auth headers have changed before, so
+ * the collector must treat a failed/parse-less read as "no signal" (return
+ * without writing) — never as "plenty of quota." The direct-SDK adapter already
+ * captures the unified-7d headers on success (topology-free), so this seam is the
+ * remaining path, wired by a follow-up once the container/credential layout is
+ * confirmed. Left unimplemented so nothing hard-codes an unverified path.
+ */
+export async function collectCliWeeklyQuota(_adapterType: CliAdapterType): Promise<void> {
+  // Intentionally unimplemented — see the doc comment above. A follow-up wires
+  // the provider-native read + parse + recordCliWeeklyQuota once topology is
+  // confirmed. Until then, the topology-free direct-SDK capture path feeds the
+  // signal, and the policy falls back to the proxy when no fresh snapshot exists.
+  return;
 }
