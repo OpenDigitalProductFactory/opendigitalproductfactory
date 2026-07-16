@@ -5,6 +5,11 @@
 // registered as a navigation source in lib/ea/domain-nav-sources.ts. The two groups
 // (Delivery vs Runtime & Releases) keep self-upgrade/dev-loop visibly distinct from the
 // Backlog queue until P2 re-homes them off /ops entirely.
+//
+// EP-DELIVERY-FLOW BI-1DE21746: the Delivery group reads left-to-right as ONE flow —
+// "Delivery Flow" (the investment funnel → the bet → execution board, at /ops/demand)
+// leads, and "Backlog" is the execution/burn-down board (/ops) it feeds into. They
+// are two faces of the same BacklogItem, no longer two duplicate boards.
 
 export const OPS_NAV_GROUPS: ReadonlyArray<{
   label: string;
@@ -13,8 +18,8 @@ export const OPS_NAV_GROUPS: ReadonlyArray<{
   {
     label: "Delivery",
     tabs: [
+      { label: "Delivery Flow", href: "/ops/demand" },
       { label: "Backlog", href: "/ops" },
-      { label: "Demand", href: "/ops/demand" },
     ],
   },
   {
