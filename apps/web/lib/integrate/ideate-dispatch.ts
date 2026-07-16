@@ -18,7 +18,16 @@ import {
   sandboxExec,
   writeSandboxFile,
 } from "./sandbox/agent-cli-runtime";
+import type { ChatMessage } from "@/lib/inference/ai-inference";
 const IDEATE_TIMEOUT_MS = 600_000; // 10 minutes — complex features need time for codebase research
+
+// Local models often wrap the design JSON in prose or emit malformed JSON that
+// survives repairJson. Rather than hard-fail on the first unparseable turn
+// (BI-0463ED78), we give the model a bounded chance to reformat its own output
+// into strict JSON before surfacing an error to the operator.
+export const LOCAL_IDEATE_MAX_ATTEMPTS = 2;
+const REFORMAT_INSTRUCTION =
+  "Your previous response could not be parsed. Reply with ONLY the design document as a single valid JSON object — no prose, no explanation, and no markdown code fences. Make sure every string is properly quoted and escaped, and remove any trailing commas.";
 
 export type IdeateResult = {
   designDoc: Record<string, unknown> | null;
@@ -325,6 +334,42 @@ function parseDesignDoc(output: string): Record<string, unknown> | null {
 }
 
 /**
+ * Run the local (routeAndCall) ideate inference with a bounded reformat-retry.
+ * On the first attempt the model gets the research prompt; if the output can't
+ * be parsed into a design doc, subsequent attempts feed the model its own
+ * output back with a strict "JSON only" instruction. This turns a single
+ * malformed local inference from a hard failure into a recoverable one
+ * (BI-0463ED78) without any provider fallback or new inference path.
+ *
+ * `call` is injected (rather than importing routeAndCall directly) so the retry
+ * loop is unit-testable without the routing stack.
+ */
+export async function runLocalIdeateWithRetry(
+  call: (messages: ChatMessage[]) => Promise<string>,
+  basePrompt: string,
+  maxAttempts: number = LOCAL_IDEATE_MAX_ATTEMPTS,
+  onAttempt?: (attempt: number) => void,
+): Promise<{ designDoc: Record<string, unknown> | null; rawOutput: string; attempts: number }> {
+  let rawOutput = "";
+  let designDoc: Record<string, unknown> | null = null;
+  let attempt = 0;
+  for (attempt = 1; attempt <= maxAttempts && !designDoc; attempt++) {
+    onAttempt?.(attempt);
+    const messages: ChatMessage[] =
+      attempt === 1
+        ? [{ role: "user", content: basePrompt }]
+        : [
+            { role: "user", content: basePrompt },
+            { role: "assistant", content: rawOutput || "(empty response)" },
+            { role: "user", content: REFORMAT_INSTRUCTION },
+          ];
+    rawOutput = (await call(messages)).trim();
+    designDoc = parseDesignDoc(rawOutput);
+  }
+  return { designDoc, rawOutput, attempts: attempt - 1 };
+}
+
+/**
  * Dispatch ideate research to the selected external CLI (Claude / Codex / Grok) inside the sandbox.
  */
 /** Derive a few distinctive search terms from the feature title + description,
@@ -431,16 +476,24 @@ export async function dispatchIdeateResearch(params: {
         deriveSearchTerms(params.featureTitle, params.featureDescription),
         params.onProgress,
       );
-      const prompt = buildResearchPrompt(params) + codeGraphContext;
+      const basePrompt = buildResearchPrompt(params) + codeGraphContext;
       const { routeAndCall } = await import("@/lib/inference/routed-inference");
-      const response = await routeAndCall(
-        [{ role: "user" as const, content: prompt }],
-        "You are a senior software architect producing a structured design document. Respond with the design document content only — no preamble.",
-        "internal",
-        { budgetClass: "quality_first", ...(params.modelTier ? { modelTier: params.modelTier } : {}) },
+      const systemPrompt =
+        "You are a senior software architect producing a structured design document. Respond with the design document content only — no preamble.";
+      const { designDoc, rawOutput } = await runLocalIdeateWithRetry(
+        async (messages) => {
+          const response = await routeAndCall(messages, systemPrompt, "internal", {
+            budgetClass: "quality_first",
+            ...(params.modelTier ? { modelTier: params.modelTier } : {}),
+          });
+          return response.content ?? "";
+        },
+        basePrompt,
+        LOCAL_IDEATE_MAX_ATTEMPTS,
+        (attempt) => {
+          if (attempt > 1) params.onProgress?.("Reformatting the design into valid JSON…");
+        },
       );
-      const rawOutput = (response.content ?? "").trim();
-      const designDoc = parseDesignDoc(rawOutput);
       return {
         designDoc,
         rawOutput,
