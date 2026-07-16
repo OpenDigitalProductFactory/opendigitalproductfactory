@@ -993,6 +993,12 @@ export function AgentCoworkerPanel({
         {messages.map((msg, i) => {
           const prevAgentId = i > 0 ? messages[i - 1]?.agentId : null;
           const showAgentLabel = msg.role === "assistant" && msg.agentId !== prevAgentId;
+          // Button-decisions are actionable only on the latest turn while idle:
+          // clicking submits the option as the human's reply and continues the
+          // turn. Superseded decisions (a newer message exists) or an in-flight
+          // turn (isBusy) render without buttons — the prose closeout still shows.
+          const isLatest = i === messages.length - 1;
+          const decisionActive = isLatest && !isBusy && msg.role === "assistant";
           return (
             <AgentMessageBubble
               key={msg.id}
@@ -1001,6 +1007,7 @@ export function AgentCoworkerPanel({
               agentName={showAgentLabel && msg.agentId ? (AGENT_NAME_MAP[msg.agentId] ?? msg.agentId) : null}
               onApprove={handleApprove}
               onReject={handleReject}
+              {...(decisionActive ? { onDecision: (value: string) => handleSend(value) } : {})}
               {...(msg.deliveryState ? { deliveryState: msg.deliveryState } : {})}
               {...(msg.deliveryState === "failed" ? { onRetry: () => handleRetry(msg.id) } : {})}
             />

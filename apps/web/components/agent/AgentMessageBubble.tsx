@@ -7,6 +7,11 @@ import type { AgentMessageProvider, AgentMessageRow } from "@/lib/agent-coworker
 import type { ReactNode } from "react";
 import { AgentAttachmentCard } from "./AgentAttachmentCard";
 import { providerModelLabel } from "@/lib/agent/provider-model-label";
+import {
+  parseDecisionFromContent,
+  type CoworkerDecision,
+  type CoworkerDecisionOption,
+} from "@/lib/tak/decision-block";
 
 /**
  * Format the per-turn provider/model attribution badge shown on assistant
@@ -67,6 +72,14 @@ type Props = {
   agentName: string | null;
   onApprove?: (proposalId: string) => void;
   onReject?: (proposalId: string) => void;
+  /**
+   * Present only when this message is the latest turn and the panel is idle:
+   * a clicked decision option is submitted as the human's reply via this
+   * callback, continuing the turn. When absent, decision buttons are not
+   * rendered (a superseded/in-flight decision is conveyed by the prose closeout
+   * already visible above it).
+   */
+  onDecision?: (value: string) => void;
   deliveryState?: "sending" | "sent" | "failed";
   onRetry?: () => void;
 };
@@ -248,12 +261,82 @@ function formatRelativeTime(isoString: string): string {
   return `${days}d ago`;
 }
 
+/**
+ * Renders a coworker decision as clickable buttons (EP-COWORKER-INTERACTIVITY).
+ * The recommended option is the primary button; a "reject" option is tinted as
+ * the negative action. Clicking submits the option's value as the human's reply
+ * — the single-press equivalent of typing it. The free-text input remains the
+ * "Other…" escape hatch, so this never traps the human into the offered set.
+ */
+function DecisionButtons({
+  decision,
+  onDecision,
+}: {
+  decision: CoworkerDecision;
+  onDecision: (value: string) => void;
+}) {
+  const buttonStyle = (option: CoworkerDecisionOption) => {
+    const negative = option.kind === "reject";
+    if (option.recommended) {
+      return {
+        background: "var(--dpf-accent)",
+        border: "1px solid var(--dpf-accent)",
+        color: "#fff",
+        fontWeight: 600,
+      };
+    }
+    if (negative) {
+      return {
+        background: "color-mix(in srgb, var(--dpf-error) 12%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--dpf-error) 34%, transparent)",
+        color: "var(--dpf-error)",
+        fontWeight: 500,
+      };
+    }
+    return {
+      background: "color-mix(in srgb, var(--dpf-surface-2) 90%, transparent)",
+      border: "1px solid var(--dpf-border)",
+      color: "var(--dpf-text)",
+      fontWeight: 500,
+    };
+  };
+
+  return (
+    <div
+      data-testid="agent-decision"
+      style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6, marginLeft: 4 }}
+    >
+      {decision.options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          data-testid="agent-decision-option"
+          data-recommended={option.recommended ? "true" : undefined}
+          onClick={() => onDecision(option.value)}
+          title={decision.prompt ?? undefined}
+          style={{
+            borderRadius: 8,
+            padding: "6px 14px",
+            fontSize: 12,
+            lineHeight: 1.2,
+            cursor: "pointer",
+            ...buttonStyle(option),
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AgentMessageBubble({
   message,
   showAgentLabel,
   agentName,
   onApprove,
   onReject,
+  onDecision,
   deliveryState,
   onRetry,
 }: Props) {
@@ -475,7 +558,12 @@ export function AgentMessageBubble({
   }
 
   const isAssistantError = !isUser && looksLikeAgentError(message.content);
-  const managedDocumentIds = isUser ? [] : extractManagedDocumentIds(message.content);
+  // Extract any button-decision the coworker attached, and strip its sentinel
+  // from the human-visible content before rendering / doc-id extraction.
+  const { cleanedContent, decision } = !isUser
+    ? parseDecisionFromContent(message.content)
+    : { cleanedContent: message.content, decision: null };
+  const managedDocumentIds = isUser ? [] : extractManagedDocumentIds(cleanedContent);
 
   return (
     <div
@@ -544,8 +632,8 @@ export function AgentMessageBubble({
             )}
             <ReactMarkdown components={MARKDOWN_COMPONENTS}>
               {message.role === "assistant"
-                ? stripSystemPromptPrefix(message.content)
-                : message.content}
+                ? stripSystemPromptPrefix(cleanedContent)
+                : cleanedContent}
             </ReactMarkdown>
             {managedDocumentIds.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
@@ -607,6 +695,9 @@ export function AgentMessageBubble({
           </div>
         )}
       </div>
+      {!isUser && decision && onDecision && (
+        <DecisionButtons decision={decision} onDecision={onDecision} />
+      )}
       {isUser && deliveryState && deliveryState !== "sent" && (
         <div
           style={{

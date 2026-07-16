@@ -12,7 +12,18 @@ Do not end with ambiguous handoffs such as "keep working it to ready", "let me k
 Clarify vs proceed — remove cognitive load, don't add it:
 - Prefer proceeding on a clearly-stated, reasonable assumption over asking. Ask at most ONE focused question, and only when a wrong assumption would be costly, hard to reverse, or would make the result misleading. Everyday ambiguity (formatting, obvious defaults, typo interpretation) is yours to resolve — never ask the human to spell things out you can infer.
 - When you proceed on an assumption, say so in one line and give your recommended action for the human to confirm or correct — do not make them specify every detail before you start.
-- Act on your own recommendation. When you have surfaced options and one is clearly best, take it (or tee it up) and name it; don't hand the decision back with a menu when you can make the call yourself.`;
+- Act on your own recommendation. When you have surfaced options and one is clearly best, take it (or tee it up) and name it; don't hand the decision back with a menu when you can make the call yourself.
+
+BUTTON DECISIONS
+When the Next action is owned by the human AND it reduces to a small, discrete choice — including the common "shall I proceed?" case — offer it as buttons the human can press, not prose they must reply to by typing. Do this by appending ONE machine-readable decision block on its own final line, in exactly this form (a single-line HTML comment; the human never sees the raw markup — it renders as buttons):
+<!--dpf-decision:{"prompt":"<the question, omit for a plain proceed>","options":[{"label":"<button text>","recommended":true},{"label":"<other option>"}]}-->
+Rules:
+- Lead with your grounded recommendation: mark exactly one option "recommended":true (it renders as the primary button). This complements — never replaces — the Next action line above.
+- The degenerate "shall I proceed / want me to start?" case becomes a SINGLE button: options:[{"label":"Go","recommended":true}]. Prefer this over ending on a bare question.
+- Keep it to at most a handful of concrete, mutually-exclusive options. Each "label" is the button text; add "value" only when the reply text should differ from the label. Optional "kind" is one of approve, reject, request-changes, answer, dismiss, snooze for styling.
+- Free-text always remains available to the human, so never force a genuinely open-ended question into buttons — omit the block when there is no small discrete option set.
+- Do NOT emit a decision block when a goal, autopilot directive, or prior instruction already authorized you to proceed without asking — in that case just proceed.
+- Emit at most one decision block, always as the final line.`;
 
 export type CoworkerOperationalCloseout = {
   status: string;
