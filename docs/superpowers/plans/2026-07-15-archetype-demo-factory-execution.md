@@ -30,15 +30,23 @@ no `Math.random`/`Date` in the core).
   shows money in-flight *and* revenue accruing. `evaluateDemoDelight` is exported for reuse as the P4
   CI gate. **Verified:** 100 tests green (94 oracle + determinism/flavor/enrichment/grounding/golden);
   full package suite 238/238.
-- ⏳ **Next** — `apps/web/lib/demo/load-demo-business.ts` — `loadDemoBusiness(archetypeId, { flavor? })` /
-  `unloadDemoBusiness()`: upsert the generated `DemoBusiness` into the real tables, set the org
-  archetype via the existing reset path (`resetStorefrontArchetype`), run `runSetupCompletionSeeds`.
-  Provenance/teardown: most target models (`StorefrontBooking`, `ServiceProvider`, `Bill`,
-  `TaxObligationPeriod`, `Obligation`) have **no** `source` column, so demo rows are tagged with a
-  stable `demo-` prefix on their `@unique` refs (`bookingRef`/`providerId`/`billRef`/…) for a
-  `deleteMany({ startsWith: "demo-" })` teardown (resolves spec §9.1). Guardrail: never load over
-  non-demo data. Verified against the **live** `loadLivingBusinessSnapshot` (same code path, not a
-  fixture).
+- ✅ **Landed (pure planner)** — `packages/storefront-templates/src/demo-business-load.ts` —
+  `planDemoLoad(demo, { storefrontId, itemIds })` maps a `DemoBusiness` onto the exact rows the live
+  loader reads (`ServiceProvider`, `StorefrontBooking`, `Bill`/`Supplier`, `EmployeeProfile`),
+  DB-free and deterministic, so the risky part — field mapping, reversible `demo-` tagging, the
+  load-over-real-data guardrail (`isSafeToLoadDemo`) — is unit-tested without a database. Provenance:
+  most target models have **no** `source` column, so every demo row carries a stable `demo-` prefix
+  on its `@unique` ref; `demoTeardownSpec` drives a `deleteMany({ startsWith })` teardown (resolves
+  spec §9.1). **Verified:** planner suite green over all 94 (refs/FK-safety/status-mapping/teardown/
+  guardrail); package suite stays green.
+- ✅ **Landed (thin executor)** — `apps/web/lib/demo/load-demo-business.ts` — `loadDemoBusiness` /
+  `unloadDemoBusiness`: resolve the org, run the guardrail, set the archetype via
+  `resetStorefrontArchetype`, execute `planDemoLoad` as prisma upserts (parents first; FK ids
+  resolved for `Bill.supplierId`→`Supplier.id`, `Booking.providerId`→`ServiceProvider.id`), and run
+  `runSetupCompletionSeeds`. `db` is injectable; covered by a fake-db unit test (guardrail refusal,
+  demo-prefix tagging, reversible teardown) run in CI. Schema wiring verified against the live DB
+  (`information_schema` column + FK checks). **Remaining tier:** end-to-end render through the live
+  `loadLivingBusinessSnapshot` on a running install — exercised by P2's gallery / a deployed build.
 
 ## P2 — the gallery (founder review surface)
 
