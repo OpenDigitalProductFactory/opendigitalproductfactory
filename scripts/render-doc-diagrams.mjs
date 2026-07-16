@@ -110,7 +110,11 @@ function main() {
   // Render mode. Prune orphans, render/refresh, rewrite manifest.
   fs.mkdirSync(DIAGRAMS_ABS, { recursive: true });
   const puppeteerCfg = path.join(os.tmpdir(), "dpf-puppeteer.json");
-  fs.writeFileSync(puppeteerCfg, JSON.stringify({ args: ["--no-sandbox", "--disable-gpu"] }));
+  const cfg = { args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"] };
+  // On Alpine/musl (the convergence sandbox), point at the system chromium —
+  // Google's glibc Chrome cannot run there. Set PUPPETEER_EXECUTABLE_PATH.
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) cfg.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  fs.writeFileSync(puppeteerCfg, JSON.stringify(cfg));
 
   for (const key of Object.keys(manifest)) {
     if (!wanted.has(key)) {

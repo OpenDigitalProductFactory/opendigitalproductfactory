@@ -142,6 +142,10 @@ jobs:
         run: node --test scripts/check-doc-links.test.mjs
       - name: User-guide link integrity
         run: node scripts/check-doc-links.mjs
+      - name: Diagram assets are fresh
+        # --check only compares committed SVGs against the manifest (no Chromium
+        # needed); rendering happens in a compile-ready env via `pnpm docs:diagrams`.
+        run: node scripts/render-doc-diagrams.mjs --check
 
   pr-health-test:
     name: PR Health Logic
