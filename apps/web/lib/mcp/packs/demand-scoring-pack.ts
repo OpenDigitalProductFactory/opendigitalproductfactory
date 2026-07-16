@@ -115,6 +115,20 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "run_capacity_drain",
+    description:
+      "Evaluate the use-it-or-lose-it capacity policy: near the weekly pre-paid LLM allocation reset, with a healthy pool and free build slots, dispatch the top demand-ranked ready work so allocation isn't wasted. dryRun=true (default) reports the decision without dispatching; dryRun=false actually dispatches (bounded by the WIP cap). Off unless capacityDrainEnabled.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dryRun: { type: "boolean", description: "true (default) = report the decision only; false = actually dispatch up to the WIP headroom." },
+      },
+      required: [],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "sweep_duplicate_demand",
     description:
       "Scan the open backlog for likely-duplicate pairs (by title/body similarity) so recurring demand can be merged and reach concentrated. Read-only — returns ranked pairs across the whole open set; use merge_backlog_items to act on them. A safe on-demand alternative to auto-deduping at intake.",
@@ -634,6 +648,18 @@ async function approveDemandForFundingHandler(
   };
 }
 
+async function runCapacityDrainHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+  const dryRun = params["dryRun"] !== false; // default true (report only)
+  const { evaluateAndDrainCapacity } = await import("@/lib/capacity/evaluate-drain");
+  const r = await evaluateAndDrainCapacity({ prisma, userId, dryRun });
+  const suffix = r.drained
+    ? ` — dispatched ${r.dispatched} build(s)`
+    : dryRun && r.decision.drain
+      ? " (would dispatch; dry run)"
+      : "";
+  return { success: true, message: `${r.decision.reason}${suffix}`, data: r };
+}
+
 export const demandScoringPack: ToolPack = {
   packId: "demand-scoring",
   definitions,
@@ -645,6 +671,7 @@ export const demandScoringPack: ToolPack = {
     merge_backlog_items: (params) => mergeBacklogItemsHandler(params),
     sweep_duplicate_demand: (params) => sweepDuplicateDemandHandler(params),
     approve_demand_for_funding: (params, userId, ctx) => approveDemandForFundingHandler(params, userId, ctx),
+    run_capacity_drain: (params, userId) => runCapacityDrainHandler(params, userId),
   },
   grants: {
     score_demand_item: ["backlog_write"],
@@ -654,5 +681,6 @@ export const demandScoringPack: ToolPack = {
     merge_backlog_items: ["backlog_write"],
     sweep_duplicate_demand: ["backlog_read"],
     approve_demand_for_funding: ["backlog_write"],
+    run_capacity_drain: ["backlog_write"],
   },
 };

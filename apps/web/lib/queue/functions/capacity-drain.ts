@@ -1,0 +1,37 @@
+import { cron } from "inngest";
+import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
+
+// Use-it-or-lose-it capacity drain — evaluates hourly. Near the weekly
+// allocation reset, with a healthy pool and free build slots, it dispatches the
+// top demand-ranked ready work so pre-paid LLM capacity is not wasted. No-op
+// unless capacityDrainEnabled (opt-in). Kernel decision DI-5FED0D945EBB.
+export const capacityDrainScheduled = inngest.createFunction(
+  {
+    id: "build/capacity-drain-scheduled",
+    retries: 1,
+    concurrency: { limit: 1, scope: "fn" },
+    // Off-minute hourly (avoids the top-of-hour fleet stampede).
+    triggers: [cron("17 * * * *")],
+  },
+  async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
+    return step.run("evaluate-capacity-drain", async () => {
+      const { prisma } = await import("@dpf/db");
+      const { evaluateAndDrainCapacity } = await import("@/lib/capacity/evaluate-drain");
+      const { dispatchApprovedIdeateBuilds } = await import("@/lib/integrate/ideate-on-approval");
+      const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
+
+      const userId = await resolveScheduledOwnerUserId();
+      const result = await evaluateAndDrainCapacity({ prisma, userId });
+      // Fire Ideate for anything the drain just promoted (same completion the
+      // daily tee-up does), so drained builds don't strand in `ideate`.
+      const ideateDispatch = result.drained
+        ? await dispatchApprovedIdeateBuilds({ userId })
+        : null;
+      return { ...result, ideateDispatch };
+    });
+  },
+);

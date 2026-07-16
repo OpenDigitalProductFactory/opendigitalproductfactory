@@ -318,6 +318,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "capacity-drain",
+    inngestId: "build/capacity-drain-scheduled",
+    name: "Capacity drain (use-it-or-lose-it)",
+    purpose:
+      "Near the weekly LLM-allocation reset, with a healthy pool and free build slots, dispatch top demand-ranked ready work so allocation is not wasted. Opt-in (capacityDrainEnabled).",
+    cron: "17 * * * *",
+    cadence: "Hourly at :17",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "assurance-remediation-tee-up",
     inngestId: "assurance/remediation-tee-up-scheduled",
     name: "Assurance remediation tee-up",

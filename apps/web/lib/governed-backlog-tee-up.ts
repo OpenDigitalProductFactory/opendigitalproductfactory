@@ -100,7 +100,7 @@ export function parseFixContextFromBody(body: string | null | undefined): Parsed
   return out;
 }
 
-export type GovernedBacklogTeeUpTrigger = "daily" | "manual";
+export type GovernedBacklogTeeUpTrigger = "daily" | "manual" | "capacity-drain";
 
 export type GovernedBacklogTeeUpCandidate = {
   id: string;
@@ -491,8 +491,18 @@ export async function promoteBacklogItemToBuildDraft(
   };
 }
 
-function resolveRequestedLimit(config: GovernedBacklogConfig, requestedLimit?: number): number {
-  const configuredCap = config?.backlogTeeUpDailyCap ?? DEFAULT_DAILY_CAP;
+function resolveRequestedLimit(
+  config: GovernedBacklogConfig,
+  requestedLimit?: number,
+  capOverride?: number,
+): number {
+  // capOverride replaces the daily cap as the ceiling for this run — used by the
+  // capacity-drain path to fill idle build slots up to the WIP cap near the
+  // weekly-allocation reset, rather than being held to the normal daily cadence.
+  const configuredCap =
+    typeof capOverride === "number" && capOverride >= 0
+      ? Math.floor(capOverride)
+      : config?.backlogTeeUpDailyCap ?? DEFAULT_DAILY_CAP;
   if (requestedLimit == null || Number.isNaN(requestedLimit)) {
     return configuredCap;
   }
@@ -506,6 +516,8 @@ export async function runGovernedBacklogTeeUp(input: {
   userId: string;
   trigger: GovernedBacklogTeeUpTrigger;
   limit?: number;
+  /** Overrides the daily cap as the per-run ceiling (capacity-drain path). */
+  capOverride?: number;
 }): Promise<{
   trigger: GovernedBacklogTeeUpTrigger;
   requestedLimit: number;
@@ -514,7 +526,7 @@ export async function runGovernedBacklogTeeUp(input: {
   skippedCount: number;
   builds: Array<{ backlogItemId: string; buildId: string }>;
 }> {
-  const { prisma, userId, trigger, limit } = input;
+  const { prisma, userId, trigger, limit, capOverride } = input;
   const config = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
     select: {
@@ -523,7 +535,7 @@ export async function runGovernedBacklogTeeUp(input: {
     },
   });
 
-  const requestedLimit = resolveRequestedLimit(config, limit);
+  const requestedLimit = resolveRequestedLimit(config, limit, capOverride);
   if (config?.governedBacklogEnabled !== true || requestedLimit <= 0) {
     return {
       trigger,
