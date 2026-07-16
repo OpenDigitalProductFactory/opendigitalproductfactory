@@ -10,8 +10,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 8,
     "demand": {
       "byStage": {
-        "capture": 6,
-        "deliver": 5,
+        "deliver": 11,
         "settle": 4,
       },
       "inFlight": 9,
@@ -41,8 +40,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 8,
     "demand": {
       "byStage": {
-        "capture": 8,
-        "deliver": 5,
+        "deliver": 13,
         "settle": 2,
       },
       "inFlight": 7,
@@ -72,8 +70,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 7,
     "demand": {
       "byStage": {
-        "capture": 5,
-        "deliver": 4,
+        "deliver": 9,
         "settle": 3,
       },
       "inFlight": 7,
@@ -103,8 +100,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 8,
     "demand": {
       "byStage": {
-        "capture": 5,
-        "deliver": 6,
+        "deliver": 11,
         "settle": 4,
       },
       "inFlight": 10,
@@ -134,8 +130,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 7,
     "demand": {
       "byStage": {
-        "capture": 6,
-        "deliver": 4,
+        "deliver": 10,
         "settle": 2,
       },
       "inFlight": 6,
@@ -1033,9 +1028,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 10,
     "demand": {
       "byStage": {
-        "capture": 2,
         "deliver": 6,
-        "retain": 6,
+        "retain": 8,
         "settle": 4,
       },
       "inFlight": 10,
@@ -1530,9 +1524,9 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 8,
     "demand": {
       "byStage": {
-        "capture": 5,
         "deliver": 6,
         "settle": 4,
+        "trust-compliance": 5,
       },
       "inFlight": 10,
       "primaryQueue": "pickups",
@@ -1592,8 +1586,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 9,
     "demand": {
       "byStage": {
-        "capture": 6,
         "deliver": 6,
+        "retain": 6,
         "settle": 2,
       },
       "inFlight": 8,
@@ -1623,8 +1617,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 6,
     "demand": {
       "byStage": {
-        "capture": 5,
         "deliver": 4,
+        "retain": 5,
         "settle": 3,
       },
       "inFlight": 7,
@@ -1654,8 +1648,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 7,
     "demand": {
       "byStage": {
-        "capture": 5,
         "deliver": 5,
+        "retain": 5,
         "settle": 4,
       },
       "inFlight": 9,
@@ -1685,9 +1679,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 6,
     "demand": {
       "byStage": {
-        "capture": 2,
         "deliver": 6,
-        "retain": 5,
+        "retain": 7,
         "settle": 2,
       },
       "inFlight": 8,
@@ -1717,9 +1710,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 10,
     "demand": {
       "byStage": {
-        "capture": 2,
         "deliver": 5,
-        "retain": 5,
+        "retain": 7,
         "settle": 2,
       },
       "inFlight": 7,
@@ -1749,9 +1741,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 8,
     "demand": {
       "byStage": {
-        "capture": 3,
         "deliver": 4,
-        "retain": 7,
+        "retain": 10,
         "settle": 2,
       },
       "inFlight": 6,
@@ -1781,9 +1772,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 9,
     "demand": {
       "byStage": {
-        "capture": 3,
         "deliver": 3,
-        "retain": 7,
+        "retain": 10,
         "settle": 4,
       },
       "inFlight": 7,
@@ -1813,9 +1803,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 7,
     "demand": {
       "byStage": {
-        "capture": 2,
         "deliver": 5,
-        "retain": 8,
+        "retain": 10,
         "settle": 2,
       },
       "inFlight": 7,
@@ -2031,10 +2020,10 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 10,
     "demand": {
       "byStage": {
-        "capture": 2,
         "deliver": 3,
         "retain": 5,
         "settle": 2,
+        "trust-compliance": 2,
       },
       "inFlight": 5,
       "primaryQueue": "renewals",
@@ -2063,10 +2052,10 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 10,
     "demand": {
       "byStage": {
-        "capture": 4,
         "deliver": 4,
         "retain": 6,
         "settle": 4,
+        "trust-compliance": 4,
       },
       "inFlight": 8,
       "primaryQueue": "renewals",
@@ -2095,10 +2084,10 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 9,
     "demand": {
       "byStage": {
-        "capture": 2,
         "deliver": 5,
         "retain": 5,
         "settle": 2,
+        "trust-compliance": 2,
       },
       "inFlight": 7,
       "primaryQueue": "renewals",
@@ -2840,9 +2829,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 8,
     "demand": {
       "byStage": {
-        "capture": 2,
+        "capture": 5,
         "deliver": 5,
-        "qualify": 3,
         "settle": 4,
       },
       "inFlight": 9,
@@ -2872,9 +2860,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 6,
     "demand": {
       "byStage": {
-        "capture": 3,
+        "capture": 7,
         "deliver": 6,
-        "qualify": 4,
         "settle": 4,
       },
       "inFlight": 10,
@@ -2904,9 +2891,8 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "customers": 6,
     "demand": {
       "byStage": {
-        "capture": 2,
+        "capture": 4,
         "deliver": 3,
-        "qualify": 2,
         "settle": 3,
       },
       "inFlight": 6,

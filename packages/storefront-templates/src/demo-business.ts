@@ -4,6 +4,7 @@ import {
   type OperationalValueStreamStageKey,
 } from "./operational-value-stream";
 import { deriveTwinProfile, type TwinProfile, type TwinTemplate } from "./twin-profile";
+import { deriveTwinValueStreamBinding } from "./twin-value-stream";
 import { resolveDemoFlavor } from "./demo-flavor";
 
 /**
@@ -245,17 +246,6 @@ function humanizeCog(kind: string): string {
   return kind.split("-").map(titleCase).join(" ");
 }
 
-/** Map a twin queue to the value-stream stage its work sits in (Epic C grounding). */
-function stageForQueue(queueKey: string, loadBearing: OperationalValueStreamStageKey[]): OperationalValueStreamStageKey {
-  const k = queueKey.toLowerCase();
-  if (/(renew|atrisk|at-risk|laps|retain|grant)/.test(k)) return "retain";
-  if (/(dispatch|schedul|promised|deadline|hold)/.test(k)) return "qualify";
-  if (/(review|inspect|wip)/.test(k)) return "deliver";
-  if (/(restock|pick|tickets|ctas)/.test(k)) return "capture";
-  // intake / waitlist / requests / reservations / walkins / checkins → capture,
-  // unless the archetype's load-bearing stage is qualify (booking/rental).
-  return loadBearing.includes("qualify") ? "qualify" : "capture";
-}
 
 /** A plausible per-ticket value from the archetype's own item prices, else a
  *  category-shaped default. */
@@ -302,6 +292,9 @@ export function deriveDemoBusiness(
   const flavor = options.flavor ?? resolveDemoFlavor(archetype.archetypeId, archetype.category);
   const profile = deriveTwinProfile(archetype);
   const ovs = deriveOperationalValueStream(archetype);
+  // Grounding (workstream C): the single source of truth for which value-stream
+  // stage each twin queue's demand sits in.
+  const binding = deriveTwinValueStreamBinding(archetype);
 
   const currency = flavor?.currency ?? "GBP";
   const timezone = flavor?.timezone ?? "Europe/London";
@@ -378,7 +371,7 @@ export function deriveDemoBusiness(
       demand.push({
         key: `dm-${demandIndex}`,
         label: `${titleCase(workNoun)} #${1000 + demandIndex}`,
-        stageKey: stageForQueue(queue.key, ovs.loadBearingStageKeys),
+        stageKey: binding.queueToStage[queue.key],
         queueKey: queue.key,
         waitingMinutes: baseWait + i * intIn(4, 12, seed, `q-step-${queue.key}-${i}`),
         customerKey: nextCustomer(`q-cust-${queue.key}-${i}`),
