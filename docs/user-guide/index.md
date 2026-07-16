@@ -5,15 +5,15 @@ description: "Day-to-day operating guide for the Open Digital Product Factory pl
 
 The User Guide is the day-to-day operating manual for everyone who works in the platform. The same pages are bundled into the portal's in-app help at runtime, so what you see here matches what you see when you press the help button inside the product.
 
-If you're brand new, start with [Market Archetypes And Coworkers](market-archetypes), then [Getting Started](getting-started/). The other sections are organized by the work you do, not by the screens you click.
+If you're brand new, start with [Market Archetypes And Coworkers](market-archetypes.md), then [Getting Started](getting-started/index.md). The other sections are organized by the work you do, not by the screens you click.
 
 ## Start here
 
-- [Market Archetypes And Coworkers](market-archetypes) — how the selected business type shapes the portal, workspace, vocabulary, coworkers, voice, and marketing posture.
-- [Getting Started](getting-started/) — what the platform does, how navigation works, and where your AI coworker lives.
-- [Roles & Access](getting-started/roles-and-access) — the platform roles and what each one can do.
-- [AI Coworker](getting-started/ai-coworker) — working with the context-aware assistant on every screen.
-- [Development Workspace](development-workspace) — how Build Studio, VS Code, policy states, and validation environments fit together.
+- [Market Archetypes And Coworkers](market-archetypes.md) — how the selected business type shapes the portal, workspace, vocabulary, coworkers, voice, and marketing posture.
+- [Getting Started](getting-started/index.md) — what the platform does, how navigation works, and where your AI coworker lives.
+- [Roles & Access](getting-started/roles-and-access.md) — the platform roles and what each one can do.
+- [AI Coworker](getting-started/ai-coworker.md) — working with the context-aware assistant on every screen.
+- [Development Workspace](development-workspace.md) — how Build Studio, VS Code, policy states, and validation environments fit together.
 
 ## Domain guides
 
@@ -21,21 +21,21 @@ Each of these is the operating manual for one part of the platform. The pages ar
 
 | Section | What it covers |
 |---------|----------------|
-| [AI Workforce](ai-workforce/) | Provider configuration, model routing lifecycle, decision perspective, cost governance, and per-provider notes (Anthropic, Codex/OpenAI, xAI/Grok, local models). |
-| [Build Studio](build-studio/) | The guided five-phase pipeline (intake, design, build, review, ship), Build runtime, documentation impact, and deployment. |
-| [Compliance](compliance/) | Regulations, controls, evidence, audits, incidents, regulatory submissions. |
-| [Customers](customers/) | Customer accounts, sales pipeline, marketing. |
-| [Finance](finance/) | Invoicing, AP/AR, banking and reconciliation, AI spend, controls and automation, reporting. |
-| [HR](hr/) | Employees, roles, lifecycle scaffolding. |
-| [Operations](operations/) | Delivery backlog, infrastructure discovery, value-stream operations. |
-| [Platform](platform/) | AI operations, Edge Nodes, identity & access, authority & audit, tools & integrations. |
-| [Portfolios](portfolios/) | Portfolio management, health metrics, investment tracking. |
-| [Products](products/) | Product inventory, lifecycle stages, business-model roles. |
-| [Security Operations](security/) | The built-in AI SOC — sources, detections, cases, governed response, compliance, and MSP federation. |
-| [Storefront](storefront/) | Public-facing storefront — setup, catalog, inbox, fulfilment, business and operations settings. |
-| [Wiki](wiki/) | Governed platform knowledge, founder-kernel pages, principles, and citations. |
-| [Workspace](workspace/) | The personal workspace, managed documents, and cross-domain activity. |
-| [Admin](admin/) | Admin-only configuration screens. |
+| [AI Workforce](ai-workforce/index.md) | Provider configuration, model routing lifecycle, decision perspective, cost governance, and per-provider notes (Anthropic, Codex/OpenAI, xAI/Grok, local models). |
+| [Build Studio](build-studio/index.md) | The guided five-phase pipeline (intake, design, build, review, ship), Build runtime, documentation impact, and deployment. |
+| [Compliance](compliance/index.md) | Regulations, controls, evidence, audits, incidents, regulatory submissions. |
+| [Customers](customers/index.md) | Customer accounts, sales pipeline, marketing. |
+| [Finance](finance/index.md) | Invoicing, AP/AR, banking and reconciliation, AI spend, controls and automation, reporting. |
+| [HR](hr/index.md) | Employees, roles, lifecycle scaffolding. |
+| [Operations](operations/index.md) | Delivery backlog, infrastructure discovery, value-stream operations. |
+| [Platform](platform/index.md) | AI operations, Edge Nodes, identity & access, authority & audit, tools & integrations. |
+| [Portfolios](portfolios/index.md) | Portfolio management, health metrics, investment tracking. |
+| [Products](products/index.md) | Product inventory, lifecycle stages, business-model roles. |
+| [Security Operations](security/index.md) | The built-in AI SOC — sources, detections, cases, governed response, compliance, and MSP federation. |
+| [Storefront](storefront/index.md) | Public-facing storefront — setup, catalog, inbox, fulfilment, business and operations settings. |
+| [Wiki](wiki/index.md) | Governed platform knowledge, founder-kernel pages, principles, and citations. |
+| [Workspace](workspace/index.md) | The personal workspace, managed documents, and cross-domain activity. |
+| [Admin](admin/index.md) | Admin-only configuration screens. |
 
 ## Architecture and standards
 

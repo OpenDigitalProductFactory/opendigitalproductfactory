@@ -26,6 +26,6 @@ Use the Platform area to supervise AI operations, Edge Nodes, integrations, iden
 
 ## Specific Guides
 
-- [AI Operations](ai-operations) - operations map, capacity continuity, assignments, capability needs, and history.
-- [Edge Nodes](edge-nodes) - Edge Node enrollment, trust, freshness, and host-level runbook links.
-- [Tools and Integrations](tools-and-integrations) - tool catalog, native integrations, MCP surfaces, and service posture.
+- [AI Operations](ai-operations.md) - operations map, capacity continuity, assignments, capability needs, and history.
+- [Edge Nodes](edge-nodes.md) - Edge Node enrollment, trust, freshness, and host-level runbook links.
+- [Tools and Integrations](tools-and-integrations.md) - tool catalog, native integrations, MCP surfaces, and service posture.

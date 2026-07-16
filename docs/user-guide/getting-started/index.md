@@ -19,7 +19,7 @@ If you are new, start with the business story before the internal platform map: 
 - **Run operations** — Manage customers, finance, compliance, HR, portfolio, backlog, wiki, and platform health from one governed surface.
 - **Improve the install** — Use Build Studio and, in customizable installs, VS Code to make governed changes from the shared workspace.
 
-If you installed in customizable mode, Build Studio and VS Code are intended to complement each other from the same shared workspace. Build Studio is actively hardening and remains the governed evidence/promotion surface; VS Code is still the right companion for complex source edits today. See the [Development Workspace](../development-workspace) guide for details.
+If you installed in customizable mode, Build Studio and VS Code are intended to complement each other from the same shared workspace. Build Studio is actively hardening and remains the governed evidence/promotion surface; VS Code is still the right companion for complex source edits today. See the [Development Workspace](../development-workspace.md) guide for details.
 
 ## Navigation
 
@@ -39,12 +39,12 @@ Additional areas accessible via navigation within pages: Compliance, Finance, HR
 
 ## Your AI Coworker
 
-Every page has an AI coworker available via the floating action button in the bottom-right corner. The coworker understands what page you are on, what kind of business the install is configured for, and which actions are allowed on that surface. Some installs also enable voice input; narrated output is opt-in and governed by profile/consent rules. See the [AI Coworker Guide](ai-coworker) for details.
+Every page has an AI coworker available via the floating action button in the bottom-right corner. The coworker understands what page you are on, what kind of business the install is configured for, and which actions are allowed on that surface. Some installs also enable voice input; narrated output is opt-in and governed by profile/consent rules. See the [AI Coworker Guide](ai-coworker.md) for details.
 
 ## Next Steps
 
-- [Roles & Access](roles-and-access) — Understand platform roles and what each one can do
-- [Market Archetypes And Coworkers](../market-archetypes) — Understand how archetypes, coworkers, and voice fit together
-- [AI Coworker](ai-coworker) — Learn how to work with the AI assistant
-- [Development Workspace](../development-workspace) — Learn how Build Studio, VS Code, policy states, and validation environments fit together
-- [Agent Development Environments](agent-dev-environments) — Set up Claude, Codex, and Grok (desktop apps or CLI): MCP, skill pack, AGENTS.md, local settings, and managing multiple concurrent threads
+- [Roles & Access](roles-and-access.md) — Understand platform roles and what each one can do
+- [Market Archetypes And Coworkers](../market-archetypes.md) — Understand how archetypes, coworkers, and voice fit together
+- [AI Coworker](ai-coworker.md) — Learn how to work with the AI assistant
+- [Development Workspace](../development-workspace.md) — Learn how Build Studio, VS Code, policy states, and validation environments fit together
+- [Agent Development Environments](agent-dev-environments.md) — Set up Claude, Codex, and Grok (desktop apps or CLI): MCP, skill pack, AGENTS.md, local settings, and managing multiple concurrent threads

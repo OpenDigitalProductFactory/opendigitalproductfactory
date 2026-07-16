@@ -66,9 +66,9 @@ What is **not** in place yet: the detector framework on the edge (Slice 1 of the
 2. Approve trust only when the node identity, host, network placement, and intended collector scope are understood. Trust is one-way — once approved, the node's submissions become platform evidence.
 3. Review heartbeat and freshness before treating a discovery run as current. A stale heartbeat means the run is stale, regardless of how recent the row looks.
 4. For the host-level setup, follow the runbooks under `docs/install/`:
-   - [Multi-host LAN installation](../../install/edge-node-multi-host)
-   - [Air-gapped installation](../../install/edge-node-air-gapped)
-   - [Verification runbook](../../install/verification-runbook)
+   - [Multi-host LAN installation](../../install/edge-node-multi-host.md)
+   - [Air-gapped installation](../../install/edge-node-air-gapped.md)
+   - [Verification runbook](../../install/verification-runbook.md)
 5. Use collected inventory as evidence for operations and discovery workflows — owner review still applies before any change is taken on the basis of an Edge Node row.
 
 ## Authoritative State

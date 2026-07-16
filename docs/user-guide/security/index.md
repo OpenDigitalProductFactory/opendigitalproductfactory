@@ -53,5 +53,5 @@ The only step that needs you is **approval of a response** — the one decision 
 
 ## Where to go next
 
-- **[Setting up the SOC](setup)** — get data flowing: what works out of the box, and how to connect your own sources.
-- **[Operating the SOC](operating)** — the day-to-day: reading the console, working cases, tuning detections, approving responses, and running compliance reports.
+- **[Setting up the SOC](setup.md)** — get data flowing: what works out of the box, and how to connect your own sources.
+- **[Operating the SOC](operating.md)** — the day-to-day: reading the console, working cases, tuning detections, approving responses, and running compliance reports.

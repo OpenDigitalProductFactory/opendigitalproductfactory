@@ -43,5 +43,5 @@ Login: `admin@dpf.local` / `changeme123`
 
 ### Related
 
-- [Developer Setup](developer-setup) — native pnpm + Docker sidecars alternative
-- [Development Workspace](../development-workspace) — how Build Studio, VS Code, and production promotion fit together
+- [Developer Setup](developer-setup.md) — native pnpm + Docker sidecars alternative
+- [Development Workspace](../development-workspace.md) — how Build Studio, VS Code, and production promotion fit together

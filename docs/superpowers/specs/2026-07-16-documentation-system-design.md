@@ -104,58 +104,134 @@ The substrate is three-quarters built: the **code graph** (`trace_code_surface`)
 
 Per the operator decision (2026-07-16), **eliminate the divergence** rather than paper over it with a two-sided validator.
 
-### 5.1 One link-resolution module
+### 5.1 Canonical document identity, not one hardcoded URL
 
-A single canonical resolver — `resolveDocLink(sourceFilePath, href) → canonicalUrl` — owns the mapping from a repo path + an authored href to the correct URL, keyed on the **file's actual directory**, not the frontmatter `area`. It normalizes `../`, handles cross-tree and absolute links, and knows the published URL structure (`docs/user-guide/** → /user-guide/**`, `docs/dev/** → /dev/**`, etc.).
+The source of truth is the **document identity**: the repo path of a markdown page plus its derived public and portal addresses. A single resolver owns the mapping from a source page + authored href to that identity, keyed on the **file's actual directory**, not the frontmatter `area`.
 
-- The **portal** renderer replaces `DocRenderer.tsx:resolveHref` with a call into this module (via a small build-time index of the corpus, since the browser lacks the file tree).
-- The **Jekyll** side is brought into line by (a) normalizing authored links to the one convention the resolver expects and (b) a build-step generator that emits correct hrefs, replacing reliance on `jekyll-relative-links`' `.md`-only rewriting. Where feasible, prefer **site-absolute links** authored once and validated, over fragile relative math.
-- **Authoring convention** (documented, linted): one link style for the whole corpus. The link checker is the enforcer; authors stop juggling two conventions.
+```ts
+type DocLinkTarget = {
+  sourcePath: string;       // docs/user-guide/getting-started/setup-and-first-login.md
+  publicHref: string;       // /user-guide/getting-started/setup-and-first-login/
+  portalHref: string;       // /docs/getting-started/setup-and-first-login
+  anchor?: string;
+};
+
+resolveDocLink(sourcePath: string, authoredHref: string): DocLinkTarget;
+```
+
+The resolver normalizes `../`, rejects ambiguous `index` suffixes, handles anchors, and knows the published URL structure (`docs/user-guide/** → /user-guide/**`, `docs/dev/** → /dev/**`, etc.). The return shape deliberately carries **both** surface URLs; collapsing them into one string would recreate today's mismatch under a friendlier name.
+
+- The **shared module** lives in source, with a pure core usable from Node scripts and server components. Suggested split: `apps/web/lib/docs/doc-link-resolver.ts` for the pure logic and `apps/web/lib/docs/doc-index.generated.json` for the generated corpus index.
+- The **portal** renderer replaces `DocRenderer.tsx:resolveHref` with a call into this module. The app should pass the current page's `sourcePath`, not just `currentArea`, because `area` is metadata and has already proven too weak for path resolution.
+- The **public site** is brought into line by a build-step generator that rewrites or validates links against `publicHref`, replacing reliance on `jekyll-relative-links`' `.md`-only behavior. Jekyll remains the public renderer in this epic; the generated index is the contract that keeps it honest.
+- **Authoring convention**: authors link to markdown documents using resolver-supported document paths, not surface URLs. The preferred internal form is repo-relative from the current file, including the `.md` suffix when targeting a page (`../ai-workforce/index.md#model-routing`). Site-absolute `/user-guide/...` and portal-absolute `/docs/...` links are generated outputs, not hand-authored source, except for intentional external/self links documented by the checker.
 
 ### 5.2 The link checker (executable, CI-gated)
 
-A `scripts/check-doc-links.mjs` that walks `docs/user-guide/**` (and cross-tree targets), and for every inline link asserts `resolveDocLink` produces a URL that **exists on both surfaces**. Fails CI on any dead link. The docs fast-path is amended so this check always runs on docs PRs.
+Add `scripts/check-doc-links.mjs` and `scripts/check-doc-links.test.mjs`. The checker walks `docs/user-guide/**/*.md` plus allowed cross-tree targets and, for every inline link/image/anchor, asserts:
+
+- `resolveDocLink` resolves to an existing source page or allowed external URL.
+- The derived `publicHref` and `portalHref` are both valid routes for that document.
+- Anchors match generated heading ids on the target page.
+- Authored links follow the convention: no `index` suffixes, no portal URLs in source markdown, no public-site URLs used as internal shortcuts.
+- Relative image paths resolve to a served asset location on both surfaces.
+
+The CI shape should be a dedicated `Docs Link Integrity` job, not a sub-step hidden in heavy CI. It runs on all PRs and push/merge-group events, including docs-only PRs where `changes.heavy=false`. That fixes the current inversion where docs-only changes skip the expensive checks and receive no replacement scrutiny.
 
 ### 5.3 Rich content
 
-Add `remark-gfm`, an `img` component (with `src` resolved through the same module to a served asset root), and Mermaid rendering to the portal; add Mermaid + image support to the Jekyll layout. One user-guide image/screenshot convention that resolves on both surfaces.
+Add GFM, images, screenshots, and Mermaid as first-class content types.
+
+- **GFM tables**: add `remark-gfm` to the portal renderer and test that existing pipe tables produce real `<table>` elements, not paragraphs of raw text.
+- **Images and screenshots**: introduce one asset convention, lint it, and serve it on both surfaces. Recommended convention: page-local assets under `docs/user-guide/_assets/<page-slug>/...`, with markdown authored as relative links. The resolver maps them to public-site static paths and portal static paths.
+- **Image quality bar**: screenshots must have descriptive alt text, stable dimensions, and no cropped evidence-critical UI. Portal rendering should use themed borders/captions that match DPF's design tokens, not ad hoc markdown defaults.
+- **Mermaid**: prefer build-time rendering to static SVG/PNG assets over live client-side Mermaid execution. The root already carries `@mermaid-js/mermaid-cli`; using a generated asset avoids shipping a large diagram runtime into the portal and keeps the public site and portal visually identical. The source markdown remains fenced `mermaid`; the build/check step renders and validates it.
+- **Security**: generated SVG must be sanitized or rendered to PNG if sanitization is not guaranteed. Markdown HTML passthrough remains disabled unless a later security-reviewed slice explicitly enables it.
 
 ### 5.4 The documentation step (surface-agnostic gate + coworker)
 
-All surfaces land via PR (§4 unified-delivery-surfaces), so **one CI gate** enforces the step for Claude, Codex, and Build Studio identically — the same evidence-not-provenance pattern as the UX-Fit Gate and Native Dialog Guard. The gate: a PR touching a user-facing route/capability must update the corresponding user-guide page (via the Phase-4 edges) and pass link + structure checks. The activated coworker executes the authoring/repair work the gate demands and runs a standing sweep.
+All surfaces land via PR (§4 unified-delivery-surfaces), so **one CI gate** enforces the step for Claude, Codex, Grok, and Build Studio identically — the same evidence-not-provenance pattern as the UX-Fit Gate and Native Dialog Guard.
+
+The new `Docs Impact Gate` should be narrower and more actionable than the existing Spec/Plan/Doc Gate:
+
+- It triggers when a PR changes a user-facing route, a route-mapped component, user-visible workflow copy, or a documented MCP/tool capability.
+- It requires either an update to the linked user-guide page(s) or a `Docs-Impact-Decision:` trailer explaining why no user-guide change is needed.
+- It always runs after link/structure checks, so the required update cannot satisfy the gate while adding broken links.
+- It reports the exact impacted pages and route prefixes in the CI output, so the author or coworker has a repair list rather than a vague failure.
+
+The documentation-specialist remains the executor, not a second source of truth. Activation means: add routing from failed/needed docs-impact work to the existing coworker, give it the resolver/checker outputs as input, and schedule a standing sweep that files concrete repair BIs rather than silently editing broad docs.
 
 ### 5.5 The impact graph
 
-`relatedRoutes:`/`relatedCode:` frontmatter + inverted `DOCS_ROUTE_MAP`, validated (declared routes must exist), reusing the wiki lint detector shape for staleness/orphans over the user guide.
+The graph begins as a small, reviewable manifest and graduates to the existing graph substrate once the edges prove valuable.
 
-## 6. Research & Benchmarking (per AGENTS.md §10)
+- Add `relatedRoutes:` and `relatedCode:` frontmatter to user-guide pages.
+- Invert `DOCS_ROUTE_MAP` into a generated `route → docs` manifest, then merge explicit frontmatter edges.
+- Validate declared routes against real routes and declared code paths against files that exist.
+- Reuse the wiki lint detector shape for orphans, stale pages, and dangling cross-references over the user guide.
+- Project stable edges into the existing `DocumentReference`/Neo4j graph only after the filesystem manifest is green. That keeps Phase 4 from turning into a data-model migration before the simpler source-controlled contract is proven.
+
+The gate consumes this graph in two directions: changed route/code → affected docs, and changed docs → affected routes for review context.
+
+## 6. Implementation Contracts
+
+These are the non-negotiable contracts the implementation plan should preserve.
+
+| Contract | Requirement |
+| --- | --- |
+| Source identity | Every indexed page has exactly one `sourcePath`, derived from the repo path. |
+| Surface URLs | `publicHref` and `portalHref` are generated from the same identity; neither is hand-maintained in frontmatter. |
+| Authoring style | Internal markdown links target markdown source paths; generated surface URLs are outputs. |
+| Assets | User-guide images live under the approved `_assets` convention and are resolved by the same index. |
+| CI | Docs link integrity runs on docs-only PRs, regular PRs, pushes to `main`, and merge queue events. |
+| Enforcement | Docs-impact failures name the impacted page(s), route(s), and acceptable remediation. |
+| Coworker | The existing documentation-specialist receives structured repair tasks; no new docs coworker is created. |
+| Graph | Phase 4 starts filesystem-first and projects to Neo4j only after edge validation passes. |
+
+## 7. Research & Benchmarking (per AGENTS.md §10)
 
 - **Diátaxis** (already the profession corpus): tutorials / how-to / reference / explanation as distinct modes. *Adopt* — the docs coworker already carries it; the gate should check a page declares its mode. *Gap it fills*: the user guide is undifferentiated prose.
-- **Docs-as-code link checkers — `lychee` (Rust), `markdown-link-check`, `htmltest`.** *Pattern adopted*: link-check as a required CI job. *Rejected*: adopting one wholesale — none understands DPF's dual-renderer resolution (`area` frontmatter, `/docs/` vs `/user-guide/` roots), so an off-the-shelf checker validates one surface and misses the divergence that is the actual bug. We build a thin checker over our own `resolveDocLink` and MAY use `lychee` as a second pass for external URLs. (Tool adoption itself follows §9 Tool Evaluation Pipeline before any dependency is pinned.)
+- **Docs-as-code link checkers — `lychee` (Rust), `markdown-link-check`, `htmltest`.** *Pattern adopted*: link-check as a required CI job. *Rejected*: adopting one wholesale — none understands DPF's dual-renderer resolution (`area` frontmatter, `/docs/` vs `/user-guide/` roots), so an off-the-shelf checker validates one surface and misses the divergence that is the actual bug. We build a thin checker over our own `resolveDocLink` and MAY use `lychee` as a second pass for external URLs. (Tool adoption itself follows AGENTS.md §9 Tool Evaluation Pipeline before any dependency is pinned.)
 - **Vale** (prose linter): *deferred* — style linting is lower-value than link/structure integrity; revisit in a later slice.
 - **Docusaurus / Nextra / Starlight** (React doc SSGs with broken-link failure built in): *studied, not adopted now* — migrating off Jekyll is a larger bet than this epic; §5.1 instead makes the existing two renderers agree. Migration remains a possible future consolidation (would collapse the divergence at the source) and is noted as an explicit non-goal here.
 - **Anti-pattern identified**: "author more doctrine and hope for compliance" — the exact failure the process-spine spec (`2026-05-30`) diagnosed. This spec adds executable enforcement, not a fourteenth rule.
 
-## 7. Phasing
+## 8. Phasing
 
 | Phase | BI | Outcome | Gate to next |
 | --- | --- | --- | --- |
-| 1 — Stop the bleeding | BI-8605018E | `resolveDocLink` module; `check-doc-links.mjs` in CI; current dead links fixed | Link checker green on the whole corpus |
-| 2 — Rich content | BI-E94AE869 | remark-gfm + img + mermaid on both surfaces; image convention | Tables/images/diagrams render on both surfaces |
-| 3 — Enforce the step | BI-3F6BB8CC | Surface-agnostic docs CI gate; documentation-specialist activated (sweep + hand-off) | Gate blocks a route change with no doc update |
-| 4 — Impact graph | BI-74BED65D | `relatedRoutes`/`relatedCode` edges; inverted route map; "needs review" flagging | A functionality change flags affected pages |
+| 1 — Stop the bleeding | BI-8605018E | `DocLinkTarget` resolver; generated doc index; `check-doc-links.mjs` + tests; current dead links fixed | Link checker green on the whole indexed corpus and seeded failure test proves CI blocks regressions |
+| 2 — Rich content | BI-E94AE869 | `remark-gfm`; image/screenshot convention; build-time Mermaid render; portal + public-site styling | Tables, images, screenshots, and Mermaid render on both surfaces from the same source markdown |
+| 3 — Enforce the step | BI-3F6BB8CC | `Docs Impact Gate`; documentation-specialist repair hand-off; standing sweep creates actionable work | Gate blocks a route/capability change with no linked doc update or explicit docs-impact decision |
+| 4 — Impact graph | BI-74BED65D | `relatedRoutes`/`relatedCode` frontmatter; generated route-doc manifest; optional graph projection | A functionality change flags affected pages and a doc change reports affected route/code context |
 
 Phases 1–2 are engine-light and unblock everything. Phase 3 is where the *systematic* change lands. Phase 4 is the intelligence layer on top.
 
-## 8. Acceptance
+### Implementation status
 
-- **P1**: `check-doc-links.mjs` runs in CI on docs PRs and fails on a seeded dead link; the flagged `agent-dev-environments` page and the §2.1 examples resolve on both surfaces; both renderers call one `resolveDocLink`.
-- **P2**: a GFM table, an image, and a Mermaid diagram render correctly in **both** the portal and the public site; the image convention is documented.
-- **P3**: a PR that changes a user-facing route without updating its linked user-guide page fails the docs gate; the documentation-specialist coworker runs a standing sweep and is the lifecycle hand-off target; the step is enforced identically for Claude/Codex/Build Studio (evidence-not-provenance).
-- **P4**: `relatedRoutes` are validated against real routes; changing a linked route flags its pages "docs need review" and routes them to the coworker.
+- **Phase 1 — landed (2026-07-16).** Shared zero-dependency resolver `apps/web/lib/docs/doc-link-resolver.mjs` (+ `.d.mts`) derives both surface URLs from one `sourcePath`; `scripts/gen-doc-index.mjs` writes the committed `apps/web/lib/docs/doc-index.generated.json` (499 pages, with heading anchors); `scripts/check-doc-links.mjs` (+ `scripts/check-doc-links.test.mjs`, 16 tests) validates every user-guide link/image/anchor on both surfaces; `scripts/fix-doc-links.mjs` normalized the corpus (65 links across 15 files) and the remaining judgment cases were fixed by hand. The portal renderer (`DocRenderer.tsx`) now resolves through the shared module using the page's real `sourcePath` (no longer the frontmatter `area`) and ids h2–h4. Image and Mermaid rendering are deliberately deferred to Phase 2. CI job **Docs Link Integrity** runs on every PR incl. docs-only. Checker is **green on the whole corpus**. Runtime-bound gates (portal `next build`, live UX) are unrun in the source-only worktree and route through the sandbox/canonical install per §5.
+- Phases 2–4: not started.
 
-## 9. Non-goals
+## 9. Acceptance
+
+- **P1**: `check-doc-links.mjs` runs in CI on docs-only and mixed PRs, fails on a seeded dead link, and validates anchors; the flagged `agent-dev-environments` page and the §2.1 examples resolve on both surfaces; the portal renderer no longer uses frontmatter `area` as the path authority.
+- **P2**: a GFM table, an image/screenshot, and a Mermaid diagram render correctly in **both** the portal and the public site from the same source markdown; generated diagram assets are deterministic and reviewed like source artifacts.
+- **P3**: a PR that changes a user-facing route/capability without updating its linked user-guide page or adding a `Docs-Impact-Decision:` fails the docs gate; the documentation-specialist coworker receives structured repair work; the step is enforced identically for Claude/Codex/Grok/Build Studio (evidence-not-provenance).
+- **P4**: `relatedRoutes` are validated against real routes; `relatedCode` paths are validated against real files; changing a linked route/code file flags affected pages "docs need review" and reports them in CI/coworker input.
+
+## 10. Risks and Mitigations
+
+| Risk | Mitigation |
+| --- | --- |
+| Link checker becomes noisy and authors bypass it | Keep failures concrete: source file, authored href, attempted resolution, suggested replacement. |
+| Generated site rewrites create unreadable diffs | Keep source markdown unchanged where possible; generate an index/asset outputs and only normalize links in explicit repair PRs. |
+| Mermaid rendering adds flaky browser/runtime work | Use build-time CLI rendering with deterministic outputs and a small fixture test. |
+| Docs-impact gate blocks legitimate internal refactors | Allow a `Docs-Impact-Decision:` trailer, but require it to name why no user-facing documentation changed. |
+| Phase 4 turns into a graph-platform rewrite | Start with a source-controlled manifest; project to Neo4j only after the manifest contract is stable. |
+
+## 11. Non-goals
 
 - Migrating off Jekyll to a React SSG (Docusaurus/Starlight) — a larger consolidation, noted but out of scope; §5.1 converges the two existing renderers instead.
 - Folding the user guide into the managed-Document CMS — the user guide stays filesystem-authored, git-owned markdown.
 - Prose/style linting (Vale) — deferred to a later slice.
+- Enabling arbitrary raw HTML in markdown — rich content means supported markdown, generated diagrams, and governed assets, not unreviewed HTML passthrough.

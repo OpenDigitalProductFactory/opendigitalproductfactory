@@ -126,10 +126,10 @@ git push -u origin feat/my-thing
 gh pr create --base main
 ```
 
-Branch prefixes by intent: `feat/*`, `fix/*`, `chore/*`, `doc/*`, `clean/*`. One concern per branch. See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for the full PR workflow.
+Branch prefixes by intent: `feat/*`, `fix/*`, `chore/*`, `doc/*`, `clean/*`. One concern per branch. See [CONTRIBUTING.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/CONTRIBUTING.md) for the full PR workflow.
 
 ### Related
 
-- [Dev Container Setup](dev-container) — fully containerized alternative, no local Node.js required
-- [Agent Development Environments](agent-dev-environments) — set up Claude, Codex, and Grok (desktop apps or CLI): MCP, skill pack, AGENTS.md, local settings, and managing multiple concurrent threads
-- [Development Workspace](../development-workspace) — how Build Studio, VS Code, and production promotion fit together
+- [Dev Container Setup](dev-container.md) — fully containerized alternative, no local Node.js required
+- [Agent Development Environments](agent-dev-environments.md) — set up Claude, Codex, and Grok (desktop apps or CLI): MCP, skill pack, AGENTS.md, local settings, and managing multiple concurrent threads
+- [Development Workspace](../development-workspace.md) — how Build Studio, VS Code, and production promotion fit together

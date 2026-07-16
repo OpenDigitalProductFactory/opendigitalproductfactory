@@ -116,6 +116,33 @@ jobs:
       - name: Run guard loop
         run: node scripts/check-guards.mjs
 
+  docs-link-integrity:
+    name: Docs Link Integrity
+    runs-on: ubuntu-latest
+    # EP-DOCS-SYSTEM Phase 1. The user guide is rendered by two engines (the
+    # public Jekyll site and the in-portal Next.js renderer) with historically
+    # opposite link conventions and no validation — so dead links accumulated
+    # silently, and the docs-only fast-path gave docs LESS scrutiny, not more.
+    # This job has no `heavy` gate: it runs on every PR, including docs-only
+    # ones, validating every user-guide link/image/anchor against the canonical
+    # doc index on BOTH surfaces via the shared resolver
+    # (apps/web/lib/docs/doc-link-resolver.mjs). Internal-link integrity is
+    # deterministic, so it blocks; external URLs are checked by a scheduled
+    # crawl (Phase 3), not here. See
+    # docs/superpowers/specs/2026-07-16-documentation-system-design.md.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Doc index is fresh
+        run: node scripts/gen-doc-index.mjs --check
+      - name: Resolver + checker unit tests
+        run: node --test scripts/check-doc-links.test.mjs
+      - name: User-guide link integrity
+        run: node scripts/check-doc-links.mjs
+
   pr-health-test:
     name: PR Health Logic
     runs-on: ubuntu-latest

@@ -114,7 +114,7 @@ Build Studio uses the install's shared workspace as its authoring source:
 - in customizable installs, Build Studio and VS Code use the same workspace and branch
 - the Build runtime starts from that shared workspace, then adds isolation for preview, tests, and migration rehearsal
 
-See [Development Workspace](../development-workspace) for the full operating model.
+See [Development Workspace](../development-workspace.md) for the full operating model.
 
 ## What the AI Coworker Can and Cannot Do
 

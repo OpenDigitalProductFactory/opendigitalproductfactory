@@ -70,4 +70,4 @@ You can review and adjust the underlying posture in your organization's onboardi
 - Detections appearing when something noteworthy happens (and **not** appearing when activity is benign — the detector is built to avoid crying wolf).
 - Cases forming from related detections, ready for a coworker to triage.
 
-From here, move on to **[Operating the SOC](operating)**.
+From here, move on to **[Operating the SOC](operating.md)**.

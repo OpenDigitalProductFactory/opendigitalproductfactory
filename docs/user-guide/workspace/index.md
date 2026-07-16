@@ -22,6 +22,6 @@ My Workspace is your personal home base inside the platform. It gives you a cros
 - Click a tile to jump directly into the relevant area
 - Review recent activity from colleagues and AI agents without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
-- Open [Managed Documents](documents) to review document state, versions, and references
+- Open [Managed Documents](documents.md) to review document state, versions, and references
 - Use the AI coworker to get a personalized briefing on what needs your attention
-- Open the ["Needs you" inbox](attention-inbox) to act on decisions that need you — approve, answer, or open them in context
+- Open the ["Needs you" inbox](attention-inbox.md) to act on decisions that need you — approve, answer, or open them in context
