@@ -439,9 +439,23 @@ async function prepareUpgradeSourceInWorkspace(
 }
 
 /**
+ * Hard ceiling on any single git invocation. The real failure mode this guards
+ * is an INDEFINITE hang — a credential prompt, an `index.lock` wait, or process-
+ * spawn contention on Windows/WSL2 when the host is saturated by the portal's
+ * agent subprocesses. Those never return on their own, so without a timeout a
+ * single `git log` on the git-backed self-upgrade render (local-changes ledger)
+ * can wedge the whole page. 120s is far above any legitimate mechanical prep op
+ * (branch move / merge / checkout are sub-second here) yet still converts an
+ * infinite hang into a bounded non-zero result the caller already handles.
+ * BI-4A400DE4.
+ */
+const GIT_RUNNER_TIMEOUT_MS = 120_000;
+
+/**
  * Real git runner over execFile. Never throws on non-zero exit — git's exit
  * code and captured stderr are returned so callers can branch on them (a merge
- * conflict is exit 1, not an exception).
+ * conflict is exit 1, not an exception). A timed-out git is killed and returned
+ * as a non-zero result (never a hang) — see GIT_RUNNER_TIMEOUT_MS.
  */
 export async function defaultGitRunner(args: string[]): Promise<GitResult> {
   const { execFile } = await import("node:child_process");
@@ -457,13 +471,21 @@ export async function defaultGitRunner(args: string[]): Promise<GitResult> {
   return new Promise<GitResult>((resolve) => {
     execFile("git", safeArgs, {
       maxBuffer: 10 * 1024 * 1024,
+      timeout: GIT_RUNNER_TIMEOUT_MS,
+      killSignal: "SIGKILL",
       env: { ...process.env, GIT_LFS_SKIP_SMUDGE: "1" },
     }, (err, stdout, stderr) => {
       const out = stdout?.toString() ?? "";
       const errOut = stderr?.toString() ?? "";
       if (err) {
+        // execFile flags a timeout kill via err.killed + err.signal; surface it
+        // as a distinct, non-zero result so callers degrade rather than hang.
+        const killed = (err as { killed?: boolean }).killed === true;
         const code = typeof (err as { code?: unknown }).code === "number" ? (err as { code: number }).code : 1;
-        resolve({ stdout: out, stderr: errOut || errMsg(err), code });
+        const stderrOut = killed
+          ? errOut || `git timed out after ${GIT_RUNNER_TIMEOUT_MS}ms and was terminated`
+          : errOut || errMsg(err);
+        resolve({ stdout: out, stderr: stderrOut, code: killed ? 124 : code });
       } else {
         resolve({ stdout: out, stderr: errOut, code: 0 });
       }

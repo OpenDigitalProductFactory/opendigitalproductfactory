@@ -106,20 +106,61 @@ export async function collectLocalChanges(run: GitRunner, opts: CollectOptions):
   return { available: true, changes: parseNumstat(res.stdout).slice(0, max) };
 }
 
-/** Server resolver: read the live install's config + run git. */
-export async function getLocalChangesLedger(): Promise<LocalChangesResult> {
+/**
+ * Render-path deadline for the (git-backed) ledger. This runs inside the
+ * self-upgrade page's server render; the hard defaultGitRunner cap (120s) only
+ * guards against a truly-hung git, which is too long to make an operator wait
+ * for a below-the-fold panel. Bound it tightly so the page content streams
+ * promptly and the ledger degrades to its "unavailable" note under contention.
+ * BI-4A400DE4.
+ */
+const LEDGER_RENDER_DEADLINE_MS = 5_000;
+
+const LEDGER_UNAVAILABLE: LocalChangesResult = {
+  available: false,
+  note: "The local-changes list is unavailable right now.",
+  changes: [],
+};
+
+export interface LedgerDeps {
+  /** Override the git-backed collection (defaults to the live config + runner). */
+  collect?: () => Promise<LocalChangesResult>;
+  /** Override the render deadline (ms) — tests use a tiny value. */
+  deadlineMs?: number;
+}
+
+async function defaultCollect(): Promise<LocalChangesResult> {
+  const { getSelfUpgradeConfig } = await import("./config");
+  const { defaultGitRunner } = await import("./prepare-source");
+  const config = await getSelfUpgradeConfig();
+  const hostSourcePath = config.hostSourceMountPath ?? process.env.HOST_SOURCE_PATH ?? "/workspace";
+  return collectLocalChanges(defaultGitRunner, {
+    hostSourcePath,
+    remote: config.repositoryRemote ?? "origin",
+    branch: config.repositoryBranch ?? "main",
+    installBranch: config.installBranch,
+  });
+}
+
+/**
+ * Server resolver: read the live install's config + run git, bounded by a render
+ * deadline so a slow/hung git can never hold up the self-upgrade page render.
+ * Times out (or errors) to the "unavailable" note. BI-4A400DE4.
+ */
+export async function getLocalChangesLedger(deps: LedgerDeps = {}): Promise<LocalChangesResult> {
+  const collect = deps.collect ?? defaultCollect;
+  const deadlineMs = deps.deadlineMs ?? LEDGER_RENDER_DEADLINE_MS;
   try {
-    const { getSelfUpgradeConfig } = await import("./config");
-    const { defaultGitRunner } = await import("./prepare-source");
-    const config = await getSelfUpgradeConfig();
-    const hostSourcePath = config.hostSourceMountPath ?? process.env.HOST_SOURCE_PATH ?? "/workspace";
-    return await collectLocalChanges(defaultGitRunner, {
-      hostSourcePath,
-      remote: config.repositoryRemote ?? "origin",
-      branch: config.repositoryBranch ?? "main",
-      installBranch: config.installBranch,
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<LocalChangesResult>((resolve) => {
+      timer = setTimeout(() => resolve(LEDGER_UNAVAILABLE), deadlineMs);
     });
+    try {
+      return await Promise.race([collect(), deadline]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   } catch {
-    return { available: false, note: "The local-changes list is unavailable right now.", changes: [] };
+    return LEDGER_UNAVAILABLE;
   }
 }
