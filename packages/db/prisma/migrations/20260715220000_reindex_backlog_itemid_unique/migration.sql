@@ -1,0 +1,25 @@
+-- Rebuild the unique btree backing BacklogItem.itemId.
+--
+-- BI-EB0E6727: the "BacklogItem_itemId_key" btree became corrupt (an unclean
+-- shutdown / torn write). Equality lookups (WHERE "itemId" = $1) — which the
+-- backlog MCP resolvers issue via Prisma findUnique for get / update /
+-- update-status / retire / link / size — MISS ~45 rows that a sequential scan
+-- still returns, so those governance paths return not_found for ids that
+-- list_backlog_items happily lists.
+--
+-- Verified against the live index for a known-present itemId:
+--     WHERE "itemId" = $1            -> 0 rows  (index scan, corrupt)
+--     WHERE "itemId" LIKE $1         -> 0 rows  (index scan, corrupt)
+--     WHERE "itemId" IN ($1)         -> 0 rows  (index scan, corrupt)
+--     WHERE upper("itemId")=upper($1)-> 1 row   (sequential scan, correct)
+-- That divergence between index and heap is the classic signature of a corrupt
+-- btree; a code-level findFirst fallback cannot fix it because equality still
+-- routes through the same broken index.
+--
+-- REINDEX rebuilds the index in place from the heap. It restores correct
+-- equality lookups WITHOUT changing the schema (the index definition is
+-- unchanged, so Prisma sees no drift) and WITHOUT touching row data. On a
+-- healthy index it is a harmless no-op, so this migration is safe to apply in
+-- every environment. Non-CONCURRENT REINDEX is transaction-safe, which the
+-- Prisma migration runner requires.
+REINDEX INDEX "BacklogItem_itemId_key";
