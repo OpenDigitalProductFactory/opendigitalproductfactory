@@ -14,7 +14,56 @@
 
 import { DISCOVERY_TRIAGE_AGENT_ID } from "@dpf/db";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { DiscoveryTriageRunResult } from "@/lib/discovery-triage-runner";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+
+const DISCOVERY_TRIAGE_SAMPLE_LIMIT = 10;
+
+/**
+ * Compact the discovery-triage run result for inline tool output (BI-PIR-edaa1d12).
+ *
+ * run_discovery_triage persists every decision server-side, but the scheduled
+ * triage agent has no file-reading tool, so returning the full decisions[] array
+ * inline (~50k chars on a full run) overflows the runtime token budget and the
+ * daily metrics become unreadable — the summary can confirm executed-vs-skipped
+ * but not report a single count. By default we return a metrics-only summary
+ * (every count, the single top follow-up, and a capped sample of the entities
+ * still needing human review) and only inline the full decisions[] array when
+ * the caller explicitly opts in.
+ */
+export function compactDiscoveryTriageData(
+  result: DiscoveryTriageRunResult,
+  includeDecisions: boolean,
+): Record<string, unknown> {
+  const decisions = Array.isArray(result.decisions) ? result.decisions : [];
+  const actionable = decisions.filter((d) => d.requiresHumanReview);
+  const sample = (actionable.length > 0 ? actionable : decisions)
+    .slice(0, DISCOVERY_TRIAGE_SAMPLE_LIMIT)
+    .map((d) => ({ inventoryEntityId: d.inventoryEntityId, outcome: d.outcome }));
+  const topFollowUp = actionable[0]
+    ? {
+        inventoryEntityId: actionable[0].inventoryEntityId,
+        outcome: actionable[0].outcome,
+        pendingHumanReview: result.metrics?.humanReview ?? actionable.length,
+      }
+    : null;
+
+  const data: Record<string, unknown> = {
+    trigger: result.trigger,
+    processedAt: result.processedAt,
+    runIdempotencyKey: result.runIdempotencyKey,
+    skipped: result.skipped ?? false,
+    skipReason: result.skipReason ?? null,
+    metrics: result.metrics,
+    decisionCount: decisions.length,
+    topFollowUp,
+    decisionSampleIds: sample,
+  };
+  if (includeDecisions) {
+    data.decisions = decisions;
+  }
+  return data;
+}
 
 const definitions: ToolDefinition[] = [
   {
@@ -35,6 +84,12 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         trigger: { type: "string", enum: ["cadence", "volume"], default: "cadence" },
+        includeDecisions: {
+          type: "boolean",
+          default: false,
+          description:
+            "Include the full per-entity decisions[] array inline. Off by default — the response returns a compact metrics summary plus a sample of the entities needing review, because the full array can exceed the runtime token limit.",
+        },
       },
       required: [],
     },
@@ -139,18 +194,21 @@ async function runDiscoveryTriageHandler(
 ): Promise<ToolResult> {
   const { runDiscoveryTriageDaily } = await import("@/lib/discovery-triage-runner");
   const trigger = params["trigger"] === "volume" ? "volume" : "cadence";
+  const includeDecisions = params["includeDecisions"] === true;
   const result = await runDiscoveryTriageDaily(undefined, {
     trigger,
     actorType: "agent",
     actorId: context?.agentId ?? DISCOVERY_TRIAGE_AGENT_ID,
     enableAutonomousReview: true,
   });
+  const escalation = result.metrics?.escalationQueueDepth ?? 0;
   return {
     success: true,
     message: result.skipped
       ? result.skipReason ?? "Discovery triage skipped."
-      : `Discovery triage processed ${result.metrics.processed} entities with ${result.metrics.autoAttributed} auto-attributed.`,
-    data: result as unknown as Record<string, unknown>,
+      : `Discovery triage processed ${result.metrics.processed} entities with ${result.metrics.autoAttributed} auto-attributed` +
+        (escalation > 0 ? `; ${escalation} awaiting human review.` : "."),
+    data: compactDiscoveryTriageData(result, includeDecisions),
   };
 }
 

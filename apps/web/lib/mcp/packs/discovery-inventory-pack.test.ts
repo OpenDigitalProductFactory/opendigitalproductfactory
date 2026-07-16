@@ -25,7 +25,7 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => db);
 
-import { discoveryInventoryPack } from "./discovery-inventory-pack";
+import { discoveryInventoryPack, compactDiscoveryTriageData } from "./discovery-inventory-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
 const EXPECTED_TOOLS = [
@@ -133,6 +133,56 @@ describe("discovery-inventory pack — handler behavior (delegation preserved)",
     expect(arg.actorId).toBe("agent-discovery-triage");
   });
 
+  it("run_discovery_triage returns a compact summary inline and omits the full decisions[] by default", async () => {
+    const decisions = Array.from({ length: 30 }, (_, i) => ({
+      inventoryEntityId: `entity-${i}`,
+      outcome: i % 2 === 0 ? "human-review" : "auto-attributed",
+      requiresHumanReview: i % 2 === 0,
+    }));
+    triageRunner.runDiscoveryTriageDaily.mockResolvedValue({
+      trigger: "cadence",
+      processedAt: "2026-07-16T00:00:00.000Z",
+      runIdempotencyKey: "run-1",
+      skipped: false,
+      metrics: { processed: 30, autoAttributed: 15, humanReview: 15, escalationQueueDepth: 15 },
+      decisions,
+    });
+    const res = await discoveryInventoryPack.handlers.run_discovery_triage({}, "u1");
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("processed 30 entities with 15 auto-attributed");
+    expect(res.message).toContain("15 awaiting human review");
+    const data = res.data as Record<string, unknown>;
+    // The heavy array is NOT inlined by default…
+    expect(data.decisions).toBeUndefined();
+    // …but the metrics, the count, the top follow-up, and a capped sample are.
+    expect(data.metrics).toEqual({ processed: 30, autoAttributed: 15, humanReview: 15, escalationQueueDepth: 15 });
+    expect(data.decisionCount).toBe(30);
+    expect((data.decisionSampleIds as unknown[]).length).toBe(10);
+    expect(data.topFollowUp).toEqual({
+      inventoryEntityId: "entity-0",
+      outcome: "human-review",
+      pendingHumanReview: 15,
+    });
+  });
+
+  it("run_discovery_triage inlines the full decisions[] only when includeDecisions is opted in", async () => {
+    const decisions = [
+      { inventoryEntityId: "e0", outcome: "auto-attributed", requiresHumanReview: false },
+      { inventoryEntityId: "e1", outcome: "taxonomy-gap", requiresHumanReview: true },
+    ];
+    triageRunner.runDiscoveryTriageDaily.mockResolvedValue({
+      trigger: "volume",
+      processedAt: "2026-07-16T00:00:00.000Z",
+      skipped: false,
+      metrics: { processed: 2, autoAttributed: 1, humanReview: 1, escalationQueueDepth: 1 },
+      decisions,
+    });
+    const res = await discoveryInventoryPack.handlers.run_discovery_triage({ includeDecisions: true }, "u1");
+    const data = res.data as Record<string, unknown>;
+    expect(data.decisions).toEqual(decisions);
+    expect(data.decisionCount).toBe(2);
+  });
+
   it("run_hive_scout_ingest forwards actor + taskRun context and summarizes the run", async () => {
     hiveScout.runHiveScoutIngest.mockResolvedValue({
       catalogEntries: 10, gaps: 2, reviewed: 1, created: 1, duplicates: 0, deferred: 0,
@@ -228,5 +278,40 @@ describe("discovery-inventory pack — handler behavior (delegation preserved)",
     expect(noName.error).toBe("missing_name");
     const noUrl = await discoveryInventoryPack.handlers.configure_gateway_scan({ name: "x" }, "u1");
     expect(noUrl.error).toBe("missing_endpoint_url");
+  });
+});
+
+describe("compactDiscoveryTriageData", () => {
+  it("handles a skipped run with no decisions — zero count, null follow-up, empty sample", () => {
+    const data = compactDiscoveryTriageData(
+      {
+        trigger: "cadence",
+        processedAt: "2026-07-16T00:00:00.000Z",
+        skipped: true,
+        skipReason: "too soon",
+        metrics: { processed: 0, autoAttributed: 0, humanReview: 0 },
+        decisions: [],
+      } as never,
+      false,
+    );
+    expect(data.skipped).toBe(true);
+    expect(data.skipReason).toBe("too soon");
+    expect(data.decisionCount).toBe(0);
+    expect(data.topFollowUp).toBeNull();
+    expect(data.decisionSampleIds).toEqual([]);
+    expect(data.decisions).toBeUndefined();
+  });
+
+  it("samples the first decisions when none require human review (no actionable follow-up)", () => {
+    const decisions = [
+      { inventoryEntityId: "e0", outcome: "auto-attributed", requiresHumanReview: false },
+      { inventoryEntityId: "e1", outcome: "dismissed", requiresHumanReview: false },
+    ];
+    const data = compactDiscoveryTriageData(
+      { trigger: "volume", processedAt: "t", metrics: { humanReview: 0 }, decisions } as never,
+      false,
+    );
+    expect(data.topFollowUp).toBeNull();
+    expect((data.decisionSampleIds as unknown[]).length).toBe(2);
   });
 });
