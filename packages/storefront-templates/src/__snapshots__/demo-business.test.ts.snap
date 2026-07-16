@@ -5,7 +5,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "veterinary-clinic",
     "cogProposal": "Allocate the next appointment to the best provider by availability",
-    "companyName": "Riverside Veterinary Clinic",
+    "companyName": "Meadowbrook Veterinary Clinic",
     "currency": "GBP",
     "customers": 8,
     "demand": {
@@ -36,7 +36,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "dental-practice",
     "cogProposal": "Allocate the next appointment to the best provider by availability",
-    "companyName": "Riverside Dental Practice",
+    "companyName": "Bright Smile Dental",
     "currency": "GBP",
     "customers": 8,
     "demand": {
@@ -253,7 +253,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "hair-salon",
     "cogProposal": "Allocate the next appointment to the best provider by availability",
-    "companyName": "Kingsley Hair Salon",
+    "companyName": "Kingsley & Co. Hair",
     "currency": "GBP",
     "customers": 8,
     "demand": {
@@ -470,7 +470,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "plumber",
     "cogProposal": "Allocate the next job to the best technician by travel-time",
-    "companyName": "Harborview Plumber",
+    "companyName": "Ashford Plumbing & Heating",
     "currency": "GBP",
     "customers": 8,
     "demand": {
@@ -842,7 +842,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "accounting",
     "cogProposal": "Allocate the next matter to the best professional by utilization",
-    "companyName": "Northgate Accounting & Bookkeeping",
+    "companyName": "Northgate Accountancy",
     "currency": "GBP",
     "customers": 8,
     "demand": {
@@ -1339,7 +1339,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "restaurant",
     "cogProposal": "Allocate the next ticket to the best table by dwell-time",
-    "companyName": "Ashford Restaurant",
+    "companyName": "The Copper Fork",
     "currency": "GBP",
     "customers": 8,
     "demand": {
@@ -2308,7 +2308,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "new-home-builder",
     "cogProposal": "Allocate the next job to the best technician by travel-time",
-    "companyName": "Kingsley New Home Builder",
+    "companyName": "Cedar Park Homes",
     "currency": "GBP",
     "customers": 10,
     "demand": {
@@ -2339,7 +2339,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
   {
     "archetypeId": "custom-home-builder",
     "cogProposal": "Allocate the next job to the best technician by travel-time",
-    "companyName": "Northgate Custom Home Builder",
+    "companyName": "Harborview Custom Builders",
     "currency": "GBP",
     "customers": 10,
     "demand": {
