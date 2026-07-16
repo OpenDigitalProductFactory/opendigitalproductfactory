@@ -12,9 +12,10 @@
 //     i.e. the doctrine has no settled answer there yet
 //   - staleness — decision material that has aged out of its freshness window
 //     (down-weighted in decisions) yet still governs, so it wants re-validation
-// Drift (golden-decision flips) is tracked as a later sub-slice; see the spec.
+//   - drift — a canonical ("golden") decision whose winner flipped, or whose
+//     margin collapsed toward a coin-flip, under the current corpus (spec §4.3)
 
-export type FindingClass = "conflict" | "gap" | "staleness";
+export type FindingClass = "conflict" | "gap" | "staleness" | "drift";
 
 export type ReviewFinding = {
   id: string;
@@ -67,6 +68,21 @@ export type GapCluster = {
 /** How much decision material has aged out of its freshness window but still governs. */
 export type StaleMaterialSummary = {
   count: number;
+};
+
+/**
+ * A canonical decision that has drifted under the current corpus — mapped by the
+ * page from `evaluateGoldenDrift`, so this module stays free of the decision
+ * engine and remains a pure findings builder.
+ */
+export type DriftRow = {
+  scenarioId: string;
+  rationale: string;
+  expectedWinner: string;
+  actualWinner: string;
+  margin: number;
+  marginFloor: number;
+  driftKind: "flip" | "thin-margin";
 };
 
 function riskPosture(riskTier: string | null): string | null {
@@ -160,22 +176,52 @@ export function buildStalenessFindings(
   ];
 }
 
+function humanOption(optionId: string): string {
+  return optionId.split("-").filter(Boolean).join(" ");
+}
+
+export function buildDriftFindings(rows: DriftRow[]): ReviewFinding[] {
+  return rows.map((row) => {
+    const flip = row.driftKind === "flip";
+    const detail = flip
+      ? `${row.rationale} It used to land on "${humanOption(row.expectedWinner)}"; the current doctrine now favors "${humanOption(row.actualWinner)}".`
+      : `${row.rationale} "${humanOption(row.expectedWinner)}" still wins, but the call is now near-tied (margin ${row.margin.toFixed(2)}, floor ${row.marginFloor.toFixed(2)}).`;
+    return {
+      id: `drift:${row.scenarioId}`,
+      findingClass: "drift",
+      title: flip
+        ? "A doctrine change flipped a canonical decision"
+        : "A canonical decision is down to a coin-flip",
+      detail: truncate(detail, 200),
+      postureLabel: `margin ${row.margin.toFixed(2)}`,
+      count: 1,
+      href: null,
+      // The fix is to revisit a dimension or the principle aggregate, not to
+      // hand-edit one decision — send the operator to the criteria (matrix).
+      actionLabel: "Review the criteria",
+      actionHref: "/coworker-decisions/matrix",
+    };
+  });
+}
+
 /**
  * Assemble the ordered findings list. Conflicts first (they actively misfire),
- * then gaps by descending cluster size (the biggest coverage holes first),
- * then staleness (housekeeping the doctrine).
+ * then drift (a canonical call has silently changed), then gaps by descending
+ * cluster size (the biggest coverage holes first), then staleness (housekeeping).
  */
 export function buildReviewFindings(input: {
   conflicts: ConflictRow[];
+  drift?: DriftRow[];
   gapClusters: GapCluster[];
   staleMaterial?: StaleMaterialSummary;
 }): ReviewFinding[] {
   const conflicts = buildConflictFindings(input.conflicts);
+  const drift = input.drift ? buildDriftFindings(input.drift) : [];
   const gaps = buildGapFindings(input.gapClusters).sort(
     (a, b) => b.count - a.count,
   );
   const staleness = input.staleMaterial
     ? buildStalenessFindings(input.staleMaterial)
     : [];
-  return [...conflicts, ...gaps, ...staleness];
+  return [...conflicts, ...drift, ...gaps, ...staleness];
 }

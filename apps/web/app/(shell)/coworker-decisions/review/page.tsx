@@ -10,9 +10,15 @@ import { prisma, Prisma } from "@dpf/db";
 import {
   buildReviewFindings,
   type ConflictRow,
+  type DriftRow,
   type GapCluster,
   type ReviewFinding,
 } from "@/lib/wiki/decision-review-findings";
+import {
+  type ParsedPrinciplePage,
+  selectKernelCommandments,
+} from "@/lib/decision/golden-decisions";
+import { evaluateGoldenDrift, driftedScenarios } from "@/lib/decision/decision-drift";
 import {
   OrgDecisionCaptureList,
   type OpenOrgDecision,
@@ -29,6 +35,7 @@ const UNRESOLVED = ["defer", "escalate"];
 
 const CLASS_LABEL: Record<ReviewFinding["findingClass"], string> = {
   conflict: "conflict",
+  drift: "drift",
   gap: "gap",
   staleness: "stale",
 };
@@ -36,6 +43,7 @@ const CLASS_LABEL: Record<ReviewFinding["findingClass"], string> = {
 // Semantic accent per finding class, via theme tokens (no hardcoded colors).
 const CLASS_ACCENT: Record<ReviewFinding["findingClass"], string> = {
   conflict: "var(--dpf-error)",
+  drift: "var(--dpf-error)",
   gap: "var(--dpf-accent)",
   staleness: "var(--dpf-warning)",
 };
@@ -73,8 +81,14 @@ function toGapClusters(
 }
 
 export default async function DecisionReviewPage() {
-  const [conflictRows, unresolvedRows, staleCount, orgProfile, openOrgRows] =
-    await Promise.all([
+  const [
+    conflictRows,
+    unresolvedRows,
+    staleCount,
+    orgProfile,
+    openOrgRows,
+    principleRows,
+  ] = await Promise.all([
       prisma.decisionInteraction.findMany({
         where: { principleConflict: true },
         orderBy: { createdAt: "desc" },
@@ -121,7 +135,46 @@ export default async function DecisionReviewPage() {
           createdAt: true,
         },
       }),
+      // Live kernel commandment corpus — the input the golden-decision drift
+      // check re-scores against. Only commandments carry a signed vector today
+      // (see selectKernelCommandments), so that is all we need to detect a flip.
+      prisma.wikiPage.findMany({
+        where: {
+          organizationId: null,
+          pageKind: "principle",
+          principleTier: "commandment",
+          status: "published",
+        },
+        select: {
+          slug: true,
+          principleAppliesTo: true,
+          principleDimensionVector: true,
+          principleWeight: true,
+        },
+      }),
     ]);
+
+  // Re-score the canonical decisions against the current corpus and surface any
+  // that flipped or fell to a coin-flip (spec §4.3).
+  const principlePages: ParsedPrinciplePage[] = principleRows.map((p) => ({
+    slug: p.slug,
+    principleTier: "commandment",
+    principleAppliesTo: p.principleAppliesTo ?? [],
+    principleDimensionVector:
+      (p.principleDimensionVector as Record<string, number> | null) ?? undefined,
+    principleWeight: p.principleWeight ?? undefined,
+  }));
+  const driftRows: DriftRow[] = driftedScenarios(
+    evaluateGoldenDrift(selectKernelCommandments(principlePages)),
+  ).map((d) => ({
+    scenarioId: d.scenarioId,
+    rationale: d.rationale,
+    expectedWinner: d.expectedWinner,
+    actualWinner: d.actualWinner,
+    margin: d.margin,
+    marginFloor: d.marginFloor,
+    driftKind: d.driftKind ?? "flip",
+  }));
 
   const openOrgDecisions: OpenOrgDecision[] = openOrgRows.map((row) => ({
     interactionId: row.interactionId,
@@ -133,6 +186,7 @@ export default async function DecisionReviewPage() {
 
   const findings = buildReviewFindings({
     conflicts: conflictRows as ConflictRow[],
+    drift: driftRows,
     gapClusters: toGapClusters(unresolvedRows, orgProfile?.profileId ?? null),
     staleMaterial: { count: staleCount },
   });
@@ -153,8 +207,9 @@ export default async function DecisionReviewPage() {
         </h1>
         <p className="text-sm text-[var(--dpf-muted)]">
           As your AI makes decisions, this is where you keep the governance sharp
-          — resolve clashing principles and cover the gaps where it has no
-          settled answer yet.
+          — resolve clashing principles, cover the gaps where it has no settled
+          answer yet, and catch when a doctrine change quietly flips a canonical
+          call.
         </p>
       </header>
 
@@ -232,10 +287,6 @@ export default async function DecisionReviewPage() {
         </Link>
       </div>
 
-      <p className="text-xs text-[var(--dpf-muted)] mt-4">
-        Coming next: golden-decision drift alerts — when a doctrine change flips a
-        canonical decision.
-      </p>
     </div>
   );
 }
