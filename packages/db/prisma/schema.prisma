@@ -2344,6 +2344,13 @@ model Agent {
   portfolioId String?
   archived    Boolean  @default(false)
 
+  // BI-REFACTOR-B6A61421: typed portal hive-mind role, authored in
+  // packages/db/data/agent_registry.json and loaded by the seed. The
+  // portal-context hive-mind resolver prefers this over keyword role inference
+  // (inferRole). Nullable + backfilled by the seed → @migration-safety: data-safe.
+  // Values: "builder"|"reviewer"|"architect"|"tester"|"operator"|"specialist".
+  role String?
+
   // EP-AI-WORKFORCE-001: Unified agent lifecycle fields
   valueStream       String? // "evaluate"|"explore"|"integrate"|"deploy"|"release"|"consume"|"operate"|"cross-cutting"
   it4itSections     String[] @default([])
