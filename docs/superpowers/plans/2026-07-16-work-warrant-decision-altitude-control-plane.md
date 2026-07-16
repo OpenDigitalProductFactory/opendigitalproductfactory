@@ -105,3 +105,27 @@ ties them to a single altitude signal.
 
 Process-Spine-Decision: altitude-classifier approach ratified via principle_decide
 (structure-first, composite 0.874, high confidence) — see above.
+
+## Convergence with EP-QUALITY-RIGHTSIZING (bridge, feat/warrant-rightsizing-bridge)
+
+Grounding review found the warrant must NOT run a parallel rigor engine: the existing
+`build-process-matrix.ts` already escalates gate/review rigor monotonically via
+`getProcessPolicy(type, size, RightsizingOpts{qualityFirst, sensitivity})`, already
+derives a blast-radius `sensitivity` (`deriveDeliverableSensitivity`), and already picks
+a `BuildModelTier` (`getModelTier`). The warrant's `budget.gateProfile`/`budget.modelTier`
+are the SAME decisions viewed through altitude + blast-radius.
+
+Decision: the warrant is the single **front door**; `warrant-rightsizing-bridge.ts` maps
+it onto the one existing engine so `checkPhaseGate` stays the sole gate authority:
+- `warrantToRightsizingOpts(warrant)` → `{qualityFirst, sensitivity}` (collapsed→inert base
+  cell; standard→elevated; full→high). Monotonic — can only raise rigor above the matrix
+  baseline, never relax below it.
+- `resolveWarrantedPolicy(type, size, warrant)` → the one `LifecyclePolicy` a build runs.
+- `warrantToModelTier(warrant)` → reconciles the 3-tier budget (economical|standard|strong)
+  with the engine's 2-tier `BuildModelTier` (local|robust).
+
+Consequence: **BI-22250BA2 (blast-radius signal provider) IS the already-planned
+BI-CFEB2B22 (P3)** — the `deriveDeliverableSensitivity` header names it: "replaces the
+heuristic with code-graph blast-radius." They should be consolidated: the code-graph + EA
+blast-radius feeds `sensitivity` (verify) and the warrant's blast-radius (promote) through
+one core, not two.
