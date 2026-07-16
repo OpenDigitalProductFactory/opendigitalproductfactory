@@ -654,6 +654,50 @@ target-specific == owning spec.**
   — authentik as Identity Edge; the canonical implementation of
   contract 4.
 
+
+## Patterns for extending deployment contracts
+
+Future specs that add install-time or runtime **configuration metadata** should
+reuse these canonical field patterns (BI-IMP-336969A9) rather than inventing
+new key shapes per surface.
+
+### Required identity fields (every config document)
+
+| Field | Type | Notes |
+|---|---|---|
+| `schemaVersion` | string (semver) | Document shape version, not product version |
+| `contractId` | string | Stable id, e.g. `deploy.lifecycle` |
+| `ownerSpec` | string path | Spec that owns validation |
+
+### Optional operator-facing metadata
+
+| Field | Type | Notes |
+|---|---|---|
+| `displayName` | string | Human label |
+| `description` | string | One paragraph |
+| `required` | boolean | Fail install if missing |
+| `default` | JSON | Only when safe and documented |
+| `secret` | boolean | Must not log / must use secrets store (contract 8) |
+| `envVar` | string | Maps to runtime env name from contract 2 |
+
+### Minimal JSON template
+
+```json
+{
+  "schemaVersion": "1.0.0",
+  "contractId": "deploy.example",
+  "ownerSpec": "docs/superpowers/specs/2026-05-09-deployment-contracts.md",
+  "displayName": "Example setting",
+  "required": false,
+  "secret": false,
+  "envVar": "DPF_EXAMPLE"
+}
+```
+
+Validation: reject unknown keys at write time; refuse to start when `required`
+is true and the value is empty; never put secrets in compose `environment:`
+plaintext when `secret: true`.
+
 ## Out of scope
 
 This doctrine does **not** specify:
