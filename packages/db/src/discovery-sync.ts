@@ -173,6 +173,23 @@ function dedupeDiscoveredItems(
   return [...byKey.values()];
 }
 
+/**
+ * Stable key for an InventoryRelationship's persisted-identity tuple
+ * (fromEntityId, toEntityId, relationshipType) — the columns of the compound
+ * `@@unique([fromEntityId, toEntityId, relationshipType])`. Used to dedupe
+ * relationships within a single persistence run so two distinct relationshipKeys
+ * that resolve to the same persisted tuple upsert the row once (BI-PIR-7d69a445).
+ * The `|` separator cannot appear in cuid ids (alphanumeric) or relationship-type
+ * slugs, so the composed key is unambiguous.
+ */
+export function relationshipTupleKey(
+  fromEntityId: string,
+  toEntityId: string,
+  relationshipType: string,
+): string {
+  return `${fromEntityId}|${toEntityId}|${relationshipType}`;
+}
+
 export function summarizeDiscoveryPersistence(
   summary: Partial<DiscoveryPersistenceSummary>,
 ): DiscoveryPersistenceSummary {
@@ -465,6 +482,12 @@ export async function persistBootstrapDiscoveryRun(
 
     let createdRelationships = 0;
     let updatedRelationships = 0;
+    // BI-PIR-7d69a445: within a single run, maps each resolved relationship tuple
+    // (fromEntityId, toEntityId, relationshipType) to the InventoryRelationship id
+    // already upserted for it, so a second relationship that collapses onto the
+    // same tuple under a DIFFERENT relationshipKey reuses that row instead of
+    // taking the create path and violating the compound @@unique.
+    const persistedRelationshipIdByTuple = new Map<string, string>();
 
     for (const relationship of normalized.inventoryRelationships) {
       const fromEntityId = relationship.fromDiscoveredKey
@@ -484,47 +507,76 @@ export async function persistBootstrapDiscoveryRun(
         continue;
       }
 
-      const existed = existingRelationshipKeys.has(relationship.relationshipKey);
-      const persistedRelationship = await tx.inventoryRelationship.upsert({
-        where: { relationshipKey: relationship.relationshipKey },
-        create: {
-          relationshipKey: relationship.relationshipKey,
-          relationshipType: relationship.relationshipType,
-          status: "active",
-          confidence: relationship.confidence ?? null,
-          properties: relationship.properties,
-          scopeKey: runScope.scopeKey,
-          customerAccount: runScope.customerAccountId
-            ? { connect: { id: runScope.customerAccountId } }
-            : undefined,
-          customerSite: runScope.customerSiteId
-            ? { connect: { id: runScope.customerSiteId } }
-            : undefined,
-          firstSeenAt: now,
-          lastSeenAt: now,
-          lastConfirmedRun: { connect: { id: run.id } },
-          fromEntity: { connect: { id: fromEntityId } },
-          toEntity: { connect: { id: toEntityId } },
-        },
-        update: {
-          relationshipType: relationship.relationshipType,
-          status: "active",
-          confidence: relationship.confidence ?? null,
-          properties: relationship.properties,
-          scopeKey: runScope.scopeKey,
-          customerAccount: runScope.customerAccountId
-            ? { connect: { id: runScope.customerAccountId } }
-            : { disconnect: true },
-          customerSite: runScope.customerSiteId
-            ? { connect: { id: runScope.customerSiteId } }
-            : { disconnect: true },
-          lastSeenAt: now,
-          lastConfirmedRun: { connect: { id: run.id } },
-          fromEntity: { connect: { id: fromEntityId } },
-          toEntity: { connect: { id: toEntityId } },
-        },
-        select: { id: true, relationshipKey: true },
-      });
+      // BI-PIR-7d69a445: entity dedup can map two distinct discovered refs onto
+      // one persisted entity id, so two relationships with DISTINCT
+      // relationshipKeys can resolve to the SAME (fromEntityId, toEntityId,
+      // relationshipType) tuple. The upsert's conflict target is relationshipKey,
+      // so the second one misses, takes the create path, and violates the compound
+      // @@unique — a P2002 that (inside this $transaction) aborts the entire
+      // persistence run. Reuse the row already upserted for this tuple in the
+      // current run rather than re-entering the create path. The
+      // DiscoveredRelationship below is still written for every relationship, so
+      // each source key keeps its own provenance row linked to the shared
+      // InventoryRelationship. (Cross-run collisions, where the tuple was
+      // persisted by a PRIOR run under a different relationshipKey, still need a
+      // canonical-key decision — tracked on BI-PIR-7d69a445.)
+      const tupleKey = relationshipTupleKey(
+        fromEntityId,
+        toEntityId,
+        relationship.relationshipType,
+      );
+      let persistedRelationshipId = persistedRelationshipIdByTuple.get(tupleKey);
+      if (!persistedRelationshipId) {
+        const existed = existingRelationshipKeys.has(relationship.relationshipKey);
+        const persistedRelationship = await tx.inventoryRelationship.upsert({
+          where: { relationshipKey: relationship.relationshipKey },
+          create: {
+            relationshipKey: relationship.relationshipKey,
+            relationshipType: relationship.relationshipType,
+            status: "active",
+            confidence: relationship.confidence ?? null,
+            properties: relationship.properties,
+            scopeKey: runScope.scopeKey,
+            customerAccount: runScope.customerAccountId
+              ? { connect: { id: runScope.customerAccountId } }
+              : undefined,
+            customerSite: runScope.customerSiteId
+              ? { connect: { id: runScope.customerSiteId } }
+              : undefined,
+            firstSeenAt: now,
+            lastSeenAt: now,
+            lastConfirmedRun: { connect: { id: run.id } },
+            fromEntity: { connect: { id: fromEntityId } },
+            toEntity: { connect: { id: toEntityId } },
+          },
+          update: {
+            relationshipType: relationship.relationshipType,
+            status: "active",
+            confidence: relationship.confidence ?? null,
+            properties: relationship.properties,
+            scopeKey: runScope.scopeKey,
+            customerAccount: runScope.customerAccountId
+              ? { connect: { id: runScope.customerAccountId } }
+              : { disconnect: true },
+            customerSite: runScope.customerSiteId
+              ? { connect: { id: runScope.customerSiteId } }
+              : { disconnect: true },
+            lastSeenAt: now,
+            lastConfirmedRun: { connect: { id: run.id } },
+            fromEntity: { connect: { id: fromEntityId } },
+            toEntity: { connect: { id: toEntityId } },
+          },
+          select: { id: true, relationshipKey: true },
+        });
+        persistedRelationshipId = persistedRelationship.id;
+        persistedRelationshipIdByTuple.set(tupleKey, persistedRelationshipId);
+
+        if (existed) {
+          updatedRelationships += 1;
+        } else {
+          createdRelationships += 1;
+        }
+      }
 
       await tx.discoveredRelationship.create({
         data: {
@@ -535,15 +587,9 @@ export async function persistBootstrapDiscoveryRun(
           toDiscoveredItem: { connect: { id: toDiscoveredItemId } },
           confidence: relationship.confidence ?? null,
           rawData: relationship.properties,
-          inventoryRelationship: { connect: { id: persistedRelationship.id } },
+          inventoryRelationship: { connect: { id: persistedRelationshipId } },
         },
       });
-
-      if (existed) {
-        updatedRelationships += 1;
-      } else {
-        createdRelationships += 1;
-      }
     }
 
     const currentRelationshipKeys = new Set(
