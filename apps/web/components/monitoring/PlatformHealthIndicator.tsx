@@ -37,6 +37,7 @@ export function PlatformHealthIndicator() {
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[var(--dpf-surface-2)] transition-colors"
         title={label}
+        aria-label={`Platform health: ${label}`}
       >
         <span
           className={`h-2 w-2 rounded-full ${health === "critical" ? "animate-pulse" : ""}`}
