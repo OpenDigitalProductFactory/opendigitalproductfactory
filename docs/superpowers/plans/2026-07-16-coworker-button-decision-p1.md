@@ -27,6 +27,13 @@ The sentinel rides inside `AgentMessage.content` (already persisted + refetched)
 - Hermetic vitest suites (`decision-block.test.ts`, `coworker-interaction-contract.test.ts`): run in CI.
 - Full typecheck + live portal drive: gated by CI + a rebuilt portal (source-only worktree can't run either locally).
 
+## Design grounding
+
+- Existing specs/plans reviewed: `docs/superpowers/specs/2026-07-16-coworker-button-decision-interface.md` (authored this session) and this plan. No existing spec covered agent→human button decisions; `apps/web/lib/tak/question-packet.ts` is the opposite direction (operator→agent).
+- Current code substrate reviewed: `apps/web/lib/tak/coworker-interaction-contract.ts` (the free-text Next-action closeout — the emit seam), `apps/web/components/agent/AgentMessageBubble.tsx` (existing `AgentActionProposal` Approve/Reject — the only live decision UI, binary via `messageId @unique`), `apps/web/lib/attention/types.ts` (`AttentionActionKind` — reused vocabulary), `apps/web/components/build-studio/cards/ChoiceCard.tsx` (unpersisted UI reference).
+- Source of truth: EP-COWORKER-INTERACTIVITY (cross-page HITL handoff). Carrier + rendering follow the existing proposal-button and managed-doc-chip patterns rather than inventing new substrate.
+- Decision: P1 = migration-free content-embedded decision sentinel parsed at render; reuse `AttentionActionKind`; defer the typed `AgentMessage.decision` column, proposal convergence, and cross-page inbox buttons to P2/P3 (BI-450D5833).
+
 ## Follow-ups (tracked, not silent debt)
 
 - **P2:** promote the carrier to a typed `AgentMessage.decision Json?` column (removes content-embedded sentinel + semantic-memory noise); converge `AgentActionProposal` approve/reject onto the decision carrier.
