@@ -725,8 +725,9 @@ export async function routeAndCall(
     (m) => m.providerTier === "user_configured" && (m.status === "active" || m.status === "degraded"),
   );
   const fellToLocal = selectedTier === "bundled" && hasUserConfiguredActive && !result.downgraded;
+  // fellToLocal requires an ACTIVE paid provider (no outage) — it was merely ineligible for this request (usually context-window/capability), not unavailable (BI-9DFAFB4A).
   const localFallbackBanner = fellToLocal
-    ? `This turn ran on the bundled local model because configured paid providers were unavailable. Tool calls and complex reasoning may be unreliable on local — retry in a moment, or check provider status in Admin > AI.`
+    ? `This turn ran on the bundled local model. Your configured provider is active but wasn't eligible for this request — usually because the request exceeded its context window, or needed a capability it doesn't offer. Local output can be less reliable for tool use and complex reasoning; try a shorter request, or review provider settings in Admin > AI.`
     : null;
 
   // 6. Persist TokenUsage row for the cost ledger (Phase J).
