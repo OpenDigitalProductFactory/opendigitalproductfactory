@@ -60,7 +60,7 @@ model User {
   improvementReviews            ImprovementProposal[]         @relation("ImprovementReviews")
   improvementSubmissions        ImprovementProposal[]         @relation("ImprovementSubmissions")
   notifications                 Notification[]
-  notificationSubscriptions     NotificationSubscription[] @relation("NotificationSubscriptionUser")
+  notificationSubscriptions     NotificationSubscription[]    @relation("NotificationSubscriptionUser")
   requestedPasswordResetTokens  PasswordResetToken[]          @relation("PasswordResetRequestedBy")
   passwordResetTokens           PasswordResetToken[]          @relation("PasswordResetForUser")
   issueReports                  PlatformIssueReport[]
@@ -134,7 +134,7 @@ model CustomerContact {
   // MDM write-time dedup (EP-4A12A7CB WG-1): standardizeName of the display
   // name (firstName+lastName, falling back to legacy name). Fuzzy-alert only —
   // email stays the unique identity key.
-  nameNormalized   String  @default("")
+  nameNormalized   String               @default("")
   phone            String?
   jobTitle         String?
   linkedinUrl      String?
@@ -337,6 +337,17 @@ model Principal {
   ownedDecisionPerspectiveProfiles    DecisionPerspectiveProfile[]        @relation("DecisionPerspectiveProfileOwner")
   promotedDecisionPerspectiveVersions DecisionPerspectiveProfileVersion[] @relation("DecisionPerspectiveProfileVersionPromoter")
   decisionEscalationsResolved         EscalationCapture[]                 @relation("DecisionEscalationResolverPrincipal")
+  patientProfiles                     PatientProfile[]                    @relation("PatientProfileIdentity")
+  patientProfilesRecorded             PatientProfile[]                    @relation("PatientProfileRecorder")
+  patientProfilesVerified             PatientProfile[]                    @relation("PatientProfileVerifier")
+  patientAuthoritiesGranted           PatientAuthority[]                  @relation("PatientAuthorityGrantee")
+  patientAuthoritiesAsserted          PatientAuthority[]                  @relation("PatientAuthorityAsserter")
+  patientAuthoritiesVerified          PatientAuthority[]                  @relation("PatientAuthorityVerifier")
+  patientAuthoritiesRevoked           PatientAuthority[]                  @relation("PatientAuthorityRevoker")
+  patientConsentDirectivesAsserted    PatientConsentDirective[]           @relation("PatientConsentDirectiveAsserter")
+  patientConsentDirectivesVerified    PatientConsentDirective[]           @relation("PatientConsentDirectiveVerifier")
+  patientConsentDirectivesRevoked     PatientConsentDirective[]           @relation("PatientConsentDirectiveRevoker")
+  patientAuthorizationDecisions       AuthorizationDecisionLog[]          @relation("PatientAuthorizationSubject")
   createdAt                           DateTime                            @default(now())
   updatedAt                           DateTime                            @updatedAt
 
@@ -1420,11 +1431,11 @@ model BacklogItemActivity {
 }
 
 model WorkCapsule {
-  id                      String                @id @default(cuid())
-  capsuleId               String                @unique
+  id                      String                   @id @default(cuid())
+  capsuleId               String                   @unique
   title                   String
-  objective               String                @db.Text
-  status                  String                @default("draft")
+  objective               String                   @db.Text
+  status                  String                   @default("draft")
   source                  String
   executorKind            String?
   executorRef             String?
@@ -1438,9 +1449,9 @@ model WorkCapsule {
   portfolioRole           String?
   servedPersona           String?
   activityKind            String?
-  outcomeAnchor           Json                  @default("{}")
-  servesPortfolioRoles    Json                  @default("[]")
-  dependsOnPortfolioRoles Json                  @default("[]")
+  outcomeAnchor           Json                     @default("{}")
+  servesPortfolioRoles    Json                     @default("[]")
+  dependsOnPortfolioRoles Json                     @default("[]")
   repositoryFullName      String?
   baseBranch              String?
   baseSha                 String?
@@ -1451,14 +1462,14 @@ model WorkCapsule {
   pullRequestNumber       Int?
   sandboxProviderId       String?
   sandboxId               String?
-  scopeClaims             Json                  @default("[]")
-  workspaceState          Json                  @default("{}")
-  verificationState       Json                  @default("{}")
-  providerRequirements    Json                  @default("[]")
-  promotionPolicy         Json                  @default("{}")
-  contributionMode        String                @default("private")
+  scopeClaims             Json                     @default("[]")
+  workspaceState          Json                     @default("{}")
+  verificationState       Json                     @default("{}")
+  providerRequirements    Json                     @default("[]")
+  promotionPolicy         Json                     @default("{}")
+  contributionMode        String                   @default("private")
   branchTaxonomy          String?
-  idempotencyKey          String?               @unique
+  idempotencyKey          String?                  @unique
   leaseHolderPrincipalId  String?
   leaseExpiresAt          DateTime?
   createdByPrincipalId    String?
@@ -1466,8 +1477,8 @@ model WorkCapsule {
   // commissioned the work, distinct from the creator/executor. Nullable; the
   // stable human-quotable key already exists as capsuleId (WC-*).
   requestedByPrincipalId  String?
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
   lastSyncedAt            DateTime?
   archivedAt              DateTime?
   activities              WorkCapsuleActivity[]
@@ -2369,8 +2380,8 @@ model Agent {
   skills               AgentSkillAssignment[]
   toolGrants           AgentToolGrant[]
   toolGrantRevocations AgentToolGrantRevocation[]
-  memoryNotes          CoworkerMemoryNote[]      @relation("CoworkerMemoryNoteAgent")
-  taskGoals            CoworkerTaskGoal[]        @relation("CoworkerTaskGoalAgent")
+  memoryNotes          CoworkerMemoryNote[]        @relation("CoworkerMemoryNoteAgent")
+  taskGoals            CoworkerTaskGoal[]          @relation("CoworkerTaskGoalAgent")
   coworkerServices     CoworkerService[]
   coworkerEngagements  CoworkerEngagement[]
   coworkerAssessments  CoworkerSelfAssessment[]    @relation("CoworkerSelfAssessmentAgent")
@@ -2737,31 +2748,181 @@ model AgentPromptContext {
 }
 
 model AuthorizationDecisionLog {
-  id                  String            @id @default(cuid())
-  decisionId          String            @unique
-  actorType           String
-  actorRef            String
-  humanContextRef     String?
-  agentContextRef     String?
-  delegationGrantId   String?
-  authorityBindingId  String?
-  actionKey           String
-  objectRef           String?
-  decision            String
-  rationale           Json
-  createdAt           DateTime          @default(now())
-  endpointUsed        String?
-  mode                String?
-  routeContext        String?
-  sensitivityLevel    String?
-  sensitivityOverride Boolean?
-  authorityBinding    AuthorityBinding? @relation(fields: [authorityBindingId], references: [id])
-  delegationGrant     DelegationGrant?  @relation(fields: [delegationGrantId], references: [id])
+  id                        String                   @id @default(cuid())
+  decisionId                String                   @unique
+  actorType                 String
+  actorRef                  String
+  humanContextRef           String?
+  agentContextRef           String?
+  delegationGrantId         String?
+  authorityBindingId        String?
+  organizationId            String?
+  patientSubjectPrincipalId String?
+  patientAuthorityId        String?
+  patientConsentDirectiveId String?
+  purposeOfUse              String?
+  policyVersion             String?
+  actionKey                 String
+  objectRef                 String?
+  decision                  String
+  rationale                 Json
+  createdAt                 DateTime                 @default(now())
+  endpointUsed              String?
+  mode                      String?
+  routeContext              String?
+  sensitivityLevel          String?
+  sensitivityOverride       Boolean?
+  authorityBinding          AuthorityBinding?        @relation(fields: [authorityBindingId], references: [id])
+  delegationGrant           DelegationGrant?         @relation(fields: [delegationGrantId], references: [id])
+  organization              Organization?            @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  patientSubjectPrincipal   Principal?               @relation("PatientAuthorizationSubject", fields: [patientSubjectPrincipalId], references: [id], onDelete: SetNull)
+  patientAuthority          PatientAuthority?        @relation(fields: [patientAuthorityId], references: [id], onDelete: SetNull)
+  patientConsentDirective   PatientConsentDirective? @relation(fields: [patientConsentDirectiveId], references: [id], onDelete: SetNull)
 
   @@index([decision])
   @@index([createdAt])
   @@index([actorRef])
   @@index([authorityBindingId])
+  @@index([organizationId, patientSubjectPrincipalId, createdAt])
+  @@index([patientAuthorityId])
+  @@index([patientConsentDirectiveId])
+}
+
+/// Healthcare patient role attached to canonical Principal identity.
+/// Demographics remain in their owning clinical/identity resource; this model
+/// contains only role, communication, retention, and identity-review state.
+model PatientProfile {
+  id                         String                    @id @default(cuid())
+  patientId                  String                    @unique
+  organizationId             String
+  principalId                String
+  status                     String                    @default("active")
+  minorStatus                String                    @default("unknown")
+  minorStatusAsOf            DateTime?
+  selfAccessAllowed          Boolean                   @default(false)
+  preferredLanguage          String?
+  accessibilityNeeds         Json?
+  communicationPreferences   Json?
+  sourceSystem               String?
+  sourceId                   String?
+  sourceVersion              String?
+  recordedAt                 DateTime                  @default(now())
+  recordedByPrincipalId      String?
+  verifiedAt                 DateTime?
+  verifiedByPrincipalId      String?
+  sensitivityLabels          String[]                  @default([])
+  retentionClass             String?
+  legalHold                  Boolean                   @default(false)
+  mergedIntoPatientProfileId String?
+  enteredInErrorAt           DateTime?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  organization               Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  principal                  Principal                 @relation("PatientProfileIdentity", fields: [principalId], references: [id], onDelete: Restrict)
+  recordedByPrincipal        Principal?                @relation("PatientProfileRecorder", fields: [recordedByPrincipalId], references: [id], onDelete: SetNull)
+  verifiedByPrincipal        Principal?                @relation("PatientProfileVerifier", fields: [verifiedByPrincipalId], references: [id], onDelete: SetNull)
+  mergedIntoPatientProfile   PatientProfile?           @relation("PatientProfileMerge", fields: [mergedIntoPatientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  mergedPatientProfiles      PatientProfile[]          @relation("PatientProfileMerge")
+  authorities                PatientAuthority[]
+  consentDirectives          PatientConsentDirective[]
+
+  @@unique([organizationId, principalId])
+  @@unique([id, organizationId])
+  @@unique([organizationId, sourceSystem, sourceId])
+  @@index([organizationId, status])
+  @@index([principalId])
+  @@index([mergedIntoPatientProfileId])
+}
+
+/// Effective-dated human relationship authority for a patient. This does not
+/// replace AuthorityBinding, which remains the canonical AI/resource grant.
+model PatientAuthority {
+  id                      String                     @id @default(cuid())
+  authorityId             String                     @unique
+  organizationId          String
+  patientProfileId        String
+  granteePrincipalId      String
+  relationshipType        String
+  status                  String                     @default("proposed")
+  legalBasis              String?
+  purposesOfUse           String[]                   @default([])
+  permittedOperations     String[]                   @default([])
+  recordCategories        String[]                   @default([])
+  locationRefs            String[]                   @default([])
+  scopeJson               Json?
+  evidenceRef             String?
+  effectiveFrom           DateTime
+  expiresAt               DateTime?
+  revokedAt               DateTime?
+  revokedByPrincipalId    String?
+  revocationReason        String?
+  assertedAt              DateTime                   @default(now())
+  assertedByPrincipalId   String
+  verifiedAt              DateTime?
+  verifiedByPrincipalId   String?
+  version                 Int                        @default(1)
+  supersedesAuthorityId   String?
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+  patientProfile          PatientProfile             @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  granteePrincipal        Principal                  @relation("PatientAuthorityGrantee", fields: [granteePrincipalId], references: [id], onDelete: Restrict)
+  assertedByPrincipal     Principal                  @relation("PatientAuthorityAsserter", fields: [assertedByPrincipalId], references: [id], onDelete: Restrict)
+  verifiedByPrincipal     Principal?                 @relation("PatientAuthorityVerifier", fields: [verifiedByPrincipalId], references: [id], onDelete: SetNull)
+  revokedByPrincipal      Principal?                 @relation("PatientAuthorityRevoker", fields: [revokedByPrincipalId], references: [id], onDelete: SetNull)
+  supersedesAuthority     PatientAuthority?          @relation("PatientAuthorityVersion", fields: [supersedesAuthorityId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  supersededByAuthorities PatientAuthority[]         @relation("PatientAuthorityVersion")
+  authorizationDecisions  AuthorizationDecisionLog[]
+
+  @@unique([id, organizationId, patientProfileId])
+  @@index([organizationId, patientProfileId, status])
+  @@index([granteePrincipalId, status])
+  @@index([expiresAt])
+  @@index([supersedesAuthorityId])
+}
+
+/// Versioned patient consent or privacy restriction. A deny directive is
+/// evaluated before ordinary proxy access and may explicitly forbid emergency
+/// override.
+model PatientConsentDirective {
+  id                       String                     @id @default(cuid())
+  directiveId              String                     @unique
+  organizationId           String
+  patientProfileId         String
+  directiveType            String
+  status                   String                     @default("proposed")
+  decision                 String
+  purposesOfUse            String[]                   @default([])
+  operations               String[]                   @default([])
+  recordCategories         String[]                   @default([])
+  legalBasis               String?
+  evidenceRef              String?
+  scopeJson                Json?
+  effectiveFrom            DateTime
+  expiresAt                DateTime?
+  emergencyOverrideAllowed Boolean                    @default(false)
+  revokedAt                DateTime?
+  revokedByPrincipalId     String?
+  revocationReason         String?
+  assertedAt               DateTime                   @default(now())
+  assertedByPrincipalId    String
+  verifiedAt               DateTime?
+  verifiedByPrincipalId    String?
+  version                  Int                        @default(1)
+  supersedesDirectiveId    String?
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  patientProfile           PatientProfile             @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  assertedByPrincipal      Principal                  @relation("PatientConsentDirectiveAsserter", fields: [assertedByPrincipalId], references: [id], onDelete: Restrict)
+  verifiedByPrincipal      Principal?                 @relation("PatientConsentDirectiveVerifier", fields: [verifiedByPrincipalId], references: [id], onDelete: SetNull)
+  revokedByPrincipal       Principal?                 @relation("PatientConsentDirectiveRevoker", fields: [revokedByPrincipalId], references: [id], onDelete: SetNull)
+  supersedesDirective      PatientConsentDirective?   @relation("PatientConsentDirectiveVersion", fields: [supersedesDirectiveId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  supersededByDirectives   PatientConsentDirective[]  @relation("PatientConsentDirectiveVersion")
+  authorizationDecisions   AuthorizationDecisionLog[]
+
+  @@unique([id, organizationId, patientProfileId])
+  @@index([organizationId, patientProfileId, status])
+  @@index([expiresAt])
+  @@index([supersedesDirectiveId])
 }
 
 model CustomerAccount {
@@ -3303,7 +3464,7 @@ model Quote {
   notes         String?
   // Public accept-link token (mirrors Invoice.payToken): possession authorizes
   // the customer to view and accept this quote at /s/quote/[token].
-  acceptToken String?   @unique
+  acceptToken   String?   @unique
   sentAt        DateTime?
   acceptedAt    DateTime?
   rejectedAt    DateTime?
@@ -3358,8 +3519,8 @@ model SalesOrder {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  quote   Quote           @relation(fields: [quoteId], references: [id])
-  account CustomerAccount @relation(fields: [accountId], references: [id])
+  quote        Quote           @relation(fields: [quoteId], references: [id])
+  account      CustomerAccount @relation(fields: [accountId], references: [id])
   subscription Subscription?
 
   @@index([accountId])
@@ -3391,9 +3552,9 @@ model Subscription {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  account    CustomerAccount @relation(fields: [accountId], references: [id])
-  salesOrder SalesOrder?     @relation(fields: [salesOrderId], references: [id])
-  edgeNodes  EdgeNode[]
+  account         CustomerAccount    @relation(fields: [accountId], references: [id])
+  salesOrder      SalesOrder?        @relation(fields: [salesOrderId], references: [id])
+  edgeNodes       EdgeNode[]
   renewalSchedule RecurringSchedule?
 
   @@index([accountId])
@@ -3485,6 +3646,8 @@ model Organization {
   mediaAssets                   MediaAsset[]
   ledgerAccounts                LedgerAccount[]
   journalEntries                JournalEntry[]
+  patientProfiles               PatientProfile[]
+  patientAuthorizationDecisions AuthorizationDecisionLog[]
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -7366,42 +7529,42 @@ model CalendarSync {
 }
 
 model Regulation {
-  id               String                 @id @default(cuid())
-  regulationId     String                 @unique
-  name             String
-  shortName        String
-  jurisdiction     String
-  industry         String?
+  id                String                 @id @default(cuid())
+  regulationId      String                 @unique
+  name              String
+  shortName         String
+  jurisdiction      String
+  industry          String?
   // Data-driven applicability spec (RegulationApplicability in
   // regulation-applicability.ts): { basis[], jurisdictions[], archetypes?,
   // listingStatuses? }. When set, the generic evaluator (regulationApplies)
   // classifies this regulation for an install with no per-regulation code —
   // adding a governance requirement is a data operation, not a code change.
   // Null → fall back to the legacy jurisdiction/industry string matcher.
-  applicability    Json?
-  sourceType       String                 @default("external")
-  effectiveDate    DateTime?
-  reviewDate       DateTime?
-  sourceUrl        String?
-  notes            String?
-  agentId          String?
-  status           String                 @default("active")
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  changeDetected   Boolean                @default(false)
-  lastKnownVersion String?
-  sourceCheckDate  DateTime?
+  applicability     Json?
+  sourceType        String                 @default("external")
+  effectiveDate     DateTime?
+  reviewDate        DateTime?
+  sourceUrl         String?
+  notes             String?
+  agentId           String?
+  status            String                 @default("active")
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  changeDetected    Boolean                @default(false)
+  lastKnownVersion  String?
+  sourceCheckDate   DateTime?
   // Phase 4 — version lineage. `version` increments per governed iteration;
   // `previousVersionId` links a new version to the one it supersedes, so
   // "iterate an existing regulation" is an immutable new version, not a silent
   // in-place mutation. The prior version is retired (status="superseded").
-  version           Int                   @default(1)
+  version           Int                    @default(1)
   previousVersionId String?
-  previousVersion   Regulation?           @relation("RegulationVersions", fields: [previousVersionId], references: [id])
-  nextVersions      Regulation[]          @relation("RegulationVersions")
-  obligations      Obligation[]
-  alerts           RegulatoryAlert[]
-  submissions      RegulatorySubmission[]
+  previousVersion   Regulation?            @relation("RegulationVersions", fields: [previousVersionId], references: [id])
+  nextVersions      Regulation[]           @relation("RegulationVersions")
+  obligations       Obligation[]
+  alerts            RegulatoryAlert[]
+  submissions       RegulatorySubmission[]
 
   @@index([status])
   @@index([jurisdiction])
@@ -7501,10 +7664,10 @@ model ControlObligationLink {
 // commits via the existing create/link actions. `payload` holds the kind-specific
 // proposal; `kind` selects how approval commits it.
 model ComplianceProposal {
-  id                   String    @id @default(cuid())
-  proposalId           String    @unique
+  id                   String   @id @default(cuid())
+  proposalId           String   @unique
   kind                 String // "control-mapping" | "regulation" | "obligation"
-  status               String    @default("pending") // pending | approved | rejected
+  status               String   @default("pending") // pending | approved | rejected
   payload              Json
   rationale            String?
   proposedByAgentId    String?
@@ -7512,8 +7675,8 @@ model ComplianceProposal {
   reviewedByEmployeeId String?
   reviewNotes          String?
   committedEntityId    String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@index([status])
   @@index([kind])
@@ -8663,26 +8826,26 @@ model StorefrontItem {
 }
 
 model StorefrontBooking {
-  id                 String              @id @default(cuid())
-  bookingRef         String              @unique
-  storefrontId       String
-  itemId             String
-  customerContactId  String?
-  customerEmail      String
-  customerName       String
-  customerPhone      String?
-  scheduledAt        DateTime
-  durationMinutes    Int
-  notes              String?
-  status             String              @default("pending")
-  providerId         String?
-  assignmentMode     String?
-  recurrenceRule     String?
-  recurrenceEndDate  DateTime?
-  parentBookingId    String?
-  fromReschedule     String?
-  cancellationReason String?
-  cancelledAt        DateTime?
+  id                   String              @id @default(cuid())
+  bookingRef           String              @unique
+  storefrontId         String
+  itemId               String
+  customerContactId    String?
+  customerEmail        String
+  customerName         String
+  customerPhone        String?
+  scheduledAt          DateTime
+  durationMinutes      Int
+  notes                String?
+  status               String              @default("pending")
+  providerId           String?
+  assignmentMode       String?
+  recurrenceRule       String?
+  recurrenceEndDate    DateTime?
+  parentBookingId      String?
+  fromReschedule       String?
+  cancellationReason   String?
+  cancelledAt          DateTime?
   // EP-056D2A5E / BI-CC4659CB. Set by the booking-overlap-exclusion migration
   // when a PRE-EXISTING overlap is found: the later row of the pair is parked
   // here (not cancelled, not deleted) so the EXCLUDE constraint can land without
@@ -8690,13 +8853,13 @@ model StorefrontBooking {
   // Excluded from the constraint predicate; non-null rows are the operator review
   // queue. New bookings never set this.
   overlapQuarantinedAt DateTime?
-  idempotencyKey     String?             @unique
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  storefront         StorefrontConfig    @relation(fields: [storefrontId], references: [id])
-  provider           ServiceProvider?    @relation(fields: [providerId], references: [id])
-  parentBooking      StorefrontBooking?  @relation("BookingRecurrence", fields: [parentBookingId], references: [id])
-  childBookings      StorefrontBooking[] @relation("BookingRecurrence")
+  idempotencyKey       String?             @unique
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  storefront           StorefrontConfig    @relation(fields: [storefrontId], references: [id])
+  provider             ServiceProvider?    @relation(fields: [providerId], references: [id])
+  parentBooking        StorefrontBooking?  @relation("BookingRecurrence", fields: [parentBookingId], references: [id])
+  childBookings        StorefrontBooking[] @relation("BookingRecurrence")
 
   @@index([storefrontId, status])
   @@index([customerEmail])
@@ -8830,36 +8993,36 @@ model RentableUnit {
 }
 
 model RentalAgreement {
-  id                  String    @id @default(cuid())
-  agreementRef        String    @unique
-  storefrontId        String
-  storefrontItemId    String
-  rentableUnitId      String? // null for quantity-pool classes
-  customerContactId   String?
-  customerEmail       String
-  customerName        String
-  customerPhone       String?
-  periodStart         DateTime
-  periodEnd           DateTime
-  pricingModel        String    @default("per-day") // per-day|per-week|usage-based|fixed
-  rateAmount          Decimal?
-  depositAmount       Decimal?
-  currency            String    @default("GBP")
-  status              String    @default("reserved") // reserved|verified|active|returned|closed|cancelled
-  verificationStatus  String    @default("not-required") // not-required|pending|verified|failed
-  checkoutConditionId String?   @unique
-  returnConditionId   String?   @unique
-  cancellationReason  String?
-  cancelledAt         DateTime?
+  id                   String    @id @default(cuid())
+  agreementRef         String    @unique
+  storefrontId         String
+  storefrontItemId     String
+  rentableUnitId       String? // null for quantity-pool classes
+  customerContactId    String?
+  customerEmail        String
+  customerName         String
+  customerPhone        String?
+  periodStart          DateTime
+  periodEnd            DateTime
+  pricingModel         String    @default("per-day") // per-day|per-week|usage-based|fixed
+  rateAmount           Decimal?
+  depositAmount        Decimal?
+  currency             String    @default("GBP")
+  status               String    @default("reserved") // reserved|verified|active|returned|closed|cancelled
+  verificationStatus   String    @default("not-required") // not-required|pending|verified|failed
+  checkoutConditionId  String?   @unique
+  returnConditionId    String?   @unique
+  cancellationReason   String?
+  cancelledAt          DateTime?
   // EP-056D2A5E / BI-CC4659CB. See StorefrontBooking.overlapQuarantinedAt — the
   // later row of a pre-existing overlapping pair is parked here (not cancelled,
   // not deleted) so the EXCLUDE constraint can land without destroying customer
   // data. Excluded from the constraint predicate; non-null rows are the operator
   // review queue.
   overlapQuarantinedAt DateTime?
-  idempotencyKey      String?   @unique
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  idempotencyKey       String?   @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   storefront        StorefrontConfig        @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
   item              StorefrontItem          @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
@@ -9670,11 +9833,11 @@ model RecurringSchedule {
   updatedAt       DateTime  @updatedAt
 
   // The support contract this schedule renews, if it was minted from one.
-  subscriptionId String? @unique
-  account   CustomerAccount     @relation(fields: [accountId], references: [id])
-  createdBy User?               @relation("RecurringScheduleCreations", fields: [createdById], references: [id])
-  subscription Subscription?    @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  lineItems RecurringLineItem[]
+  subscriptionId String?             @unique
+  account        CustomerAccount     @relation(fields: [accountId], references: [id])
+  createdBy      User?               @relation("RecurringScheduleCreations", fields: [createdById], references: [id])
+  subscription   Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  lineItems      RecurringLineItem[]
 
   @@index([accountId])
   @@index([status])
@@ -10603,41 +10766,41 @@ model WorkQueue {
 }
 
 model WorkItem {
-  id                String            @id @default(cuid())
-  itemId            String            @unique @default(cuid())
+  id                String             @id @default(cuid())
+  itemId            String             @unique @default(cuid())
   sourceType        String
   sourceId          String?
   title             String
-  description       String            @db.Text
-  urgency           String            @default("routine")
-  effortClass       String            @default("medium")
+  description       String             @db.Text
+  urgency           String             @default("routine")
+  effortClass       String             @default("medium")
   workerConstraint  Json
   teamId            String?
-  team              ValueStreamTeam?  @relation(fields: [teamId], references: [id])
+  team              ValueStreamTeam?   @relation(fields: [teamId], references: [id])
   queueId           String
-  queue             WorkQueue         @relation(fields: [queueId], references: [id])
-  status            String            @default("queued")
+  queue             WorkQueue          @relation(fields: [queueId], references: [id])
+  status            String             @default("queued")
   assignedToType    String?
   assignedToUserId  String?
-  assignedToUser    User?             @relation("WorkItemAssignee", fields: [assignedToUserId], references: [id])
+  assignedToUser    User?              @relation("WorkItemAssignee", fields: [assignedToUserId], references: [id])
   assignedToAgentId String?
-  assignedToAgent   Agent?            @relation("WorkItemAgent", fields: [assignedToAgentId], references: [id])
+  assignedToAgent   Agent?             @relation("WorkItemAgent", fields: [assignedToAgentId], references: [id])
   assignedThreadId  String?
   claimedAt         DateTime?
   dueAt             DateTime?
   calendarEventId   String?
-  calendarEvent     CalendarEvent?    @relation(fields: [calendarEventId], references: [id])
+  calendarEvent     CalendarEvent?     @relation(fields: [calendarEventId], references: [id])
   evidence          Json?
   parentItemId      String?
-  parentItem        WorkItem?         @relation("WorkItemHierarchy", fields: [parentItemId], references: [id])
-  childItems        WorkItem[]        @relation("WorkItemHierarchy")
+  parentItem        WorkItem?          @relation("WorkItemHierarchy", fields: [parentItemId], references: [id])
+  childItems        WorkItem[]         @relation("WorkItemHierarchy")
   a2aTaskId         String?
   messages          WorkItemMessage[]
   presence          WorkItemPresence[]
   routingDecision   Json?
   completedAt       DateTime?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@index([queueId, status])
   @@index([assignedToUserId, status])
@@ -12651,20 +12814,20 @@ model JournalEntry {
 }
 
 model JournalLine {
-  id             String   @id @default(cuid())
-  journalEntryId String
-  accountId      String
+  id                String   @id @default(cuid())
+  journalEntryId    String
+  accountId         String
   // Exactly one of debit/credit is non-zero per line; both stored as non-negative
   // Decimal. The posting service enforces sum(debit) == sum(credit) per entry.
-  debit          Decimal  @default(0)
-  credit         Decimal  @default(0)
-  currency       String   @default("GBP")
-  description    String?
+  debit             Decimal  @default(0)
+  credit            Decimal  @default(0)
+  currency          String   @default("GBP")
+  description       String?
   // Optional analytical dimensions (ACDOCA-style rich line): who the posting relates to.
   customerAccountId String?
   contactId         String?
-  sortOrder      Int      @default(0)
-  createdAt      DateTime @default(now())
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
 
   journalEntry JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
   account      LedgerAccount @relation(fields: [accountId], references: [id])

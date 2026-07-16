@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { parsePrismaSchema } from "../integrate/code-graph/extractors/prisma-schema-adapter";
 import {
@@ -150,5 +152,35 @@ describe("planMirror", () => {
     expect(summary.created).toBeGreaterThan(0);
     expect(summary.updated).toBe(0);
     expect(summary.removed).toBe(0);
+  });
+});
+
+describe("healthcare patient authority mirror allocation", () => {
+  it("discovers the canonical patient models and their Principal/Organization relationships", () => {
+    const schema = readFileSync(
+      resolve(process.cwd(), "../../packages/db/prisma/schema.prisma"),
+      "utf8",
+    );
+    const desired = buildDesiredState(parsePrismaSchema(schema));
+    const elementKeys = desired.elements.map((element) => element.sourceKey);
+    const relationshipKeys = desired.relationships.map(
+      (relationship) => relationship.sourceKey,
+    );
+
+    expect(elementKeys).toEqual(
+      expect.arrayContaining([
+        modelSourceKey("PatientProfile"),
+        modelSourceKey("PatientAuthority"),
+        modelSourceKey("PatientConsentDirective"),
+      ]),
+    );
+    expect(relationshipKeys).toEqual(
+      expect.arrayContaining([
+        "prisma:relation:PatientProfile:organization:Organization",
+        "prisma:relation:PatientProfile:principal:Principal",
+        "prisma:relation:PatientAuthority:patientProfile:PatientProfile",
+        "prisma:relation:PatientConsentDirective:patientProfile:PatientProfile",
+      ]),
+    );
   });
 });

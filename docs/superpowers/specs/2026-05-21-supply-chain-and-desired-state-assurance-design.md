@@ -168,6 +168,18 @@ the Phase 2 critical path.
 This reconciliation is not optional and must not be papered over. The §2.3 #5 principle should
 read "one finding substrate" as a stated direction; the schema does not yet honor it.
 
+**Dated owner + no-seventh-finding-table guard (2026-07-16).** Phase 1 landed `AssuranceFinding`
+as the seventh finding-shaped model, so the §3.3 fallback now applies: the finding substrate is
+frozen behind an explicit **dated owner — founder (markbodman), 2026-07-16** — pending the Phase-2
+unify vs. keep decision (BI-REFACTOR-CC46703A). The decision-free half of that fallback is now
+enforced in CI by `scripts/check-finding-substrate.mjs` (the "Finding Substrate Guard" job): it
+freezes the seven known finding-shaped models — `PortfolioQualityIssue`, `AuditFinding`,
+`WikiLintFinding`, `EaConformanceIssue`, `LicenseReadinessIssue`, `PlatformIssueReport`,
+`AssuranceFinding` — and fails CI if an eighth (any new model whose name ends in
+`Finding`/`Issue`/`Report`, outside the curated allowlist) is added without a recorded decision.
+The guard does NOT make the unify decision; it prevents further drift while that founder-reserved
+call is open.
+
 ---
 
 ## 4. Goals

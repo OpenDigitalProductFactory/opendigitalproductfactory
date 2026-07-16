@@ -233,6 +233,26 @@ jobs:
       - name: Run guard
         run: node scripts/check-module-size.mjs
 
+  finding-substrate-guard:
+    name: Finding Substrate Guard
+    runs-on: ubuntu-latest
+    # BI-REFACTOR-CC46703A — the "no-seventh-finding-table guard". The Assurance
+    # Ledger spec (§3.3) froze the finding substrate after AssuranceFinding became
+    # the seventh finding-shaped model. Until the founder Phase-2 unify decision
+    # lands, this ratchet fails CI if an eighth finding-shaped model (name ending
+    # in Finding/Issue/Report, outside the curated allowlist) is added without a
+    # decision. Guard owner: founder (markbodman), dated 2026-07-16.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Drift-guard — guard self-test mirrors the frozen substrate
+        run: node --test scripts/check-finding-substrate.test.mjs
+      - name: Run guard
+        run: node scripts/check-finding-substrate.mjs
+
   docs-staleness-detector:
     name: Docs Staleness Detector
     runs-on: ubuntu-latest

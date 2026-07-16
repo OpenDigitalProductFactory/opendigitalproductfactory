@@ -23,6 +23,7 @@ import {
   type RowsChangeData,
   type SortColumn,
   type RenderSummaryCellProps,
+  type RenderGroupCellProps,
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import "./dpf-grid.css";
@@ -118,6 +119,7 @@ import {
   type RowHeight,
 } from "./grid-view-options";
 import {
+  computeFooter,
   computeFooterRow,
   availableAggs,
   toFooterAgg,
@@ -456,6 +458,17 @@ export function WorkbookGrid({
   // Pin the leftmost N visible columns (clamped to leave one scrollable).
   const effectiveFrozen = clampFrozenCount(frozenCount, visibleCols.length);
 
+  // In-grid grouping. Drop stale ids so a deleted grouping column can't wedge the
+  // grid into an empty TreeDataGrid. Declared before gridColumns because the
+  // column builder reads `grouping`/`effectiveGroupBy` to render per-group
+  // subtotals. Grouping is grid-only; gallery renders flat cards regardless.
+  const effectiveGroupBy = useMemo(
+    () => groupBy.filter((id) => columns.some((c) => c.columnId === id)),
+    [groupBy, columns],
+  );
+  const groupColumnId = effectiveGroupBy[0];
+  const grouping = Boolean(groupColumnId) && !gallery && columns.length > 0;
+
   const gridColumns = useMemo<Column<GridRowData, SummaryRow>[]>(() => {
     const cols = visibleCols.map((c, i) => {
       const built = buildColumn(
@@ -464,10 +477,33 @@ export function WorkbookGrid({
         showProvenance,
         i < effectiveFrozen,
       ) as Column<GridRowData, SummaryRow>;
-      if (!showFooter) return built;
+      // Inline per-group subtotal: when grouping is active, a non-group-by column
+      // with a chosen aggregate shows that aggregate over the group's rows on the
+      // group header row — the same `footerAgg` selection that drives the footer
+      // bar, so one summary function reads as both subtotal and grand total
+      // (Excel/Smartsheet behavior). Group-by columns are left alone so
+      // TreeDataGrid keeps rendering their toggle + value + child count.
+      const agg = footerAgg[c.columnId] ?? "none";
+      const showsGroupSubtotal =
+        grouping && agg !== "none" && !effectiveGroupBy.includes(c.columnId);
+      const withGroupCell: Column<GridRowData, SummaryRow> = showsGroupSubtotal
+        ? {
+            ...built,
+            renderGroupCell: ({ childRows }: RenderGroupCellProps<GridRowData, SummaryRow>) => {
+              const value = computeFooter(childRows, c.columnId, agg);
+              return value ? (
+                <span className="dpf-grid-group-subtotal" title={`${FOOTER_AGG_LABELS[agg]} of ${c.name}`}>
+                  <span className="dpf-grid-group-subtotal-label">{FOOTER_AGG_LABELS[agg]}</span>
+                  {value}
+                </span>
+              ) : null;
+            },
+          }
+        : built;
+      if (!showFooter) return withGroupCell;
       // Footer cell: an aggregate picker + the computed value (Airtable-style).
       return {
-        ...built,
+        ...withGroupCell,
         renderSummaryCell: ({ row }: RenderSummaryCellProps<SummaryRow, GridRowData>) => (
           <div className="dpf-grid-footer-cell">
             <select
@@ -515,7 +551,7 @@ export function WorkbookGrid({
     return capabilities.canDeleteRow
       ? [SelectColumn as Column<GridRowData, SummaryRow>, expandCol, ...cols]
       : [expandCol, ...cols];
-  }, [visibleCols, capabilities, showProvenance, effectiveFrozen, showFooter, footerAgg]);
+  }, [visibleCols, capabilities, showProvenance, effectiveFrozen, showFooter, footerAgg, grouping, effectiveGroupBy]);
 
   const onColumnsReorder = useCallback(
     (sourceKey: string, targetKey: string) => {
@@ -525,14 +561,6 @@ export function WorkbookGrid({
     },
     [columns],
   );
-
-  // In-grid grouping (v1: single column). Drop stale ids so a deleted grouping
-  // column can't wedge the grid into an empty TreeDataGrid.
-  const effectiveGroupBy = useMemo(
-    () => groupBy.filter((id) => columns.some((c) => c.columnId === id)),
-    [groupBy, columns],
-  );
-  const groupColumnId = effectiveGroupBy[0];
 
   const sortedRows = useMemo<GridRowData[]>(() => {
     const filtered = applyFilterGroup(
@@ -551,8 +579,6 @@ export function WorkbookGrid({
     return sorted;
   }, [rowData, columns, filterQuery, filterGroup, sortColumns]);
 
-  // Grouping is grid-only; gallery renders flat cards regardless.
-  const grouping = Boolean(groupColumnId) && !gallery && columns.length > 0;
 
   // Footer summary bar: one pinned bottom row of per-column aggregates over the
   // filtered rows. Empty object when off; react-data-grid still needs a row so
@@ -1085,6 +1111,11 @@ export function WorkbookGrid({
                 {effectiveGroupBy.length > 1 ? `${effectiveGroupBy.length} levels · ` : ""}
                 {topGroupIds.length} group{topGroupIds.length === 1 ? "" : "s"}
               </span>
+              {!Object.values(footerAgg).some((a) => a && a !== "none") && (
+                <span className="text-xs italic text-[var(--dpf-muted)]">
+                  Tip: pick an aggregate in the Summary bar (Columns) to show subtotals per group.
+                </span>
+              )}
             </>
           )}
         </div>
