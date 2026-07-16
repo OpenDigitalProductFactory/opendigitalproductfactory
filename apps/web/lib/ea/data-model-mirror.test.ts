@@ -184,3 +184,43 @@ describe("healthcare patient authority mirror allocation", () => {
     );
   });
 });
+
+describe("healthcare care appointment mirror allocation", () => {
+  it("discovers care scheduling authority and tenant/patient relationships", () => {
+    const schema = readFileSync(
+      resolve(process.cwd(), "../../packages/db/prisma/schema.prisma"),
+      "utf8",
+    );
+    const desired = buildDesiredState(parsePrismaSchema(schema));
+    const elementKeys = desired.elements.map((element) => element.sourceKey);
+    const relationshipKeys = desired.relationships.map(
+      (relationship) => relationship.sourceKey,
+    );
+
+    expect(elementKeys).toEqual(
+      expect.arrayContaining([
+        modelSourceKey("CareVisitType"),
+        modelSourceKey("CareLocation"),
+        modelSourceKey("CareResource"),
+        modelSourceKey("CareSchedulingPolicy"),
+        modelSourceKey("CareAppointment"),
+        modelSourceKey("CareAppointmentParticipant"),
+        modelSourceKey("CareAppointmentResource"),
+        modelSourceKey("CareAppointmentStatusEvent"),
+        modelSourceKey("AppointmentSyncEvent"),
+      ]),
+    );
+    expect(relationshipKeys).toEqual(
+      expect.arrayContaining([
+        "prisma:relation:CareAppointment:organization:Organization",
+        "prisma:relation:CareAppointment:patientProfile:PatientProfile",
+        "prisma:relation:CareAppointment:storefrontBooking:StorefrontBooking",
+        "prisma:relation:CareAppointment:visitType:CareVisitType",
+        "prisma:relation:CareAppointment:location:CareLocation",
+        "prisma:relation:CareAppointmentParticipant:appointment:CareAppointment",
+        "prisma:relation:CareAppointmentResource:appointment:CareAppointment",
+        "prisma:relation:AppointmentSyncEvent:appointment:CareAppointment",
+      ]),
+    );
+  });
+});
