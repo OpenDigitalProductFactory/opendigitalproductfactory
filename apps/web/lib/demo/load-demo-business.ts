@@ -53,6 +53,8 @@ export interface LoadDemoBusinessResult {
   archetypeId: string;
   storefrontId: string;
   seededAt: Date;
+  /** False when the (non-fatal) setup-completion priming seeds failed. */
+  primed: boolean;
   counts: {
     providers: number;
     bookings: number;
@@ -133,13 +135,22 @@ export async function loadDemoBusiness(
   await upsertBills(db, plan, supplierIdByRef, now);
   await upsertBookings(db, plan, storefrontId, providerIdByRef, now);
 
-  // 4. Setup-completion seeds (WWWD priming corpus etc.) — fail-open, idempotent.
-  await runSetupCompletionSeeds(org.id);
+  // 4. Setup-completion seeds (WWWD priming corpus etc.) — best-effort. The demo's
+  //    operational-twin data (steps 1–3) is the deliverable; priming is enrichment,
+  //    so a seed failure (e.g. embedding service down) must not abort the load.
+  let primed = true;
+  try {
+    await runSetupCompletionSeeds(org.id);
+  } catch (err) {
+    primed = false;
+    console.warn(`loadDemoBusiness: setup-completion seeds failed (non-fatal): ${String(err)}`);
+  }
 
   return {
     archetypeId,
     storefrontId,
     seededAt: now,
+    primed,
     counts: {
       providers: plan.providers.length,
       bookings: plan.bookings.length,
