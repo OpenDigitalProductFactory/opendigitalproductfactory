@@ -533,7 +533,7 @@ export function WorkbookGrid({
   );
 
   const onRowsChange = useCallback(
-    (newRows: GridRowData[], data: RowsChangeData<GridRowData>) => {
+    (newRows: GridRowData[], data: RowsChangeData<GridRowData, SummaryRow>) => {
       // newRows are in sorted order; map back into the canonical rowData by rowId.
       const byId = new Map(newRows.map((r) => [r.rowId, r]));
       const columnId = data.column.key;
