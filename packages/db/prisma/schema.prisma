@@ -6467,6 +6467,20 @@ model PlatformDevConfig {
   // (rice, 70/20/10). §11.
   demandFramework           String?
   demandBucketTargets       Json?
+  // Use-it-or-lose-it capacity draining (EP-DEMAND-MGMT / capacity automation).
+  // When enabled, near the weekly pre-paid LLM allocation reset with a healthy
+  // (non-exhausted) pool and free build slots, the scheduled evaluator dispatches
+  // top demand-ranked ready work up to the WIP cap so allocation is not wasted.
+  // All nullable/defaulted → off by default (opt-in). See lib/capacity/drain-policy.ts.
+  capacityDrainEnabled      Boolean   @default(false)
+  /// Weekly reset day-of-week in UTC (0=Sun … 6=Sat). Default Monday.
+  capacityResetDow          Int       @default(1)
+  /// Weekly reset hour in UTC (0–23).
+  capacityResetHourUtc      Int       @default(0)
+  /// Start draining once within this many hours of the reset.
+  capacityDrainWindowHours  Int       @default(12)
+  /// Max builds to dispatch per drain evaluation (still bounded by the WIP cap).
+  capacityDrainMaxDispatch  Int       @default(3)
   // Hive Contributions consent (spec §6.1). Device-fingerprint contribution is
   // opt-in, DEFAULTED ON because outbound fingerprints are PII-free
   // (redactFingerprintEvidence, fail-closed). The master pause halts ALL

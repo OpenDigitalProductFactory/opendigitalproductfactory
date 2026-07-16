@@ -26,6 +26,7 @@ import {
   governedBacklogTeeUpRequested,
   governedBacklogTeeUpScheduled,
 } from "./governed-backlog-tee-up";
+import { capacityDrainScheduled } from "./capacity-drain";
 import { assuranceRemediationTeeUpScheduled } from "./assurance-remediation-teeup";
 import { assuranceMergeGateScheduled } from "./assurance-merge-gate-teeup";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
@@ -86,6 +87,7 @@ export const scheduledFunctions = [
   agentTaskDispatch,
   taskrunWatchdog,
   governedBacklogTeeUpScheduled,
+  capacityDrainScheduled, // use-it-or-lose-it: drain idle weekly allocation into top demand near reset
   assuranceRemediationTeeUpScheduled, // BI-7C121CCF: off-hours, budget-capped assurance remediation lane
   assuranceMergeGateScheduled, // BI-204EE70B P2.2: WWMD merge gate (dark — escalate-only until actuation enabled)
   tokenExpiryMonitor,
