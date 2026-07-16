@@ -95,20 +95,20 @@ describe("derivePlatformSummary", () => {
     const summary = derivePlatformSummary({
       checked: true,
       online: true,
-      // qdrant absent entirely (not in upTargets) => missing/unknown, not down.
-      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("sandbox")],
+      // sandbox absent entirely (not in upTargets) => missing/unknown, not down.
+      upTargets: [up("prometheus"), up("portal"), up("postgres")],
       alerts: [],
     });
 
     expect(summary.value).toBe("Degraded");
-    expect(summary.detail).toBe("AI memory & search is not reporting");
+    expect(summary.detail).toBe("Build workspace is not reporting");
   });
 });
 
 describe("friendlyJobLabel / humanizeJobList", () => {
   it("maps known jobs to plain-language labels", () => {
     expect(friendlyJobLabel("postgres")).toBe("Database");
-    expect(friendlyJobLabel("qdrant")).toBe("AI memory & search");
+    expect(friendlyJobLabel("inngest")).toBe("Background jobs");
     expect(friendlyJobLabel("sandbox")).toBe("Build workspace");
   });
 

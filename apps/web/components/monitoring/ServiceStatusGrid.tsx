@@ -14,7 +14,7 @@ type Props = {
   // Optional override — callers can still pass their own service list (the
   // legacy hardcoded shape). When omitted, the grid uses the targets-driven
   // path: one tile per active scrape target, plus the canonical
-  // UNSCRAPED_SERVICES (Neo4j, AI Inference, Voice STT) appended.
+  // UNSCRAPED_SERVICES (AI Inference, Voice STT) appended.
   services?: ServiceDefinition[];
   className?: string;
 };
@@ -98,8 +98,7 @@ function Grid({
 export const DPF_SERVICES: ServiceDefinition[] = [
   { name: "Portal", job: "portal" },
   { name: "PostgreSQL", job: "postgres" },
-  { name: "Neo4j", statusHint: "Not scraped" },
-  { name: "Qdrant", job: "qdrant" },
+  // BET-5 retired Neo4j + Qdrant (Postgres-only) — tiles removed (BI-2B70C92C).
   { name: "AI Inference", statusHint: "Portal metrics" },
   { name: "Sandbox", job: "sandbox" },
   { name: "Inngest", job: "inngest" },
