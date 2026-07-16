@@ -57,7 +57,7 @@ export default async function DocumentDetailPage({ params }: Props) {
           </div>
           <h1 className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{document.title}</h1>
           <p className="mt-2 max-w-3xl text-sm text-[var(--dpf-muted)]">
-            Updated <LocalTime value={document.updatedAt} /> by {document.createdByName ?? document.ownerName ?? "unknown principal"}.
+            Updated <LocalTime value={document.updatedAt} /> by {document.createdByName ?? document.ownerName ?? "unknown"}.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
