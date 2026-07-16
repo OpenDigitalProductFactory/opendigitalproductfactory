@@ -42,6 +42,42 @@ export function surfacePrefixFromRouteContext(routeContext: string): string {
   return `/${segments.slice(0, 2).join("/")}`;
 }
 
+// Status synonyms and articles carry no information distinguishing a headline
+// from its detail, so they're ignored when deciding whether the detail merely
+// restates the headline.
+const STATUS_STOPWORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "were", "be", "been",
+  "down", "offline", "unavailable", "unreachable", "not", "responding", "no",
+]);
+
+function contentTokens(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w && !STATUS_STOPWORDS.has(w)),
+  );
+}
+
+/**
+ * True when `context` adds no content words beyond `title` — i.e. it merely
+ * restates the headline ("The knowledge graph is down" / "The knowledge graph
+ * is unavailable"). Such a detail is dropped so the briefing doesn't render
+ * "X is down — X is unavailable" (BI-49C4EA5D). A detail that names a real
+ * consequence ("…— most features will fail") keeps content words and is kept.
+ */
+export function detailRestatesTitle(title: string, context: string | null | undefined): boolean {
+  if (!context || !context.trim()) return true;
+  const contextTokens = contentTokens(context);
+  if (contextTokens.size === 0) return true;
+  const titleTokens = contentTokens(title);
+  for (const word of contextTokens) {
+    if (!titleTokens.has(word)) return false;
+  }
+  return true;
+}
+
 /**
  * Compose the opening briefing, gated by the employee's Proactivity choice for
  * this coworker: quiet = stay silent (that's what quiet means), balanced =
@@ -75,8 +111,11 @@ export function composeOpeningBriefing(input: {
   const headline = surfaceLocal[0] ?? input.items[0];
   const remaining = input.items.length - 1;
 
+  const headlineLink = `[${headline.title}](${headline.deepLink})`;
   const lines = [
-    `**Most pressing:** [${headline.title}](${headline.deepLink}) — ${headline.context}`,
+    detailRestatesTitle(headline.title, headline.context)
+      ? `**Most pressing:** ${headlineLink}`
+      : `**Most pressing:** ${headlineLink} — ${headline.context}`,
   ];
   if (remaining > 0) {
     lines.push(
