@@ -168,6 +168,17 @@ a:hover { text-decoration: underline; }
   text-align: center;
 }
 
+/* Mermaid diagrams: strip the code-block chrome, centre, allow horizontal scroll */
+.doc-content pre.mermaid {
+  background: transparent;
+  border: none;
+  padding: 8px 0;
+  margin: 20px 0;
+  text-align: center;
+  overflow-x: auto;
+  line-height: normal;
+}
+
 /* Rouge syntax-highlighting palette (subset, matches dark/light) */
 .highlight .c, .highlight .c1, .highlight .cm { color: #6a737d; font-style: italic; }
 .highlight .k, .highlight .kd, .highlight .kn { color: #d73a49; }

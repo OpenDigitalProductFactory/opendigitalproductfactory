@@ -38,6 +38,36 @@
   <p class="doc-edit-link"><a href="https://github.com/{{ site.repository }}/edit/main/docs/{{ page.path }}" rel="noopener">Edit this page on GitHub</a></p>
 </main>
 
+<!--
+  Mermaid rendering. Kramdown+Rouge emit ```mermaid fences as
+  <div class="language-mermaid highlighter-rouge"> … </div> — raw code, not a
+  diagram. This shim recovers the source text, swaps in <pre class="mermaid">
+  nodes, and renders them, but only on pages that actually contain a diagram
+  (no library download otherwise). Theme follows the reader's colour scheme.
+-->
+<script type="module">
+  const blocks = document.querySelectorAll("div.language-mermaid");
+  if (blocks.length) {
+    const { default: mermaid } = await import(
+      "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
+    );
+    for (const block of blocks) {
+      const pre = document.createElement("pre");
+      pre.className = "mermaid";
+      pre.textContent = block.textContent; // Rouge preserves newlines as text
+      block.replaceWith(pre);
+    }
+    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: dark ? "dark" : "neutral",
+      fontFamily: "inherit",
+    });
+    await mermaid.run({ querySelector: "pre.mermaid" });
+  }
+</script>
+
 <footer class="site-footer">
   <div class="wrap">
     <p>
