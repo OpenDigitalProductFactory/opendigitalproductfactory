@@ -131,9 +131,16 @@ type Props = {
    * so the operator can see, on the providers list, which one to turn on.
    */
   resolvesPhases?: string[];
+  /**
+   * BI-779FA953: operator-facing weekly subscription allocation hint for a CLI-
+   * backed provider — "63% weekly left · resets ~2d 4h" — from the real quota
+   * snapshot. Informational (not a routing state); shown regardless of the 429
+   * gate so the operator can see remaining allocation. Null when no fresh reading.
+   */
+  weeklyAllocationHint?: string | null;
 };
 
-export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases }: Props) {
+export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, weeklyAllocationHint }: Props) {
   const { provider, credential } = pw;
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -207,6 +214,23 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases }: Pr
         >
           {provider.name}
         </span>
+
+        {/* BI-779FA953: real remaining weekly subscription allocation, when a
+            fresh quota snapshot is available. Informational — never gates routing. */}
+        {weeklyAllocationHint && (
+          <span
+            title={`Remaining pre-paid weekly LLM allocation for this subscription pool: ${weeklyAllocationHint}.`}
+            style={{
+              flexShrink: 0,
+              fontSize: 9,
+              fontVariantNumeric: "tabular-nums",
+              color: "var(--dpf-text-muted)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {weeklyAllocationHint}
+          </span>
+        )}
 
         {/* Routing eligibility — the single "can routing use this now?" answer */}
         <span title={eligibilityTitle} style={{ flexShrink: 0, display: "inline-flex" }}>

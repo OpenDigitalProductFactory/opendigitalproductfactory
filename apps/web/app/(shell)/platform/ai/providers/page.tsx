@@ -11,7 +11,7 @@ import { TokenSpendPanel } from "@/components/platform/TokenSpendPanel";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
-import { getAllCliPoolStatuses, type CliPoolState } from "@/lib/routing/cli-pool-status";
+import { getAllCliPoolStatuses, formatWeeklyAllocationHint, type CliPoolState } from "@/lib/routing/cli-pool-status";
 import { CliPoolStatusPanel } from "@/components/platform/CliPoolStatusPanel";
 import { cliAdapterTypeForProvider, deriveRoutingEligibility, type RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 import { getRecentBudgetEvents, countRecentRejections } from "@/lib/inference/budget-events-data";
@@ -87,6 +87,7 @@ export default async function ProvidersPage() {
   const cliPoolByAdapter = new Map(cliPoolStatuses.map((s) => [s.adapterType, s] as const));
   const nowMs = now.getTime();
   const eligibilityById: Record<string, RoutingEligibility> = {};
+  const weeklyHintById: Record<string, string | null> = {};
   for (const pw of aiProviders) {
     const p = pw.provider;
     const adapterType = cliAdapterTypeForProvider(p.providerId);
@@ -107,6 +108,8 @@ export default async function ProvidersPage() {
       cliPoolExhausted: pool?.isExhausted ?? false,
       cliPoolResetHint: pool ? poolResetHint(pool) : null,
     });
+    // Real remaining weekly subscription allocation, when a fresh snapshot exists.
+    weeklyHintById[p.providerId] = pool ? formatWeeklyAllocationHint(pool, now) : null;
   }
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
@@ -203,6 +206,7 @@ export default async function ProvidersPage() {
                   key={pw.provider.providerId}
                   pw={pw}
                   eligibility={eligibilityById[pw.provider.providerId]!}
+                  weeklyAllocationHint={weeklyHintById[pw.provider.providerId] ?? null}
                   {...(modelSummaries.has(pw.provider.providerId) ? { modelSummary: modelSummaries.get(pw.provider.providerId)! } : {})}
                   {...(resolvesPhasesById.has(pw.provider.providerId) ? { resolvesPhases: resolvesPhasesById.get(pw.provider.providerId)! } : {})}
                 />
