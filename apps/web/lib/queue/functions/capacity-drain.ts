@@ -24,6 +24,13 @@ export const capacityDrainScheduled = inngest.createFunction(
       const { dispatchApprovedIdeateBuilds } = await import("@/lib/integrate/ideate-on-approval");
       const { resolveScheduledOwnerUserId } = await import("../scheduled-owner");
 
+      // Refresh the REAL weekly-quota snapshot before evaluating, so the drain
+      // policy burns on live remaining allocation rather than the proxy. Opt-in
+      // + fail-closed: a no-op unless the operator has declared the creds path
+      // and enabled collection (BI-779FA953). Never throws into the drain.
+      const { collectClaudeCliWeeklyQuota } = await import("@/lib/routing/weekly-quota-collector");
+      const collect = await collectClaudeCliWeeklyQuota().catch(() => ({ collected: false, reason: "collector threw" }));
+
       const userId = await resolveScheduledOwnerUserId();
       const result = await evaluateAndDrainCapacity({ prisma, userId });
       // Fire Ideate for anything the drain just promoted (same completion the
@@ -31,7 +38,7 @@ export const capacityDrainScheduled = inngest.createFunction(
       const ideateDispatch = result.drained
         ? await dispatchApprovedIdeateBuilds({ userId })
         : null;
-      return { ...result, ideateDispatch };
+      return { ...result, ideateDispatch, weeklyCollect: collect };
     });
   },
 );
