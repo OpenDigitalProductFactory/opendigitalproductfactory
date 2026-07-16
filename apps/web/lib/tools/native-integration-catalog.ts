@@ -10,6 +10,8 @@ export type NativeIntegrationId =
   | "google-business-profile"
   | "facebook"
   | "facebook-pages"
+  | "whatsapp-business"
+  | "instagram-business"
   | "linkedin-personal-social"
   | "linkedin-ads"
   | "email-postmark"
@@ -179,6 +181,37 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
     tags: ["facebook", "pages", "social", "posts", "comments", "local presence"],
     enables: ["Page profile context", "Recent post context", "Recent comment context", "Local social presence guidance"],
     relevantAgentIds: ["customer-advisor", "coo"],
+    requiredGrantKeys: ["marketing_read"],
+  },
+  {
+    id: "whatsapp-business",
+    integrationId: "whatsapp-business",
+    provider: "facebook",
+    name: "WhatsApp Business",
+    description:
+      "Localized messaging readiness anchor for WhatsApp Business phone quality, approved message templates, and language coverage. Read-first phone and template probes run before any outbound message, automation, or webhook workflows.",
+    href: "/platform/tools/integrations/whatsapp-business",
+    category: "communications",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["whatsapp", "messaging", "communications", "templates", "meta"],
+    enables: ["WhatsApp phone readiness context", "Message template context", "Localized template coverage context"],
+    relevantAgentIds: ["customer-advisor", "marketing-specialist", "coo"],
+    requiredGrantKeys: ["marketing_read"],
+  },
+  {
+    id: "instagram-business",
+    integrationId: "instagram-business",
+    provider: "facebook",
+    name: "Instagram Business",
+    description: "Local visual presence anchor for Instagram Business profile details, recent media, and comment activity. Read-first profile and media probes before any publishing or comment write-back is scoped.",
+    href: "/platform/tools/integrations/instagram-business",
+    category: "local-social-presence",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["instagram", "social", "media", "comments", "local presence", "meta"],
+    enables: ["Instagram profile context", "Recent media context", "Recent comment context"],
+    relevantAgentIds: ["customer-advisor", "marketing-specialist"],
     requiredGrantKeys: ["marketing_read"],
   },
   {
