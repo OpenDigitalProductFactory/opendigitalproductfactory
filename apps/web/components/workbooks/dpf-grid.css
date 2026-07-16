@@ -259,6 +259,27 @@
   color: var(--dpf-text);
 }
 
+/* Per-group subtotal shown on a grouped row (mirrors the footer aggregate). */
+.dpf-grid-group-subtotal {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--dpf-text);
+}
+
+.dpf-grid-group-subtotal-label {
+  font-weight: 400;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--dpf-muted);
+}
+
 /* Rating field — filled/empty stars. */
 .dpf-grid-rating {
   letter-spacing: 0.05em;

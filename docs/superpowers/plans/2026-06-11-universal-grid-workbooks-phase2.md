@@ -199,7 +199,15 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   top-level ids each render so newly-appeared groups still open. The two intents are split back out of
   the full expanded set `TreeDataGrid` reports on each toggle, which is what makes nested expansions
   persist (the old single-level "subtraction" model dropped them). Pure, unit-tested `expandedGroupSet`
-  / `splitExpandedGroupIds` (`grid-reorder-group.ts`). Inline per-group subtotal rows remain a follow-up.
+  / `splitExpandedGroupIds` (`grid-reorder-group.ts`).
+- **Slice 23 — inline per-group subtotals — SHIPPED.** When grouping is active, each non-group-by
+  column with a chosen aggregate renders that aggregate over the group's rows on the group header row
+  (react-data-grid `Column.renderGroupCell` → `props.childRows`). It reuses the **same** `footerAgg`
+  selection that drives the footer bar, so one summary function reads as both per-group subtotal and
+  grand total — Excel/Smartsheet behavior — with no new config, state, or persistence. Group-by columns
+  are left untouched so `TreeDataGrid` keeps rendering their toggle + value + child count. Reuses the
+  pure, unit-tested `computeFooter` (`grid-footer-summary.ts`); a Group-panel tip points the user to the
+  Summary bar to pick aggregates. This closes the grouping-parity follow-up noted in Slice 22.
 - **Slice 18 — table ergonomics: hide fields + frozen columns + row height — SHIPPED.** A "Columns"
   toolbar panel (progressive disclosure) with per-field show/hide checkboxes, a "Freeze first N
   columns" selector (pins the leftmost visible columns on horizontal scroll via react-data-grid
@@ -228,10 +236,9 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   Conditions combine with a single AND/OR toggle. Pure, unit-tested `grid-filter-builder.ts`
   (`applyFilterGroup`/`evaluateCondition`/`opsForField`); half-typed conditions never hide rows.
   Persisted as `filterGroup` in the view state (old `columnFilters` still parsed for back-compat).
-- **Remaining (not built):** inline per-group subtotal rows (multi-level grouping UI itself shipped,
-  Slice 22); named/shareable server-side views; calendar view (fullcalendar — needs a date column);
-  manual row reordering; full pivots + richer charts; metrics/semantic layer; operationalization
-  lifecycle.
+- **Remaining (not built):** named/shareable server-side views; calendar view (fullcalendar — needs a
+  date column); manual row reordering; full pivots + richer charts; metrics/semantic layer;
+  operationalization lifecycle.
   **Debt:** `Grid.tsx` is over the 1000-LOC hard cap — decompose the toolbar/panels into
   subcomponents (in progress: Filter + Summary panels extracted to `GridPanels.tsx`).
 
