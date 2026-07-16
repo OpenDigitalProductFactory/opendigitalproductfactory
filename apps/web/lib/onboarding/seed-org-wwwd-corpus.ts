@@ -37,6 +37,7 @@ import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
 import { storeWikiPage, type StoreWikiPageInput } from "@/lib/wiki/embeddings";
 import { DECISION_DOMAIN_CLASSES, type DecisionDomainClass } from "@/lib/decision-perspective/types";
 import { suggestMission } from "./mission-suggestion";
+import { deriveExcellenceCorpus, excellenceCorpusToMarkdown } from "./excellence-corpus";
 import {
   resolveBusinessProfile,
   resolveStanceVectors,
@@ -148,6 +149,14 @@ function buildPages(
   orgName: string | null,
 ): SeedPage[] {
   const profile = resolveBusinessProfile({ archetypeId, industry: industry ?? bc?.industry ?? null });
+  // Excellence Corpus (workstream B): "what great looks like" for this archetype,
+  // seeded as unconfirmed priming so the AI cog starts from a picture of a well-run
+  // one rather than a blank slate.
+  const excellence = deriveExcellenceCorpus({
+    archetypeId,
+    industry: industry ?? bc?.industry ?? null,
+    ctaType: null,
+  });
 
   const mission =
     (bc?.mission ?? "").trim() ||
@@ -235,6 +244,16 @@ function buildPages(
         `This is ${orgLabel}'s starting supplier and supply-chain stance, derived from how this kind of business typically runs. Refine it as actual suppliers, vendors, and purchasing rhythms are captured.`,
       ].join("\n"),
       abstract: profile.supplyChain,
+    },
+    {
+      // Excellence Corpus (workstream B): the "what great looks like" primer, so
+      // the AI cog starts from a picture of a well-run one, not a blank slate.
+      slug: "org-what-great-looks-like",
+      title: "What great looks like",
+      pageKind: "principle",
+      bundles: ["plan-readiness"],
+      body: excellenceCorpusToMarkdown(excellence, orgLabel),
+      abstract: excellence.whatGreatLooksLike,
     },
   ];
 
