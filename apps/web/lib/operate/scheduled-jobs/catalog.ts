@@ -177,6 +177,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "runtime-artifact-janitor",
+    inngestId: "ops/runtime-artifact-janitor",
+    name: "Runtime-artifact janitor (observe)",
+    purpose:
+      "Observe-only: logs the orphaned CI build images + stray compose projects it WOULD reap. Never deletes — real --apply reaping is a separate founder-gated action.",
+    cron: "20 5 * * *",
+    cadence: "Daily at 05:20",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "infra-prune",
     inngestId: "ops/infra-prune",
     name: "Infrastructure prune",
