@@ -147,9 +147,10 @@ describe("seedOrgWwwdCorpus", () => {
     expect(fake.versions).toHaveLength(1);
     expect(fake.versions[0]).toMatchObject({ versionId: result.versionId, versionNumber: 1 });
 
-    // Twelve materials across all four decision classes (BI-70ADC71F)
-    expect(result.materialCount).toBe(12);
-    expect(fake.materials).toHaveLength(12);
+    // Thirteen materials across all four decision classes (BI-70ADC71F + the
+    // workstream-B excellence page in plan-readiness).
+    expect(result.materialCount).toBe(13);
+    expect(fake.materials).toHaveLength(13);
     for (const m of fake.materials) {
       expect(m.profileVersionId).toBe(result.versionId);
       expect(m.reviewStatus).toBe("approved");
@@ -163,14 +164,14 @@ describe("seedOrgWwwdCorpus", () => {
       return acc;
     }, {});
     expect(byClass).toEqual({
-      "plan-readiness": 4,
+      "plan-readiness": 5,
       "risk-assessment": 3,
       "professional-practice": 3,
       "architecture-tradeoff": 2,
     });
 
-    // Nine published, org-scoped, non-kernel wiki pages (4 identity + 5 vectors)
-    expect(fake.wikiPages).toHaveLength(9);
+    // Ten published, org-scoped, non-kernel wiki pages (4 identity + 1 excellence + 5 vectors)
+    expect(fake.wikiPages).toHaveLength(10);
     for (const p of fake.wikiPages) {
       expect(p.status).toBe("published");
       expect(p.organizationId).toBe(ORG);
@@ -180,6 +181,7 @@ describe("seedOrgWwwdCorpus", () => {
       "org-how-we-decide",
       "org-mission",
       "org-supply-chain",
+      "org-what-great-looks-like",
       "org-who-we-serve",
       "stances/customer-goodwill",
       "stances/growth-vs-stability",
@@ -195,9 +197,9 @@ describe("seedOrgWwwdCorpus", () => {
     expect(mission!.pageKind).toBe("principle");
 
     // Every published page was embedded into Qdrant
-    expect(embed).toHaveBeenCalledTimes(9);
+    expect(embed).toHaveBeenCalledTimes(10);
     expect(result.embedded).toBe(true);
-    expect(result.wikiPageIds).toHaveLength(9);
+    expect(result.wikiPageIds).toHaveLength(10);
   });
 
   it("is idempotent — re-running produces no duplicate profile/version/material/page rows", async () => {
@@ -218,11 +220,11 @@ describe("seedOrgWwwdCorpus", () => {
     // Fallback + org profile, each upserted once (no duplicates on re-run).
     expect(fake.profiles).toHaveLength(2);
     expect(fake.versions).toHaveLength(1);
-    expect(fake.materials).toHaveLength(12);
-    expect(fake.wikiPages).toHaveLength(9);
+    expect(fake.materials).toHaveLength(13);
+    expect(fake.wikiPages).toHaveLength(10);
     // Body unchanged on the 2nd run → no extra revision, no re-embed
-    expect(fake.revisions).toHaveLength(9);
-    expect(embed).toHaveBeenCalledTimes(9);
+    expect(fake.revisions).toHaveLength(10);
+    expect(embed).toHaveBeenCalledTimes(10);
   });
 
   it("still seeds a non-empty corpus when no mission was captured (archetype fallback)", async () => {
@@ -234,7 +236,7 @@ describe("seedOrgWwwdCorpus", () => {
 
     const result = await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
 
-    expect(result.materialCount).toBe(12);
+    expect(result.materialCount).toBe(13);
     const mission = fake.wikiPages.find((p) => p.slug === "org-mission");
     expect(mission).toBeDefined();
     expect(mission!.body.trim().length).toBeGreaterThan(20);
@@ -253,8 +255,8 @@ describe("seedOrgWwwdCorpus", () => {
 
     expect(result.embedded).toBe(false);
     // DB rows still created despite embedding failure
-    expect(fake.wikiPages).toHaveLength(9);
-    expect(fake.materials).toHaveLength(12);
+    expect(fake.wikiPages).toHaveLength(10);
+    expect(fake.materials).toHaveLength(13);
   });
 
   it("seeds an archetype-aware org-supply-chain stance page + material", async () => {
