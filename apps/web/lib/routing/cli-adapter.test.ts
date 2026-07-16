@@ -66,6 +66,15 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   }),
 }));
 
+// Sandbox file writer — the adapter delegates every temp-file / secret write to
+// writeSandboxFile, which streams content via stdin (BI-AFEF038A). Mock it so we
+// can assert on the (path, content, mode) it was handed WITHOUT the content ever
+// touching a command string.
+const mockWriteSandboxFile = vi.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
+vi.mock("@/lib/integrate/sandbox/agent-cli-runtime", () => ({
+  writeSandboxFile: (...args: unknown[]) => mockWriteSandboxFile(...args),
+}));
+
 import {
   cliAdapter,
   CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE,
@@ -73,6 +82,14 @@ import {
   parseCliJsonOutput,
   parseCliStreamOutput,
 } from "./cli-adapter";
+
+// The (path, content, mode, chownNodeUser) each writeSandboxFile call received.
+type SandboxWriteParams = { path: string; content: string; mode?: string; chownNodeUser?: boolean };
+function sandboxWriteFor(pathSubstring: string): SandboxWriteParams | undefined {
+  return mockWriteSandboxFile.mock.calls
+    .map((c) => c[0] as unknown as SandboxWriteParams)
+    .find((p) => p.path.includes(pathSubstring));
+}
 import { InferenceError } from "@/lib/ai-inference";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
@@ -132,6 +149,7 @@ describe("cliAdapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    mockWriteSandboxFile.mockResolvedValue(undefined);
   });
 
   it("has type 'claude-cli'", () => {
@@ -276,11 +294,11 @@ describe("cliAdapter", () => {
 
     await cliAdapter.execute(makeRequest({ tools }));
 
-    // The system prompt file should include tool descriptions
-    // Verify via the exec calls that wrote to temp files
-    const execCalls = mockExecAsync.mock.calls.map(c => c[0] as string);
-    const systemFileWrite = execCalls.find(c => c.includes("cli-system-"));
-    expect(systemFileWrite).toBeDefined();
+    // The system prompt file should include tool descriptions. Verify via the
+    // captured writeSandboxFile content (streamed to the sandbox via stdin).
+    const systemWrite = sandboxWriteFor("cli-system-");
+    expect(systemWrite).toBeDefined();
+    expect(systemWrite!.content).toContain("create_backlog_item");
   });
 
   it("handles CLI process error with auth failure classification", async () => {
@@ -367,16 +385,11 @@ describe("cliAdapter", () => {
 
     await cliAdapter.execute(makeRequest());
 
-    // Find the runner-script write — it has cli-run-... in the filename and
-    // base64-encodes the script body. We decode and assert.
-    const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
-    const runnerWrite = execCalls.find((c) => c.includes("cli-run-"));
+    // Find the runner-script write — path has cli-run-…; the script body is the
+    // `content` streamed to the sandbox via stdin (never in a command string).
+    const runnerWrite = sandboxWriteFor("cli-run-");
     expect(runnerWrite).toBeDefined();
-
-    // Extract the base64 payload between the single quotes after `echo '`.
-    const m = runnerWrite!.match(/echo '([A-Za-z0-9+/=]+)'/);
-    expect(m).not.toBeNull();
-    const decodedScript = Buffer.from(m![1]!, "base64").toString("utf-8");
+    const decodedScript = runnerWrite!.content;
 
     expect(decodedScript).toContain("--disallowedTools");
     expect(decodedScript).toContain(CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE);
@@ -457,13 +470,15 @@ describe("cliAdapter", () => {
       expect(mintArgs.scopes).toContain("backlog_read");
       expect(mintArgs.scopes).toContain("backlog_write");
 
-      // mcp-config file write
-      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
-      const mcpWrite = execCalls.find((c) => c.includes("cli-mcp-"));
+      // mcp-config file write — chown to the node user + chmod 644 so the Claude
+      // CLI process can read the config. These are now params to writeSandboxFile
+      // (the JWT-bearing content flows via stdin, never the command surface).
+      const mcpWrite = sandboxWriteFor("cli-mcp-");
       expect(mcpWrite).toBeDefined();
-      // chown to node user + chmod 644 so the Claude CLI process can read the config
-      expect(mcpWrite).toContain("chown node:node");
-      expect(mcpWrite).toContain("chmod 644");
+      expect(mcpWrite!.chownNodeUser).toBe(true);
+      expect(mcpWrite!.mode).toBe("644");
+      // The short-lived JWT is carried in the config content, not in argv.
+      expect(mcpWrite!.content).toContain("eyJ.test.jwt");
     });
 
     it("includes --mcp-config + --strict-mcp-config in the runner script", async () => {
@@ -473,10 +488,7 @@ describe("cliAdapter", () => {
 
       await cliAdapter.execute(makeMcpRequest());
 
-      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
-      const runnerWrite = execCalls.find((c) => c.includes("cli-run-"));
-      const m = runnerWrite!.match(/echo '([A-Za-z0-9+/=]+)'/);
-      const decoded = Buffer.from(m![1]!, "base64").toString("utf-8");
+      const decoded = sandboxWriteFor("cli-run-")!.content;
 
       expect(decoded).toContain("--mcp-config");
       expect(decoded).toContain("--strict-mcp-config");
@@ -492,10 +504,7 @@ describe("cliAdapter", () => {
 
       await cliAdapter.execute(makeMcpRequest());
 
-      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
-      const systemWrite = execCalls.find((c) => c.includes("cli-system-"));
-      const m = systemWrite!.match(/echo '([A-Za-z0-9+/=]+)'/);
-      const sys = Buffer.from(m![1]!, "base64").toString("utf-8");
+      const sys = sandboxWriteFor("cli-system-")!.content;
 
       // Tool descriptions and the structured-JSON wire-format contract must
       // be absent — the CLI advertises tools via MCP discovery.
@@ -510,14 +519,11 @@ describe("cliAdapter", () => {
 
       await cliAdapter.execute(makeMcpRequest());
 
-      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
-      const runnerWrite = execCalls.find((c) => c.includes("cli-run-"));
-      const decoded = Buffer.from(runnerWrite!.match(/echo '([A-Za-z0-9+/=]+)'/)![1]!, "base64").toString("utf-8");
+      const decoded = sandboxWriteFor("cli-run-")!.content;
       expect(decoded).not.toContain("--mcp-config");
       expect(decoded).toContain("--disallowedTools"); // legacy path still suppresses native tools
 
-      const systemWrite = execCalls.find((c) => c.includes("cli-system-"));
-      const sys = Buffer.from(systemWrite!.match(/echo '([A-Za-z0-9+/=]+)'/)![1]!, "base64").toString("utf-8");
+      const sys = sandboxWriteFor("cli-system-")!.content;
       // Legacy text-tool injection is back when the mint fails
       expect(sys).toContain("To invoke a tool");
     });
@@ -539,11 +545,9 @@ describe("cliAdapter", () => {
       );
 
       expect(mockCreateMcpSessionToken).not.toHaveBeenCalled();
-      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
-      const runnerWrite = execCalls.find((c) => c.includes("cli-run-"));
+      const runnerWrite = sandboxWriteFor("cli-run-");
       expect(runnerWrite).toBeDefined();
-      const decoded = Buffer.from(runnerWrite!.match(/echo '([A-Za-z0-9+/=]+)'/)![1]!, "base64").toString("utf-8");
-      expect(decoded).not.toContain("--mcp-config");
+      expect(runnerWrite!.content).not.toContain("--mcp-config");
     });
 
     it("derives capability=read when no tools require write grants", async () => {
