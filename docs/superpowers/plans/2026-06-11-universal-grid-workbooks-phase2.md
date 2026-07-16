@@ -189,9 +189,17 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   the *rows themselves* into groups (the Smartsheet affordance). Groups start expanded; user collapses
   are remembered as a subtraction (`collapsedGroups`) so new groups from edits/filtering still open by
   default. Grid-only (gallery stays flat); the group-by column persists in the view state. Bucketing
-  is the pure, unit-tested `groupRowsByColumn`. **Multi-level grouping** is a documented follow-up —
-  `groupBy` is already an array end-to-end and `TreeDataGrid` supports nesting; only the panel UI
-  (add/remove ordered group levels) and expand-id handling for nested ids remain.
+  is the pure, unit-tested `groupRowsByColumn`.
+- **Slice 22 — multi-level (nested) grouping — SHIPPED.** The Group panel now takes an ordered list
+  of group-by columns (chips per level, outer→inner, each removable, plus an "add level…" picker)
+  instead of a single select — the Smartsheet/Airtable "group by A then B" affordance. `groupBy` was
+  already a `string[]` end-to-end and `TreeDataGrid` nests natively, so this is a panel-UI change plus
+  a corrected expansion model: top-level groups open by default (collapses tracked in `collapsedGroups`),
+  deeper levels closed by default (opens tracked in `extraExpanded`), reconciled against the current
+  top-level ids each render so newly-appeared groups still open. The two intents are split back out of
+  the full expanded set `TreeDataGrid` reports on each toggle, which is what makes nested expansions
+  persist (the old single-level "subtraction" model dropped them). Pure, unit-tested `expandedGroupSet`
+  / `splitExpandedGroupIds` (`grid-reorder-group.ts`). Inline per-group subtotal rows remain a follow-up.
 - **Slice 18 — table ergonomics: hide fields + frozen columns + row height — SHIPPED.** A "Columns"
   toolbar panel (progressive disclosure) with per-field show/hide checkboxes, a "Freeze first N
   columns" selector (pins the leftmost visible columns on horizontal scroll via react-data-grid
@@ -220,12 +228,12 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   Conditions combine with a single AND/OR toggle. Pure, unit-tested `grid-filter-builder.ts`
   (`applyFilterGroup`/`evaluateCondition`/`opsForField`); half-typed conditions never hide rows.
   Persisted as `filterGroup` in the view state (old `columnFilters` still parsed for back-compat).
-- **Remaining (not built):** row-expand record modal; multi-level (nested) grouping UI + inline
-  group subtotals; named/shareable server-side views; calendar view (fullcalendar — needs a date
-  column); manual row reordering; full pivots + richer charts; metrics/semantic layer;
-  operationalization lifecycle.
+- **Remaining (not built):** inline per-group subtotal rows (multi-level grouping UI itself shipped,
+  Slice 22); named/shareable server-side views; calendar view (fullcalendar — needs a date column);
+  manual row reordering; full pivots + richer charts; metrics/semantic layer; operationalization
+  lifecycle.
   **Debt:** `Grid.tsx` is over the 1000-LOC hard cap — decompose the toolbar/panels into
-  subcomponents before the next feature increment.
+  subcomponents (in progress: Filter + Summary panels extracted to `GridPanels.tsx`).
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 

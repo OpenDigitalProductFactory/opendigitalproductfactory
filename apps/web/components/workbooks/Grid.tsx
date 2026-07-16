@@ -107,6 +107,8 @@ import {
   applyColumnOrder,
   groupRowsByColumn,
   groupKeys,
+  expandedGroupSet,
+  splitExpandedGroupIds,
 } from "./grid-reorder-group";
 import {
   visibleColumns as computeVisibleColumns,
@@ -366,9 +368,14 @@ export function WorkbookGrid({
   const [showFooter, setShowFooter] = useState(false);
   // Which row is expanded into the record detail modal (null = closed).
   const [openRowId, setOpenRowId] = useState<string | null>(null);
-  // Which groups the user has collapsed (session-scoped); everything else is
-  // expanded by default so the grouped grid reads like Smartsheet on open.
-  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  // Group expansion (session-scoped), split so nested grouping behaves like
+  // Smartsheet/Airtable: top-level groups open by default (collapses tracked in
+  // `collapsedGroups`), deeper levels closed by default (opens tracked in
+  // `extraExpanded`). TreeDataGrid reports the full expanded set on every toggle,
+  // so we split it back into these two intents rather than storing it verbatim —
+  // that keeps freshly-appeared top groups (from a filter/edit) open by default.
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<unknown>>(() => new Set());
+  const [extraExpanded, setExtraExpanded] = useState<ReadonlySet<unknown>>(() => new Set());
   // Multi-step undo/redo of cell edits (distinct from the audit history). Each
   // entry's inverse replays through the same validated dispatch as a normal edit.
   const [history, setHistory] = useState<GridHistory>(EMPTY_HISTORY);
@@ -563,23 +570,34 @@ export function WorkbookGrid({
     [],
   );
 
-  // Every group starts expanded; the user's collapses are remembered and applied
-  // as a subtraction so new groups (from edits/filtering) still open by default.
-  const allGroupIds = useMemo(
+  // Top-level group ids (the first group-by column's keys). These open by
+  // default; the user's collapses are remembered as a subtraction so new groups
+  // (from edits/filtering) still open. Deeper nested levels are closed by default
+  // and opened on demand — those opens live in `extraExpanded`.
+  const topGroupIds = useMemo(
     () => (groupColumnId ? groupKeys(sortedRows, groupColumnId) : []),
     [sortedRows, groupColumnId],
   );
   const expandedGroupIds = useMemo(
-    () => new Set<unknown>(allGroupIds.filter((id) => !collapsedGroups.has(id))),
-    [allGroupIds, collapsedGroups],
+    () => expandedGroupSet(topGroupIds, collapsedGroups, extraExpanded),
+    [topGroupIds, collapsedGroups, extraExpanded],
   );
   const onExpandedGroupIdsChange = useCallback(
     (ids: Set<unknown>) => {
-      const expanded = new Set(Array.from(ids, String));
-      setCollapsedGroups(new Set(allGroupIds.filter((id) => !expanded.has(id))));
+      // TreeDataGrid hands back the full expanded set (all levels); split it back
+      // into the collapse/expand intents we track.
+      const split = splitExpandedGroupIds(ids, topGroupIds);
+      setCollapsedGroups(split.collapsedGroups);
+      setExtraExpanded(split.extraExpanded);
     },
-    [allGroupIds],
+    [topGroupIds],
   );
+  // Reset expansion intents when the group-by columns change so a new grouping
+  // starts fully at its default (top open, deeper closed).
+  const resetGroupExpansion = useCallback(() => {
+    setCollapsedGroups(new Set());
+    setExtraExpanded(new Set());
+  }, []);
 
   const persistCell = useCallback(
     async (
@@ -996,40 +1014,76 @@ export function WorkbookGrid({
       {showGroup && columns.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
           <span className="text-sm text-[var(--dpf-muted)]">Group by</span>
-          <select
-            value={groupColumnId ?? ""}
-            onChange={(e) => {
-              setGroupBy(e.target.value ? [e.target.value] : []);
-              setCollapsedGroups(new Set());
-            }}
-            aria-label="Group by column"
-            className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]"
-          >
-            <option value="">none</option>
-            {columns.map((c) => (
-              <option key={c.columnId} value={c.columnId}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          {/* Ordered group-by levels: each chip is one level (outer → inner). */}
+          {effectiveGroupBy.map((id, level) => {
+            const col = columns.find((c) => c.columnId === id);
+            if (!col) return null;
+            return (
+              <span
+                key={id}
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]"
+              >
+                <span className="text-xs text-[var(--dpf-muted)]">{level + 1}</span>
+                {col.name}
+                <button
+                  type="button"
+                  aria-label={`Remove grouping by ${col.name}`}
+                  onClick={() => {
+                    setGroupBy(effectiveGroupBy.filter((g) => g !== id));
+                    resetGroupExpansion();
+                  }}
+                  className="ml-0.5 text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+          {(() => {
+            const available = columns.filter((c) => !effectiveGroupBy.includes(c.columnId));
+            if (available.length === 0) return null;
+            return (
+              <select
+                value=""
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  setGroupBy([...effectiveGroupBy, e.target.value]);
+                  resetGroupExpansion();
+                }}
+                aria-label={effectiveGroupBy.length ? "Add group-by level" : "Group by column"}
+                className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]"
+              >
+                <option value="">{effectiveGroupBy.length ? "add level…" : "none"}</option>
+                {available.map((c) => (
+                  <option key={c.columnId} value={c.columnId}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            );
+          })()}
           {grouping && (
             <>
               <button
                 type="button"
-                onClick={() => setCollapsedGroups(new Set())}
+                onClick={resetGroupExpansion}
                 className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               >
                 Expand all
               </button>
               <button
                 type="button"
-                onClick={() => setCollapsedGroups(new Set(allGroupIds))}
+                onClick={() => {
+                  setCollapsedGroups(new Set(topGroupIds));
+                  setExtraExpanded(new Set());
+                }}
                 className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               >
                 Collapse all
               </button>
               <span className="text-xs text-[var(--dpf-muted)]">
-                {allGroupIds.length} group{allGroupIds.length === 1 ? "" : "s"}
+                {effectiveGroupBy.length > 1 ? `${effectiveGroupBy.length} levels · ` : ""}
+                {topGroupIds.length} group{topGroupIds.length === 1 ? "" : "s"}
               </span>
             </>
           )}
