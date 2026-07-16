@@ -4,9 +4,31 @@ import {
   buildReviewFindings,
   buildConflictFindings,
   buildGapFindings,
+  buildDriftFindings,
   type ConflictRow,
+  type DriftRow,
   type GapCluster,
 } from "./decision-review-findings";
+
+const flipRow: DriftRow = {
+  scenarioId: "quick-vs-proper-normal",
+  rationale: "The kernel must prefer the proper fix.",
+  expectedWinner: "proper-seed-fix",
+  actualWinner: "quick-runtime-patch",
+  margin: 0.42,
+  marginFloor: 0.3,
+  driftKind: "flip",
+};
+
+const thinRow: DriftRow = {
+  scenarioId: "cheap-sound-vs-rebuild-guard",
+  rationale: "Anti-maximalism guard.",
+  expectedWinner: "cheap-sound-additive",
+  actualWinner: "cheap-sound-additive",
+  margin: 0.04,
+  marginFloor: 0.1,
+  driftKind: "thin-margin",
+};
 
 const conflict: ConflictRow = {
   interactionId: "DI-ABC123",
@@ -105,5 +127,34 @@ describe("buildReviewFindings", () => {
     });
     expect(f.detail.length).toBeLessThanOrEqual(120);
     expect(f.detail.endsWith("…")).toBe(true);
+  });
+
+  it("builds a flip drift finding that names old and new winners and routes to the matrix", () => {
+    const [f] = buildDriftFindings([flipRow]);
+    expect(f.findingClass).toBe("drift");
+    expect(f.title).toContain("flipped");
+    expect(f.detail).toContain("proper seed fix");
+    expect(f.detail).toContain("quick runtime patch");
+    expect(f.actionHref).toBe("/coworker-decisions/matrix");
+    expect(f.postureLabel).toBe("margin 0.42");
+  });
+
+  it("builds a thin-margin drift finding phrased as a coin-flip", () => {
+    const [f] = buildDriftFindings([thinRow]);
+    expect(f.title).toContain("coin-flip");
+    expect(f.detail).toContain("near-tied");
+  });
+
+  it("orders drift after conflicts and before gaps", () => {
+    const findings = buildReviewFindings({
+      conflicts: [conflict],
+      drift: [flipRow],
+      gapClusters: [gap],
+    });
+    expect(findings.map((f) => f.findingClass)).toEqual([
+      "conflict",
+      "drift",
+      "gap",
+    ]);
   });
 });

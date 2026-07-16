@@ -223,9 +223,13 @@ any phase.
 - **Phase 0** ✅ — this spec + epic + BIs + operator mockup. No code. (PR #2573)
 - **Phase 1 — Reframe the landing.** ✅ Three-discipline hub with derived health, nav renamed
   "Wiki" → "Decision governance", raw material retained as a drill-in. (PR #2575)
-- **Phase 2 — Decision Review & Adjust workspace.** ✅ (conflict + gap, PR #2575) → completion:
+- **Phase 2 — Decision Review & Adjust workspace.** ✅ **Complete.** (conflict + gap, PR #2575) → completion:
   `staleness` findings (stale-but-cited material) + the read-only decision **matrix** view
-  (`/coworker-decisions/matrix`). Drift (golden-decision flips) remains the one open sub-slice.
+  (`/coworker-decisions/matrix`) + **`drift` findings** — the review page re-scores the frozen
+  `GOLDEN_SCENARIOS` against the *live* commandment corpus each load (`evaluateGoldenDrift` over
+  the same `decide()` engine) and surfaces any canonical decision whose winner **flipped** or whose
+  margin fell below its `marginFloor` (a coin-flip), each routed to the matrix to revisit a
+  dimension or the aggregate. All Phase-2 sub-slices are now delivered.
 - **Phase 3 — WWWD business-stance editor.** ✅ `/coworker-decisions/stance` — a plain-language draft authoring
   form that writes an org-overlay `stance` page (the WWWD corpus the decision-routing block grounds
   business calls in). Closes the confirmed "no adjust UI" gap. Draft by default.
