@@ -1009,7 +1009,7 @@ describe("Latest Run card — human-readable upgrade scope", () => {
         latestRunImpact={digest}
       />,
     );
-    expect(html).toContain("data-run-impact-headline");
+    expect(html).toContain('data-impact-scope-headline="run"');
     expect(html).toContain("Nine changes since your last upgrade, one breaking.");
   });
 
@@ -1021,7 +1021,7 @@ describe("Latest Run card — human-readable upgrade scope", () => {
         latestRunImpact={digest}
       />,
     );
-    expect(html).toContain("data-run-impact-counts");
+    expect(html).toContain('data-impact-scope-counts="run"');
     expect(html).toContain("9 changes");
     expect(html).toContain("1 breaking · 5 new · 3 fixes");
     // Breaking present -> ribbon takes the destructive color.
@@ -1045,8 +1045,8 @@ describe("Latest Run card — human-readable upgrade scope", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded")} />,
     );
-    expect(html).not.toContain("data-run-impact-counts");
-    expect(html).not.toContain("data-run-impact-headline");
+    expect(html).not.toContain("data-impact-scope-counts");
+    expect(html).not.toContain("data-impact-scope-headline");
     // The SHA identity line still renders.
     expect(html).toContain("data-run-sha-range");
   });
@@ -1064,6 +1064,69 @@ describe("Latest Run card — human-readable upgrade scope", () => {
     );
     expect(html).toContain("2 new · 1 fix");
     // No headline block when the digest headline is null.
-    expect(html).not.toContain("data-run-impact-headline");
+    expect(html).not.toContain("data-impact-scope-headline");
+  });
+});
+
+describe("Update-available banner — at-a-glance scope", () => {
+  const okSummary = {
+    ok: true as const,
+    summary: {
+      currentLineageSha: "a".repeat(40),
+      targetSha: "b".repeat(40),
+      counts: { breaking: 2, feature: 4, fix: 1, performance: 0, other: 0, total: 7 },
+      topItems: [],
+      allItems: [],
+      phrased: {
+        headline: "Seven changes are ready, two of them breaking.",
+        itemPhrasings: [],
+        touchesCustomizationsCallout: "",
+      },
+      enrichment: { githubReachable: true, prsEnriched: 4 },
+      generatedAt: "2026-07-15T00:00:00.000Z",
+      fromCache: true,
+    },
+  };
+
+  it("shows the glance ribbon on the banner when an update is available", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        isFresh={false}
+        targetSha={"b".repeat(40)}
+        initialImpactSummary={okSummary}
+      />,
+    );
+    expect(html).toContain('data-update-glance="true"');
+    expect(html).toContain('data-impact-scope-headline="available"');
+    expect(html).toContain("Seven changes are ready, two of them breaking.");
+    expect(html).toContain("7 changes");
+    expect(html).toContain("2 breaking · 4 new · 1 fix");
+  });
+
+  it("omits the glance ribbon when the build is fresh (up to date)", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} isFresh={true} initialImpactSummary={okSummary} />,
+    );
+    expect(html).not.toContain('data-update-glance="true"');
+    expect(html).not.toContain('data-impact-scope-headline="available"');
+  });
+
+  it("omits the glance ribbon when the summary did not resolve", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        isFresh={false}
+        targetSha={"b".repeat(40)}
+        initialImpactSummary={{
+          ok: false,
+          reason: "no-lineage",
+          detail: "No succeeded run yet.",
+        }}
+      />,
+    );
+    expect(html).not.toContain('data-update-glance="true"');
+    // The plain "Update available" line still renders.
+    expect(html).toContain("Update available");
   });
 });

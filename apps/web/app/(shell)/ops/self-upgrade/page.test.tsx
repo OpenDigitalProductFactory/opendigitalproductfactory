@@ -13,6 +13,9 @@ vi.mock("@/lib/actions/platform-dev-config", () => ({
 
 vi.mock("@/lib/self-upgrade/impact", () => ({
   loadPersistedImpactSummary: vi.fn().mockResolvedValue(null),
+  summarizeUpgradeImpact: vi
+    .fn()
+    .mockResolvedValue({ ok: false, reason: "no-lineage", detail: "no lineage" }),
 }));
 
 vi.mock("@/components/ops/OpsTabNav", () => ({
@@ -56,6 +59,7 @@ vi.mock("@/components/ops/SelfUpgradeClient", () => ({
 
 import { getSelfUpgradeStatus, listSelfUpgradeRuns } from "@/lib/actions/promotions";
 import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
+import { loadPersistedImpactSummary, summarizeUpgradeImpact } from "@/lib/self-upgrade/impact";
 import SelfUpgradePage from "./page";
 
 beforeEach(() => {
@@ -229,5 +233,37 @@ describe("SelfUpgradePage", () => {
     const html = renderToStaticMarkup(await SelfUpgradePage());
 
     expect(html).toContain('data-update-pending="false"');
+  });
+
+  it("auto-generates the impact summary on load when an update is available", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      enabled: true,
+      isFresh: false,
+      targetSha: "b".repeat(40),
+    });
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    await SelfUpgradePage();
+
+    // Cache-first generate on load — the glance one-liner is present without a
+    // click; the read-only rehydrate path is not taken.
+    expect(summarizeUpgradeImpact).toHaveBeenCalled();
+    expect(loadPersistedImpactSummary).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-generate when the build is already fresh", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      enabled: true,
+      isFresh: true,
+      targetSha: "b".repeat(40),
+    });
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    await SelfUpgradePage();
+
+    expect(summarizeUpgradeImpact).not.toHaveBeenCalled();
+    expect(loadPersistedImpactSummary).toHaveBeenCalled();
   });
 });
