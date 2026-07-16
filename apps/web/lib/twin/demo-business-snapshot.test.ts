@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { ALL_ARCHETYPES, deriveDemoBusiness, deriveTwinProfile } from "@dpf/storefront-templates";
+import {
+  ALL_ARCHETYPES,
+  deriveDemoBusiness,
+  deriveTwinProfile,
+  deriveTwinValueStreamBinding,
+} from "@dpf/storefront-templates";
 
 import { demoBusinessToTwinSnapshot, demoGalleryCard } from "./demo-business-snapshot";
 
@@ -29,6 +34,27 @@ describe("demoBusinessToTwinSnapshot", () => {
       expect(snap.capacityChips.length).toBeGreaterThan(0);
       expect(snap.utility.some((u) => u.key === "revenue")).toBe(true);
       expect(snap.utility.some((u) => u.key === "bills")).toBe(true);
+    }
+  });
+
+  it("overlays the value-stream flow lane when a binding is supplied (workstream C)", () => {
+    for (const archetype of ALL_ARCHETYPES) {
+      const demo = deriveDemoBusiness(archetype);
+      const profile = deriveTwinProfile(archetype);
+      const binding = deriveTwinValueStreamBinding(archetype);
+
+      // Without a binding, no stageFlow (fixtures stay simple).
+      expect(demoBusinessToTwinSnapshot(demo, profile).stageFlow).toBeUndefined();
+
+      // With a binding, the flow lane mirrors the archetype's stages and totals
+      // reconcile with the demand.
+      const snap = demoBusinessToTwinSnapshot(demo, profile, binding);
+      expect(snap.stageFlow).toBeDefined();
+      expect(snap.stageFlow!.map((s) => s.stageKey)).toEqual(binding.stages.map((s) => s.stageKey));
+      const totalInFlow = snap.stageFlow!.reduce((n, s) => n + s.count, 0);
+      expect(totalInFlow).toBe(demo.demand.length);
+      // All demand lands on real stages, so the flow is non-empty.
+      expect(snap.stageFlow!.some((s) => s.count > 0)).toBe(true);
     }
   });
 

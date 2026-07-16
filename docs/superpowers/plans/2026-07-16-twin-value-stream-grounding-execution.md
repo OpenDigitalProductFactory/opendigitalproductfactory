@@ -28,14 +28,25 @@ process — the factory-automation lens of **queue depth + wait per stage**.
   Return & Inspect; dispatch → Qualify; renewals → Retain). Golden snapshot regenerated (per-stage
   demand counts now reflect the grounded mapping). Package suite 259/259; typecheck clean.
 
-## C-2 — per-stage flow in the live twin (next PR)
+## C-2 — per-stage flow in the live twin ✅ landed
 
-- Extend `loadLivingBusinessSnapshot` (`apps/web/lib/twin/living-business-snapshot.ts`) and/or the
-  demo→TwinSnapshot bridge to group live/demo demand **by value-stream stage** using
-  `deriveTwinValueStreamBinding`, surfacing per-stage queue depth + longest wait — so the twin's
-  queues carry their stage label and the architecture view and animation view line up.
-- Verify end-to-end against the real dev DB (loaded demo → per-stage grouping renders through the
-  live projection), same discipline as A·P1.
+The twin now carries a **value-stream flow lane** — the archetype's stage backbone with demand
+counts + longest wait overlaid, so the animation view and the architecture view are one picture:
+
+- `apps/web/components/twin/snapshot.ts` — `TwinStageFlow` + optional `TwinSnapshot.stageFlow`.
+- `apps/web/lib/twin/stage-flow.ts` — `buildStageFlow(binding, demandByStage)` (pure, shared).
+- `apps/web/lib/twin/living-business-snapshot.ts` — the **live** projection groups bookings by
+  stage (waiting/unassigned → the primary stage; in-progress → Deliver) and emits `stageFlow`.
+- `apps/web/lib/twin/demo-business-snapshot.ts` — the demo bridge overlays `stageFlow` from the
+  generated demand (`demoBusinessToTwinSnapshot(demo, profile, binding)`).
+- `apps/web/components/twin/ValueStreamStrip.tsx` — the render (load-bearing stages accented);
+  `TwinView` shows it under the capacity chips when present; the gallery detail page passes the
+  binding.
+
+**Verified:** mapper test overlays `stageFlow` for all 94 (stages mirror the binding; per-stage
+counts reconcile with the demand; a load-bearing stage carries demand); `apps/web` typecheck clean.
+End-to-end live render against the real dev DB is pending the in-progress platform upgrade (same
+port-forward discipline as A·P1) — the render path is the same `TwinView` proven live in A·P1.
 
 ## Non-goals
 

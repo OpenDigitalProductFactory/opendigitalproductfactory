@@ -14,10 +14,11 @@
 //
 // PURE + deterministic (the DemoBusiness is already deterministic in its seed).
 
-import type { DemoBusiness, TwinProfile } from "@dpf/storefront-templates";
+import type { DemoBusiness, TwinProfile, TwinValueStreamBinding } from "@dpf/storefront-templates";
 
 import type { Intent } from "@/components/ui/report-kit";
 
+import { buildStageFlow, type StageDemand } from "./stage-flow";
 import type { TwinSnapshot, TwinZoneSnapshot, TwinQueueSnapshot } from "@/components/twin/snapshot";
 import type {
   CapacityChipData,
@@ -39,8 +40,13 @@ function money(currency: string, amount: number): string {
   return `${symbol}${Math.round(amount).toLocaleString("en-US")}`;
 }
 
-/** Map a generated demo business onto the twin render contract. */
-export function demoBusinessToTwinSnapshot(demo: DemoBusiness, profile: TwinProfile): TwinSnapshot {
+/** Map a generated demo business onto the twin render contract. Pass the
+ *  value-stream binding to overlay the per-stage flow lane (workstream C). */
+export function demoBusinessToTwinSnapshot(
+  demo: DemoBusiness,
+  profile: TwinProfile,
+  binding?: TwinValueStreamBinding,
+): TwinSnapshot {
   const workerByKey = new Map(demo.workforce.map((w) => [w.key, w]));
 
   // Zones ← resources arranged by zone; each resource's owner is its worker (if a person).
@@ -136,8 +142,22 @@ export function demoBusinessToTwinSnapshot(demo: DemoBusiness, profile: TwinProf
     },
   ];
 
+  // Value-stream flow lane (workstream C): demand grouped by its stage.
+  let stageFlow;
+  if (binding) {
+    const byStage: Record<string, StageDemand> = {};
+    for (const d of demo.demand) {
+      const cur = byStage[d.stageKey] ?? { count: 0, longestWaitMs: 0 };
+      cur.count += 1;
+      cur.longestWaitMs = Math.max(cur.longestWaitMs ?? 0, d.waitingMinutes * 60_000);
+      byStage[d.stageKey] = cur;
+    }
+    stageFlow = buildStageFlow(binding, byStage);
+  }
+
   return {
     capacityChips,
+    ...(stageFlow ? { stageFlow } : {}),
     zones,
     workItems,
     queues,
