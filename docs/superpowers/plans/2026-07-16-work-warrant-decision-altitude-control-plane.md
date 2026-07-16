@@ -1,0 +1,86 @@
+# Work Warrant — decision-altitude control plane
+
+**Epic:** EP-7B169558 · **Anchor BI:** BI-8AB0E66D
+**Backlogged siblings:** BI-0A6B8B38 (per-phase token/cost metering), BI-EE211BFA (WWWD org-stance → evidence/reporting/AC-groups)
+
+## Problem
+
+The decision-governance ladder (WSID task · WWWD business · WWMD architectural) and
+the shared execution substrate (the one sandbox) are **disconnected**: a decision's
+altitude and its company/industry/location context don't flow down to change how
+execution spends tokens, gathers evidence, or reports. So Build Studio applies
+**uniform maximal rigor and unmetered spend to every job** — a 4-file badge and an
+xlarge cross-channel report both run the same ideate→plan→(2 reviews)→build machinery,
+and both record `cost=null`. Observed 2026-07-16: `BuildPhaseRun` token/cost were
+0/null across all builds; completed builds ran identical phase sets regardless of size.
+
+## Design: the Work Warrant
+
+A `WorkWarrant`, computed once at promote/triage and read by every downstream consumer:
+
+```
+WorkWarrant {
+  altitude:         WSID | WWWD | WWMD
+  altitudeBasis:    structural | corpus | operator   // provenance
+  confidence:       high | medium | low
+  lane:             autonomous-bs | governed-interactive | direct-expert
+  budget:           { tokenCeiling, modelTier, effortLevel, gateProfile }
+  evidenceProfile:  minimal | standard | compliance | architectural
+  reportingProfile: one-line | business | ledger
+  contextScope:     { industry, jurisdiction, archetype }
+}
+```
+
+Consumers: funnel admission/prioritization, lane router (governed-interactive runs on
+the **same** sandbox — no proliferation), effort binder (activates the dormant
+EP-27FD96BC knobs from `budget`), evidence collector (`evidenceProfile`), reporter
+(`reportingProfile`).
+
+## Cold-start: structure-first (kernel-ratified)
+
+The hard constraint (operator): altitude must classify when the WWWD/WSID corpus is
+**not yet established** on a fresh install. Routed through `principle_decide`
+(WWMD-altitude platform decision):
+
+- **Recommendation: `structure-first`** — composite **0.874**, margin **0.78**,
+  confidence **high**; top positive contributor **Architecture Over Shortcuts**
+  (read `corpus-required` / `operator-labeled` as shortcuts that defer the design and
+  incur rework); governing profile: organization; no commandment conflict.
+
+The classifier (`apps/web/lib/decision/work-warrant-altitude.ts`, this PR) is a pure,
+corpus-free function over day-one structural signals. It works because of the ladder's
+asymmetry:
+
+- **WWMD** (expensive to mis-classify) — hard structural rules (decompose-required,
+  xlarge, schema/routing/core-contract touch). Its corpus is *already* established
+  (principle dimensions, AGENTS.md, golden decisions), so the must-be-right end is
+  right on day one.
+- **WSID** (cheap if wrong) — structural defaults (small + single-leaf + no cross-cutting).
+- **WWWD** (thin corpus) — defers to `needsOperatorConfirm`; each confirmation **seeds**
+  the corpus, so it sharpens from operation rather than blocking on it.
+- **Ambiguous** — never silently WSID; defaults to the safer higher altitude + confirm.
+
+`altitudeBasis` records provenance (structural → corpus → operator), so an auditor can
+watch the classifier shift from structural to corpus-driven as the org matures and
+never trust corpus it doesn't have.
+
+## Phasing
+
+1. **This PR** — corpus-free `classifyAltitude` core + unit tests (no DB/model/corpus).
+   The de-risking artifact: proves the cold-start classification is decisive with zero corpus.
+2. **BI-8AB0E66D cont.** — the `WorkWarrant` object + wiring into promote/triage;
+   consumers read it (lane, budget→effort knobs, gate profile).
+3. **BI-0A6B8B38** — populate `BuildPhaseRun` token/cost so `budget.tokenCeiling` is
+   enforceable (until then it is advisory).
+4. **BI-EE211BFA** — WWWD org stance parameterizes evidence/reporting/decomposition
+   AC-groups by industry + jurisdiction (extends the compliance-archetype pattern).
+
+## Reuse (migration, not green-field)
+
+Right-sizing matrix (`build-process-matrix.ts`), decision tables
+(`DecisionShadowLedger`/`DecisionPerspectiveProfile`), dormant effort-warrant knobs
+(EP-27FD96BC), archetype scoping (compliance). The warrant is the control object that
+ties them to a single altitude signal.
+
+Process-Spine-Decision: altitude-classifier approach ratified via principle_decide
+(structure-first, composite 0.874, high confidence) — see above.
