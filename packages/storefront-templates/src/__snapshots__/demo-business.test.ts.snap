@@ -63,6 +63,36 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     },
   },
   {
+    "archetypeId": "medical-practice",
+    "cogProposal": "Allocate the next appointment to the best provider by availability",
+    "companyName": "Ashford Medical Practice",
+    "currency": "GBP",
+    "customers": 10,
+    "demand": {
+      "byStage": {
+        "deliver": 11,
+        "settle": 2,
+      },
+      "inFlight": 6,
+      "primaryQueue": "requests",
+      "queued": 7,
+      "total": 13,
+    },
+    "finance": {
+      "bills": 2,
+      "hasTaxPeriod": true,
+      "invoices": 2,
+      "obligations": 2,
+      "paidInvoices": 1,
+    },
+    "resources": 2,
+    "template": "BOOK",
+    "workforce": {
+      "ai": 1,
+      "humans": 3,
+    },
+  },
+  {
     "archetypeId": "physiotherapy",
     "cogProposal": "Allocate the next appointment to the best provider by availability",
     "companyName": "Ashford Physiotherapy",
