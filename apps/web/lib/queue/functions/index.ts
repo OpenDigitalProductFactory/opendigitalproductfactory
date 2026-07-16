@@ -50,6 +50,7 @@ import {
   postgresTrialRestoreRequested,
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
+import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
 import {
   dataRetentionSweepScheduled,
   dataRetentionSweepRequested,
@@ -103,6 +104,7 @@ export const scheduledFunctions = [
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
+  runtimeArtifactJanitor, // BI-DBF3F426: OBSERVE-ONLY dry-run scan of orphaned CI images + stray compose projects (logs would-reap, never deletes; --apply is founder-gated), daily 05:20, flag-gated DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
   inngestRetentionSweepScheduled, // BI-0AB96FE7: bound db=inngest history + reap Redis-TTL orphans that wedge the executor, every 6h
   mdmStewardSweepScheduled, // EP-4A12A7CB slice 4: autonomous Data Steward — sweep + auto-resolve account dupes, daily 05:00
