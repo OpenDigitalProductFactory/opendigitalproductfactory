@@ -9,6 +9,7 @@ export * from "./archetypes/index";
 export * from "./media-profile";
 export * from "./operational-value-stream";
 export * from "./twin-profile";
+export * from "./twin-value-stream";
 export * from "./demo-business";
 export * from "./demo-business-load";
 export * from "./demo-flavor";
