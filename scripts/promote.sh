@@ -194,8 +194,14 @@ if [[ $_dry_run -eq 0 ]]; then
   # using Bake, but buildx isn't installed". This matches the working manual
   # `docker compose build` path. (Self-upgrade docker-build failures, 2026-06-06.)
   export COMPOSE_BAKE=false
+  # Build portal AND postgres. postgres is now a first-party built image
+  # (docker/postgres/Dockerfile — pgvector + baked init script, BI-4796D52B);
+  # building it here guarantees the image exists before any recreate, and the
+  # build context is streamed to the daemon so it works from /host-source where
+  # a host bind mount could not. The build is a single COPY over the cached
+  # pgvector base — negligible cost.
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
-    "${_f_args[@]}" build portal
+    "${_f_args[@]}" build portal postgres
   # Capture the source content hash baked into the FRESHLY BUILT image. It is
   # computed from the actual bundled source bytes (Dockerfile) independent of
   # the DPF_VERSION label, so the content-verify step can prove the recreated
