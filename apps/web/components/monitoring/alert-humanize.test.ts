@@ -55,6 +55,13 @@ describe("humanizeHealthAlert", () => {
     expect(h.title).toBe("new-service is offline");
     expect(h.explanation).toContain("won't work until it's back");
   });
+
+  it("does not claim a live knowledge-graph outage for retired Neo4jDown (BI-49C4EA5D)", () => {
+    const h = humanizeHealthAlert(alert({ alertname: "Neo4jDown", severity: "critical" }));
+    expect(h.title).toMatch(/retired|Stale/i);
+    expect(h.explanation).toMatch(/Postgres/i);
+    expect(h.title).not.toBe("The knowledge graph is down");
+  });
 });
 
 describe("friendlyServiceName", () => {

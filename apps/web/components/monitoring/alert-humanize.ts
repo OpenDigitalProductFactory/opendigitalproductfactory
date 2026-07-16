@@ -40,10 +40,12 @@ const SERVICE_DOWN_IMPACT: Record<string, string> = {
   portal: "The web portal is not responding — most of the platform is unavailable.",
   sandbox: "Builds and AI coworker development work can't run until it's back.",
   postgres: "The platform database is unreachable — most features will fail.",
-  qdrant: "AI memory and semantic search lookups will fail.",
+  // BET-5 retired Qdrant/Neo4j services — keep keys only so a stale scrape/label
+  // never invents a "knowledge graph down" consequence after decommission.
+  qdrant: "Legacy vector-DB label (retired) — memory lives in Postgres/pgvector.",
   inngest: "Background jobs and scheduled coworker work are paused.",
   redis: "Work queues and caching are unavailable.",
-  neo4j: "The knowledge graph is unavailable.",
+  neo4j: "Legacy graph-DB label (retired) — graph mirror lives in Postgres.",
   adp: "Document processing is unavailable.",
   "dev-portal": "The contributor preview (a contributor-only surface) is down.",
   prometheus: "Health monitoring itself is down — alert data may be stale.",
@@ -106,13 +108,18 @@ const ALERT_TRANSLATIONS: Record<string, AlertTranslation> = {
     title: () => "The database is nearly out of connections",
     explanation: () => "If connections run out, pages and coworkers will start failing.",
   },
+  // QdrantDown / Neo4jDown retired with BET-5 (BI-31FDC859 / BI-49C4EA5D) —
+  // rules removed from alerts.yml; if a stale alert still arrives, do not
+  // restate a phantom "knowledge graph" failure as current platform state.
   QdrantDown: {
-    title: () => "AI memory search is down",
-    explanation: () => SERVICE_DOWN_IMPACT.qdrant,
+    title: () => "Stale memory-search alert (Qdrant was retired)",
+    explanation: () =>
+      "Qdrant is no longer part of the install — memory and vectors live in Postgres. This alert should clear after monitoring reloads.",
   },
   Neo4jDown: {
-    title: () => "The knowledge graph is down",
-    explanation: () => SERVICE_DOWN_IMPACT.neo4j,
+    title: () => "Stale graph alert (Neo4j was retired)",
+    explanation: () =>
+      "Neo4j is no longer part of the install — the graph mirror lives in Postgres. This alert should clear after monitoring reloads.",
   },
   ModelRunnerDown: {
     title: () => "Local AI is unavailable",

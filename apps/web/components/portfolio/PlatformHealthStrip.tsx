@@ -30,10 +30,10 @@ const INITIAL: HealthState = {
   criticalAlerts: 0,
 };
 
+// BET-5: Qdrant/Neo4j retired — memory/graph are Postgres (BI-31FDC859).
 const SERVICE_JOBS = [
   { name: "Portal", job: "portal" },
   { name: "PostgreSQL", job: "postgres" },
-  { name: "Qdrant", job: "qdrant" },
   { name: "AI Inference", job: "model-runner" },
 ];
 

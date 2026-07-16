@@ -31,12 +31,6 @@ scrape_configs:
   #     - targets: ["neo4j:2004"]
   #   metrics_path: /metrics
 
-  - job_name: "qdrant"
-    scrape_interval: 30s
-    static_configs:
-      - targets: ["qdrant:6333"]
-    metrics_path: /metrics
-
   # ─── Application ────────────────────────────────────────────
   - job_name: "portal"
     static_configs:

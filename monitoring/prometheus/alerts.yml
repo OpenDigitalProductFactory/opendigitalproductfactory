@@ -98,28 +98,6 @@ groups:
         annotations:
           summary: "PostgreSQL is unreachable"
 
-      - alert: QdrantDown
-        expr: up{job="qdrant"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Qdrant vector DB is unreachable -- AI Coworker memory offline"
-
-      # neo4j exposes no Prometheus metrics, so it cannot be a scrape target;
-      # the portal probes its HTTP API and exports dpf_dependency_up{service}. [BI-963DBB05]
-      - alert: Neo4jDown
-        expr: dpf_dependency_up{service="neo4j"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Neo4j graph DB is unreachable -- code graph + architecture views offline"
-
-      # model-runner + stt have no /metrics; the portal probes them into
-      # dpf_dependency_up{service}. Gate on "was up in the last 6h" so these never
-      # false-fire on installs that don't run a local model runner / STT (e.g. a
-      # cloud install) -- only alert when a previously-working service drops. [BI-963DBB05]
       - alert: ModelRunnerDown
         expr: dpf_dependency_up{service="model-runner"} == 0 and max_over_time(dpf_dependency_up{service="model-runner"}[6h]) == 1
         for: 5m
