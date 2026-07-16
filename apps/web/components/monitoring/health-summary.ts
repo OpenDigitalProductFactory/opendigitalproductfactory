@@ -110,7 +110,8 @@ type ServiceStatusInput = {
   offline: boolean;
 };
 
-const PLATFORM_REQUIRED_JOBS = ["portal", "postgres", "qdrant", "sandbox"];
+// BET-5: qdrant retired (Postgres-only), so it's no longer a required job.
+const PLATFORM_REQUIRED_JOBS = ["portal", "postgres", "sandbox"];
 const TELEMETRY_JOBS = ["node-exporter", "cadvisor"];
 const TELEMETRY_JOB_SET = new Set(TELEMETRY_JOBS);
 // Host-hardware telemetry exporters, one per substrate (Windows / Linux).
@@ -323,7 +324,6 @@ export const JOB_PRESENTATION: Record<string, JobPresentation> = {
   portal: { name: "Portal" },
   sandbox: { name: "Sandbox" },
   postgres: { name: "PostgreSQL" },
-  qdrant: { name: "Qdrant" },
   inngest: { name: "Inngest" },
   redis: { name: "Redis" },
   adp: { name: "ADP" },
@@ -346,8 +346,6 @@ const PLATFORM_SERVICE_LABEL: Record<string, string> = {
   portal: "Web portal",
   sandbox: "Build workspace",
   postgres: "Database",
-  qdrant: "AI memory & search",
-  neo4j: "Knowledge graph",
   inngest: "Background jobs",
   redis: "Queues & cache",
   adp: "Document processing",
@@ -376,14 +374,11 @@ export function humanizeJobList(jobs: string[]): string {
 }
 
 // Services that have no Prometheus scrape target but the user should still
-// see on the Health tab — either because they exist but ship without a
-// /metrics endpoint (Neo4j Community, whisper-server), or because they're
-// observable through a different channel (AI Inference + Voice STT both
-// flow through portal application metrics on /api/metrics, not their own
-// scrape job). These tiles render as neutral "Not scraped" / "Portal
-// metrics" — the same pattern the older hardcoded grid used for Neo4j.
+// see on the Health tab — because they're observable through a different
+// channel (AI Inference + Voice STT both flow through portal application
+// metrics on /api/metrics, not their own scrape job). These tiles render as
+// neutral "Portal metrics". (Neo4j was removed here by BET-5 — BI-2B70C92C.)
 export const UNSCRAPED_SERVICES: ServiceDefinition[] = [
-  { name: "Neo4j", statusHint: "Not scraped" },
   { name: "AI Inference", statusHint: "Portal metrics" },
   { name: "Voice STT", statusHint: "Portal metrics" },
 ];
