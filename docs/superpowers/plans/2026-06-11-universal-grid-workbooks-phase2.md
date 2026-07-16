@@ -213,11 +213,17 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   A shared `isNumericFieldType` (types.ts) makes the new numeric types summable everywhere (footer bar,
   group summary). Offered in the Add-column picker with sensible config defaults (5 stars, `$`, minutes);
   per-column config UI (star count, currency symbol) is a follow-up.
-- **Remaining (not built):** rich filter
-  operators + AND/OR builder; row-expand record modal; more field types (rating/percent/currency/
-  progress/duration/phone); multi-level (nested) grouping UI + inline group subtotals; named/
-  shareable server-side views; calendar view (fullcalendar — needs a date column); manual row
-  reordering; full pivots + richer charts; metrics/semantic layer; operationalization lifecycle.
+- **Slice 21 — structured filter builder (typed operators + AND/OR) — SHIPPED.** Replaces the
+  substring-only per-column filter with a real filter builder: each condition is column + operator +
+  value, where the operators offered adapt to the field type (`is`/`is not`/`contains`/`starts with`/
+  `is empty` for text; `=`/`≠`/`>`/`<`/`between` for numbers/dates; `is`/`is not` for choices).
+  Conditions combine with a single AND/OR toggle. Pure, unit-tested `grid-filter-builder.ts`
+  (`applyFilterGroup`/`evaluateCondition`/`opsForField`); half-typed conditions never hide rows.
+  Persisted as `filterGroup` in the view state (old `columnFilters` still parsed for back-compat).
+- **Remaining (not built):** row-expand record modal; multi-level (nested) grouping UI + inline
+  group subtotals; named/shareable server-side views; calendar view (fullcalendar — needs a date
+  column); manual row reordering; full pivots + richer charts; metrics/semantic layer;
+  operationalization lifecycle.
   **Debt:** `Grid.tsx` is over the 1000-LOC hard cap — decompose the toolbar/panels into
   subcomponents before the next feature increment.
 
