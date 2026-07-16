@@ -14,11 +14,53 @@ This guide is for contributors who want to develop the platform with a **dedicat
 | **Codex** | Desktop / IDE client app **or** CLI | Both read the same `~/.codex/config.toml` |
 | **Grok** | **CLI only** | No GUI client yet — the Grok CLI is the only surface today |
 
-Whether you run the **desktop app** or the **CLI**, the DPF setup is the same: connect the **DPF MCP server**, load the **`dpf-platform` skill pack** and the **AGENTS.md** operating doctrine, and adjust a few **local client settings** so the agent follows the portal's processes. These agents are the more advanced surface — they let an experienced contributor run **multiple concurrent threads of work** (one branch and one git worktree per thread) while still adhering to every process the portal establishes.
+Whether you run the **desktop app** or the **CLI**, the DPF setup is the same: install the **`dpf-platform` plugin** (which bundles the **skill pack**, the **DPF MCP server** wiring, and the **governance hooks**), load the **AGENTS.md** operating doctrine, and adjust a few **local client settings** so the agent follows the portal's processes. These agents are the more advanced surface — they let an experienced contributor run **multiple concurrent threads of work** (one branch and one git worktree per thread) while still adhering to every process the portal establishes.
 
-If you only want the guided experience, use [Build Studio](../build-studio/) and stop here. If you want to drive the platform from a full agent client, read on.
+If you only want the guided experience, use [Build Studio](../build-studio/index.md) and stop here. If you want to drive the platform from a full agent client, read on.
 
 > **One process, four surfaces.** Build Studio, Claude, Codex, and Grok are interchangeable adapters behind one contract: the evidence-gated lifecycle (`ideate → plan → build → review → ship`), the DPF MCP coordination plane, documentation impact checks, and the worktree/lease isolation model. Governance reads the *evidence*, never *which surface produced it*. See the [Unified Delivery Surfaces spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md).
+
+### How the pieces fit together
+
+Every surface — the three agent clients and Build Studio — plugs into the same coordination plane and the same governed lifecycle. The diagram below is the mental model for the rest of this guide:
+
+```mermaid
+flowchart TB
+    subgraph surfaces["Development surfaces (interchangeable)"]
+        claude["Claude<br/>(app / IDE / CLI)"]
+        codex["Codex<br/>(app / CLI)"]
+        grok["Grok<br/>(CLI)"]
+        bs["Build Studio<br/>(in-portal)"]
+    end
+
+    subgraph plugin["dpf-platform plugin (per client)"]
+        skills["Skills<br/>27 kernel-aware workflows"]
+        hooks["Hooks<br/>local governance guards"]
+        mcpwire["MCP wiring<br/>dpf connector"]
+    end
+
+    mcp["DPF MCP coordination plane<br/>backlog · capsules · evidence · leases"]
+    lifecycle["Evidence-gated lifecycle<br/>ideate → plan → build → review → ship"]
+    pr["PR against main<br/>DCO-signed · CI gates"]
+    webhook["GitHub webhook<br/>promotion intake"]
+    live["Live install<br/>self-upgrade pipeline"]
+
+    claude --- plugin
+    codex --- plugin
+    grok --- plugin
+    plugin --> mcp
+    bs --> mcp
+    mcp --> lifecycle
+    lifecycle --> pr
+    pr --> webhook
+    webhook --> live
+```
+
+Three things are worth calling out up front, because they recur throughout this guide:
+
+- The **plugin** is how a client becomes DPF-aware — it delivers skills, hooks, and the MCP connector in one install.
+- The **MCP plane** is the single source of truth for coordination. *If it isn't in MCP, it didn't happen.*
+- The **webhook** at the bottom is what closes the loop: a pushed branch re-enters the governed promotion pipeline automatically, with no surface hand-advancing the live install.
 
 ---
 
@@ -37,7 +79,7 @@ The headline advantage is **thread management**: several worktrees open at once,
 
 ### Prerequisites
 
-You need the base developer environment first — see [Developer Setup](developer-setup) (pnpm + Docker sidecars) or the [Dev Container Setup](dev-container). Then install **at least one** agent client:
+You need the base developer environment first — see [Developer Setup](developer-setup.md) (pnpm + Docker sidecars) or the [Dev Container Setup](dev-container.md). Then install **at least one** agent client:
 
 | Agent | Where to get it |
 | ----- | --------------- |
@@ -49,7 +91,7 @@ You do not have to install all three, or pick one form over another. The setup i
 
 ---
 
-### Step 1 — Wire MCP, the skill pack, and AGENTS.md (one command)
+### Step 1 — Wire MCP, the plugin, and AGENTS.md (one command)
 
 From the repo root, run the **agent toolchain bootstrap**. It is the single, client-agnostic entry point that connects every installed client — desktop app or CLI — to DPF in one pass:
 
@@ -66,11 +108,11 @@ The bootstrap is **idempotent** (re-running on a converged install is a no-op) a
 1. **Detects** which of Claude / Codex / Grok are installed — resolving GUI-app and non-PATH install locations, not just `which`.
 2. **Mints and persists a DPF MCP token** if one isn't present (issued inside the portal container, persisted to `~/.dpf/agent-toolchain.env` and your shell profile, never logged). Default scope is `write` so the agent can use side-effecting MCP tools (backlog, evidence, Build Studio handoff). On macOS it also injects the token via `launchctl` so GUI-launched apps — which don't read your shell profile — still pick it up.
 3. **Connects the DPF MCP server** in each client (`.mcp.json` / `.vscode/mcp.json` for Claude, `[mcp_servers.dpf]` in Codex/Grok config), all referencing `${DPF_MCP_BEARER_TOKEN}`.
-4. **Installs the `dpf-platform` skill pack** for each client (the kernel-principle-enforcing skills — worktree-per-session, evidence-before-diagnosis, pr-with-dco, etc.).
+4. **Installs the `dpf-platform` plugin** for each client from the repo-local marketplace — this is the single package that carries the **skill pack**, the **MCP connector contract**, and the **governance hooks** (see [The plugin](#the-plugin-skills-hooks-and-mcp-in-one-package) below).
 5. **Seeds kernel-tier memory** so the agent is kernel-aware from the first turn, before any MCP retrieval round-trip.
 6. **Runs read-only MCP + kernel smoke probes** and prints a single **readiness banner**.
 
-After it finishes, **restart the client** (desktop app or CLI) so it reloads the MCP connection and the skill pack.
+After it finishes, **restart the client** (desktop app or CLI) so it reloads the MCP connection and the plugin.
 
 > **AGENTS.md is already in the repo.** `AGENTS.md` at the repo root is the canonical rulebook, and the tool-specific pointer files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/copilot-instructions.md`, `CONVENTIONS.md`, `.continue/rules/`) already point to it — they're checked in. You don't author these; you just make sure your client loads project instructions (most do automatically from the repo root). **Don't duplicate rules into the pointer files** — they are pointers, not copies.
 
@@ -85,7 +127,75 @@ After it finishes, **restart the client** (desktop app or CLI) so it reloads the
 | `needs_refresh` | Token exists but the running client hasn't picked it up | Restart the client / refresh the binding |
 | `failed_smoke` | Installed but did not apply a kernel principle | View evidence under `--show-substrate` |
 
-Re-run with `--show-substrate` for plugin/config/memory detail, or `--dry-run` to preview writes. See [docs/operations/install.md](../../operations/install) for what each state means in depth.
+Re-run with `--show-substrate` for plugin/config/memory detail, or `--dry-run` to preview writes. See [docs/operations/install.md](../../operations/install.md) for what each state means in depth.
+
+---
+
+### The plugin: skills, hooks, and MCP in one package
+
+The bootstrap doesn't copy loose files around — it installs one **plugin**, `dpf-platform`, into each client. A plugin is the Claude Code (and Codex / Grok) packaging format that lets a single artifact declare **skills**, **hooks**, and **MCP servers** together. DPF ships all three from `packages/dpf-skill-pack` so one install makes any client fully DPF-native.
+
+```mermaid
+flowchart LR
+    subgraph pkg["packages/dpf-skill-pack"]
+        manifest[".claude-plugin/plugin.json<br/>(+ .codex-plugin / .grok-plugin)"]
+        sk["skills/<br/>27 SKILL.md workflows"]
+        hk["hooks/hooks.json<br/>governance guards"]
+        mc["claude.mcp.json<br/>dpf connector contract"]
+    end
+
+    market["Repo-local marketplace<br/>.claude-plugin/marketplace.json"]
+    client["Your client<br/>Claude / Codex / Grok"]
+
+    manifest --> market
+    market -->|bootstrap installs| client
+    sk --> client
+    hk --> client
+    mc --> client
+```
+
+The manifest (`plugin.json`) is what ties it together — its `skills`, `hooks`, and `mcpServers` keys point at the three folders above. Codex and Grok get parallel manifests (`.codex-plugin/plugin.json`, `.grok-plugin/plugin.json`) so the **same source of truth** installs on every surface.
+
+> **One file per skill, two surfaces.** Each skill's `SKILL.md` is a superset that feeds **both** the external agent client (as the `dpf-platform:*` plugin namespace) **and** the in-portal coworker (seeded as a `SkillDefinition` row). You never maintain two copies.
+
+#### Skills — the kernel-aware workflows
+
+Skills are the reusable procedures that encode DPF's non-negotiable process into steps an agent can follow. They fire in two ways: you invoke one explicitly (`dpf-platform:dpf-file-backlog-item`), or the agent auto-selects one when your request matches its trigger description. There are **27** in the pack; the ones you'll reach for most:
+
+| Skill | Use it when |
+| ----- | ----------- |
+| `dpf-worktree-per-session` | Starting or auditing a concurrent session that touches the working tree |
+| `dpf-verify-substrate-first` | Tempted to add a new table / type / enum / tool — check it doesn't already exist |
+| `dpf-file-backlog-item` | New work needs to enter the backlog before a plan is written |
+| `dpf-writing-plans` | A filed BI needs a phased implementation plan |
+| `dpf-decision-via-kernel` | An open question has 2+ architecturally-distinct options |
+| `dpf-evidence-before-diagnosis` | Diagnosing a failure — gather signals before proposing a cause |
+| `dpf-tdd` / `dpf-systematic-debugging` | Test-first implementation; disciplined bug hunts |
+| `dpf-local-merge-ci-before-push` | About to push — converge and run CI locally first |
+| `dpf-pr-with-dco` | Opening a PR (branch from `origin/main`, sign every commit) |
+| `dpf-verify-on-live-install` | Runtime-bound verification against the canonical install |
+| `dpf-promote-to-build-studio` | Handing a triaged BI to the Build Studio pipeline |
+| `dpf-route-learning-to-commons` | A durable learning needs to reach every agent and install |
+
+The full set spans architecture review, data-architecture stewardship, decision capture, UX-fit review, and the SysML architecture substrate. Because they enforce the same kernel principles that AGENTS.md documents, **using the skill is how you comply by construction** rather than remembering every rule by hand.
+
+#### Hooks — local guardrails (not to be confused with webhooks)
+
+The plugin also ships **hooks**: local, deterministic guards the client runs *before* a tool call, defined in `hooks/hooks.json`. They are how the platform stays safe even when an agent moves fast. Distinguish them from **[webhooks](#webhooks-closing-the-promotion-loop)** (GitHub → portal HTTP callbacks) covered later — hooks run *on your machine, inside the client*; webhooks run *server-side, across machines*.
+
+| Hook | Fires on | What it prevents |
+| ---- | -------- | ---------------- |
+| `lease-guard` | Bash | Ungoverned dev-server launches (`pnpm/npm/yarn dev`, `next dev`, `turbo dev`) against a shared runtime without a lease |
+| `root-clone-guard` | Bash | Mutating the shared root clone from a session that should be in a worktree |
+| `compose-guard` | Bash | Ad-hoc `docker compose` / `docker run` against shared singletons |
+| `ux-fit-precheck` | Write / Edit | Shipping a UI-impacting change without a UX-fit pass |
+| `spec-plan-doc-precheck` | Write / Edit | Code landing ahead of its spec / plan / doc |
+| `tool-economy-precheck` | Write / Edit | Adding tool surface that blows the context budget |
+| `worktree-create` | WorktreeCreate | A new worktree starting life un-seeded (no MCP, no isolated compose project) |
+
+Don't loosen these. There is one narrow, documented escape hatch — the lease guard only — for a genuine local emergency: prefix the command with `DPF_ALLOW_UNGATED_SERVER=1`. Everything else is meant to hold.
+
+> **Codex and Grok inherit the same guards.** The `dpf-platform` plugin ships `hooks/hooks.json` for all three clients, and Codex and Grok adopted the Claude `PreToolUse` protocol, so the guards travel to them too (functional confirmation on those surfaces is pending). Either way, comply **by construction**: claim a lease before launching any shared runtime, claim a Work Capsule before you start, record evidence as you go.
 
 ---
 
@@ -113,9 +223,7 @@ Make sure your client reads repo-root project instructions (`AGENTS.md` via its 
 
 #### Be deliberate about auto-run / auto-approve
 
-DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (`git config core.hooksPath .githooks`, auto-set on new clones), and a `PreToolUse` **lease guard** (`packages/dpf-skill-pack/hooks/lease-guard.mjs`, shipped in the `dpf-platform` plugin) that *refuses* ungoverned dev-server launches (`pnpm/npm/yarn dev`, `next dev`, `turbo dev`). Don't loosen these. Emergency bypass for the lease guard only: prefix `DPF_ALLOW_UNGATED_SERVER=1`.
-
-> **Codex and Grok now inherit the same guard from the plugin.** The `dpf-platform` plugin ships the governance hooks in `hooks/hooks.json`, and both clients adopted the Claude `PreToolUse` protocol, so the lease guard travels to them too (functional confirmation on those surfaces is pending). Either way, comply **by construction**: claim a lease before launching any shared runtime, claim a Work Capsule before you start, record evidence as you go.
+DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (`git config core.hooksPath .githooks`, auto-set on new clones), and the plugin's `PreToolUse` **hooks** (above). Don't loosen these. If a hook blocks you, the fix is almost always to claim a lease or move into a worktree, not to bypass the guard.
 
 ---
 
@@ -123,15 +231,16 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 #### Claude
 
-- Desktop app, IDE extension, and Claude Code CLI share `~/.claude`, so one bootstrap covers whichever you run. Loads the `dpf-platform` skill pack, `dpf` MCP connector, and the governance hooks (`hooks/hooks.json`) via the repo-local marketplace. `.claude/settings.json` still declares the session-lifecycle hooks (the SessionEnd reaper and transcript snapshot).
+- Desktop app, IDE extension, and Claude Code CLI share `~/.claude`, so one bootstrap covers whichever you run. Installs the `dpf-platform` plugin (skills, `dpf` MCP connector, and the governance hooks in `hooks/hooks.json`) via the repo-local marketplace. `.claude/settings.json` still declares the session-lifecycle hooks (the SessionEnd reaper and transcript snapshot).
+- Invoke a skill by its namespaced name, e.g. `dpf-platform:dpf-worktree-per-session`, or let the agent auto-select from the request.
 
 #### Codex
 
-- Desktop/IDE app and CLI both read `~/.codex/config.toml`. The bearer token is referenced via `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`, never stored in the file. **Check the draft-PR default** (above).
+- Desktop/IDE app and CLI both read `~/.codex/config.toml`. The bearer token is referenced via `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`, never stored in the file. The plugin installs from `.codex-plugin/plugin.json`. **Check the draft-PR default** (above).
 
 #### Grok
 
-- **CLI only — no GUI client yet.** Reads the DPF MCP server block from `~/.grok/config.toml` (HTTP transport, same `${DPF_MCP_BEARER_TOKEN}` pattern).
+- **CLI only — no GUI client yet.** Reads the DPF MCP server block from `~/.grok/config.toml` (HTTP transport, same `${DPF_MCP_BEARER_TOKEN}` pattern); the plugin installs from `.grok-plugin/plugin.json`.
 - **Authentication to xAI** is separate from the DPF MCP token. Preferred path is the OAuth **device-code** flow — `grok login --device-auth` opens `accounts.x.ai/oauth2/device`; you sign in with Google / X / Apple and the credential lands in `~/.grok/auth.json`. An `XAI_API_KEY` is the fallback. (Build Studio's containerized Grok dispatch uses the same credential model — see the [Grok device-code OAuth spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-07-grok-device-code-oauth-design.md).)
 
 ---
@@ -146,15 +255,52 @@ All clients authenticate to the DPF MCP server with the same `DPF_MCP_BEARER_TOK
 
 ---
 
+### Marketplaces — two different catalogs
+
+"Marketplace" means two distinct things in DPF. Keep them straight:
+
+| | **Plugin marketplace** (client-side) | **Tool / skill marketplace** (in-portal) |
+| --- | --- | --- |
+| What it distributes | The `dpf-platform` **plugin** (skills + hooks + MCP wiring) | Governed **MCP tools and skills** an agent or coworker can adopt |
+| Where it lives | `.claude-plugin/marketplace.json` in the repo (`dpf-platform-local`) | The portal catalog, reached via MCP (`search_tool_marketplace`) and the in-portal UI |
+| Who installs from it | The bootstrap, into your Claude / Codex / Grok client | An agent requesting a capability it doesn't yet have granted |
+| When you touch it | Once, at setup (the bootstrap does it for you) | When a thread needs a tool/skill that isn't in its current grant |
+
+The **plugin marketplace** is repo-local and boring by design — a single JSON manifest that names one plugin (`dpf-platform`) and points at `packages/dpf-skill-pack`. The bootstrap runs the equivalent of `claude plugin install dpf-platform@dpf-platform-local --scope local`; you rarely interact with it directly.
+
+The **tool marketplace** is the interesting one for day-to-day work: it's the governed catalog through which an agent discovers and requests additional capabilities rather than reaching for ungoverned tooling. Requests flow through the same evidence/coordination plane — a capability is *granted*, not self-installed — which is what keeps the tool surface auditable. See the [Agent Tool Marketplace spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-01-agent-tool-marketplace-design.md) and the [AI Coworker Skills Marketplace spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-03-30-ai-coworker-skills-marketplace.md).
+
+---
+
 ### Managing multiple threads
 
 This is where the agent clients go beyond Build Studio. The model is simple and strict:
 
 > **One thread = one branch = one git worktree.** Never share a working tree across sessions — that causes index/HEAD collisions and cross-thread file sweeps.
 
+```mermaid
+flowchart TB
+    root["Root clone (~/dpf or d:/DPF)<br/>SHARED · merge / release / inspect only"]
+    root -. "based on origin/main" .-> wtA
+    root -.-> wtB
+    root -.-> wtC
+
+    subgraph threads["Concurrent threads — isolated"]
+        wtA["worktree: feat/alpha<br/>branch + COMPOSE_PROJECT_NAME=dpf-alpha"]
+        wtB["worktree: fix/beta<br/>branch + COMPOSE_PROJECT_NAME=dpf-beta"]
+        wtC["worktree: feat/gamma<br/>branch + COMPOSE_PROJECT_NAME=dpf-gamma"]
+    end
+
+    wtA --> prA["PR → main (DCO)"]
+    wtB --> prB["PR → main (DCO)"]
+    wtC --> prC["PR → main (DCO)"]
+```
+
+Each worktree is its own branch, its own isolated Docker Compose project, and its own seeded MCP config — so containers, volumes, and HEADs never collide. The root clone is the only shared thing, and you keep it out of the way.
+
 #### Never work in the root clone
 
-The root clone (`~/dpf` on macOS/Linux, `d:\DPF` on Windows) is **shared mutable state**. The self-upgrade loop and other concurrent sessions rewrite its working tree and HEAD without coordinating with your editor — they *will* roll back or discard work that lives only there. Treat the root clone as **merge / release / inspection only**. See the [Collision-Free Dev Workflow](../../dev/collision-free-dev-workflow) for the full failure analysis.
+The root clone (`~/dpf` on macOS/Linux, `d:\DPF` on Windows) is **shared mutable state**. The self-upgrade loop and other concurrent sessions rewrite its working tree and HEAD without coordinating with your editor — they *will* roll back or discard work that lives only there. Treat the root clone as **merge / release / inspection only**. See the [Collision-Free Dev Workflow](../../dev/collision-free-dev-workflow.md) for the full failure analysis.
 
 #### Spin up an isolated thread
 
@@ -194,6 +340,37 @@ git -C ~/dpf worktree remove ~/dpf-worktrees/<slug>
 
 ---
 
+### Webhooks — closing the promotion loop
+
+Everything above gets your change into a **pushed branch and a PR**. The last leg — how that pushed work re-enters the governed promotion pipeline — runs on a **webhook**, server-side, and it's the same regardless of which agent produced the branch.
+
+A GitHub webhook posts repository events to the portal at `POST /api/platform/git/updates`. The portal verifies the HMAC signature (`x-hub-signature-256` against `DPF_GIT_WEBHOOK_SECRET`), records a **git promotion candidate**, and — for a push to the default branch — queues it for **sandbox verification** ahead of the self-upgrade pipeline. Deliveries are idempotent (deduplicated on the GitHub delivery id), and events that don't qualify (non-default branch, deleted ref, missing SHA) are recorded as `ignored` rather than acted on.
+
+```mermaid
+sequenceDiagram
+    participant A as Agent client
+    participant GH as GitHub
+    participant WH as Portal /api/platform/git/updates
+    participant P as Promotion pipeline
+    participant L as Live install
+
+    A->>GH: push branch / open PR (DCO-signed)
+    GH->>WH: webhook event (HMAC-signed)
+    WH->>WH: verify signature, dedupe delivery id
+    WH->>P: record promotion candidate → queue sandbox verify
+    P->>P: sandbox build + gate evidence
+    P->>L: self-upgrade advances live install
+```
+
+Two things follow from this design:
+
+- **Webhooks are a platform-level integration, not a per-session setup step.** The operator configures the GitHub repository webhook and `DPF_GIT_WEBHOOK_SECRET` once. As a contributor you don't wire it per thread — you just push, and the loop picks it up.
+- **No surface hand-advances the live install.** The webhook feeds the *promotion pipeline*; it does not deploy. Promotion still runs the sandbox verification and the gate evidence before anything reaches the running portal. This is the automated counterpart to the manual rule below (*"the live install advances only via the self-upgrade pipeline"*).
+
+Don't confuse this server-side **webhook** with the client-side **[hooks](#hooks-local-guardrails-not-to-be-confused-with-webhooks)** — hooks guard tool calls on your machine; the webhook carries git events between GitHub and the portal.
+
+---
+
 ### Adhering to the portal's processes
 
 The agent surfaces are powerful precisely because they don't get a governance discount. Hold these whichever client you drive:
@@ -218,20 +395,21 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 | `/mcp` (or the client's MCP panel) doesn't list `dpf` | Restart the client in the repo root; GUI apps need a full restart to pick up a new token; re-run the bootstrap if still missing |
 | Banner shows `missing_token` | Issue a write token in Admin → Platform Development → MCP, then re-run the bootstrap |
 | Banner shows `needs_refresh` | Restart the client; if rotated, `POST /api/mcp/token/refresh` with the new token |
+| Skills / plugin not showing up | Confirm the `dpf-platform` plugin installed (re-run the bootstrap, `--show-substrate` for detail); restart the client |
 | PRs keep opening as drafts | Disable the "create PRs as draft" default in your client's GitHub settings (DPF uses ready-for-review PRs only) |
 | Tool returns `insufficient_token_scope` | Issue a scoped token, refresh, retry — do **not** bypass with direct DB edits |
 | New worktree has no `dpf` connector | Run `scripts/dpf-bootstrap-agent-toolchain.sh` inside the worktree, then restart |
-| Dev-server launch refused (Claude Code) | Use a lease for the shared runtime, or run in an isolated worktree compose stack |
-| Codex/Grok missing the lease guard | Re-run the bootstrap and restart the client. Regardless of hook status, comply by construction: claim the lease before launching |
+| Dev-server launch refused (a hook blocked it) | Use a lease for the shared runtime, or run in an isolated worktree compose stack |
+| Pushed branch isn't triggering promotion | That's the server-side webhook — confirm the GitHub repo webhook and `DPF_GIT_WEBHOOK_SECRET` are configured (operator task), not a per-session step |
+| Codex/Grok missing a hook guard | Expected on some surfaces — comply by construction: claim the lease before launching |
 
 ---
 
 ### Related
 
-- [Developer Setup](developer-setup) — base local environment (pnpm + Docker sidecars)
-- [Dev Container Setup](dev-container) — fully containerized alternative
-- [Development Workspace](../development-workspace) — how Build Studio, VS Code, policy states, and validation environments fit together
-- [Collision-Free Dev Workflow](../../dev/collision-free-dev-workflow) — the one-command worktree workflow and why the root clone eats your work
+- [Developer Setup](developer-setup.md) — base local environment (pnpm + Docker sidecars)
+- [Dev Container Setup](dev-container.md) — fully containerized alternative
+- [Development Workspace](../development-workspace.md) — how Build Studio, VS Code, policy states, and validation environments fit together
+- [Collision-Free Dev Workflow](../../dev/collision-free-dev-workflow.md) — the one-command worktree workflow and why the root clone eats your work
 - [AGENTS.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/AGENTS.md) — the canonical agent rulebook
-- Specs: [Agent Toolchain Bootstrap](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md) · [Unified Delivery Surfaces](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) · [First-Class Grok Support](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-31-grok-first-class-support-design.md)
-</content>
+- Specs: [Agent Toolchain Bootstrap](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md) · [Unified Delivery Surfaces](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) · [First-Class Grok Support](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-31-grok-first-class-support-design.md) · [Agent Tool Marketplace](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-01-agent-tool-marketplace-design.md)
