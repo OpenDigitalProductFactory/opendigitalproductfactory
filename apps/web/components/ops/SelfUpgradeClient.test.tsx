@@ -994,3 +994,76 @@ describe("SelfUpgradeClient – upgrade activity", () => {
     expect(html).toContain("Automatic upgrades paused until");
   });
 });
+
+describe("Latest Run card — human-readable upgrade scope", () => {
+  const digest = {
+    counts: { breaking: 1, feature: 5, fix: 3, performance: 0, other: 0, total: 9 },
+    headline: "Nine changes since your last upgrade, one breaking.",
+  };
+
+  it("leads with the plain-language headline when the run recorded one", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded")}
+        latestRunImpact={digest}
+      />,
+    );
+    expect(html).toContain("data-run-impact-headline");
+    expect(html).toContain("Nine changes since your last upgrade, one breaking.");
+  });
+
+  it("renders the scope ribbon with total and category breakdown", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded")}
+        latestRunImpact={digest}
+      />,
+    );
+    expect(html).toContain("data-run-impact-counts");
+    expect(html).toContain("9 changes");
+    expect(html).toContain("1 breaking · 5 new · 3 fixes");
+    // Breaking present -> ribbon takes the destructive color.
+    expect(html).toContain("--dpf-destructive");
+  });
+
+  it("shortens the SHA pair and keeps the full value as a hover title", () => {
+    const long = { currentSha: "1".repeat(40), targetSha: "2".repeat(40) };
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded", long)} />,
+    );
+    expect(html).toContain("data-run-sha-range");
+    // Truncated display (12 chars + ellipsis) is what the operator reads —
+    // never the full 40-char wall as visible body text.
+    expect(html).toContain(`>111111111111…</span>`);
+    // Full SHA is preserved for copy/verify via the title attribute only.
+    expect(html).toContain(`title="${"1".repeat(40)}"`);
+  });
+
+  it("omits the ribbon entirely when the run recorded no summary", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded")} />,
+    );
+    expect(html).not.toContain("data-run-impact-counts");
+    expect(html).not.toContain("data-run-impact-headline");
+    // The SHA identity line still renders.
+    expect(html).toContain("data-run-sha-range");
+  });
+
+  it("uses muted (non-destructive) ribbon color when nothing is breaking", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded")}
+        latestRunImpact={{
+          counts: { breaking: 0, feature: 2, fix: 1, performance: 0, other: 0, total: 3 },
+          headline: null,
+        }}
+      />,
+    );
+    expect(html).toContain("2 new · 1 fix");
+    // No headline block when the digest headline is null.
+    expect(html).not.toContain("data-run-impact-headline");
+  });
+});

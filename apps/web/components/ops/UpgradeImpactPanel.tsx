@@ -15,6 +15,7 @@
 
 import { useState, useTransition } from "react";
 import type { SummaryResult, ImpactItem } from "@/lib/self-upgrade/impact/types";
+import { formatImpactCounts } from "@/lib/self-upgrade/impact/format";
 import { CollapsibleList } from "@/components/ui/report-kit";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
@@ -38,24 +39,6 @@ const CATEGORY_BADGE: Record<ImpactItem["category"], string> = {
   other:
     "bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] border-[var(--dpf-border)]",
 };
-
-function countsLine(counts: {
-  breaking: number;
-  feature: number;
-  fix: number;
-  performance: number;
-  other: number;
-  total: number;
-}): string {
-  const parts: string[] = [];
-  if (counts.breaking > 0) parts.push(`${counts.breaking} breaking`);
-  if (counts.feature > 0) parts.push(`${counts.feature} new`);
-  if (counts.performance > 0) parts.push(`${counts.performance} perf`);
-  if (counts.fix > 0) parts.push(`${counts.fix} fix${counts.fix === 1 ? "" : "es"}`);
-  if (counts.other > 0) parts.push(`${counts.other} other`);
-  if (parts.length === 0) return `${counts.total} change${counts.total === 1 ? "" : "s"}`;
-  return parts.join(" · ");
-}
 
 function ItemRow({
   item,
@@ -234,7 +217,7 @@ export default function UpgradeImpactPanel({
           )}
 
           <div className="text-xs text-[var(--dpf-muted)]" data-counts-line>
-            {countsLine(result.summary.counts)}
+            {formatImpactCounts(result.summary.counts)}
           </div>
 
           {result.summary.phrased?.touchesCustomizationsCallout && (

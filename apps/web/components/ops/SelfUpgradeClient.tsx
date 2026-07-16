@@ -11,7 +11,8 @@ import {
 } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
-import type { SummaryResult } from "@/lib/self-upgrade/impact/types";
+import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
+import { formatImpactCounts } from "@/lib/self-upgrade/impact/format";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -116,6 +117,8 @@ type Props = {
     summary: string;
   } | null;
   latestRun: LatestRun | null;
+  /** Human-readable scope of what the latest run carried (null when unrecorded). */
+  latestRunImpact?: RunImpactDigest | null;
   quiescence?: QuiescenceActivity | null;
   admission?: AdmissionSnapshot | null;
   cooldownUntil?: string | null;
@@ -304,6 +307,7 @@ export default function SelfUpgradeClient({
   isFresh,
   releaseBatch,
   latestRun,
+  latestRunImpact,
   quiescence,
   admission,
   cooldownUntil,
@@ -1129,11 +1133,48 @@ export default function SelfUpgradeClient({
             </div>
           )}
 
+          {/* Scope of the upgrade in human terms. The raw 40-char SHA pair told
+              an operator nothing about how big or risky a run is; lead with the
+              plain-language headline + counts ribbon (breaking/new/fix) drawn
+              from the impact summary this run recorded, and keep the shortened
+              SHAs as the precise-but-secondary identity line. */}
+          {latestRunImpact?.headline && (
+            <div className="text-sm text-[var(--dpf-text)]" data-run-impact-headline>
+              {latestRunImpact.headline}
+            </div>
+          )}
+
+          {latestRunImpact && (
+            <div className="text-xs" data-run-impact-counts>
+              <span className="text-[var(--dpf-text)]">
+                {latestRunImpact.counts.total} change
+                {latestRunImpact.counts.total === 1 ? "" : "s"}
+              </span>
+              <span className="text-[var(--dpf-muted)]"> · </span>
+              {/* Breaking changes are the risk signal an operator most needs to
+                  see, so color the ribbon destructive when any are present. */}
+              <span
+                className={
+                  latestRunImpact.counts.breaking > 0
+                    ? "text-[var(--dpf-destructive)]"
+                    : "text-[var(--dpf-muted)]"
+                }
+              >
+                {formatImpactCounts(latestRunImpact.counts)}
+              </span>
+            </div>
+          )}
+
           {latestRun.currentSha && latestRun.targetSha && (
-            <div className="text-xs text-[var(--dpf-muted)]">
-              <span className="font-mono">{latestRun.currentSha}</span>
+            <div className="text-xs text-[var(--dpf-muted)]" data-run-sha-range>
+              <span className="text-[var(--dpf-muted)]">Change: </span>
+              <span className="font-mono" title={latestRun.currentSha}>
+                {shortSha(latestRun.currentSha)}
+              </span>
               {" → "}
-              <span className="font-mono">{latestRun.targetSha}</span>
+              <span className="font-mono" title={latestRun.targetSha}>
+                {shortSha(latestRun.targetSha)}
+              </span>
             </div>
           )}
 
@@ -1329,9 +1370,13 @@ export default function SelfUpgradeClient({
                   <td className="px-3 py-2 text-[var(--dpf-muted)]">
                     {run.currentSha && run.targetSha ? (
                       <>
-                        <span className="font-mono">{run.currentSha}</span>
+                        <span className="font-mono" title={run.currentSha}>
+                          {shortSha(run.currentSha)}
+                        </span>
                         {" → "}
-                        <span className="font-mono">{run.targetSha}</span>
+                        <span className="font-mono" title={run.targetSha}>
+                          {shortSha(run.targetSha)}
+                        </span>
                       </>
                     ) : null}
                   </td>

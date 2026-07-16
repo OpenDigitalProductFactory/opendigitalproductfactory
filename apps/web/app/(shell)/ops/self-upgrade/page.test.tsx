@@ -92,6 +92,7 @@ const baseStatus = {
     summary: "Pending-update tally unavailable — routine upgrades proceed without batching.",
   },
   latestRun: null,
+  latestRunImpact: null,
   quiescence: {
     level: "normal" as const,
     runId: null,

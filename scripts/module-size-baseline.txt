@@ -6,8 +6,8 @@ apps/web/components/agent/AgentCoworkerPanel.tsx	1260
 apps/web/components/agent/AgentMessageInput.tsx	1034
 apps/web/components/ea/EaCanvas.tsx	1047
 apps/web/components/inventory/TopologyGraph.tsx	1031
-apps/web/components/ops/SelfUpgradeClient.test.tsx	997
-apps/web/components/ops/SelfUpgradeClient.tsx	1377
+apps/web/components/ops/SelfUpgradeClient.test.tsx	1070
+apps/web/components/ops/SelfUpgradeClient.tsx	1422
 apps/web/components/platform/AiOperationsMap.tsx	2849
 apps/web/components/platform/EffectivePermissionsPanel.tsx	851
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
@@ -26,8 +26,8 @@ apps/web/lib/actions/crm.ts	1423
 apps/web/lib/actions/ea.ts	1055
 apps/web/lib/actions/mcp-tokens.test.ts	1254
 apps/web/lib/actions/platform-dev-config.ts	1331
-apps/web/lib/actions/promotions.self-upgrade.test.ts	1021
-apps/web/lib/actions/promotions.ts	997
+apps/web/lib/actions/promotions.self-upgrade.test.ts	1022
+apps/web/lib/actions/promotions.ts	948
 apps/web/lib/actions/tax-remittance.test.ts	1080
 apps/web/lib/actions/tax-remittance.ts	1788
 apps/web/lib/ai-operations-map/load-map-data.test.ts	943

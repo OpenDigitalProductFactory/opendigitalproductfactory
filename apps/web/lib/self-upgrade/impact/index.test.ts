@@ -9,21 +9,28 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
 
 // Mock the durable store so the orchestrator tests stay DB-free; store.ts has
 // its own test for the prisma interaction.
-const { persistSummaryMock, getPersistedSummaryMock, getPersistedSummaryRowMock } =
-  vi.hoisted(() => ({
-    persistSummaryMock: vi.fn(),
-    getPersistedSummaryMock: vi.fn(),
-    getPersistedSummaryRowMock: vi.fn(),
-  }));
+const {
+  persistSummaryMock,
+  getPersistedSummaryMock,
+  getPersistedSummaryByIdMock,
+  getPersistedSummaryRowMock,
+} = vi.hoisted(() => ({
+  persistSummaryMock: vi.fn(),
+  getPersistedSummaryMock: vi.fn(),
+  getPersistedSummaryByIdMock: vi.fn(),
+  getPersistedSummaryRowMock: vi.fn(),
+}));
 vi.mock("./store", () => ({
   persistSummary: (...a: unknown[]) => persistSummaryMock(...a),
   getPersistedSummary: (...a: unknown[]) => getPersistedSummaryMock(...a),
+  getPersistedSummaryById: (...a: unknown[]) => getPersistedSummaryByIdMock(...a),
   getPersistedSummaryRow: (...a: unknown[]) => getPersistedSummaryRowMock(...a),
 }));
 
 import {
   summarizeUpgradeImpact,
   loadPersistedImpactSummary,
+  loadRunImpactDigest,
   getCurrentImpactSummaryId,
 } from "./index";
 import { _resetCacheForTest } from "./cache";
@@ -35,6 +42,7 @@ beforeEach(() => {
   // Defaults: nothing persisted, writes succeed. Individual tests override.
   persistSummaryMock.mockResolvedValue("UIS-1");
   getPersistedSummaryMock.mockResolvedValue(null);
+  getPersistedSummaryByIdMock.mockResolvedValue(null);
   getPersistedSummaryRowMock.mockResolvedValue(null);
 });
 
@@ -316,6 +324,53 @@ describe("loadPersistedImpactSummary", () => {
       loadCurrentLineageSha: async () => "a".repeat(40),
     });
     expect(out).toBeNull();
+  });
+});
+
+describe("loadRunImpactDigest", () => {
+  it("returns counts + headline from the run's own summary id", async () => {
+    getPersistedSummaryByIdMock.mockResolvedValue(
+      storedSummary({
+        counts: { breaking: 1, feature: 5, fix: 3, performance: 0, other: 0, total: 9 },
+        phrased: {
+          headline: "Nine changes, one breaking.",
+          itemPhrasings: [],
+          touchesCustomizationsCallout: "",
+        },
+      }),
+    );
+    const out = await loadRunImpactDigest("UIS-42");
+    expect(getPersistedSummaryByIdMock).toHaveBeenCalledWith("UIS-42");
+    expect(out).toEqual({
+      counts: { breaking: 1, feature: 5, fix: 3, performance: 0, other: 0, total: 9 },
+      headline: "Nine changes, one breaking.",
+    });
+  });
+
+  it("returns a null headline when phrasing was skipped", async () => {
+    getPersistedSummaryByIdMock.mockResolvedValue(storedSummary({ phrased: null }));
+    const out = await loadRunImpactDigest("UIS-1");
+    expect(out?.headline).toBeNull();
+    expect(out?.counts.total).toBe(1);
+  });
+
+  it("returns a null headline when the phrased headline is blank", async () => {
+    getPersistedSummaryByIdMock.mockResolvedValue(
+      storedSummary({
+        phrased: { headline: "   ", itemPhrasings: [], touchesCustomizationsCallout: "" },
+      }),
+    );
+    expect((await loadRunImpactDigest("UIS-1"))?.headline).toBeNull();
+  });
+
+  it("returns null for a run that recorded no summary (null id)", async () => {
+    expect(await loadRunImpactDigest(null)).toBeNull();
+    expect(getPersistedSummaryByIdMock).not.toHaveBeenCalled();
+  });
+
+  it("degrades to null when the store read throws", async () => {
+    getPersistedSummaryByIdMock.mockRejectedValue(new Error("db down"));
+    expect(await loadRunImpactDigest("UIS-1")).toBeNull();
   });
 });
 

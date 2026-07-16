@@ -15,7 +15,12 @@ import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveTargetSha } from "@/lib/self-upgrade/version";
 import { cacheKey, getCached, setCached } from "./cache";
-import { getPersistedSummary, getPersistedSummaryRow, persistSummary } from "./store";
+import {
+  getPersistedSummary,
+  getPersistedSummaryById,
+  getPersistedSummaryRow,
+  persistSummary,
+} from "./store";
 import { collectChangeSet } from "./change-set";
 import { collectInstallSignals } from "./install-signals";
 import { parseCommits } from "./conventional";
@@ -26,6 +31,7 @@ import { phraseSummary } from "./phrase";
 import {
   DEFAULT_TOP_N,
   type InstallSignals,
+  type RunImpactDigest,
   type SummaryResult,
   type UpgradeImpactSummary,
 } from "./types";
@@ -236,6 +242,23 @@ export async function loadPersistedImpactSummary(
   );
   if (!summary) return null;
   return { ok: true, summary: { ...summary, fromCache: true } };
+}
+
+/**
+ * Compact impact digest for the Latest Run card — the human-readable "what did
+ * this run carry?" the raw SHA pair never gave. Loaded by the run's OWN
+ * `impactSummaryId` (the summary the operator reviewed at launch), not by a
+ * (lineage, target) re-derivation, so it stays correct for a completed run even
+ * after the upstream target has advanced past that run's endpoints.
+ */
+export async function loadRunImpactDigest(
+  impactSummaryId: string | null | undefined,
+): Promise<RunImpactDigest | null> {
+  if (!impactSummaryId) return null;
+  const summary = await getPersistedSummaryById(impactSummaryId).catch(() => null);
+  if (!summary) return null;
+  const headline = summary.phrased?.headline?.trim();
+  return { counts: summary.counts, headline: headline ? headline : null };
 }
 
 /**
