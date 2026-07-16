@@ -568,7 +568,7 @@ async function approveDemandForFundingHandler(
   const itemId = String(params["itemId"] ?? "");
   const item = await prisma.backlogItem.findUnique({
     where: { itemId },
-    select: { id: true, itemId: true, title: true, demandScore: true, demandStage: true, investmentBucket: true, effortSize: true },
+    select: { id: true, itemId: true, title: true, demandScore: true, demandStage: true, investmentBucket: true, effortSize: true, agentId: true, claimStatus: true },
   });
   if (!item) return { success: false, error: "not_found", message: `Item ${itemId} not found` };
   if (item.demandScore === null) {
@@ -601,18 +601,32 @@ async function approveDemandForFundingHandler(
 
   // Only advance to `ready` (funded) when the org's stance recommends/arbitrates.
   const funded = decision.allowed;
+  let volunteered: { offered: boolean; agentId: string | null } = { offered: false, agentId: null };
   if (funded) {
     await prisma.backlogItem.update({ where: { id: item.id }, data: { demandStage: "ready" } });
+    // AI-led execution (EP-DELIVERY-FLOW BI-A6648529): crossing the bet pulls a
+    // coworker forward. Kernel decision (high conf) = ask-first — raise a
+    // coworker-pickup offer for a human to approve, not an autonomous claim.
+    // Best-effort: the funding decision stands even if the offer can't be recorded.
+    try {
+      const { offerFundedItemToCoworker } = await import("@/lib/demand/volunteering.server");
+      volunteered = await offerFundedItemToCoworker(item);
+    } catch {
+      // non-fatal
+    }
   }
+  const volunteerNote = volunteered.offered ? ` ${volunteered.agentId} volunteered — approve the pickup.` : "";
   return {
     success: true,
     entityId: item.itemId,
     message: funded
-      ? `Funded ${item.itemId} → ready. ${decision.operatorMessage}`
+      ? `Funded ${item.itemId} → ready. ${decision.operatorMessage}${volunteerNote}`
       : `Not funded (${decision.evaluation.outcomeType}); stays at ${item.demandStage ?? "raw"}. ${decision.operatorMessage}`,
     data: {
       funded,
       demandStage: funded ? "ready" : item.demandStage,
+      volunteered: volunteered.offered,
+      volunteeredAgentId: volunteered.agentId,
       interactionId: decision.interactionId,
       outcomeType: decision.evaluation.outcomeType,
       orgProfileSelected: decision.orgProfileSelected,

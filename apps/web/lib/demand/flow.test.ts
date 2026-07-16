@@ -20,6 +20,8 @@ function item(partial: Partial<DemandItemView> & { itemId: string }): DemandItem
     estimateHumanJobSize: null,
     estimateSource: null,
     estimateAgreed: null,
+    claimStatus: null,
+    claimedByAgentId: null,
     ...partial,
   };
 }
