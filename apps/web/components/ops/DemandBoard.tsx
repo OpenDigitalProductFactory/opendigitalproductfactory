@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   buildValueEffortMatrix,
   groupByFunnelStage,
@@ -15,6 +15,7 @@ import type { ValueEffortQuadrant } from "@/lib/demand/scoring";
 import { bucketBalance, BUCKET_LABELS, computeBucketMix } from "@/lib/demand/buckets";
 import { groupByFlowLane, FLOW_LANE_LABELS, type FlowColumn } from "@/lib/demand/flow";
 import { resolveEstimateProvenance } from "@/lib/demand/estimate-provenance";
+import { recordEstimate } from "@/lib/actions/demand-estimate";
 
 const VALUE_BAND_LABEL: Record<ReturnType<typeof valueBand>, string> = {
   high: "High value",
@@ -37,38 +38,179 @@ const QUADRANT_TOKEN: Record<ValueEffortQuadrant, string> = {
   time_sink: "var(--dpf-warning)",
 };
 
+const ESTIMATE_SOURCE_LABEL: Record<string, string> = { ai: "AI", human: "human", agreed: "agreed" };
+
+/** Tiny inline text button used across the estimate controls. */
+function MiniButton({
+  onClick,
+  disabled,
+  title,
+  children,
+  tone = "accent",
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+  children: React.ReactNode;
+  tone?: "accent" | "muted" | "success";
+}) {
+  const color =
+    tone === "success" ? "var(--dpf-success)" : tone === "muted" ? "var(--dpf-muted)" : "var(--dpf-accent)";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="rounded border px-1.5 py-0.5 text-[10px] font-medium disabled:opacity-40"
+      style={{ color, borderColor: color }}
+    >
+      {children}
+    </button>
+  );
+}
+
 /**
- * Estimate-provenance chip (EP-DELIVERY-FLOW). Shows WHOSE effort estimate the
- * value/effort score carries, and surfaces the ⇄ reconcile affordance when the AI
- * and human numbers still diverge. Display-only here — the interactive
- * confirm/overrule/reconcile flow is BI-AA1763CD. Returns null when no attributed
- * estimate exists yet (the plain effort line covers that case).
+ * Interactive collaborative-estimation controls (EP-DELIVERY-FLOW BI-AA1763CD).
+ * The effort estimate is the value/effort score's denominator; here it becomes a
+ * visible, attributed, collaborative act:
+ * - **AI proposes forward** — "AI estimate" records a first-pass (derived from the
+ *   intake effortSize) attributed to the coworker.
+ * - **Human confirm/overrule** — confirm adopts the AI number; overrule sets a
+ *   different one (the human number leads).
+ * - **Reconcile divergence** — when AI and human differ, "Use AI" / "Keep mine"
+ *   settle it; the score is provisional (⇄) until then.
+ * Writes through the governed recordEstimate action, which recomputes demandScore.
  */
-function EstimateChip({ item }: { item: DemandItemView }) {
+export function EstimateControls({ item }: { item: DemandItemView }) {
   const prov = resolveEstimateProvenance({
     aiJobSize: item.estimateAiJobSize,
     humanJobSize: item.estimateHumanJobSize,
     agreed: item.estimateAgreed,
   });
-  if (prov.source === null) return null;
-  if (prov.diverged) {
-    return (
+  const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const run = (input: Parameters<typeof recordEstimate>[0]) =>
+    startTransition(async () => {
+      setError(null);
+      const res = await recordEstimate(input);
+      if (!res.ok) setError(res.error);
+      else {
+        setEditing(false);
+        setDraft("");
+      }
+    });
+
+  const submitHuman = (agree?: boolean) => {
+    const n = Number(draft);
+    if (!Number.isFinite(n) || n <= 0) {
+      setError("Enter effort points greater than 0.");
+      return;
+    }
+    run({ itemId: item.itemId, by: "human", jobSize: n, agree });
+  };
+
+  const editor = (
+    <span className="inline-flex items-center gap-1">
+      <input
+        type="number"
+        min={0}
+        step="any"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="pts"
+        aria-label="Effort points"
+        className="w-12 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-1 py-0.5 text-[10px] text-[var(--dpf-text)]"
+      />
+      <MiniButton onClick={() => submitHuman()} disabled={pending} title="Set your estimate">
+        Set
+      </MiniButton>
+      <MiniButton
+        onClick={() => {
+          setEditing(false);
+          setError(null);
+        }}
+        disabled={pending}
+        tone="muted"
+        title="Cancel"
+      >
+        ✕
+      </MiniButton>
+    </span>
+  );
+
+  // Chip describing the resolved state.
+  const chip =
+    prov.source === null ? null : prov.diverged ? (
       <span
         className="rounded px-1.5 py-0.5 text-[10px] font-medium"
         style={{ color: "var(--dpf-warning)", borderColor: "var(--dpf-warning)" }}
         title="AI and human estimates diverge — reconcile to trust the score"
       >
-        ⇄ {item.estimateAiJobSize} ↔ {item.estimateHumanJobSize} · reconcile
+        ⇄ AI {item.estimateAiJobSize} ↔ you {item.estimateHumanJobSize}
+      </span>
+    ) : (
+      <span
+        className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-muted)]"
+        title={`Effort estimate: ${prov.effectiveJobSize} (${ESTIMATE_SOURCE_LABEL[prov.source] ?? prov.source})`}
+      >
+        est {prov.effectiveJobSize} · {ESTIMATE_SOURCE_LABEL[prov.source] ?? prov.source}
+        {prov.source === "ai" ? " (proposed)" : ""}
       </span>
     );
-  }
-  const SOURCE_LABEL: Record<string, string> = { ai: "AI", human: "human", agreed: "agreed" };
+
   return (
-    <span
-      className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-muted)]"
-      title={`Effort estimate: ${prov.effectiveJobSize} (${SOURCE_LABEL[prov.source] ?? prov.source})`}
-    >
-      est {prov.effectiveJobSize} · {SOURCE_LABEL[prov.source] ?? prov.source}
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {chip}
+      {editing ? (
+        editor
+      ) : prov.diverged ? (
+        <>
+          <MiniButton onClick={() => run({ itemId: item.itemId, by: "human", agree: true })} disabled={pending} tone="success" title="Adopt the AI estimate">
+            Use AI {item.estimateAiJobSize}
+          </MiniButton>
+          <MiniButton
+            onClick={() => run({ itemId: item.itemId, by: "human", jobSize: item.estimateHumanJobSize ?? 0, agree: true })}
+            disabled={pending}
+            title="Keep your estimate as the agreed one"
+          >
+            Keep {item.estimateHumanJobSize}
+          </MiniButton>
+        </>
+      ) : prov.source === "ai" ? (
+        <>
+          <MiniButton onClick={() => run({ itemId: item.itemId, by: "human", agree: true })} disabled={pending} tone="success" title="Confirm the AI estimate">
+            Confirm
+          </MiniButton>
+          <MiniButton onClick={() => setEditing(true)} disabled={pending} title="Set a different estimate">
+            Overrule
+          </MiniButton>
+        </>
+      ) : prov.source === null ? (
+        <>
+          {item.effortSize && (
+            <MiniButton onClick={() => run({ itemId: item.itemId, by: "ai" })} disabled={pending} tone="muted" title="Propose a first-pass estimate from the effort size">
+              ✨ AI estimate
+            </MiniButton>
+          )}
+          <MiniButton onClick={() => setEditing(true)} disabled={pending} title="Set the effort estimate">
+            ✎ estimate
+          </MiniButton>
+        </>
+      ) : (
+        <MiniButton onClick={() => setEditing(true)} disabled={pending} tone="muted" title="Revise the estimate">
+          ✎
+        </MiniButton>
+      )}
+      {pending && <span className="text-[10px] text-[var(--dpf-muted)]">…</span>}
+      {error && (
+        <span className="text-[10px] text-[var(--dpf-warning)]" title={error}>
+          {error.length > 40 ? `${error.slice(0, 40)}…` : error}
+        </span>
+      )}
     </span>
   );
 }
@@ -91,7 +233,7 @@ function DemandCard({ item }: { item: DemandItemView }) {
         <span className="text-[10px] text-[var(--dpf-muted)]">
           {item.effortSize ? `${item.effortSize} effort` : effort !== null ? `effort ${effort}` : "unsized"}
         </span>
-        <EstimateChip item={item} />
+        <EstimateControls item={item} />
         {item.claimStatus === "offered" && item.claimedByAgentId && (
           <span
             className="rounded px-1.5 py-0.5 text-[10px] font-medium"

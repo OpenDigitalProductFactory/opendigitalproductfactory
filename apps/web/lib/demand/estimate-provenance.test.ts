@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveEstimateProvenance } from "./estimate-provenance";
+import { firstPassJobSize, resolveEstimateProvenance } from "./estimate-provenance";
 
 describe("resolveEstimateProvenance", () => {
   it("is unestimated when neither side has a number", () => {
@@ -76,5 +76,21 @@ describe("resolveEstimateProvenance", () => {
   it("never reports divergence when only one side has estimated", () => {
     expect(resolveEstimateProvenance({ aiJobSize: 8, agreed: false }).diverged).toBe(false);
     expect(resolveEstimateProvenance({ humanJobSize: 3 }).diverged).toBe(false);
+  });
+});
+
+describe("firstPassJobSize", () => {
+  it("projects the t-shirt effort size to the shared job-size points", () => {
+    expect(firstPassJobSize("small")).toBe(1);
+    expect(firstPassJobSize("medium")).toBe(3);
+    expect(firstPassJobSize("large")).toBe(8);
+    expect(firstPassJobSize("xlarge")).toBe(20);
+  });
+
+  it("returns null when there is no effort size to project from", () => {
+    expect(firstPassJobSize(null)).toBeNull();
+    expect(firstPassJobSize(undefined)).toBeNull();
+    expect(firstPassJobSize("")).toBeNull();
+    expect(firstPassJobSize("enormous")).toBeNull();
   });
 });
