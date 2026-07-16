@@ -25,6 +25,7 @@ import { ResourceUnitGrid } from "./ResourceUnit";
 import { TwinQueue } from "./TwinQueue";
 import { TwinZone } from "./TwinZone";
 import { UtilityBand } from "./UtilityBand";
+import { ValueStreamStrip } from "./ValueStreamStrip";
 import { WorkItem } from "./WorkItem";
 import type { TwinSnapshot } from "./snapshot";
 
@@ -61,6 +62,10 @@ export function TwinView({ profile, snapshot, className = "" }: TwinViewProps) {
   return (
     <div className={`flex flex-col gap-4 ${className}`.trim()}>
       <CapacityChips chips={snapshot.capacityChips} />
+
+      {snapshot.stageFlow && snapshot.stageFlow.length > 0 ? (
+        <ValueStreamStrip stages={snapshot.stageFlow} />
+      ) : null}
 
       <PresenceRow members={snapshot.presence} />
 

@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ALL_ARCHETYPES, deriveDemoBusiness, deriveTwinProfile } from "@dpf/storefront-templates";
+import {
+  ALL_ARCHETYPES,
+  deriveDemoBusiness,
+  deriveTwinProfile,
+  deriveTwinValueStreamBinding,
+} from "@dpf/storefront-templates";
 
 import { TwinView } from "@/components/twin";
 import { demoBusinessToTwinSnapshot } from "@/lib/twin/demo-business-snapshot";
@@ -26,7 +31,8 @@ export default async function TwinGalleryDetailPage({
 
   const demo = deriveDemoBusiness(archetype);
   const profile = deriveTwinProfile(archetype);
-  const snapshot = demoBusinessToTwinSnapshot(demo, profile);
+  const binding = deriveTwinValueStreamBinding(archetype);
+  const snapshot = demoBusinessToTwinSnapshot(demo, profile, binding);
 
   return (
     <div>

@@ -37,6 +37,21 @@ export interface TwinQueueSnapshot {
   emptyLabel?: string;
 }
 
+/** One value-stream stage with the live demand sitting in it (workstream C —
+ *  grounding the twin's queues in the archetype's real process). Keyed to the
+ *  `deriveTwinValueStreamBinding` stages so the animation view and the
+ *  architecture view line up. */
+export interface TwinStageFlow {
+  stageKey: string;
+  label: string;
+  order: number;
+  loadBearing: boolean;
+  /** Demand units currently at this stage. */
+  count: number;
+  /** Longest wait among demand at this stage ("8m", "2d"); omitted when none waits. */
+  longestWait?: string;
+}
+
 /** The cog's current proposal over live state (constraint → proposal → confirm). */
 export interface TwinCogSnapshot {
   proposal: string;
@@ -47,6 +62,9 @@ export interface TwinCogSnapshot {
 
 export interface TwinSnapshot {
   capacityChips: CapacityChipData[];
+  /** The archetype's value-stream backbone with demand counts overlaid (workstream
+   *  C). Optional — a fixture without grounding simply omits it. */
+  stageFlow?: TwinStageFlow[];
   zones: TwinZoneSnapshot[];
   workItems: WorkItemData[];
   queues: TwinQueueSnapshot[];

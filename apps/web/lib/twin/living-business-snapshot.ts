@@ -17,10 +17,13 @@
 import {
   ALL_ARCHETYPES,
   deriveTwinProfile,
+  deriveTwinValueStreamBinding,
   type ArchetypeDefinition,
   type TwinProfile,
   type TwinTemplate,
 } from "@dpf/storefront-templates";
+
+import { buildStageFlow, type StageDemand } from "./stage-flow";
 
 import type { Intent } from "@/components/ui/report-kit";
 import {
@@ -489,6 +492,25 @@ export async function loadLivingBusinessSnapshot(opts?: {
     now,
   );
 
+  // Value-stream flow lane (workstream C): live demand grouped by its stage.
+  // Waiting (pending / unassigned) demand sits at the primary stage; work in
+  // progress has moved to Deliver.
+  const binding = deriveTwinValueStreamBinding(def);
+  const deliverStage = binding.stages.some((s) => s.stageKey === "deliver")
+    ? "deliver"
+    : binding.primaryStageKey;
+  const stageDemand: Record<string, StageDemand> = {};
+  for (const b of bookings) {
+    const waiting = b.status.toLowerCase() === "pending" || b.provider == null;
+    const stage = waiting ? binding.primaryStageKey : deliverStage;
+    const waitMs = waiting && b.createdAt ? Math.max(0, now.getTime() - b.createdAt.getTime()) : 0;
+    const cur = stageDemand[stage] ?? { count: 0, longestWaitMs: 0 };
+    cur.count += 1;
+    cur.longestWaitMs = Math.max(cur.longestWaitMs ?? 0, waitMs);
+    stageDemand[stage] = cur;
+  }
+  const stageFlow = buildStageFlow(binding, stageDemand);
+
   return {
     live: true,
     archetypeId,
@@ -501,6 +523,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
       billsDueCount: bills.length,
       longestWaitMs: longestWaitMs(bookings, now),
     }),
+    stageFlow,
     zones,
     workItems: bookingsToWorkItems(bookings, profile.workItemNoun.singular),
     queues,
