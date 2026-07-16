@@ -16,6 +16,13 @@ vi.mock("@dpf/db", () => {
           return rows.get(where.adapterType) ?? null;
         }),
         findMany: vi.fn(async () => [...rows.values()]),
+        update: vi.fn(async ({ where, data }: { where: { adapterType: string }; data: Record<string, unknown> }) => {
+          const existing = rows.get(where.adapterType);
+          if (!existing) throw new Error("Record to update not found");
+          const row = { ...existing, ...data };
+          rows.set(where.adapterType, row);
+          return row;
+        }),
         deleteMany: vi.fn(async ({ where }: { where: { adapterType: string } }) => {
           rows.delete(where.adapterType);
           return { count: 1 };
@@ -29,11 +36,24 @@ vi.mock("@dpf/db", () => {
 import {
   parseRetryAfterSeconds,
   recordCliRateLimit,
+  recordCliWeeklyQuota,
+  captureAnthropicWeeklyQuota,
   getCliPoolStatus,
   getAllCliPoolStatuses,
   clearCliRateLimit,
 } from "./cli-pool-status";
+import type { WeeklyQuotaSnapshot } from "./weekly-quota";
 import { prisma } from "@dpf/db";
+
+function snap(overrides: Partial<WeeklyQuotaSnapshot> = {}): WeeklyQuotaSnapshot {
+  return {
+    utilization: 0.4,
+    resetAt: new Date("2026-07-18T05:00:00Z"),
+    source: "anthropic-unified-headers",
+    observedAt: new Date("2026-07-16T12:00:00Z"),
+    ...overrides,
+  };
+}
 
 // Helper to reset the in-memory rows map between tests
 function clearMockRows() {
@@ -197,15 +217,88 @@ describe("clearCliRateLimit", () => {
     vi.clearAllMocks();
   });
 
-  it("removes the row so subsequent getCliPoolStatus returns null", async () => {
+  it("removes the row so subsequent getCliPoolStatus returns null (no weekly snapshot)", async () => {
     await recordCliRateLimit("claude-cli", "anthropic-sub", "Retry-After: 60");
     await clearCliRateLimit("claude-cli");
     const status = await getCliPoolStatus("claude-cli");
     expect(status).toBeNull();
   });
 
+  it("preserves the weekly-quota snapshot but clears exhaustion", async () => {
+    // A rate limit then a weekly reading, then a successful call clears it.
+    await recordCliRateLimit("claude-cli", "anthropic-sub", "Retry-After: 300");
+    await recordCliWeeklyQuota("claude-cli", "anthropic-sub", snap({ utilization: 0.6 }));
+    await clearCliRateLimit("claude-cli");
+
+    const status = await getCliPoolStatus("claude-cli");
+    expect(status).not.toBeNull();
+    // Exhaustion cleared…
+    expect(status!.isExhausted).toBe(false);
+    expect(status!.resetAt).toBeNull();
+    // …but the weekly signal survives.
+    expect(status!.weeklyUtilization).toBeCloseTo(0.6);
+    expect(status!.weeklySource).toBe("anthropic-unified-headers");
+  });
+
   it("swallows db errors without throwing", async () => {
-    vi.mocked(prisma.cliPoolStatus.deleteMany).mockRejectedValueOnce(new Error("db down"));
+    vi.mocked(prisma.cliPoolStatus.findUnique).mockRejectedValueOnce(new Error("db down"));
     await expect(clearCliRateLimit("claude-cli")).resolves.not.toThrow();
+  });
+});
+
+describe("recordCliWeeklyQuota", () => {
+  beforeEach(() => {
+    clearMockRows();
+    vi.clearAllMocks();
+  });
+
+  it("writes a quota-only row that reads as NOT exhausted", async () => {
+    await recordCliWeeklyQuota("claude-cli", "anthropic-sub", snap({ utilization: 0.42 }));
+    const status = await getCliPoolStatus("claude-cli");
+    expect(status).not.toBeNull();
+    expect(status!.weeklyUtilization).toBeCloseTo(0.42);
+    expect(status!.weeklyResetAt?.toISOString()).toBe("2026-07-18T05:00:00.000Z");
+    expect(status!.weeklyObservedAt?.toISOString()).toBe("2026-07-16T12:00:00.000Z");
+    // No rate-limit event → resetAt null → not exhausted.
+    expect(status!.isExhausted).toBe(false);
+  });
+
+  it("merges the weekly snapshot onto an existing rate-limited row without clearing exhaustion", async () => {
+    await recordCliRateLimit("codex-cli", "chatgpt", "Retry-After: 300");
+    await recordCliWeeklyQuota("codex-cli", "chatgpt", snap({ utilization: 0.9 }));
+    const status = await getCliPoolStatus("codex-cli");
+    expect(status!.isExhausted).toBe(true); // still rate-limited
+    expect(status!.weeklyUtilization).toBeCloseTo(0.9); // and now carries quota
+  });
+
+  it("swallows db errors without throwing", async () => {
+    vi.mocked(prisma.cliPoolStatus.upsert).mockRejectedValueOnce(new Error("db down"));
+    await expect(
+      recordCliWeeklyQuota("claude-cli", "anthropic-sub", snap()),
+    ).resolves.not.toThrow();
+  });
+});
+
+describe("captureAnthropicWeeklyQuota", () => {
+  beforeEach(() => {
+    clearMockRows();
+    vi.clearAllMocks();
+  });
+
+  it("records the weekly signal when unified-7d headers are present", async () => {
+    const headers = new Headers({
+      "anthropic-ratelimit-unified-7d-utilization": "0.55",
+      "anthropic-ratelimit-unified-7d-reset": "1784224800",
+    });
+    await captureAnthropicWeeklyQuota("anthropic", headers);
+    const status = await getCliPoolStatus("claude-cli");
+    expect(status!.weeklyUtilization).toBeCloseTo(0.55);
+    expect(status!.weeklySource).toBe("anthropic-unified-headers");
+  });
+
+  it("is a no-op when the weekly headers are absent (API-key traffic)", async () => {
+    await captureAnthropicWeeklyQuota("anthropic", new Headers({ "x-ratelimit-remaining-tokens": "5000" }));
+    expect(prisma.cliPoolStatus.upsert).not.toHaveBeenCalled();
+    expect(await getCliPoolStatus("claude-cli")).toBeNull();
   });
 });

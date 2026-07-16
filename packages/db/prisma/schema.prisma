@@ -12040,6 +12040,21 @@ model CliPoolStatus {
   retryAfterSeconds Int?
   /// First 300 chars of the stderr / error message for debugging.
   errorSnippet      String?
+  /// Real remaining-weekly-allocation signal (replaces the exhaustion proxy for
+  /// the capacity-drain policy). Fraction 0..1 of the weekly subscription window
+  /// consumed, from the provider's own quota surface (Anthropic unified-7d
+  /// headers / oauth usage, or codex account/rateLimits/read). Null until a
+  /// snapshot has been collected. See lib/routing/weekly-quota.ts.
+  weeklyUtilization Float?
+  /// Provider-authoritative weekly reset time (rolling ~72h anchored window, NOT
+  /// a fixed calendar day). Null when no snapshot / no reset reported.
+  weeklyResetAt     DateTime?
+  /// Which provider signal produced weeklyUtilization: "anthropic-unified-headers"
+  /// | "anthropic-oauth-usage" | "codex-app-server".
+  weeklySource      String?
+  /// When the weekly snapshot was taken — gates staleness (a stale read must not
+  /// be trusted as "plenty of quota").
+  weeklyObservedAt  DateTime?
   updatedAt         DateTime  @updatedAt
 
   @@index([adapterType, resetAt])
