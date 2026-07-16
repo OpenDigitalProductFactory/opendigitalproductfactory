@@ -309,4 +309,122 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     expect(createdObservedKeys).toEqual(["duplicate:item"]);
   });
+
+  it("upserts one InventoryRelationship per resolved tuple when distinct keys collapse (BI-PIR-7d69a445)", async () => {
+    // Two inventory entities share the SAME entityKey ("host:shared") but arrive
+    // under DIFFERENT discovered keys ("dk:a" / "dk:b"), so entity resolution
+    // maps both discovered keys onto the same persisted entity id. Two
+    // relationships with DISTINCT relationshipKeys ("rel:k1" / "rel:k2") therefore
+    // collapse onto the same (fromEntityId, toEntityId, relationshipType) tuple.
+    // Before the fix the second one took the create path and violated the compound
+    // @@unique (P2002, aborting the whole $transaction). The dedup must upsert the
+    // InventoryRelationship exactly once, while EACH relationship still records its
+    // own DiscoveredRelationship provenance row linked to the shared row.
+    const relationshipUpsertKeys: string[] = [];
+    const discoveredRelationshipCreates: Array<{ relationshipKey: string; connectId: string }> = [];
+
+    const db = {
+      $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        discoveryRun: { create: async () => ({ id: "run-3" }) },
+        inventoryEntity: {
+          findMany: async () => [],
+          upsert: async ({ where }: { where: { entityKey: string } }) => ({
+            id: `entity:${where.entityKey}`,
+            entityKey: where.entityKey,
+          }),
+          updateMany: async () => ({ count: 0 }),
+        },
+        discoveredItem: {
+          create: async ({ data }: { data: { observedKey: string } }) => ({
+            id: `discovered:${data.observedKey}`,
+          }),
+        },
+        discoveredSoftwareEvidence: { upsert: async () => ({}) },
+        inventoryRelationship: {
+          findMany: async () => [],
+          upsert: async ({ where }: { where: { relationshipKey: string } }) => {
+            relationshipUpsertKeys.push(where.relationshipKey);
+            return { id: `relationship:${where.relationshipKey}`, relationshipKey: where.relationshipKey };
+          },
+          updateMany: async () => ({ count: 0 }),
+        },
+        discoveredRelationship: {
+          create: async ({ data }: { data: { relationshipKey: string; inventoryRelationship: { connect: { id: string } } } }) => {
+            discoveredRelationshipCreates.push({
+              relationshipKey: data.relationshipKey,
+              connectId: data.inventoryRelationship.connect.id,
+            });
+            return {};
+          },
+        },
+        portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}) },
+      }),
+    };
+
+    const entity = (discoveredKey: string, entityKey: string) => ({
+      entityKey,
+      entityType: "host",
+      name: entityKey,
+      discoveredKey,
+      portfolioSlug: "foundational",
+      taxonomyNodeId: "foundational/compute/servers",
+      attributionStatus: "attributed" as const,
+      attributionMethod: "rule" as const,
+      attributionConfidence: 0.98,
+      providerView: "foundational",
+      properties: {},
+    });
+    const item = (discoveredKey: string) => ({
+      discoveredKey,
+      sourceKind: "dpf_bootstrap",
+      itemType: "host",
+      name: discoveredKey,
+      externalRef: discoveredKey,
+      attributes: {},
+    });
+
+    await persistBootstrapDiscoveryRun(
+      db,
+      {
+        discoveredItems: [item("dk:a"), item("dk:b"), item("dk:c")],
+        inventoryEntities: [
+          entity("dk:a", "host:shared"),
+          entity("dk:b", "host:shared"),
+          entity("dk:c", "runtime:target"),
+        ],
+        inventoryRelationships: [
+          {
+            relationshipKey: "rel:k1",
+            relationshipType: "hosts",
+            fromDiscoveredKey: "dk:a",
+            toDiscoveredKey: "dk:c",
+            properties: {},
+          },
+          {
+            relationshipKey: "rel:k2",
+            relationshipType: "hosts",
+            fromDiscoveredKey: "dk:b",
+            toDiscoveredKey: "dk:c",
+            properties: {},
+          },
+        ],
+        softwareEvidence: [],
+      },
+      { runKey: "run-3", sourceSlug: "dpf_bootstrap" },
+      {
+        projectInventoryEntity: async () => undefined,
+        projectInventoryRelationship: async () => undefined,
+      },
+    );
+
+    // The colliding tuple was upserted exactly once (the second relationship
+    // reused it instead of taking the crashing create path)...
+    expect(relationshipUpsertKeys).toEqual(["rel:k1"]);
+    // ...but BOTH relationships kept their own provenance row, linked to the one
+    // shared InventoryRelationship.
+    expect(discoveredRelationshipCreates).toEqual([
+      { relationshipKey: "rel:k1", connectId: "relationship:rel:k1" },
+      { relationshipKey: "rel:k2", connectId: "relationship:rel:k1" },
+    ]);
+  });
 });
