@@ -16,7 +16,7 @@ This guide is for contributors who want to develop the platform with a **dedicat
 
 Whether you run the **desktop app** or the **CLI**, the DPF setup is the same: install the **`dpf-platform` plugin** (which bundles the **skill pack**, the **DPF MCP server** wiring, and the **governance hooks**), load the **AGENTS.md** operating doctrine, and adjust a few **local client settings** so the agent follows the portal's processes. These agents are the more advanced surface — they let an experienced contributor run **multiple concurrent threads of work** (one branch and one git worktree per thread) while still adhering to every process the portal establishes.
 
-If you only want the guided experience, use [Build Studio](../build-studio/) and stop here. If you want to drive the platform from a full agent client, read on.
+If you only want the guided experience, use [Build Studio](../build-studio/index.md) and stop here. If you want to drive the platform from a full agent client, read on.
 
 > **One process, four surfaces.** Build Studio, Claude, Codex, and Grok are interchangeable adapters behind one contract: the evidence-gated lifecycle (`ideate → plan → build → review → ship`), the DPF MCP coordination plane, documentation impact checks, and the worktree/lease isolation model. Governance reads the *evidence*, never *which surface produced it*. See the [Unified Delivery Surfaces spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md).
 
@@ -79,7 +79,7 @@ The headline advantage is **thread management**: several worktrees open at once,
 
 ### Prerequisites
 
-You need the base developer environment first — see [Developer Setup](developer-setup) (pnpm + Docker sidecars) or the [Dev Container Setup](dev-container). Then install **at least one** agent client:
+You need the base developer environment first — see [Developer Setup](developer-setup.md) (pnpm + Docker sidecars) or the [Dev Container Setup](dev-container.md). Then install **at least one** agent client:
 
 | Agent | Where to get it |
 | ----- | --------------- |
@@ -127,7 +127,7 @@ After it finishes, **restart the client** (desktop app or CLI) so it reloads the
 | `needs_refresh` | Token exists but the running client hasn't picked it up | Restart the client / refresh the binding |
 | `failed_smoke` | Installed but did not apply a kernel principle | View evidence under `--show-substrate` |
 
-Re-run with `--show-substrate` for plugin/config/memory detail, or `--dry-run` to preview writes. See [docs/operations/install.md](../../operations/install) for what each state means in depth.
+Re-run with `--show-substrate` for plugin/config/memory detail, or `--dry-run` to preview writes. See [docs/operations/install.md](../../operations/install.md) for what each state means in depth.
 
 ---
 
@@ -300,7 +300,7 @@ Each worktree is its own branch, its own isolated Docker Compose project, and it
 
 #### Never work in the root clone
 
-The root clone (`~/dpf` on macOS/Linux, `d:\DPF` on Windows) is **shared mutable state**. The self-upgrade loop and other concurrent sessions rewrite its working tree and HEAD without coordinating with your editor — they *will* roll back or discard work that lives only there. Treat the root clone as **merge / release / inspection only**. See the [Collision-Free Dev Workflow](../../dev/collision-free-dev-workflow) for the full failure analysis.
+The root clone (`~/dpf` on macOS/Linux, `d:\DPF` on Windows) is **shared mutable state**. The self-upgrade loop and other concurrent sessions rewrite its working tree and HEAD without coordinating with your editor — they *will* roll back or discard work that lives only there. Treat the root clone as **merge / release / inspection only**. See the [Collision-Free Dev Workflow](../../dev/collision-free-dev-workflow.md) for the full failure analysis.
 
 #### Spin up an isolated thread
 
@@ -407,9 +407,9 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 
 ### Related
 
-- [Developer Setup](developer-setup) — base local environment (pnpm + Docker sidecars)
-- [Dev Container Setup](dev-container) — fully containerized alternative
-- [Development Workspace](../development-workspace) — how Build Studio, VS Code, policy states, and validation environments fit together
-- [Collision-Free Dev Workflow](../../dev/collision-free-dev-workflow) — the one-command worktree workflow and why the root clone eats your work
+- [Developer Setup](developer-setup.md) — base local environment (pnpm + Docker sidecars)
+- [Dev Container Setup](dev-container.md) — fully containerized alternative
+- [Development Workspace](../development-workspace.md) — how Build Studio, VS Code, policy states, and validation environments fit together
+- [Collision-Free Dev Workflow](../../dev/collision-free-dev-workflow.md) — the one-command worktree workflow and why the root clone eats your work
 - [AGENTS.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/AGENTS.md) — the canonical agent rulebook
 - Specs: [Agent Toolchain Bootstrap](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md) · [Unified Delivery Surfaces](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) · [First-Class Grok Support](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-31-grok-first-class-support-design.md) · [Agent Tool Marketplace](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-01-agent-tool-marketplace-design.md)
