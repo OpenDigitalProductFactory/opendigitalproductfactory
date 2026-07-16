@@ -92,6 +92,15 @@ function DemandCard({ item }: { item: DemandItemView }) {
           {item.effortSize ? `${item.effortSize} effort` : effort !== null ? `effort ${effort}` : "unsized"}
         </span>
         <EstimateChip item={item} />
+        {item.claimStatus === "offered" && item.claimedByAgentId && (
+          <span
+            className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+            style={{ color: "var(--dpf-accent)", borderColor: "var(--dpf-accent)" }}
+            title={`${item.claimedByAgentId} volunteered to build this — approve the pickup`}
+          >
+            🙋 {item.claimedByAgentId} volunteered — approve
+          </span>
+        )}
         <span className="ml-auto font-mono text-[var(--dpf-muted-foreground)]">{item.itemId}</span>
       </div>
       <button

@@ -26,6 +26,8 @@ export const getDemandItems = cache(async (): Promise<DemandItemView[]> => {
       estimateHumanJobSize: true,
       estimateSource: true,
       estimateAgreed: true,
+      claimStatus: true,
+      claimedByAgentId: true,
       epic: { select: { epicId: true } },
     },
   });
@@ -46,5 +48,7 @@ export const getDemandItems = cache(async (): Promise<DemandItemView[]> => {
     estimateHumanJobSize: r.estimateHumanJobSize,
     estimateSource: r.estimateSource,
     estimateAgreed: r.estimateAgreed,
+    claimStatus: r.claimStatus,
+    claimedByAgentId: r.claimedByAgentId,
   }));
 });

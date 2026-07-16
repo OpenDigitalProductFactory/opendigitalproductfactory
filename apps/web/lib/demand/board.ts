@@ -28,6 +28,11 @@ export type DemandItemView = {
   estimateHumanJobSize: number | null;
   estimateSource: string | null;
   estimateAgreed: boolean | null;
+  // AI-led volunteering (EP-DELIVERY-FLOW BI-A6648529): when a funded bet has been
+  // offered to a coworker (ask-first pickup gate), claimStatus="offered" and
+  // claimedByAgentId names the volunteer — the bet card shows "🙋 volunteered".
+  claimStatus: string | null;
+  claimedByAgentId: string | null;
 };
 
 export type FunnelColumn = {
