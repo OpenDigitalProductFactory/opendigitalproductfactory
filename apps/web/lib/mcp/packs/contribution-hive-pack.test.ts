@@ -159,4 +159,62 @@ describe("contribution-hive pack — handler behavior (delegation preserved)", (
     expect(res.message).toContain("IMP-1");
     expect(backlogSvc.ingestBacklogItem).toHaveBeenCalledTimes(1);
   });
+
+  it("does NOT auto-file a low-severity [reference-doc] proposal (BI-18685188 gate)", async () => {
+    db.agentMessage.findMany.mockResolvedValue([]);
+    db.improvementProposal.create.mockResolvedValue({
+      proposalId: "IP-REFDOC",
+      title: "[reference-doc] AGENTS.md — would benefit from a hook roster",
+      description: "[reference-doc] AGENTS.md ...",
+      observedFriction: null,
+      severity: "low",
+    });
+
+    const res = await contributionHivePack.handlers.propose_improvement(
+      {
+        title: "[reference-doc] AGENTS.md — would benefit from a hook roster",
+        description: "[reference-doc] AGENTS.md ...",
+        category: "process",
+        severity: "low",
+      },
+      "u1",
+      { agentId: "architecture-review", routeContext: "/build", threadId: "THR-1" },
+    );
+
+    // Proposal still recorded (evidence), but never filed to the backlog.
+    expect(res.success).toBe(true);
+    expect(res.entityId).toBe("IP-REFDOC");
+    expect(db.improvementProposal.create).toHaveBeenCalledTimes(1);
+    expect(backlogSvc.ingestBacklogItem).not.toHaveBeenCalled();
+    expect(db.improvementProposal.update).not.toHaveBeenCalled();
+    expect(res.message).toContain("Improvements view");
+  });
+
+  it("still auto-files a medium-severity [reference-doc] proposal (keeps medium/high)", async () => {
+    db.agentMessage.findMany.mockResolvedValue([]);
+    db.improvementProposal.create.mockResolvedValue({
+      proposalId: "IP-REFDOCM",
+      title: "[reference-doc] docs/foo.md — missing lease guard",
+      description: "[reference-doc] docs/foo.md ...",
+      observedFriction: null,
+      severity: "medium",
+    });
+    backlogSvc.ingestBacklogItem.mockResolvedValue({ itemId: "IMP-9" });
+    db.improvementProposal.update.mockResolvedValue({});
+
+    const res = await contributionHivePack.handlers.propose_improvement(
+      {
+        title: "[reference-doc] docs/foo.md — missing lease guard",
+        description: "[reference-doc] docs/foo.md ...",
+        category: "process",
+        severity: "medium",
+      },
+      "u1",
+      { agentId: "architecture-review", routeContext: "/build", threadId: "THR-1" },
+    );
+
+    expect(res.success).toBe(true);
+    expect(backlogSvc.ingestBacklogItem).toHaveBeenCalledTimes(1);
+    expect(res.message).toContain("IMP-9");
+  });
 });

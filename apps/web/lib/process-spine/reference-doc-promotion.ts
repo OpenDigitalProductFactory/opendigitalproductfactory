@@ -31,3 +31,40 @@ export function referenceDocProposalBody(issue: ReferenceDocIssue): string {
     .filter(Boolean)
     .join("\n\n");
 }
+
+// ─── Backlog auto-file gate (BI-18685188) ─────────────────────────────────────
+
+/**
+ * Withhold ONLY `low`-severity `[reference-doc]` improvement proposals from
+ * auto-filing into the backlog. This is the single shared rule applied at BOTH
+ * auto-file paths — creation-time (propose_improvement → ingestBacklogItem) and
+ * the reconcile orphan-drain — so it lives in one place.
+ *
+ * Why: the architecture-review scanner emits a large recurring batch of
+ * low-severity `[reference-doc] … would benefit from …` doc-polish proposals
+ * (promoteReferenceDocFindings sets severity="low", title="[reference-doc] …").
+ * Auto-filing all of them re-inflates the open backlog every pass; they are
+ * founder-reserved canonical-doc authorship (AGENTS.md, kernel principles,
+ * architecture specs), hand-deferred in bulk. This mirrors the existing skill
+ * exclusion (`category !== "skill"`, they run the governed skill-revision
+ * lifecycle instead) — a conservative, additive, reversible extension.
+ *
+ * Nothing is lost: gated proposals are still created/kept as ImprovementProposal
+ * rows and remain in the Improvements view for founder review; they are only
+ * withheld from becoming BI-* backlog items. `medium`/`high`/`critical`
+ * reference-doc proposals and every non-reference-doc proposal continue to
+ * auto-file exactly as before.
+ *
+ * The severity THRESHOLD (which severities to keep, and whether reference-doc
+ * suggestions belong in the backlog at all) is a founder-reserved policy
+ * decision — see BI-18685188.
+ */
+export function isLowSeverityReferenceDocProposal(p: {
+  title: string;
+  severity: string;
+}): boolean {
+  return (
+    (p.severity ?? "").trim().toLowerCase() === "low" &&
+    REFERENCE_DOC_RE.test((p.title ?? "").trim())
+  );
+}
