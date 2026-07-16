@@ -196,6 +196,7 @@ describe("loadLivingBusinessSnapshot — loader", () => {
       bill: { findMany: async () => [] },
       taxObligationPeriod: { findMany: async () => [] },
       obligation: { findMany: async () => [] },
+      invoice: { findMany: async () => [] },
       storefrontBooking: { findMany: async () => [] },
       serviceProvider: { findMany: async () => [] },
     } as unknown as LivingBusinessClient;
@@ -238,6 +239,7 @@ describe("loadLivingBusinessSnapshot — loader", () => {
       bill: { findMany: async () => [{ amountDue: 500, dueDate: NOW, status: "open", currency: "GBP" }] },
       taxObligationPeriod: { findMany: async () => [{ dueDate: new Date("2026-07-20T00:00:00Z"), status: "open", filedAt: null }] },
       obligation: { findMany: async () => [] },
+      invoice: { findMany: async () => [] },
       storefrontBooking: {
         findMany: async () => [
           {
