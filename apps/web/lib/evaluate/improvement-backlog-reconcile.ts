@@ -17,6 +17,15 @@
 // skill-revision approve/rollback lifecycle (lib/skills/proposals.ts), not the
 // backlog. (Spec guardrail: "Skill proposals stay separate.")
 //
+// Low-severity [reference-doc] proposals (BI-18685188) are also EXCLUDED here,
+// mirroring the skill exclusion: the architecture-review scanner emits a large
+// recurring batch of low-severity doc-polish suggestions that re-inflate the
+// backlog every pass and are founder-reserved canonical-doc authorship. They
+// remain as ImprovementProposal rows for founder review — only withheld from the
+// backlog. medium/high reference-doc proposals still file. The rule lives in one
+// place (isLowSeverityReferenceDocProposal) and is applied at both auto-file
+// paths (this reconcile + propose_improvement creation).
+//
 // See docs/superpowers/specs/2026-06-06-work-intake-unification-design.md §3.3.
 
 import { prisma as defaultPrisma } from "@dpf/db";
@@ -27,6 +36,7 @@ import {
   type BacklogIngestInput,
   type BacklogIngestResult,
 } from "@/lib/operate/backlog-ingest";
+import { isLowSeverityReferenceDocProposal } from "@/lib/process-spine/reference-doc-promotion";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -96,7 +106,7 @@ export async function reconcileImprovementBacklog(
   const store = deps.store ?? (defaultPrisma as unknown as ReconcileStore);
   const ingest = deps.ingest ?? defaultIngest;
 
-  const orphans = await store.improvementProposal.findMany({
+  const found = await store.improvementProposal.findMany({
     where: {
       backlogItemId: null,
       status: { not: "rejected" },
@@ -113,6 +123,11 @@ export async function reconcileImprovementBacklog(
     },
     orderBy: { createdAt: "asc" },
   });
+
+  // Gate low-severity [reference-doc] doc-polish proposals from the backlog
+  // (BI-18685188), mirroring the skill exclusion above. They stay as
+  // ImprovementProposal rows (with backlogItemId still null) for founder review.
+  const orphans = found.filter((p) => !isLowSeverityReferenceDocProposal(p));
 
   const itemIds: string[] = [];
   for (const p of orphans) {

@@ -153,3 +153,64 @@ describe("reconcileImprovementBacklog", () => {
     ]);
   });
 });
+
+// ─── Low-severity [reference-doc] gate (BI-18685188) ───────────────────────────
+
+const REFDOC_LOW = {
+  proposalId: "IP-REFDOC1",
+  title: "[reference-doc] AGENTS.md — would benefit from a hook roster",
+  description: "[reference-doc] AGENTS.md ...",
+  category: "process",
+  severity: "low",
+  observedFriction: "Architecture review surfaced a reference-doc gap.",
+  submittedById: "architecture-review",
+};
+
+describe("reconcileImprovementBacklog — low-severity [reference-doc] gate", () => {
+  it("does NOT file a low-severity [reference-doc] orphan (withheld from the backlog)", async () => {
+    const { store, updates } = makeStore([REFDOC_LOW]);
+    const ingest = vi.fn(async () => ({ itemId: "BI-IMP-X", id: "c-x", created: true }));
+
+    const result = await reconcileImprovementBacklog({ store, ingest });
+
+    expect(result).toEqual({ filed: 0, itemIds: [] });
+    expect(ingest).not.toHaveBeenCalled();
+    // Left as an ImprovementProposal row — no backlogItemId link written.
+    expect(updates).toHaveLength(0);
+  });
+
+  it("still files a medium-severity [reference-doc] orphan (threshold keeps medium/high)", async () => {
+    const medium = { ...REFDOC_LOW, proposalId: "IP-REFDOC2", severity: "medium" };
+    const { store } = makeStore([medium]);
+    const ingest = vi.fn(async () => ({ itemId: "BI-IMP-MED", id: "c-m", created: true }));
+
+    const result = await reconcileImprovementBacklog({ store, ingest });
+
+    expect(result.filed).toBe(1);
+    expect(ingest).toHaveBeenCalledOnce();
+  });
+
+  it("still files a low-severity NON-reference-doc orphan (no over-suppression)", async () => {
+    const lowNormal = { ...ORPHAN, proposalId: "IP-LOW1", severity: "low" };
+    const { store } = makeStore([lowNormal]);
+    const ingest = vi.fn(async () => ({ itemId: "BI-IMP-LOW", id: "c-l", created: true }));
+
+    const result = await reconcileImprovementBacklog({ store, ingest });
+
+    expect(result.filed).toBe(1);
+    expect(ingest).toHaveBeenCalledOnce();
+  });
+
+  it("files the normal orphans in a batch while dropping only the low reference-doc one", async () => {
+    const { store, updates } = makeStore([ORPHAN, REFDOC_LOW]);
+    const ingest = vi.fn(async () => ({ itemId: "BI-IMP-KEEP", id: "c-k", created: true }));
+
+    const result = await reconcileImprovementBacklog({ store, ingest });
+
+    expect(result.filed).toBe(1);
+    expect(ingest).toHaveBeenCalledOnce();
+    expect(updates).toEqual([
+      { where: { proposalId: "IP-6F240" }, data: { backlogItemId: "BI-IMP-KEEP" } },
+    ]);
+  });
+});

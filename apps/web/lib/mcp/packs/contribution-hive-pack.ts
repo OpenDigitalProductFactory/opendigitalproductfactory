@@ -20,6 +20,7 @@ import {
   extractBuildIdHint,
   resolveActiveBuildId,
 } from "@/lib/mcp/build-tool-helpers";
+import { isLowSeverityReferenceDocProposal } from "@/lib/process-spine/reference-doc-promotion";
 
 const definitions: ToolDefinition[] = [
   {
@@ -687,36 +688,48 @@ async function proposeImprovementHandler(
   // backlog the moment the proposal exists, so it is visible and triageable
   // without the old manual Review→Prioritize promotion that never happened.
   // The proposal stays the evidence record; the BacklogItem is the work.
+  //
+  // Gate (BI-18685188): low-severity [reference-doc] doc-polish proposals are
+  // withheld from the backlog here, mirroring the reconcile-path exclusion, so
+  // the scanner's recurring doc-suggestion batch never inflates the backlog at
+  // creation. They remain as ImprovementProposal rows (backlogItemId null) for
+  // founder review. medium/high reference-doc + all other proposals still file.
   let backlogItemId: string | null = null;
-  try {
-    const { ingestBacklogItem, improvementCategoryToWorkType } = await import(
-      "@/lib/operate/backlog-ingest"
-    );
-    const ingest = await ingestBacklogItem({
-      title: proposal.title,
-      body: [
-        proposal.description,
-        proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
-        `Category: ${category} | Severity: ${proposal.severity}`,
-        `From improvement proposal ${proposal.proposalId}`,
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      workType: improvementCategoryToWorkType(category),
-      source: "automated-detection",
-      itemIdPrefix: "IMP",
-      submittedById: userId,
-      agentId: context?.agentId ?? null,
-      origin: { kind: "improvement", id: proposal.proposalId },
-    });
-    backlogItemId = ingest.itemId;
-    await prisma.improvementProposal.update({
-      where: { proposalId: proposal.proposalId },
-      data: { backlogItemId },
-    });
-  } catch (err) {
-    // Non-fatal: the proposal is still recorded even if the backlog projection fails.
-    console.error("[propose_improvement] backlog auto-file failed", err);
+  const autoFileSuppressed = isLowSeverityReferenceDocProposal({
+    title: proposal.title,
+    severity: proposal.severity,
+  });
+  if (!autoFileSuppressed) {
+    try {
+      const { ingestBacklogItem, improvementCategoryToWorkType } = await import(
+        "@/lib/operate/backlog-ingest"
+      );
+      const ingest = await ingestBacklogItem({
+        title: proposal.title,
+        body: [
+          proposal.description,
+          proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
+          `Category: ${category} | Severity: ${proposal.severity}`,
+          `From improvement proposal ${proposal.proposalId}`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        workType: improvementCategoryToWorkType(category),
+        source: "automated-detection",
+        itemIdPrefix: "IMP",
+        submittedById: userId,
+        agentId: context?.agentId ?? null,
+        origin: { kind: "improvement", id: proposal.proposalId },
+      });
+      backlogItemId = ingest.itemId;
+      await prisma.improvementProposal.update({
+        where: { proposalId: proposal.proposalId },
+        data: { backlogItemId },
+      });
+    } catch (err) {
+      // Non-fatal: the proposal is still recorded even if the backlog projection fails.
+      console.error("[propose_improvement] backlog auto-file failed", err);
+    }
   }
 
   // Index the proposal in platform knowledge (was previously unreachable
@@ -737,7 +750,9 @@ async function proposeImprovementHandler(
     entityId: proposal.proposalId,
     message: backlogItemId
       ? `Improvement proposal ${proposal.proposalId} created and filed to the backlog as ${backlogItemId} for triage.`
-      : `Improvement proposal ${proposal.proposalId} created: "${proposal.title}".`,
+      : autoFileSuppressed
+        ? `Improvement proposal ${proposal.proposalId} created: "${proposal.title}". Kept in the Improvements view for founder review; low-severity [reference-doc] suggestions are not auto-filed to the backlog (BI-18685188).`
+        : `Improvement proposal ${proposal.proposalId} created: "${proposal.title}".`,
   };
 }
 
