@@ -7,7 +7,7 @@ import { BacklogItemRow } from "./BacklogItemRow";
 import { EpicCard, type EpicSort } from "./EpicCard";
 import { EpicPanel } from "./EpicPanel";
 import { OperatorTriageBand } from "./OperatorTriageBand";
-import { isTerminalBacklogItemStatus } from "./backlogVisibility";
+import { visibleUnderHideDone } from "./backlogVisibility";
 import { FilterBar, type FacetDef } from "@/components/ui/report-kit";
 import { backlogItemOrigin, BACKLOG_ORIGIN_FILTERS } from "@/lib/ops/backlog-origin";
 import type {
@@ -143,6 +143,10 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
   const unassigned = items.filter(
     (i) => i.epicId === null && matchesOrigin(i) && !portfolioFilter,
   );
+  // Count badges must reflect the same hideDone filter the list applies, so the
+  // headline "Unassigned" number is actionable work — not the raw pile inflated
+  // by hidden deferred/done items (BI-7CB3C1CD).
+  const visibleUnassigned = visibleUnderHideDone(unassigned, hideDone);
   const types = ["portfolio", "product"] as const;
   const byType = new Map(types.map((t) => [t, unassigned.filter((i) => i.type === t)]));
 
@@ -294,12 +298,12 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
       <div>
         <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-4">
           Unassigned
-          <span className="ml-2 normal-case font-normal">{unassigned.length}</span>
+          <span className="ml-2 normal-case font-normal">{visibleUnassigned.length}</span>
         </h2>
 
         {types.map((t) => {
           const typeItems = byType.get(t) ?? [];
-          const filteredItems = hideDone ? typeItems.filter((i) => !isTerminalBacklogItemStatus(i.status)) : typeItems;
+          const filteredItems = visibleUnderHideDone(typeItems, hideDone);
           const hiddenItemCount = typeItems.length - filteredItems.length;
           const label = TYPE_LABELS[t] ?? t;
 
@@ -308,7 +312,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest">
                   {label}
-                  <span className="ml-2 normal-case font-normal">{typeItems.length}</span>
+                  <span className="ml-2 normal-case font-normal">{filteredItems.length}</span>
                 </h3>
                 <button
                   onClick={() => openCreate(t)}
