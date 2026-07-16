@@ -45,6 +45,36 @@ When you visit the External Services page or click "Sync Models & Profiles", the
 
 This also happens at container startup during the seed process — models are discovered and profiled without needing a page visit.
 
+## Local Multimodal Input (Vision + Audio)
+
+Docker Model Runner can serve a **local multimodal-input model** — Gemma 4 12B (`ai/gemma4:12B`) — that accepts **text, image, and audio** input and returns text. This brings vision and audio understanding onto the same on-machine substrate as text inference. The image or audio you send is processed entirely on your machine — **zero egress** — so the multimodal model inherits the same full sensitivity clearance (public through restricted) as any local model.
+
+### Pulling the multimodal model
+
+The model is pulled with the same zero-click flow as any other local model — no sign-in, no API key:
+
+```
+docker model pull ai/gemma4:12B
+```
+
+The download is roughly 7.54 GB. Once pulled, the platform discovers and profiles it automatically on the next External Services visit (or at container-startup seed) and tags it with the `imageInput` and `audioInput` capabilities.
+
+### How routing selects it (no provider pinning)
+
+There is **no provider or model pin**. A request that needs vision or audio declares a capability floor — `imageInput` or `audioInput` — and the router selects any active model whose profile satisfies that floor. Because Gemma 4 12B is profiled with `capabilities.imageInput = true` and `capabilities.audioInput = true`, it is chosen automatically when — and only when — a request carries image or audio content. Text-only requests are unaffected and continue to route by the usual text and tool-fidelity capability scores.
+
+These multimodal tags start as **bootstrap priors** (low profile confidence): the local-model family detector recognises the Gemma multimodal family and seeds `imageInput`/`audioInput` so routing works on a fresh install, and the activation-time capability evaluation then measures and calibrates the real scores. The capability flag is the routing contract — no model id is ever hard-coded into a request.
+
+### What is not affected
+
+- **Code generation** continues to route to the code tier (for example `qwen3-coder`), a text/tool model with no vision or audio capability — the multimodal model is never selected for code-gen.
+- **Embeddings** are served by embedding models (nomic / bge / e5 family), which are never multimodal-routable.
+- Adding the multimodal model changes nothing about existing text routing; it only becomes reachable when a request explicitly needs an image or audio modality.
+
+### Vision feeds the WWMD cognitive-load rubric
+
+The first production consumer of local vision is UI evaluation. When `evaluate_page` audits a rendered route it captures a screenshot; that screenshot is routed to the vision-capable local model, which returns a structured visual assessment (cognitive load, visual density, estimated control count). Those signals merge into the WWMD `human_cognitive_load` decision rubric — giving the rubric real visual input for the first time and closing the "structural is not functional" gap on UI review, entirely on-machine.
+
 ## Sensitivity Clearance
 
 Local models are automatically granted full sensitivity clearance: public, internal, confidential, and restricted. This is because data processed by local models never leaves your machine.
