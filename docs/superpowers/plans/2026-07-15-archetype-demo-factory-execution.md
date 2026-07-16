@@ -50,9 +50,23 @@ no `Math.random`/`Date` in the core).
 
 ## P2 — the gallery (founder review surface)
 
-`/admin/twin-gallery` (or extend `/admin/twin-kit`): iterate `ALL_ARCHETYPES`, render each twin
-from its generated demo through `TwinView`, grouped by category, click-through to `/workspace`.
-Carries a recorded `UX-Fit-Decision` (new admin surface).
+✅ **Landed** (BI-1C26FCD5). Three pieces:
+
+- `apps/web/lib/twin/demo-business-snapshot.ts` — `demoBusinessToTwinSnapshot(demo, profile)`, the
+  **persona'd render bridge**: the third sibling of the snapshot family (live = DB→TwinSnapshot,
+  fixture = TwinProfile→TwinSnapshot, **demo = DemoBusiness→TwinSnapshot**), so the same `TwinView`
+  renders a real generated demo in memory, no DB. Plus `demoGalleryCard` (the scannable summary).
+- `app/(shell)/admin/twin-gallery/page.tsx` — a **scannable grid** of all 94 persona'd demos grouped
+  by category (company name, template, staffed zones, queued demand + longest wait, workforce/AI,
+  revenue-in, the cog's proposed move), click-through per card.
+- `app/(shell)/admin/twin-gallery/[archetypeId]/page.tsx` — the **full persona'd twin** rendered
+  through `TwinView` from `demoBusinessToTwinSnapshot`.
+
+Deterministic ⇒ safe to static-render; no per-archetype build. **Verified:** mapper + gallery-card
+unit tests over all 94 (zones/queues keyed to the profile, primary queue carries the cog move,
+presence has humans + AI, finance utility present); `apps/web` typecheck clean. `UX-Fit-Decision`:
+new admin dev surface, view_admin-gated, reachable at `/admin/twin-gallery` (not added to primary
+nav — a reviewer/developer surface, like `/admin/twin-kit`).
 
 ## P3 — the flavor registry (shared with the Excellence Corpus, `BI-44EF78DE`)
 
