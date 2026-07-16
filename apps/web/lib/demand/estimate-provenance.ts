@@ -18,6 +18,8 @@
 // Spec: docs/superpowers/specs/2026-07-12-delivery-flow-demand-backlog-unification-design.md
 // §"Collaborative estimation (the ÷ effort)".
 
+import { EFFORT_SIZE_TO_JOB_SIZE } from "./scoring";
+
 /**
  * Provenance of the EFFECTIVE effort estimate feeding demandScore.
  * - `ai`     — only an AI coworker has estimated (its first-pass proposal stands).
@@ -57,6 +59,18 @@ export type EstimateProvenance = {
 
 function num(v: number | null | undefined): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/**
+ * The AI coworker's first-pass effort estimate — derived from the t-shirt
+ * `effortSize` signal already captured at intake — so a coworker can propose an
+ * estimate forward the moment an item lands, before any human has weighed in.
+ * Returns null when the item has no effortSize to project from (nothing to
+ * propose; a human sets the first number). EP-DELIVERY-FLOW BI-AA1763CD.
+ */
+export function firstPassJobSize(effortSize: string | null | undefined): number | null {
+  if (effortSize && effortSize in EFFORT_SIZE_TO_JOB_SIZE) return EFFORT_SIZE_TO_JOB_SIZE[effortSize];
+  return null;
 }
 
 /**
