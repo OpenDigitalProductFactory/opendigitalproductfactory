@@ -21,6 +21,17 @@ import {
   type FilterOp,
 } from "./grid-filter-builder";
 import { numericColumns, summarize, summaryChartBars } from "./grid-summary";
+import {
+  type ConditionalRule,
+  CF_OPERATORS,
+  CF_OPERATOR_LABELS,
+  CF_COLORS,
+  rowColorClass,
+  blankRule,
+  operatorNeedsValue,
+} from "./grid-conditional-format";
+import { ROW_HEIGHTS, type RowHeight } from "./grid-view-options";
+import type { FooterAgg } from "./grid-footer-summary";
 
 const PANEL = "flex flex-col gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2";
 const CTRL = "rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]";
@@ -292,6 +303,307 @@ export function GridSummaryPanel({
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// --- Conditional-formatting (Format) panel ---------------------------------
+
+export interface GridFormatPanelProps {
+  columns: ColumnDefinition[];
+  cfRules: ConditionalRule[];
+  setCfRules: Dispatch<SetStateAction<ConditionalRule[]>>;
+  /** Monotonic counter for stable new-rule ids (owned by the Grid). */
+  cfIdRef: MutableRefObject<number>;
+}
+
+export function GridFormatPanel({
+  columns,
+  cfRules,
+  setCfRules,
+  cfIdRef,
+}: GridFormatPanelProps): ReactNode {
+  return (
+    <div className={PANEL}>
+      {cfRules.map((rule) => {
+        const update = (patch: Partial<ConditionalRule>) =>
+          setCfRules((rs) => rs.map((r) => (r.id === rule.id ? { ...r, ...patch } : r)));
+        return (
+          <div key={rule.id} className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-[var(--dpf-muted)]">Highlight when</span>
+            <select
+              value={rule.columnId}
+              onChange={(e) => update({ columnId: e.target.value })}
+              aria-label="Column"
+              className={CTRL}
+            >
+              {columns.map((c) => (
+                <option key={c.columnId} value={c.columnId}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={rule.operator}
+              onChange={(e) => update({ operator: e.target.value as ConditionalRule["operator"] })}
+              aria-label="Operator"
+              className={CTRL}
+            >
+              {CF_OPERATORS.map((op) => (
+                <option key={op} value={op}>
+                  {CF_OPERATOR_LABELS[op]}
+                </option>
+              ))}
+            </select>
+            {operatorNeedsValue(rule.operator) && (
+              <input
+                value={rule.value}
+                onChange={(e) => update({ value: e.target.value })}
+                placeholder="value"
+                aria-label="Value"
+                className={CTRL}
+              />
+            )}
+            <select
+              value={rule.color}
+              onChange={(e) => update({ color: e.target.value as ConditionalRule["color"] })}
+              aria-label="Color"
+              className={CTRL}
+            >
+              {CF_COLORS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <span className={`dpf-cf-swatch ${rowColorClass(rule.color)}`} aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => setCfRules((rs) => rs.filter((r) => r.id !== rule.id))}
+              className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+              aria-label="Remove rule"
+            >
+              ✕
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => setCfRules((rs) => [...rs, blankRule(`cf-${(cfIdRef.current += 1)}`, columns)])}
+        className="w-fit rounded-md border border-[var(--dpf-border)] px-3 py-1 text-sm text-[var(--dpf-text)]"
+      >
+        + Add formatting rule
+      </button>
+    </div>
+  );
+}
+
+// --- In-grid grouping (Group) panel ----------------------------------------
+
+export interface GridGroupPanelProps {
+  columns: ColumnDefinition[];
+  effectiveGroupBy: string[];
+  setGroupBy: Dispatch<SetStateAction<string[]>>;
+  /** Reset collapse/expand intents (owned by the Grid). */
+  resetGroupExpansion: () => void;
+  grouping: boolean;
+  topGroupIds: readonly string[];
+  setCollapsedGroups: Dispatch<SetStateAction<ReadonlySet<unknown>>>;
+  setExtraExpanded: Dispatch<SetStateAction<ReadonlySet<unknown>>>;
+  footerAgg: Record<string, FooterAgg>;
+}
+
+export function GridGroupPanel({
+  columns,
+  effectiveGroupBy,
+  setGroupBy,
+  resetGroupExpansion,
+  grouping,
+  topGroupIds,
+  setCollapsedGroups,
+  setExtraExpanded,
+  footerAgg,
+}: GridGroupPanelProps): ReactNode {
+  const available = columns.filter((c) => !effectiveGroupBy.includes(c.columnId));
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+      <span className="text-sm text-[var(--dpf-muted)]">Group by</span>
+      {/* Ordered group-by levels: each chip is one level (outer → inner). */}
+      {effectiveGroupBy.map((id, level) => {
+        const col = columns.find((c) => c.columnId === id);
+        if (!col) return null;
+        return (
+          <span
+            key={id}
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]"
+          >
+            <span className="text-xs text-[var(--dpf-muted)]">{level + 1}</span>
+            {col.name}
+            <button
+              type="button"
+              aria-label={`Remove grouping by ${col.name}`}
+              onClick={() => {
+                setGroupBy(effectiveGroupBy.filter((g) => g !== id));
+                resetGroupExpansion();
+              }}
+              className="ml-0.5 text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+            >
+              ×
+            </button>
+          </span>
+        );
+      })}
+      {available.length > 0 && (
+        <select
+          value=""
+          onChange={(e) => {
+            if (!e.target.value) return;
+            setGroupBy([...effectiveGroupBy, e.target.value]);
+            resetGroupExpansion();
+          }}
+          aria-label={effectiveGroupBy.length ? "Add group-by level" : "Group by column"}
+          className={CTRL}
+        >
+          <option value="">{effectiveGroupBy.length ? "add level…" : "none"}</option>
+          {available.map((c) => (
+            <option key={c.columnId} value={c.columnId}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      )}
+      {grouping && (
+        <>
+          <button
+            type="button"
+            onClick={resetGroupExpansion}
+            className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          >
+            Expand all
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCollapsedGroups(new Set(topGroupIds));
+              setExtraExpanded(new Set());
+            }}
+            className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          >
+            Collapse all
+          </button>
+          <span className="text-xs text-[var(--dpf-muted)]">
+            {effectiveGroupBy.length > 1 ? `${effectiveGroupBy.length} levels · ` : ""}
+            {topGroupIds.length} group{topGroupIds.length === 1 ? "" : "s"}
+          </span>
+          {!Object.values(footerAgg).some((a) => a && a !== "none") && (
+            <span className="text-xs italic text-[var(--dpf-muted)]">
+              Tip: pick an aggregate in the Summary bar (Columns) to show subtotals per group.
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// --- Row height / freeze / hide-fields (Columns) panel ----------------------
+
+export interface GridColumnsPanelProps {
+  orderedColumns: ColumnDefinition[];
+  visibleColsCount: number;
+  rowHeight: RowHeight;
+  setRowHeight: Dispatch<SetStateAction<RowHeight>>;
+  effectiveFrozen: number;
+  setFrozenCount: Dispatch<SetStateAction<number>>;
+  showFooter: boolean;
+  setShowFooter: Dispatch<SetStateAction<boolean>>;
+  hiddenColumns: string[];
+  setHiddenColumns: Dispatch<SetStateAction<string[]>>;
+}
+
+export function GridColumnsPanel({
+  orderedColumns,
+  visibleColsCount,
+  rowHeight,
+  setRowHeight,
+  effectiveFrozen,
+  setFrozenCount,
+  showFooter,
+  setShowFooter,
+  hiddenColumns,
+  setHiddenColumns,
+}: GridColumnsPanelProps): ReactNode {
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm text-[var(--dpf-muted)]">Row height</span>
+        <div className="inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)] text-sm">
+          {(Object.keys(ROW_HEIGHTS) as RowHeight[]).map((h) => (
+            <button
+              key={h}
+              type="button"
+              onClick={() => setRowHeight(h)}
+              className={
+                rowHeight === h
+                  ? "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium capitalize text-[var(--dpf-text)]"
+                  : "px-2 py-1 capitalize text-[var(--dpf-muted)]"
+              }
+            >
+              {h}
+            </button>
+          ))}
+        </div>
+        <span className="text-sm text-[var(--dpf-muted)]">Freeze first</span>
+        <select
+          value={effectiveFrozen}
+          onChange={(e) => setFrozenCount(Number(e.target.value))}
+          aria-label="Freeze first N columns"
+          className={CTRL}
+        >
+          {Array.from({ length: Math.max(1, visibleColsCount) }, (_, i) => i).map((n) => (
+            <option key={n} value={n}>
+              {n === 0 ? "no columns" : `${n} column${n === 1 ? "" : "s"}`}
+            </option>
+          ))}
+        </select>
+        <label className="inline-flex items-center gap-1 text-sm text-[var(--dpf-text)]">
+          <input type="checkbox" checked={showFooter} onChange={() => setShowFooter((v) => !v)} />
+          Summary bar
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="text-sm text-[var(--dpf-muted)]">Fields</span>
+        {orderedColumns.map((col) => {
+          const hidden = hiddenColumns.includes(col.columnId);
+          return (
+            <label
+              key={col.columnId}
+              className="inline-flex items-center gap-1 text-sm text-[var(--dpf-text)]"
+            >
+              <input
+                type="checkbox"
+                checked={!hidden}
+                onChange={() =>
+                  setHiddenColumns((prev) =>
+                    hidden ? prev.filter((id) => id !== col.columnId) : [...prev, col.columnId],
+                  )
+                }
+              />
+              {col.name}
+            </label>
+          );
+        })}
+        {hiddenColumns.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setHiddenColumns([])}
+            className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          >
+            Show all
+          </button>
+        )}
+      </div>
     </div>
   );
 }

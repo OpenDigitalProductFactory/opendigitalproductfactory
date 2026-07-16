@@ -239,8 +239,12 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
 - **Remaining (not built):** named/shareable server-side views; calendar view (fullcalendar — needs a
   date column); manual row reordering; full pivots + richer charts; metrics/semantic layer;
   operationalization lifecycle.
-  **Debt:** `Grid.tsx` is over the 1000-LOC hard cap — decompose the toolbar/panels into
-  subcomponents (in progress: Filter + Summary panels extracted to `GridPanels.tsx`).
+  **Debt (decomposition — largely paid down):** all five toolbar panels — Filter, Summary, Format,
+  Group, Columns — now live as typed, presentational components in `GridPanels.tsx` (pure UI over
+  props the Grid owns). This dropped `Grid.tsx` from 1298 → 1094 LOC. Remaining `Grid.tsx` bulk is the
+  data / react-data-grid wiring (column builder, cell persistence, view-state, CSV, keyboard) — a
+  further pass could extract the toolbar button row and the `buildColumn` factory, but the panels were
+  the growth driver as each parity feature added one.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 
