@@ -5,7 +5,7 @@
 // unit-testable; operates over the rows already loaded in the grid (full pivots
 // and SQL push-down are later Phase-4 work).
 
-import type { CellValue, ColumnDefinition } from "@/lib/workbooks/types";
+import { type CellValue, type ColumnDefinition, isNumericFieldType } from "@/lib/workbooks/types";
 import type { GridRowData } from "./cell-editors";
 import { cellSearchText } from "./grid-filter";
 
@@ -28,9 +28,9 @@ export function toSummaryNumber(value: CellValue): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Columns whose values are meaningfully summable (numeric). */
+/** Columns whose values are meaningfully summable (numeric-backed). */
 export function numericColumns(columns: ColumnDefinition[]): ColumnDefinition[] {
-  return columns.filter((c) => c.fieldType === "number");
+  return columns.filter((c) => isNumericFieldType(c.fieldType));
 }
 
 /** Round to 2dp without floating-point noise. */

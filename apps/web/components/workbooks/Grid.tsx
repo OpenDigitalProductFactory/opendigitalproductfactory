@@ -55,6 +55,12 @@ import {
   renderLinkCell,
   makeReferenceEditor,
   makeLinkEditor,
+  makeCurrencyRenderer,
+  makePercentRenderer,
+  makeDurationRenderer,
+  makeRatingRenderer,
+  renderProgressCell,
+  renderPhoneCell,
 } from "./cell-editors";
 import {
   createRowAction,
@@ -71,7 +77,19 @@ import {
   commitUndo,
   commitRedo,
 } from "./grid-history";
-import { quickFilterRows, applyColumnFilters, cellSearchText, type ColumnFilters } from "./grid-filter";
+import { quickFilterRows, cellSearchText } from "./grid-filter";
+import {
+  applyFilterGroup,
+  activeConditionCount,
+  opsForField,
+  isUnaryOp,
+  isRangeOp,
+  FILTER_OP_LABELS,
+  EMPTY_FILTER_GROUP,
+  type FilterGroup,
+  type FilterCondition,
+  type FilterOp,
+} from "./grid-filter-builder";
 import { rowsToCsv } from "./grid-csv";
 import {
   type ConditionalRule,
@@ -248,6 +266,43 @@ function buildColumn(
         editorOptions: { commitOnOutsideClick: false },
       };
     }
+    // Numeric-backed display types — edit as a number, render specially.
+    case "currency":
+      return {
+        ...base,
+        renderCell: makeCurrencyRenderer(col.config?.currencySymbol ?? "$", col.config?.precision),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "percent":
+      return {
+        ...base,
+        renderCell: makePercentRenderer(col.config?.precision),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "progress":
+      return {
+        ...base,
+        renderCell: renderProgressCell,
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "duration":
+      return {
+        ...base,
+        renderCell: makeDurationRenderer(col.config?.durationUnit ?? "minutes"),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "rating":
+      return {
+        ...base,
+        renderCell: makeRatingRenderer(col.config?.max ?? 5),
+        renderEditCell: editable ? NumberEditor : undefined,
+      };
+    case "phone":
+      return {
+        ...base,
+        renderCell: renderPhoneCell,
+        renderEditCell: editable ? renderTextEditor : undefined,
+      };
     default:
       return base;
   }
@@ -296,12 +351,13 @@ export function WorkbookGrid({
   const [showFormat, setShowFormat] = useState(false);
   const [cfRules, setCfRules] = useState<ConditionalRule[]>([]);
   const cfIdRef = useRef(0);
+  const fcIdRef = useRef(0);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryGroupBy, setSummaryGroupBy] = useState("");
   const [summaryValue, setSummaryValue] = useState("");
   const [summaryChart, setSummaryChart] = useState(false);
-  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
-  const activeFilterCount = Object.values(columnFilters).filter((v) => v.trim()).length;
+  const [filterGroup, setFilterGroup] = useState<FilterGroup>(EMPTY_FILTER_GROUP);
+  const activeFilterCount = activeConditionCount(filterGroup);
   // Drag-to-reorder column order (column ids) + in-grid collapsible grouping.
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [groupBy, setGroupBy] = useState<string[]>([]);
@@ -330,7 +386,7 @@ export function WorkbookGrid({
       const parsed = parseViewState(localStorage.getItem(viewStorageKey(tableId)));
       if (parsed) {
         if (parsed.filterQuery !== undefined) setFilterQuery(parsed.filterQuery);
-        if (parsed.columnFilters) setColumnFilters(parsed.columnFilters);
+        if (parsed.filterGroup) setFilterGroup(parsed.filterGroup);
         if (parsed.sort) setSortColumns(parsed.sort);
         if (parsed.cfRules) setCfRules(parsed.cfRules);
         if (parsed.showProvenance !== undefined) setShowProvenance(parsed.showProvenance);
@@ -363,7 +419,7 @@ export function WorkbookGrid({
         viewStorageKey(tableId),
         serializeViewState({
           filterQuery,
-          columnFilters,
+          filterGroup,
           sort,
           cfRules,
           showProvenance,
@@ -379,7 +435,7 @@ export function WorkbookGrid({
     } catch {
       // ignore quota / unavailable storage
     }
-  }, [tableId, filterQuery, columnFilters, sortColumns, cfRules, showProvenance, columnOrder, groupBy, hiddenColumns, frozenCount, rowHeight, footerAgg, showFooter]);
+  }, [tableId, filterQuery, filterGroup, sortColumns, cfRules, showProvenance, columnOrder, groupBy, hiddenColumns, frozenCount, rowHeight, footerAgg, showFooter]);
 
   // Columns in the user's saved drag order; new columns append, stale ids drop.
   const orderedColumns = useMemo(
@@ -454,9 +510,9 @@ export function WorkbookGrid({
   const groupColumnId = effectiveGroupBy[0];
 
   const sortedRows = useMemo<GridRowData[]>(() => {
-    const filtered = applyColumnFilters(
+    const filtered = applyFilterGroup(
       quickFilterRows(rowData, columns, filterQuery),
-      columnFilters,
+      filterGroup,
     );
     if (sortColumns.length === 0) return filtered;
     const sorted = [...filtered];
@@ -468,7 +524,7 @@ export function WorkbookGrid({
       return 0;
     });
     return sorted;
-  }, [rowData, columns, filterQuery, columnFilters, sortColumns]);
+  }, [rowData, columns, filterQuery, filterGroup, sortColumns]);
 
   // Grouping is grid-only; gallery renders flat cards regardless.
   const grouping = Boolean(groupColumnId) && !gallery && columns.length > 0;
@@ -799,66 +855,124 @@ export function WorkbookGrid({
       </div>
 
       {showFilters && columns.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
-          {columns.map((col) => {
-            const value = columnFilters[col.columnId] ?? "";
-            const set = (v: string) =>
-              setColumnFilters((f) => ({ ...f, [col.columnId]: v }));
+        <div className="flex flex-col gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+          {(() => {
             const ctrlClass =
               "rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]";
-            if (col.fieldType === "select") {
-              return (
-                <select
-                  key={col.columnId}
-                  value={value}
-                  onChange={(e) => set(e.target.value)}
-                  aria-label={`Filter ${col.name}`}
-                  className={ctrlClass}
-                >
-                  <option value="">{col.name}: any</option>
-                  {(col.config?.options ?? []).map((o) => (
-                    <option key={o.key} value={o.key}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              );
-            }
-            if (col.fieldType === "checkbox") {
-              return (
-                <select
-                  key={col.columnId}
-                  value={value}
-                  onChange={(e) => set(e.target.value)}
-                  aria-label={`Filter ${col.name}`}
-                  className={ctrlClass}
-                >
-                  <option value="">{col.name}: any</option>
-                  <option value="true">Checked</option>
-                  <option value="false">Unchecked</option>
-                </select>
-              );
-            }
+            const update = (id: string, patch: Partial<FilterCondition>) =>
+              setFilterGroup((g) => ({
+                ...g,
+                conditions: g.conditions.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+              }));
+            const colOf = (id: string) => columns.find((c) => c.columnId === id) ?? columns[0]!;
             return (
-              <input
-                key={col.columnId}
-                value={value}
-                onChange={(e) => set(e.target.value)}
-                placeholder={col.name}
-                aria-label={`Filter ${col.name}`}
-                className={ctrlClass}
-              />
+              <>
+                {filterGroup.conditions.map((cond, i) => {
+                  const col = colOf(cond.columnId);
+                  const ops = opsForField(col.fieldType);
+                  return (
+                    <div key={cond.id} className="flex flex-wrap items-center gap-2">
+                      <span className="w-12 text-sm text-[var(--dpf-muted)]">
+                        {i === 0 ? "Where" : (
+                          <select
+                            value={filterGroup.combinator}
+                            onChange={(e) =>
+                              setFilterGroup((g) => ({ ...g, combinator: e.target.value as FilterGroup["combinator"] }))
+                            }
+                            aria-label="Combine conditions"
+                            className={ctrlClass}
+                            disabled={i > 1}
+                          >
+                            <option value="and">and</option>
+                            <option value="or">or</option>
+                          </select>
+                        )}
+                      </span>
+                      <select
+                        value={cond.columnId}
+                        onChange={(e) => {
+                          const next = colOf(e.target.value);
+                          update(cond.id, { columnId: e.target.value, op: opsForField(next.fieldType)[0]! });
+                        }}
+                        aria-label="Filter column"
+                        className={ctrlClass}
+                      >
+                        {columns.map((c) => (
+                          <option key={c.columnId} value={c.columnId}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={cond.op}
+                        onChange={(e) => update(cond.id, { op: e.target.value as FilterOp })}
+                        aria-label="Filter operator"
+                        className={ctrlClass}
+                      >
+                        {ops.map((op) => (
+                          <option key={op} value={op}>
+                            {FILTER_OP_LABELS[op]}
+                          </option>
+                        ))}
+                      </select>
+                      {!isUnaryOp(cond.op) && (
+                        <input
+                          value={cond.value}
+                          onChange={(e) => update(cond.id, { value: e.target.value })}
+                          placeholder="value"
+                          aria-label="Filter value"
+                          className={ctrlClass}
+                        />
+                      )}
+                      {isRangeOp(cond.op) && (
+                        <input
+                          value={cond.value2 ?? ""}
+                          onChange={(e) => update(cond.id, { value2: e.target.value })}
+                          placeholder="and"
+                          aria-label="Filter upper value"
+                          className={ctrlClass}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFilterGroup((g) => ({
+                            ...g,
+                            conditions: g.conditions.filter((c) => c.id !== cond.id),
+                          }))
+                        }
+                        aria-label="Remove condition"
+                        className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const col = columns[0]!;
+                    setFilterGroup((g) => ({
+                      ...g,
+                      conditions: [
+                        ...g.conditions,
+                        {
+                          id: `fc-${(fcIdRef.current += 1)}`,
+                          columnId: col.columnId,
+                          op: opsForField(col.fieldType)[0]!,
+                          value: "",
+                        },
+                      ],
+                    }));
+                  }}
+                  className="w-fit rounded-md border border-[var(--dpf-border)] px-3 py-1 text-sm text-[var(--dpf-text)]"
+                >
+                  + Add condition
+                </button>
+              </>
             );
-          })}
-          {activeFilterCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setColumnFilters({})}
-              className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-            >
-              Clear
-            </button>
-          )}
+          })()}
         </div>
       )}
 

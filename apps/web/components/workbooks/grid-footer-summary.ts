@@ -7,7 +7,12 @@
 // unit-testable; the Grid owns the react-data-grid summary-row wiring and
 // persistence.
 
-import type { CellValue, ColumnDefinition, FieldType } from "@/lib/workbooks/types";
+import {
+  type CellValue,
+  type ColumnDefinition,
+  type FieldType,
+  isNumericFieldType,
+} from "@/lib/workbooks/types";
 import type { GridRowData } from "./cell-editors";
 import { cellSearchText } from "./grid-filter";
 import { toSummaryNumber } from "./grid-summary";
@@ -40,14 +45,9 @@ export const FOOTER_AGG_LABELS: Record<FooterAgg, string> = {
   max: "Max",
 };
 
-/** True when the field's values are meaningfully numeric. */
-function isNumericField(fieldType: FieldType): boolean {
-  return fieldType === "number";
-}
-
 /** The aggregates offered for a column, given its field type. */
 export function availableAggs(fieldType: FieldType): FooterAgg[] {
-  return isNumericField(fieldType) ? [...UNIVERSAL_AGGS, ...NUMERIC_AGGS] : UNIVERSAL_AGGS;
+  return isNumericFieldType(fieldType) ? [...UNIVERSAL_AGGS, ...NUMERIC_AGGS] : UNIVERSAL_AGGS;
 }
 
 /** True if a cell counts as "filled" (non-empty). Matches the empty/filled split. */
