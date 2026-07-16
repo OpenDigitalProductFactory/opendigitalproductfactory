@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { parseNumstat, collectLocalChanges } from "./local-changes-ledger";
+import {
+  parseNumstat,
+  collectLocalChanges,
+  getLocalChangesLedger,
+} from "./local-changes-ledger";
+import type { LocalChangesResult } from "./local-changes-ledger";
 import type { GitResult } from "./prepare-source";
 
 const ok = (stdout: string): GitResult => ({ stdout, stderr: "", code: 0 });
@@ -97,6 +102,42 @@ describe("collectLocalChanges", () => {
       remote: "origin",
       branch: "main",
       installBranch: "dpf/install",
+    });
+    expect(res.available).toBe(false);
+  });
+});
+
+describe("getLocalChangesLedger render deadline (BI-4A400DE4)", () => {
+  const collected: LocalChangesResult = {
+    available: true,
+    changes: [{ path: "apps/web/lib/private.ts", added: 3, deleted: 1 }],
+  };
+
+  it("returns the collected result when git resolves before the deadline", async () => {
+    const res = await getLocalChangesLedger({
+      collect: async () => collected,
+      deadlineMs: 50,
+    });
+    expect(res).toEqual(collected);
+  });
+
+  it("degrades to 'unavailable' (never hangs) when collection exceeds the deadline", async () => {
+    const res = await getLocalChangesLedger({
+      // Simulates a hung/slow git that never resolves within the render window.
+      collect: () => new Promise<LocalChangesResult>(() => {}),
+      deadlineMs: 10,
+    });
+    expect(res.available).toBe(false);
+    expect(res.changes).toEqual([]);
+    expect(res.note).toMatch(/unavailable/i);
+  });
+
+  it("degrades to 'unavailable' when collection throws", async () => {
+    const res = await getLocalChangesLedger({
+      collect: async () => {
+        throw new Error("boom");
+      },
+      deadlineMs: 50,
     });
     expect(res.available).toBe(false);
   });
