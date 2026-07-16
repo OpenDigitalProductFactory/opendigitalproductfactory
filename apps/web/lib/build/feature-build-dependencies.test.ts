@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveFeatureBuildDependencyGate,
   deriveReadyDependentsAfterCompletion,
+  recordReadyDependentsAfterCompletion,
 } from "./feature-build-dependencies";
 
 describe("deriveFeatureBuildDependencyGate", () => {
@@ -152,7 +153,120 @@ describe("deriveReadyDependentsAfterCompletion", () => {
         buildId: "FB-USAGE",
         title: "Record usage",
         phase: "plan",
+        createdById: null,
       },
     ]);
+  });
+});
+
+describe("recordReadyDependentsAfterCompletion — dispatches the released child's plan (BI-E49DDE47)", () => {
+  function mockDb(completed: unknown) {
+    return {
+      featureBuild: { findUnique: async (_args: unknown) => completed as never },
+      buildActivity: { create: async (_args: unknown) => ({}) as never },
+    };
+  }
+
+  it("dispatches plan for a dependent whose upstream is now complete, keyed by its owner", async () => {
+    const dispatched: Array<{ buildId: string; userId: string }> = [];
+    const ready = await recordReadyDependentsAfterCompletion({
+      buildId: "FB-UP",
+      db: mockDb({
+        id: "row-up",
+        buildId: "FB-UP",
+        title: "Upstream",
+        parentEpicId: "epic-1",
+        phase: "complete",
+        dependenciesIn: [
+          {
+            dependent: {
+              id: "row-dep",
+              buildId: "FB-DEP",
+              title: "Downstream child",
+              parentEpicId: "epic-1",
+              phase: "plan",
+              createdById: "user-42",
+              dependenciesOut: [
+                { dependsOn: { id: "row-up", buildId: "FB-UP", title: "Upstream", phase: "complete" } },
+              ],
+            },
+          },
+        ],
+      }),
+      dispatchPlanForChild: async (p) => {
+        dispatched.push(p);
+      },
+    });
+
+    expect(ready.map((r) => r.buildId)).toEqual(["FB-DEP"]);
+    expect(dispatched).toEqual([{ buildId: "FB-DEP", userId: "user-42" }]); // ← the fix: it dispatches, not just logs
+  });
+
+  it("does NOT dispatch a dependent still waiting on an incomplete sibling", async () => {
+    const dispatched: string[] = [];
+    await recordReadyDependentsAfterCompletion({
+      buildId: "FB-UP",
+      db: mockDb({
+        id: "row-up",
+        buildId: "FB-UP",
+        title: "Upstream",
+        parentEpicId: "epic-1",
+        phase: "complete",
+        dependenciesIn: [
+          {
+            dependent: {
+              id: "row-dep",
+              buildId: "FB-DEP",
+              title: "Still blocked",
+              parentEpicId: "epic-1",
+              phase: "plan",
+              createdById: "user-42",
+              dependenciesOut: [
+                { dependsOn: { id: "row-up", buildId: "FB-UP", title: "Upstream", phase: "complete" } },
+                { dependsOn: { id: "row-other", buildId: "FB-OTHER", title: "Other", phase: "build" } },
+              ],
+            },
+          },
+        ],
+      }),
+      dispatchPlanForChild: async (p) => {
+        dispatched.push(p.buildId);
+      },
+    });
+    expect(dispatched).toEqual([]);
+  });
+
+  it("skips dispatch (does not throw) when the ready dependent has no owner", async () => {
+    const dispatched: string[] = [];
+    const ready = await recordReadyDependentsAfterCompletion({
+      buildId: "FB-UP",
+      db: mockDb({
+        id: "row-up",
+        buildId: "FB-UP",
+        title: "Upstream",
+        parentEpicId: "epic-1",
+        phase: "complete",
+        dependenciesIn: [
+          {
+            dependent: {
+              id: "row-dep",
+              buildId: "FB-DEP",
+              title: "Ownerless child",
+              parentEpicId: "epic-1",
+              phase: "plan",
+              createdById: null,
+              dependenciesOut: [
+                { dependsOn: { id: "row-up", buildId: "FB-UP", title: "Upstream", phase: "complete" } },
+              ],
+            },
+          },
+        ],
+      }),
+      dispatchPlanForChild: async (p) => {
+        dispatched.push(p.buildId);
+      },
+    });
+    expect(ready.map((r) => r.buildId)).toEqual(["FB-DEP"]);
+    expect(dispatched).toEqual([]);
   });
 });

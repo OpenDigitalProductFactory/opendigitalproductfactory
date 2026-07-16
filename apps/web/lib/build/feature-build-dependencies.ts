@@ -13,6 +13,10 @@ export type FeatureBuildDependencyGateBuild = {
   title: string;
   parentEpicId: string | null;
   phase: DependencyBuildPhase;
+  /** Owner — used to dispatch the dependent's plan when it becomes ready.
+   *  Optional because only the completion-select path (which drives dispatch)
+   *  populates it; the plain gate-check path does not need it. */
+  createdById?: string | null;
   dependenciesOut: ReadonlyArray<{
     dependsOn: FeatureBuildDependencyBuild;
   }>;
@@ -32,6 +36,7 @@ export type ReadyDependentBuild = {
   buildId: string;
   title: string;
   phase: DependencyBuildPhase;
+  createdById: string | null;
 };
 
 export const FEATURE_BUILD_DEPENDENCY_READY_TOOL = "dependency:ready";
@@ -71,6 +76,7 @@ export const FEATURE_BUILD_DEPENDENCY_COMPLETION_SELECT = {
           title: true,
           parentEpicId: true,
           phase: true,
+          createdById: true,
           dependenciesOut: {
             select: {
               dependsOn: {
@@ -197,12 +203,16 @@ export function deriveReadyDependentsAfterCompletion(args: {
       buildId: dependent.buildId,
       title: dependent.title,
       phase: dependent.phase,
+      createdById: dependent.createdById ?? null,
     }));
 }
 
 export async function recordReadyDependentsAfterCompletion(args: {
   db: FeatureBuildDependencyDb;
   buildId: string;
+  /** Injectable for tests; defaults to the real plan dispatcher (dynamic import
+   *  to avoid a static cycle with plan-on-approval). Mirrors approve-decomposition. */
+  dispatchPlanForChild?: (params: { buildId: string; userId: string }) => Promise<unknown>;
 }): Promise<ReadyDependentBuild[]> {
   const completedBuild = await args.db.featureBuild.findUnique({
     where: { buildId: args.buildId },
@@ -225,6 +235,38 @@ export async function recordReadyDependentsAfterCompletion(args: {
         },
       }).catch(() => {}),
     ),
+  );
+
+  // BI-E49DDE47 (dependency-release half): approve-decomposition dispatches the
+  // UNBLOCKED heads, but dependency-chained siblings were only logged
+  // "ready to plan" here and never dispatched — so they stranded in `plan` after
+  // their upstream completed. Now that all upstream dependencies are complete,
+  // dispatch plan generation so the chain actually advances. Fire-and-forget
+  // (mirrors the ideate→plan handoff); a null owner or dispatch failure is logged,
+  // never blocks the completing build.
+  const dispatchPlanForChild =
+    args.dispatchPlanForChild ??
+    (async (params: { buildId: string; userId: string }) => {
+      const { dispatchPlanForApprovedBuild } = await import("@/lib/integrate/plan-on-approval");
+      return dispatchPlanForApprovedBuild(params);
+    });
+  await Promise.all(
+    readyDependents.map(async (dependent) => {
+      if (!dependent.createdById) {
+        console.warn(
+          `[feature-build-dependencies] ready dependent ${dependent.buildId} has no owner — cannot dispatch plan`,
+        );
+        return;
+      }
+      try {
+        await dispatchPlanForChild({ buildId: dependent.buildId, userId: dependent.createdById });
+      } catch (err) {
+        console.warn(
+          `[feature-build-dependencies] plan dispatch for ready dependent ${dependent.buildId} failed:`,
+          (err as Error)?.message,
+        );
+      }
+    }),
   );
 
   return readyDependents;
