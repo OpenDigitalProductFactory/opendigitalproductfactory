@@ -6,6 +6,7 @@ import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { resolveAgentIdentity } from "./agent-identity.js";
+import { upsertCoworkerAgentTolerant } from "./coworker-agent-upsert.js";
 import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
@@ -1044,7 +1045,12 @@ async function seedCoworkerAgents(): Promise<void> {
     // (BI-74FD6420) until a full FK migration lands.
     const { agentId, slugId, ...rest } = cw;
     const identity = resolveAgentIdentity({ agentId, name: rest.name, slugId, displayName: rest.name });
-    const agent = await prisma.agent.upsert({
+    // BI-3073F13B: this upsert keys on agentId but its create branch writes the
+    // @unique slugId, so a new agentId re-using an existing slugId throws P2002
+    // and (outside a transaction) aborts the whole coworker seed. Tolerate it:
+    // on a slugId collision, re-resolve the canonical slug row and apply this
+    // coworker's fields to it instead of crashing.
+    const agent = await upsertCoworkerAgentTolerant(prisma, slugId, {
       where: { agentId },
       create: { agentId, slugId, displayName: identity.displayName, kind: identity.kind, ...rest, lifecycleStage: "production" },
       update: {
@@ -1061,6 +1067,11 @@ async function seedCoworkerAgents(): Promise<void> {
         lifecycleStage: "production",
       },
     });
+    if (agent.outcome === "reresolved_slug_collision") {
+      console.warn(
+        `[seed-coworker] slugId "${slugId}" already held by another agent; applied ${agentId}'s fields to the canonical slug row instead of crashing (BI-3073F13B).`,
+      );
+    }
 
     const grants = HARDCODED_COWORKER_GRANTS[agentId];
     if (grants) {
