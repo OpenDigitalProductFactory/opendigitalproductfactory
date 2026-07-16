@@ -66,8 +66,8 @@ export const issueReportTriage = inngest.createFunction(
 
     console.log(
       `[issue-report-triage] Created ${result.created} backlog items ` +
-      `(${result.llmEnhanced} LLM-enhanced), spike=${spiked}, ` +
-      `escalations resolved=${hygiene.resolved}/${hygiene.scanned}`,
+      `(${result.llmEnhanced} LLM-enhanced), staged=${result.staged} expired=${result.expired}, ` +
+      `spike=${spiked}, escalations resolved=${hygiene.resolved}/${hygiene.scanned}`,
     );
 
     await step.run("record-job-run", async () => {

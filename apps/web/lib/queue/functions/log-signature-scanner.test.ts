@@ -4,6 +4,7 @@ import type { RawLogLine } from "@/lib/observability/log-signature";
 const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   createPIR: vi.fn(),
+  accruePIR: vi.fn(),
   queryLoki: vi.fn(),
 }));
 
@@ -15,6 +16,7 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("@/lib/quality/platform-issue-reports", () => ({
   createPlatformIssueReport: mocks.createPIR,
+  accrueIssueReportOccurrence: mocks.accruePIR,
 }));
 
 vi.mock("@/lib/observability/loki-query", () => ({
@@ -53,7 +55,7 @@ describe("runLogSignatureScan", () => {
     }
   });
 
-  it("does NOT re-file a signature that already has an unresolved report", async () => {
+  it("does NOT re-file a signature that already has an unresolved report — accrues instead", async () => {
     mocks.queryLoki.mockResolvedValue(errLines("portal", "db timeout", 3));
     mocks.findFirst.mockResolvedValue({ id: "existing" }); // already filed + open
 
@@ -62,6 +64,9 @@ describe("runLogSignatureScan", () => {
     expect(res.reportsCreated).toBe(0);
     expect(res.skippedExisting).toBe(1);
     expect(mocks.createPIR).not.toHaveBeenCalled();
+    // BI-51F6A428: a recurrence accrues onto the open report so a staged signal
+    // advances toward its promotion bar instead of being silently swallowed.
+    expect(mocks.accruePIR).toHaveBeenCalledWith("existing");
   });
 
   it("treats a P2002 race as skipped, not a crash", async () => {

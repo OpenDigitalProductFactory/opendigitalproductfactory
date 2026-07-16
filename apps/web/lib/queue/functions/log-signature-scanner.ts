@@ -50,7 +50,9 @@ export async function runLogSignatureScan(opts?: {
   lookbackMinutes?: number;
 }): Promise<LogScanResult> {
   const { prisma } = await import("@dpf/db");
-  const { createPlatformIssueReport } = await import("@/lib/quality/platform-issue-reports");
+  const { createPlatformIssueReport, accrueIssueReportOccurrence } = await import(
+    "@/lib/quality/platform-issue-reports"
+  );
   const lookbackMinutes = opts?.lookbackMinutes ?? LOOKBACK_MIN;
 
   let lines;
@@ -70,12 +72,18 @@ export async function runLogSignatureScan(opts?: {
   for (const b of buckets) {
     const dedupeKey = dedupeKeyFor(b.service, b.signatureId);
 
-    // Skip if an unresolved report for this signature already exists.
+    // An unresolved report for this signature already exists: this is a
+    // re-occurrence, not a novel signature. BI-51F6A428 — accrue it (bump
+    // occurrenceCount + refresh lastSeenAt) instead of plain-skipping, so a
+    // staged (below-reach-bar) signal advances toward promotion and the
+    // aging-out sweep can tell it is still recurring. The triage cron promotes
+    // it once it crosses the bar.
     const existing = await prisma.platformIssueReport.findFirst({
       where: { dedupeKey, status: { notIn: RESOLVED_STATUSES } },
       select: { id: true },
     });
     if (existing) {
+      await accrueIssueReportOccurrence(existing.id);
       skippedExisting++;
       continue;
     }

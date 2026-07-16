@@ -36,6 +36,13 @@ interface IssueReport {
   // BI-0ACD9AB2: self-fix-feasibility class. When set, the report is a self-fix
   // escalation the responder attends — the projection guard skips + holds it.
   selfFixClass?: string | null;
+  // BI-51F6A428: reach-threshold + staging accrual. occurrenceCount is how many
+  // scan cycles this signal has been seen; firstSeenAt/lastSeenAt anchor the
+  // promotion math the reach gate evaluates. Optional so pure-function callers
+  // that predate the gate still type-check.
+  occurrenceCount?: number | null;
+  firstSeenAt?: Date | null;
+  lastSeenAt?: Date | null;
 }
 
 // BI-B4F401B3: reports filed by the production crash boundary carry only a
@@ -235,9 +242,26 @@ export async function triageIssueReports(deps: {
    *  reassessment, taxonomy routing, and root cause analysis. Uses the
    *  cheapest available model via routeAndCall(budgetClass:"minimize_cost"). */
   callLlm?: (messages: Array<{ role: string; content: string }>, systemPrompt: string) => Promise<{ content: string }>;
-}): Promise<{ created: number; llmEnhanced: number }> {
+  // ── Reach-threshold + staging gate (BI-51F6A428) ──────────────────────────
+  /** True when this report may be projected now. When provided and it returns
+   *  false, the report is NOT minted into a BI: it is held staged to accrue, or
+   *  aged out if it stopped recurring. Optional so pre-gate tests keep today's
+   *  always-project behaviour; the runner wires all four together. */
+  shouldPromote?: (report: IssueReport) => boolean;
+  /** True when a below-bar staged report has stopped recurring and should be
+   *  expired (closed, no BI). Only consulted when shouldPromote returned false. */
+  shouldExpire?: (report: IssueReport) => boolean;
+  /** Flag a below-bar report as held-in-staging (keeps it OPEN, accruing). */
+  stageReport?: (id: string) => Promise<void>;
+  /** Close a genuinely-stopped staged report WITHOUT ever creating a BI. */
+  expireStagedReport?: (id: string) => Promise<void>;
+  /** Per-scan-window cap on NEW reach-gated promotions (flood guard). Once this
+   *  many new signals have been minted this run, further reach-gated low/medium
+   *  reports are deferred (staged) to the next window. High/critical bypass it. */
+  maxNewPromotions?: number;
+}): Promise<{ created: number; llmEnhanced: number; staged: number; expired: number }> {
   const reports = await deps.getOpenReports();
-  if (reports.length === 0) return { created: 0, llmEnhanced: 0 };
+  if (reports.length === 0) return { created: 0, llmEnhanced: 0, staged: 0, expired: 0 };
 
   const existingTitles = await deps.getExistingTitles();
   const dpfProductId = deps.resolveProductId
@@ -248,6 +272,8 @@ export async function triageIssueReports(deps: {
     : await getDpfTaxonomyNodeId();
   let created = 0;
   let llmEnhanced = 0;
+  let staged = 0;
+  let expired = 0;
 
   for (const report of reports) {
     // Projection guard (BI-0ACD9AB2 §5.2): a self-fix escalation is attended by
@@ -265,6 +291,41 @@ export async function triageIssueReports(deps: {
     // without filing a bug BI (no defect to fix).
     if (shouldSuppressIssueReportAsBacklog(report)) {
       await deps.acknowledgeReport(report.id);
+      continue;
+    }
+
+    // ── Reach-threshold + staging gate (BI-51F6A428) ─────────────────────
+    // Stops the PIR treadmill: a single transient log signature no longer mints
+    // a BI on first sight. shouldPromote is the pure reach+recency decision (see
+    // lib/quality/issue-report-promotion.ts); the runner wires it to apply only
+    // to the reach-gated "noise-digest" stream — human/crash/runtime reports
+    // always return true here. When it returns false, the report is held staged
+    // to accrue, or (if it stopped recurring) aged out with no BI.
+    if (deps.shouldPromote && !deps.shouldPromote(report)) {
+      if (deps.shouldExpire?.(report) && deps.expireStagedReport) {
+        await deps.expireStagedReport(report.id);
+        expired++;
+      } else if (deps.stageReport) {
+        await deps.stageReport(report.id);
+        staged++;
+      }
+      continue;
+    }
+
+    // Per-scan-window cap (BI-51F6A428): once maxNewPromotions new signals have
+    // been minted this run, defer further reach-gated low/medium promotions to
+    // the next window so a runaway source can't flood the backlog in one cycle.
+    // High/critical bypass the cap (a serious signal is never held).
+    if (
+      deps.maxNewPromotions != null &&
+      created >= deps.maxNewPromotions &&
+      classifyIssueReportStream(report) === "noise-digest" &&
+      !isHighSeverity(report.severity)
+    ) {
+      if (deps.stageReport) {
+        await deps.stageReport(report.id);
+        staged++;
+      }
       continue;
     }
 
@@ -330,7 +391,14 @@ export async function triageIssueReports(deps: {
     created++;
   }
 
-  return { created, llmEnhanced };
+  return { created, llmEnhanced, staged, expired };
+}
+
+/** True for the severities the reach gate never holds (they promote on first
+ *  occurrence). Mirrors ALWAYS_PROMOTE_SEVERITIES in issue-report-promotion.ts. */
+function isHighSeverity(severity: string | null | undefined): boolean {
+  const s = (severity ?? "").toLowerCase();
+  return s === "high" || s === "critical";
 }
 
 // ─── Spike Detection ────────────────────────────────────────────────────────
