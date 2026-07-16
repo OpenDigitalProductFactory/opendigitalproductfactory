@@ -18,6 +18,24 @@ describe("Prometheus substrate configs", () => {
     expect(config).not.toContain('targets: ["node-exporter:9100"]');
   });
 
+  it("does not scrape retired BET-5 services qdrant/neo4j (BI-31FDC859)", () => {
+    for (const name of [
+      "prometheus.yml",
+      "prometheus.dev.yml",
+      "prometheus.linux.yml",
+      "prometheus.macos.yml",
+    ]) {
+      const config = readPrometheusConfig(name);
+      // Active scrape jobs only — commented historical neo4j blocks may remain.
+      expect(config, name).not.toMatch(/^\s*-\s*job_name:\s*"qdrant"/m);
+      expect(config, name).not.toContain('targets: ["qdrant:6333"]');
+      expect(config, name).not.toMatch(/^\s*-\s*job_name:\s*"neo4j"/m);
+    }
+    const alerts = readPrometheusConfig("alerts.yml");
+    expect(alerts).not.toMatch(/^\s*-\s*alert:\s*QdrantDown/m);
+    expect(alerts).not.toMatch(/^\s*-\s*alert:\s*Neo4jDown/m);
+  });
+
   it("keeps Linux exporter scrape targets in the Linux config", () => {
     const config = readPrometheusConfig("prometheus.linux.yml");
 
