@@ -130,12 +130,14 @@ describe("connectMicrosoft365Communications", () => {
   });
 
   it("persists status=error with a redacted message on invalid credentials", async () => {
+    const failedAt = new Date("2026-07-17T19:15:00.000Z");
     const result = await connectMicrosoft365Communications(
       { ...baseInput(), clientSecret: "super-secret-do-not-leak" },
       {
         exchangeMicrosoftGraphClientCredentials: vi
           .fn()
           .mockRejectedValue(new Error("invalid Microsoft 365 credentials")),
+        now: () => failedAt,
       },
     );
 
@@ -147,6 +149,9 @@ describe("connectMicrosoft365Communications", () => {
     expect(mockUpsert).toHaveBeenCalledTimes(1);
     const call = mockUpsert.mock.calls[0][0];
     expect(call.create.status).toBe("error");
+    expect(call.create.lastTestedAt).toBeNull();
+    expect(call.create.lastErrorAt).toEqual(failedAt);
+    expect(call.create.lastErrorMsg).toBe("invalid Microsoft 365 credentials");
     expect(call.create.lastErrorMsg).not.toContain("super-secret-do-not-leak");
     expect(JSON.parse(call.create.fieldsEnc)).toMatchObject({
       reconnectFields: {
@@ -164,12 +169,15 @@ describe("connectMicrosoft365Communications", () => {
   });
 
   it("preserves a working credential when replacement authentication fails", async () => {
-    mockFindUnique.mockResolvedValue({ status: "connected" });
+    const previousTestedAt = new Date("2026-07-16T10:00:00.000Z");
+    const failedAt = new Date("2026-07-17T19:15:00.000Z");
+    mockFindUnique.mockResolvedValue({ status: "connected", lastTestedAt: previousTestedAt });
 
     await connectMicrosoft365Communications(baseInput(), {
       exchangeMicrosoftGraphClientCredentials: vi.fn().mockRejectedValue(
         new Error("invalid Microsoft 365 credentials"),
       ),
+      now: () => failedAt,
     });
 
     expect(mockUpsert).not.toHaveBeenCalled();
@@ -178,6 +186,8 @@ describe("connectMicrosoft365Communications", () => {
       data: expect.objectContaining({ lastErrorAt: expect.any(Date) }),
     });
     expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty("status");
+    expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty("lastTestedAt");
+    expect(mockUpdate.mock.calls[0][0].data.lastErrorAt).toEqual(failedAt);
     expect(mockUpdate.mock.calls[0][0].data.lastErrorMsg).toBe("invalid Microsoft 365 credentials");
   });
 });

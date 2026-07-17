@@ -98,6 +98,8 @@ export interface ConnectorSafeError {
 
 export interface FailedConnectorCredential extends Omit<SuccessfulConnectorCredential, "safeProjection"> {
   reconnectFieldsReusable: boolean;
+  /** Defaults to failure-time for compatibility; use preserve when a failed attempt is not a successful test. */
+  lastTestedAtPolicy?: "failure-time" | "preserve";
   error: ConnectorSafeError;
 }
 
@@ -326,12 +328,15 @@ export function createConnectorCredentialStore<TTransactionContext = ConnectorCr
           secretFields: {},
           safeProjection: {},
         } satisfies StoredCredentialFieldsEnvelope);
+        const lastTestedAt = input.lastTestedAtPolicy === "preserve"
+          ? existing?.lastTestedAt ?? null
+          : failedAt;
         const data: ConnectorCredentialWriteData = {
           provider: input.provider,
           status: "error",
           fieldsEnc,
           tokenCacheEnc: null,
-          lastTestedAt: failedAt,
+          lastTestedAt,
           lastErrorAt: failedAt,
           lastErrorMsg,
         };

@@ -129,6 +129,7 @@ export async function connectMicrosoft365Communications(
         secretFields: { clientSecret: input.clientSecret },
         tokenEnvelope: {},
         reconnectFieldsReusable: true,
+        lastTestedAtPolicy: "preserve",
         error: {
           kind: error instanceof ConnectorError && error.kind === "authentication"
             ? "authentication"

@@ -189,6 +189,33 @@ describe("connector credential store", () => {
     expect(database.current()).toMatchObject({ status: "error", tokenCacheEnc: null });
   });
 
+  it("can preserve an absent last-tested timestamp on first failure", async () => {
+    const failedAt = new Date("2026-07-17T12:00:00.000Z");
+    const database = repository();
+    const store = createConnectorCredentialStore({
+      repository: database.repo,
+      crypto: crypto(),
+      now: () => failedAt,
+    });
+
+    await store.recordFailedConnect({
+      integrationId: "acme",
+      provider: "acme-provider",
+      reconnectFields: { tenant: "north" },
+      reconnectFieldsReusable: true,
+      secretFields: { password: "secret-value" },
+      tokenEnvelope: {},
+      lastTestedAtPolicy: "preserve",
+      error: { kind: "authentication", safeMessage: "authentication failed" },
+    });
+
+    expect(database.current()).toMatchObject({
+      lastTestedAt: null,
+      lastErrorAt: failedAt,
+      lastErrorMsg: "authentication failed",
+    });
+  });
+
   it("stores no submitted fields when reconnect fields are not reusable", async () => {
     const database = repository();
     const crypt = crypto();

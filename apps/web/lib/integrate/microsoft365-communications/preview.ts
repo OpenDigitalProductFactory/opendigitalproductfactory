@@ -111,6 +111,7 @@ export async function loadMicrosoft365CommunicationsPreview(
         secretFields: { clientSecret: stored.clientSecret },
         tokenEnvelope: {},
         reconnectFieldsReusable: true,
+        lastTestedAtPolicy: "preserve",
         error: {
           kind: error instanceof ConnectorError && error.kind === "authentication"
             ? "authentication"
