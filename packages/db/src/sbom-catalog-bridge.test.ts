@@ -56,11 +56,18 @@ describe("bomComponentToCatalogIdentity", () => {
 describe("upsertIdentityForComponent", () => {
   it("upserts a source='sbom' CatalogIdentity keyed on identityKey", async () => {
     const upserts: Array<{ where: { identityKey: string }; create: { source: string; product: string } }> = [];
+    const bomUpdates: Array<{ where: { id: string }; data: { catalogIdentityId: string } }> = [];
     const db: SbomBridgeClient = {
       catalogIdentity: {
         upsert: async (args: unknown) => {
           upserts.push(args as { where: { identityKey: string }; create: { source: string; product: string } });
           return { id: "ci_1" };
+        },
+      },
+      bomComponent: {
+        update: async (args: unknown) => {
+          bomUpdates.push(args as { where: { id: string }; data: { catalogIdentityId: string } });
+          return {};
         },
       },
     };
@@ -70,12 +77,30 @@ describe("upsertIdentityForComponent", () => {
     expect(upserts[0]!.where.identityKey).toBe("a:npm:lodash:4-17-21");
     expect(upserts[0]!.create.source).toBe("sbom");
     expect(upserts[0]!.create.product).toBe("lodash");
+    // No id supplied → no back-link write.
+    expect(bomUpdates).toHaveLength(0);
+  });
+
+  it("links BomComponent.catalogIdentityId back when the component id is supplied (BI-877FE5D4)", async () => {
+    const bomUpdates: Array<{ where: { id: string }; data: { catalogIdentityId: string } }> = [];
+    const db: SbomBridgeClient = {
+      catalogIdentity: { upsert: async () => ({ id: "ci_lodash" }) },
+      bomComponent: {
+        update: async (args: unknown) => {
+          bomUpdates.push(args as { where: { id: string }; data: { catalogIdentityId: string } });
+          return {};
+        },
+      },
+    };
+    await upsertIdentityForComponent(db, { id: "bc_1", name: "lodash", packageUrl: "pkg:npm/lodash@4.17.21" });
+    expect(bomUpdates).toEqual([{ where: { id: "bc_1" }, data: { catalogIdentityId: "ci_lodash" } }]);
   });
 
   it("counts only resolvable components in a batch", async () => {
     let calls = 0;
     const db: SbomBridgeClient = {
       catalogIdentity: { upsert: async () => ((calls += 1), { id: `ci_${calls}` }) },
+      bomComponent: { update: async () => ({}) },
     };
     const written = await upsertIdentitiesForComponents(db, [
       { name: "lodash", packageUrl: "pkg:npm/lodash@4.17.21" },

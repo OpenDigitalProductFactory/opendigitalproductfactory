@@ -4463,6 +4463,7 @@ model CatalogIdentity {
   resolutionLogs      IdentityResolutionLog[]
   inventoryEntities   InventoryEntity[]
   softwareEvidence    DiscoveredSoftwareEvidence[]
+  bomComponents       BomComponent[]
 
   @@index([manufacturer, product])
   @@index([cpe])
@@ -6057,12 +6058,19 @@ model BomComponent {
   metadata          Json                     @default("{}")
   firstSeenAt       DateTime                 @default(now())
   lastSeenAt        DateTime                 @default(now())
+  // Enrichment linkage to the canonical identity spine (BI-877FE5D4, spec §4.8): the
+  // generic component identity the SBOM bridge resolves this component to. Public/
+  // shareable catalog knowledge; the proprietary product↔component graph lives on
+  // BomComponentOccurrence and is never linked here.
+  catalogIdentityId String?
   findings          AssuranceFinding[]
   occurrences       BomComponentOccurrence[]
+  catalogIdentity   CatalogIdentity?         @relation(fields: [catalogIdentityId], references: [id], onDelete: SetNull)
 
   @@index([componentType, name])
   @@index([packageUrl])
   @@index([ecosystem])
+  @@index([catalogIdentityId])
 }
 
 model BomComponentOccurrence {
