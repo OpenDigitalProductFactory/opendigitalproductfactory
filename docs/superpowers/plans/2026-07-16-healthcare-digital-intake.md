@@ -91,6 +91,14 @@ and exception records that those generic surfaces do not own.
 - **2C — reviewed evidence API:** stage coverage documents and consent
   attestations, then accept/reject them only through explicit human authority.
 
+Phase 2A is delivered as two reviewable checkpoints: the access/read checkpoint
+owns grant issuance, patient-context RLS correction, and the minimum packet
+projection; the response checkpoint owns retry-safe partial saves, the atomic
+`assigned` to `in-progress` transition, and completeness-gated submit. A ready
+submit completes current responses and advances the packet with one optimistic,
+append-only status event. An incomplete submit returns blocker codes and never
+advances packet state.
+
 Rollback for 2A is route and repository removal; it adds no schema migration.
 Existing Phase 1 tables remain forward-compatible and contain no raw resume
 tokens.
