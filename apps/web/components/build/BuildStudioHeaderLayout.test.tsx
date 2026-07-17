@@ -874,6 +874,52 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
     expect(details.textContent).toContain("BI-5B839D74");
     expect(details.textContent).toContain("dpf/aabbccdd/");
   });
+
+  it("surfaces the active build WorkWarrant in plain language", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[
+          makeBuild({
+            plan: {
+              workWarrant: {
+                altitude: "WWMD",
+                altitudeBasis: "structural",
+                confidence: "high",
+                needsOperatorConfirm: false,
+                lane: "governed-interactive",
+                budget: {
+                  modelTier: "strong",
+                  effortLevel: "high",
+                  gateProfile: "full",
+                  tokenCeiling: null,
+                },
+                evidenceProfile: "architectural",
+                reportingProfile: "ledger",
+                contextScope: {
+                  industry: null,
+                  jurisdiction: null,
+                  archetype: null,
+                },
+                reasons: ["touches a cross-cutting platform contract"],
+              },
+            },
+          }),
+        ]}
+        epicRollups={[]}
+        portfolios={[]}
+        governedBacklogEnabled
+        portalContext={makePortalContextEnvelope()}
+        projectBranch="main"
+        submissionBranchShortId="aabbccdd"
+      />,
+    );
+
+    expect(html).toContain('data-testid="build-work-warrant-band"');
+    expect(html).toContain("Architecture-level work");
+    expect(html).toContain("governed review");
+    expect(html).toContain("strong model");
+    expect(html).toContain("ledger evidence");
+  });
 });
 
 function makePortalContextEnvelope(): PortalContextEnvelope {
