@@ -50,12 +50,19 @@ export type AgentToolchainPlan = {
   codexCliPresent: boolean;
   /** Whether the host has Grok CLI on PATH (caller-supplied detection). */
   grokCliPresent: boolean;
+  /** Whether the host has Antigravity CLI (`agy`) on PATH (caller-supplied detection). */
+  antigravityCliPresent: boolean;
   /** Whether a DPF MCP token was discovered (e.g. via DPF_MCP_BEARER_TOKEN). */
   hasToken: boolean;
   /** Grok presence + optional dedicated config plan (TOML [mcp_servers.dpf] wiring).
    * Main MCP client config is still via the generic mcpClientConfig for .mcp.json etc.
    */
   grok: { present: boolean; config?: GrokConfigPlan } | null;
+  /** Antigravity (`agy`) presence. The MCP-config write itself is applied
+   * best-effort by the shell/Python adapters against agy's JSON mcpServers
+   * config (path pending live confirmation per EP-ANTIGRAVITY-001 / BI-ECAE3494),
+   * so no typed config-write plan is emitted here yet — recognition only. */
+  antigravity: { present: boolean } | null;
   /** TOML upsert plan for the contributor's Codex config (null when Codex CLI absent). */
   codex: CodexConfigPlan | null;
   /** Repo-root .mcp.json + .vscode/mcp.json writes (env-backed, secret-free). */
@@ -108,10 +115,16 @@ export type ComputeAgentToolchainPlanOptions = {
   codexCliPresent: boolean;
   /** Caller-detected presence of `grok` CLI on PATH. */
   grokCliPresent: boolean;
+  /** Caller-detected presence of Antigravity `agy` CLI on PATH. */
+  antigravityCliPresent?: boolean;
   /** Caller-detected presence of a DPF MCP bearer token. */
   hasToken: boolean;
   /** Path to Grok config.toml (e.g. ~/.grok/config.toml). Wired for Grok-specific MCP. */
   grokConfigPath?: string;
+  /** Path to Antigravity's MCP config (e.g. ~/.antigravity/mcp_config.json). The
+   * shell/Python adapters write the DPF mcpServers block here best-effort; the
+   * exact path is pending confirmation on a live agy install (BI-ECAE3494). */
+  antigravityConfigPath?: string;
   /** Endpoint to probe for MCP `tools/list`. */
   mcpEndpoint: string;
   /** Expected dpf-platform plugin version (from packages/dpf-skill-pack/.claude-plugin/plugin.json). */
@@ -188,6 +201,13 @@ export function computeAgentToolchainPlan(
     grok = { present: true };
   }
 
+  // Antigravity (`agy`) recognition. Additive, optional client — recognition
+  // only; the MCP-config write is applied best-effort by the adapters against
+  // agy's JSON config path (unconfirmed publicly, so no typed write plan yet).
+  const antigravity: { present: boolean } | null = options.antigravityCliPresent
+    ? { present: true }
+    : null;
+
   // Kernel memory seed (always planned — the contributor benefits from local
   // memory whether or not the CLI is installed yet).
   const memory = planKernelMemorySeed(
@@ -239,6 +259,7 @@ export function computeAgentToolchainPlan(
     claudeCodeWired: options.claudeCliPresent,
     codexWired: options.codexCliPresent,
     grokWired: options.grokCliPresent,
+    antigravityWired: options.antigravityCliPresent === true,
     mcpReadiness: options.hasToken
       ? { ok: true, toolCount: 0, observedAt: new Date().toISOString() }
       : { ok: false, reason: "no_token", httpStatus: null },
@@ -250,10 +271,12 @@ export function computeAgentToolchainPlan(
     claudeCliPresent: options.claudeCliPresent,
     codexCliPresent: options.codexCliPresent,
     grokCliPresent: options.grokCliPresent,
+    antigravityCliPresent: options.antigravityCliPresent === true,
     hasToken: options.hasToken,
     codex,
     claude,
     grok,
+    antigravity,
     mcpClientConfig,
     memory,
     mcpProbe,
@@ -276,6 +299,7 @@ export function summarizePlan(plan: AgentToolchainPlan): string {
   parts.push(`repo=${plan.repoRoot}`);
   parts.push(`claude=${plan.claudeCliPresent ? "present" : "missing"}`);
   parts.push(`codex=${plan.codexCliPresent ? "present" : "missing"}`);
+  parts.push(`antigravity=${plan.antigravityCliPresent ? "present" : "missing"}`);
   parts.push(`token=${plan.hasToken ? "present" : "missing"}`);
   parts.push(`codex-writes=${plan.codex?.writes.length ?? 0}`);
   parts.push(`codex-convergence=${plan.codex?.convergence.length ?? 0}`);

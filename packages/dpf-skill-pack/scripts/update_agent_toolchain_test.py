@@ -333,6 +333,57 @@ class GrokInstallTest(unittest.TestCase):
         self.assertIn("failed", status)
 
 
+class AntigravityMcpConfigTest(unittest.TestCase):
+    def test_skipped_when_agy_absent(self) -> None:
+        with patch.object(updater, "resolve_antigravity_binary", return_value=None):
+            status = updater.ensure_antigravity_mcp_config(
+                Path("/tmp/home"), updater.DEFAULT_MCP_URL, dry_run=False
+            )
+        self.assertEqual(status, "skipped: Antigravity CLI (agy) not found")
+
+    def test_upserts_dpf_server_env_backed_and_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                first = updater.ensure_antigravity_mcp_config(
+                    home, updater.DEFAULT_MCP_URL, dry_run=False
+                )
+                second = updater.ensure_antigravity_mcp_config(
+                    home, updater.DEFAULT_MCP_URL, dry_run=False
+                )
+            self.assertEqual(first, "converged")
+            self.assertEqual(second, "already current")
+            cfg = json.loads(updater.antigravity_mcp_config_path(home).read_text())
+            dpf = cfg["mcpServers"]["dpf"]
+            self.assertEqual(dpf["type"], "http")
+            self.assertEqual(dpf["url"], updater.DEFAULT_MCP_URL)
+            self.assertEqual(dpf["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN}")
+            # No plaintext secret is ever written.
+            self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
+
+    def test_merges_without_clobbering_other_servers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text(json.dumps({"mcpServers": {"other": {"url": "x"}}}))
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            cfg = json.loads(cfg_path.read_text())
+            self.assertIn("other", cfg["mcpServers"])
+            self.assertIn("dpf", cfg["mcpServers"])
+
+    def test_dry_run_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                status = updater.ensure_antigravity_mcp_config(
+                    home, updater.DEFAULT_MCP_URL, dry_run=True
+                )
+            self.assertIn("dry-run", status)
+            self.assertFalse(updater.antigravity_mcp_config_path(home).exists())
+
+
 class GuardLivenessAdvisoryTest(unittest.TestCase):
     def test_advisory_names_codex_trust_and_grok_blocking_gap(self) -> None:
         text = "\n".join(updater.guard_liveness_advisory()).lower()

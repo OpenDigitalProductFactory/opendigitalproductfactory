@@ -13,7 +13,7 @@
  *     --project-slug <slug> \
  *     --mcp-endpoint <url> \
  *     --expected-dpf-platform-version <version> \
- *     [--claude-cli-present] [--codex-cli-present] [--grok-cli-present] [--has-token] \
+ *     [--claude-cli-present] [--codex-cli-present] [--grok-cli-present] [--antigravity-cli-present] [--has-token] \
  *     [--reconcile-stale-entries] [--full-tier]
  *
  * The flags map 1:1 onto `ComputeAgentToolchainPlanOptions`. Output is a
@@ -78,6 +78,7 @@ const options: ComputeAgentToolchainPlanOptions = {
   codexConfigPath: requireArg(values, "codex-config"),
   claudePluginsPath: requireArg(values, "claude-plugins"),
   grokConfigPath: values["grok-config"] || "",  // optional for now; wired by sh/ps1
+  antigravityConfigPath: values["antigravity-config"] || "",  // optional; wired by sh/ps1
   kernelPrinciplesDir: requireArg(values, "kernel-principles"),
   contributorMemoryDir: requireArg(values, "contributor-memory"),
   projectSlug: requireArg(values, "project-slug"),
@@ -86,6 +87,7 @@ const options: ComputeAgentToolchainPlanOptions = {
   claudeCliPresent: flags.has("claude-cli-present"),
   codexCliPresent: flags.has("codex-cli-present"),
   grokCliPresent: flags.has("grok-cli-present"),
+  antigravityCliPresent: flags.has("antigravity-cli-present"),
   hasToken: flags.has("has-token"),
   reconcileStaleEntries: flags.has("reconcile-stale-entries"),
   commandmentTierOnly: !flags.has("full-tier"),

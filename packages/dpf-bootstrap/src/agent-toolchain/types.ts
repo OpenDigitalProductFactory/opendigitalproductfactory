@@ -86,6 +86,7 @@ export type AgentToolchainState = {
   claudeCodeWired: boolean;
   codexWired: boolean;
   grokWired: boolean;
+  antigravityWired: boolean;
   memorySeededAt: string | null;
   mcpReadiness: McpReadinessProbeResult;
   smokeTest: SmokeTestResult;
