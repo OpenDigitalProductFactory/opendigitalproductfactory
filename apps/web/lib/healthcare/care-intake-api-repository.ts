@@ -78,6 +78,8 @@ type Transaction = {
       version: number;
       sourceVersion: string | null;
       answeredLinkIds: string[];
+      answers?: unknown;
+      status?: string;
     } | null>;
     findMany(args: unknown): Promise<Array<{ answeredLinkIds: string[] }>>;
     create(args: unknown): Promise<{
@@ -96,6 +98,14 @@ type Transaction = {
 export type CareIntakeApiDatabase = {
   $transaction<T>(callback: (tx: Transaction) => Promise<T>): Promise<T>;
 };
+
+function hasSubstantiveAnswer(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some(hasSubstantiveAnswer);
+  if (typeof value === "object") return Object.values(value).some(hasSubstantiveAnswer);
+  return true;
+}
 
 function packetRequirements(value: unknown): CareIntakeRequirement[] {
   if (!Array.isArray(value) || value.length === 0) {
@@ -388,9 +398,88 @@ export async function getCareIntakePacketProjection(
           title: form.title,
           version: form.version,
           fields,
+          dataCategories: Object.fromEntries(
+            assigned.map((item) => [item.linkId, item.dataCategory]),
+          ),
           offlineCapable: form.offlineCapable,
         };
       }),
+    };
+  });
+}
+
+export async function getCareIntakeSavedResponse(
+  input: { packetId: string; formId: string; token: string },
+  database: CareIntakeApiDatabase = prisma as unknown as CareIntakeApiDatabase,
+) {
+  const claims = parseCareIntakeResumeToken(input.token);
+  const digest = digestCareIntakeResumeToken(input.token);
+  return database.$transaction(async (tx) => {
+    await setPatientContext(tx, claims);
+    const packet = await tx.careIntakePacket.findFirst({
+      where: {
+        packetId: input.packetId,
+        organizationId: claims.organizationId,
+        patientProfileId: claims.patientProfileId,
+      },
+    });
+    if (!packet) throw new Error("Care intake access denied");
+    const grant = await tx.careIntakeAccessGrant.findFirst({
+      where: {
+        grantId: claims.grantId,
+        organizationId: claims.organizationId,
+        patientProfileId: claims.patientProfileId,
+      },
+    });
+    if (!grant) throw new Error("Care intake access denied");
+    assertCareIntakeGrant(grant, {
+      digest,
+      grantId: claims.grantId,
+      packetRowId: packet.id,
+      patientProfileId: claims.patientProfileId,
+      operation: "view",
+      at: new Date(),
+    });
+    const form = await tx.dynamicForm.findFirst({ where: { formId: input.formId } });
+    if (!form) throw new Error("Dynamic form is not assigned to this intake packet");
+    const assigned = requirementsForPinnedForm(
+      packetRequirements(packet.requirementSnapshot),
+      { dynamicFormId: form.id, dynamicFormVersion: form.version },
+    );
+    if (assigned.length === 0) {
+      throw new Error("Dynamic form is not assigned to this intake packet");
+    }
+    const response = await tx.careIntakeResponse.findFirst({
+      where: {
+        organizationId: claims.organizationId,
+        packetId: packet.id,
+        dynamicFormId: form.id,
+        status: { not: "entered-in-error" },
+      },
+      orderBy: { version: "desc" },
+    });
+    await tx.careIntakeAccessGrant.updateMany({
+      where: { grantId: claims.grantId, tokenDigest: digest },
+      data: { lastUsedAt: new Date() },
+    });
+    if (!response) {
+      return {
+        responseId: null,
+        version: null,
+        status: "not-started" as const,
+        answers: {},
+        answeredLinkIds: [],
+      };
+    }
+    return {
+      responseId: response.responseId,
+      version: response.version,
+      status: response.status ?? "in-progress",
+      answers:
+        response.answers && typeof response.answers === "object" && !Array.isArray(response.answers)
+          ? response.answers as Record<string, unknown>
+          : {},
+      answeredLinkIds: response.answeredLinkIds,
     };
   });
 }
@@ -483,7 +572,10 @@ export async function saveCareIntakePartialResponse(
         answeredLinkIds: existing.answeredLinkIds,
       };
     }
-    const answeredLinkIds = Object.keys(input.answers).sort();
+    const answeredLinkIds = Object.entries(input.answers)
+      .filter(([, value]) => hasSubstantiveAnswer(value))
+      .map(([linkId]) => linkId)
+      .sort();
     const formSnapshot = { formId: form.formId, title: form.title, version: form.version, fields: form.fields };
     const formDigest = createHash("sha256")
       .update(JSON.stringify(formSnapshot))

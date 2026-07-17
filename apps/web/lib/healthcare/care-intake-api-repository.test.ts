@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getCareIntakeSavedResponse,
   getCareIntakePacketProjection,
   issueCareIntakeResumeGrant,
   saveCareIntakePartialResponse,
@@ -291,6 +292,32 @@ describe("saveCareIntakePartialResponse", () => {
     });
   });
 
+  it("does not count empty partial values as answered requirements", async () => {
+    const { db, tx } = database();
+    const issued = await issueCareIntakeResumeGrant({
+      organizationId: "org-a", patientProfileId: "patient-a", patientPrincipalId: "principal-patient-a",
+      packetId: "intake-a", granteePrincipalId: "principal-patient-a", issuedByPrincipalId: "principal-patient-a",
+      permittedOperations: ["save"], expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      authorityDecision: { effect: "allow", reasonCodes: [] },
+    }, db);
+    tx.careIntakeAccessGrant.findFirst.mockResolvedValue({
+      grantId: issued.grantId, packetId: "packet-row-a", patientProfileId: "patient-a",
+      granteePrincipalId: "principal-patient-a", tokenDigest: digestCareIntakeResumeToken(issued.token),
+      permittedOperations: ["save"], expiresAt: new Date("2026-08-01T15:00:00.000Z"), revokedAt: null,
+    });
+
+    const result = await saveCareIntakePartialResponse({
+      packetId: "intake-a", formId: "medical-history", token: issued.token,
+      idempotencyKey: "device-a-empty-1", expectedVersion: null, sourceMode: "patient-web",
+      answers: { "visit-reason": "   " }, dataCategories: { "visit-reason": "visit-reason" },
+    }, db);
+
+    expect(result.answeredLinkIds).toEqual([]);
+    expect(tx.careIntakeResponse.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ answeredLinkIds: [] }),
+    });
+  });
+
   it("returns an idempotent result without rewriting the response", async () => {
     const { db, tx } = database();
     const issued = await issueCareIntakeResumeGrant({
@@ -390,12 +417,66 @@ describe("getCareIntakePacketProjection", () => {
       dueAt: null,
       completionPercent: 0,
       forms: [
-        expect.objectContaining({ formId: "medical-history", version: 2 }),
+        expect.objectContaining({
+          formId: "medical-history",
+          version: 2,
+          dataCategories: { "visit-reason": "visit-reason" },
+        }),
       ],
     });
     expect(JSON.stringify(projection)).not.toContain("answers");
     expect(tx.dynamicForm.findMany).toHaveBeenCalledWith({
       where: { OR: [{ id: "form-row-a", version: 2 }] },
     });
+  });
+});
+
+describe("getCareIntakeSavedResponse", () => {
+  beforeEach(() => vi.useFakeTimers().setSystemTime("2026-08-01T14:00:00.000Z"));
+
+  it("returns saved answers only to a view-scoped patient grant", async () => {
+    const { db, tx } = database();
+    const issued = await issueCareIntakeResumeGrant({
+      organizationId: "org-a", patientProfileId: "patient-a", patientPrincipalId: "principal-patient-a",
+      packetId: "intake-a", granteePrincipalId: "principal-patient-a", issuedByPrincipalId: "principal-patient-a",
+      permittedOperations: ["view"], expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      authorityDecision: { effect: "allow", reasonCodes: [] },
+    }, db);
+    tx.careIntakeAccessGrant.findFirst.mockResolvedValue({
+      grantId: issued.grantId, packetId: "packet-row-a", patientProfileId: "patient-a",
+      granteePrincipalId: "principal-patient-a", tokenDigest: digestCareIntakeResumeToken(issued.token),
+      permittedOperations: ["view"], expiresAt: new Date("2026-08-01T15:00:00.000Z"), revokedAt: null,
+    });
+    tx.careIntakeResponse.findFirst.mockResolvedValue({
+      id: "response-row-a", responseId: "response-a", version: 2,
+      sourceVersion: "save-a", answeredLinkIds: ["visit-reason"],
+      answers: { "visit-reason": "Routine check" }, status: "in-progress",
+    });
+
+    await expect(getCareIntakeSavedResponse({
+      packetId: "intake-a", formId: "medical-history", token: issued.token,
+    }, db)).resolves.toEqual({
+      responseId: "response-a", version: 2, status: "in-progress",
+      answers: { "visit-reason": "Routine check" }, answeredLinkIds: ["visit-reason"],
+    });
+  });
+
+  it("returns an empty response shape before the first save", async () => {
+    const { db, tx } = database();
+    const issued = await issueCareIntakeResumeGrant({
+      organizationId: "org-a", patientProfileId: "patient-a", patientPrincipalId: "principal-patient-a",
+      packetId: "intake-a", granteePrincipalId: "principal-patient-a", issuedByPrincipalId: "principal-patient-a",
+      permittedOperations: ["view"], expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      authorityDecision: { effect: "allow", reasonCodes: [] },
+    }, db);
+    tx.careIntakeAccessGrant.findFirst.mockResolvedValue({
+      grantId: issued.grantId, packetId: "packet-row-a", patientProfileId: "patient-a",
+      granteePrincipalId: "principal-patient-a", tokenDigest: digestCareIntakeResumeToken(issued.token),
+      permittedOperations: ["view"], expiresAt: new Date("2026-08-01T15:00:00.000Z"), revokedAt: null,
+    });
+
+    await expect(getCareIntakeSavedResponse({
+      packetId: "intake-a", formId: "medical-history", token: issued.token,
+    }, db)).resolves.toEqual({ responseId: null, version: null, status: "not-started", answers: {}, answeredLinkIds: [] });
   });
 });
