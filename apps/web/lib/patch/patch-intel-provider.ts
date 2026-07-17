@@ -11,6 +11,8 @@
 
 import {
   osvVulnsToAdvisories,
+  type AdvisoryInput,
+  type CatalogLifecycleMilestoneLike,
   type OsvVuln,
   type PatchIntel,
   type PatchIntelProvider,
@@ -26,6 +28,42 @@ export interface OsvProviderOptions {
   fetchVulns: OsvVulnFetcher;
   /** CISA KEV CVE ids; advisories whose CVE alias is in this set are flagged exploited. */
   kevCves: ReadonlySet<string>;
+}
+
+export type NvdCveAdvisoryFetcher = (cpeName: string) => Promise<AdvisoryInput[]>;
+
+export interface NvdProviderOptions {
+  fetchAdvisories: NvdCveAdvisoryFetcher;
+}
+
+const EOL_MILESTONES = new Set(["eol", "eosl", "security_updates_end"]);
+
+export function milestoneEolDate(
+  milestones: readonly CatalogLifecycleMilestoneLike[] | null | undefined,
+): string | Date | null {
+  const selected = (milestones ?? []).find(
+    (milestone) => EOL_MILESTONES.has(milestone.milestone) && milestone.date,
+  );
+  return selected?.date ?? null;
+}
+
+export function mergePatchIntel(
+  ...parts: Array<PatchIntel | null | undefined>
+): PatchIntel | null {
+  const present = parts.filter((part): part is PatchIntel => part != null);
+  if (present.length === 0) return null;
+  const advisories = present.flatMap((part) => part.advisories ?? []);
+  const merged: PatchIntel = {};
+  for (const part of present) {
+    if (part.latestStableVersion) merged.latestStableVersion = part.latestStableVersion;
+    if (part.latestSafeVersion) merged.latestSafeVersion = part.latestSafeVersion;
+    if (part.eolDate) merged.eolDate = part.eolDate;
+    if (part.defaultApplyVia) merged.defaultApplyVia = part.defaultApplyVia;
+    if (part.rebootLikely != null) merged.rebootLikely = part.rebootLikely;
+    if (part.confidence) merged.confidence = part.confidence;
+  }
+  if (advisories.length > 0) merged.advisories = advisories;
+  return Object.keys(merged).length > 0 ? merged : null;
 }
 
 /**
@@ -53,5 +91,35 @@ export function createOsvPatchIntelProvider(options: OsvProviderOptions): PatchI
       kevCves: options.kevCves,
     });
     return { advisories };
+  };
+}
+
+/**
+ * Build a PatchIntelProvider backed by CatalogIdentity.cpe -> NVD CVE lookup plus
+ * CatalogLifecycleMilestone EOL rows. NVD CVEs are patch posture for installed
+ * commercial/OS software, so they project as patch-gap -> Assurance missing-patch.
+ */
+export function createNvdCpePatchIntelProvider(options: NvdProviderOptions): PatchIntelProvider {
+  return async (evidence: SoftwareEvidenceLike): Promise<PatchIntel | null> => {
+    const eolDate = milestoneEolDate(evidence.catalogLifecycleMilestones);
+    const cpe = evidence.catalogIdentityCpe;
+    let advisories: AdvisoryInput[] = [];
+
+    if (typeof cpe === "string" && cpe.length > 0) {
+      try {
+        advisories = await options.fetchAdvisories(cpe);
+      } catch {
+        advisories = [];
+      }
+    }
+
+    const intel = mergePatchIntel(
+      advisories.length > 0 ? { advisories, confidence: "verified" } : null,
+      eolDate ? { eolDate, confidence: "verified" } : null,
+    );
+    if (intel && advisories.length === 0 && typeof cpe === "string" && cpe.length > 0) {
+      intel.advisories = [];
+    }
+    return intel;
   };
 }
