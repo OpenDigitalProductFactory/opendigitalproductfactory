@@ -65,22 +65,20 @@ function collectFences() {
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex").slice(0, 16);
 const assetRel = (slug, index) => `${DIAGRAMS_DIR}/${slug}/${index}.svg`;
 
-/** Strip anything script-like from generated SVG (defence-in-depth; mmdc output is trusted-ish). */
-function sanitizeSvg(svg) {
-  return svg
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/\son\w+="[^"]*"/gi, "")
-    .replace(/(href|xlink:href)\s*=\s*"javascript:[^"]*"/gi, "");
-}
+// No output sanitization step: the SVGs are trusted build-time content (rendered
+// from repo-authored ```mermaid fences, not user input) and are consumed only
+// via <img src> — an <img>-loaded SVG is non-scriptable by the HTML spec — and
+// the portal route additionally serves them under a `default-src 'none'` CSP.
+// Regex-based HTML sanitization is intentionally NOT used (it is provably
+// incomplete; the architectural control above is the real boundary).
 
-function renderOne(content, outAbs, puppeteerCfg) {
-  const tmp = path.join(os.tmpdir(), `dpf-mermaid-${sha(content)}.mmd`);
+function renderOne(content, outAbs, tmpDir, puppeteerCfg) {
+  const tmp = path.join(tmpDir, `d-${sha(content)}.mmd`);
   fs.writeFileSync(tmp, `${content}\n`);
   fs.mkdirSync(path.dirname(outAbs), { recursive: true });
   execFileSync(MMDC, ["-i", tmp, "-o", outAbs, "-b", "transparent", "--puppeteerConfigFile", puppeteerCfg], {
     stdio: ["ignore", "ignore", "inherit"],
   });
-  fs.writeFileSync(outAbs, sanitizeSvg(fs.readFileSync(outAbs, "utf-8")));
   fs.rmSync(tmp, { force: true });
 }
 
@@ -109,29 +107,36 @@ function main() {
 
   // Render mode. Prune orphans, render/refresh, rewrite manifest.
   fs.mkdirSync(DIAGRAMS_ABS, { recursive: true });
-  const puppeteerCfg = path.join(os.tmpdir(), "dpf-puppeteer.json");
+  // Unique, unpredictable per-run temp dir (mkdtemp) for the intermediate .mmd
+  // and puppeteer config — avoids the predictable-temp-path race/symlink class.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dpf-diagrams-"));
+  const puppeteerCfg = path.join(tmpDir, "puppeteer.json");
   const cfg = { args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"] };
   // On Alpine/musl (the convergence sandbox), point at the system chromium —
   // Google's glibc Chrome cannot run there. Set PUPPETEER_EXECUTABLE_PATH.
   if (process.env.PUPPETEER_EXECUTABLE_PATH) cfg.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
   fs.writeFileSync(puppeteerCfg, JSON.stringify(cfg));
 
-  for (const key of Object.keys(manifest)) {
-    if (!wanted.has(key)) {
-      const abs = path.join(REPO_ROOT, `${DIAGRAMS_DIR}/${key}.svg`);
-      fs.rmSync(abs, { force: true });
+  try {
+    for (const key of Object.keys(manifest)) {
+      if (!wanted.has(key)) {
+        const abs = path.join(REPO_ROOT, `${DIAGRAMS_DIR}/${key}.svg`);
+        fs.rmSync(abs, { force: true });
+      }
     }
+    const next = {};
+    let rendered = 0;
+    for (const [key, f] of wanted) {
+      const abs = path.join(REPO_ROOT, assetRel(f.slug, f.index));
+      const hash = sha(f.content);
+      if (manifest[key] !== hash || !fs.existsSync(abs)) { renderOne(f.content, abs, tmpDir, puppeteerCfg); rendered++; }
+      next[key] = hash;
+    }
+    fs.writeFileSync(MANIFEST, `${JSON.stringify({ generatedBy: "scripts/render-doc-diagrams.mjs", diagrams: next }, null, 2)}\n`);
+    console.log(`Rendered ${rendered} diagram(s); ${wanted.size} total in manifest.`);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-  const next = {};
-  let rendered = 0;
-  for (const [key, f] of wanted) {
-    const abs = path.join(REPO_ROOT, assetRel(f.slug, f.index));
-    const hash = sha(f.content);
-    if (manifest[key] !== hash || !fs.existsSync(abs)) { renderOne(f.content, abs, puppeteerCfg); rendered++; }
-    next[key] = hash;
-  }
-  fs.writeFileSync(MANIFEST, `${JSON.stringify({ generatedBy: "scripts/render-doc-diagrams.mjs", diagrams: next }, null, 2)}\n`);
-  console.log(`Rendered ${rendered} diagram(s); ${wanted.size} total in manifest.`);
 }
 
 main();
