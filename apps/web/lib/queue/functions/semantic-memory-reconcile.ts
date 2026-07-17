@@ -17,8 +17,9 @@ import {
   type CleanupEvidence,
 } from "@/lib/inference/semantic-memory-cleanup";
 
-/** 04:50 UTC daily — after the 04:00 retention sweep (which purges aged threads). */
-export const SEMANTIC_MEMORY_RECONCILE_CRON = "50 4 * * *";
+/** 05:10 UTC daily — after the 04:00 retention sweep (which purges aged threads),
+ *  clear of the 04:20 memory-consolidation and 04:50 MDM-steward slots. */
+export const SEMANTIC_MEMORY_RECONCILE_CRON = "10 5 * * *";
 export const SEMANTIC_MEMORY_RECONCILE_SCHEDULED_INNGEST_ID =
   "govern/semantic-memory-reconcile-scheduled";
 export const SEMANTIC_MEMORY_RECONCILE_REQUESTED_EVENT =

@@ -252,6 +252,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: "ops/mdm-steward.requested",
   },
   {
+    jobId: "semantic-memory-reconcile",
+    inngestId: "govern/semantic-memory-reconcile-scheduled",
+    name: "Semantic memory orphan reconciliation",
+    purpose:
+      "BI-DG-001 (EP-DATA-GOVERNANCE): removes agent-memory vectors whose source coworker turn has been purged, so a deleted conversation cannot linger in semantic recall. If it stops, orphaned vectors accumulate and a source deletion is never fully propagated to the derived copy. Editable so an operator can pause or run-now the sweep.",
+    cron: "10 5 * * *",
+    cadence: "Daily at 05:10",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: "govern/semantic-memory-reconcile.requested",
+  },
+  {
     jobId: "discovery-prometheus-poll",
     inngestId: "ops/prometheus-poll",
     name: "Discovery: Prometheus poll",
