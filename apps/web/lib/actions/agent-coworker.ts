@@ -1344,11 +1344,30 @@ export async function sendMessage(input: {
   // load_tools remains as the shim for the long tail. Discovery/attachment only —
   // the broker can only surface already-authorized tools (INV-3 intact).
   const { brokerCapabilities } = await import("@/lib/tak/capability-broker");
-  const brokeredToolNames = brokerCapabilities({
+  const brokerResult = brokerCapabilities({
     routeContext: input.routeContext,
     message: trimmedContent,
     tools: availableTools,
-  }).brokeredNames;
+  });
+  const brokeredToolNames = brokerResult.brokeredNames;
+  // BI-17ACD329 (Phase 4) — mixture-of-experts routing, RECOMMEND-ONLY (kernel
+  // DI-D1C241BCCBF0). When the turn's intent belongs to a different specialist
+  // coworker, record the recommendation for observability. It does NOT delegate
+  // or change authority — coworkers hold no delegation grant, and granting one is
+  // a governed, least-privilege decision. The record is ready to drive delegation
+  // the moment governance enables it.
+  const { routeToSpecialist } = await import("@/lib/tak/specialist-router");
+  const specialistRecommendation = routeToSpecialist({
+    taskClass: brokerResult.taskClass,
+    currentAgentId: agent.agentId,
+  });
+  if (specialistRecommendation) {
+    console.log(
+      `[specialist-router] route=${JSON.stringify(input.routeContext)} ` +
+        `current=${JSON.stringify(agent.agentId)} taskClass=${JSON.stringify(specialistRecommendation.taskClass)} ` +
+        `→ specialist=${JSON.stringify(specialistRecommendation.specialistAgentId)} (recommend-only)`,
+    );
+  }
   const { attached: budgetedTools, deferred: deferredTools } = selectCoworkerToolBudget({
     tools: availableTools,
     roleGrants,

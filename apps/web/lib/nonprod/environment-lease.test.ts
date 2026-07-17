@@ -8,6 +8,7 @@ import {
   reapExpiredNonprodEnvironmentLeases,
   MAX_LEASE_TTL_MS,
   DEFAULT_LEASE_TTL_MS,
+  NONPROD_OWNER_PROVIDERS,
 } from "./environment-lease";
 
 function db() {
@@ -23,6 +24,15 @@ function db() {
   };
 }
 
+describe("NONPROD_OWNER_PROVIDERS", () => {
+  it("includes antigravity alongside the peer host-worktree surfaces (BI-FA5F49C6)", () => {
+    expect(NONPROD_OWNER_PROVIDERS).toEqual(
+      expect.arrayContaining(["build-studio", "claude", "codex", "grok", "antigravity", "coworker"]),
+    );
+    expect(NONPROD_OWNER_PROVIDERS).toHaveLength(6);
+  });
+});
+
 describe("non-production environment leases", () => {
   it("lists active, unexpired leases", async () => {
     const mockDb = db();
@@ -37,6 +47,25 @@ describe("non-production environment leases", () => {
         expiresAt: { gt: new Date("2026-05-26T17:00:00.000Z") },
       },
       orderBy: { createdAt: "desc" },
+    });
+  });
+
+  it("claims an available environment for antigravity as ownerProvider", async () => {
+    const mockDb = db();
+    const result = await claimNonprodEnvironmentLease({
+      db: mockDb as never,
+      environmentKey: "active-candidate",
+      ownerProvider: "antigravity",
+      ownerSessionId: "session-agy-1",
+      purpose: "UX verification",
+      url: "http://127.0.0.1:3001",
+      ports: [3001],
+      expiresAt: new Date("2026-05-26T17:15:00.000Z"),
+      now: new Date("2026-05-26T17:00:00.000Z"),
+    });
+    expect(result.status).toBe("claimed");
+    expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ ownerProvider: "antigravity" }),
     });
   });
 

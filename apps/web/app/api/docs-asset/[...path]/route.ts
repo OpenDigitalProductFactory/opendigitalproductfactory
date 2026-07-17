@@ -36,18 +36,35 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   }
   const ext = path.extname(resolved).toLowerCase();
   const contentType = CONTENT_TYPES[ext];
-  if (!contentType || !fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+  if (!contentType) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const body = fs.readFileSync(resolved);
-  return new NextResponse(body, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": "public, max-age=3600",
-      // SVGs are sanitized at render time; still forbid inline script execution.
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
-    },
-  });
+  // Read via a single file descriptor to avoid a check-then-read (TOCTOU) race:
+  // fstat and read operate on the same open inode, so the file cannot be swapped
+  // between the "is it a regular file?" check and the read.
+  let fd: number;
+  try {
+    fd = fs.openSync(resolved, "r");
+  } catch {
+    // Missing file (ENOENT), or anything else that prevents opening — treat as 404.
+    return new NextResponse("Not found", { status: 404 });
+  }
+  try {
+    if (!fs.fstatSync(fd).isFile()) {
+      return new NextResponse("Not found", { status: 404 });
+    }
+    const body = fs.readFileSync(fd);
+    return new NextResponse(body, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=3600",
+        // SVGs are sanitized at render time; still forbid inline script execution.
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+      },
+    });
+  } finally {
+    fs.closeSync(fd);
+  }
 }

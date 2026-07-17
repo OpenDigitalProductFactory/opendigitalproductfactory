@@ -63,7 +63,7 @@ export async function runCatalogEnrichmentSweepJob(
       prisma as unknown as Parameters<typeof runCatalogEnrichmentSweep>[0],
       {
         limit: options.limit ?? CATALOG_SWEEP_BATCH_LIMIT,
-        fetchers: { eolFetch: fetch, nvdFetch: fetch },
+        fetchers: { eolFetch: fetch, nvdFetch: fetch, wikidataFetch: fetch },
       },
     );
 
