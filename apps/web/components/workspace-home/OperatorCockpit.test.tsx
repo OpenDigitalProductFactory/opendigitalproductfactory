@@ -31,7 +31,6 @@ function item(
 }
 
 const NOW = Date.parse("2026-07-11T12:00:00.000Z");
-const textOf = (html: string) => html.replace(/<[^>]+>/g, "");
 
 describe("OperatorCockpitView", () => {
   it("leads with the calm owner count and shared decision cards", () => {
@@ -75,7 +74,7 @@ describe("OperatorCockpitView", () => {
     );
 
     expect(html).toContain("Nothing needs you right now.");
-    expect(textOf(html)).toContain("Your digital team is handling 1 item");
+    expect(html).toContain("Your digital team is handling</span> 1 item");
     expect(html).toContain("no action needed");
     expect(html).not.toContain("qdrant is offline");
   });
