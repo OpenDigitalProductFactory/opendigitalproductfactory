@@ -187,7 +187,13 @@ export function createConnectorLifecycle<TDraft, TRefreshResult = unknown>(depen
         probe = await input.probe();
       } catch (error) {
         const failure = toConnectorAttemptFailure(error);
-        await dependencies.persistence.transact((draft) => input.auditFailure(draft, failure));
+        try {
+          await dependencies.persistence.transact((draft) => input.auditFailure(draft, failure));
+        } catch (auditError) {
+          throw new ConnectorAttemptFailedError(toConnectorAttemptFailure(auditError), {
+            cause: new AggregateError([error, auditError], "Health probe and failure audit both failed."),
+          });
+        }
         return { state: "degraded", error: failure.safeMessage };
       }
       const result: ConnectorHealthResult = probe.ok

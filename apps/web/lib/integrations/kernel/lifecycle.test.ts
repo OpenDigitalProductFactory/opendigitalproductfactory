@@ -361,6 +361,29 @@ describe("retry and sync", () => {
     expect(auditFailure).not.toHaveBeenCalled();
   });
 
+  it("fails closed with a typed safe error when both health probe and failure audit fail", async () => {
+    const lifecycle = createConnectorLifecycle({
+      persistence: { transact: async <T>(operation: (draft: {}) => Promise<T>) => operation({}) },
+    });
+    const execution = lifecycle.health({
+      probe: async () => { throw new ConnectorError("upstream_unavailable", "raw provider token"); },
+      audit: async () => undefined,
+      auditFailure: async () => { throw new Error("raw database password"); },
+    });
+    await expect(execution).rejects.toMatchObject({
+      failure: { status: "failed", kind: "internal", safeMessage: "Connector operation failed." },
+    });
+    try {
+      await execution;
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).not.toContain("provider token");
+      expect((error as Error).message).not.toContain("database password");
+      expect((error as Error & { cause?: unknown }).cause).toBeInstanceOf(AggregateError);
+      expect((error as Error & { cause: AggregateError }).cause.errors).toHaveLength(2);
+    }
+  });
+
   it("audits refresh and client-credential exchange failures without rotating the last token", async () => {
     const refreshFixture = durableAttemptFixture({ token: "last-valid" });
     const lifecycle = createConnectorLifecycle<Parameters<typeof refreshFixture.persistence.transact>[0] extends (draft: infer D) => unknown ? D : never, { token: string }>({ persistence: refreshFixture.persistence });
