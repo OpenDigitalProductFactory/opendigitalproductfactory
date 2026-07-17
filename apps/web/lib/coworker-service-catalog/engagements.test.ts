@@ -174,4 +174,32 @@ describe("createCoworkerEngagement", () => {
       ),
     ).rejects.toThrow("External coworker offers require contractContext.termsRef and contractContext.dataBoundaryRef.");
   });
+
+  it("persists audit references supplied by an A2A delegation receipt", async () => {
+    const fakeDb = db();
+
+    await createCoworkerEngagement(
+      {
+        offerId: "offer-1",
+        requestedByAgentId: "coordinator-agent",
+        requestedOutcome: "Prepare review packet.",
+        auditRefs: {
+          delegationReceiptId: "CDR-1234",
+          delegationReceiptKind: "coworker-delegation",
+        },
+      },
+      { db: fakeDb },
+    );
+
+    expect(fakeDb.coworkerEngagement.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          auditRefs: {
+            delegationReceiptId: "CDR-1234",
+            delegationReceiptKind: "coworker-delegation",
+          },
+        }),
+      }),
+    );
+  });
 });
