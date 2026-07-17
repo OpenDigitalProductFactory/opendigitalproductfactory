@@ -42,6 +42,17 @@ describe("resolveLiveInstallReadiness", () => {
     expect(r.verdict).toBe("BLOCKED");
   });
 
+  it("surfaces actionable nextAction detail when ancestry fails with a classified kind (BI-08BE758C)", async () => {
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({
+        isAncestor: async () => ({ contained: null, failureKind: "no-repo" }),
+      }),
+    );
+    expect(r.verdict).toBe("BLOCKED");
+    expect(r.nextAction.detail).toMatch(/DPF_REPO_ROOT/);
+  });
+
   it("MUST-ADVANCE when the served identity is a content-hash (not comparable)", async () => {
     const r = await resolveLiveInstallReadiness(
       { featureSha: FEATURE },
