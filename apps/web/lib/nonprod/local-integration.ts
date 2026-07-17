@@ -3,7 +3,7 @@ import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 
 export type LocalIntegrationResultInput = {
   actorUserId: string;
-  provider: "build-studio" | "claude" | "codex" | "coworker";
+  provider: "build-studio" | "claude" | "codex" | "grok" | "antigravity" | "coworker";
   externalSessionId: string;
   routeContext: string;
   buildId?: string;
