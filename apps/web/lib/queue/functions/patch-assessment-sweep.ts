@@ -15,9 +15,14 @@ import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
 import { runEstatePatchAssessment, type PatchStoreDb } from "@/lib/patch/patch-assessment-store";
-import { createOsvPatchIntelProvider } from "@/lib/patch/patch-intel-provider";
+import {
+  createNvdCpePatchIntelProvider,
+  createOsvPatchIntelProvider,
+  mergePatchIntel,
+} from "@/lib/patch/patch-intel-provider";
 import { fetchOsvVulns } from "@/lib/patch/osv-client";
 import { fetchKevCves } from "@/lib/patch/kev-client";
+import { fetchNvdCveAdvisories } from "@/lib/patch/nvd-client";
 import type { PatchAssessmentSummary } from "@dpf/db/patch";
 
 /**
@@ -35,7 +40,12 @@ export async function runPatchAssessmentSweep(): Promise<PatchAssessmentSummary>
     kevCves = new Set();
   }
 
-  const provider = createOsvPatchIntelProvider({ fetchVulns: fetchOsvVulns, kevCves });
+  const osvProvider = createOsvPatchIntelProvider({ fetchVulns: fetchOsvVulns, kevCves });
+  const nvdProvider = createNvdCpePatchIntelProvider({
+    fetchAdvisories: (cpe) => fetchNvdCveAdvisories(cpe, { kevCves }),
+  });
+  const provider = async (evidence: Parameters<typeof osvProvider>[0]) =>
+    mergePatchIntel(await osvProvider(evidence), await nvdProvider(evidence));
   return runEstatePatchAssessment(prisma as unknown as PatchStoreDb, provider, { now: new Date() });
 }
 

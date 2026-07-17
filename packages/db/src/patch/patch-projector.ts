@@ -28,6 +28,18 @@ export interface SoftwareEvidenceLike {
   /** Optional MSP scope carried from the owning InventoryEntity. */
   customerAccountId?: string | null;
   customerSiteId?: string | null;
+  /** Resolved canonical identity fields, preferably from the evidence row then host. */
+  catalogIdentityId?: string | null;
+  catalogIdentityCpe?: string | null;
+  catalogIdentityPart?: string | null;
+  catalogLifecycleMilestones?: CatalogLifecycleMilestoneLike[] | null;
+}
+
+export interface CatalogLifecycleMilestoneLike {
+  milestone: string;
+  date?: string | Date | null;
+  source?: string | null;
+  confidence?: number | null;
 }
 
 /** Version + advisory intelligence for one software item (produced by the feed slice). */
@@ -141,6 +153,7 @@ export function assessEvidence(
 
 function adapterKeyFor(assessment: PatchAssessment): string {
   if (assessment.cisaKev) return "cisa-kev";
+  if (assessment.primaryAdvisorySource === "nvd") return "nvd";
   if (assessment.findingKind === "vulnerability") return "osv";
   return "patch-intel";
 }
@@ -155,6 +168,7 @@ function titleFor(evidence: SoftwareEvidenceLike, assessment: PatchAssessment): 
     case "end-of-life":
       return `${name} ${installed} is end-of-life`;
     case "patch-gap":
+      if (assessment.primaryAdvisoryId) return `${name} ${installed} needs patch for ${assessment.primaryAdvisoryId}`;
       return `${name} ${installed}${target ? ` → ${target}` : ""}`;
     default:
       return `${name} ${installed}`;

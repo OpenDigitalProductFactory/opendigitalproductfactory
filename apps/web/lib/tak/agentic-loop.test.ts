@@ -47,6 +47,7 @@ vi.mock("@/lib/mcp-governed-execute", () => ({
 
 import { runAgenticLoop } from "./agentic-loop";
 import { routeAndCall } from "@/lib/routed-inference";
+import { INV5_UNVERIFIED_MESSAGE } from "./evidence-requirement";
 import { executeTool } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { prisma } from "@dpf/db";
@@ -525,6 +526,44 @@ describe("runAgenticLoop", () => {
     expect(result.content).not.toContain("Model Assignment");
     expect(result.providerId).toBe("unknown");
     expect(result.modelId).toBe("unknown");
+  });
+
+  it("returns could-not-verify instead of fabricated prose when an evidence-required turn makes zero tool calls (BI-B5C358B1)", async () => {
+    // The Scrum Master incident: a live-state backlog question on /ops, a local
+    // model that ignores its tools and answers from memory with fabricated
+    // numbers. The loop must NOT surface that answer — it nudges once for a tool,
+    // then returns the explicit could-not-verify message.
+    const mockRoute = vi.mocked(routeAndCall);
+    const FABRICATED =
+      "Yes — 59 of 60 backlog items are done or deferred, and only one is still in progress. " +
+      "The team has resolved nearly all of the pressing issues on the self-upgrade board.";
+    mockRoute.mockResolvedValue(
+      mockResult({
+        content: FABRICATED,
+        providerId: "local",
+        modelId: "docker.io/ai/qwen3.6:latest",
+        toolCalls: [],
+      }) as never,
+    );
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      chatHistory: [{ role: "user" as const, content: "have the pressing issues been resolved?" }],
+      routeContext: "/ops/self-upgrade",
+      agentId: "ops-coordinator",
+      interactionMode: "chat",
+      tools: [
+        { name: "query_backlog", description: "Query backlog items and epics", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+      ],
+      toolsForProvider: [
+        { type: "function", function: { name: "query_backlog", description: "Query backlog items and epics", parameters: {} } },
+      ],
+    });
+
+    expect(result.content).toBe(INV5_UNVERIFIED_MESSAGE);
+    expect(result.content).not.toContain("59");
+    // One bounded recovery nudge before refusing → routeAndCall invoked twice.
+    expect(mockRoute.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("tells the operator to reconnect a provider (not 'wait 30s') when every endpoint is eliminated", async () => {

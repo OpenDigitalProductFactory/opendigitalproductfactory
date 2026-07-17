@@ -65,13 +65,28 @@ selection), effective-dating, and DB-backed rule loading from
 unknown-jurisdiction and unknown-predicate fail-closed tests, priced-premium
 test, starter-pack resolver test (14 tests, `constraints/evaluate.test.ts`).
 
-### Phase 3 — Solver adapter + Timefold packaging spike
+### Phase 3 — Solver adapter + Timefold packaging spike *(contract + validation built; sidecar spike pending)*
 
-**Deliverable.** Provider-neutral adapter: accepts a normalized, versioned problem, returns candidate solutions + machine-readable score/violation detail; **no** DB read, notification, publish, or exception authority. Timefold CE spike as a bounded internal sidecar service (not embedded in the Node/Alpine image): license/SBOM/provenance review, ARM64/AMD64 container sizing, determinism + timeout tests, offline operation, failure semantics. DPF performs identity resolution, applicability, and **independent hard-rule validation after solve**.
+**Deliverable.** Provider-neutral adapter contract + the independent
+post-solve validation gate. **Built in this slice** (`apps/web/lib/workforce/staffing/solver/`):
+`adapter.ts` (the `SolverAdapter` interface — a single pure `solve(problem,
+options)`; `SolveStatus` mirrors the CP-SAT/StaffingProposalRun status model; no
+DB/notify/publish authority); `validate-after-solve.ts` (re-runs the Phase 2
+constraint engine over the solver's proposed bindings — the solver is UNTRUSTED,
+"the solver recommended it" is not a rationale, spec §7.3/§14.3); `mock-adapter.ts`
+(a deterministic greedy solver for fixtures, honest about unfilled demand).
 
-**Files.** `apps/web/lib/workforce/staffing/solver/adapter.ts` (interface + normalized problem/solution types); solver sidecar service dir + Dockerfile; compose wiring (one `dpf` project).
+**Pending — the infra spike** (separate PR, not pure-TS): Timefold CE sidecar
+(kernel `DI-78788D22BE65`) — license/SBOM/provenance, ARM64/AMD64 container
+sizing, determinism + timeout tests against the same fixtures, offline
+operation, `dpf`-compose wiring; OR-Tools CP-SAT fallback behind the same
+contract. Provider enums must not leak into the core (spec §14.1).
 
-**Verification.** Deterministic fixtures → stable solutions; feasible/infeasible/unknown/timeout each handled; independent post-solve validation catches any solver hard-rule violation; sidecar builds on both arches; documented OR-Tools fallback path.
+**Verification.** Deterministic mock (same input ⇒ same output), honest
+`infeasible` with unfilled shifts (no fabricated fill), credential-aware fill,
+and the post-solve gate: rejects a rogue option that double-books despite the
+solver self-reporting zero violations, and withholds publish when the
+jurisdiction is unresolved (6 tests, `solver/adapter.test.ts`).
 
 ### Phase 4 — AI Staffing Coworker proposal flow + human-authority boundary
 
