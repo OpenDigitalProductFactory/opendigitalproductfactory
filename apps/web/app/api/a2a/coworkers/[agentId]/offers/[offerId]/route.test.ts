@@ -198,8 +198,11 @@ describe("A2A coworker offer route", () => {
     );
 
     expect(response.status).toBe(400);
+    // Canonical apiErrorResponse envelope (BI-81EE4A46): { code, message, details }
     await expect(response.json()).resolves.toMatchObject({
-      error: "missing_gaid_call_chain",
+      code: "INVALID_ARGUMENT",
+      message: "Cross-boundary A2A task submission requires actingAgentGaid and delegatingAgentGaid.",
+      details: { error: "missing_gaid_call_chain" },
     });
     expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
   });
@@ -222,8 +225,12 @@ describe("A2A coworker offer route", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
-      error: "missing_contract_context",
-      missing: ["termsRef", "dataBoundaryRef"],
+      code: "INVALID_ARGUMENT",
+      message: "Cross-boundary A2A task submission requires termsRef and dataBoundaryRef.",
+      details: {
+        error: "missing_contract_context",
+        missing: ["termsRef", "dataBoundaryRef"],
+      },
     });
     expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
   });
