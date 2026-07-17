@@ -1,6 +1,6 @@
 # Governed Platform Upgrade — Phase 0 (Substrate Cleanup) + Phase 1 (Versioning Baseline) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
+> **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stabilize the split self-upgrade code path so there is exactly one runnable upgrade flow with consistent DTO vocabulary, then introduce a first-class `platform.version` concept whose canonical source is `version.json` and whose runtime mirror, API, and `/ops/self-upgrade` UI all agree.
 
@@ -1266,7 +1266,7 @@ When you reach Phase 2, dispatch a fresh writing-plans run with this section as 
 
 ## Execution Handoff
 
-Recommended execution mode per `superpowers:subagent-driven-development`:
+Recommended execution mode (one reviewable task at a time, per the dpf-writing-plans preamble):
 
 - **One subagent per task**, fresh context each time
 - **Operator review between tasks** — particularly between Task 5 (deletions) and Task 6 (resolveTargetSha log)

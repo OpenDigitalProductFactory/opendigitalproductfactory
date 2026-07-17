@@ -1,6 +1,6 @@
 # Feedback Routing Resolution Ledger Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build Phase 2/2a for feedback: a pure `assessFeedbackRouting()` decision layer plus the `PlatformIssueResolution` ledger required before any upstream bridge filing.
 
