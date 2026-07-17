@@ -16,7 +16,9 @@ describe("classifyEvidenceRequirement", () => {
       message: "have the pressing issues been resolved?",
     });
     expect(r.required).toBe(true);
-    expect(r.taskClass).toBe("/ops/self-upgrade");
+    // Phase 2: taskClass is now a data-driven class id from the taxonomy.
+    expect(r.taskClass).not.toBeNull();
+    expect(r.authoritativeToolNames?.length ?? 0).toBeGreaterThan(0);
   });
 
   it("flags a live-state question with no '?' via a state cue", () => {

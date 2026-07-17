@@ -15,6 +15,8 @@
 // live-state tools) plus a live-state question cue. Phase 2 (the IntentClassifier)
 // replaces the heuristic; the enforcement guard is permanent.
 
+import { classifyTaskClass } from "./intent-taxonomy";
+
 /** What the user is shown when a live-data answer could not be tool-verified. */
 export const INV5_UNVERIFIED_MESSAGE =
   "I couldn't verify this against live data just now — I don't want to guess at " +
@@ -46,15 +48,20 @@ const LIVE_STATE_CUES: readonly RegExp[] = [
 
 export interface EvidenceRequirement {
   required: boolean;
-  /** Short label for observability / audit (e.g. the route prefix). */
+  /** The matched task class (e.g. "backlog-status"), or a route label / null. */
   taskClass: string | null;
+  /** The authoritative live-state tools that verify this class, when known. A
+   *  turn is tool-verified iff one of these ran successfully; absent → any
+   *  non-meta tool counts (Phase-1 behavior). */
+  authoritativeToolNames?: readonly string[];
 }
 
 /**
  * Decide whether this turn's answer depends on live operational state and must be
- * tool-backed. Phase-1 heuristic: TRUE when the route exposes authoritative
- * domain tools AND the user message reads like a live-state question. Both cues
- * are required to keep false positives off ordinary conversational turns.
+ * tool-backed. Phase 2 (BI-DF3092F4) consults the data-driven task-class taxonomy
+ * first; for routes the taxonomy does not yet cover it falls back to the Phase-1
+ * heuristic (a route that declares domain tools + a live-state question). Both
+ * paths require a live-state cue so ordinary conversational turns are never gated.
  */
 export function classifyEvidenceRequirement(params: {
   routeContext?: string | null;
@@ -62,16 +69,24 @@ export function classifyEvidenceRequirement(params: {
   domainTools?: readonly string[];
   message: string;
 }): EvidenceRequirement {
-  const domainTools = params.domainTools ?? [];
   const message = (params.message ?? "").trim();
-  if (domainTools.length === 0 || message.length === 0) {
-    return { required: false, taskClass: null };
+  if (message.length === 0) return { required: false, taskClass: null };
+
+  // Phase 2: data-driven task-class classification.
+  const tc = classifyTaskClass({ routeContext: params.routeContext, message });
+  if (tc) {
+    return { required: true, taskClass: tc.taskClass, authoritativeToolNames: tc.authoritativeToolNames };
   }
+
+  // Phase-1 fallback for uncovered routes: route declares domain tools + question.
+  const domainTools = params.domainTools ?? [];
+  if (domainTools.length === 0) return { required: false, taskClass: null };
   const looksLikeLiveStateQuestion =
     message.includes("?") || LIVE_STATE_CUES.some((re) => re.test(message));
   return {
     required: looksLikeLiveStateQuestion,
     taskClass: looksLikeLiveStateQuestion ? (params.routeContext ?? "route") : null,
+    authoritativeToolNames: looksLikeLiveStateQuestion ? domainTools : undefined,
   };
 }
 

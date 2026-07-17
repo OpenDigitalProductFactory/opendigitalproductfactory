@@ -148,6 +148,8 @@ This is the kernel/org-overlay pattern again: component catalog entries are kern
 - Reclamation & usage metering — **BI-55756F66**
 - SaaS management — **BI-30151E25**
 
+**Phase C detailed design:** see [`2026-07-17-software-asset-management-phase-c-design.md`](2026-07-17-software-asset-management-phase-c-design.md), which decomposes the three roadmap BIs into founder-signoff-gated child BIs and records the WWMD decision to extend the existing `CatalogIdentity` / `DigitalProduct` / `SupplierContract` / `AssuranceFinding` spines instead of creating a parallel SAM substrate.
+
 **Phase D — HAM (roadmap):**
 - Hardware lifecycle & financials — **BI-3D1DBFBE**
 

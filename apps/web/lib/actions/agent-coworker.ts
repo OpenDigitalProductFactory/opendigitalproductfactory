@@ -1320,7 +1320,12 @@ export async function sendMessage(input: {
   // Reads the DMR served-context TRUTH (not ModelProfile, which model discovery can
   // reset to null); no reachable local generation model → the full 48. Resolved
   // once up front (localServedContext) and reused here + for the skills-catalog cap.
-  const toolCap = deriveCoworkerToolCap(localServedContext);
+  // BI-DF3092F4 (Phase 2) — lift the cap above the fail-safe cliff only when the
+  // local model has MEASURED tool-selection fidelity evidence for a larger
+  // surface; unmeasured → null → Phase-1 fail-safe. Best-effort (never throws).
+  const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
+  const measuredToolFidelityCeiling = await resolveLocalToolFidelityCeiling();
+  const toolCap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling });
   // BI-B5C358B1 — the route's declared domain tools are the ones a turn on this
   // route is most likely to need (e.g. /ops → backlog query/update). They were
   // only injected as system-prompt PROSE, never attached, so the intent ranker's
@@ -1331,10 +1336,23 @@ export async function sendMessage(input: {
   // granted simply isn't in availableTools and is a no-op here (authority INV-3
   // intact).
   const routeDomainToolNames = resolveRouteContext(input.routeContext).domainTools ?? [];
+  // BI-FB0A5C82 (Phase 3) — planner-driven capability discovery. The broker
+  // classifies the turn's intent and proactively selects the capability set it
+  // needs (the intent's authoritative tools + top keyword-relevant tools), which
+  // can extend BEYOND the route's static domainTools. Force-attaching them means
+  // the model gets the right tools without a model-driven load_tools round-trip;
+  // load_tools remains as the shim for the long tail. Discovery/attachment only —
+  // the broker can only surface already-authorized tools (INV-3 intact).
+  const { brokerCapabilities } = await import("@/lib/tak/capability-broker");
+  const brokeredToolNames = brokerCapabilities({
+    routeContext: input.routeContext,
+    message: trimmedContent,
+    tools: availableTools,
+  }).brokeredNames;
   const { attached: budgetedTools, deferred: deferredTools } = selectCoworkerToolBudget({
     tools: availableTools,
     roleGrants,
-    pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames]),
+    pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames, ...brokeredToolNames]),
     alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
     cap: toolCap,
     // BI-ACE1EBA4 — when the cap forces deferral, keep the tools most relevant to
