@@ -42,6 +42,7 @@ import {
   attachBuildStudioWorkCapsule,
   type BuildStudioCapsuleDb,
 } from "@/lib/work-capsules/build-studio-attachment";
+import type { UnifiedWipDb } from "@/lib/build/unified-wip-query";
 import { revalidatePortalContextForBuild } from "@/lib/portal-context/invalidation";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
@@ -83,16 +84,18 @@ export async function createFeatureBuild(input: {
 
   if (!input.title.trim()) return { ok: false, error: "Title is required" };
 
-  // WIP cap: don't let a new build start while too many are unfinished
-  // (all builds share one sandbox). Returned (not thrown) so the plain-English
-  // message survives the Server-Action → client boundary in production.
-  const { wipCapReached, BUILD_WIP_CAP, BuildWipCapError, TERMINAL_BUILD_PHASES } =
-    await import("@/lib/build/wip-cap");
-  const activeBuilds = await prisma.featureBuild.count({
-    where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
-  });
-  if (wipCapReached(activeBuilds)) {
-    const err = new BuildWipCapError(activeBuilds, BUILD_WIP_CAP);
+  // WIP cap (BI-937128F6): don't let a new build start while the shared BS
+  // sandbox pool is saturated. The pressure is now the unified, pool-aware count
+  // across ALL surfaces' active WIP — a new BS build contends on the bs-sandbox
+  // pool, so it gates on that pool's pressure (capacity BUILD_WIP_CAP, unchanged),
+  // replacing the old BS-only build count. Returned (not thrown) so the
+  // plain-English message survives the Server-Action → client boundary in prod.
+  const { decideUnifiedWip, BuildWipCapError } = await import("@/lib/build/wip-cap");
+  const { loadActiveUnifiedWip, poolPressure } = await import("@/lib/build/unified-wip-query");
+  const wip = await loadActiveUnifiedWip(prisma as unknown as UnifiedWipDb);
+  const wipDecision = decideUnifiedWip("bs-sandbox", poolPressure(wip, "bs-sandbox"));
+  if (!wipDecision.admitted) {
+    const err = new BuildWipCapError(wipDecision.pressure, wipDecision.capacity);
     return { ok: false, error: err.message, code: err.code };
   }
 

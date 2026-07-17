@@ -38,9 +38,15 @@ const { mockPrisma, mockInngest } = vi.hoisted(() => ({
       findFirst: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      // BI-937128F6: unified WIP query reads active capsules across surfaces.
+      findMany: vi.fn(),
     },
     workCapsuleActivity: {
       create: vi.fn(),
+    },
+    // BI-937128F6: unified WIP query reads the active shared nonprod leases.
+    nonProductionEnvironmentLease: {
+      findMany: vi.fn(),
     },
     platformDevConfig: {
       findUnique: vi.fn(),
@@ -95,6 +101,8 @@ describe("backlog MCP tool execution", () => {
       backlogTeeUpDailyCap: 3,
     });
     mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
+    mockPrisma.workCapsule.findMany.mockResolvedValue([]);
+    mockPrisma.nonProductionEnvironmentLease.findMany.mockResolvedValue([]);
     mockPrisma.workCapsule.create.mockResolvedValue({
       id: "capsule-row-1",
       capsuleId: "WC-BUILD-1234",
