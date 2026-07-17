@@ -164,6 +164,12 @@ mode. `DPF_LOCAL_CI_COMMAND` remains an explicit override. The
 old Phase 1 stub is only reachable via `DPF_ALLOW_LOCAL_CI_STUB=1` for contract
 tests and must never be used as release evidence.
 
+The command plan carries required process environment as `env NAME=value ...`
+prefixes, and the Node runner interprets those prefixes directly instead of
+depending on a host `env` executable. This keeps the 8 GiB `NODE_OPTIONS`
+headroom on both POSIX and Windows typecheck paths; the production build may
+still use the host-specific strategy selected by the plan.
+
 The network-disconnect proof is encoded in
 `tests/release/local-ci-gate-contract.test.mjs`: the contract denies network
 Git verbs during `gate-worktree.sh`, records local-only evidence with
