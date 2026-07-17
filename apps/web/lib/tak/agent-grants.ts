@@ -628,9 +628,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // HR — query
   query_employees: ["consumer_read", "registry_read"],
 
-  // Workforce staffing (EP-WORKFORCE-OPS / BI-4AD09A35) — minimum-necessary
-  // read surface on the coworker read baseline. Write/proposal tools are
-  // deny-by-default follow-ups with their own scoped grants.
+  // Workforce staffing (EP-WORKFORCE-OPS / BI-4AD09A35) read surface.
   list_staffing_demand: ["registry_read"],
   get_staffing_coverage: ["registry_read"],
 
