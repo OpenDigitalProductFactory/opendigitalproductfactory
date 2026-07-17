@@ -67,6 +67,7 @@ import {
   createRowAction,
   updateCellsAction,
   deleteRowAction,
+  reorderRowsAction,
   listViewsAction,
   saveViewAction,
   deleteViewAction,
@@ -123,6 +124,7 @@ import { GridViewsMenu } from "./GridViewsMenu";
 import {
   reorderColumnIds,
   applyColumnOrder,
+  reorderRowsByDrag,
   groupRowsByColumn,
   groupKeys,
   expandedGroupSet,
@@ -637,6 +639,26 @@ export function WorkbookGrid({
   const groupColumnId = effectiveGroupBy[0];
   const grouping = Boolean(groupColumnId) && !gallery && columns.length > 0;
 
+  // Manual row reordering (drag a row to a new slot). Optimistic: reorder the
+  // local rows immediately, then persist the new order to WorkbookRow.position
+  // (custom tables only — platform grids have no stored row order). Declared
+  // before gridColumns because the drag column's cell calls it.
+  const onReorderRow = useCallback(
+    (dragId: string, dropId: string) => {
+      const next = reorderRowsByDrag(rowData, dragId, dropId);
+      setRowData(next);
+      if (source === "custom") {
+        void reorderRowsAction(
+          tableId,
+          next.map((r) => r.rowId),
+        ).then((res) => {
+          if (!res.ok) setError(res.error);
+        });
+      }
+    },
+    [rowData, source, tableId],
+  );
+
   const gridColumns = useMemo<Column<GridRowData, SummaryRow>[]>(() => {
     const cols = visibleCols.map((c, i) => {
       const built = buildColumn(
@@ -716,10 +738,59 @@ export function WorkbookGrid({
         </button>
       ),
     };
-    return capabilities.canDeleteRow
-      ? [SelectColumn as Column<GridRowData, SummaryRow>, expandCol, ...cols]
-      : [expandCol, ...cols];
-  }, [visibleCols, capabilities, showProvenance, effectiveFrozen, showFooter, footerAgg, grouping, effectiveGroupBy]);
+    // Leading "drag" column: manual row reordering. Only meaningful on a custom
+    // table whose rows have a stored order, and only while the displayed order is
+    // the manual one — a sort or grouping overrides it, so hide the handle then.
+    const canReorderRows =
+      source === "custom" && capabilities.canEditCell && sortColumns.length === 0 && !grouping;
+    const dragCol: Column<GridRowData, SummaryRow> = {
+      key: "__drag__",
+      name: "",
+      width: 28,
+      minWidth: 28,
+      maxWidth: 28,
+      frozen: true,
+      resizable: false,
+      sortable: false,
+      renderCell: ({ row }) => (
+        <div
+          className="dpf-grid-drag-handle"
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.setData("text/plain", row.rowId);
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const src = e.dataTransfer.getData("text/plain");
+            if (src && src !== row.rowId) onReorderRow(src, row.rowId);
+          }}
+          title="Drag to reorder"
+          aria-label="Drag to reorder row"
+        >
+          ⠿
+        </div>
+      ),
+    };
+    const lead: Column<GridRowData, SummaryRow>[] = [];
+    if (capabilities.canDeleteRow) lead.push(SelectColumn as Column<GridRowData, SummaryRow>);
+    if (canReorderRows) lead.push(dragCol);
+    lead.push(expandCol);
+    return [...lead, ...cols];
+  }, [
+    visibleCols,
+    capabilities,
+    showProvenance,
+    effectiveFrozen,
+    showFooter,
+    footerAgg,
+    grouping,
+    effectiveGroupBy,
+    source,
+    sortColumns.length,
+    onReorderRow,
+  ]);
 
   const onColumnsReorder = useCallback(
     (sourceKey: string, targetKey: string) => {

@@ -61,6 +61,21 @@ export function applyColumnOrder(
 }
 
 /**
+ * Reorder rows for a drag-and-drop: move the row with id `dragId` into the slot
+ * of `dropId` (same semantics as column drag). Returns a new array; the input is
+ * untouched, and an unknown id is a no-op. Used for manual row ordering.
+ */
+export function reorderRowsByDrag(
+  rows: readonly GridRowData[],
+  dragId: string,
+  dropId: string,
+): GridRowData[] {
+  const ids = reorderColumnIds(rows.map((r) => r.rowId), dragId, dropId);
+  const byId = new Map(rows.map((r) => [r.rowId, r]));
+  return ids.map((id) => byId.get(id)!);
+}
+
+/**
  * Bucket rows by a column's displayed value — the `rowGrouper` a `TreeDataGrid`
  * calls for each grouping level. Empty/blank values collapse into a single
  * `(empty)` bucket. Insertion order within a bucket is preserved (so an active
