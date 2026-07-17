@@ -797,18 +797,25 @@ export async function sendMessage(input: {
     const contextSources = [
       // L1: Route-essential context
       { tier: "L1" as const, priority: 0, content: domainBlock, tokenCount: countTokens(domainBlock), source: "domain", compressible: false },
-      // L1: Profession corpus (WSID Phase 3) — the coworker's professional
-      // knowledge base, ranked above generic wiki recall. Priority 1 (just under
-      // route-domain context); compressible to abstracts-only under tight budget.
+      // L1: PAGE DATA — screen the employee is on; promoted from L2 so it's funded before in-flight work and survives small tiers; ~1500-char compressed floor (BI-7C9DCBF7).
+      ...(routeData ? [{
+        tier: "L1" as const, priority: 1, content: `--- PAGE DATA ---\n${routeData}`, tokenCount: countTokens(routeData),
+        source: "page-data", compressible: true,
+        compressedContent: `--- PAGE DATA ---\n${routeData.slice(0, 1500)}...`,
+        compressedTokenCount: countTokens(routeData.slice(0, 1500)),
+      }] : []),
+      // L1: Profession corpus (WSID Phase 3) — professional knowledge base above
+      // generic wiki recall; compressible to abstracts-only under tight budget.
       ...(professionCorpus?.promptBlock ? [{
-        tier: "L1" as const, priority: 1, content: professionCorpus.promptBlock,
+        tier: "L1" as const, priority: 2, content: professionCorpus.promptBlock,
         tokenCount: professionCorpus.tokenCount, source: "profession-corpus", compressible: true,
         compressedContent: professionCorpus.compactBlock ?? "",
         compressedTokenCount: professionCorpus.compactTokenCount,
       }] : []),
+      // L1: In-flight work (portal-context) — the FALLBACK topic; ranks below page-data.
       ...(portalContextPrompt ? [{
         tier: "L1" as const,
-        priority: 2,
+        priority: 3,
         content: portalContextPrompt,
         tokenCount: countTokens(portalContextPrompt),
         source: "portal-context",
@@ -816,28 +823,21 @@ export async function sendMessage(input: {
       }] : []),
       // L1: User facts — structured memory from prior conversations
       ...(factsContext ? [{
-        tier: "L1" as const, priority: 3, content: factsContext, tokenCount: countTokens(factsContext),
+        tier: "L1" as const, priority: 4, content: factsContext, tokenCount: countTokens(factsContext),
         source: "user-facts", compressible: true,
         compressedContent: factsCompressed ?? "",
         compressedTokenCount: countTokens(factsCompressed ?? ""),
       }] : []),
-      // L2: Situational — page data
-      ...(routeData ? [{
-        tier: "L2" as const, priority: 1, content: `--- PAGE DATA ---\n${routeData}`, tokenCount: countTokens(routeData),
-        source: "page-data", compressible: true,
-        compressedContent: `--- PAGE DATA ---\n${routeData.slice(0, 400)}...`,
-        compressedTokenCount: countTokens(routeData.slice(0, 400)),
-      }] : []),
       // L2: Semantic memory — past conversation context
       ...(recalledContext ? [{
-        tier: "L2" as const, priority: 2, content: recalledContext, tokenCount: countTokens(recalledContext),
+        tier: "L2" as const, priority: 1, content: recalledContext, tokenCount: countTokens(recalledContext),
         source: "semantic-memory", compressible: true,
         compressedContent: compressedRecall!,
         compressedTokenCount: countTokens(compressedRecall!),
       }] : []),
       // L2: Knowledge pointers
       ...(knowledgePointers ? [{
-        tier: "L2" as const, priority: 3, content: knowledgePointers, tokenCount: countTokens(knowledgePointers),
+        tier: "L2" as const, priority: 2, content: knowledgePointers, tokenCount: countTokens(knowledgePointers),
         source: "knowledge", compressible: true, compressedContent: "", compressedTokenCount: 0,
       }] : []),
       // L2: Attachments — already injected inline in the last user message (lines 273-283)
