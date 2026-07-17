@@ -50,6 +50,7 @@ export type SweepIdentityRow = {
 
 /** One BomComponent row the SBOM stage bridges into the catalog. */
 export type SweepBomRow = {
+  id: string;
   name: string;
   version: string | null;
   packageUrl: string | null;
@@ -100,6 +101,8 @@ export type CatalogSweepResult = {
 
 function bomRowToInput(row: SweepBomRow): BomComponentInput {
   return {
+    // Carry the row id so the bridge links BomComponent.catalogIdentityId (BI-877FE5D4).
+    id: row.id,
     name: row.name,
     version: row.version,
     packageUrl: row.packageUrl,
@@ -139,6 +142,7 @@ export async function runCatalogEnrichmentSweep(
     take: limit,
     orderBy: { lastSeenAt: "desc" },
     select: {
+      id: true,
       name: true,
       version: true,
       packageUrl: true,

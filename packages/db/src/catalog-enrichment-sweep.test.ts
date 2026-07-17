@@ -14,6 +14,7 @@ type Recorded = {
   cpeUpdates: Array<{ id: string; cpe: string }>;
   lifecycleUpserts: Array<{ catalogIdentityId: string; milestone: string }>;
   sbomUpserts: string[];
+  bomLinks: Array<{ id: string; catalogIdentityId: string }>;
 };
 
 function buildDb(
@@ -46,6 +47,10 @@ function buildDb(
     bomComponent: {
       count: async () => bomComponents.length,
       findMany: async () => bomComponents,
+      update: async ({ where, data }: { where: { id: string }; data: { catalogIdentityId: string } }) => {
+        recorded.bomLinks.push({ id: where.id, catalogIdentityId: data.catalogIdentityId });
+        return {};
+      },
     },
   } as unknown as CatalogSweepClient;
 }
@@ -77,18 +82,21 @@ describe("runCatalogEnrichmentSweep", () => {
       { id: "ci-mystery", part: "a", manufacturer: "Acme", product: "MysteryApp", productVersion: null, edition: null },
     ];
     const bomComponents: SweepBomRow[] = [
-      { name: "left-pad", version: "1.3.0", packageUrl: "pkg:npm/left-pad@1.3.0", supplierName: null, ecosystem: "npm" },
+      { id: "bc-leftpad", name: "left-pad", version: "1.3.0", packageUrl: "pkg:npm/left-pad@1.3.0", supplierName: null, ecosystem: "npm" },
     ];
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [] };
     const db = buildDb(identities, bomComponents, recorded);
 
     const result = await runCatalogEnrichmentSweep(db, {
       fetchers: { eolFetch: eolFetchStub() },
     });
 
-    // SBOM stage bridged the one component.
+    // SBOM stage bridged the one component and linked it back to its identity.
     expect(result.sbomComponentsIngested).toBe(1);
     expect(recorded.sbomUpserts).toHaveLength(1);
+    expect(recorded.bomLinks).toEqual([
+      { id: "bc-leftpad", catalogIdentityId: "ci:a:npm:left-pad:1-3-0" },
+    ]);
     // CPE resolved for both identities.
     expect(result.cpeResolved).toBe(2);
     expect(recorded.cpeUpdates.map((u) => u.id).sort()).toEqual(["ci-mystery", "ci-pg"]);
@@ -106,7 +114,7 @@ describe("runCatalogEnrichmentSweep", () => {
       { id: "ci-a", part: "a", manufacturer: "A", product: "A", productVersion: null, edition: null },
       { id: "ci-b", part: "a", manufacturer: "B", product: "B", productVersion: null, edition: null },
     ];
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [] };
     const db = buildDb(identities, [], recorded);
     // First CPE update throws; the sweep must count it and continue to ci-b.
     let calls = 0;
@@ -128,7 +136,7 @@ describe("runCatalogEnrichmentSweep", () => {
     const identities: SweepIdentityRow[] = Array.from({ length: 5 }, (_, i) => ({
       id: `ci-${i}`, part: "a", manufacturer: "M", product: "P", productVersion: null, edition: null,
     }));
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [] };
     // findMany honors take in the real client; here we assert the option is passed through
     // by returning only the first `take` rows.
     const takeAware: CatalogSweepClient = {

@@ -8,6 +8,12 @@
 // (which proprietary product contains it) is composition IP and is NOT touched here.
 
 export type BomComponentInput = {
+  /**
+   * The BomComponent row id. When present, the component is linked back to the
+   * CatalogIdentity it resolves to (BI-877FE5D4); when absent (e.g. a pre-persist
+   * derivation) only the identity is upserted, no link is written.
+   */
+  id?: string | null;
   name: string;
   version?: string | null;
   packageUrl?: string | null;
@@ -73,10 +79,13 @@ export function bomComponentToCatalogIdentity(component: BomComponentInput): Der
   return { identityKey, part: "a", manufacturer, product, productVersion: version };
 }
 
-/** Minimal prisma surface for the upsert — keeps this unit-testable with a mock. */
+/** Minimal prisma surface for the upsert + link — keeps this unit-testable with a mock. */
 export type SbomBridgeClient = {
   catalogIdentity: {
     upsert(args: unknown): Promise<{ id: string }>;
+  };
+  bomComponent: {
+    update(args: unknown): Promise<unknown>;
   };
 };
 
@@ -94,12 +103,21 @@ export async function upsertIdentityForComponent(
     productVersion: identity.productVersion,
     source: "sbom",
   };
-  await db.catalogIdentity.upsert({
+  const row = await db.catalogIdentity.upsert({
     where: { identityKey: identity.identityKey },
     update: fields,
     create: { identityKey: identity.identityKey, ...fields },
     select: { id: true },
   });
+  // Link the component back to its canonical identity (BI-877FE5D4) so the SBOM view
+  // can traverse component→identity→lifecycle/CVEs. Only when the caller supplied the
+  // BomComponent id (a real persisted row); a pre-persist derivation just upserts.
+  if (component.id) {
+    await db.bomComponent.update({
+      where: { id: component.id },
+      data: { catalogIdentityId: row.id },
+    });
+  }
   return identity.identityKey;
 }
 
