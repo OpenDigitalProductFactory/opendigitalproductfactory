@@ -57,6 +57,70 @@ describe("buildFingerprintContribution — opt-in gating + fail-closed redaction
   });
 });
 
+// BI-8577DA8F (HAM Phase D1, spec §5.3): commodity hardware model rules reuse the SAME
+// device-fingerprint contribution path — no second egress mechanism. The shareable
+// manufacturer/product/model mapping rides `resolvedIdentity` (kind='hardware', model),
+// so no payload extension is needed; the redaction gate + opt-in still apply unchanged.
+const dellR750Rule: ContributableRule = {
+  ruleKey: "estate:dell-poweredge-r750",
+  requiredEvidenceFamilies: ["dmi"],
+  matchExpression: { all: [{ type: "contains", path: "product", value: "poweredge r750" }] },
+  resolvedIdentity: { kind: "hardware", name: "Dell PowerEdge R750", vendor: "Dell", model: "PowerEdge R750", deviceClass: "server" },
+  taxonomyNodeId: "foundational/compute/physical_compute",
+  identityConfidence: 0.97,
+  taxonomyConfidence: 0.95,
+};
+
+describe("buildFingerprintContribution — commodity hardware model rules (BI-8577DA8F)", () => {
+  it("contributes a commodity hardware model rule through the SAME path, mapping on resolvedIdentity", () => {
+    const result = buildFingerprintContribution(dellR750Rule, { optIn: true, contributor: "dpf-pseudo-hw" });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    // The §5.3 shareable manufacturer/product/model mapping — already carried, no new field.
+    expect(result.payload.resolvedIdentity.vendor).toBe("Dell");
+    expect(result.payload.resolvedIdentity.model).toBe("PowerEdge R750");
+    expect(result.payload.taxonomyNodeId).toBe("foundational/compute/physical_compute");
+  });
+
+  it("honors the same device-fingerprint opt-out for hardware rules", () => {
+    expect(buildFingerprintContribution(dellR750Rule, { optIn: false, contributor: "p" }).status).toBe("skipped_opt_out");
+  });
+
+  it("redacts an embedded MAC in a hardware rule (does not egress a private local literal)", () => {
+    const withMac: ContributableRule = {
+      ...dellR750Rule,
+      matchExpression: { all: [{ type: "exact", path: "mac", value: "b0:83:fe:aa:bb:cc" }] },
+    };
+    const result = buildFingerprintContribution(withMac, { optIn: true, contributor: "p" });
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(JSON.stringify(result.payload)).toContain("[redacted-mac]");
+    expect(result.redactedFields.length).toBeGreaterThan(0);
+  });
+
+  it("ABORTS fail-closed when a hardware rule embeds a secret-like token", () => {
+    const poisoned: ContributableRule = {
+      ...dellR750Rule,
+      matchExpression: { all: [{ type: "contains", path: "banner", value: "authorization: bearer sk-idrac999" }] },
+    };
+    const result = buildFingerprintContribution(poisoned, { optIn: true, contributor: "p" });
+    expect(result.status).toBe("aborted_blocked_sensitive");
+  });
+
+  it("activates an inbound hardware model rule only after the install's own fixtures pass", () => {
+    const inboundHw: InboundFingerprintRule = {
+      ...dellR750Rule,
+      provenance: { contributor: "dpf-other-install", curationRecordId: "cur_hw" },
+    };
+    const decision = decideInboundActivation(inboundHw, {
+      positive: [{ name: "r750", evidenceFamilies: ["dmi"], normalizedEvidence: { product: "poweredge r750" } }],
+      negative: [{ name: "r640", evidenceFamilies: ["dmi"], normalizedEvidence: { product: "poweredge r640" } }],
+    });
+    expect(decision.activate).toBe(true);
+    expect(decision.scope).toBe("local"); // never auto-global, hardware included
+  });
+});
+
 describe("decideInboundActivation — supply-chain-safe fixture gating", () => {
   const inbound: InboundFingerprintRule = {
     ...reolinkRule,

@@ -36,6 +36,7 @@ import {
 // (single source of truth — avoids a duplicate `deriveEolSlug` / barrel-export clash).
 import { deriveEolSlug } from "./enrich-digital-product";
 import { enrichHardwareIdentity } from "./hardware-lifecycle";
+import { deriveSupportPostureFromMilestones } from "./support-posture";
 
 const DEFAULT_LIMIT = 100;
 
@@ -75,6 +76,11 @@ export type CatalogSweepClient = CpeUpsertClient &
       findMany(args: unknown): Promise<SweepBomRow[]>;
       count(args?: unknown): Promise<number>;
     };
+    // HAM Phase D1 (BI-4731303B): project feed-derived support posture onto the discovered
+    // instances of a hardware model (every InventoryEntity resolved to the identity).
+    inventoryEntity: {
+      updateMany(args: unknown): Promise<{ count: number }>;
+    };
   };
 
 export type CatalogSweepFetchers = {
@@ -89,6 +95,8 @@ export type CatalogSweepFetchers = {
 export type CatalogSweepOptions = {
   limit?: number;
   fetchers?: CatalogSweepFetchers;
+  /** Clock for support-posture projection (BI-4731303B); defaults to now. Injectable for tests. */
+  now?: Date;
 };
 
 export type CatalogSweepResult = {
@@ -101,6 +109,9 @@ export type CatalogSweepResult = {
   // instead of the software endoflife mapping.
   hardwareIdentitiesEnriched: number;
   hardwareMilestonesWritten: number;
+  // HAM Phase D1 (BI-4731303B): InventoryEntity rows whose support posture was projected
+  // from a resolved hardware identity's lifecycle milestones.
+  entitiesPostureProjected: number;
   sbomComponentsIngested: number;
   bomComponentsTotal: number;
   failures: number;
@@ -130,6 +141,7 @@ export async function runCatalogEnrichmentSweep(
   const eolFetch = options.fetchers?.eolFetch;
   const nvdFetch = options.fetchers?.nvdFetch;
   const wikidataFetch = options.fetchers?.wikidataFetch;
+  const now = options.now ?? new Date();
 
   const result: CatalogSweepResult = {
     identitiesScanned: 0,
@@ -139,6 +151,7 @@ export async function runCatalogEnrichmentSweep(
     lifecycleProductsMatched: 0,
     hardwareIdentitiesEnriched: 0,
     hardwareMilestonesWritten: 0,
+    entitiesPostureProjected: 0,
     sbomComponentsIngested: 0,
     bomComponentsTotal: 0,
     failures: 0,
@@ -219,6 +232,22 @@ export async function runCatalogEnrichmentSweep(
         );
         if (hw.eolMatched || hw.wikidataMatched) result.hardwareIdentitiesEnriched += 1;
         result.hardwareMilestonesWritten += hw.milestonesWritten;
+
+        // Project the feed-derived support posture onto every discovered instance of this
+        // hardware model (BI-4731303B). Only when the eol evidence yields a posture — a
+        // model with no eol milestone leaves the entities' existing status untouched.
+        const posture = deriveSupportPostureFromMilestones(hw.milestones, now);
+        if (posture) {
+          const { count } = await db.inventoryEntity.updateMany({
+            where: { catalogIdentityId: identity.id },
+            data: {
+              supportStatus: posture.supportStatus,
+              supportLifecycleSource: posture.supportLifecycleSource,
+              supportLifecycleConfidence: posture.supportLifecycleConfidence,
+            },
+          });
+          result.entitiesPostureProjected += count;
+        }
       } else {
         const slug = deriveEolSlug(identity);
         if (slug) {

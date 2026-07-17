@@ -152,6 +152,9 @@ export type HardwareEnrichResult = {
   milestonesWritten: number;
   eolMatched: boolean;
   wikidataMatched: boolean;
+  // Every milestone written this pass — the sweep derives InventoryEntity support posture
+  // from these without a re-read (BI-4731303B).
+  milestones: HardwareLifecycleMilestone[];
 };
 
 /**
@@ -164,7 +167,12 @@ export async function enrichHardwareIdentity(
   identity: HardwareIdentityInput,
   fetchers: HardwareFetchers = {},
 ): Promise<HardwareEnrichResult> {
-  const result: HardwareEnrichResult = { milestonesWritten: 0, eolMatched: false, wikidataMatched: false };
+  const result: HardwareEnrichResult = {
+    milestonesWritten: 0,
+    eolMatched: false,
+    wikidataMatched: false,
+    milestones: [],
+  };
 
   const slug = deriveEolSlug(identity);
   if (slug) {
@@ -175,6 +183,7 @@ export async function enrichHardwareIdentity(
         const milestones = hardwareReleaseToMilestones(release);
         if (milestones.length > 0) {
           result.eolMatched = true;
+          result.milestones.push(...milestones);
           result.milestonesWritten += await upsertHardwareMilestones(db, identity.id, milestones);
         }
       }
@@ -189,9 +198,11 @@ export async function enrichHardwareIdentity(
     );
     if (discontinued) {
       result.wikidataMatched = true;
-      result.milestonesWritten += await upsertHardwareMilestones(db, identity.id, [
+      const wikidataMilestones: HardwareLifecycleMilestone[] = [
         { milestone: "end_of_sale", date: discontinued, source: WIKIDATA_SOURCE, confidence: WIKIDATA_CONFIDENCE },
-      ]);
+      ];
+      result.milestones.push(...wikidataMilestones);
+      result.milestonesWritten += await upsertHardwareMilestones(db, identity.id, wikidataMilestones);
     }
   }
 
