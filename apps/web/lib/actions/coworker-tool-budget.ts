@@ -60,37 +60,62 @@ export const MIN_COWORKER_ATTACHED_TOOLS = 12;
  */
 export const ACCURACY_CLIFF_PRONE_MAX_CONTEXT = 32_768;
 
+/** Options for the per-turn tool-attachment cap (EP-E431FC8A · BI-B5C358B1). */
+export interface CoworkerToolCapOptions {
+  /**
+   * A MEASURED tool-selection-fidelity ceiling for the local model that will run
+   * the turn: the largest attached-tool surface at which its measured accuracy
+   * stays above threshold (produced by the Phase-2 eval harness). When present
+   * and positive, it replaces the fail-safe cliff ceiling — this is the ONLY way
+   * a local model is trusted with more than `LOCAL_TOOL_SELECTION_CLIFF` tools.
+   * Absent/null/≤0 → the fail-safe cliff applies. Never lets a model exceed the
+   * window-fit or the 48 hard ceiling.
+   */
+  measuredToolFidelityCeiling?: number | null;
+}
+
 /**
- * Derive the per-turn tool-attachment cap from the served context window of the
- * model that will run the turn. Two ceilings apply, whichever is smaller:
- *   1. WINDOW-FIT — the hardcoded 48 was sized for a ~32k window; on a
- *      VRAM-constrained local model served at 24,576 tokens, 48 tool schemas
- *      (~16k tokens) plus a long conversation overflow `exceed_context_size_error`.
- *   2. ACCURACY-CLIFF (BI-2B2F59EB) — for a cliff-prone small local window
- *      (< 32k), bound the cap at the ~15-tool selection cliff so a small model
- *      isn't handed a surface it can't select from. Deferred tools stay
- *      authorized and loadable via load_tools, so this caps accuracy cost, never
- *      capability.
+ * Derive the per-turn tool-attachment cap. Three ceilings apply, whichever is
+ * smallest:
+ *   1. WINDOW-FIT — 48 was sized for a ~32k window; a VRAM-constrained local
+ *      model served at 24,576 tokens overflows `exceed_context_size_error` with
+ *      48 schemas (~16k tokens) plus a long thread.
+ *   2. SELECTION-CLIFF (BI-2B2F59EB, BI-B5C358B1) — a small local model's tool-
+ *      SELECTION accuracy collapses past ~15 tools. This is a property of the
+ *      MODEL, not its context window: a large served window (e.g. 131,072) means
+ *      the tools *fit*, NOT that the model can *choose* among them. So whenever a
+ *      local model is in the serving path (any non-null served context) the cliff
+ *      binds — regardless of window size — unless there is measured fidelity
+ *      evidence to the contrary (`measuredToolFidelityCeiling`). Deferred tools
+ *      stay authorized and loadable via load_tools, so this caps accuracy cost,
+ *      never capability.
+ *   3. HARD CEILING — never above `MAX_COWORKER_ATTACHED_TOOLS` (48).
  *
- * It binds on the LOCAL model's served context even when a cloud provider is
- * preferred, because the cloud→local FALLBACK path is exactly where these
- * overflows/cliffs happen; the cost on a cloud turn is only a few extra
- * load_tools round-trips, never a failure. `null`/unknown (no small-context
- * local model) → the full 48.
+ * `servedContextTokens` is the LOCAL model's served context (from the DMR truth);
+ * it binds even when a cloud provider is preferred, because the cloud→local
+ * FALLBACK is exactly where these cliffs bite. `null`/unknown = NO local model in
+ * the serving path (a pure cloud turn) → the full 48, unaffected by the cliff.
  *
- *   32_768 → 15 (accuracy cliff)   32_769 → 48 (capable; ceiling)   16_000 → 12 (floor)   null → 48
+ * This function is the SINGLE SOURCE of the coworker tool-count policy (INV-6):
+ * the cliff constant lives in `context-economy-metrics.ts` and is consumed here.
+ *
+ *   131_072 (local, unmeasured) → 15   131_072 + measured 40 → 40   24_576 → 15   16_000 → 12   null (cloud) → 48
  */
-export function deriveCoworkerToolCap(servedContextTokens: number | null | undefined): number {
+export function deriveCoworkerToolCap(
+  servedContextTokens: number | null | undefined,
+  opts?: CoworkerToolCapOptions,
+): number {
+  // No local model in the serving path → cloud turn, no cliff, full ceiling.
   if (!servedContextTokens || servedContextTokens <= 0) return MAX_COWORKER_ATTACHED_TOOLS;
   const toolBudgetTokens = servedContextTokens - COWORKER_NON_TOOL_RESERVE_TOKENS;
   const fitted = Math.floor(toolBudgetTokens / TOOL_SCHEMA_TOKEN_ESTIMATE);
-  // A cliff-prone small local model also caps at the selection cliff, not just
-  // the window fit. 32k local contexts still sit on the selection-accuracy
-  // cliff; larger/capable windows keep the full window-fit ceiling.
-  const ceiling =
-    servedContextTokens <= ACCURACY_CLIFF_PRONE_MAX_CONTEXT
-      ? Math.min(MAX_COWORKER_ATTACHED_TOOLS, LOCAL_TOOL_SELECTION_CLIFF)
-      : MAX_COWORKER_ATTACHED_TOOLS;
+  // Fail-safe: a local model is cliff-prone by CLASS. Only measured fidelity
+  // evidence lifts the ceiling above the selection cliff; a bigger window never
+  // does (that was the BI-B5C358B1 defect — capacity mistaken for fidelity).
+  const measured = opts?.measuredToolFidelityCeiling;
+  const selectionCeiling =
+    measured && measured > 0 ? measured : LOCAL_TOOL_SELECTION_CLIFF;
+  const ceiling = Math.min(MAX_COWORKER_ATTACHED_TOOLS, selectionCeiling);
   return Math.max(MIN_COWORKER_ATTACHED_TOOLS, Math.min(ceiling, fitted));
 }
 

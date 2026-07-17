@@ -7,6 +7,12 @@ import { detectRepeatedToolCall, recordRepeatedToolIssue } from "@/lib/tak/runti
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/actions/coworker-tool-budget";
+import {
+  classifyEvidenceRequirement,
+  enforceEvidenceIntegrity,
+  INV5_UNVERIFIED_MESSAGE,
+} from "@/lib/tak/evidence-requirement";
+import { resolveRouteContext } from "@/lib/route-context-map";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
@@ -1361,6 +1367,16 @@ export async function runAgenticLoop(params: {
   let continuationNudges = 0;
   let fabricationRetries = 0;
   let frustrationCount = 0;
+  // Evidence-integrity gate (INV-1). Decide once whether this turn's answer
+  // depends on live operational state (a route with authoritative domain tools +
+  // a live-state question); the terminal guard in the zero-tool branch enforces
+  // that such a turn never returns factual prose without a successful tool call.
+  const evidenceRequirement = classifyEvidenceRequirement({
+    routeContext,
+    domainTools: resolveRouteContext(routeContext).domainTools,
+    message: latestUserText(messages),
+  });
+  let evidenceRecoveryNudges = 0;
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
@@ -1864,6 +1880,63 @@ export async function runAgenticLoop(params: {
           executedTools,
           proposal: null,
         };
+      }
+
+      // Evidence-integrity gate (INV-1). When this turn's answer depends on live
+      // operational state and NO authoritative tool executed successfully, the
+      // model's factual prose is unverifiable — it is exactly the Scrum Master
+      // fabrication (a confident backlog answer with zero tool calls). Give the
+      // model ONE bounded, tool-forcing nudge; if it still won't call a tool,
+      // return the explicit could-not-verify message rather than let a guess
+      // reach the user. The nudge re-runs the normal iteration (no tool_choice or
+      // fallback-chain change), so recovery can never silently escalate to a paid
+      // provider (INV-4). load_tools is a meta-tool, not evidence.
+      if (evidenceRequirement.required && trimmed.length > 0) {
+        const authoritativeToolExecutions = executedTools.filter(
+          (t) => t.result?.success && t.name !== LOAD_TOOLS_TOOL_NAME,
+        ).length;
+        const guard = enforceEvidenceIntegrity({
+          required: true,
+          authoritativeToolExecutions,
+          content: trimmed,
+        });
+        if (guard.blocked) {
+          if (evidenceRecoveryNudges < 1) {
+            evidenceRecoveryNudges++;
+            console.warn(
+              `[agentic-loop] evidence-required turn answered with zero authoritative tools ` +
+                `route=${JSON.stringify(routeContext)} taskClass=${JSON.stringify(evidenceRequirement.taskClass)}; ` +
+                `nudging to fetch live data before refusing.`,
+            );
+            messages = [
+              ...messages,
+              { role: "assistant" as const, content: result.content },
+              {
+                role: "user" as const,
+                content:
+                  "That question is about the CURRENT state of live operational data, which changes over time. " +
+                  "Do not answer from memory. Call one of your available tools to fetch the real data now, then " +
+                  "answer using only what the tool returns.",
+              },
+            ];
+            continue;
+          }
+          console.warn(
+            `[agentic-loop] evidence-required turn could not be tool-verified after recovery; ` +
+              `returning could-not-verify (INV-1/INV-5) route=${JSON.stringify(routeContext)}.`,
+          );
+          return {
+            content: INV5_UNVERIFIED_MESSAGE,
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: null,
+          };
+        }
       }
 
       const hasAuthoritativeToolAvailable = tools.some(
