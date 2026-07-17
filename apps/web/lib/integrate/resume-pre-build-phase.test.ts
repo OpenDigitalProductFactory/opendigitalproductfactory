@@ -9,10 +9,13 @@ const executeToolMock = vi.fn();
 const txFindUniqueMock = vi.fn();
 const txUpdateMock = vi.fn();
 const txActivityCreateMock = vi.fn();
+const platformDevConfigFindUniqueMock = vi.fn();
+const autoResolveDecomposeMock = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     featureBuild: { findUnique: (...args: unknown[]) => findUniqueMock(...args) },
+    platformDevConfig: { findUnique: (...args: unknown[]) => platformDevConfigFindUniqueMock(...args) },
     // abandonStrandedPreBuild wraps its work in a $transaction; run the callback
     // immediately with a tx exposing the row re-check + mutation methods.
     $transaction: (fn: (tx: unknown) => unknown) =>
@@ -24,6 +27,9 @@ vi.mock("@dpf/db", () => ({
         buildActivity: { create: (...args: unknown[]) => txActivityCreateMock(...args) },
       }),
   },
+}));
+vi.mock("@/lib/build/auto-resolve-decompose-gate", () => ({
+  autoResolveDecomposeRequiredGate: (...args: unknown[]) => autoResolveDecomposeMock(...args),
 }));
 vi.mock("@/lib/build-review-verification-trigger", () => ({
   queueBuildReviewVerification: (...args: unknown[]) => queueBuildReviewVerificationMock(...args),
@@ -54,6 +60,10 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     dispatchDesignFixMock.mockReset().mockResolvedValue({ kind: "repaired", rounds: 1 });
     dispatchPlanMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
     executeToolMock.mockReset().mockResolvedValue({ success: true, message: "Plan review: pass." });
+    // Default to a non-governed install so the existing park-guard tests exercise
+    // the operator-driven behavior; governed autopilot tests override this.
+    platformDevConfigFindUniqueMock.mockReset().mockResolvedValue({ governedBacklogEnabled: false });
+    autoResolveDecomposeMock.mockReset().mockResolvedValue({ action: "park" });
   });
 
   it("re-queues review verification for a stranded review-phase build", async () => {
@@ -158,6 +168,62 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(dispatchDesignFixMock).not.toHaveBeenCalled();
     expect(out.kind).toBe("skipped");
     expect((out as { reason: string }).reason).toContain("candidates already exist");
+  });
+
+  // ── Governed-backlog autopilot (BI-C4F828B7) ─────────────────────────────
+  // On a governed install an auto-promoted parked build is resolved
+  // autonomously here (the reviewDesignDoc gate never sees an ALREADY-parked
+  // build — it is short-circuited on every resume), instead of parking forever.
+  it("auto-decomposes a parked governed-autopilot build instead of parking it", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: {
+        decision: "pass",
+        sizeAssessment: { decision: "decompose-required" },
+        decompositionCandidates: { latest: [{ candidateId: "candidate-1", childScopes: [] }] },
+      },
+      originatingBacklogItemId: "bi-1",
+      parentEpicId: null,
+    });
+    platformDevConfigFindUniqueMock.mockResolvedValue({ governedBacklogEnabled: true });
+    autoResolveDecomposeMock.mockResolvedValue({
+      action: "decomposed",
+      epicId: "EP-XYZ",
+      childBuildIds: ["FB-C1", "FB-C2"],
+      candidateId: "candidate-1",
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-AP", phase: "ideate", userId: "uAP" });
+
+    expect(autoResolveDecomposeMock).toHaveBeenCalledOnce();
+    // Did NOT fall back to the propose-and-park path.
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(dispatchIdeateMock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: "resumed", via: "autoResolveDecomposeRequiredGate" });
+  });
+
+  it("advances a parked governed-autopilot build after an auto-override (re-runs review, does not park)", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: {
+        decision: "pass",
+        sizeAssessment: { decision: "decompose-required" },
+      },
+      originatingBacklogItemId: "bi-1",
+      parentEpicId: null,
+    });
+    platformDevConfigFindUniqueMock.mockResolvedValue({ governedBacklogEnabled: true });
+    autoResolveDecomposeMock.mockResolvedValue({
+      action: "overridden",
+      rationale: "no candidates",
+      reason: "no-candidates",
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-AO", phase: "ideate", userId: "uAO" });
+
+    // Override recorded → falls through to re-run reviewDesignDoc so it advances.
+    expect(executeToolMock).toHaveBeenCalledWith("reviewDesignDoc", { buildId: "FB-AO" }, "uAO", { featureBuildId: "FB-AO" });
+    expect(out).toMatchObject({ kind: "resumed", via: "executeTool:reviewDesignDoc" });
   });
 
   it("does NOT park a decompose-required build once an operator override is recorded — re-runs review so it can advance", async () => {

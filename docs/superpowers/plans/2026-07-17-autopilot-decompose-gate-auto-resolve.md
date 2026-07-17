@@ -77,6 +77,30 @@ build select):
 - `overridden` → the monolithic override is recorded in the DB; fall through to
   the normal phase-advance logic.
 
+### Wiring — the second gate (follow-up, same BI)
+
+The `reviewDesignDoc` gate only fires for builds *flowing through* review. A build
+that is **already parked** at `decompose-required` is short-circuited earlier, on
+every resume tick, by a **second, independent gate**: `isParkedAtDecomposeGate` in
+`apps/web/lib/integrate/resume-pre-build-phase.ts` (BI-BD4F2D0D — added to stop an
+earlier resume↔gate loop). It refuses to re-dispatch ideate / re-run review and
+just proposes candidates once, then parks — so the auto-resolve in `reviewDesignDoc`
+is **never reached** for the existing backlog of parked builds.
+
+Live evidence (founder install, post-deploy): 23 builds still parked, `auto-decompose`
+fired 0 times, and `resumeStrandedBuildsOnBoot` logged "skipped … parked awaiting
+approve" ~938× in 3h. So the same auto-resolve is wired into this second gate:
+
+- On the `isParkedAtDecomposeGate` branch, for a governed + backlog-originated build,
+  call `autoResolveDecomposeRequiredGate` (same orchestrator).
+- `decomposed` → return `resumed` (parent superseded; children dispatched).
+- `overridden` → fall through to the normal review re-run (now advances past the gate).
+- `park` / not-eligible → the original propose-once-and-park behavior is preserved
+  for operator-driven / non-governed installs.
+
+This is what actually drains the existing parked-ideate backlog and closes the loop
+for any build resumed after a restart.
+
 ## Why not the alternatives
 
 - **Backpressure / human-queue** (park but bounded, or route to a decision
