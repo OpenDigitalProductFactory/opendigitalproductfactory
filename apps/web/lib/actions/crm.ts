@@ -20,7 +20,15 @@ import {
   type DedupCheckResult,
   type DedupResolution,
 } from "@/lib/mdm/dedup-gate";
-import { evaluateTechnologyLifecycle } from "@/lib/customer-estate/lifecycle-evaluation";
+import {
+  buildCustomerConfigurationItemLifecycleState,
+  calcLineTotal,
+  readLifecycleEvidenceField,
+  requiredTrimmed,
+  toDateOrNull,
+  trimOrNull,
+  type CustomerConfigurationItemInput,
+} from "@/lib/crm/crm-core";
 
 // ─── Activity Logging (used by all other actions) ───────────────────────────
 
@@ -337,163 +345,6 @@ export async function createCustomerSiteNode(input: {
   return node;
 }
 
-type CustomerConfigurationItemInput = {
-  siteId?: string;
-  name: string;
-  ciType: string;
-  technologySourceType?: "commercial" | "open_source" | "hybrid";
-  supportModel?: string;
-  manufacturer?: string;
-  normalizedVersion?: string;
-  observedVersion?: string;
-  billingCadence?: string;
-  customerChargeModel?: string;
-  renewalDate?: string | Date | null;
-  endOfSupportAt?: string | Date | null;
-  endOfLifeAt?: string | Date | null;
-  warrantyEndAt?: string | Date | null;
-  reviewCadenceDays?: number;
-  licenseQuantity?: number | null;
-  status?: string;
-  evidenceSource?: string;
-  evidenceNotes?: string;
-};
-
-function trimOrNull(value: string | null | undefined) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function toDateOrNull(value: string | Date | null | undefined) {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function readLifecycleEvidenceField(
-  value: unknown,
-  key: "source" | "notes",
-) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const record = value as Record<string, unknown>;
-  return typeof record[key] === "string" ? record[key] : undefined;
-}
-
-function deriveLifecycleConfidence(input: {
-  supportModel: string | null;
-  normalizedVersion: string | null;
-  observedVersion: string | null;
-  renewalDate: Date | null;
-  endOfSupportAt: Date | null;
-  endOfLifeAt: Date | null;
-  warrantyEndAt: Date | null;
-  evidenceSource: string | null;
-  evidenceNotes: string | null;
-}) {
-  let confidence = 0.35;
-
-  if (input.supportModel) confidence += 0.15;
-  if (input.normalizedVersion || input.observedVersion) confidence += 0.15;
-  if (input.renewalDate || input.endOfSupportAt || input.endOfLifeAt || input.warrantyEndAt) confidence += 0.2;
-  if (input.evidenceSource) confidence += 0.1;
-  if (input.evidenceNotes) confidence += 0.05;
-
-  return Math.min(0.95, Number(confidence.toFixed(2)));
-}
-
-function buildCustomerConfigurationItemLifecycleState(input: CustomerConfigurationItemInput) {
-  const supportModel = trimOrNull(input.supportModel);
-  const manufacturer = trimOrNull(input.manufacturer);
-  const normalizedVersion = trimOrNull(input.normalizedVersion);
-  const observedVersion = trimOrNull(input.observedVersion);
-  const billingCadence = trimOrNull(input.billingCadence);
-  const customerChargeModel = trimOrNull(input.customerChargeModel);
-  const evidenceSource = trimOrNull(input.evidenceSource);
-  const evidenceNotes = trimOrNull(input.evidenceNotes);
-  const renewalDate = toDateOrNull(input.renewalDate);
-  const endOfSupportAt = toDateOrNull(input.endOfSupportAt);
-  const endOfLifeAt = toDateOrNull(input.endOfLifeAt);
-  const warrantyEndAt = toDateOrNull(input.warrantyEndAt);
-
-  const lifecycle = evaluateTechnologyLifecycle(
-    {
-      name: input.name,
-      ciType: input.ciType,
-      technologySourceType: input.technologySourceType ?? "commercial",
-      supportModel: (supportModel as
-        | "vendor_contract"
-        | "subscription"
-        | "community"
-        | "lts"
-        | "partner"
-        | "unknown"
-        | null
-        | undefined) ?? undefined,
-      normalizedVersion,
-      observedVersion,
-      billingCadence,
-      customerChargeModel,
-      renewalDate,
-      endOfSupportAt,
-      endOfLifeAt,
-      warrantyEndAt,
-      licenseQuantity: input.licenseQuantity ?? undefined,
-    },
-    new Date(),
-  );
-
-  const nextLifecycleReviewAt =
-    lifecycle.nextReviewAt ??
-    (input.reviewCadenceDays
-      ? new Date(Date.now() + input.reviewCadenceDays * 24 * 60 * 60 * 1000)
-      : null);
-
-  return {
-    supportModel,
-    manufacturer,
-    normalizedVersion,
-    observedVersion,
-    billingCadence,
-    customerChargeModel,
-    renewalDate,
-    endOfSupportAt,
-    endOfLifeAt,
-    warrantyEndAt,
-    lifecycleStatus: lifecycle.lifecycleStatus,
-    supportStatus: lifecycle.supportStatus,
-    recommendedAction: lifecycle.recommendedAction,
-    lifecycleConfidence: deriveLifecycleConfidence({
-      supportModel,
-      normalizedVersion,
-      observedVersion,
-      renewalDate,
-      endOfSupportAt,
-      endOfLifeAt,
-      warrantyEndAt,
-      evidenceSource,
-      evidenceNotes,
-    }),
-    lastLifecycleReviewAt: new Date(),
-    nextLifecycleReviewAt,
-    lifecycleEvidence: {
-      summary: lifecycle.summary,
-      seededReviewCadenceDays: input.reviewCadenceDays ?? null,
-      source: evidenceSource,
-      notes: evidenceNotes,
-    },
-  };
-}
-
 export async function createCustomerConfigurationItem(input: CustomerConfigurationItemInput & {
   accountId: string;
 }) {
@@ -724,14 +575,6 @@ export type RouteAcquisitionSignalToEngagementResult = {
   engagementId: string;
   engagementTitle: string;
 };
-
-function requiredTrimmed(value: string | null | undefined, label: string): string {
-  const trimmed = value?.trim() ?? "";
-  if (!trimmed) {
-    throw new Error(`${label} is required`);
-  }
-  return trimmed;
-}
 
 export async function routeAcquisitionSignalToEngagement(
   input: RouteAcquisitionSignalToEngagementInput,
@@ -1116,15 +959,6 @@ async function nextSalesOrderRef(): Promise<string> {
   );
   const seq = Number(result[0]!.nextval);
   return `SO-${year}-${String(seq).padStart(4, "0")}`;
-}
-
-/** Calculate line total: unitPrice * quantity * (1 - discountPercent/100) */
-function calcLineTotal(
-  unitPrice: number,
-  quantity: number,
-  discountPercent: number,
-): number {
-  return unitPrice * quantity * (1 - discountPercent / 100);
 }
 
 export async function createQuote(input: {
