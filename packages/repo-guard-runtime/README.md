@@ -7,4 +7,3 @@ pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime
 ```
 
 The loader verifies the exact manifest pin, lockfile importer, resolved pnpm path, package version, and loaded module version. It fails instead of using an unowned ancestor dependency.
-
