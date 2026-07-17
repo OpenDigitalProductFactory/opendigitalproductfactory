@@ -577,9 +577,25 @@ export async function resumeStrandedBuildsOnBoot(
      * sandbox / scoped-verification chain.
      */
     advanceToReview?: (buildId: string) => Promise<boolean>;
+    /**
+     * Age-out cap (BI-A009313E). A build created longer ago than this while
+     * STILL in a resumable pre-build phase (ideate/plan/review) is aged out to
+     * `abandoned` instead of resumed again — capping the perpetual resume loop
+     * that a self-upgrade swap re-triggers every time. Keyed on createdAt so the
+     * cap is immune to the resume churn re-heartbeating the row. Defaults to
+     * {@link STRANDED_ABANDON_MS} (7 days).
+     */
+    abandonAfterMs?: number;
+    /**
+     * Injectable age-out reaper (BI-A009313E). Given a stranded pre-build build
+     * past the cap, transition it to `abandoned` and return whether it did.
+     * Defaults to {@link abandonStrandedPreBuild}; injected in tests so the boot
+     * reconcile can be asserted without a real DB write.
+     */
+    abandonStale?: (args: { buildId: string; phase: string; ageMs: number }) => Promise<boolean>;
   } = {},
   logger: Pick<Console, "log" | "error"> = console,
-): Promise<{ resumed: number; flagged: number; advanced: number } | null> {
+): Promise<{ resumed: number; flagged: number; advanced: number; abandoned: number } | null> {
   const staleAfterMs = opts.staleAfterMs ?? 5 * 60 * 1000;
   try {
     const { prisma } = await import("@dpf/db");
@@ -587,7 +603,14 @@ export async function resumeStrandedBuildsOnBoot(
       "@/lib/integrate/build-exec-types"
     );
     type ExecStateLike = import("@/lib/integrate/build-exec-types").ExecStateLike;
-    const cutoff = new Date(Date.now() - staleAfterMs);
+    // Age-out cap primitives (BI-A009313E). Lazy-imported to keep the boot module
+    // graph small, matching this file's convention.
+    const { isStrandedPreBuildAbandonable, STRANDED_ABANDON_MS } = await import(
+      "@/lib/integrate/resume-pre-build-phase"
+    );
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - staleAfterMs);
+    const abandonAfterMs = opts.abandonAfterMs ?? STRANDED_ABANDON_MS;
     // BI-17377D05: cover ALL non-terminal pre-ship phases, not just `build`.
     // Only the `build` phase has a resumable step-machine (buildExecState) that
     // autoExecuteBuild can re-dispatch; ideate/plan/review are dispatch-driven
@@ -599,7 +622,16 @@ export async function resumeStrandedBuildsOnBoot(
         phase: { in: ["ideate", "plan", "build", "review"] },
         updatedAt: { lt: cutoff },
       },
-      select: { buildId: true, phase: true, buildExecState: true, verificationOut: true, createdById: true },
+      select: {
+        buildId: true,
+        phase: true,
+        buildExecState: true,
+        verificationOut: true,
+        createdById: true,
+        // createdAt + parentEpicId feed the age-out cap (BI-A009313E).
+        createdAt: true,
+        parentEpicId: true,
+      },
     });
 
     // Default pre-build resumer (BI-9257CF19): lazy-imports the canonical
@@ -655,9 +687,22 @@ export async function resumeStrandedBuildsOnBoot(
     // orchestrator's on-completion advance (scoped verification + phase gate).
     const advanceToReview = opts.advanceToReview ?? advanceStrandedBuildToReview;
 
+    // Default age-out reaper (BI-A009313E): lazy-imports the canonical abandon
+    // helper so a build stranded in a pre-build phase past the cap is retired to
+    // `abandoned` rather than resumed forever.
+    const abandonStale =
+      opts.abandonStale ??
+      (async (args: { buildId: string; phase: string; ageMs: number }) => {
+        const { abandonStrandedPreBuild } = await import(
+          "@/lib/integrate/resume-pre-build-phase"
+        );
+        return abandonStrandedPreBuild(args);
+      });
+
     let resumed = 0;
     let flagged = 0;
     let advanced = 0;
+    let abandoned = 0;
     for (const build of candidates) {
       // ── Pre-build phases (ideate/plan/review): no step-machine, but each
       // phase has a canonical generator/reviewer we can re-fire. BI-9257CF19:
@@ -668,6 +713,43 @@ export async function resumeStrandedBuildsOnBoot(
       // and each underlying dispatcher carries its own idempotency guard. Fire-
       // and-forget so one slow re-review never blocks the boot reconcile loop.
       if (build.phase !== "build") {
+        // ── Age-out cap (BI-A009313E). A build created past the abandon
+        // threshold while STILL in a pre-build phase has failed to progress for
+        // a week — re-resuming it only re-churns the loop that a self-upgrade
+        // swap re-triggers every time (the acute flood: 63 dead ideate strands
+        // re-resumed on every swap). Retire it to `abandoned` so it leaves the
+        // candidate set for good; quiescence's reconcileTerminalBuildPhaseRuns
+        // then closes its open BuildPhaseRun. Keyed on createdAt, so this is
+        // immune to the resume churn re-heartbeating the row (the exact reason
+        // the quiescence dead-phase reaper can't clear these). Re-promote the
+        // backlog item to retry — abandonment is reversible.
+        if (
+          isStrandedPreBuildAbandonable({
+            phase: build.phase,
+            createdAt: build.createdAt,
+            parentEpicId: build.parentEpicId,
+            now,
+            thresholdMs: abandonAfterMs,
+          })
+        ) {
+          const ageMs = now.getTime() - build.createdAt.getTime();
+          const didAbandon = await abandonStale({
+            buildId: build.buildId,
+            phase: build.phase,
+            ageMs,
+          });
+          if (didAbandon) {
+            abandoned++;
+            logger.log(
+              `[build-resume] ${build.buildId} stranded in ${build.phase} for >${Math.round(
+                ageMs / 86_400_000,
+              )}d — aged out to abandoned instead of resuming (BI-A009313E)`,
+            );
+            continue;
+          }
+          // Abandon declined (raced to alive/terminal); fall through to resume.
+        }
+
         logger.log(
           `[build-resume] ${build.buildId} stranded in ${build.phase} phase after restart/swap — auto-resuming (BI-9257CF19)`,
         );
@@ -762,7 +844,14 @@ export async function resumeStrandedBuildsOnBoot(
     if (advanced > 0) {
       logger.log(`[build-resume] advanced ${advanced} build→review transition strand(s)`);
     }
-    return { resumed, flagged, advanced };
+    if (abandoned > 0) {
+      logger.log(
+        `[build-resume] aged out ${abandoned} stranded pre-build strand(s) to abandoned (created > ${Math.round(
+          abandonAfterMs / 86_400_000,
+        )}d ago, no progress) (BI-A009313E)`,
+      );
+    }
+    return { resumed, flagged, advanced, abandoned };
   } catch (err) {
     logger.error("[build-resume] failed (non-fatal):", err);
     return null;

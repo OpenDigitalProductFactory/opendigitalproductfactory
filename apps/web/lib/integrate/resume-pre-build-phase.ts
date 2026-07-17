@@ -48,6 +48,122 @@ export type ResumePreBuildOutcome =
   | { kind: "skipped"; phase: string; reason: string }
   | { kind: "failed"; phase: string; error: string };
 
+/**
+ * Age-out cap for a build stranded in a NON-terminal PRE-BUILD phase
+ * (ideate/plan/review). A build created this long ago that is STILL in a
+ * pre-build phase has failed to progress for a week — these phases resolve in
+ * minutes-to-hours, not days — so it is aged out to `abandoned` instead of
+ * being auto-resumed forever (BI-A009313E). Override with
+ * BUILD_STRANDED_ABANDON_MS.
+ *
+ * Keyed on `createdAt`, NOT `updatedAt` or a TaskRun heartbeat: auto-resume
+ * itself writes BuildActivity (and can bump updatedAt / mint fresh heartbeats),
+ * so an updatedAt/heartbeat signal is defeated by the very loop we are trying to
+ * break — it is exactly why the quiescence dead-phase reaper cannot clear these
+ * (they always look "alive"). `createdAt` never moves, so the cap is immune to
+ * resume re-heartbeating.
+ *
+ * Default 7 days: a full week survives the operator being away plus the weekly
+ * rate-limit reset (see feedback: idle-is-not-abandoned), so genuinely
+ * operator-paused work — e.g. a build correctly parked awaiting a decomposition
+ * decision — is never abandoned prematurely. Abandonment is reversible:
+ * re-promote the backlog item to retry.
+ */
+export const STRANDED_ABANDON_MS =
+  Number(process.env.BUILD_STRANDED_ABANDON_MS) || 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Pre-build phases that have a canonical generator/reviewer resume path but no
+ * `build`-phase step-machine. These are the phases the age-out cap governs; the
+ * `build` phase keeps its proven step-machine resume and is intentionally NOT
+ * aged out here.
+ */
+export const RESUMABLE_PRE_BUILD_PHASES = ["ideate", "plan", "review"] as const;
+
+function isResumablePreBuildPhase(phase: string): boolean {
+  return (RESUMABLE_PRE_BUILD_PHASES as readonly string[]).includes(phase);
+}
+
+/**
+ * Pure decision: has a pre-build strand outlived the resume cap and should be
+ * aged out to `abandoned` instead of resumed again? No DB; unit-tested.
+ *
+ * Abandonable only when the build is in a resumable pre-build phase
+ * (ideate/plan/review — NOT `build`, which resumes via its step-machine), is not
+ * an epic-decomposed child (those are coordinated by the parent epic, not reaped
+ * here), and was created longer ago than the threshold.
+ */
+export function isStrandedPreBuildAbandonable(args: {
+  phase: string;
+  createdAt: Date;
+  parentEpicId: string | null;
+  now: Date;
+  thresholdMs: number;
+}): boolean {
+  const { phase, createdAt, parentEpicId, now, thresholdMs } = args;
+  if (parentEpicId) return false;
+  if (!isResumablePreBuildPhase(phase)) return false;
+  return now.getTime() - createdAt.getTime() > thresholdMs;
+}
+
+/**
+ * DB helper: age a stranded pre-build build out to `abandoned` so it leaves the
+ * resume candidate set for good — stopping the per-swap re-churn — and its open
+ * BuildPhaseRun is closed by quiescence's reconcileTerminalBuildPhaseRuns.
+ *
+ * Transactional + idempotent: re-checks under the row so a build that just came
+ * alive (advanced past the pre-build phase, or was abandoned by a concurrent
+ * sweep) between scan and write is left untouched. Returns true iff it abandoned
+ * the row. Never throws (best-effort maintenance).
+ */
+export async function abandonStrandedPreBuild(params: {
+  buildId: string;
+  phase: string;
+  ageMs: number;
+  now?: Date;
+}): Promise<boolean> {
+  const { buildId, phase, ageMs } = params;
+  const now = params.now ?? new Date();
+  const days = Math.max(1, Math.round(ageMs / 86_400_000));
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const fresh = await tx.featureBuild.findUnique({
+        where: { buildId },
+        select: { phase: true, abandonedAt: true },
+      });
+      // Already terminal/abandoned, or advanced out of a pre-build phase since
+      // the scan — nothing to do.
+      if (!fresh || fresh.abandonedAt || !isResumablePreBuildPhase(fresh.phase)) {
+        return false;
+      }
+      await tx.featureBuild.update({
+        where: { buildId },
+        data: {
+          phase: "abandoned",
+          abandonedAt: now,
+          abandonReason:
+            `Auto-aged-out: stranded in ${phase} phase for >${days}d with no progress. ` +
+            `Capped the perpetual build-resume loop — each portal swap re-resumed it, ` +
+            `re-stranding it on the next upgrade (BI-A009313E). Re-promote the backlog item to retry.`,
+        },
+      });
+      await tx.buildActivity.create({
+        data: {
+          buildId,
+          tool: "resumeStrandedBuildsOnBoot",
+          summary:
+            `Aged out stranded ${phase} build to abandoned (>${days}d old, no progress) — ` +
+            `capped the auto-resume loop (BI-A009313E). Re-promote the backlog item to retry.`,
+        },
+      });
+      return true;
+    });
+  } catch (err) {
+    console.warn(`[build-resume] failed to age out stranded build ${buildId}:`, err);
+    return false;
+  }
+}
+
 function hasPlanTasks(buildPlan: unknown): boolean {
   const plan = buildPlan as { tasks?: unknown[] } | null;
   return Array.isArray(plan?.tasks) && plan!.tasks!.length > 0;

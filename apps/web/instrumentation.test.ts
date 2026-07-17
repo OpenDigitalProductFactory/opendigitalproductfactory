@@ -567,7 +567,7 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
 
     const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
 
-    expect(result).toEqual({ resumed: 1, flagged: 0, advanced: 0 });
+    expect(result).toEqual({ resumed: 1, flagged: 0, advanced: 0, abandoned: 0 });
     expect(dispatch).toHaveBeenCalledWith("BLD-STRANDED");
     expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
   });
@@ -590,7 +590,7 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
       { log: vi.fn(), error: vi.fn() },
     );
 
-    expect(result).toEqual({ resumed: 0, flagged: 0, advanced: 0 });
+    expect(result).toEqual({ resumed: 0, flagged: 0, advanced: 0, abandoned: 0 });
     expect(dispatch).not.toHaveBeenCalled();
     // Only the non-contradictory verified-complete row reaches the advancer.
     expect(advanceToReview).toHaveBeenCalledTimes(1);
@@ -604,20 +604,24 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
   // operator rescue, so an in-flight build survives a self-upgrade swap. The
   // `build`-phase step-machine resume is untouched.
   it("auto-resumes ideate/plan/review strands without using the build-phase dispatch", async () => {
+    // Recently created (well within the abandon cap) so they resume, not age out.
+    const recent = new Date();
     featureBuildFindManyMock.mockResolvedValueOnce([
-      { buildId: "BLD-IDEATE", phase: "ideate", buildExecState: null, verificationOut: null, createdById: "user-1" },
-      { buildId: "BLD-PLAN", phase: "plan", buildExecState: { step: "deps_installed" }, verificationOut: null, createdById: "user-2" },
-      { buildId: "BLD-REVIEW", phase: "review", buildExecState: null, verificationOut: null, createdById: "user-3" },
+      { buildId: "BLD-IDEATE", phase: "ideate", buildExecState: null, verificationOut: null, createdById: "user-1", createdAt: recent, parentEpicId: null },
+      { buildId: "BLD-PLAN", phase: "plan", buildExecState: { step: "deps_installed" }, verificationOut: null, createdById: "user-2", createdAt: recent, parentEpicId: null },
+      { buildId: "BLD-REVIEW", phase: "review", buildExecState: null, verificationOut: null, createdById: "user-3", createdAt: recent, parentEpicId: null },
     ]);
     const dispatch = vi.fn();
     const resumePreBuild = vi.fn();
+    const abandonStale = vi.fn();
 
     const result = await resumeStrandedBuildsOnBoot(
-      { dispatch, resumePreBuild },
+      { dispatch, resumePreBuild, abandonStale },
       { log: vi.fn(), error: vi.fn() },
     );
 
-    expect(result).toEqual({ resumed: 0, flagged: 3, advanced: 0 });
+    expect(result).toEqual({ resumed: 0, flagged: 3, advanced: 0, abandoned: 0 });
+    expect(abandonStale).not.toHaveBeenCalled(); // young strands are never aged out
     expect(dispatch).not.toHaveBeenCalled(); // build-phase step-machine only
     // Each pre-build strand is handed to the canonical resumer with its actor.
     expect(resumePreBuild).toHaveBeenCalledTimes(3);
@@ -625,6 +629,73 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-PLAN", phase: "plan", userId: "user-2" });
     expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-REVIEW", phase: "review", userId: "user-3" });
     expect(buildActivityCreateMock).toHaveBeenCalledTimes(3); // one resume signal each
+  });
+
+  // BI-A009313E: age-out cap. A build created past the abandon threshold while
+  // still in a pre-build phase is retired to `abandoned` instead of being
+  // resumed forever (the perpetual ideate-resume flood a self-upgrade swap
+  // re-triggers). Keyed on createdAt so it is immune to resume re-heartbeating.
+  it("ages out a stale pre-build strand to abandoned instead of resuming it", async () => {
+    const old = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000); // 20 days old
+    const recent = new Date();
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-DEAD", phase: "ideate", buildExecState: null, verificationOut: null, createdById: "user-1", createdAt: old, parentEpicId: null },
+      { buildId: "BLD-YOUNG", phase: "ideate", buildExecState: null, verificationOut: null, createdById: "user-2", createdAt: recent, parentEpicId: null },
+    ]);
+    const resumePreBuild = vi.fn();
+    const abandonStale = vi.fn().mockResolvedValue(true);
+    const log = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot(
+      { dispatch: vi.fn(), resumePreBuild, abandonStale },
+      { log, error: vi.fn() },
+    );
+
+    expect(result).toEqual({ resumed: 0, flagged: 1, advanced: 0, abandoned: 1 });
+    // The stale one is aged out; the young one still resumes.
+    expect(abandonStale).toHaveBeenCalledTimes(1);
+    expect(abandonStale).toHaveBeenCalledWith(
+      expect.objectContaining({ buildId: "BLD-DEAD", phase: "ideate" }),
+    );
+    expect(resumePreBuild).toHaveBeenCalledTimes(1);
+    expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-YOUNG", phase: "ideate", userId: "user-2" });
+    expect(log.mock.calls.some((c) => String(c[0]).includes("aged out to abandoned"))).toBe(true);
+  });
+
+  it("does NOT age out an epic-decomposed child even when old (coordinated by the epic)", async () => {
+    const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-EPIC-CHILD", phase: "ideate", buildExecState: null, verificationOut: null, createdById: "u", createdAt: old, parentEpicId: "EP-1" },
+    ]);
+    const resumePreBuild = vi.fn();
+    const abandonStale = vi.fn().mockResolvedValue(true);
+
+    const result = await resumeStrandedBuildsOnBoot(
+      { dispatch: vi.fn(), resumePreBuild, abandonStale },
+      { log: vi.fn(), error: vi.fn() },
+    );
+
+    expect(result).toEqual({ resumed: 0, flagged: 1, advanced: 0, abandoned: 0 });
+    expect(abandonStale).not.toHaveBeenCalled();
+    expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-EPIC-CHILD", phase: "ideate", userId: "u" });
+  });
+
+  it("falls through to resume when the age-out reaper declines (raced to alive/terminal)", async () => {
+    const old = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000);
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-RACED", phase: "ideate", buildExecState: null, verificationOut: null, createdById: "u", createdAt: old, parentEpicId: null },
+    ]);
+    const resumePreBuild = vi.fn();
+    const abandonStale = vi.fn().mockResolvedValue(false); // declined under the row
+
+    const result = await resumeStrandedBuildsOnBoot(
+      { dispatch: vi.fn(), resumePreBuild, abandonStale },
+      { log: vi.fn(), error: vi.fn() },
+    );
+
+    expect(result).toEqual({ resumed: 0, flagged: 1, advanced: 0, abandoned: 0 });
+    expect(abandonStale).toHaveBeenCalledTimes(1);
+    expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-RACED", phase: "ideate", userId: "u" });
   });
 
   it("queries all non-terminal pre-ship phases with a staleAfter cutoff", async () => {
@@ -662,7 +733,7 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
       { log, error: vi.fn() },
     );
 
-    expect(result).toEqual({ resumed: 0, flagged: 0, advanced: 1 });
+    expect(result).toEqual({ resumed: 0, flagged: 0, advanced: 1, abandoned: 0 });
     expect(advanceToReview).toHaveBeenCalledWith("BLD-AT-GATE");
     expect(dispatch).not.toHaveBeenCalled(); // not a step-machine re-dispatch
     expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
