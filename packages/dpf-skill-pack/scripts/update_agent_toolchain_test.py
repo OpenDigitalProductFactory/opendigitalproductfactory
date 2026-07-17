@@ -220,6 +220,47 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
             self.assertEqual(raw.count("dpf-platform"), 1)
 
+    def test_heals_config_already_corrupted_with_duplicate_table(self) -> None:
+        """A config a pre-#2657 updater left with a stray appended
+        `[mcp_servers.dpf]` (a TOML redefinition error) is healed back to a single
+        table on the next run, rather than forcing the operator to hand-delete the
+        duplicate every time. Unrelated tables are left intact."""
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config = home / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                'model = "gpt-5.5"\n\n'
+                "[mcp_servers.dpf]\n"
+                'url = "http://127.0.0.1:3000/api/mcp/v1"\n'
+                'bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"\n'
+                "enabled = true\n\n"
+                "[mcp_servers.node_repl]\n"
+                'command = "node"\n\n'
+                # The stray duplicate a pre-fix fallback run appended at the end.
+                "[mcp_servers.dpf]\n"
+                'url = "http://127.0.0.1:3000/api/mcp/v1"\n'
+                'bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"\n'
+                "enabled = true\n",
+                encoding="utf-8",
+            )
+
+            with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}, clear=False):
+                updater.main([
+                    "--skill-pack-path",
+                    str(skill_pack),
+                    "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
+                ])
+
+            raw = config.read_text()
+            self.assertEqual(raw.count("[mcp_servers.dpf]"), 1)
+            if tomllib is not None:
+                data = tomllib.loads(raw)  # raises if a duplicate table survives
+                self.assertEqual(data["mcp_servers"]["node_repl"]["command"], "node")
+                self.assertEqual(data["model"], "gpt-5.5")
+
     @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
     def test_repairs_missing_managed_plugin_without_token_or_portal(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
