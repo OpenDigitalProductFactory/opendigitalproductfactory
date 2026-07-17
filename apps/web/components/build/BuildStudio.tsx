@@ -44,7 +44,8 @@ import { BuildCustomerStatusBand } from "./BuildCustomerStatusBand";
 import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
 import { BuildOperatorHeaderDetails, BuildWorkRequestStrip, formatOperatorPhaseLabel } from "./BuildOperatorContext";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
-import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
+import { deleteFeatureBuild } from "@/lib/actions/build";
+import { createBuildStudioBacklogIntake, startBacklogBuild } from "@/lib/actions/backlog-build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildDecisionLedgerAction } from "@/lib/actions/build-decision-ledger";
 import { getBuildChangeNarrativeAction } from "@/lib/actions/build-change-narrative";
@@ -122,6 +123,13 @@ const MISSING_BOM_SUMMARY: BomSummary = {
 const MAX_OPERATOR_FLEET_ITEMS = 4;
 const BUILD_CUSTODIAN_SNOOZE_KEY = "dpf:build-studio-custodian-snoozed";
 
+type BuildStudioPendingIntake = {
+  itemId: string;
+  title: string;
+  portfolioId: string;
+  portfolioName: string;
+};
+
 /** Map the build's lifecycle phase onto the 5-dot overseer phase rail. */
 function toRailPhase(phase: BuildPhase): PhaseRailPhase {
   switch (phase) {
@@ -184,6 +192,9 @@ export function BuildStudio({
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
+  const [newPortfolioId, setNewPortfolioId] = useState(() => portfolioRows[0]?.id ?? "");
+  const [pendingIntake, setPendingIntake] = useState<BuildStudioPendingIntake | null>(null);
+  const [promotingItemId, setPromotingItemId] = useState<string | null>(null);
   // Tab selector removed per spec §1 + §9 #11 — the workflow graph is the
   // always-visible primary surface of the active-build pane. Progress /
   // Brief / Review / Sandbox / BS-Queue evidence migrates into the
@@ -228,6 +239,11 @@ export function BuildStudio({
       typeof window === "undefined" ? undefined : window.innerWidth,
     ),
   );
+  useEffect(() => {
+    if (!newPortfolioId && portfolioRows[0]?.id) {
+      setNewPortfolioId(portfolioRows[0].id);
+    }
+  }, [newPortfolioId, portfolioRows]);
   // Anchored NodeInspector lifecycle. When ProcessGraph is rendered with an
   // onNodeClick prop, it delegates click handling here instead of opening
   // its own internal TaskInspector / WorkflowStageInspector overlays. The
@@ -554,105 +570,52 @@ export function BuildStudio({
     setCreateError(null);
     setCreating(true);
     try {
-      const result = await createFeatureBuild({ title });
-      if (!result.ok) {
-        // Expected domain error (e.g. WIP cap reached) — the action returns it as
-        // a value so the plain-English message survives to here instead of being
-        // stripped to a generic production digest.
+      const result = await createBuildStudioBacklogIntake({ title, portfolioId: newPortfolioId });
+      if (result.status === "blocked") {
         setCreateError(result.error);
         return;
       }
-      const { buildId } = result;
-      setActiveBuild({
-        id: "",
-        buildId,
-        title,
-        description: null,
-        portfolioId: null,
-        brief: null,
-        plan: null,
-        phase: "ideate",
-        sandboxId: null,
-        sandboxPort: null,
-        diffSummary: null,
-        diffPatch: null,
-        codingProvider: null,
-        threadId: null,
-        digitalProductId: null,
-        product: null,
-        createdById: "",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        originatingBacklogItemId: null,
-        draftApprovedAt: null,
-        designDoc: null,
-        designReview: null,
-        buildPlan: null,
-        planReview: null,
-        taskResults: null,
-        verificationOut: null,
-        acceptanceMet: null,
-        scoutFindings: null,
-        happyPathState: {
-          intake: {
-            status: "pending",
-            taxonomyNodeId: null,
-            backlogItemId: null,
-            epicId: null,
-            constrainedGoal: null,
-            failureReason: null,
-          },
-          execution: {
-            engine: null,
-            source: null,
-            status: "pending",
-            failureStage: null,
-          },
-          verification: {
-            status: "pending",
-            checks: [],
-          },
-        },
-        accountableEmployeeId: null,
-        claimedByAgentId: null,
-        claimedAt: null,
-        claimStatus: null,
-        uxTestResults: null,
-        uxVerificationStatus: null,
-        buildExecState: null,
-        deliberationSummary: null,
-        originator: null,
-        phaseHandoffs: null,
-      });
+      setPendingIntake(result.item);
       setNewTitle("");
       router.refresh();
-      // Open the co-worker panel and auto-prompt about the new feature.
-      // Include targetBuildId so Shell can queue the message until its
-      // thread context matches the new build — without the guard, the
-      // auto-message can fire against the previously-active thread
-      // because Shell's thread switch lags the panel's receipt of the
-      // event by one React render cycle.
+    } catch (err) {
+      // Never leave the button silently stuck at "Filing..." — surface the
+      // failure so intake is recoverable instead of looking wedged.
+      console.error("[build-studio] create backlog intake failed", err);
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to file the backlog item. Please try again.",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handlePromotePendingIntake() {
+    if (!pendingIntake) return;
+    setCreateError(null);
+    setPromotingItemId(pendingIntake.itemId);
+    try {
+      const result = await startBacklogBuild(pendingIntake.itemId);
+      if (result.status === "blocked") {
+        setCreateError(result.error);
+        return;
+      }
+      setPendingIntake(null);
+      await selectBuildById(result.buildId);
+      router.refresh();
       document.dispatchEvent(new CustomEvent("open-agent-panel", {
         detail: {
-          // BI-253ADC70 (D18): prior wording "Help me define it." read as the
-          // coworker asking the user for help rather than offering it. Flipped
-          // to an offer-of-help framing — Dale's "AI as assistant" mental
-          // model expects the coworker to drive the next question.
-          autoMessage: `I just created a new feature called "${title}". Let's define it together — I'll ask a few questions about how your shop works.`,
-          targetBuildId: buildId,
+          autoMessage: `I just promoted ${pendingIntake.itemId} into Build Studio as "${pendingIntake.title}". Let's define it together — I'll ask a few questions about how your shop works.`,
+          targetBuildId: result.buildId,
         },
       }));
     } catch (err) {
-      // Never leave the button silently stuck at "Starting…" — surface the
-      // failure so intake is recoverable instead of looking wedged
-      // (BI-87CEAFEE: a render-loop crash previously hung this path with no
-      // user-visible signal).
-      console.error("[build-studio] create build failed", err);
+      console.error("[build-studio] promote backlog intake failed", err);
       setCreateError(
         err instanceof Error ? err.message : "Failed to start the build. Please try again.",
       );
     } finally {
-      setCreating(false);
+      setPromotingItemId(null);
     }
   }
 
@@ -730,23 +693,64 @@ export function BuildStudio({
                 rows={3}
                 className="w-full px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)] resize-y min-h-[72px] max-h-[200px] leading-snug"
               />
+              <label className="mt-2 block text-[10px] font-medium uppercase tracking-wide text-[var(--dpf-muted)]">
+                Portfolio
+                <select
+                  value={newPortfolioId}
+                  onChange={(e) => setNewPortfolioId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                >
+                  {portfolioRows.length === 0 ? (
+                    <option value="">No portfolios available</option>
+                  ) : null}
+                  {portfolioRows.map((portfolio) => (
+                    <option key={portfolio.id} value={portfolio.id}>
+                      {portfolio.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               {/* BI-950FE085 (D??): the prior "New" label gave Dale no signal
                   about what he was creating. "Start a new build" is explicit —
                   it names the action, the artifact, and the intent. */}
               <div className="flex items-center justify-between mt-2 gap-2">
                 <div className="text-[10px] text-[var(--dpf-muted)] leading-tight">
-                  Press Cmd/Ctrl+Enter to start.
+                  Press Cmd/Ctrl+Enter to file.
                   {newTitle.length > 0 ? ` ${newTitle.length} characters.` : ""}
                 </div>
                 <button
                   onClick={handleCreate}
-                  disabled={creating || !newTitle.trim()}
+                  disabled={creating || !newTitle.trim() || !newPortfolioId}
                   className="px-4 py-2 text-sm font-semibold bg-[var(--dpf-accent)] text-white border-none rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none hover:opacity-90 transition-opacity flex items-center gap-1.5"
                 >
                   {creating && <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  {creating ? "Starting…" : "Start a new build"}
+                  {creating ? "Filing..." : "File backlog item"}
                 </button>
               </div>
+              {pendingIntake && (
+                <div className="mt-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                    Ready to promote
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-[var(--dpf-text)]">
+                    {pendingIntake.itemId}
+                  </div>
+                  <p className="mt-1 text-xs leading-snug text-[var(--dpf-muted)]">
+                    {pendingIntake.title} · {pendingIntake.portfolioName}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handlePromotePendingIntake}
+                    disabled={promotingItemId === pendingIntake.itemId}
+                    className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[var(--dpf-accent)] px-3 py-2 text-sm font-semibold text-[var(--dpf-accent)] transition-colors hover:bg-[var(--dpf-accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {promotingItemId === pendingIntake.itemId && (
+                      <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                    )}
+                    {promotingItemId === pendingIntake.itemId ? "Promoting..." : "Promote to Feature Build"}
+                  </button>
+                </div>
+              )}
               {createError && (
                 <div
                   role="alert"

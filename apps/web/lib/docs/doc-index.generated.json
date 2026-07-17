@@ -3737,6 +3737,22 @@
         "status"
       ]
     },
+    "docs/operations/customer-zero-preinstall-readiness.md": {
+      "publicHref": "/operations/customer-zero-preinstall-readiness/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "customer-0-pre-install-readiness-software-platform-archetype",
+        "decision-snapshot",
+        "pre-install-inputs",
+        "archetype-readiness",
+        "reseller-bi-to-github-path",
+        "non-technical-operator-handoff",
+        "day-zero-checklist",
+        "related-docs"
+      ]
+    },
     "docs/operations/disaster-recovery.md": {
       "publicHref": "/operations/disaster-recovery/",
       "portalHref": null,

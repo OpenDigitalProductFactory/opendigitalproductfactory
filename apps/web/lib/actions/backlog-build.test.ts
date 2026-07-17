@@ -5,9 +5,16 @@ const { mockAuth, mockPrisma, mockPromote } = vi.hoisted(() => ({
   mockPrisma: {
     backlogItem: {
       findUnique: vi.fn(),
+      create: vi.fn(),
       update: vi.fn(),
     },
+    backlogItemActivity: {
+      create: vi.fn(),
+    },
     platformDevConfig: {
+      findUnique: vi.fn(),
+    },
+    portfolio: {
       findUnique: vi.fn(),
     },
     $transaction: vi.fn(),
@@ -32,7 +39,7 @@ vi.mock("next/cache", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { startBacklogBuild } from "@/lib/actions/backlog-build";
+import { createBuildStudioBacklogIntake, startBacklogBuild } from "@/lib/actions/backlog-build";
 
 describe("startBacklogBuild", () => {
   beforeEach(() => {
@@ -46,6 +53,77 @@ describe("startBacklogBuild", () => {
     });
     mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({ governedBacklogEnabled: true });
+    mockPrisma.portfolio.findUnique.mockResolvedValue({ id: "portfolio-1", name: "Foundational" });
+    mockPrisma.backlogItem.create.mockResolvedValue({
+      id: "backlog-row-1",
+      itemId: "BI-1234ABCD",
+      title: "Improve Build Studio intake",
+      portfolioId: "portfolio-1",
+    });
+    mockPrisma.backlogItemActivity.create.mockResolvedValue({});
+  });
+
+  it("files Build Studio intake as an open build-triaged backlog item with a required portfolio", async () => {
+    await expect(createBuildStudioBacklogIntake({
+      title: "Improve Build Studio intake",
+      portfolioId: "portfolio-1",
+    })).resolves.toEqual({
+      status: "created",
+      item: {
+        itemId: "BI-1234ABCD",
+        title: "Improve Build Studio intake",
+        portfolioId: "portfolio-1",
+        portfolioName: "Foundational",
+      },
+    });
+
+    expect(mockPrisma.backlogItem.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: "Improve Build Studio intake",
+        type: "portfolio",
+        workType: "feature",
+        source: "user-request",
+        status: "open",
+        triageOutcome: "build",
+        effortSize: "medium",
+        portfolioId: "portfolio-1",
+        submittedById: "user-1",
+      }),
+      select: {
+        id: true,
+        itemId: true,
+        title: true,
+        portfolioId: true,
+      },
+    });
+    expect(mockPrisma.backlogItemActivity.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        backlogItemId: "backlog-row-1",
+        kind: "build-studio-intake",
+        recordedById: "user-1",
+      }),
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/ops");
+    expect(revalidatePath).toHaveBeenCalledWith("/build");
+  });
+
+  it("blocks Build Studio intake when no valid portfolio is selected", async () => {
+    await expect(createBuildStudioBacklogIntake({
+      title: "Improve Build Studio intake",
+      portfolioId: "",
+    })).resolves.toEqual({
+      status: "blocked",
+      error: "Portfolio is required.",
+    });
+
+    mockPrisma.portfolio.findUnique.mockResolvedValueOnce(null);
+    await expect(createBuildStudioBacklogIntake({
+      title: "Improve Build Studio intake",
+      portfolioId: "missing",
+    })).resolves.toEqual({
+      status: "blocked",
+      error: "Choose a valid portfolio.",
+    });
   });
 
   it("promotes the semantic backlog item id through the governed Build Studio helper", async () => {
