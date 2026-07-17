@@ -4,10 +4,10 @@
 | ----- | ----- |
 | Status | Draft — for chief-architect review |
 | Date | 2026-07-16 |
-| Author | Claude Code (deep research pass) |
+| Author | Claude Code (deep research pass), Codex review/research amendments |
 | Epic (proposed) | `EP-EMPLOYEE-OCCUPATION` (composes onto `EP-REDUCTION-GEAR-ARCH`, `EP-COWORKER-INTERACTIVITY`, `EP-ONBOARDING-INTAKE`, `EP-ATTENTION-SURFACE`, `EP-PROACTIVE-OPS`, `EP-WSID`) |
 | Scope | The **occupation** dimension for a customer's in-trench employees: a role-tailored workspace surface, a per-occupation coworker roster, and a condensed first-login onboarding that teaches the two flagship UX features (Priority, Proactivity) with a job-specific slice. |
-| Out of scope | Implementation, schema migration authoring, route rewrites, customer-portal changes, changes to the DPF platform-management RBAC security model, HR lifecycle mechanics already owned by the HR specs. |
+| Out of scope | Implementation, schema migration authoring, route rewrites, customer-portal changes, changes to the existing six DPF platform-management roles, HR lifecycle mechanics already owned by the HR specs. The base workforce access floor in §5.6 is in scope because occupation needs a safe security floor. |
 | Companion plan | [`docs/superpowers/plans/2026-07-16-employee-occupation-onboarding-and-role-tailored-workspace.md`](../plans/2026-07-16-employee-occupation-onboarding-and-role-tailored-workspace.md) |
 
 ---
@@ -16,7 +16,7 @@
 
 The founder directive: *"The onboarding process needs to teach the users about the two main UX features for priority and proactivity — at main portal setup and for each new user when they first log on as an employee. Employee onboarding needs a condensed way to introduce the platform. There are common aspects, but also job-specific aspects aligned to each archetype — a dental hygienist and a field service tech each need to know what the portal does for them. This may reveal persona gaps. The company-wide operations page needs to be tailored for a specific job; not all portal features need to be there. Add this employee-and-role dimension, with specific privileges to interact with certain AI coworkers."*
 
-This spec addresses six coupled needs:
+This spec addresses seven coupled needs:
 
 1. **Teach the two flagship UX features** — *Priority* (the Attention Surface / "Needs you" inbox) and *Proactivity* (proactive AI coworkers) — at two moments: portal setup, and each employee's first login.
 2. **A condensed employee platform intro** — short, not the full COO-led owner tour.
@@ -24,6 +24,7 @@ This spec addresses six coupled needs:
 4. **A role-tailored operations/workspace surface** — the company-wide `/workspace` reshaped for a specific job, showing only the features that job needs.
 5. **The employee + role (occupation) dimension** as durable substrate.
 6. **Per-occupation coworker interaction privileges** — which AI coworkers a given job may summon/message.
+7. **Joiner/mover/leaver-safe lifecycle behavior** — first-login onboarding is only the first event; a later position/occupation change must re-scope the workspace and coworker roster without leaving stale access behind.
 
 ### 1.1 The central finding: two different "role" systems are conflated today
 
@@ -89,17 +90,18 @@ Critically, the vertical-home spec explicitly says *"No routing decision should 
 
 ## 3. Research & benchmarking (AGENTS.md §10)
 
-### 3.1 Commercial systems
+### 3.1 Standards and commercial systems
 
-- **Microsoft Dynamics 365 — Role Centers.** Each business role gets a tailored home page (cards, queues, KPIs, activities) driven by the assigned security role. The direct analog to a role-tailored `/workspace`. **Adopt:** occupation → a curated home surface. **Reject:** Dynamics couples the home tightly to its RBAC security role; we keep the *security* boundary (platform-management RBAC) separate from the *occupation* focus layer.
-- **SAP Fiori — Business Roles → Launchpad Spaces & Pages.** A business role maps to a "space" containing "pages" of app tiles; users only see apps their role composes. **Adopt:** occupation as a reusable bundle that resolves to a page of tiles/coworkers, seeded centrally. **Reject:** Fiori's catalog/group/tile-mapping ceremony — DPF already has a typed contribution registry that is lighter.
-- **Workday — role-based dashboards/worklets.** Worklets surface only role-relevant tasks. **Adopt:** the "only what this job needs" default.
-- **ServiceNow — role-based Workspaces + Guided Setup + Next Experience onboarding.** Role-scoped agent/workspace surfaces plus a guided-tour onboarding layer. **Adopt:** the pairing of a role-tailored surface *with* a guided onboarding layer — exactly this spec's two halves.
-- **Salesforce — Permission Sets + In-App Guidance/Trailhead.** Additive permission sets on top of a base profile; in-app prompts teach features contextually. **Adopt:** occupation as an *additive, composable* layer over a base worker role (not a monolithic profile). **Reject:** Salesforce's static tooltip walkthroughs — DPF teaches via a coworker, not a tooltip.
+- **NIST RBAC / ANSI INCITS 359.** NIST records RBAC as an ANSI/INCITS standard and points implementers toward role engineering and RBAC standards. **Adopt:** keep raw authority expressed as auditable role/permission assignments. **Reject:** treating "occupation" as an informal UI-only label that can bypass authorization. Source: [NIST RBAC project](https://csrc.nist.gov/projects/role-based-access-control).
+- **Microsoft Dynamics 365 Business Central — Role Centers.** Microsoft describes Role Centers as the user's entry point and home page, customized to the user's profile, and notes that the Role Center is a natural space for welcome/checklist onboarding content. **Adopt:** occupation → curated home + onboarding checklist on the same surface. **Reject:** binding the home directly to the same object that grants permissions; DPF needs a separate focus layer over a security floor. Source: [Designing Role Centers](https://learn.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-designing-role-centers).
+- **SAP Fiori — Business Roles → Launchpad Spaces & Pages.** SAP's spaces/pages model packages role-relevant apps into launchpad surfaces. **Adopt:** occupation as a reusable bundle that resolves to a page of tiles/coworkers, seeded centrally. **Reject:** Fiori's catalog/group/tile-mapping ceremony — DPF already has a typed contribution registry that is lighter. Source: [SAP spaces/pages best practices](https://help.sap.com/docs/SAP_S4HANA_CLOUD/4fc8d03390c342da8a60f8ee387bca1a/3885563c3c054af3a68220029e5a8fc3.html).
+- **Microsoft Entra Lifecycle Workflows.** Entra models employee lifecycle work as joiner/mover/leaver workflows with triggers, scopes, templates, task history, and on-demand runs. **Adopt:** first-login onboarding as one lifecycle workflow; position/occupation changes are mover events that may reset or add curriculum. **Reject:** one-shot onboarding state with no lifecycle history. Source: [Understanding lifecycle workflows](https://learn.microsoft.com/en-us/entra/id-governance/understanding-lifecycle-workflows).
+- **ServiceNow Employee Center / Guided Self-Service.** ServiceNow frames Employee Center around employee navigation, search, task management, and guided self-service experiences. **Adopt:** task-focused employee portal with guided, contextual self-service. **Reject:** a broad platform-operator dashboard for every employee. Sources: [Configuring Employee Center](https://www.servicenow.com/docs/r/employee-service-management/employee-experience-foundation/setup-emp-center.html), [Guided Self-Service](https://www.servicenow.com/docs/r/yokohama/employee-service-management/employee-experience-foundation/gss-guided-self-service-overview.html).
+- **Salesforce — In-App Guidance.** Salesforce positions in-app guidance as contextual prompts/walkthroughs for training users where they work. **Adopt:** anchored guidance over live UI. **Reject:** static tooltip walkthroughs as the primary teacher; DPF's differentiator is coworker-narrated learning. Source: [Salesforce In-App Guidance](https://help.salesforce.com/s/articleView?id=sales.iag_create.htm&language=en_US&type=5).
 
 ### 3.2 Open-source systems
 
-- **ERPNext — Role Profiles + Workspaces + Module Onboarding.** A "Role Profile" bundles multiple roles; each module has a workspace and a guided "onboarding" step list. The closest full analog to occupation (bundle) + role-tailored workspace + guided onboarding. **Adopt:** the three-in-one shape. **Reject:** ERPNext's free-form workspace page-builder (DPF uses typed contributions per §5.5 of the vertical-home spec).
+- **ERPNext — Role Profiles + Workspaces + Module Onboarding.** ERPNext Role Profiles store multiple roles so similar users can receive a bundle at once. This is the closest open-source analog to occupation bundle + role-tailored workspace + guided onboarding. **Adopt:** the three-in-one shape. **Reject:** ERPNext's free-form workspace page-builder (DPF uses typed contributions per §5.5 of the vertical-home spec). Source: [ERPNext Role and Role Profile](https://docs.frappe.io/erpnext/role-and-role-profile).
 - **Odoo — Groups → tailored menus + industry modules.** Access groups drive which menus/apps appear; industry packs tailor the install. **Adopt:** occupation narrows the visible surface the way groups narrow menus.
 - **Keycloak — realm roles, composite roles, groups.** Composite roles aggregate finer roles; groups attach role sets to users. **Adopt:** occupation modeled as a composable set of capability/coworker grants (a "composite"), not a flat enum.
 - **Frappe Workspaces** (already cited by the vertical-home spec): declarative block-based work surfaces. **Adopt:** declarative, typed composition.
@@ -110,7 +112,7 @@ Shepherd.js, driver.js, react-joyride, Intro.js are the standard spotlight/coach
 
 ### 3.4 Patterns adopted / rejected / anti-patterns / gaps filled
 
-**Adopted:** occupation → tailored home (Dynamics Role Centers, Fiori Spaces); occupation as a composable bundle over a base worker role (ERPNext Role Profile, Keycloak composite, Salesforce permission sets); guided onboarding paired with the tailored surface (ServiceNow, ERPNext); occupation seeded centrally per archetype, symmetric with `packages/storefront-templates/src/archetypes/*`; coworker-narrated teaching over static tooltips.
+**Adopted:** occupation → tailored home (Dynamics Role Centers, Fiori Spaces); occupation as a composable bundle over a base worker role (ERPNext Role Profile, Keycloak composite, Salesforce permission sets); guided onboarding paired with the tailored surface (ServiceNow, ERPNext, Microsoft Entra); occupation seeded centrally per archetype, symmetric with `packages/storefront-templates/src/archetypes/*`; coworker-narrated teaching over static tooltips.
 
 **Rejected:** static tooltip-only tours; a runtime page-builder for occupation homes; a global occupation enum (there are thousands of occupations — use a seeded, archetype-scoped registry); a separate employee runtime *shell* (forbidden by `docs/superpowers/specs/2026-03-15-employee-tool-intake-design.md`: *"preserve one workspace shell for all roles"*).
 
@@ -129,6 +131,9 @@ Shepherd.js, driver.js, react-joyride, Intro.js are the standard spotlight/coach
 5. **Teach by encountering a coworker.** Feature teaching is coworker-narrated, job-matched, and honest about empty states (teach the feature even when its queue is empty).
 6. **Progressive disclosure.** Default employee view = 3–5 essential things for their job; more is reachable, not absent, when the role authorizes it.
 7. **Honest unconfigured state.** If an occupation has no tailored contribution yet, fall back to the archetype home, then the platform home — and say so to admins, never fake a tailored surface.
+8. **Lifecycle events are first-class.** Joiner onboarding, mover re-scoping, and leaver revocation are separate events with history. A changed `Position.occupationKey` must re-evaluate workspace, nav, curriculum, and coworker roster immediately.
+9. **Admin mapping must be explainable.** Operators need to see "why this employee sees this" from the employee profile: platform role/capability floor, position, occupation, active curriculum, visible tile set, and coworker roster.
+10. **Mobile is not a later UX.** Field-service and front-line roles will often meet this surface on mobile. The first-login intro and focused workspace must have mobile acceptance criteria from the first implementation slice.
 
 ---
 
@@ -145,7 +150,7 @@ type OccupationProfile = {
   summary: string;                    // one line: what this job does with the portal
   archetypeCategories: string[];      // industries where it appears, e.g. ["healthcare-wellness"]
   archetypeIds?: string[];            // optional narrower business-type scope, e.g. ["dental-practice"]
-  baseWorkerRole: PlatformRoleId;     // the RBAC floor this occupation sits on (see §5.6)
+  baseAccessProfile: string;          // RBAC/capability floor this occupation sits on (see §5.6)
   wsidProfessionFamily?: string;      // link to the WSID professional corpus (EP-WSID)
   featureSurface: {
     tileAllowlist: WorkspaceTileKey[];       // which ALL_TILES this job sees by default
@@ -154,6 +159,7 @@ type OccupationProfile = {
   };
   coworkerRoster: OccupationCoworkerGrant[]; // which coworkers this job may summon (see §5.5)
   onboardingCurriculumId: string;            // the condensed intro to run on first login (see §5.7)
+  moverCurriculumId?: string;                // optional intro when an existing employee changes occupation
 };
 
 type OccupationCoworkerGrant = {
@@ -174,6 +180,8 @@ EmployeeProfile.positionId → Position.occupationKey → OccupationProfile
 ```
 
 This keeps `EmployeeProfile`/`Position`/`Department` canonical (AGENTS.md §11), adds no new identity entity, and lets an org map many positions to one occupation. When an occupation cannot resolve (position unset, or `occupationKey` null), the employee gets the archetype home and the generic worker roster — an honest fallback, not a broken surface.
+
+**Lifecycle rule:** `Position.occupationKey` is not just setup data. A change is a **mover event**. It invalidates any cached occupation resolution, re-runs nav/workspace/coworker roster resolution, and creates a small mover curriculum when the new occupation has materially different workspace or coworker access. Leavers follow the existing HR lifecycle path; this spec does not implement offboarding, but occupation grants must be revoked when the employee account is disabled or detached.
 
 ### 5.3 Role-tailored workspace: extend the vertical-home resolver
 
@@ -201,6 +209,8 @@ Occupation contributions reuse the **same typed contribution manifest, primitive
 
 **Thread user context into the command center.** The org-wide `loadWorkspaceCommandCenter(prismaClient)` gains an optional `{ occupationKey, userId }` so per-occupation content (a hygienist's patient queue vs a tech's dispatch board) can render. Absent context, it behaves exactly as today.
 
+**No card sprawl.** Occupation homes are operational work surfaces, not marketing dashboards. Each contribution must fit the vertical-home slot covenant, use existing report-kit/status primitives, and pass a mobile first-viewport screenshot check. The default worker home should answer: "What needs me, what is next, and which coworker can help?"
+
 ### 5.4 Feature subset per occupation (progressive disclosure, not deletion)
 
 The occupation `tileAllowlist` + `navEmphasis` define the **default focused view**. Enforcement composes with the existing 3-gate nav filter (`getShellNavSections`) as a **fourth, narrowing gate**:
@@ -213,6 +223,18 @@ visible(tile) = can(user, tile.capability)          // RBAC security floor (unch
 ```
 
 `occupationAllows` returns true when the tile is in the occupation's allowlist **or** the occupation is unresolved (fallback = show role-permitted set). It never returns true for a tile the RBAC floor already denies. A role-authorized "Show all my access" reveal (reusing the existing worker/operator `dpf-nav-mode` switch) lets a user who legitimately has broader access step out of the focused view — progressive disclosure, not a locked box.
+
+**Non-widening invariant:** every implementation slice must carry a test of the form:
+
+```ts
+for (const tile of allTiles) {
+  if (!can(user, tile.capabilityKey)) {
+    expect(visibleWithOccupation(user, occupation, tile)).toBe(false);
+  }
+}
+```
+
+The same invariant applies to route nav, section nav, actions, and coworker tools. Occupation may narrow, sort, explain, and route. It may not authorize a capability.
 
 ### 5.5 Per-occupation coworker privileges
 
@@ -228,14 +250,16 @@ Governance composes with the identity-access spec rather than a parallel gate:
 
 This is additive privilege (a roster grant), but every actual tool call still passes the existing role∩agent-grant intersection (`getAvailableTools`) and the coworker's own governance — the roster decides *reachability*, not raw authority.
 
+**Audit and explanation:** roster resolution writes a lightweight explanation object into the agent panel context (`occupationKey`, matched roster grant, governance profile, fallback reason). Admins can inspect the same explanation from the employee profile. If no roster grants match, the panel falls back to a generic helper with no action tools and a clear "not configured for this role yet" state.
+
 ### 5.6 Occupation vs the platform-management roles (the RBAC seam)
 
-The six `HR-000…HR-500` roles stay exactly as they are — they govern *platform administration*. In-trench business employees sit on a **base worker role** (`OccupationProfile.baseWorkerRole`). Two clean options for the base, to be decided at plan time with the chief architect:
+The existing six `HR-000…HR-500` roles stay exactly as they are — they govern *platform administration*. In-trench business employees sit on a **base access profile** (`OccupationProfile.baseAccessProfile`). Two clean options for the base, to be decided at plan time with the chief architect:
 
-- **Option A (recommended): reuse the existing worker audience + a minimal platform role floor.** Most business employees map to the least-privileged platform role and the `worker` audience mode; occupation supplies all business-work curation and the coworker roster. Smallest change; no new RBAC value.
-- **Option B: add one `HR-600` "Workforce Member" platform role.** A clean 7th role that explicitly means "customer's in-trench employee," decoupling business employees from the platform-management ladder. Larger change (touches `PlatformRoleId`, `PERMISSIONS`, seeds) but conceptually cleaner.
+- **Option A: reuse the existing worker audience + an existing platform role floor.** Smallest change; no new RBAC value. **Architectural concern:** the current six `HR-*` roles all mean platform-management responsibilities, and the apparent low roles still carry platform-facing capabilities. Reusing one risks semantic confusion and overexposure.
+- **Option B (recommended): add one explicit `HR-600` "Workforce Member" platform role, or an equivalent first-class workforce access profile if the architect rejects another `HR-*` value.** This creates a clean security floor for in-trench employees, decoupling them from the platform-management ladder. Larger change (touches `PlatformRoleId`, `PERMISSIONS`, seeds, and AGENTS.md §3 enum guidance) but safer and clearer.
 
-Either way, occupation — not the platform role — is what makes a hygienist's surface a hygienist's surface. The spec records this as a decision for §9.
+Either way, occupation — not the platform role — is what makes a hygienist's surface a hygienist's surface. The base access profile answers "what is this user allowed to do at all?"; occupation answers "what should this job see first, and which coworker should help?"
 
 ### 5.7 Onboarding: teach Priority & Proactivity, condensed and job-aware
 
@@ -257,6 +281,10 @@ Narration is delivered by the **occupation-matched coworker** (via `OccupationPr
 
 **Persistence & tracking:** reuse the orphaned HR **`OnboardingPanel` + `OnboardingTask`** substrate. Add a small set of platform-intro curriculum tasks (learn-priority, learn-proactivity, meet-coworkers, job-tour) keyed by `onboardingCurriculumId`, and mark completion per **user** (an `EmployeeProfile.platformIntroCompletedAt` timestamp, or an `OnboardingTask` of a new `kind:"platform-intro"`). First-login detection = employee has no completed platform-intro curriculum. This also finally wires `OnboardingPanel` to a route.
 
+**Completion semantics:** prefer `OnboardingTask` rows for auditable step history and a derived `platformIntroCompletedAt` only if performance requires it. The first-login intro must be idempotent: refreshes resume the current step, a completed curriculum does not reappear, and a mover curriculum can be added later without erasing the original joiner completion history.
+
+**Accessibility and interruption:** the intro must be keyboard-operable, screen-reader legible, dismissible with "resume later," and available from Help after completion. This is a work tool, not a modal trap.
+
 ### 5.8 Persona gaps this design closes (and the library extension)
 
 - **Human-occupation persona** — created as `OccupationProfile`.
@@ -264,13 +292,29 @@ Narration is delivered by the **occupation-matched coworker** (via `OccupationPr
 - **Admin-RBAC vs business-occupation conflation** — resolved by §5.6.
 - **Archetype leaf lacks an occupation level** — resolved by the archetype-scoped occupation registry (§5.1).
 
+### 5.9 Admin mapping and operations UX
+
+The implementation needs an operator-facing "why this employee sees this" surface, otherwise support and sales demos will turn into archaeology.
+
+Add an occupation panel on the employee profile / employee admin surface showing:
+
+- Position title, department, manager, and resolved `occupationKey`.
+- The matched `OccupationProfile` and why it matched (`Position.occupationKey`, fallback, or unresolved).
+- Base access profile / platform role and granted capabilities.
+- Default tile allowlist, emphasized nav, and "show all my access" eligibility.
+- Coworker roster with governance profile and interaction mode.
+- Joiner/mover curriculum status and next required task.
+
+Admins with `manage_user_lifecycle` can map a `Position` to an occupation from the seeded list for the org's archetype. They cannot invent a new occupation inline; adding a new reusable occupation remains a seed/spec change until real customer pressure justifies per-install overrides.
+
 ---
 
 ## 6. Data-model stewardship (AGENTS.md §11)
 
 - **Reuse, don't fork:** `EmployeeProfile`, `Position`, `Department`, `Team`/`TeamMembership`, `OnboardingTask`, `AgentGovernanceProfile`, `DelegationGrant`, `DirectivePolicyClass`, `StorefrontArchetype`, the workspace-home registry, WSID corpus.
 - **New tables (2):** `OccupationProfile` (+ its seed data package) and the coworker-roster rows (embed on `OccupationProfile` or a thin `OccupationCoworkerGrant` join, decided at plan time). Both are **config/template**, not identity — no `Principal` (§11 principal-convergence not triggered).
-- **New columns (1–2):** `Position.occupationKey` (nullable FK-by-slug); `EmployeeProfile.platformIntroCompletedAt` (or an `OnboardingTask.kind`).
+- **New columns (1–2):** `Position.occupationKey` (nullable FK-by-slug); optional `EmployeeProfile.platformIntroCompletedAt` only if the plan does not use derived completion from `OnboardingTask`.
+- **OnboardingTask extension:** add a closed `kind`/`curriculumId` shape rather than overloading title strings. Suggested `kind` values: `hr-onboarding`, `hr-offboarding`, `platform-intro`, `occupation-mover`.
 - **Enums (AGENTS.md §3):** `occupationKey` is a **seeded registry**, not a hardcoded global enum (thousands of occupations); it is validated per archetype at seed time, the way `archetypeId` is. `interaction` on the coworker grant *is* a small closed enum (`summon|assigned-only|read-only`) and must be declared as a strongly-typed union in the same commit as its first use.
 - **`Organization` canonical identity** untouched.
 
@@ -278,7 +322,7 @@ Narration is delivered by the **occupation-matched coworker** (via `OccupationPr
 
 ## 7. Verification strategy (AGENTS.md §5 — structural is not sufficient)
 
-Structural (necessary): unit tests for the extended resolver (all five resolution tiers + occupation-unresolved fallback), the `occupationAllows` narrowing gate (never widens past RBAC), the coworker-roster enforcement in `resolveAgentForRoute`, and the onboarding-completion detection. Type-level assertion that occupation contributions satisfy the existing slot covenant. Theme-aware component tests (no hardcoded colors).
+Structural (necessary): unit tests for the extended resolver (all five resolution tiers + occupation-unresolved fallback), the `occupationAllows` narrowing gate (never widens past RBAC), the coworker-roster enforcement in `resolveAgentForRoute`, and the onboarding-completion detection. Type-level assertion that occupation contributions satisfy the existing slot covenant. Theme-aware component tests (no hardcoded colors). Schema/seed tests must prove every seeded occupation references real archetypes, real coworkers, valid governance profiles, valid WSID families, valid curriculum ids, valid tiles, and valid nav prefixes.
 
 Functional (required for ship): on the **Live portal** (`http://localhost:3000`, per `project_portal_address`) with a seeded demo business per `EP-ARCHETYPE-DEMO`:
 1. Seed at least two occupations in one archetype (e.g. dental hygienist + front-desk coordinator in a `dental-practice`), each bound to a `Position` and an `EmployeeProfile` with its own `User`.
@@ -286,8 +330,22 @@ Functional (required for ship): on the **Live portal** (`http://localhost:3000`,
 3. Confirm each employee's `/workspace` resolves to the occupation-tailored home, shows only the occupation's tiles by default, and the role-authorized reveal still exposes broader access.
 4. Confirm the coworker panel lists only the occupation's roster and attaches the right coworker per route; confirm an out-of-roster coworker is not silently attached.
 5. Submit a structured dynamic-analysis report (drove X → observed Y → signed off Z) per `feedback_dynamic_analysis_is_evidence`. Desktop + mobile.
+6. Change one employee's `Position.occupationKey` from occupation A to occupation B; confirm the workspace, nav focus, coworker roster, and mover curriculum update without deleting the original joiner completion history.
+7. Disable or detach the employee account; confirm occupation coworker reachability disappears with the base account access and cannot be reached by direct URL/API.
 
 The `dpf-ux-fit-review` skill runs before any UI-impacting slice, and each PR carries a `UX-Fit-Decision:` trailer (AGENTS.md §12).
+
+## 7.1 Implementation contracts
+
+| Contract | Requirement |
+| -------- | ----------- |
+| Security floor | All actions still pass platform capability checks and agent tool-grant checks. Occupation never grants raw capability. |
+| Focus layer | Occupation can narrow/default/sort/explain the workspace, nav, and coworker roster. |
+| Lifecycle | Joiner, mover, and leaver events re-evaluate occupation-derived surfaces and leave auditable history. |
+| Fallback | Unresolved occupation falls back honestly to archetype/platform surfaces and generic helper behavior. |
+| Admin explanation | Every resolved employee surface has an inspectable explanation for support/admin users. |
+| Mobile | First implementation slice includes mobile viewport evidence for first-login intro and focused workspace. |
+| Seed integrity | Occupation seed data validates archetype, coworker, governance, WSID, curriculum, tile, and nav references. |
 
 ---
 
@@ -314,7 +372,7 @@ The `dpf-ux-fit-review` skill runs before any UI-impacting slice, and each PR ca
 - Persona library extends to **occupation personas within archetypes**.
 
 **Open questions for plan/architect:**
-1. **Base worker role** — Option A (reuse least-privileged platform role + worker audience) vs Option B (add `HR-600` Workforce Member). §5.6.
+1. **Base worker role** — Option B is now the architectural recommendation: add `HR-600` Workforce Member or an equivalent first-class workforce access profile. Chief architect must choose the exact shape because it touches the strongly-typed role enum. §5.6.
 2. **Coworker roster storage** — embed on `OccupationProfile` vs a thin `OccupationCoworkerGrant` join table (favor the join for queryability + per-install override).
 3. **Completion tracking** — `EmployeeProfile.platformIntroCompletedAt` column vs `OnboardingTask.kind:"platform-intro"` rows (favor reusing `OnboardingTask` to also wire the orphaned panel).
 4. **Occupation override per install** — do customers relabel/re-scope a seeded occupation (like `customVocabulary`), or is the seed authoritative until real pressure? (Favor seed-authoritative first; DB override later, mirroring the vertical-home vocabulary decision.)
@@ -322,6 +380,19 @@ The `dpf-ux-fit-review` skill runs before any UI-impacting slice, and each PR ca
 
 ---
 
-## 10. Reporting protocol
+## 10. Risks and mitigations
+
+| Risk | Mitigation |
+| ---- | ---------- |
+| Existing platform roles are reused for employees and leak platform-management meaning or capabilities. | Prefer `HR-600`/workforce access profile; add non-widening tests and admin explanation. |
+| Occupation registry becomes a brittle global taxonomy. | Scope occupations by archetype/category, seed only high-value jobs, and add per-install override later only with evidence. |
+| Coworker roster is mistaken for tool authority. | Enforce roster as reachability only; all tool calls still pass `getAvailableTools` and governance profile checks. |
+| First-login intro becomes a modal chore. | Keep it 3-5 steps, resumable, coworker-narrated, and available later from Help. |
+| Role-tailored workspace hides legitimate work. | Provide "show all my access" for authorized users and make the focused mode reversible. |
+| Field roles fail on mobile. | Treat mobile as a Phase-1 acceptance gate, not a polish pass. |
+
+---
+
+## 11. Reporting protocol
 
 This spec pass produces: this design doc; a companion phased plan; a proposed epic `EP-EMPLOYEE-OCCUPATION` with BIs composing onto the epics in §8; and occupation-persona anchors under `docs/personas/`. No implementation in this pass — per the delivery-surfaces doctrine, filed BIs are promoted through the evidence-gated lifecycle (external build or Build Studio, chosen by fit).
