@@ -13573,3 +13573,359 @@ model GraphEdge {
   @@index([srcKey, relType])
   @@map("graph_edge")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Workforce staffing & scheduling substrate (EP-WORKFORCE-OPS / BI-4AD09A35).
+// Canonical staffing authority: demand → shifts → assignments → availability →
+// preferences → constraints → proposals. Spec:
+// docs/superpowers/specs/2026-07-17-organization-workforce-staffing-scheduling-design.md
+// Cross-domain references (employee/org/principal/leave/credential/proposal) are
+// bare indexed FK columns — matching the schema's organizationId convention — so
+// this migration is additive and touches no hub model. Relations are declared
+// only within the staffing domain. Discriminator fields are String (allowed
+// values named in comments), matching LeaveRequest/TimesheetPeriod status fields.
+// Times are stored as instants plus a timezone and local-date context (spec §5.3).
+// `version` columns carry optimistic concurrency for publication (spec §5.3).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Required coverage for an interval/location/role. Spec §5.1.1 + §9.9(1):
+/// `demandShape` is the first-class discriminator so the solver posture is
+/// explicit rather than assumed.
+model StaffingDemand {
+  id                   String   @id @default(cuid())
+  demandId             String   @unique
+  organizationId       String
+  // coverage_floor | forecast_curve | fixed_slot | task_pipeline | census_load
+  demandShape          String
+  sourceType           String? // forecast | manual | booking | work | census
+  sourceId             String?
+  startAt              DateTime
+  endAt                DateTime
+  timezone             String
+  localDateContext     String?
+  workLocationId       String?
+  occupationProfileId  String?
+  roleKey              String?
+  requiredSkills       String[] @default([])
+  requiredCredentials  String[] @default([])
+  minQuantity          Int      @default(1)
+  targetQuantity       Int?
+  // headcount-by-formula (spec §9.3): when set, quantity is derived at eval time
+  quantityFormula      Json?
+  priority             Int      @default(0)
+  status               String   @default("open") // open | partially_covered | covered | cancelled
+  provenance           Json?
+  effectiveVersion     Int      @default(1)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  shifts               StaffingShift[]
+
+  @@index([organizationId, status])
+  @@index([demandShape])
+  @@index([startAt, endAt])
+  @@index([workLocationId])
+}
+
+/// Tentative work interval, mutable until publication. Spec §5.1.2.
+model StaffingShift {
+  id                 String   @id @default(cuid())
+  shiftId            String   @unique
+  organizationId     String
+  staffingDemandId   String?
+  startAt            DateTime
+  endAt              DateTime
+  timezone           String
+  localDateContext   String?
+  workLocationId     String?
+  requiredQuantity   Int      @default(1)
+  lifecycle          String   @default("draft") // draft | proposed | published | cancelled
+  publicationVersion Int      @default(0)
+  version            Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  demand             StaffingDemand?        @relation(fields: [staffingDemandId], references: [id])
+  assignments        StaffingAssignment[]
+  resourceLinks      StaffingResourceLink[]
+
+  @@index([organizationId, lifecycle])
+  @@index([staffingDemandId])
+  @@index([startAt, endAt])
+}
+
+/// Authorized (or proposed) binding of a person/crew to a shift. Spec §5.1.3 +
+/// §9.9(2,4): assignee may be an individual or a typed crew; `assignmentMode`
+/// distinguishes direct assignment from the offer/claim flow used for
+/// contractor/renter/volunteer capacity the organization does not command.
+model StaffingAssignment {
+  id                    String   @id @default(cuid())
+  assignmentId          String   @unique
+  organizationId        String
+  staffingShiftId       String
+  assigneeType          String   @default("employee") // employee | crew
+  employeeProfileId     String?
+  staffingCrewId        String?
+  // proposed | offered | claimed | confirmed | declined | withdrawn | completed | on_site
+  lifecycle             String   @default("proposed")
+  assignmentMode        String   @default("assigned") // assigned | offer_claim
+  decisionInteractionId String?
+  approverEmployeeId    String?
+  acknowledgementState  String   @default("none") // none | pending | acknowledged | declined
+  source                String? // solver | manual | swap | import
+  version               Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  shift                 StaffingShift             @relation(fields: [staffingShiftId], references: [id], onDelete: Cascade)
+  crew                  StaffingCrew?             @relation(fields: [staffingCrewId], references: [id])
+  events                StaffingAssignmentEvent[]
+
+  @@index([organizationId, lifecycle])
+  @@index([staffingShiftId])
+  @@index([employeeProfileId])
+  @@index([staffingCrewId])
+}
+
+/// Append-only assignment history (spec §5.3): cancellation must not erase who
+/// was assigned previously.
+model StaffingAssignmentEvent {
+  id                   String   @id @default(cuid())
+  staffingAssignmentId String
+  eventType            String // proposed | confirmed | declined | withdrawn | completed | acknowledged | reassigned
+  atVersion            Int
+  actorRef             String?
+  detail               Json?
+  createdAt            DateTime @default(now())
+
+  assignment           StaffingAssignment @relation(fields: [staffingAssignmentId], references: [id], onDelete: Cascade)
+
+  @@index([staffingAssignmentId, createdAt])
+}
+
+/// Typed crew / composite assignable unit (spec §9.2.3). Members and their
+/// in-crew roles (lead + helper, apprentice paired with journeyman) are the
+/// unit's internal composition.
+model StaffingCrew {
+  id             String   @id @default(cuid())
+  crewId         String   @unique
+  organizationId String
+  name           String?
+  crewType       String? // moving | trades_install | catering | event_dept | patrol
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  members        StaffingCrewMember[]
+  assignments    StaffingAssignment[]
+
+  @@index([organizationId])
+}
+
+model StaffingCrewMember {
+  id                String   @id @default(cuid())
+  staffingCrewId    String
+  employeeProfileId String
+  roleInCrew        String?
+  isLead            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  crew              StaffingCrew @relation(fields: [staffingCrewId], references: [id], onDelete: Cascade)
+
+  @@unique([staffingCrewId, employeeProfileId])
+  @@index([employeeProfileId])
+}
+
+/// Co-scheduled non-person resources (vehicle/room/operatory/kit/equipment) that
+/// share a shift interval, so double-booking detection covers equipment and
+/// rooms, not only people (spec §9.9(2)). `resourceRef` points at the owning
+/// domain record (e.g. a WorkLocation, vehicle asset, or ServiceProvider room).
+model StaffingResourceLink {
+  id              String   @id @default(cuid())
+  organizationId  String
+  staffingShiftId String
+  resourceType    String // vehicle | room | operatory | kit | equipment | chair | station
+  resourceRef     String
+  createdAt       DateTime @default(now())
+
+  shift           StaffingShift @relation(fields: [staffingShiftId], references: [id], onDelete: Cascade)
+
+  @@index([staffingShiftId])
+  @@index([resourceType, resourceRef])
+}
+
+/// Employee-declared or authorized availability window. Spec §5.1.4.
+model EmployeeAvailabilityWindow {
+  id                String   @id @default(cuid())
+  windowId          String   @unique
+  organizationId    String
+  employeeProfileId String
+  kind              String // available | unavailable
+  startAt           DateTime
+  endAt             DateTime
+  timezone          String
+  localInterval     String?
+  recurrence        String?
+  source            String? // employee | hr | derived
+  effectiveFrom     DateTime?
+  effectiveTo       DateTime?
+  ownerRef          String?
+  confirmationState String   @default("confirmed") // confirmed | pending
+  supersededById    String?
+  version           Int      @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([employeeProfileId])
+  @@index([organizationId, kind])
+  @@index([startAt, endAt])
+}
+
+/// Typed, consented, weighted scheduling preference. Spec §5.1.5 + §12: only
+/// employee-confirmed preferences (origin=explicit or promoted) are binding;
+/// inferred origin stays soft and expiring.
+model EmployeeSchedulingPreference {
+  id                String   @id @default(cuid())
+  preferenceId      String   @unique
+  organizationId    String
+  employeeProfileId String
+  preferenceType    String
+  scope             String?
+  weight            Float    @default(0)
+  origin            String   @default("explicit") // explicit | inferred
+  consentState      String   @default("pending") // pending | consented | revoked
+  confidence        Float?
+  evidenceRefs      Json?
+  effectiveFrom     DateTime?
+  expiresAt         DateTime?
+  supersededById    String?
+  version           Int      @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([employeeProfileId])
+  @@index([organizationId, preferenceType])
+}
+
+/// Typed labor-rule predicate + parameters (spec §5.1.6 + §9.8 registry).
+/// `organizationId` null = a platform/jurisdiction starter pack rule.
+/// `predicateType` names the §9.8 variable family; hard rules cannot be relaxed
+/// by the solver, and non-waivable hard rules reject exception creation (§6).
+model StaffingConstraintRule {
+  id              String   @id @default(cuid())
+  ruleId          String   @unique
+  organizationId  String?
+  predicateType   String
+  family          String?
+  parameters      Json     @default("{}")
+  severity        String   @default("hard") // hard | soft
+  applicability   Json     @default("{}") // jurisdiction | archetype | org | unit | location | employmentType
+  sourcePolicyUrl String?
+  legallyWaivable Boolean  @default(false)
+  effectiveFrom   DateTime?
+  effectiveTo     DateTime?
+  validationState String   @default("draft") // draft | reviewed | active
+  reviewOwnerRef  String?
+  version         Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([predicateType])
+  @@index([severity, validationState])
+}
+
+/// Immutable optimization run over a versioned input snapshot (spec §5.1.7). A
+/// run never mutates assignments; it produces options.
+model StaffingProposalRun {
+  id                String   @id @default(cuid())
+  runId             String   @unique
+  organizationId    String
+  inputSnapshotHash String
+  inputVersion      String?
+  solverProvider    String?
+  solverVersion     String?
+  timeLimitMs       Int?
+  // pending | running | feasible | optimal | infeasible | unknown | timeout | failed
+  status            String   @default("pending")
+  scoreComponents   Json?
+  unfilledDemand    Json?
+  violations        Json?
+  explanation       Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  options           StaffingProposalOption[]
+
+  @@index([organizationId, status])
+}
+
+model StaffingProposalOption {
+  id                    String   @id @default(cuid())
+  optionId              String   @unique
+  staffingProposalRunId String
+  rank                  Int?
+  scoreComponents       Json?
+  coverage              Json?
+  unfilledDemand        Json?
+  violations            Json?
+  explanation           Json?
+  comparison            Json?
+  terminalStatus        String?
+  createdAt             DateTime @default(now())
+
+  run                   StaffingProposalRun @relation(fields: [staffingProposalRunId], references: [id], onDelete: Cascade)
+
+  @@index([staffingProposalRunId, rank])
+}
+
+/// Request to depart from a waivable organization rule (spec §5.1.8). Hard
+/// non-waivable legal/credential rules must reject exception creation at the
+/// application layer.
+model StaffingExceptionRequest {
+  id                     String   @id @default(cuid())
+  exceptionId            String   @unique
+  organizationId         String
+  staffingConstraintRuleId String?
+  staffingShiftId        String?
+  staffingAssignmentId   String?
+  reason                 String
+  requestedScope         String?
+  expiresAt              DateTime?
+  approvingAuthorityRef  String?
+  decision               String   @default("pending") // pending | approved | denied
+  decisionInteractionId  String?
+  evidence               Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([organizationId, decision])
+  @@index([staffingConstraintRuleId])
+}
+
+/// Bounded staging record for communication/integration-derived intent
+/// (spec §5.1.9 + §10-§11). Never directly solver-authoritative: it must be
+/// employee-confirmed and promoted (to a preference or a LeaveRequest) first.
+model WorkforceCandidateFact {
+  id                     String   @id @default(cuid())
+  candidateFactId        String   @unique
+  organizationId         String
+  subjectEmployeeProfileId String?
+  kind                   String // time_off_intent | availability_hint | preference_hint
+  extractedValue         Json?
+  confidence             Float?
+  sourceEnvelope         Json? // provider | tenant | external id | sender/subject | received | integrity | excerpt/digest
+  identityResolution     String   @default("unresolved") // unresolved | resolved | ambiguous
+  reviewState            String   @default("pending") // pending | confirmed | edited | rejected
+  extractionModelVersion String?
+  inferenceAt            DateTime?
+  expiresAt              DateTime?
+  correctionOf           String?
+  promotionTargetType    String? // preference | leave_request
+  promotionTargetId      String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([organizationId, reviewState])
+  @@index([subjectEmployeeProfileId])
+  @@index([kind])
+}
