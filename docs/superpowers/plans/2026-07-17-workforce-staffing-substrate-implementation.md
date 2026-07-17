@@ -113,13 +113,23 @@ and location-scoped delegations; leave/exception non-delegable even with a grant
 human publish gated on capability; proposal recommends fewest-unfilled publishable
 option and never auto-publishes; honest no-feasible-schedule path.
 
-### Phase 5 — MCP staffing tool pack
+### Phase 5 — MCP staffing tool pack *(read surface built)*
 
-**Deliverable.** New `staffing-pack.ts` (or a scoped extension of `workforce-pack.ts`): read tools (coverage, unscheduled demand, minimum-necessary availability/eligibility outcomes), proposal tools, employee availability/preference write tools — all deny-by-default grants. Registered via `pack-registry.ts`.
+**Deliverable.** New `staffing-pack.ts`. **Built in this slice:** the read
+surface — `list_staffing_demand` and `get_staffing_coverage` (minimum-necessary
+counts, not private employee detail), on the `registry_read` coworker baseline,
+registered via `pack-registry.ts`, with grants mirrored into `agent-grants.ts
+TOOL_TO_GRANTS` (the gating source). **Follow-up:** the write/proposal tools
+(declare availability, set preference, prepare/publish proposal) as deny-by-
+default tools carrying their own scoped grants and routing through the Phase 4
+human-authority boundary.
 
-**Files.** `apps/web/lib/mcp/packs/staffing-pack.ts` + test; `pack-registry.ts` registration.
+**Files.** `apps/web/lib/mcp/packs/staffing-pack.ts` (+ test); `pack-registry.ts` registration; `apps/web/lib/tak/agent-grants.ts` grant mirror.
 
-**Verification.** Pack tests (grant shapes, tool contracts); tools callable via MCP JSON-RPC against the running portal.
+**Verification.** Pack-shape test (4) + the cross-pack drift guard (40, asserts
+grants match TOOL_TO_GRANTS) + pack-registry & agent-grants guards (139 total) —
+all DB-free and green. DB-backed handler execution verified in CI. Live MCP
+JSON-RPC callability is a live-verification item for Phase 8.
 
 ### Phase 6 — UX surface: People → Staffing (golden = appointment + field-crew)
 
