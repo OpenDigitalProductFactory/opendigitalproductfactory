@@ -23,6 +23,26 @@ Give a non-technical operator a plain answer to: “Is my local source home heal
 - Empty/failure behavior: syncing, stale, not-configured, and blocked states get plain next actions.
 - AI boundary: no coworker prompt is started by this card.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-05-26-contributor-change-lanes-design.md`
+  - `docs/superpowers/plans/2026-05-26-contributor-change-lanes.md`
+  - `docs/superpowers/plans/2026-05-26-contributor-inventory-sync.md`
+  - `docs/superpowers/specs/2026-06-18-private-public-change-segregation-design.md`
+- Current code substrate reviewed:
+  - `apps/web/app/(shell)/platform/development/change-lanes/page.tsx`
+  - `apps/web/components/platform/development/change-lanes/ChangeLanesDashboard.tsx`
+  - `apps/web/components/platform/development/change-lanes/ChangeLaneSourceSummary.tsx`
+  - `apps/web/components/platform/development/change-lanes/ChangeLaneTable.tsx`
+  - `apps/web/lib/contributor-change-lanes/read-model.ts`
+  - `apps/web/lib/contributor-change-lanes/lane-projection.ts`
+  - `apps/web/lib/contributor-change-lanes/types.ts`
+- Source of truth:
+  - The card derives from the existing `loadContributorChangeLaneReadModel` freshness rows and projected `ContributorChangeLane` rows; it does not add a second repository-health model.
+- Decision:
+  - Add a page-local summary card above the existing technical table. This keeps the operator-facing answer plain while preserving the table as the evidence drill-down.
+
 ## Phases
 
 1. Add a pure repository-health summarizer.
