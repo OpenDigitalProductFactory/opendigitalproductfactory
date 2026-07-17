@@ -144,8 +144,7 @@ export function buildWorktreePath(buildId: string, workspace: string = WORKSPACE
  * rollback to the old shared-tree behavior.
  */
 export function isBuildWorktreeIsolationEnabled(): boolean {
-  const value = process.env.DPF_BUILD_WORKTREE_ISOLATION?.trim().toLowerCase();
-  return value !== "0" && value !== "false" && value !== "off";
+  return !["0", "false", "off"].includes(process.env.DPF_BUILD_WORKTREE_ISOLATION?.trim().toLowerCase() ?? "");
 }
 
 /**
