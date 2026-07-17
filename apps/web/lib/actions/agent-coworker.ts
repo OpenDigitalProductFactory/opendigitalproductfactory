@@ -1336,10 +1336,23 @@ export async function sendMessage(input: {
   // granted simply isn't in availableTools and is a no-op here (authority INV-3
   // intact).
   const routeDomainToolNames = resolveRouteContext(input.routeContext).domainTools ?? [];
+  // BI-FB0A5C82 (Phase 3) — planner-driven capability discovery. The broker
+  // classifies the turn's intent and proactively selects the capability set it
+  // needs (the intent's authoritative tools + top keyword-relevant tools), which
+  // can extend BEYOND the route's static domainTools. Force-attaching them means
+  // the model gets the right tools without a model-driven load_tools round-trip;
+  // load_tools remains as the shim for the long tail. Discovery/attachment only —
+  // the broker can only surface already-authorized tools (INV-3 intact).
+  const { brokerCapabilities } = await import("@/lib/tak/capability-broker");
+  const brokeredToolNames = brokerCapabilities({
+    routeContext: input.routeContext,
+    message: trimmedContent,
+    tools: availableTools,
+  }).brokeredNames;
   const { attached: budgetedTools, deferred: deferredTools } = selectCoworkerToolBudget({
     tools: availableTools,
     roleGrants,
-    pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames]),
+    pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames, ...brokeredToolNames]),
     alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
     cap: toolCap,
     // BI-ACE1EBA4 — when the cap forces deferral, keep the tools most relevant to
