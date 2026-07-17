@@ -35,6 +35,7 @@ import {
 // loop and one enriched by enrich_digital_product resolve to the same endoflife slug
 // (single source of truth — avoids a duplicate `deriveEolSlug` / barrel-export clash).
 import { deriveEolSlug } from "./enrich-digital-product";
+import { enrichHardwareIdentity } from "./hardware-lifecycle";
 
 const DEFAULT_LIMIT = 100;
 
@@ -81,6 +82,8 @@ export type CatalogSweepFetchers = {
   eolFetch?: typeof fetch;
   /** NVD CPE-dictionary fetcher; when omitted the CPE is deterministic-only. */
   nvdFetch?: typeof fetch;
+  /** Wikidata fetcher (HAM Phase D hardware backfill); when omitted it is skipped. */
+  wikidataFetch?: typeof fetch;
 };
 
 export type CatalogSweepOptions = {
@@ -94,6 +97,10 @@ export type CatalogSweepResult = {
   cpeResolved: number;
   lifecycleMilestonesWritten: number;
   lifecycleProductsMatched: number;
+  // HAM Phase D1 (BI-84710E60): part='h' identities routed to the hardware feed stage
+  // instead of the software endoflife mapping.
+  hardwareIdentitiesEnriched: number;
+  hardwareMilestonesWritten: number;
   sbomComponentsIngested: number;
   bomComponentsTotal: number;
   failures: number;
@@ -122,6 +129,7 @@ export async function runCatalogEnrichmentSweep(
   const limit = options.limit ?? DEFAULT_LIMIT;
   const eolFetch = options.fetchers?.eolFetch;
   const nvdFetch = options.fetchers?.nvdFetch;
+  const wikidataFetch = options.fetchers?.wikidataFetch;
 
   const result: CatalogSweepResult = {
     identitiesScanned: 0,
@@ -129,6 +137,8 @@ export async function runCatalogEnrichmentSweep(
     cpeResolved: 0,
     lifecycleMilestonesWritten: 0,
     lifecycleProductsMatched: 0,
+    hardwareIdentitiesEnriched: 0,
+    hardwareMilestonesWritten: 0,
     sbomComponentsIngested: 0,
     bomComponentsTotal: 0,
     failures: 0,
@@ -193,17 +203,35 @@ export async function runCatalogEnrichmentSweep(
       );
       result.cpeResolved += 1;
 
-      const slug = deriveEolSlug(identity);
-      if (slug) {
-        const product = await fetchEolProduct(slug, eolFetch ?? fetch);
-        if (product) {
-          result.lifecycleProductsMatched += 1;
-          result.lifecycleMilestonesWritten += await upsertLifecycleForIdentity(
-            db,
-            identity.id,
-            product,
-            identity.productVersion,
-          );
+      if (identity.part === "h") {
+        // HAM Phase D1 (BI-84710E60): hardware identities take the hardware feed stage
+        // (endoflife.date discontinued/eol + Wikidata backfill) rather than the software
+        // release mapping, so end-of-sale posture and low-confidence backfill are captured.
+        const hw = await enrichHardwareIdentity(
+          db,
+          {
+            id: identity.id,
+            manufacturer: identity.manufacturer,
+            product: identity.product,
+            productVersion: identity.productVersion,
+          },
+          { eolFetch, wikidataFetch },
+        );
+        if (hw.eolMatched || hw.wikidataMatched) result.hardwareIdentitiesEnriched += 1;
+        result.hardwareMilestonesWritten += hw.milestonesWritten;
+      } else {
+        const slug = deriveEolSlug(identity);
+        if (slug) {
+          const product = await fetchEolProduct(slug, eolFetch ?? fetch);
+          if (product) {
+            result.lifecycleProductsMatched += 1;
+            result.lifecycleMilestonesWritten += await upsertLifecycleForIdentity(
+              db,
+              identity.id,
+              product,
+              identity.productVersion,
+            );
+          }
         }
       }
     } catch {
