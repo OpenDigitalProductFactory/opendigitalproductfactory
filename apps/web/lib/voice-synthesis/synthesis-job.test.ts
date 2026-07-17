@@ -40,6 +40,7 @@ vi.mock("./audio-storage", () => ({
 }))
 
 import { runVoiceSynthesisJob } from "./synthesis-job"
+import { applyPersonaStyle } from "./persona-style"
 
 describe("runVoiceSynthesisJob", () => {
   beforeEach(() => vi.clearAllMocks())
@@ -103,5 +104,29 @@ describe("runVoiceSynthesisJob", () => {
     })
 
     await expect(runVoiceSynthesisJob("DI-abc")).resolves.toBeUndefined()
+  })
+
+  it("does not throw if persona styling fails - voice remains non-blocking enrichment", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.mocked(applyPersonaStyle).mockRejectedValueOnce(new Error("style model unavailable"))
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue({
+      interactionId: "DI-abc",
+      rationale: "Plan is ready.",
+      outcomeType: "recommend",
+      confidenceAfter: 0.7,
+      profile: {
+        voiceEnabled: true,
+        personaConfig: { systemPrompt: "Speak warmly." },
+        voiceProfile: { id: "vp-1", providerVoiceId: "v1", provider: "cartesia", language: "en", status: "ready" },
+      },
+    })
+
+    await expect(runVoiceSynthesisJob("DI-abc")).resolves.toBeUndefined()
+    expect(mockPrisma.decisionInteractionVoiceOutput.create).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[tool-trace] voice.synthesis.style.failed",
+      expect.objectContaining({ interactionId: "DI-abc" }),
+    )
+    errorSpy.mockRestore()
   })
 })
