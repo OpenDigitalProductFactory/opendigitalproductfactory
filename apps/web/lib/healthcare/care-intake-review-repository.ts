@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { prisma } from "@dpf/db";
 import {
   calculateIntakeReadiness,
@@ -27,7 +29,7 @@ type ReviewPacketRow = {
   consentAttestations: Array<{ status: string }>;
   coverageEvidence: Array<{ status: string }>;
   accessGrants: Array<{
-    grantId: string; granteePrincipalId: string | null; permittedOperations: string[];
+    grantId: string; permittedOperations: string[];
     expiresAt: Date; lastUsedAt: Date | null; revokedAt: Date | null;
   }>;
 };
@@ -52,6 +54,14 @@ export type CareIntakeReviewDatabase = {
 function requirements(value: unknown): CareIntakeRequirement[] {
   if (!Array.isArray(value)) throw new Error("Invalid intake requirement snapshot");
   return value as CareIntakeRequirement[];
+}
+
+function patientReference(organizationId: string, patientProfileId: string): string {
+  return createHash("sha256")
+    .update(`${organizationId}:${patientProfileId}`)
+    .digest("hex")
+    .slice(0, 10)
+    .toUpperCase();
 }
 
 export async function listCareIntakeReviewQueue(
@@ -89,7 +99,7 @@ export async function listCareIntakeReviewQueue(
         consentAttestations: { select: { status: true } },
         coverageEvidence: { select: { status: true } },
         accessGrants: {
-          select: { grantId: true, granteePrincipalId: true, permittedOperations: true, expiresAt: true, lastUsedAt: true, revokedAt: true },
+          select: { grantId: true, permittedOperations: true, expiresAt: true, lastUsedAt: true, revokedAt: true },
         },
       },
     });
@@ -105,8 +115,8 @@ export async function listCareIntakeReviewQueue(
       });
       return {
         packetId: packet.packetId,
-        patientProfileId: packet.patientProfileId,
-        appointmentId: packet.appointmentId,
+        patientReference: patientReference(input.organizationId, packet.patientProfileId),
+        appointmentLinked: Boolean(packet.appointmentId),
         status: packet.status,
         version: packet.version,
         dueAt: packet.dueAt,

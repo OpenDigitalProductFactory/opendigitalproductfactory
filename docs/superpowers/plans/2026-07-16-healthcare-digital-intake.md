@@ -149,6 +149,25 @@ status, notice, and empty states; use `PatientProfile`, `PatientAuthority`, and
 show staff-assisted recovery for unlinked identity and permission failures;
 and do not start AI work from any care card.
 
+**UX fit review — receptionist intake:** `fits-with-guardrails`. The owning
+area is internal Storefront management, where a small practice already manages
+its team, inbox, and other daily operations. `/storefront/intake` is a
+healthcare-only section tab rather than a new global destination. Its first
+viewport is a front-desk queue ordered by the repository's due-date contract,
+with counts for needs-attention, in-progress, and ready work. Cards use an
+organization-scoped pseudonymous patient reference and disclose whether a
+visit is linked, then show readiness blockers, exception summaries, and
+assisted/paper provenance, but do not render questionnaire
+answers, document/signature payloads, or raw patient/appointment identifiers.
+The route requires employee `view_customer` authority and an organization-bound
+Principal before the restricted review repository establishes its audited
+`intake-review` purpose context. AI actions are deliberately absent: this is a
+human review and coordination surface, not clinical decision support.
+Resolving that reference to a patient display identity and visit details
+requires a separate, column-limited staff summary authority; the intake-review
+RLS policy intentionally does not widen `PatientProfile` or `CareAppointment`
+access for this UI slice.
+
 1. **3A — patient identity and task discovery:** resolve the signed-in customer
    contact through canonical `Principal` identity, establish patient RLS
    context, show minimum-necessary active intake tasks in `/portal/health`, and
