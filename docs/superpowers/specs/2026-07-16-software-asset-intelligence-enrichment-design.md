@@ -72,6 +72,8 @@ A **decoupled, continuous** stage (not one-shot), triggered on promotion + weekl
 
 Writes results onto `InventoryEntity` / `DigitalProduct` (§4.3), with lineage in `IdentityResolutionLog`.
 
+**AI fallback — LANDED (BI-85359521).** The cheap-model fallback deferred from BI-27EE2AF7 is built as a **decoupled governed stage** (the altitude the kernel selected — DI-7D4E383E9944 — over inlining in `discovery-normalize` or folding into the CatalogIdentity enrichment sweep). Engine: `packages/db/src/catalog-identity-inference.ts` (`runIdentityInferenceFallback`) — a pure loop over an injectable inference fn + client that scans unresolved `InventoryEntity` (catalogIdentityId null / identityStatus in {null, needs_review, needs_reresolve}, never `human_confirmed`) stalest-first, and per proposal: writes an `IdentityResolutionLog(resolutionType='ai_resolved')` row, keeps `InventoryEntity.catalogIdentityId` untouched during the shadow window, promotes repeated identical resolutions of an entity to a `status='shadow'` `DiscoveryFingerprintRule`, and auto-applies the identity **only at confidence ≥ 0.97**. A contradicting `human_confirmed`/`human_corrected` resolution demotes the shadow rule to `rejected`, and a `human_confirmed` identity is never overwritten (§4.1). **Cost guardrail:** the model calls are **batched** (`batchSize`) and bounded by a **per-run inference-token budget cap** + hard call cap, so a 10k+-entity estate cannot blow the AI budget in one pass; the remainder rotates in on the next poll. Governed home: `apps/web/lib/asset-intelligence/identity-inference-{constants,runner}.ts` + the `identity-inference-fallback` scheduled Inngest job (weekly Tue 04:43 + a run-now event), wiring the real prisma and a `routeAndCall(budgetClass="minimize_cost")` inference fn (dynamic model discovery, no vendor pinning).
+
 ### 4.3 Existing-model updates
 
 `InventoryEntity` gains: `catalogIdentityId` (FK), `identityStatus`/`identityConfidence`, `updatePosture` (`unknown|current|behind|ahead`) + source + confidence, `latestKnownVersion`, `supportLifecycleSource`/`supportLifecycleConfidence`. `DigitalProduct` gains: `enrichmentStatus` (`pending|enriched|partial|failed`), `lastEnrichedAt`. The dangling `softwareIdentityId` is resolved **in the same migration that lands `CatalogIdentity`** (rename→`legacySoftwareIdentityId` + join, or drop-with-evidence) — post-state invariant: no discovery/inventory field points at a non-existent table (2026-04-18 §7.4).
@@ -128,6 +130,7 @@ This is the kernel/org-overlay pattern again: component catalog entries are kern
 - Canonical models + dangling-FK fix — **BI-74579817**
 - Enrichment fields on InventoryEntity/DigitalProduct — **BI-70469721**
 - enrich-digital-product pipeline + estate-specialist tools + cost guardrail — **BI-27EE2AF7**
+- AI-assisted identity-resolution fallback for the ambiguous tail + per-run inference cost guardrail — **BI-85359521** — **LANDED** (the cheap-model fallback deferred from BI-27EE2AF7; engine `packages/db/src/catalog-identity-inference.ts`, governed weekly Inngest job `identity-inference-fallback`; shadow window + auto-promote at ≥0.97 + human-precedence demotion + batched/budget-capped guardrail). See §4.2.
 - FingerprintRule catalog + legacy warm-start — **BI-0528AD01**
 
 **Phase B — Open support-lifecycle & vuln feeds:**
