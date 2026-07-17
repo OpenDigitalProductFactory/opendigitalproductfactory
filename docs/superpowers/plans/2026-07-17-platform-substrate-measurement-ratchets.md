@@ -215,11 +215,11 @@ Run the targeted test. Partial Docker output must fail closed without overwritin
 
 Add `measure:substrate:runtime` and `check:substrate:runtime`. The checker refuses a baseline from an unleased or unidentifiable runtime.
 
-- [ ] **Step 6: Collect the canonical baseline**
+- [x] **Step 6: Collect the canonical baseline**
 
 Claim `local-integration-ci`, deploy/verify through the governed sandbox path, wait for its readiness verdict, collect two consecutive no-stream samples, and require each budget to differ by no more than 5%; store the higher value. Record lease id, environment key, served SHA, host profile, and commands.
 
-- [ ] **Step 7: Commit runtime measurement support**
+- [x] **Step 7: Commit runtime measurement support**
 
 ```powershell
 git add scripts/measure-platform-substrate-runtime.mjs scripts/measure-platform-substrate-runtime.test.mjs scripts/platform-substrate-runtime-baseline.json package.json
@@ -259,7 +259,7 @@ git commit -s -m "docs(architecture): define substrate boundary budgets"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-17-platform-substrate-measurement-ratchets.md` checkboxes as evidence lands
 
-- [ ] **Step 1: Run fresh source-local verification**
+- [x] **Step 1: Run fresh source-local verification**
 
 ```powershell
 node --test scripts/lib/platform-substrate-measurements.test.mjs scripts/measure-platform-substrate.test.mjs scripts/check-no-substrate-regression.test.mjs scripts/measure-platform-substrate-runtime.test.mjs
@@ -269,17 +269,17 @@ pnpm check:guards
 pnpm --filter web typecheck
 ```
 
-Current evidence: the source measurement suites, static substrate guard, documentation gates, and independent implementation reviews are green. The governed `local-integration-ci` merged candidate passed Prisma generation/migrations and the complete test run (1,934 test files; 16,771 tests; evidence activity `cmroen0ik00u701mw9pcu3vei`). Windows typecheck subsequently exited 134 because the runner did not provide the required 8 GiB Node heap (blocked/fail evidence activity `cmroen0ji00u901mw7q4i4tgs`; tracked by `BI-LOCAL-CI-WINDOWS-TYPECHECK-HEAP`). Therefore this step remains open.
+Current evidence: the source measurement suites, static substrate guard, documentation gates, and independent implementation reviews are green. The governed `local-integration-ci` candidate at `e6f20832f` passed Prisma generation/migrations, the complete web test run, Windows typecheck with `NODE_OPTIONS=--max-old-space-size=8192`, and the production Docker build (test evidence `cmrogx26a04bu01mw0z74sz53`; build evidence `cmrogx27704bw01mwc0af6epa`).
 
-- [ ] **Step 2: Inspect the full diff and requirements checklist**
+- [x] **Step 2: Inspect the full diff and requirements checklist**
 
 Confirm every acceptance item in BI-PSC-001 and the design spec has direct evidence.
 
-- [ ] **Step 3: Route runtime-bound build evidence correctly**
+- [x] **Step 3: Route runtime-bound build evidence correctly**
 
 Claim `local-integration-ci`, run the production build and `pnpm check:substrate:runtime` there, record build and runtime-budget evidence, and release the lease. Do not claim worktree-only runtime evidence.
 
-The governed candidate and database/test portions are verified as recorded above. Production build evidence and the canonical runtime baseline remain outstanding.
+The governed candidate, database/test/typecheck, and production-build portions are verified as recorded above. Canonical runtime baseline/check evidence was collected under lease `NPEL-E1D03C5F6E` from served SHA `98ed83b67820f893b84c8ec9555d7f535b13b301` and recorded as activity `cmroh2g6904e601mwh8lcs3f9`.
 
 - [x] **Step 4: Commit plan evidence updates**
 
@@ -300,4 +300,4 @@ Run `pnpm pr:health`, address review/CI findings with reviewed commits, and conf
 
 Use DPF MCP to attach source tests, canonical build/runtime budget, and merged PR/SHA evidence; then mark BI-PSC-001 done. Leave the epic open for BI-PSC-002.
 
-Pending completion evidence: successful Windows typecheck with the required heap, production build, canonical runtime baseline/check, ready PR, merge SHA, and BI closure.
+Pending completion evidence: ready PR, merge SHA, and BI closure.

@@ -18,6 +18,9 @@ const RUNTIME_METRIC_DIRECTIONS = Object.freeze({
   optionalDegradedServices: "informational",
   servedIdentity: "informational",
 });
+const RUNTIME_RSS_TOLERANCE_PERCENT = 5;
+const RUNTIME_RSS_METRICS = new Set(["totalIdleContainerRssBytes", "portalIdleRssBytes"]);
+const RUNTIME_COMMANDS = Object.freeze(["docker compose ps --format json --all", "docker stats --no-stream --format {{json .}}", "GET /api/health", "GET /api/platform/version"]);
 
 function parseJsonRecords(text, label) {
   if (typeof text !== "string" || !text.trim()) throw new Error(`${label} returned empty output`);
@@ -182,10 +185,25 @@ export function compareRuntimeMetrics(baseline, current) {
   for (const [key, expected] of Object.entries(baseline)) {
     const actual = current?.[key];
     if (!actual || actual.direction !== expected.direction || expected.direction !== RUNTIME_METRIC_DIRECTIONS[key]) throw new Error(`Runtime metric policy mismatch: ${key}`);
-    if (expected.direction === "non-increasing" && actual.value > expected.value) regressions.push({ metric: key, baseline: expected.value, current: actual.value });
+    const allowed = RUNTIME_RSS_METRICS.has(key)
+      ? expected.value * (1 + RUNTIME_RSS_TOLERANCE_PERCENT / 100)
+      : expected.value;
+    if (expected.direction === "non-increasing" && actual.value > allowed) regressions.push({ metric: key, baseline: expected.value, current: actual.value });
     else if (expected.direction !== "non-increasing" && expected.direction !== "informational") throw new Error(`Unsupported runtime metric direction: ${expected.direction}`);
   }
   return { passed: regressions.length === 0, regressions };
+}
+
+export function validateRuntimeBaseline(baseline, current) {
+  const fail = (reason) => { throw new Error(`Runtime baseline is unverifiable: ${reason}`); };
+  if (!baseline || typeof baseline !== "object" || baseline.version !== 1 || baseline.manifestVersion !== current?.manifestVersion) fail("version or manifest version mismatch");
+  if (typeof baseline.generatedAt !== "string" || Number.isNaN(Date.parse(baseline.generatedAt))) fail("generatedAt must be an ISO-compatible timestamp");
+  if (typeof baseline.hostProfile !== "string" || !baseline.hostProfile || baseline.hostProfile !== current?.hostProfile) fail("host profile mismatch");
+  if (!baseline.lease || typeof baseline.lease.id !== "string" || !baseline.lease.id.trim() || baseline.lease.environmentKey !== REQUIRED_ENVIRONMENT) fail("canonical lease identity is missing");
+  if (typeof baseline.gitSha !== "string" || !baseline.gitSha.trim() || baseline.gitSha !== baseline.metrics?.servedIdentity?.value?.gitSha) fail("served SHA provenance mismatch");
+  if (baseline.sampling?.maxVariancePercent !== RUNTIME_RSS_TOLERANCE_PERCENT || baseline.sampling?.samples !== 2 || baseline.sampling?.selection !== "higher-non-increasing-budget") fail("sampling contract mismatch");
+  if (JSON.stringify(baseline.commands) !== JSON.stringify(RUNTIME_COMMANDS)) fail("measurement command contract mismatch");
+  try { validateRuntimeMetricShapes(baseline.metrics); } catch (error) { fail(error.message); }
 }
 
 function validateRuntimeMetricShapes(metrics) {
@@ -197,8 +215,14 @@ function validateRuntimeMetricShapes(metrics) {
       continue;
     }
     const identity = metric.value;
-    if (!identity || typeof identity !== "object" || typeof identity.gitSha !== "string" || !identity.gitSha.trim() || !("version" in identity) || !("imageVersion" in identity) || ![identity.version, identity.imageVersion].every((value) => value === null || typeof value === "string")) {
-      throw new Error("servedIdentity must include a nonempty gitSha and nullable string version/imageVersion");
+    const imageVersion = identity?.imageVersion;
+    const validImageVersion = imageVersion === null || (
+      imageVersion && typeof imageVersion === "object" &&
+      typeof imageVersion.raw === "string" && imageVersion.raw.trim() &&
+      ["git-sha", "content-hash", "unknown"].includes(imageVersion.source)
+    );
+    if (!identity || typeof identity !== "object" || typeof identity.gitSha !== "string" || !identity.gitSha.trim() || !("version" in identity) || !("imageVersion" in identity) || !(identity.version === null || typeof identity.version === "string") || !validImageVersion) {
+      throw new Error("servedIdentity must include a nonempty gitSha, nullable string version, and nullable structured imageVersion");
     }
   }
 }
@@ -223,7 +247,7 @@ export function mergeStableSamples(first, second) {
       metrics[key] = { direction, value: high };
     } else metrics[key] = b;
   }
-  return { ...second, metrics, sampling: { maxVariancePercent: 5, samples: 2, selection: "higher-non-increasing-budget" }, commands: ["docker compose ps --format json --all", "docker stats --no-stream --format {{json .}}", "GET /api/health", "GET /api/platform/version"] };
+  return { ...second, metrics, sampling: { maxVariancePercent: RUNTIME_RSS_TOLERANCE_PERCENT, samples: 2, selection: "higher-non-increasing-budget" }, commands: [...RUNTIME_COMMANDS] };
 }
 
 async function loadJson(path, label) {
@@ -247,7 +271,7 @@ export async function runRuntimeMeasurement(options = {}) {
       return { exitCode: 0, stdout: options.json ? serializeRuntimeBaseline(baseline) : `Updated runtime substrate baseline: ${baselinePath}\n`, stderr: "" };
     }
     const baseline = await loadJson(baselinePath, "runtime substrate baseline");
-    if (baseline.version !== 1 || baseline.manifestVersion !== manifest.version) throw new Error("Runtime baseline version or manifest version is incompatible");
+    validateRuntimeBaseline(baseline, { manifestVersion: manifest.version, hostProfile: current.hostProfile });
     const comparison = compareRuntimeMetrics(baseline.metrics, current.metrics);
     if (!comparison.passed) return { exitCode: 1, stdout: "", stderr: `Runtime substrate regression:\n${comparison.regressions.map((r) => `${r.metric}: ${r.baseline} -> ${r.current}`).join("\n")}\n` };
     return { exitCode: 0, stdout: options.json ? serializeRuntimeBaseline({ current, comparison }) : "Runtime substrate guard passed.\n", stderr: "" };

@@ -102,7 +102,7 @@ Deterministic definition of done:
 - 100% of Compose services are classified; zero missing and zero duplicate service keys.
 - Every non-core service has one boundary reason and capability key.
 - Static measurements are reproducible byte-for-byte except timestamp/SHA provenance.
-- Every non-increasing metric fails on `baseline + 1`, passes unchanged, and reports an improvement below baseline in fixtures.
+- Every static and discrete-runtime non-increasing metric fails on `baseline + 1`, passes unchanged, and reports an improvement below baseline in fixtures. Runtime RSS metrics use the documented five-percent sampling/noise envelope: values at the boundary pass and values above it fail.
 - Evidence lives in `scripts/platform-substrate-baseline.json`; architecture semantics live in `docs/architecture/platform-substrate-boundaries.md`.
 
 ### 6.2 Unified connector kernel — BI-PSC-002

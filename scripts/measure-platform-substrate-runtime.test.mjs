@@ -45,7 +45,7 @@ test("collects required, memory, health, optional-state, and served identity met
   const result = await collectRuntimeMeasurements({
     manifest,
     execute: execFixture,
-    fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "abc123", version: "1.2.3", imageVersion: "img-7" },
+    fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "abc123", version: "1.2.3", imageVersion: { raw: "abc123", source: "git-sha" } },
     portalUrl: "http://portal.test",
     lease: { id: "lease-1", environmentKey: "local-integration-ci" },
     hostProfile: "windows-x64",
@@ -57,7 +57,7 @@ test("collects required, memory, health, optional-state, and served identity met
     unhealthyRequiredServices: { direction: "non-increasing", value: 0 },
     optionalInactiveServices: { direction: "informational", value: 1 },
     optionalDegradedServices: { direction: "informational", value: 1 },
-    servedIdentity: { direction: "informational", value: { gitSha: "abc123", imageVersion: "img-7", version: "1.2.3" } },
+    servedIdentity: { direction: "informational", value: { gitSha: "abc123", imageVersion: { raw: "abc123", source: "git-sha" }, version: "1.2.3" } },
   });
 });
 
@@ -177,6 +177,8 @@ test("check applies runtime ratchets while informational changes never fail", as
     servedIdentity: metric("informational", { gitSha: "old", imageVersion: null, version: null }),
   };
   assert.equal(compareRuntimeMetrics(baseline, { ...baseline, requiredRunningServices: metric("non-increasing", 2), optionalInactiveServices: metric("informational", 99) }).passed, false);
+  assert.equal(compareRuntimeMetrics(baseline, { ...baseline, totalIdleContainerRssBytes: metric("non-increasing", 10.5), portalIdleRssBytes: metric("non-increasing", 10.5) }).passed, true);
+  assert.equal(compareRuntimeMetrics(baseline, { ...baseline, totalIdleContainerRssBytes: metric("non-increasing", 10.51) }).passed, false);
   assert.equal(compareRuntimeMetrics(baseline, { ...baseline, optionalInactiveServices: metric("informational", 99), servedIdentity: metric("informational", { gitSha: "new", imageVersion: null, version: null }) }).passed, true);
 });
 
@@ -193,8 +195,41 @@ test("comparison rejects malformed numeric and served-identity metric shapes", a
     assert.throws(() => compareRuntimeMetrics({ ...valid, portalIdleRssBytes: metric("non-increasing", bad) }, valid), /portalIdleRssBytes.*finite nonnegative/i);
     assert.throws(() => compareRuntimeMetrics(valid, { ...valid, portalIdleRssBytes: metric("non-increasing", bad) }), /portalIdleRssBytes.*finite nonnegative/i);
   }
+  const structuredIdentity = {
+    ...valid,
+    servedIdentity: metric("informational", { gitSha: "served", imageVersion: { raw: "served", source: "git-sha" }, version: "1" }),
+  };
+  assert.doesNotThrow(() => compareRuntimeMetrics(structuredIdentity, structuredIdentity));
   assert.throws(() => compareRuntimeMetrics({ ...valid, optionalInactiveServices: metric("informational", "0") }, valid), /optionalInactiveServices.*finite nonnegative/i);
   assert.throws(() => compareRuntimeMetrics(valid, { ...valid, servedIdentity: metric("informational", { gitSha: "" }) }), /servedIdentity/i);
+  for (const imageVersion of ["legacy", {}, { raw: "", source: "git-sha" }, { raw: "served", source: "invalid" }]) {
+    assert.throws(() => compareRuntimeMetrics(valid, { ...valid, servedIdentity: metric("informational", { gitSha: "served", imageVersion, version: "1" }) }), /servedIdentity/i);
+  }
+});
+
+test("runtime baseline contract rejects unverifiable provenance and host drift", async () => {
+  const { validateRuntimeBaseline } = await import(modulePath);
+  const metric = (direction, value) => ({ direction, value });
+  const baseline = {
+    version: 1, manifestVersion: 1, generatedAt: "2026-07-17T00:00:00.000Z", gitSha: "served", hostProfile: "win32-x64",
+    lease: { id: "NPEL-1", environmentKey: "local-integration-ci" },
+    sampling: { maxVariancePercent: 5, samples: 2, selection: "higher-non-increasing-budget" },
+    commands: ["docker compose ps --format json --all", "docker stats --no-stream --format {{json .}}", "GET /api/health", "GET /api/platform/version"],
+    metrics: {
+      requiredRunningServices: metric("non-increasing", 1), totalIdleContainerRssBytes: metric("non-increasing", 10), portalIdleRssBytes: metric("non-increasing", 10), unhealthyRequiredServices: metric("non-increasing", 0), optionalInactiveServices: metric("informational", 0), optionalDegradedServices: metric("informational", 0), servedIdentity: metric("informational", { gitSha: "served", imageVersion: null, version: "1" }),
+    },
+  };
+  assert.doesNotThrow(() => validateRuntimeBaseline(baseline, { manifestVersion: 1, hostProfile: "win32-x64" }));
+  const invalid = [
+    { ...baseline, lease: { ...baseline.lease, id: "" } },
+    { ...baseline, lease: { ...baseline.lease, environmentKey: "active-candidate" } },
+    { ...baseline, hostProfile: "linux-x64" },
+    { ...baseline, gitSha: "caller" },
+    { ...baseline, generatedAt: "not-a-date" },
+    { ...baseline, sampling: { ...baseline.sampling, samples: 1 } },
+    { ...baseline, commands: baseline.commands.slice(1) },
+  ];
+  for (const value of invalid) assert.throws(() => validateRuntimeBaseline(value, { manifestVersion: 1, hostProfile: "win32-x64" }), /runtime baseline/i);
 });
 
 test("update reverifies the lease immediately before write and preserves baseline on change", async () => {
@@ -243,13 +278,13 @@ test("sample merge rejects identity, host, version, manifest, and lease swaps", 
       requiredRunningServices: { direction: "non-increasing", value: 1 }, totalIdleContainerRssBytes: { direction: "non-increasing", value: 1 },
       portalIdleRssBytes: { direction: "non-increasing", value: 1 }, unhealthyRequiredServices: { direction: "non-increasing", value: 0 },
       optionalInactiveServices: { direction: "informational", value: 0 }, optionalDegradedServices: { direction: "informational", value: 0 },
-      servedIdentity: { direction: "informational", value: { gitSha: "served", imageVersion: "img", version: "1" } },
+      servedIdentity: { direction: "informational", value: { gitSha: "served", imageVersion: { raw: "img", source: "unknown" }, version: "1" } },
     },
   };
   const changes = [
     ["identity", { gitSha: "other" }], ["host", { hostProfile: "linux-x64" }], ["version", { version: 2 }],
     ["manifest", { manifestVersion: 2 }], ["lease", { lease: { id: "other", environmentKey: "local-integration-ci" } }],
-    ["servedIdentity", { metrics: { ...base.metrics, servedIdentity: { direction: "informational", value: { gitSha: "other", imageVersion: "img", version: "1" } } } }],
+    ["servedIdentity", { metrics: { ...base.metrics, servedIdentity: { direction: "informational", value: { gitSha: "other", imageVersion: { raw: "img", source: "unknown" }, version: "1" } } } }],
   ];
   for (const [label, change] of changes) assert.throws(() => mergeStableSamples(base, { ...base, ...change }), new RegExp(label, "i"));
 });
