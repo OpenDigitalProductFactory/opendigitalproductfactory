@@ -14,11 +14,13 @@ The Product Inventory is a structured catalogue of all digital products in your 
 - **Status** — The current operational state: Draft (not yet active), Active (in use), or Inactive (paused or decommissioned).
 - **Stage-Gate Readiness** — A checklist of criteria that must be met before a product can advance from one lifecycle stage to the next. Gates ensure quality and governance before promotion.
 - **Taxonomy Attribution** — Each product is tagged with nodes from the DPPM taxonomy tree, enabling comparison with similar products and portfolio-level filtering.
+- **Software Enrichment** — Inventory entity details can show the latest known version, update posture, canonical manufacturer/product identity and CPE, plus sourced support-lifecycle milestones when that enrichment is available.
 
 ## What You Can Do
 
 - Browse all products with filtering by lifecycle stage, status, portfolio, and taxonomy
 - View a product's full profile including its health metrics, linked backlog items, and architecture models
+- Inspect available software identity and support-lifecycle facts without leaving the inventory entity detail page
 - Check stage-gate readiness and see which criteria are outstanding before the next stage
 - Advance a product through lifecycle stages once gate criteria are satisfied
 - Register a new product and assign it to a portfolio and taxonomy category
