@@ -403,6 +403,7 @@ export async function promoteBacklogItemToBuildDraft(
       ...(fixBrief ? { brief: fixBrief } : {}),
       createdById: userId,
       digitalProductId: item.digitalProductId ?? null,
+      portfolioId: item.portfolioId ?? null,
       originatingBacklogItemId: item.id,
       draftApprovedAt: null,
       plan,
