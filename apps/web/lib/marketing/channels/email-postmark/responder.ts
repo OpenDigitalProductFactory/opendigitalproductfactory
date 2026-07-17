@@ -15,6 +15,7 @@
 // same human-approval queue the rest of Phase 1/2 use.
 
 import { prisma } from "@dpf/db";
+import { createSingleFlight } from "@/lib/integrations/kernel/single-flight";
 
 export type InboundClassification = "qualified-inquiry" | "support" | "spam" | "other";
 
@@ -41,14 +42,42 @@ export type ResponderResult = {
   engagementId: string | null;
 };
 
-export async function runInboundResponder(input: {
+const responderFlights = createSingleFlight<ResponderResult>();
+
+export function runInboundResponder(input: {
   inboundId: string;
 }): Promise<ResponderResult> {
+  return responderFlights.run(input.inboundId, () => runInboundResponderOnce(input));
+}
+
+async function runInboundResponderOnce(input: { inboundId: string }): Promise<ResponderResult> {
   const inbound = await prisma.inboundChannelMessage.findUnique({
     where: { inboundId: input.inboundId },
   });
   if (!inbound) {
     return { classification: "other", draftId: null, engagementId: null };
+  }
+
+  // Callback delivery is at-least-once. Recover an already-created draft when
+  // a worker crashed before linking it back to the inbound row, so replaying
+  // the same inboundId never creates a second reply draft.
+  const existingDraft = inbound.draftedReplyId
+    ? { draftId: inbound.draftedReplyId }
+    : await prisma.outboundDraft.findFirst({
+        where: { sourceType: "inbound-channel-message", sourceId: inbound.inboundId },
+        select: { draftId: true },
+      });
+  if (existingDraft) {
+    if (!inbound.draftedReplyId) {
+      await prisma.inboundChannelMessage.update({
+        where: { inboundId: inbound.inboundId },
+        data: { draftedReplyId: existingDraft.draftId },
+      });
+    }
+    const classification = isInboundClassification(inbound.classification)
+      ? inbound.classification
+      : "other";
+    return { classification, draftId: existingDraft.draftId, engagementId: inbound.routedEngagementId };
   }
 
   // 1. Rule-based pre-filter.
@@ -115,6 +144,10 @@ export async function runInboundResponder(input: {
   });
 
   return { classification, draftId: draft.draftId, engagementId };
+}
+
+function isInboundClassification(value: string | null): value is InboundClassification {
+  return value === "qualified-inquiry" || value === "support" || value === "spam" || value === "other";
 }
 
 function preFilter(
