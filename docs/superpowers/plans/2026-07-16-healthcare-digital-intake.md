@@ -132,13 +132,39 @@ tokens.
 
 ## Phase 3 — user experience
 
-1. Add the patient/proxy next-action intake flow using the existing dynamic
-   mobile renderer.
-2. Add a receptionist readiness/exception projection with no unrestricted
+Decision DI-634F671ADAF7 selected patient-auth-first over placing patient work
+inside the generic account portal without a patient identity binding or
+shipping a bearer-link-only experience (high confidence, composite 7.121,
+margin 1.475). The existing `CustomerContact` to `Principal` convergence and
+`PatientProfile` principal key provide that binding without a new identity
+table or session type.
+
+**UX fit review — patient care intake:** `fits-with-guardrails`. The owning
+area is the customer-facing Portal. `/portal/health` is the patient-native
+section home, with intake as a task/detail flow under it rather than a global
+navigation area. The first persona is an authenticated patient; an authorized
+proxy is a separate RLS-backed discovery checkpoint. Reuse report-kit for
+status, notice, and empty states; use `PatientProfile`, `PatientAuthority`, and
+`CareIntakePacket` as source truth; never show answer payloads in task lists;
+show staff-assisted recovery for unlinked identity and permission failures;
+and do not start AI work from any care card.
+
+1. **3A — patient identity and task discovery:** resolve the signed-in customer
+   contact through canonical `Principal` identity, establish patient RLS
+   context, show minimum-necessary active intake tasks in `/portal/health`, and
+   issue short-lived self-scoped grants without accepting organization,
+   patient, authority, or grant scope identifiers from the browser.
+2. **3B — patient form runner:** add the patient next-action intake flow using
+   the canonical `DynamicForm` schema and converge web/mobile validation rather
+   than creating another form-definition authority.
+3. Add a receptionist readiness/exception projection with no unrestricted
    clinical answers.
-3. Add accessible save/resume, plain-language/translation hooks, signature
+4. Add accessible save/resume, plain-language/translation hooks, signature
    confirmation, assisted-entry disclosure, and offline reconciliation.
-4. Verify mobile, kiosk, receptionist, and paper fallback paths in the shared
+5. Add authorized-proxy task discovery through a purpose-scoped inverse
+   authority lookup; do not weaken patient RLS or require the browser to supply
+   a patient identifier.
+6. Verify mobile, kiosk, receptionist, and paper fallback paths in the shared
    nonproduction environment.
 
 ## Verification

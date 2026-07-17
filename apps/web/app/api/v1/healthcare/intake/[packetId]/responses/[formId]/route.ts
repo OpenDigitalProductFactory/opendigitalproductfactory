@@ -2,7 +2,10 @@ import { z } from "zod";
 
 import { apiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
-import { saveCareIntakePartialResponse } from "@/lib/healthcare/care-intake-api-repository";
+import {
+  getCareIntakeSavedResponse,
+  saveCareIntakePartialResponse,
+} from "@/lib/healthcare/care-intake-api-repository";
 
 const SaveBody = z.object({
   idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,160}$/),
@@ -14,6 +17,28 @@ const SaveBody = z.object({
   answers: z.record(z.string(), z.unknown()),
   dataCategories: z.record(z.string(), z.string().min(1)),
 });
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ packetId: string; formId: string }> },
+) {
+  const token = request.headers.get("x-intake-resume-token")?.trim();
+  if (!token) return apiError("INTAKE_TOKEN_REQUIRED", "Intake access token required", 401).toResponse();
+  try {
+    const { packetId, formId } = await params;
+    return apiSuccess(await getCareIntakeSavedResponse({ packetId, formId, token }));
+  } catch (error) {
+    if (
+      error instanceof Error
+      && (error.message.includes("access denied")
+        || error.message.includes("resume token")
+        || error.message.includes("not assigned"))
+    ) {
+      return apiError("INTAKE_ACCESS_DENIED", "Intake access denied", 403).toResponse();
+    }
+    return apiError("INTERNAL_ERROR", "An unexpected error occurred", 500).toResponse();
+  }
+}
 
 export async function PUT(
   request: Request,
