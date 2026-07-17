@@ -3,7 +3,7 @@
 // Used by apps/web/lib/actions/mcp-tokens.ts (server action) and
 // apps/web/scripts/issue-mcp-token.ts (CLI).
 
-export type McpSnippetFormat = "claude-code" | "codex" | "grok" | "vscode" | "raw";
+export type McpSnippetFormat = "claude-code" | "codex" | "grok" | "antigravity" | "vscode" | "raw";
 
 export const MCP_BEARER_TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN";
 
@@ -11,6 +11,7 @@ export type McpSetupSnippets = {
   claudeCode: string;
   codex: string;
   grok: string;
+  antigravity: string;
   vscode: string;
   syncCommand: string;
   envPowerShell: string;
@@ -81,6 +82,15 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
     `url = "${url}"`,
     `bearer_token_env_var = "${MCP_BEARER_TOKEN_ENV_VAR}"`,
   ].join("\n");
+  // Antigravity (Google): VS Code / Windsurf-derived agentic IDE. Its MCP config
+  // is a JSON block keyed by `mcpServers` (same shape as Claude Code's .mcp.json),
+  // consumed by both the IDE and the `agy` CLI. EP-ANTIGRAVITY-001 evidence gate
+  // (BI-47A81FEB): confirm the exact config path against a live install before
+  // this is automated in the bootstrap — the common 2026 locations are:
+  //   macOS/Linux: ~/.antigravity/mcp_config.json  (or the in-IDE MCP settings)
+  //   Windows:     %USERPROFILE%\.antigravity\mcp_config.json
+  // The JSON content itself is identical across platforms.
+  const antigravity = JSON.stringify({ mcpServers: { dpf: httpEntry } }, null, 2);
   // VS Code: .vscode/mcp.json uses servers (not mcpServers)
   const vscode = JSON.stringify({ servers: { dpf: vscodeHttpEntry } }, null, 2);
   const syncCommand = ".\\scripts\\seed-worktree-mcp.ps1";
@@ -95,6 +105,7 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
     claudeCode,
     codex,
     grok,
+    antigravity,
     vscode,
     syncCommand,
     envPowerShell,

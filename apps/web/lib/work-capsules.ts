@@ -72,6 +72,7 @@ export const WORK_CAPSULE_EXECUTOR_KINDS = [
   "codex-desktop",
   "claude-desktop",
   "grok-desktop",
+  "antigravity-desktop",
   "human",
   "git-webhook",
   "dpf-native",

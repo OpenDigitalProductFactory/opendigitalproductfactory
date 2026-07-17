@@ -117,8 +117,15 @@ function parseArgs(argv: readonly string[]): Args {
       }
       case "--format": {
         const v = next();
-        if (v !== "claude-code" && v !== "codex" && v !== "grok" && v !== "vscode" && v !== "raw") {
-          fatal(`--format must be claude-code | codex | grok | vscode | raw; got: ${v}`);
+        if (
+          v !== "claude-code" &&
+          v !== "codex" &&
+          v !== "grok" &&
+          v !== "antigravity" &&
+          v !== "vscode" &&
+          v !== "raw"
+        ) {
+          fatal(`--format must be claude-code | codex | grok | antigravity | vscode | raw; got: ${v}`);
         }
         format = v;
         break;
@@ -157,7 +164,7 @@ function printHelp(): void {
       "                         template (sandbox_execute, iac_execute, build_promote,",
       "                         ...); admin -> admin template; read -> coding-agent reads.",
       `  --expires-days N|never Token TTL in days, or "never" (default: ${DEFAULT_EXPIRES_DAYS})`,
-      "  --format <fmt>         claude-code | codex | grok | vscode | raw (default: claude-code)",
+      "  --format <fmt>         claude-code | codex | grok | antigravity | vscode | raw (default: claude-code)",
       "  --base-url <url>       Portal base URL",
       "                         (default: $AUTH_URL / $APP_URL / http://localhost:3000)",
       "  --help, -h             Show this help",
@@ -166,6 +173,7 @@ function printHelp(): void {
       "  claude-code  .mcp.json snippet   (mcpServers.dpf, http transport)",
       "  codex        ~/.codex/config.toml snippet using bearer_token_env_var",
       "  grok         ~/.grok/config.toml snippet (same TOML shape as codex; also works for project .grok/config.toml)",
+      "  antigravity  ~/.antigravity/mcp_config.json snippet (mcpServers.dpf, http transport; confirm path per EP-ANTIGRAVITY-001 evidence gate)",
       "  vscode       .vscode/mcp.json snippet (servers.dpf)",
       "  raw          Plaintext token only",
       "",
@@ -247,7 +255,9 @@ async function main(): Promise<void> {
           ? snippets.codex
           : args.format === "grok"
             ? snippets.grok
-            : snippets.claudeCode;
+            : args.format === "antigravity"
+              ? snippets.antigravity
+              : snippets.claudeCode;
     console.log(snippet);
   }
 

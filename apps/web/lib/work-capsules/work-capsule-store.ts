@@ -120,6 +120,7 @@ function isExternalLeaseExecutor(executorKind: WorkCapsuleExecutorKind | null | 
     executorKind === "codex-desktop" ||
     executorKind === "claude-desktop" ||
     executorKind === "grok-desktop" ||
+    executorKind === "antigravity-desktop" ||
     executorKind === "human"
   );
 }
