@@ -28,19 +28,27 @@ The **first** `agy` run triggers Google Sign-In. On an interactive desktop it op
 
 This is **agy-native** — DPF does not implement or store this credential.
 
-## 3. Wire the DPF MCP token
+## 3. Connect the DPF MCP token
 
-Issue a scoped token and get the agy-shaped snippet:
+First get a scoped token — you need it for every method below:
 
 ```
 pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format antigravity
 ```
 
-This prints a JSON `mcpServers.dpf` block (HTTP transport, `Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}`). Set the env var (`DPF_MCP_BEARER_TOKEN`) and place the block in agy's MCP config.
+Set `DPF_MCP_BEARER_TOKEN` to the token, and keep the printed JSON `mcpServers.dpf` block (HTTP transport, `Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}`) handy.
 
-> ⚠️ **Confirm the exact MCP config path on your install.** Antigravity's public docs do not yet pin the file; it is Windsurf-derived, so the JSON `mcpServers` shape is expected at approximately `~/.antigravity/mcp_config.json` (macOS/Linux) / `%USERPROFILE%\.antigravity\mcp_config.json` (Windows), or via the in-IDE MCP settings. **Verify with your live install and report back** so the bootstrap auto-wiring (BI-ECAE3494) can pin it. Until pinned, the bootstrap wires best-effort and prints the path it used.
+**Preferred — let `agy` add the server itself.** In an `agy` session, ask it to add an MCP server named `dpf` at `http://127.0.0.1:3000/api/mcp/v1` with an `Authorization: Bearer` header from `DPF_MCP_BEARER_TOKEN`. This is the **sure-fire path**: `agy` writes the entry to whatever config file it actually reads, so you never have to know or guess that path (operator-confirmed working, 2026-07-17).
 
-Confirm the connection: from an `agy` session, ask it to `tools/list` the `dpf` server or call `get_next_recommended_work` — it should reach the DPF backlog.
+**Fallback — write the config yourself.** Place the `mcpServers.dpf` block in agy's MCP config. The path is Windsurf-derived and not pinned in public docs — approximately `~/.antigravity/mcp_config.json` (macOS/Linux) / `%USERPROFILE%\.antigravity\mcp_config.json` (Windows), or the in-IDE MCP settings. The bootstrap wires this best-effort and **prints the path it used**; if agy doesn't pick it up, use the preferred method above instead. (Pinning the exact path is `BI-ECAE3494` — no longer load-bearing now that self-add works.)
+
+## 3b. Confirm the DPF MCP is live — at the start of **every** thread
+
+**The MCP connection is per-session and does not always carry into a fresh `agy` thread.** This is the same failure mode DPF's *self-provision-before-working* contract guards against ([AGENTS.md](../../AGENTS.md) §"Self-provision before working"): a session missing its DPF tools must converge **before** doing any work — otherwise the agent silently has no backlog, no evidence recording, and no governed tools, and will improvise around the gap.
+
+**Check (do this first, each thread):** ask `agy` to list its connected MCP servers, or to call a benign read-only DPF tool such as `get_next_recommended_work`. If the `dpf` tools aren't there, the MCP is **not** connected in this session — do not proceed.
+
+**Self-heal:** confirm `DPF_MCP_BEARER_TOKEN` is set in the environment agy launched from, then re-run the **preferred** method in §3 (ask agy to add the `dpf` server) and start a fresh agy session so it reloads. Treat "no `dpf` tools" as a hard stop, not a warning.
 
 ## 4. Run a governed build (the evidence gate — BI-47A81FEB)
 
