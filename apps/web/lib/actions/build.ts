@@ -28,7 +28,7 @@ import {
   recordReadyDependentsAfterCompletion,
 } from "@/lib/build/feature-build-dependencies";
 import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
-import type { ResumeBuildImplementationOutcome, ResumeImplementationMode } from "@/lib/build/progress-visibility-types";
+import type { ResumeBuildImplementationOutcome } from "@/lib/build/progress-visibility-types";
 import {
   type BusinessBriefEvidenceKind,
   type BusinessBuildBriefSource,
@@ -44,23 +44,18 @@ import {
 } from "@/lib/work-capsules/build-studio-attachment";
 import type { UnifiedWipDb } from "@/lib/build/unified-wip-query";
 import { revalidatePortalContextForBuild } from "@/lib/portal-context/invalidation";
+import {
+  businessBriefJsonPayload,
+  readPersistedSourceCurrency,
+  derivePhaseHandoffContext,
+  deriveResumeImplementationMode,
+  formatResumeImplementationOutcomeMessage,
+} from "@/lib/build/build-actions-core";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
 async function requireBuildAccess(): Promise<string> {
   return (await requireCapability("view_platform")).userId;
-}
-
-function businessBriefJsonPayload(
-  businessBrief: ReturnType<typeof legacyFeatureBuildBriefToBusinessBuildBriefInput>,
-) {
-  return {
-    affectedPeople: businessBrief.affectedPeople as unknown as Prisma.InputJsonValue,
-    sourceEvidence: businessBrief.sourceEvidence as unknown as Prisma.InputJsonValue,
-    technicalInterpretation: businessBrief.technicalInterpretation as unknown as Prisma.InputJsonValue,
-    riskProfile: businessBrief.riskProfile as unknown as Prisma.InputJsonValue,
-    hiveReadiness: businessBrief.hiveReadiness as unknown as Prisma.InputJsonValue,
-  };
 }
 
 // ─── Create Feature Build ────────────────────────────────────────────────────
@@ -626,42 +621,11 @@ export async function advanceBuildPhase(
 
   // Write PhaseHandoff document — structured context for the next phase's agent
   try {
-    const PHASE_AGENT: Record<string, string> = {
-      ideate: "build-specialist",
-      plan: "ea-architect",
-      build: "build-specialist",
-      review: "ops-coordinator",
-      ship: "platform-engineer",
-    };
-    const fromAgent = PHASE_AGENT[currentPhase] ?? "build-specialist";
-    const toAgent = PHASE_AGENT[targetPhase] ?? "build-specialist";
-
-    // Build evidence digest — one-line summary per populated field
-    const evidenceFields: string[] = [];
-    const evidenceDigest: Record<string, string> = {};
-    if (build.designDoc) { evidenceFields.push("designDoc"); evidenceDigest.designDoc = "Design document saved"; }
-    if (build.designReview) {
-      evidenceFields.push("designReview");
-      const review = build.designReview as Record<string, unknown>;
-      evidenceDigest.designReview = `${review.decision ?? "reviewed"} — ${String(review.summary ?? "").slice(0, 100)}`;
-    }
-    if (build.buildPlan) { evidenceFields.push("buildPlan"); evidenceDigest.buildPlan = "Implementation plan saved"; }
-    if (build.planReview) {
-      evidenceFields.push("planReview");
-      const review = build.planReview as Record<string, unknown>;
-      evidenceDigest.planReview = `${review.decision ?? "reviewed"} — ${String(review.summary ?? "").slice(0, 100)}`;
-    }
-    if (build.verificationOut) {
-      evidenceFields.push("verificationOut");
-      const v = build.verificationOut as Record<string, unknown>;
-      evidenceDigest.verificationOut = `typecheck: ${v.typecheckPassed ? "pass" : "fail"}`;
-    }
-    if (build.acceptanceMet) {
-      evidenceFields.push("acceptanceMet");
-      evidenceDigest.acceptanceMet = Array.isArray(build.acceptanceMet)
-        ? `${(build.acceptanceMet as Array<{ met?: boolean }>).filter(c => c.met).length}/${(build.acceptanceMet as unknown[]).length} criteria met`
-        : "Evaluated";
-    }
+    const { fromAgent, toAgent, evidenceFields, evidenceDigest } = derivePhaseHandoffContext({
+      currentPhase,
+      targetPhase,
+      build,
+    });
 
     await prisma.phaseHandoff.create({
       data: {
@@ -834,17 +798,6 @@ export async function autoExecuteBuild(buildId: string): Promise<void> {
         : `Build pipeline failed at step: ${result.failedAt ?? result.step}`,
     },
   }).catch(() => {});
-}
-
-function readPersistedSourceCurrency(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  const sourceCurrency = (value as { sourceCurrency?: unknown }).sourceCurrency;
-  if (!sourceCurrency || typeof sourceCurrency !== "object" || Array.isArray(sourceCurrency)) {
-    return null;
-  }
-  return sourceCurrency;
 }
 
 /**
@@ -1211,40 +1164,6 @@ export async function resumeBuildImplementation(buildId: string): Promise<Resume
     dispatchQueued: true,
     message: formatResumeImplementationOutcomeMessage(resumeMode, resetTasks),
   };
-}
-
-function deriveResumeImplementationMode(args: {
-  phase: BuildPhase;
-  taskCount: number;
-  resetTasks: number;
-  verificationFailed: boolean;
-}): ResumeImplementationMode {
-  if (args.resetTasks > 0) {
-    return "reset-blocked";
-  }
-  if (args.taskCount === 0) {
-    return "replan-and-dispatch";
-  }
-  if (args.phase === "review" && args.verificationFailed) {
-    return "rerun-verification";
-  }
-  return "already-running";
-}
-
-function formatResumeImplementationOutcomeMessage(
-  mode: ResumeImplementationMode,
-  resetTasks: number,
-): string {
-  if (mode === "reset-blocked") {
-    return `Reset ${resetTasks} task${resetTasks === 1 ? "" : "s"} to BLOCKED; queued implementation resume.`;
-  }
-  if (mode === "replan-and-dispatch") {
-    return "No persisted task rows were reset; queued implementation dispatch from the current plan.";
-  }
-  if (mode === "rerun-verification") {
-    return "Cleared verification output; queued verification recovery through the existing implementation resume path.";
-  }
-  return "Resume request recorded; implementation already has observable work in progress.";
 }
 
 // autoA11yAudit was removed on 2026-04-20 when the Inngest-based
