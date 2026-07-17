@@ -721,6 +721,9 @@ model DigitalProduct {
   observationConfig             Json?
   coverageStatus                String?
   sourceKind                    String?
+  // Enrichment status roll-up (BI-70469721) — written by the enrich-digital-product pipeline.
+  enrichmentStatus              String?                        @default("pending") // pending | enriched | partial | failed
+  lastEnrichedAt                DateTime?
   backlogItems                  BacklogItem[]
   manifests                     CodebaseManifest[]
   assuranceFindings             AssuranceFinding[]
@@ -4370,13 +4373,101 @@ model DiscoveredSoftwareEvidence {
   rawMetadata             Json?
   normalizationStatus     String          @default("pending")
   normalizationConfidence Float?
+  // `softwareIdentityId` is a pre-existing DANGLING FK — its target `SoftwareIdentity` was dropped
+  // in migration 20260320222431. Left untouched here (additive change); its resolution
+  // (rename→legacy + warm-start join, OR drop-with-evidence) needs live row counts and is an
+  // explicit sandbox sub-task of BI-74579817. Spec §7.4.
   softwareIdentityId      String?
+  // New canonical linkage into the CatalogIdentity spine (additive).
+  catalogIdentityId       String?
   firstSeenAt             DateTime        @default(now())
   lastSeenAt              DateTime        @default(now())
   inventoryEntity         InventoryEntity @relation(fields: [inventoryEntityId], references: [id], onDelete: Cascade)
+  catalogIdentity         CatalogIdentity? @relation(fields: [catalogIdentityId], references: [id], onDelete: SetNull)
 
   @@index([inventoryEntityId])
   @@index([normalizationStatus])
+  @@index([catalogIdentityId])
+}
+
+/// Canonical normalized software/hardware identity — the manufacturer→product→version→edition
+/// spine (Technopedia-style), keyed by CPE 2.3 where resolved. Raw vendor strings never write
+/// here directly; only the fingerprint/normalize pipeline sets these fields, via rules.
+/// EP-ASSET-INTELLIGENCE / BI-74579817.
+/// Spec: docs/superpowers/specs/2026-07-16-software-asset-intelligence-enrichment-design.md §4.1
+model CatalogIdentity {
+  id                  String                       @id @default(cuid())
+  // Stable canonical key (e.g. the cpe:2.3 string, or manufacturer:product:version:edition).
+  identityKey         String                       @unique
+  part                String                       @default("a") // CPE part: a (application) | o (os) | h (hardware)
+  manufacturer        String
+  product             String
+  productVersion      String?
+  edition             String?
+  patchLevel          String?
+  cpe                 String? // cpe:2.3 formatted string when resolved
+  category            String?
+  source              String                       @default("manual") // seeded | rule | ai_resolved | human_confirmed | feed
+  confidence          Float?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  lifecycleMilestones CatalogLifecycleMilestone[]
+  // Convergence (BI-74579817): reuse the existing DiscoveryFingerprintRule subsystem rather than
+  // add a parallel rule model — it already maps evidence→identity (via inline resolvedIdentity
+  // JSON). This FK lets a rule resolve to a canonical CatalogIdentity. See spec §4.1 + the
+  // stewardship note in the BI. STEWARD DECISION: converge vs. keep device/software rules separate.
+  fingerprintRules    DiscoveryFingerprintRule[]
+  resolutionLogs      IdentityResolutionLog[]
+  inventoryEntities   InventoryEntity[]
+  softwareEvidence    DiscoveredSoftwareEvidence[]
+
+  @@index([manufacturer, product])
+  @@index([cpe])
+  @@index([part])
+}
+
+/// Structured support-lifecycle milestone for a CatalogIdentity — one row per named milestone,
+/// each carrying its own source + confidence. Populated from open feeds (endoflife.date) plus a
+/// manual overlay for long-tail commercial software. BI-74579817 (model) / BI-3A2328D6 (feed).
+model CatalogLifecycleMilestone {
+  id                String          @id @default(cuid())
+  catalogIdentityId String
+  // mainstream_end | extended_support_end | eol | eosl | security_updates_end | release
+  milestone         String
+  date              DateTime?
+  source            String // endoflife.date | nvd | vendor_calendar | manual
+  confidence        Float?
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  catalogIdentity   CatalogIdentity @relation(fields: [catalogIdentityId], references: [id], onDelete: Cascade)
+
+  @@unique([catalogIdentityId, milestone, source], map: "CatalogLifecycleMilestone_identity_milestone_source_key")
+  @@index([catalogIdentityId])
+  @@index([milestone])
+}
+
+/// Audit lineage of every identity resolution — which rule / AI / human resolved an entity to a
+/// CatalogIdentity, with confidence + evidence. Human-confirmed rows are never overwritten by a
+/// rule (§6.3.1). BI-74579817.
+model IdentityResolutionLog {
+  id                String           @id @default(cuid())
+  inventoryEntityId String?
+  catalogIdentityId String?
+  fingerprintRuleId String?
+  // rule | ai_resolved | human_confirmed | human_corrected | shadow
+  resolutionType    String
+  confidence        Float?
+  evidence          Json?
+  discoveryRunId    String?
+  createdAt         DateTime         @default(now())
+  inventoryEntity   InventoryEntity?          @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  catalogIdentity   CatalogIdentity?          @relation(fields: [catalogIdentityId], references: [id], onDelete: SetNull)
+  fingerprintRule   DiscoveryFingerprintRule? @relation(fields: [fingerprintRuleId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryEntityId])
+  @@index([catalogIdentityId])
+  @@index([resolutionType])
 }
 
 model DiscoveryFingerprintObservation {
@@ -4457,15 +4548,21 @@ model DiscoveryFingerprintRule {
   sourceObservationIds     String[] @default([])
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
+  // Convergence FK (BI-74579817): resolve a fingerprint to the canonical CatalogIdentity spine,
+  // superseding the inline `resolvedIdentity` JSON over time. Nullable during migration.
+  catalogIdentityId        String?
 
   catalogVersion       DiscoveryFingerprintCatalogVersion? @relation(fields: [catalogVersionId], references: [id], onDelete: SetNull)
   taxonomyNode         TaxonomyNode?                       @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
   approvedObservations DiscoveryFingerprintObservation[]   @relation("ApprovedFingerprintRule")
+  catalogIdentity      CatalogIdentity?                    @relation(fields: [catalogIdentityId], references: [id], onDelete: SetNull)
+  resolutionLogs       IdentityResolutionLog[]
 
   @@index([status])
   @@index([scope])
   @@index([taxonomyNodeId])
   @@index([catalogVersionId])
+  @@index([catalogIdentityId])
 }
 
 model DiscoveryFingerprintCatalogVersion {
@@ -4529,7 +4626,20 @@ model InventoryEntity {
   attributionConfidence       Float?
   attributionEvidence         Json?
   candidateTaxonomy           Json?
+  // Enrichment result fields (BI-70469721). Populated by the enrich-digital-product pipeline
+  // (BI-27EE2AF7). Spec 2026-07-16-software-asset-intelligence-enrichment-design §4.3.
+  catalogIdentityId           String?
+  identityStatus              String? // unresolved | rule_resolved | ai_resolved | human_confirmed
+  identityConfidence          Float?
+  updatePosture               String                            @default("unknown") // unknown | current | behind | ahead
+  updatePostureSource         String?
+  updatePostureConfidence     Float?
+  latestKnownVersion          String?
+  supportLifecycleSource      String?
+  supportLifecycleConfidence  Float?
   discoveredItems             DiscoveredItem[]
+  catalogIdentity             CatalogIdentity?                  @relation(fields: [catalogIdentityId], references: [id])
+  identityResolutionLogs      IdentityResolutionLog[]
   digitalProduct              DigitalProduct?                   @relation(fields: [digitalProductId], references: [id])
   lastConfirmedRun            DiscoveryRun?                     @relation("InventoryEntityConfirmedRun", fields: [lastConfirmedRunId], references: [id])
   portfolio                   Portfolio?                        @relation(fields: [portfolioId], references: [id])
@@ -4555,6 +4665,7 @@ model InventoryEntity {
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
+  @@index([catalogIdentityId])
   @@index([scopeKey])
   @@index([customerAccountId])
   @@index([customerSiteId])
