@@ -96,6 +96,30 @@ describe("governedExecuteTool — happy path", () => {
     expect(calls).toEqual(["query_backlog"]);
   });
 
+  it("stamps the chain-of-custody link (delegationChainId) from context onto the audit row (BI-F82F4E04)", async () => {
+    await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: {},
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: { agentId: "AGT-100", threadId: "thread-1", delegationChainId: "chain-xyz" },
+      source: "agentic-loop",
+    });
+    expect((auditRows.at(-1) as { delegationChainId?: string })?.delegationChainId).toBe("chain-xyz");
+
+    // A direct human→coworker call carries no chain — null, but the human is on userId.
+    await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: {},
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      source: "rest",
+    });
+    const direct = auditRows.at(-1) as { delegationChainId?: string | null; userId?: string };
+    expect(direct?.delegationChainId ?? null).toBeNull();
+    expect(direct?.userId).toBe("user-1");
+  });
+
   it("runs lifecycle hooks around successful tool execution", async () => {
     const calls: string[] = [];
     _setGovernanceForTests({
