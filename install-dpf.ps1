@@ -1214,8 +1214,11 @@ services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
     restart: unless-stopped
+    command: ["--config.file=/postgres_exporter.yml"]
     ports:
       - "9187:9187"
+    volumes:
+      - ./monitoring/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro
     environment:
       DATA_SOURCE_NAME: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf?sslmode=disable
     depends_on:
@@ -1238,9 +1241,14 @@ volumes:
             # Write monitoring configuration files (Prometheus + Grafana)
             $monDir = "$DPF_DIR\monitoring"
             New-Item -ItemType Directory -Path "$monDir\prometheus" -Force | Out-Null
+            New-Item -ItemType Directory -Path "$monDir\postgres-exporter" -Force | Out-Null
             New-Item -ItemType Directory -Path "$monDir\grafana\provisioning\datasources" -Force | Out-Null
             New-Item -ItemType Directory -Path "$monDir\grafana\provisioning\dashboards" -Force | Out-Null
             New-Item -ItemType Directory -Path "$monDir\grafana\dashboards" -Force | Out-Null
+
+            @"
+auth_modules: {}
+"@ | Set-Content "$monDir\postgres-exporter\postgres_exporter.yml" -Encoding UTF8
 
             # Prometheus config
             @"
