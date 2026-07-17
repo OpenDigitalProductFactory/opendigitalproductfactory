@@ -1320,7 +1320,12 @@ export async function sendMessage(input: {
   // Reads the DMR served-context TRUTH (not ModelProfile, which model discovery can
   // reset to null); no reachable local generation model → the full 48. Resolved
   // once up front (localServedContext) and reused here + for the skills-catalog cap.
-  const toolCap = deriveCoworkerToolCap(localServedContext);
+  // BI-DF3092F4 (Phase 2) — lift the cap above the fail-safe cliff only when the
+  // local model has MEASURED tool-selection fidelity evidence for a larger
+  // surface; unmeasured → null → Phase-1 fail-safe. Best-effort (never throws).
+  const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
+  const measuredToolFidelityCeiling = await resolveLocalToolFidelityCeiling();
+  const toolCap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling });
   // BI-B5C358B1 — the route's declared domain tools are the ones a turn on this
   // route is most likely to need (e.g. /ops → backlog query/update). They were
   // only injected as system-prompt PROSE, never attached, so the intent ranker's
