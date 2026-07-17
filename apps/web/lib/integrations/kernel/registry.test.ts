@@ -26,6 +26,18 @@ function definition(key: string, capability: string): ConnectorRegistryEntry {
   };
 }
 
+function mutableAdapterEntry() {
+  let privateCount = 0;
+  const adapter = {
+    definition: definition("adapter", "capability.adapter").definition,
+    invoke(value: string) {
+      privateCount += 1;
+      return `${value}:${privateCount}`;
+    },
+  };
+  return { adapter, entry: { definition: adapter.definition, adapter } };
+}
+
 describe("createConnectorRegistry", () => {
   it("rejects duplicate connector IDs", () => {
     expect(() => createConnectorRegistry([
@@ -64,6 +76,27 @@ describe("createConnectorRegistry", () => {
     expect(Object.isFrozen(entry.definition.capabilities)).toBe(true);
     expect(Object.isFrozen(entry.definition.health)).toBe(true);
     expect(Object.isFrozen(entry.definition.authorities[0])).toBe(true);
+    expect(() => {
+      (entry.definition.capabilities as string[]).push("mutated");
+    }).toThrow();
+  });
+
+  it("captures a frozen adapter facade without freezing legitimate private state", () => {
+    const { adapter, entry } = mutableAdapterEntry();
+    const registry = createConnectorRegistry([entry]);
+    const facade = registry.get("adapter")!.adapter!;
+    const capturedInvoke = facade.invoke;
+
+    adapter.invoke = () => "replaced";
+
+    expect(Object.isFrozen(facade)).toBe(true);
+    expect(Object.isFrozen(facade.definition.capabilities)).toBe(true);
+    expect(capturedInvoke("first")).toBe("first:1");
+    expect(facade.invoke("second")).toBe("second:2");
+    expect(adapter.invoke("ignored")).toBe("replaced");
+    expect(() => {
+      (facade as { invoke: (value: string) => string }).invoke = () => "mutated";
+    }).toThrow();
   });
 });
 
@@ -82,13 +115,15 @@ describe("canonical connector registry", () => {
     ["email-postmark", "postmark"],
     ["microsoft365-communications", "microsoft365"],
   ])("projects shared safe state, health, and capabilities for %s", (key, provider) => {
+    const sourceDate = new Date("2026-07-17T12:00:00.000Z");
+    const sourceProjection = { account: "safe-value", nested: { enabled: true } };
     const projected = connectorRegistry.project(key, {
       integrationId: key,
       provider,
       status: "connected",
-      safeProjection: { account: "safe-value", nested: { enabled: true } },
+      safeProjection: sourceProjection,
       lastErrorMsg: null,
-      lastTestedAt: new Date("2026-07-17T12:00:00.000Z"),
+      lastTestedAt: sourceDate,
     }, { latestProbeFailed: true });
 
     expect(projected).toMatchObject({
@@ -99,12 +134,22 @@ describe("canonical connector registry", () => {
         provider,
         status: "degraded",
         safeProjection: { account: "safe-value", nested: { enabled: true } },
+        lastTestedAt: "2026-07-17T12:00:00.000Z",
       },
     });
     expect(projected.capabilities.length).toBeGreaterThan(0);
     expect(Object.isFrozen(projected)).toBe(true);
     expect(Object.isFrozen(projected.capabilities)).toBe(true);
     expect(Object.isFrozen(projected.state.safeProjection.nested)).toBe(true);
+    expect(Object.isFrozen(sourceDate)).toBe(false);
+
+    sourceDate.setUTCFullYear(2030);
+    sourceProjection.nested.enabled = false;
+    expect(projected.state.lastTestedAt).toBe("2026-07-17T12:00:00.000Z");
+    expect(projected.state.safeProjection.nested).toEqual({ enabled: true });
+    expect(() => {
+      (projected.state.safeProjection.nested as { enabled: boolean }).enabled = false;
+    }).toThrow();
   });
 
   it("projects an unconfigured connector without vendor-specific state mapping", () => {

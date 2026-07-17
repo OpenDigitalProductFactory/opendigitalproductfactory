@@ -14,9 +14,26 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
       ? { readonly [TKey in keyof T]: DeepReadonly<T[TKey]> }
       : T;
 
-export interface ConnectorRegistryEntry {
+export type ConnectorAdapterFacade<TAdapter extends object> = {
+  readonly [TKey in keyof TAdapter]: TAdapter[TKey] extends (
+    ...args: infer TArgs
+  ) => infer TResult
+    ? (...args: TArgs) => TResult
+    : DeepReadonly<TAdapter[TKey]>;
+};
+
+export interface ConnectorRegistryEntry<TAdapter extends object = Record<string, never>> {
   readonly definition: ConnectorDefinition;
-  readonly adapter?: unknown;
+  readonly adapter?: TAdapter;
+}
+
+export interface ConnectorProjectedState {
+  readonly integrationId: string;
+  readonly provider: string | null;
+  readonly status: ConnectorSetupState["status"];
+  readonly safeProjection: DeepReadonly<ConnectorSetupState["safeProjection"]>;
+  readonly lastErrorMsg: string | null;
+  readonly lastTestedAt: string | null;
 }
 
 export interface ConnectorProjection {
@@ -24,17 +41,19 @@ export interface ConnectorProjection {
   readonly key: string;
   readonly displayName: string;
   readonly capabilities: readonly string[];
-  readonly state: DeepReadonly<ConnectorSetupState>;
+  readonly state: ConnectorProjectedState;
   readonly health: {
     readonly status: ConnectorSetupState["status"];
     readonly probeIntervalSeconds: number;
   };
 }
 
-export interface ConnectorRegistry {
-  list(): readonly ConnectorRegistryEntry[];
-  get(key: string): ConnectorRegistryEntry | undefined;
-  getByCapability(capability: string): ConnectorRegistryEntry | undefined;
+export interface ConnectorRegistry<TAdapter extends object = Record<string, never>> {
+  list(): readonly ConnectorRegistryEntry<ConnectorAdapterFacade<TAdapter>>[];
+  get(key: string): ConnectorRegistryEntry<ConnectorAdapterFacade<TAdapter>> | undefined;
+  getByCapability(
+    capability: string,
+  ): ConnectorRegistryEntry<ConnectorAdapterFacade<TAdapter>> | undefined;
   project(
     key: string,
     source: ConnectorSetupStateSource | null,
@@ -50,9 +69,22 @@ function deepFreeze<T>(value: T): DeepReadonly<T> {
   return value as DeepReadonly<T>;
 }
 
-export function createConnectorRegistry(
-  entries: readonly ConnectorRegistryEntry[],
-): ConnectorRegistry {
+function createAdapterFacade<TAdapter extends object>(
+  adapter: TAdapter,
+): ConnectorAdapterFacade<TAdapter> {
+  const facade: Record<PropertyKey, unknown> = {};
+  for (const key of Reflect.ownKeys(adapter)) {
+    const value = Reflect.get(adapter, key);
+    facade[key] = typeof value === "function"
+      ? value.bind(adapter)
+      : deepFreeze(structuredClone(value));
+  }
+  return Object.freeze(facade) as ConnectorAdapterFacade<TAdapter>;
+}
+
+export function createConnectorRegistry<TAdapter extends object = Record<string, never>>(
+  entries: readonly ConnectorRegistryEntry<TAdapter>[],
+): ConnectorRegistry<TAdapter> {
   const sorted = [...entries].sort((left, right) =>
     left.definition.key < right.definition.key
       ? -1
@@ -60,13 +92,17 @@ export function createConnectorRegistry(
         ? 1
         : 0,
   );
-  const byKey = new Map<string, ConnectorRegistryEntry>();
-  const byCapability = new Map<string, ConnectorRegistryEntry>();
+  type RegisteredEntry = ConnectorRegistryEntry<ConnectorAdapterFacade<TAdapter>>;
+  const byKey = new Map<string, RegisteredEntry>();
+  const byCapability = new Map<string, RegisteredEntry>();
 
   for (const rawEntry of sorted) {
-    // Definitions are already deeply immutable. Keep adapters encapsulated and
-    // stateful-capable while preventing registry entries from being rewritten.
-    const entry = Object.freeze({ ...rawEntry });
+    const entry: RegisteredEntry = Object.freeze({
+      definition: rawEntry.definition,
+      ...(rawEntry.adapter
+        ? { adapter: createAdapterFacade(rawEntry.adapter) }
+        : {}),
+    });
     const key = entry.definition.key;
     if (byKey.has(key)) throw new Error(`Duplicate connector key: ${key}`);
     byKey.set(key, entry);
@@ -79,7 +115,7 @@ export function createConnectorRegistry(
     }
   }
 
-  const stableEntries = deepFreeze([...byKey.values()]) as readonly ConnectorRegistryEntry[];
+  const stableEntries = deepFreeze([...byKey.values()]) as readonly RegisteredEntry[];
 
   return Object.freeze({
     list: () => stableEntries,
@@ -99,8 +135,12 @@ export function createConnectorRegistry(
         displayName: entry.definition.displayName,
         capabilities: [...entry.definition.capabilities],
         state: {
-          ...state,
+          integrationId: state.integrationId,
+          provider: state.provider,
+          status: state.status,
           safeProjection: structuredClone(state.safeProjection),
+          lastErrorMsg: state.lastErrorMsg,
+          lastTestedAt: state.lastTestedAt?.toISOString() ?? null,
         },
         health: {
           status: state.status,
