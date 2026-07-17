@@ -10,9 +10,9 @@
 | Source design | [`2026-09-cada-cloud-sovereignty-architects-forum.md`](../strategy/2026-09-cada-cloud-sovereignty-architects-forum.md), [`2026-06-19-estate-sovereignty-governance-design.md`](../superpowers/specs/2026-06-19-estate-sovereignty-governance-design.md) |
 | Substrate spec | [`2026-06-14-sysml-architecture-substrate-design.md`](../superpowers/specs/2026-06-14-sysml-architecture-substrate-design.md) |
 | Principle | [`data-sovereignty-follows-control`](../founder-kernel/wiki/principles/data-sovereignty-follows-control.md) |
-| Model content (seed) | EA-graph materialization deferred — tracked in `EP-ESTATE-SOVEREIGNTY` (Phase 1) |
+| Model content (seed) | `packages/db/src/seed-ea-sysml-cada.ts` (BI-AA3A4144) |
 
-This note captures how the EU Cloud and AI Development Act (CADA, proposed 3 June 2026) maps onto DPF's current architecture: which assurance-level obligations the shipped substrate already satisfies, and which are forward requirements. The canonical model is the DPF EA graph (`EaElement`/`EaRelationship`); this markdown is the human-readable companion. Per the substrate spec's stance, EA-graph materialization (a `seed-ea-sysml-cada.ts`) is a **deferred follow-up**; the sovereignty-relevant routing behaviour is verified by source-local tests today.
+This note captures how the EU Cloud and AI Development Act (CADA, proposed 3 June 2026) maps onto DPF's current architecture: which assurance-level obligations the shipped substrate already satisfies, and which are forward requirements. The canonical model is the DPF EA graph (`EaElement`/`EaRelationship`); this markdown is the human-readable companion. EA-graph materialization lives in `packages/db/src/seed-ea-sysml-cada.ts`; the sovereignty-relevant routing behaviour is verified by source-local tests today.
 
 **Legend.** `[D]` = deterministic fact (grounded in code/schema). `[J]` = architect-authored judgment (design intent, not yet realized). Verification status: **green** = automated test passes today; **planned** = future slice.
 
@@ -26,7 +26,7 @@ This note captures how the EU Cloud and AI Development Act (CADA, proposed 3 Jun
 - **Allocations:** residency → `local-only`/`pipeline-v2`; deployment → `docker-compose`/deployment-contracts; jurisdiction → `BusinessContext`; affected-countries → `eu-jurisdictions.ts` + `Country`; evidence → `RouteDecisionLog`/`ChangeRequest`/`ToolExecution`; knowledge → CADA corpus page + `seed-cada-regulation`. (Full table below.)
 - **Verification cases:** VC-CADA-LOCAL, VC-CADA-COUNTRIES green today; others planned.
 - **Data authority impact:** No new source-of-truth tables in this change. CADA is registered in the existing compliance domain (`Regulation`/`Obligation`/`Control`) via a seed; affected-countries reuse the existing `Country` table plus a bloc-membership constant.
-- **EA/current-state catch-up:** New `PKG-CADA` model package + this note. EA-graph seed is the deferred follow-up.
+- **EA/current-state catch-up:** New `PKG-CADA` model package + this note + `seed-ea-sysml-cada.ts`.
 - **Open architecture risks:** (1) The strictest tier (Level 4) "no third-country control over software evolution" is a governance gap for a foreign-domiciled maintainer — mitigated by open source + EU steward + signed SBOM, not yet closed `[J]`. (2) Estate discovery is LAN-only today; per-element jurisdiction/operator metadata and external-application sovereignty fields are new substrate `[J]`. (3) CADA is a proposal; tier criteria may shift in trilogue.
 
 ---
@@ -100,5 +100,6 @@ PART-CADA-residency ──sysml_traces──▶ principle:data-sovereignty-follo
 - CADA registered as platform knowledge: founder-kernel principle, legal-compliance corpus page (runtime-injected), and the `eu-jurisdictions` affected-countries reference (+ test).
 - CADA registered in the governance domain via `seed-cada-regulation.ts` (operator-run, mirrors DORA) — obligations + suggested controls mapped to DPF capabilities.
 - The pre-existing local-only inference gate is recognized here as the Level-4 AI-egress control (REQ-CADA-2), already test-covered.
+- The CADA SysML model is materialized into the EA graph by `packages/db/src/seed-ea-sysml-cada.ts` with requirements, allocations, verification cases, and traceability relationships.
 
-**Modeled, realized later `[J]`:** REQ-CADA-3 (signed SBOM), REQ-CADA-4 (EU steward posture), REQ-CADA-6 (`targetAssuranceLevel`), REQ-CADA-8 (estate-wide assessment), and the EA-graph materialization of this package. These are scoped in [`2026-06-19-estate-sovereignty-governance-design.md`](../superpowers/specs/2026-06-19-estate-sovereignty-governance-design.md) and tracked in `EP-ESTATE-SOVEREIGNTY`.
+**Modeled, realized later `[J]`:** REQ-CADA-3 (signed SBOM), REQ-CADA-4 (EU steward posture), REQ-CADA-6 (`targetAssuranceLevel`), and REQ-CADA-8 (estate-wide assessment). These are scoped in [`2026-06-19-estate-sovereignty-governance-design.md`](../superpowers/specs/2026-06-19-estate-sovereignty-governance-design.md) and tracked in `EP-ESTATE-SOVEREIGNTY`.

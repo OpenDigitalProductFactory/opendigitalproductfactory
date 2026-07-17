@@ -17,6 +17,7 @@ import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedEaSysml2 } from "./seed-ea-sysml2.js";
 import { seedEaSysmlAiCockpit } from "./seed-ea-sysml-ai-cockpit.js";
 import { seedEaSysmlAgentAuthority } from "./seed-ea-sysml-agent-authority.js";
+import { seedEaSysmlCada } from "./seed-ea-sysml-cada.js";
 import { seedEaSysmlDataAuthority } from "./seed-ea-sysml-data-authority.js";
 import { projectPlatformCapabilities } from "./portfolio-sources/project-portfolio-source.js";
 import { projectAiProviders, projectIntegrations } from "./portfolio-sources/project-external-supply.js";
@@ -2386,6 +2387,7 @@ async function main(): Promise<void> {
   await step("eaViews", () => seedEaViews());
   await step("eaSysmlAiCockpit", () => seedEaSysmlAiCockpit());
   await step("eaSysmlAgentAuthority", () => seedEaSysmlAgentAuthority());
+  await step("eaSysmlCada", () => seedEaSysmlCada());
   await step("eaSysmlDataAuthority", () => seedEaSysmlDataAuthority());
   await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
   await step("coworkerServiceCatalog", () => seedCoworkerServiceCatalog(prisma));
