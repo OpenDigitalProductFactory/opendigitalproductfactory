@@ -16,7 +16,7 @@ apps/web/components/workbooks/Grid.tsx	1358
 apps/web/instrumentation.test.ts	897
 apps/web/instrumentation.ts	1430
 apps/web/lib/actions/agent-coworker-external.test.ts	867
-apps/web/lib/actions/agent-coworker.ts	2741
+apps/web/lib/actions/agent-coworker.ts	2751
 apps/web/lib/actions/agent-task-scheduler.test.ts	1121
 apps/web/lib/actions/ai-providers.ts	915
 apps/web/lib/actions/build-governed.test.ts	1142
@@ -56,8 +56,8 @@ apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	903
 apps/web/lib/tak/agent-grants.ts	824
 apps/web/lib/tak/agent-routing.ts	965
-apps/web/lib/tak/agentic-loop.test.ts	2240
-apps/web/lib/tak/agentic-loop.ts	2612
+apps/web/lib/tak/agentic-loop.test.ts	2279
+apps/web/lib/tak/agentic-loop.ts	2670
 apps/web/lib/tak/route-context-map.ts	1226
 apps/web/lib/tak/route-context.ts	1239
 apps/web/lib/work-capsules/mcp-handlers.ts	884

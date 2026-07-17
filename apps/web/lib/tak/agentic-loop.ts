@@ -7,6 +7,11 @@ import { detectRepeatedToolCall, recordRepeatedToolIssue } from "@/lib/tak/runti
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/actions/coworker-tool-budget";
+import {
+  classifyEvidenceRequirement,
+  resolveEvidenceRecovery,
+} from "@/lib/tak/evidence-requirement";
+import { resolveRouteContext } from "@/lib/route-context-map";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
@@ -1361,6 +1366,16 @@ export async function runAgenticLoop(params: {
   let continuationNudges = 0;
   let fabricationRetries = 0;
   let frustrationCount = 0;
+  // Evidence-integrity gate (INV-1). Decide once whether this turn's answer
+  // depends on live operational state (a route with authoritative domain tools +
+  // a live-state question); the terminal guard in the zero-tool branch enforces
+  // that such a turn never returns factual prose without a successful tool call.
+  const evidenceRequirement = classifyEvidenceRequirement({
+    routeContext,
+    domainTools: resolveRouteContext(routeContext).domainTools,
+    message: latestUserText(messages),
+  });
+  let evidenceRecoveryNudges = 0;
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
@@ -1864,6 +1879,49 @@ export async function runAgenticLoop(params: {
           executedTools,
           proposal: null,
         };
+      }
+
+      // Evidence-integrity gate (INV-1). When this turn's answer depends on live
+      // operational state and NO authoritative tool ran, the model's factual
+      // prose is unverifiable (the Scrum Master fabrication). Nudge once for a
+      // tool, then refuse rather than surface a guess. The nudge re-runs the
+      // normal iteration (no tool_choice/fallback-chain change), so recovery can
+      // never silently escalate to a paid provider (INV-4). load_tools is a
+      // meta-tool, not evidence.
+      if (evidenceRequirement.required && trimmed.length > 0) {
+        const authoritativeToolExecutions = executedTools.filter(
+          (t) => t.result?.success && t.name !== LOAD_TOOLS_TOOL_NAME,
+        ).length;
+        const recovery = resolveEvidenceRecovery({
+          required: true,
+          authoritativeToolExecutions,
+          content: trimmed,
+          recoveryNudgesUsed: evidenceRecoveryNudges,
+        });
+        if (recovery.kind === "nudge") {
+          evidenceRecoveryNudges++;
+          console.warn(`[agentic-loop] evidence-required turn, zero authoritative tools; nudging. route=${JSON.stringify(routeContext)}`);
+          messages = [
+            ...messages,
+            { role: "assistant" as const, content: result.content },
+            { role: "user" as const, content: recovery.nudgeMessage },
+          ];
+          continue;
+        }
+        if (recovery.kind === "refuse") {
+          console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)}`);
+          return {
+            content: recovery.message,
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: null,
+          };
+        }
       }
 
       const hasAuthoritativeToolAvailable = tools.some(

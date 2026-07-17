@@ -34,26 +34,38 @@ describe("deriveCoworkerToolCap", () => {
     expect(deriveCoworkerToolCap(1_000)).toBe(MIN_COWORKER_ATTACHED_TOOLS);
   });
 
-  it("returns the full ceiling when there is no small-context local model", () => {
+  it("returns the full ceiling when there is NO local model in the serving path (cloud)", () => {
+    // null/undefined/0 mean no reachable local generation model — a cloud turn,
+    // unaffected by the local selection cliff.
     expect(deriveCoworkerToolCap(null)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
     expect(deriveCoworkerToolCap(undefined)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
     expect(deriveCoworkerToolCap(0)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
   });
 
-  it("never exceeds the 48 ceiling even for a huge cloud window", () => {
-    expect(deriveCoworkerToolCap(200_000)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  it("cliff-caps a LARGE local window — capacity is not selection fidelity (BI-B5C358B1)", () => {
+    // The Scrum Master incident: qwen3.6 served 131,072 tokens, was handed 48
+    // tools, made zero tool calls, and fabricated. A large window measures FIT,
+    // not tool-SELECTION skill — a small local model still collapses past ~15.
+    expect(deriveCoworkerToolCap(131_072)).toBe(15);
+    expect(deriveCoworkerToolCap(200_000)).toBe(15);
+    expect(deriveCoworkerToolCap(32_769)).toBe(15);
+    expect(deriveCoworkerToolCap(31_999)).toBe(15);
   });
 
-  it("applies the accuracy-cliff ceiling only below the capable-model line", () => {
-    // Just below 32k: cliff-prone → bounded at 15 despite window-fit allowing more.
-    expect(deriveCoworkerToolCap(31_999)).toBe(15);
-    // Just above 32k: capable → full window-fit ceiling.
-    expect(deriveCoworkerToolCap(32_769)).toBe(MAX_COWORKER_ATTACHED_TOOLS);
+  it("honors a MEASURED tool-fidelity ceiling (the Phase-2 exemption path)", () => {
+    // When a model has measured evidence it selects reliably from more than the
+    // cliff, the caller passes that ceiling and the cap follows it (bounded by 48).
+    expect(deriveCoworkerToolCap(131_072, { measuredToolFidelityCeiling: 40 })).toBe(40);
+    expect(deriveCoworkerToolCap(131_072, { measuredToolFidelityCeiling: 200 })).toBe(
+      MAX_COWORKER_ATTACHED_TOOLS,
+    );
+    // An unmeasured/absent ceiling stays fail-safe at the cliff.
+    expect(deriveCoworkerToolCap(131_072, { measuredToolFidelityCeiling: null })).toBe(15);
   });
 
   it("is monotonic — a larger window never yields fewer tools", () => {
     const sizes = [4_096, 12_000, 16_000, 20_000, 24_576, 28_000, 32_768, 64_000];
-    const caps = sizes.map(deriveCoworkerToolCap);
+    const caps = sizes.map((s) => deriveCoworkerToolCap(s));
     for (let i = 1; i < caps.length; i++) expect(caps[i]).toBeGreaterThanOrEqual(caps[i - 1]);
   });
 });
@@ -149,6 +161,32 @@ describe("selectCoworkerToolBudget", () => {
     expect(names).toContain("create_backlog_item");
     expect(names).toContain("search_code_graph");
     expect(deferred.map((t) => t.name)).toEqual(["wiki_query"]);
+  });
+
+  it("forces route domain tools into tier-0 so route-relevant tools survive the cap (BI-B5C358B1)", () => {
+    // Reproduces the Scrum Master incident shape: the backlog tools do not
+    // lexically match "pressing/issues/resolved", so the intent ranker scores them
+    // 0 and, under a tight local cap, they would be deferred. Forcing the route's
+    // domainTools into tier-0 (as agent-coworker now does) guarantees they attach.
+    const tools = [
+      tool("wiki_query", "wiki"),
+      tool("search_code_graph", "code graph"),
+      tool("get_backlog_item", "Fetch one backlog item by id"),
+      tool("query_backlog", "Query backlog items and epics"),
+    ];
+    const intentQuery = "have the pressing issues been resolved";
+    const { attached, deferred } = selectCoworkerToolBudget({
+      tools,
+      roleGrants: ["backlog_read"],
+      pageActionNames: new Set(["query_backlog", "get_backlog_item"]), // route domainTools
+      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+      cap: 1,
+      intentQuery,
+    });
+    const names = attached.map((t) => t.name);
+    expect(names).toContain("query_backlog");
+    expect(names).toContain("get_backlog_item");
+    expect(deferred.map((t) => t.name)).not.toContain("query_backlog");
   });
 
   it("prefers role tools over core, and core over the breadth tail, when the cap bites", () => {
