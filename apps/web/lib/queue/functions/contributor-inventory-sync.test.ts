@@ -63,7 +63,11 @@ vi.mock("@dpf/db", () => ({
   CONTRIBUTOR_INVENTORY_SCHEDULE: "every-10-minutes",
 }));
 
-import { runContributorInventorySync, type SyncSourceReaders } from "./contributor-inventory-sync";
+import {
+  resolveContributorInventoryGitCwd,
+  runContributorInventorySync,
+  type SyncSourceReaders,
+} from "./contributor-inventory-sync";
 
 const FIXED_NOW = new Date("2026-05-26T20:00:00.000Z");
 
@@ -313,6 +317,26 @@ describe("runContributorInventorySync", () => {
       lastError: null,
       nextRunAt: new Date(FIXED_NOW.getTime() + 10 * 60_000),
     });
+  });
+});
+
+describe("resolveContributorInventoryGitCwd", () => {
+  it("prefers DPF_REPO_ROOT so portal inventory commands run against the mounted host clone", () => {
+    expect(
+      resolveContributorInventoryGitCwd({
+        env: { DPF_REPO_ROOT: "/host-dpf" },
+        cwd: "/app",
+      }),
+    ).toBe("/host-dpf");
+  });
+
+  it("falls back to process cwd when DPF_REPO_ROOT is not configured", () => {
+    expect(
+      resolveContributorInventoryGitCwd({
+        env: {},
+        cwd: "/app",
+      }),
+    ).toBe("/app");
   });
 });
 
