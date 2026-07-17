@@ -41,6 +41,7 @@ docs/Reference/mcp/schema/** text eol=lf
 scripts/module-size-baseline.txt merge=union
 
 scripts/route-error-baseline.txt merge=union
+scripts/superpowers-skill-baseline.txt merge=union
 
 scripts/docs-reference-baseline.txt merge=union
 

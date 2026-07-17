@@ -1,6 +1,6 @@
 # Connector Factory Framework Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the first implementation slice of DPF’s connector factory framework: a reusable shared connector substrate, ADP runtime retrofit for test-mode overrides, and a multi-vendor harness skeleton with ADP contract + scenario support.
 
