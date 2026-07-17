@@ -8,6 +8,7 @@ import { BuildVerificationScopedCard } from "./BuildVerificationScopedCard";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 import { StallEventHistoryStrip } from "./StallEventHistoryStrip";
 import { BuildPhaseCostCard } from "./BuildPhaseCostCard";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 type Props = {
   projection: BuildProgressVisibility | null;
@@ -52,9 +53,12 @@ export function BuildProgressOperationalPanel({ projection, engineerView = false
               <div className="text-sm font-semibold text-[var(--dpf-text)]">DB taskResults progress</div>
               <div className="text-xs text-[var(--dpf-muted)]">{percent}%</div>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded bg-[var(--dpf-surface-2)]">
-              <div className="h-full bg-[var(--dpf-accent)]" style={{ width: `${percent}%` }} />
-            </div>
+            <ProgressBar
+              className="mt-2"
+              value={percent}
+              size="sm"
+              label="DB taskResults progress"
+            />
           </div>
 
           {projection.progress.conflicts.length > 0 && (

@@ -17,6 +17,13 @@ export type SpinnerSize = "xs" | "sm" | "md" | "lg";
 
 export type SpinnerProps = {
   size?: SpinnerSize;
+  /**
+   * Ring color source. `"accent"` (default) draws a neutral track with an accent
+   * leading edge — for spinners on a surface. `"current"` draws the ring from
+   * `currentColor`, so a spinner inside a button inherits the button's text color
+   * (e.g. white on a solid accent button).
+   */
+  tone?: "accent" | "current";
   /** Accessible label announced by screen readers. Ignored when `presentational`. */
   label?: string;
   /**
@@ -35,15 +42,23 @@ const SIZE_CLASS: Record<SpinnerSize, string> = {
   lg: "h-8 w-8 border-[3px]",
 };
 
-// Track = subtle border; the leading edge picks up the accent so the ring reads
-// as spinning. Both are tokens — never raw hex (AGENTS.md §12).
-const RING_STYLE: CSSProperties = {
-  borderColor: "var(--dpf-border)",
-  borderTopColor: "var(--dpf-accent)",
+// Track = faint ring; the leading edge is solid so the ring reads as spinning.
+// "accent" uses tokens (for on-surface spinners); "current" derives both from
+// currentColor (for a spinner inside a colored button). Never raw hex (§12).
+const RING_STYLE: Record<NonNullable<SpinnerProps["tone"]>, CSSProperties> = {
+  accent: {
+    borderColor: "var(--dpf-border)",
+    borderTopColor: "var(--dpf-accent)",
+  },
+  current: {
+    borderColor: "color-mix(in srgb, currentColor 25%, transparent)",
+    borderTopColor: "currentColor",
+  },
 };
 
 export function Spinner({
   size = "sm",
+  tone = "accent",
   label = "Loading…",
   presentational = false,
   className = "",
@@ -54,7 +69,7 @@ export function Spinner({
       className={["dpf-spin inline-block shrink-0 rounded-full", SIZE_CLASS[size], className]
         .filter(Boolean)
         .join(" ")}
-      style={RING_STYLE}
+      style={RING_STYLE[tone]}
     />
   );
 
