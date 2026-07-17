@@ -90,6 +90,20 @@ function buildComponents(sourcePath: string) {
         </a>
       );
     },
+    img: ({ src, alt }: { src?: string | Blob; alt?: string }) => {
+      // Screenshots/images: resolve through the shared resolver so a relative
+      // src (e.g. ../assets/<page-slug>/foo.png) is served via /api/docs-asset
+      // in the portal. Diagrams use the language-mermaid path above, not this.
+      const { href } = resolvePortalLink(typeof src === "string" ? src : undefined, sourcePath);
+      // eslint-disable-next-line @next/next/no-img-element
+      return (
+        <img
+          src={href}
+          alt={alt ?? ""}
+          className="my-4 max-w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+        />
+      );
+    },
     code: ({ children, className }: C & { className?: string }) => {
       const isBlock = className?.startsWith("language-");
       if (className === "language-mermaid") {
