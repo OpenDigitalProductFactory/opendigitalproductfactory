@@ -93,6 +93,15 @@ export async function disconnectEmailPostmark(): Promise<void> {
       actor: { coworkerId: "email-postmark-disconnect", userId: null }, operation: "disconnect",
       redactedInput: {}, responseKind: "disconnected", resultCount: 0, durationMs: 0,
     }),
+    auditFailure: ({ transaction }, failure) => recordConnectorAuditInTransaction(transaction.integrationToolCallLog, {
+      connectorId: EMAIL_POSTMARK_CONNECTOR_ID,
+      actor: { coworkerId: "email-postmark-disconnect", userId: null }, operation: "disconnect",
+      redactedInput: {}, responseKind: "failed", resultCount: 0, durationMs: 0,
+      error: {
+        kind: failure.kind === "cancelled" ? "internal" : failure.kind,
+        safeMessage: failure.safeMessage,
+      },
+    }),
   });
 }
 

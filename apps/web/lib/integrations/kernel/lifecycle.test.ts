@@ -25,6 +25,38 @@ function persistence(): LifecyclePersistence<{ token?: string; checkpoint?: stri
   });
 }
 
+function durableAttemptFixture(initial: { token?: string; checkpoint?: string } = {}) {
+  type State = { token?: string; checkpoint?: string };
+  type Draft = {
+    state: State;
+    transaction: { integrationToolCallLog: { create(args: { data: unknown }): Promise<void> } };
+  };
+  let state = structuredClone(initial);
+  const auditRows: unknown[] = [];
+  const persistence: LifecyclePersistence<Draft> = {
+    async transact<T>(operation: (draft: Draft) => Promise<T>) {
+      const nextState = structuredClone(state);
+      const stagedAudit: unknown[] = [];
+      const result = await operation({
+        state: nextState,
+        transaction: { integrationToolCallLog: { create: async ({ data }) => { stagedAudit.push(data); } } },
+      });
+      state = nextState;
+      auditRows.push(...stagedAudit);
+      return result;
+    },
+  };
+  const durableAudit = (operation: "disconnect" | "health" | "refresh" | "sync", responseKind: string) =>
+    async (draft: Draft, failure?: { kind: string; safeMessage: string }) => {
+      await recordConnectorAuditInTransaction(draft.transaction.integrationToolCallLog, {
+        connectorId: "fixture", actor: { coworkerId: "worker", userId: null }, operation,
+        redactedInput: {}, responseKind, durationMs: 1,
+        error: failure ? { kind: failure.kind === "cancelled" ? "internal" : failure.kind as never, safeMessage: failure.safeMessage } : null,
+      }, () => new Date(0));
+    };
+  return { persistence, auditRows, durableAudit, state: () => state };
+}
+
 describe("connector lifecycle", () => {
   it("composes credential writes and the Task 4 audit sink in the same caller-owned transaction", async () => {
     const events: string[] = [];
@@ -165,6 +197,26 @@ describe("connector lifecycle", () => {
     } });
   });
 
+  it("durably audits a connect persistence failure without committing credential state", async () => {
+    const fixture = durableAttemptFixture({ token: "old" });
+    const lifecycle = createConnectorLifecycle({ persistence: fixture.persistence });
+    await expect(lifecycle.connect({
+      exchange: async () => ({ token: "new" }),
+      persist: async () => { throw new Error("credential write failed"); },
+      audit: async () => undefined,
+      persistFailure: async () => undefined,
+      auditFailure: async (draft) => {
+        await recordConnectorAuditInTransaction(draft.transaction.integrationToolCallLog, {
+          connectorId: "fixture", actor: { coworkerId: "worker", userId: null }, operation: "connect",
+          redactedInput: {}, responseKind: "failed", durationMs: 1,
+          error: { kind: "internal", safeMessage: "Connector credential persistence failed." },
+        });
+      },
+    })).rejects.toThrow("credential write failed");
+    expect(fixture.state().token).toBe("old");
+    expect(fixture.auditRows).toHaveLength(1);
+  });
+
   it.each(["connect", "disconnect", "refresh"] as const)("rolls back %s when audit fails", async (operation) => {
     const db = persistence();
     db.state = { token: "valid" };
@@ -173,8 +225,8 @@ describe("connector lifecycle", () => {
     await expect(operation === "connect"
       ? lifecycle.connect({ exchange: async () => ({ token: "replacement" }), persist: async (d, s) => { d.token = s.token; }, audit, persistFailure: async () => undefined, auditFailure: async () => undefined })
       : operation === "disconnect"
-        ? lifecycle.disconnect({ persist: async (d) => { delete d.token; }, audit })
-        : lifecycle.refresh({ connectorId: "one", refresh: async () => ({ token: "rotated" }), persist: async (d, s) => { d.token = s.token; }, audit }))
+        ? lifecycle.disconnect({ persist: async (d) => { delete d.token; }, audit, auditFailure: async () => undefined })
+        : lifecycle.refresh({ connectorId: "one", refresh: async () => ({ token: "rotated" }), persist: async (d, s) => { d.token = s.token; }, audit, auditFailure: async () => undefined }))
       .rejects.toThrow("audit unavailable");
     expect(db.state.token).toBe("valid");
   });
@@ -201,9 +253,9 @@ describe("connector lifecycle", () => {
     };
     const lifecycle = createConnectorLifecycle({ persistence });
     if (operation === "connect") await lifecycle.connect({ exchange: async () => "connect", persist: async (d) => d.credentials.mark("connect"), audit, persistFailure: async () => undefined, auditFailure: async () => undefined });
-    if (operation === "disconnect") await lifecycle.disconnect({ persist: async (d) => d.credentials.mark("disconnect"), audit });
-    if (operation === "refresh") await lifecycle.refresh({ connectorId: "credential-row-id", refresh: async () => "refresh", persist: async (d) => d.credentials.mark("refresh"), audit });
-    if (operation === "sync") await runConnectorSync({ request: { idempotencyKey: "sync-id" }, persistence, retry: { maxAttempts: 1, initialDelayMs: 0, maxDelayMs: 0 }, sync: async () => ({ resultCount: 1, checkpoint: "sync" }), persist: async (d) => d.credentials.mark("sync"), audit });
+    if (operation === "disconnect") await lifecycle.disconnect({ persist: async (d) => d.credentials.mark("disconnect"), audit, auditFailure: async () => undefined });
+    if (operation === "refresh") await lifecycle.refresh({ connectorId: "credential-row-id", refresh: async () => "refresh", persist: async (d) => d.credentials.mark("refresh"), audit, auditFailure: async () => undefined });
+    if (operation === "sync") await runConnectorSync({ request: { idempotencyKey: "sync-id" }, persistence, retry: { maxAttempts: 1, initialDelayMs: 0, maxDelayMs: 0 }, sync: async () => ({ resultCount: 1, checkpoint: "sync" }), persist: async (d) => d.credentials.mark("sync"), audit, auditFailure: async () => undefined });
     expect(committed).toEqual([operation, "audit"]);
   });
 
@@ -231,10 +283,10 @@ describe("connector lifecycle", () => {
     const execution = operation === "connect"
       ? lifecycle.connect({ exchange: async () => "connect", persist: async (d) => d.credentials.mark("connect"), audit, persistFailure: async () => undefined, auditFailure: async () => undefined })
       : operation === "disconnect"
-        ? lifecycle.disconnect({ persist: async (d) => d.credentials.mark("disconnect"), audit })
+        ? lifecycle.disconnect({ persist: async (d) => d.credentials.mark("disconnect"), audit, auditFailure: audit })
         : operation === "refresh"
-          ? lifecycle.refresh({ connectorId: "credential-row-id", refresh: async () => "refresh", persist: async (d) => d.credentials.mark("refresh"), audit })
-          : runConnectorSync({ request: { idempotencyKey: "sync-id" }, persistence, retry: { maxAttempts: 1, initialDelayMs: 0, maxDelayMs: 0 }, sync: async () => ({ resultCount: 1, checkpoint: "sync" }), persist: async (d) => d.credentials.mark("sync"), audit });
+          ? lifecycle.refresh({ connectorId: "credential-row-id", refresh: async () => "refresh", persist: async (d) => d.credentials.mark("refresh"), audit, auditFailure: audit })
+          : runConnectorSync({ request: { idempotencyKey: "sync-id" }, persistence, retry: { maxAttempts: 1, initialDelayMs: 0, maxDelayMs: 0 }, sync: async () => ({ resultCount: 1, checkpoint: "sync" }), persist: async (d) => d.credentials.mark("sync"), audit, auditFailure: audit });
     await expect(execution).rejects.toThrow("Connector audit persistence failed");
     expect(committed).toEqual([]);
   });
@@ -247,13 +299,14 @@ describe("connector lifecycle", () => {
     const audit = vi.fn(async () => undefined);
     const results = await Promise.all([1, 2, 3].map(() => lifecycle.refresh({
       connectorId: "credential-row-id", refresh, persist, audit,
+      auditFailure: async () => undefined,
     })));
     expect(results).toEqual([{ token: "new" }, { token: "new" }, { token: "new" }]);
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(persist).toHaveBeenCalledTimes(1);
     expect(audit).toHaveBeenCalledTimes(1);
     expect(db.state.token).toBe("new");
-    await expect(lifecycle.refresh({ connectorId: "failed", refresh: async () => { throw new Error("nope"); }, persist: async () => undefined, audit: async () => undefined })).rejects.toThrow("nope");
+    await expect(lifecycle.refresh({ connectorId: "failed", refresh: async () => { throw new Error("nope"); }, persist: async () => undefined, audit: async () => undefined, auditFailure: async () => undefined })).rejects.toThrow("nope");
     expect(db.state.token).toBe("new");
   });
 
@@ -265,13 +318,106 @@ describe("connector lifecycle", () => {
       void lifecycle.connect({ exchange: async () => ({ token: "x" }), persist: async () => undefined, audit: async () => undefined, persistFailure: async () => undefined });
     }
     const exchange = vi.fn(async () => ({ token: "fresh" }));
-    await lifecycle.ensureClientCredential({ expired: true, exchange, persist: async (d, s) => { d.token = s.token; }, audit: async () => undefined });
+    await lifecycle.ensureClientCredential({ expired: true, exchange, persist: async (d, s) => { d.token = s.token; }, audit: async () => undefined, auditFailure: async () => undefined });
     expect(exchange).toHaveBeenCalledOnce();
     expect(db.state.token).toBe("fresh");
   });
 });
 
 describe("retry and sync", () => {
+  it("orchestrates health network work and durably audits success and safe failure once", async () => {
+    const success = durableAttemptFixture();
+    const lifecycle = createConnectorLifecycle({ persistence: success.persistence });
+    await expect(lifecycle.health({
+      probe: async () => ({ ok: true }),
+      audit: async (draft) => success.durableAudit("health", "success")(draft),
+      auditFailure: success.durableAudit("health", "failed"),
+    })).resolves.toEqual({ state: "connected" });
+    expect(success.auditRows).toHaveLength(1);
+
+    const failed = durableAttemptFixture();
+    const failedLifecycle = createConnectorLifecycle({ persistence: failed.persistence });
+    await expect(failedLifecycle.health({
+      probe: async () => { throw new ConnectorError("upstream_unavailable", "secret upstream detail"); },
+      audit: async (draft) => failed.durableAudit("health", "success")(draft),
+      auditFailure: failed.durableAudit("health", "failed"),
+    })).resolves.toEqual({ state: "degraded", error: "Connector provider is unavailable." });
+    expect(failed.auditRows).toHaveLength(1);
+    expect(JSON.stringify(failed.auditRows)).not.toContain("secret upstream detail");
+  });
+
+  it("audits refresh and client-credential exchange failures without rotating the last token", async () => {
+    const refreshFixture = durableAttemptFixture({ token: "last-valid" });
+    const lifecycle = createConnectorLifecycle<Parameters<typeof refreshFixture.persistence.transact>[0] extends (draft: infer D) => unknown ? D : never, { token: string }>({ persistence: refreshFixture.persistence });
+    await expect(lifecycle.refresh({
+      connectorId: "credential-row-id",
+      refresh: async () => { throw new ConnectorError("authentication", "raw refresh token secret"); },
+      persist: async (draft, result) => { draft.state.token = result.token; },
+      audit: refreshFixture.durableAudit("refresh", "success"),
+      auditFailure: refreshFixture.durableAudit("refresh", "failed"),
+    })).rejects.toThrow("raw refresh token secret");
+    expect(refreshFixture.state().token).toBe("last-valid");
+    expect(refreshFixture.auditRows).toHaveLength(1);
+    expect(JSON.stringify(refreshFixture.auditRows)).not.toContain("raw refresh token secret");
+
+    const clientFixture = durableAttemptFixture({ token: "last-valid" });
+    const clientLifecycle = createConnectorLifecycle({ persistence: clientFixture.persistence });
+    await expect(clientLifecycle.ensureClientCredential({
+      expired: true,
+      exchange: async () => { throw new ConnectorError("upstream_unavailable", "raw client secret"); },
+      persist: async () => undefined,
+      audit: clientFixture.durableAudit("refresh", "success"),
+      auditFailure: clientFixture.durableAudit("refresh", "failed"),
+    })).rejects.toThrow("raw client secret");
+    expect(clientFixture.state().token).toBe("last-valid");
+    expect(clientFixture.auditRows).toHaveLength(1);
+    expect(JSON.stringify(clientFixture.auditRows)).not.toContain("raw client secret");
+  });
+
+  it.each([
+    { name: "retry exhaustion", idempotencyKey: "safe-key", abort: false, expectedCalls: 2 },
+    { name: "cancellation", idempotencyKey: "safe-key", abort: true, expectedCalls: 0 },
+    { name: "non-idempotent", idempotencyKey: "", abort: false, expectedCalls: 1 },
+  ])("audits sync $name once without advancing its checkpoint", async ({ idempotencyKey, abort, expectedCalls }) => {
+    const fixture = durableAttemptFixture({ checkpoint: "old" });
+    const controller = new AbortController();
+    if (abort) controller.abort();
+    let calls = 0;
+    await expect(runConnectorSync({
+      request: { idempotencyKey, signal: controller.signal }, persistence: fixture.persistence,
+      retry: { maxAttempts: 2, initialDelayMs: 0, maxDelayMs: 0 },
+      sync: async () => { calls += 1; throw new ConnectorError("upstream_unavailable", "raw provider secret"); },
+      persist: async (draft, result) => { draft.state.checkpoint = result.checkpoint as string; },
+      audit: fixture.durableAudit("sync", "success"),
+      auditFailure: fixture.durableAudit("sync", "failed"),
+    })).rejects.toThrow();
+    expect(calls).toBe(expectedCalls);
+    expect(fixture.state().checkpoint).toBe("old");
+    expect(fixture.auditRows).toHaveLength(1);
+    expect(JSON.stringify(fixture.auditRows)).not.toContain("raw provider secret");
+  });
+
+  it("audits a disconnect persistence failure once; audit-store outage remains fail-closed", async () => {
+    const fixture = durableAttemptFixture({ token: "valid" });
+    const lifecycle = createConnectorLifecycle({ persistence: fixture.persistence });
+    await expect(lifecycle.disconnect({
+      persist: async () => { throw new Error("delete failed"); },
+      audit: fixture.durableAudit("disconnect", "success"),
+      auditFailure: fixture.durableAudit("disconnect", "failed"),
+    })).rejects.toThrow("delete failed");
+    expect(fixture.state().token).toBe("valid");
+    expect(fixture.auditRows).toHaveLength(1);
+
+    const outage = createConnectorLifecycle({
+      persistence: { transact: async <T>(operation: (draft: {}) => Promise<T>) => operation({}) },
+    });
+    await expect(outage.disconnect({
+      persist: async () => { throw new Error("delete failed"); },
+      audit: async () => undefined,
+      auditFailure: async () => { throw new Error("audit unavailable"); },
+    })).rejects.toThrow("audit unavailable");
+  });
+
   it("honors capped Retry-After and deterministic backoff while preserving the idempotency key", async () => {
     const sleeps: number[] = [];
     const keys: string[] = [];
@@ -310,6 +456,7 @@ describe("retry and sync", () => {
       retry: { maxAttempts: 2, initialDelayMs: 0, maxDelayMs: 0 },
       sync: async (request) => { calls += 1; if (calls === 1) throw new ConnectorError("upstream_unavailable", "down"); return { nextCursor: "c1", resultCount: 2, checkpoint: "p1" }; },
       persist: async (draft, result) => { draft.checkpoint = result.checkpoint; }, audit: async () => undefined,
+      auditFailure: async () => undefined,
     });
     expect(db.state.checkpoint).toBe("p1");
     expect(calls).toBe(2);
@@ -318,6 +465,7 @@ describe("retry and sync", () => {
       retry: { maxAttempts: 1, initialDelayMs: 0, maxDelayMs: 0 },
       sync: async () => ({ nextCursor: "c2", resultCount: 1, checkpoint: "p2" }),
       persist: async (draft, result) => { draft.checkpoint = result.checkpoint; }, audit: async () => { throw new Error("audit"); },
+      auditFailure: async () => { throw new Error("audit"); },
     })).rejects.toThrow("audit");
     expect(db.state.checkpoint).toBe("p1");
   });
