@@ -1,0 +1,28 @@
+# Protected private-identity tokens — the denylist for check-no-private-identity.
+#
+# One token per line. Each is matched case-insensitively, on word boundaries,
+# as a literal (regex metacharacters are escaped). Lines starting with # are
+# comments; blank lines are ignored.
+#
+# WHY: customer, operator, and person identity (real company names, customer
+# names, individuals, private hostnames/IPs) must not spread into this OSS repo
+# beyond an audited baseline. The check-no-private-identity ratchet freezes the
+# per-file count of these tokens and fails CI on any NEW file or GROWN count, so
+# a leak cannot ride in on a PR from ANY surface (Claude, Codex, Build Studio, a
+# human working tree) — the Repo Guard Loop is a required check.
+#
+# This file itself is excluded from the scan, so listing a token here does not
+# trip the guard. Only list names that are ALREADY public (e.g. an app-store
+# publisher legal entity). Do NOT paste a genuinely-secret value here — that
+# would leak it into git history; for those, protect via a private allowlist out
+# of band and keep the value out of the repo entirely.
+#
+# To protect a new entity:
+#   1. add its token below,
+#   2. run:  node scripts/check-no-private-identity.mjs --update
+#      (snapshots the CURRENT, audited occurrences as the new baseline),
+#   3. review the baseline diff to confirm every frozen occurrence is legitimate.
+#
+# See docs/operations/oss-repo-identity-hygiene.md for the full policy.
+
+Arcamanus
