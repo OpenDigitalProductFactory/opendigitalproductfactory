@@ -18,7 +18,11 @@ vi.mock("@/lib/kernel/load-enforceable-principles", () => ({
   loadEnforceablePrinciples: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock("@/lib/nonprod/environment-lease", () => ({
+vi.mock("@/lib/nonprod/environment-lease", async (importOriginal) => ({
+  // Spread the real module so non-mocked exports (e.g. NONPROD_OWNER_PROVIDERS,
+  // now read by claimNonprodEnvironmentLeaseHandler) remain defined; override
+  // only the DB-touching functions with mocks.
+  ...(await importOriginal<typeof import("@/lib/nonprod/environment-lease")>()),
   listActiveNonprodEnvironmentLeases: mockListActiveNonprodEnvironmentLeases,
   claimNonprodEnvironmentLease: mockClaimNonprodEnvironmentLease,
   releaseNonprodEnvironmentLease: mockReleaseNonprodEnvironmentLease,
