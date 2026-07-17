@@ -20,14 +20,20 @@ function abortError(): Error {
   return error;
 }
 
-async function defaultSleep(delayMs: number, signal?: AbortSignal): Promise<void> {
+export async function defaultConnectorSleep(delayMs: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) throw abortError();
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(resolve, delayMs);
-    signal?.addEventListener("abort", () => {
+    const cleanup = () => signal?.removeEventListener("abort", onAbort);
+    const onAbort = () => {
       clearTimeout(timer);
+      cleanup();
       reject(abortError());
-    }, { once: true });
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, delayMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -40,7 +46,7 @@ export async function retryConnectorOperation<T>(
   policy: ConnectorRetryPolicy,
   input: RetryConnectorOperationInput<T>,
 ): Promise<T> {
-  const sleep = input.sleep ?? defaultSleep;
+  const sleep = input.sleep ?? defaultConnectorSleep;
   const jitter = input.jitter ?? ((delay: number) => delay);
   for (let attempt = 1; attempt <= policy.maxAttempts; attempt += 1) {
     if (input.signal?.aborted) throw abortError();

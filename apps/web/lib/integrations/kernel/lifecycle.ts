@@ -40,30 +40,26 @@ export async function recordConnectorAuditInTransaction(
   await createDurableConnectorAudit({ repository, now }).record(input);
 }
 
-type AuditWrite = (input?: Partial<ConnectorAuditInput>) => Promise<void>;
+type AuditWrite<TDraft> = (draft: TDraft) => Promise<void>;
 
 interface PersistedTransition<TDraft, TResult> {
   persist(draft: TDraft, result: TResult): Promise<void>;
-  audit: AuditWrite;
+  audit: AuditWrite<TDraft>;
 }
 
-interface FailedTransition<TDraft> {
-  persistFailure?(draft: TDraft, error: unknown): Promise<void>;
-  auditFailure?(error: unknown): Promise<void>;
-}
-
-export interface ConnectorLifecycleDependencies<TDraft> {
+export interface ConnectorLifecycleDependencies<TDraft, TRefreshResult> {
   persistence: LifecyclePersistence<TDraft>;
-  refreshFlights?: SingleFlight;
+  /** Keyed by unique IntegrationCredential.integrationId, not by provider slug. */
+  refreshFlights?: SingleFlight<TRefreshResult>;
 }
 
-export function createConnectorLifecycle<TDraft>(dependencies: ConnectorLifecycleDependencies<TDraft>) {
-  const refreshFlights = dependencies.refreshFlights ?? createSingleFlight();
+export function createConnectorLifecycle<TDraft, TRefreshResult = unknown>(dependencies: ConnectorLifecycleDependencies<TDraft, TRefreshResult>) {
+  const refreshFlights = dependencies.refreshFlights ?? createSingleFlight<TRefreshResult>();
 
   async function commit<TResult>(transition: PersistedTransition<TDraft, TResult>, result: TResult): Promise<TResult> {
     await dependencies.persistence.transact(async (draft) => {
       await transition.persist(draft, result);
-      await transition.audit();
+      await transition.audit(draft);
     });
     return result;
   }
@@ -78,33 +74,29 @@ export function createConnectorLifecycle<TDraft>(dependencies: ConnectorLifecycl
 
     async connect<TResult>(input: {
       exchange(): Promise<TResult>;
-    } & PersistedTransition<TDraft, TResult> & FailedTransition<TDraft>) {
+      onFailure(draft: TDraft, error: unknown): Promise<void>;
+    } & PersistedTransition<TDraft, TResult>) {
       let result: TResult;
       try {
         result = await input.exchange();
       } catch (error) {
-        if (input.persistFailure && input.auditFailure) {
-          await dependencies.persistence.transact(async (draft) => {
-            await input.persistFailure!(draft, error);
-            await input.auditFailure!(error);
-          });
-        }
+        await dependencies.persistence.transact((draft) => input.onFailure(draft, error));
         throw error;
       }
       return commit(input, result);
     },
 
-    async disconnect(input: { persist(draft: TDraft): Promise<void>; audit: AuditWrite }): Promise<void> {
+    async disconnect(input: { persist(draft: TDraft): Promise<void>; audit: AuditWrite<TDraft> }): Promise<void> {
       await dependencies.persistence.transact(async (draft) => {
         await input.persist(draft);
-        await input.audit();
+        await input.audit(draft);
       });
     },
 
-    refresh<TResult>(input: {
+    refresh(input: {
       connectorId: string;
-      refresh(): Promise<TResult>;
-    } & PersistedTransition<TDraft, TResult>): Promise<TResult> {
+      refresh(): Promise<TRefreshResult>;
+    } & PersistedTransition<TDraft, TRefreshResult>): Promise<TRefreshResult> {
       return refreshFlights.run(input.connectorId, async () => {
         const result = await input.refresh();
         return commit(input, result);
@@ -140,7 +132,7 @@ export async function runConnectorSync<TDraft, TCheckpoint>(input: {
   retry: ConnectorRetryPolicy;
   sync(request: SyncRequest): Promise<SyncResult<TCheckpoint>>;
   persist(draft: TDraft, result: SyncResult<TCheckpoint>): Promise<void>;
-  audit: AuditWrite;
+  audit: AuditWrite<TDraft>;
   sleep?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
   jitter?: (delayMs: number, attempt: number) => number;
 }): Promise<SyncResult<TCheckpoint>> {
@@ -153,7 +145,7 @@ export async function runConnectorSync<TDraft, TCheckpoint>(input: {
   });
   await input.persistence.transact(async (draft) => {
     await input.persist(draft, result);
-    await input.audit();
+    await input.audit(draft);
   });
   return result;
 }
