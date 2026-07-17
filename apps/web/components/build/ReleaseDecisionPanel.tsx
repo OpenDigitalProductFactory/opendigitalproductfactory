@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { BuildFlowState } from "@/lib/build-flow-state";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import { Spinner } from "@/components/ui/Spinner";
 import { deriveReleaseDecisionCards, isMissingReleasableDiffError, type ReleaseDecisionTone } from "@/lib/build/release-decision";
 import { deriveContributionDecisionView } from "@/lib/build/contribution-decision";
 import {
@@ -282,7 +283,7 @@ export function ReleaseDecisionPanel({
                 }))}
                 className="inline-flex items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {pendingAction === "register" && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+                {pendingAction === "register" && <Spinner size="xs" tone="current" presentational />}
                 {pendingAction === "register" ? "Registering promotion..." : "Create Promotion"}
               </button>
               <button

@@ -15,10 +15,12 @@ export type InlineBusyProps = {
   /** Visible pending text, e.g. "Summarizing…", "Saving…". */
   label: string;
   size?: SpinnerSize;
+  /** Passed to the spinner: `"current"` inherits the button's text color. */
+  tone?: "accent" | "current";
   className?: string;
 };
 
-export function InlineBusy({ label, size = "xs", className = "" }: InlineBusyProps) {
+export function InlineBusy({ label, size = "xs", tone = "accent", className = "" }: InlineBusyProps) {
   return (
     <span
       role="status"
@@ -27,7 +29,7 @@ export function InlineBusy({ label, size = "xs", className = "" }: InlineBusyPro
         .filter(Boolean)
         .join(" ")}
     >
-      <Spinner size={size} presentational />
+      <Spinner size={size} tone={tone} presentational />
       <span>{label}</span>
     </span>
   );

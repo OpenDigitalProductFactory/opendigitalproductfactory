@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/report-kit";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   advanceBuildPhase,
   approveBuildStart,
@@ -479,7 +480,7 @@ export function BuildStudioWorkflowActionCard({
                 aria-describedby={!primaryEnabled && action.disabledReason ? `${action.kind}-disabled-reason` : undefined}
                 className="inline-flex items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {pending && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+                {pending && <Spinner size="xs" tone="current" presentational />}
                 {primaryLabel}
               </button>
             </span>

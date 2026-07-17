@@ -4,6 +4,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { Spinner } from "@/components/ui/Spinner";
 import { formatText } from "@/lib/actions/local-format";
 import { DeliberationSummaryCard } from "@/components/deliberation/DeliberationSummaryCard";
 import type {
@@ -764,8 +765,8 @@ function UxTestsSection({
         badgeColor="var(--dpf-accent)"
         defaultOpen={true}
       >
-        <div className="flex items-center gap-2 px-2 py-2">
-          <span className="w-3 h-3 rounded-full border-2 border-[var(--dpf-accent)] border-t-transparent animate-spin" />
+        <div className="flex items-center gap-2 px-2 py-2" role="status" aria-live="polite">
+          <Spinner size="xs" presentational />
           <span className="text-xs text-[var(--dpf-muted)]">
             Running UX verification against the sandbox&hellip;
           </span>

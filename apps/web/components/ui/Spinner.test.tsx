@@ -31,4 +31,10 @@ describe("Spinner", () => {
     expect(html).toMatch(/var\(--dpf-border\)/);
     expect(html).not.toMatch(/#[0-9a-f]{3,6}/i);
   });
+
+  it("derives the ring from currentColor when tone='current'", () => {
+    const html = renderToStaticMarkup(<Spinner tone="current" presentational />);
+    expect(html).toMatch(/currentColor/);
+    expect(html).not.toMatch(/var\(--dpf-accent\)/);
+  });
 });

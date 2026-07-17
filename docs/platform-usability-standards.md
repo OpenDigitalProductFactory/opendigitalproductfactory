@@ -97,7 +97,7 @@ Every asynchronous action MUST show a visible, consistent activity indicator. A 
 - Announce status text with `role="status"` + `aria-live="polite"` (the primitives do this; a bare `role="status"` in the codebase usually wraps a *result/error* region, which is a different use).
 - Motion is honored against the OS **Reduce Motion** preference via a global `@media (prefers-reduced-motion: reduce)` block in `globals.css` — spinners and shimmer fall back to a static, legible resting state. Don't reintroduce unguarded keyframe animations.
 
-**Rollout:** the primitives are the canonical replacement for the ~38 hand-rolled indicators catalogued across the portal; migrate opportunistically and when touching a surface. Semantic **status dots** (e.g. a pulsing health indicator) are state, not loading, and are out of this pattern — but still inherit the reduced-motion guard.
+**Rollout:** the primitives are the canonical replacement for the hand-rolled indicators catalogued across the portal; migrate opportunistically and when touching a surface. A CI ratchet — `scripts/check-no-hand-rolled-loading.mjs`, run by the repo guard loop — freezes the remaining sites at a per-file baseline and **fails any new `animate-spin`/`animate-pulse` outside `components/ui/`** (migrate a surface, then `--update` to retighten). Semantic **status dots** (e.g. a pulsing health indicator) are state, not loading, and are out of this pattern — but still inherit the reduced-motion guard.
 
 ## Progressive Disclosure
 
