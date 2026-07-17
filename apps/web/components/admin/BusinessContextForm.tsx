@@ -81,6 +81,7 @@ type BusinessContextData = {
   description: string;
   mission: string;
   targetMarket: string;
+  sourceSystem: string;
   companySize: string | null;
   geographicScope: string | null;
   revenueModel: string;
@@ -404,6 +405,22 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
           />
           <div style={hintStyle}>
             Your stakeholders — the people who interact with your business. These aren't always "customers."
+          </div>
+        </label>
+
+        {/* Source system / migration context */}
+        <label style={labelStyle}>
+          <div style={fieldLabelStyle}>What system or process are you switching from? {optionalHint}</div>
+          <input
+            type="text"
+            name="sourceSystem"
+            value={data.sourceSystem}
+            onChange={(e) => update("sourceSystem", e.target.value)}
+            placeholder="e.g. QuickBooks, spreadsheets, paper forms, another platform"
+            style={inputStyle}
+          />
+          <div style={hintStyle}>
+            Helps your AI coworker plan imports, migration steps, and where old records may still live.
           </div>
         </label>
 

@@ -33,6 +33,7 @@ export default async function StorefrontBusinessSettingsPage() {
     description: businessContext?.description ?? suggestions?.description ?? "",
     mission: businessContext?.mission ?? "",
     targetMarket: businessContext?.targetMarket ?? "",
+    sourceSystem: businessContext?.sourceSystem ?? "",
     companySize: businessContext?.companySize ?? null,
     geographicScope: businessContext?.geographicScope ?? suggestions?.geographicScope ?? null,
     revenueModel: businessContext?.revenueModel ?? "",

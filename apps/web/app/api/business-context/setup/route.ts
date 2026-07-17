@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     description,
     mission,
     targetMarket,
+    sourceSystem,
     companySize,
     geographicScope,
     revenueModel,
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
     description?: string;
     mission?: string;
     targetMarket?: string;
+    sourceSystem?: string;
     companySize?: string;
     geographicScope?: string;
     revenueModel?: string;
@@ -131,6 +133,7 @@ export async function POST(req: NextRequest) {
       description: description ?? null,
       mission: mission ?? null,
       targetMarket: targetMarket ?? null,
+      sourceSystem: sourceSystem ?? null,
       companySize: companySize ?? null,
       geographicScope: geographicScope ?? null,
       revenueModel: revenueModel ?? null,
@@ -143,6 +146,7 @@ export async function POST(req: NextRequest) {
       ...(description !== undefined && { description }),
       ...(mission !== undefined && { mission }),
       ...(targetMarket !== undefined && { targetMarket }),
+      ...(sourceSystem !== undefined && { sourceSystem }),
       ...(companySize !== undefined && { companySize }),
       ...(geographicScope !== undefined && { geographicScope }),
       ...(revenueModel !== undefined && { revenueModel }),
