@@ -10,9 +10,9 @@ import {
   createConnectorCredentialStore,
   createPrismaConnectorCredentialRepository,
 } from "@/lib/integrations/kernel/credential-store";
-import { ConnectorError } from "@/lib/integrations/kernel/error";
 import {
   composeConnectorLifecyclePersistence,
+  ConnectorAttemptFailedError,
   createConnectorLifecycle,
   recordConnectorAuditInTransaction,
 } from "@/lib/integrations/kernel/lifecycle";
@@ -118,7 +118,7 @@ export async function connectMicrosoft365Communications(
         },
         now,
       ),
-      persistFailure: ({ credentials }, error) => credentials.recordFailedConnect({
+      persistFailure: ({ credentials }, failure) => credentials.recordFailedConnect({
         integrationId: "microsoft365-communications",
         provider: "microsoft365",
         reconnectFields: {
@@ -131,15 +131,13 @@ export async function connectMicrosoft365Communications(
         reconnectFieldsReusable: true,
         lastTestedAtPolicy: "preserve",
         error: {
-          kind: error instanceof ConnectorError && error.kind === "authentication"
+          kind: failure.kind === "authentication"
             ? "authentication"
             : "provider",
-          safeMessage: error instanceof Error
-            ? error.message
-            : "unexpected error during Microsoft 365 connect",
+          safeMessage: failure.safeMessage,
         },
       }),
-      auditFailure: ({ transaction }, error) => recordConnectorAuditInTransaction(
+      auditFailure: ({ transaction }, failure) => recordConnectorAuditInTransaction(
         transaction.integrationToolCallLog,
         {
           connectorId: "microsoft365-communications",
@@ -153,11 +151,8 @@ export async function connectMicrosoft365Communications(
           responseKind: "error",
           durationMs: Math.max(0, now().getTime() - startedAt.getTime()),
           error: {
-            kind: error instanceof ConnectorError ? error.kind : "internal",
-            safeMessage: error instanceof Error
-              ? error.message
-              : "unexpected error during Microsoft 365 connect",
-            sensitiveValues: [input.clientSecret],
+            kind: failure.kind === "cancelled" ? "internal" : failure.kind,
+            safeMessage: failure.safeMessage,
           },
         },
         now,
@@ -176,9 +171,9 @@ export async function connectMicrosoft365Communications(
     return {
       ok: false,
       status: "error",
-      error: error instanceof Error
-        ? error.message
-        : "unexpected error during Microsoft 365 connect",
+      error: error instanceof ConnectorAttemptFailedError
+        ? error.failure.safeMessage
+        : "Microsoft 365 connection could not be completed.",
       statusCode: 400,
     };
   }

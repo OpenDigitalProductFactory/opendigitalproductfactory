@@ -136,7 +136,7 @@ describe("connectMicrosoft365Communications", () => {
       {
         exchangeMicrosoftGraphClientCredentials: vi
           .fn()
-          .mockRejectedValue(new Error("invalid Microsoft 365 credentials")),
+          .mockRejectedValue(new Error("provider leaked super-secret-do-not-leak")),
         now: () => failedAt,
       },
     );
@@ -144,6 +144,7 @@ describe("connectMicrosoft365Communications", () => {
     expect(result).toMatchObject({ ok: false, status: "error", statusCode: 400 });
     if (!result.ok) {
       expect(result.error).not.toContain("super-secret-do-not-leak");
+      expect(result.error).toBe("Connector provider is unavailable.");
     }
 
     expect(mockUpsert).toHaveBeenCalledTimes(1);
@@ -151,7 +152,7 @@ describe("connectMicrosoft365Communications", () => {
     expect(call.create.status).toBe("error");
     expect(call.create.lastTestedAt).toBeNull();
     expect(call.create.lastErrorAt).toEqual(failedAt);
-    expect(call.create.lastErrorMsg).toBe("invalid Microsoft 365 credentials");
+    expect(call.create.lastErrorMsg).toBe("Connector provider is unavailable.");
     expect(call.create.lastErrorMsg).not.toContain("super-secret-do-not-leak");
     expect(JSON.parse(call.create.fieldsEnc)).toMatchObject({
       reconnectFields: {
@@ -188,6 +189,6 @@ describe("connectMicrosoft365Communications", () => {
     expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty("status");
     expect(mockUpdate.mock.calls[0][0].data).not.toHaveProperty("lastTestedAt");
     expect(mockUpdate.mock.calls[0][0].data.lastErrorAt).toEqual(failedAt);
-    expect(mockUpdate.mock.calls[0][0].data.lastErrorMsg).toBe("invalid Microsoft 365 credentials");
+    expect(mockUpdate.mock.calls[0][0].data.lastErrorMsg).toBe("Connector provider is unavailable.");
   });
 });

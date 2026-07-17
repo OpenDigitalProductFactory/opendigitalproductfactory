@@ -119,11 +119,11 @@ describe("connector lifecycle", () => {
       exchange: async () => { throw new ConnectorError("authentication", "rejected"); },
       persist: async () => undefined,
       audit: async () => undefined,
-      persistFailure: async (draft, error) => { draft.error = (error as Error).message; },
-      auditFailure: async (_draft, error) => { failureAudits.push((error as Error).message); },
-    })).rejects.toThrow("rejected");
-    expect(db.state).toMatchObject({ error: "rejected" });
-    expect(failureAudits).toEqual(["rejected"]);
+      persistFailure: async (draft, failure) => { draft.error = failure.safeMessage; },
+      auditFailure: async (_draft, failure) => { failureAudits.push(`${failure.kind}:${failure.safeMessage}`); },
+    })).rejects.toThrow("Connector authentication failed.");
+    expect(db.state).toMatchObject({ error: "Connector authentication failed." });
+    expect(failureAudits).toEqual(["authentication:Connector authentication failed."]);
     await lifecycle.connect({
       exchange: async () => ({ token: "working" }),
       persist: async (draft, result) => { draft.token = result.token; delete draft.error; },
@@ -189,7 +189,7 @@ describe("connector lifecycle", () => {
           error: { kind: "authentication", safeMessage: "Connector authentication failed." },
         }, () => new Date(0));
       },
-    })).rejects.toThrow("rejected");
+    })).rejects.toThrow("Connector authentication failed.");
     expect(committed[0]).toBe("error");
     expect(committed[1]).toMatchObject({ data: {
       integration: "fixture", toolName: "connect", responseKind: "authentication",
@@ -212,7 +212,7 @@ describe("connector lifecycle", () => {
           error: { kind: "internal", safeMessage: "Connector credential persistence failed." },
         });
       },
-    })).rejects.toThrow("credential write failed");
+    })).rejects.toThrow("Connector operation failed.");
     expect(fixture.state().token).toBe("old");
     expect(fixture.auditRows).toHaveLength(1);
   });
@@ -227,7 +227,7 @@ describe("connector lifecycle", () => {
       : operation === "disconnect"
         ? lifecycle.disconnect({ persist: async (d) => { delete d.token; }, audit, auditFailure: async () => undefined })
         : lifecycle.refresh({ connectorId: "one", refresh: async () => ({ token: "rotated" }), persist: async (d, s) => { d.token = s.token; }, audit, auditFailure: async () => undefined }))
-      .rejects.toThrow("audit unavailable");
+      .rejects.toThrow(operation === "connect" ? "Connector operation failed." : "audit unavailable");
     expect(db.state.token).toBe("valid");
   });
 
@@ -287,7 +287,7 @@ describe("connector lifecycle", () => {
         : operation === "refresh"
           ? lifecycle.refresh({ connectorId: "credential-row-id", refresh: async () => "refresh", persist: async (d) => d.credentials.mark("refresh"), audit, auditFailure: audit })
           : runConnectorSync({ request: { idempotencyKey: "sync-id" }, persistence, retry: { maxAttempts: 1, initialDelayMs: 0, maxDelayMs: 0 }, sync: async () => ({ resultCount: 1, checkpoint: "sync" }), persist: async (d) => d.credentials.mark("sync"), audit, auditFailure: audit });
-    await expect(execution).rejects.toThrow("Connector audit persistence failed");
+    await expect(execution).rejects.toThrow(operation === "connect" ? "Connector operation failed." : "Connector audit persistence failed");
     expect(committed).toEqual([]);
   });
 
@@ -344,6 +344,19 @@ describe("retry and sync", () => {
     })).resolves.toEqual({ state: "degraded", error: "Connector provider is unavailable." });
     expect(failed.auditRows).toHaveLength(1);
     expect(JSON.stringify(failed.auditRows)).not.toContain("secret upstream detail");
+  });
+
+  it("fails closed on a health success-audit outage without mislabeling provider health", async () => {
+    const auditFailure = vi.fn();
+    const lifecycle = createConnectorLifecycle({
+      persistence: { transact: async <T>(operation: (draft: {}) => Promise<T>) => operation({}) },
+    });
+    await expect(lifecycle.health({
+      probe: async () => ({ ok: true }),
+      audit: async () => { throw new Error("audit store unavailable"); },
+      auditFailure,
+    })).rejects.toThrow("audit store unavailable");
+    expect(auditFailure).not.toHaveBeenCalled();
   });
 
   it("audits refresh and client-credential exchange failures without rotating the last token", async () => {

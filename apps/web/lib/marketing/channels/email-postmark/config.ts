@@ -15,6 +15,7 @@ import {
 } from "@/lib/integrations/kernel/credential-store";
 import {
   composeConnectorLifecyclePersistence,
+  ConnectorAttemptFailedError,
   createConnectorLifecycle,
   recordConnectorAuditInTransaction,
 } from "@/lib/integrations/kernel/lifecycle";
@@ -63,24 +64,24 @@ export async function saveEmailPostmarkCredential(
         redactedInput: { fromAddress: input.fromAddress, replyToAddress: input.replyToAddress || null },
         responseKind: "connected", resultCount: 1, durationMs: Date.now() - startedAt.getTime(),
       }),
-      persistFailure: ({ credentials }, error) => credentials.recordFailedConnect({
+      persistFailure: ({ credentials }, failure) => credentials.recordFailedConnect({
         integrationId: EMAIL_POSTMARK_CONNECTOR_ID, provider: "postmark",
         reconnectFields: { fromAddress: input.fromAddress, replyToAddress: input.replyToAddress || null },
         secretFields: { signingSecret: input.signingSecret }, tokenEnvelope: { serverToken: input.serverToken },
         reconnectFieldsReusable: true, lastTestedAtPolicy: "preserve",
-        error: { kind: "configuration", safeMessage: error instanceof Error ? error.message : "Postmark connection failed." },
+        error: { kind: "configuration", safeMessage: failure.safeMessage },
       }),
-      auditFailure: ({ transaction }, error) => recordConnectorAuditInTransaction(transaction.integrationToolCallLog, {
+      auditFailure: ({ transaction }, failure) => recordConnectorAuditInTransaction(transaction.integrationToolCallLog, {
         connectorId: EMAIL_POSTMARK_CONNECTOR_ID,
         actor: { coworkerId: "email-postmark-connect", userId: null }, operation: "connect",
         redactedInput: { fromAddress: input.fromAddress, replyToAddress: input.replyToAddress || null },
         responseKind: "error", durationMs: Date.now() - startedAt.getTime(),
-        error: { kind: "configuration", safeMessage: error instanceof Error ? error.message : "Postmark connection failed.", sensitiveValues: [input.serverToken, input.signingSecret] },
+        error: { kind: failure.kind === "cancelled" ? "internal" : failure.kind, safeMessage: failure.safeMessage },
       }),
     });
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Postmark connection failed." };
+    return { ok: false, error: error instanceof ConnectorAttemptFailedError ? error.failure.safeMessage : "Postmark connection failed." };
   }
 }
 
