@@ -2,6 +2,9 @@
 title: "Agent Development Environments — Claude, Codex, Grok"
 area: getting-started
 order: 7
+relatedCode:
+  - scripts/dpf-bootstrap-agent-toolchain.sh
+  - scripts/dpf-bootstrap-agent-toolchain.ps1
 ---
 
 ## Agent Development Environments — Claude, Codex, Grok

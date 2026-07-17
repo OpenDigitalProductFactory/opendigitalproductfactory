@@ -2,6 +2,8 @@
 title: "Build Studio"
 area: build-studio
 order: 1
+relatedCode:
+  - apps/web/lib/integrate/build-orchestrator.ts
 ---
 
 ## Overview
