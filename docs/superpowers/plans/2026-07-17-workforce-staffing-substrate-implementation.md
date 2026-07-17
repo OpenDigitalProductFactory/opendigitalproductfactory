@@ -131,13 +131,30 @@ grants match TOOL_TO_GRANTS) + pack-registry & agent-grants guards (139 total) �
 all DB-free and green. DB-backed handler execution verified in CI. Live MCP
 JSON-RPC callability is a live-verification item for Phase 8.
 
-### Phase 6 — UX surface: People → Staffing (golden = appointment + field-crew)
+### Phase 6 — UX surface: People → Staffing (golden = appointment + field-crew) *(view-model built; React render pending live)*
 
-**Deliverable.** Extend `/employee` with `?view=staffing` (coordinator) per §15.1; first viewport per §15.2 (planning window, team/location scope, coverage status, unscheduled demand, hard conflicts, last-minute changes, pending decisions; actions Prepare / Compare / Approve-and-publish). Comparison of 2–4 options with the §8.3 explanation contract. Employee "my schedule / availability" scoped to self; approver deep-links from the attention inbox. Golden seed/demo data for one appointment-coverage archetype + one trades field-crew.
+**Deliverable.** Extend `/employee` with `?view=staffing` (coordinator) per §15.1;
+first viewport per §15.2. **Built in this slice** (`apps/web/lib/workforce/staffing/view/coordinator-view.ts`):
+`buildCoordinatorView` — the pure computation of the first-viewport model
+(coverage classification covered/partial/uncovered + rate, unscheduled-demand
+shortfalls soonest-first, hard conflicts from the constraint engine, last-minute
+changes newest-first, pending-decision count) with planning-window + location
+scoping; and `maskEventForCoordinator` — the single place the privacy contract
+(spec §11, §13.4) is enforced: a coordinator sees a `Busy` mask, never a private
+event title.
 
-**Files.** `apps/web/app/(shell)/employee/` (staffing view components); `apps/web/components/employee/` (staffing components); demo/seed data.
+**Pending — needs the live portal:** the React surface that renders this model at
+`/employee?view=staffing` (+ the comparison view and employee self-view), and the
+golden seed/demo data. Component tests run in jsdom (the env broken headless), so
+rendering is verified live per the design's deferred-visual-verification.
 
-**Verification.** Live portal (contributor preview :3001) — coordinator happy path, employee correction, infeasible ("no feasible schedule") explanation without fabricated fill, private-title redaction, keyboard/accessible table operation, employee-timezone clarity.
+**Files.** `apps/web/lib/workforce/staffing/view/` (pure view-model — built); `apps/web/app/(shell)/employee/` + `apps/web/components/employee/` (render — pending); demo/seed data.
+
+**Verification.** 10 tests (`view/coordinator-view.test.ts`): coverage
+classification, window/scope/cancelled exclusion, shortfall ordering, conflict
+surfacing, change ordering, and the privacy mask (private→Busy, public→title,
+default-mask non-public). Live-portal render + a11y verification is a Phase-8
+live-install item.
 
 ### Phase 7 — Calendar & comms projections
 
