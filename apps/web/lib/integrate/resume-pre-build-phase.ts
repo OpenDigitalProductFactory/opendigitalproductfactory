@@ -238,7 +238,15 @@ export async function resumePreBuildPhase(params: {
 
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { designDoc: true, buildPlan: true, planReview: true, designReview: true, plan: true },
+      select: {
+        designDoc: true,
+        buildPlan: true,
+        planReview: true,
+        designReview: true,
+        plan: true,
+        originatingBacklogItemId: true,
+        parentEpicId: true,
+      },
     });
     if (!build) {
       return { kind: "failed", phase, error: "build not found" };
@@ -262,37 +270,87 @@ export async function resumePreBuildPhase(params: {
       // blocker is a pending human decision.
       const designReviewForGate = build.designReview as DesignReviewForGate;
       if (isParkedAtDecomposeGate(designReviewForGate)) {
-        if (hasDecompositionCandidates(designReviewForGate)) {
+        // Governed-backlog autopilot (BI-C4F828B7): rather than park an
+        // auto-promoted build here forever (nobody clicks approve on an
+        // unattended install → the daily tee-up keeps minting more), resolve
+        // the gate autonomously — the same path reviewDesignDoc now takes. This
+        // is what actually drains the parked-ideate backlog: the reviewDesignDoc
+        // gate only fires for builds flowing through review, but a build that is
+        // ALREADY parked is short-circuited here on every resume and never
+        // reaches that gate. Operator-driven / non-governed builds fall through
+        // to the original propose-once-and-park behavior below.
+        let overriddenMonolithic = false;
+        const governedConfig = await prisma.platformDevConfig.findUnique({
+          where: { id: "singleton" },
+          select: { governedBacklogEnabled: true },
+        });
+        if (
+          governedConfig?.governedBacklogEnabled === true &&
+          build.originatingBacklogItemId != null
+        ) {
+          const { autoResolveDecomposeRequiredGate } = await import(
+            "@/lib/build/auto-resolve-decompose-gate"
+          );
+          const auto = await autoResolveDecomposeRequiredGate({
+            build: {
+              buildId,
+              parentEpicId: build.parentEpicId ?? null,
+              originatingBacklogItemId: build.originatingBacklogItemId ?? null,
+              designReview: build.designReview,
+            },
+            userId,
+            governedBacklogEnabled: true,
+          });
+          if (auto.action === "decomposed") {
+            return {
+              kind: "resumed",
+              phase,
+              via: "autoResolveDecomposeRequiredGate",
+              detail: `auto-decomposed into ${auto.childBuildIds.length} child build(s) under Epic ${auto.epicId}`,
+            };
+          }
+          if (auto.action === "overridden") {
+            // Monolithic override recorded — the gate no longer blocks. Fall
+            // through to the normal review re-run below, which now advances
+            // ideate -> plan.
+            overriddenMonolithic = true;
+          }
+        }
+        if (overriddenMonolithic) {
+          // Skip the park block; continue to the design-doc / review-rerun path.
+        } else if (hasDecompositionCandidates(designReviewForGate)) {
           return {
             kind: "skipped",
             phase,
             reason:
               "design passed review but size=decompose-required and candidates already exist — parked awaiting approve_decomposition or record_decomposition_override (NOT re-dispatching ideate or re-running review).",
           };
+        } else {
+          // No candidates yet: generate them ONCE so the operator has something
+          // to approve. This is the productive alternative to re-ideating — it
+          // never throws (propose_build_decomposition returns a structured
+          // ToolResult) and is self-idempotent (the branch above short-circuits
+          // next time).
+          const { executeTool } = await import("@/lib/mcp-tools");
+          const result = await executeTool(
+            "propose_build_decomposition",
+            { buildId },
+            userId,
+            { featureBuildId: buildId },
+          );
+          const detail = result.success
+            ? `proposed decomposition candidates for operator approval (${
+                typeof result.message === "string" ? result.message.slice(0, 120) : "ok"
+              })`
+            : `propose_build_decomposition produced no candidates (${String(
+                result.error ?? result.message ?? "unknown",
+              ).slice(0, 120)}) — left parked for operator`;
+          return {
+            kind: "skipped",
+            phase,
+            reason: `design passed review but size=decompose-required — ${detail}; parked awaiting approve_decomposition or override (NOT re-dispatching ideate).`,
+          };
         }
-        // No candidates yet: generate them ONCE so the operator has something to
-        // approve. This is the productive alternative to re-ideating — it never
-        // throws (propose_build_decomposition returns a structured ToolResult)
-        // and is self-idempotent (the branch above short-circuits next time).
-        const { executeTool } = await import("@/lib/mcp-tools");
-        const result = await executeTool(
-          "propose_build_decomposition",
-          { buildId },
-          userId,
-          { featureBuildId: buildId },
-        );
-        const detail = result.success
-          ? `proposed decomposition candidates for operator approval (${
-              typeof result.message === "string" ? result.message.slice(0, 120) : "ok"
-            })`
-          : `propose_build_decomposition produced no candidates (${String(
-              result.error ?? result.message ?? "unknown",
-            ).slice(0, 120)}) — left parked for operator`;
-        return {
-          kind: "skipped",
-          phase,
-          reason: `design passed review but size=decompose-required — ${detail}; parked awaiting approve_decomposition or override (NOT re-dispatching ideate).`,
-        };
       }
 
       if (!hasDesignDoc(build.designDoc)) {
