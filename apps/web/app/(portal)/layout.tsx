@@ -7,6 +7,8 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { buildBrandingStyleTag } from "@/lib/branding";
+import { resolveCarePortalIdentity } from "@/lib/healthcare/care-portal-session";
+import { listPatientCareTasks } from "@/lib/healthcare/care-intake-portal-repository";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/portal" },
@@ -22,6 +24,18 @@ export default async function PortalLayout({ children }: { children: React.React
   if (session.user.type !== "customer") redirect("/");
 
   const user = session.user;
+
+  const careIdentity = await resolveCarePortalIdentity(user);
+  const hasCareProfile = careIdentity
+    ? (await listPatientCareTasks(careIdentity)).linked
+    : false;
+  const navItems = hasCareProfile
+    ? [
+        NAV_ITEMS[0],
+        { label: "My care", href: "/portal/health" },
+        ...NAV_ITEMS.slice(1),
+      ]
+    : NAV_ITEMS;
 
   const activeBranding = await prisma.brandingConfig.findUnique({
     where: { scope: "organization" },
@@ -52,7 +66,7 @@ export default async function PortalLayout({ children }: { children: React.React
               Portal
             </Link>
             <nav className="flex gap-1">
-              {NAV_ITEMS.map((item) => (
+              {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
