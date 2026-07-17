@@ -170,7 +170,18 @@ export interface CallbackExecutionResult<TAcknowledgment> {
   domainEntityId: string;
   acknowledgment: TAcknowledgment;
   replayed: boolean;
-  operationalError?: "callback_dispatch_failed" | "callback_audit_pending";
+  operationalErrors: CallbackOperationalError[];
+}
+
+export type CallbackOperationalError = "callback_dispatch_failed" | "callback_audit_pending";
+
+function withOperationalError<TAcknowledgment>(
+  result: CallbackExecutionResult<TAcknowledgment>,
+  error: CallbackOperationalError,
+): CallbackExecutionResult<TAcknowledgment> {
+  return result.operationalErrors.includes(error)
+    ? result
+    : { ...result, operationalErrors: [...result.operationalErrors, error] };
 }
 
 const callbackKey = (connectorId: string, deliveryKey: string) => ({
@@ -197,6 +208,7 @@ function completedResult<TAcknowledgment>(
     domainEntityId: row.domainEntityId,
     acknowledgment: row.acknowledgment as TAcknowledgment,
     replayed,
+    operationalErrors: [],
   };
 }
 
@@ -224,7 +236,7 @@ async function drainDispatch<TTransaction extends ConnectorCallbackTransaction, 
     });
     return result;
   } catch {
-    return { ...result, operationalError: "callback_dispatch_failed" };
+    return withOperationalError(result, "callback_dispatch_failed");
   }
 }
 
@@ -250,7 +262,7 @@ async function drainAudit<TTransaction extends ConnectorCallbackTransaction, TAc
 ): Promise<CallbackExecutionResult<TAcknowledgment>> {
   if (!auditPending) return result;
   if (!isPendingCallbackAudit(storedAudit)) {
-    return { ...result, operationalError: "callback_audit_pending" };
+    return withOperationalError(result, "callback_audit_pending");
   }
   try {
     await input.client.$transaction(async (transaction) => {
@@ -269,7 +281,7 @@ async function drainAudit<TTransaction extends ConnectorCallbackTransaction, TAc
     });
     return result;
   } catch {
-    return { ...result, operationalError: "callback_audit_pending" };
+    return withOperationalError(result, "callback_audit_pending");
   }
 }
 
@@ -335,6 +347,7 @@ export async function executeCallbackTransaction<
           domainEntityId: domain.domainEntityId,
           acknowledgment: domain.acknowledgment,
           replayed: false,
+          operationalErrors: [],
         },
         dispatchPending: domain.dispatchPending,
         auditPending: true,

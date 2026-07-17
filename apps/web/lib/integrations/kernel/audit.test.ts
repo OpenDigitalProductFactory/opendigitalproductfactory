@@ -108,7 +108,6 @@ function callbackHarness() {
     },
     integrationToolCallLog: { create: async ({ data }: any) => { state.audits.push(data); return data; } },
   };
-  let transactionTail = Promise.resolve();
   const client = {
     integrationCallbackReceipt: tx.integrationCallbackReceipt,
     $transaction: async <T>(operation: (transaction: typeof tx) => Promise<T>) => {
@@ -116,17 +115,7 @@ function callbackHarness() {
       try { return await operation(tx); } catch (error) { restore(saved); throw error; }
     },
   };
-  const serializedClient = {
-    ...client,
-    $transaction: async <T>(operation: (transaction: typeof tx) => Promise<T>) => {
-      const previous = transactionTail;
-      let release!: () => void;
-      transactionTail = new Promise<void>((resolve) => { release = resolve; });
-      await previous;
-      try { return await client.$transaction(operation); } finally { release(); }
-    },
-  };
-  return { state, tx, client, serializedClient };
+  return { state, tx, client };
 }
 
 describe("callback idempotency", () => {
@@ -159,7 +148,7 @@ describe("callback idempotency", () => {
         domainEntityId: "inbound-2", responseCode: 200, acknowledgment: { ok: true }, dispatchPending: false,
       }; },
     });
-    expect(result).toMatchObject({ acknowledgment: { ok: true }, operationalError: "callback_audit_pending" });
+    expect(result).toMatchObject({ acknowledgment: { ok: true }, operationalErrors: ["callback_audit_pending"] });
     expect(harness.state.domains).toEqual(["inbound-2"]);
     expect(harness.state.receipts.size).toBe(1);
     expect([...harness.state.receipts.values()][0]).toMatchObject({ status: "completed", auditPending: true });
@@ -183,7 +172,7 @@ describe("callback idempotency", () => {
         acknowledgment: { ok: true }, dispatchPending: true }),
     };
     const first = await executeCallbackTransaction(base);
-    expect(first.operationalError).toBe("callback_dispatch_failed");
+    expect(first.operationalErrors).toEqual(["callback_dispatch_failed"]);
     expect([...harness.state.receipts.values()][0].dispatchPending).toBe(true);
     const replay = await executeCallbackTransaction(base);
     expect(replay.replayed).toBe(true);
@@ -224,30 +213,107 @@ describe("callback idempotency", () => {
     expect(result).toMatchObject({ replayed: true, domainEntityId: "inbound-5" });
   });
 
-  it("serializes genuinely overlapping callbacks to one domain entity, receipt, audit, and acknowledgment", async () => {
-    const harness = callbackHarness();
+  it("races two transactions after both observe an absent receipt and creates one result", async () => {
+    const receiptKey = "postmark-email:message-6";
+    const state = { receipt: null as Receipt | null, domains: [] as string[], audits: [] as unknown[] };
+    let claimArrivals = 0;
+    let releaseClaims!: () => void;
+    const claimsReached = new Promise<void>((resolve) => { releaseClaims = resolve; });
+    let winnerCommitted!: () => void;
+    const committed = new Promise<void>((resolve) => { winnerCommitted = resolve; });
+    let initialTransactions = 0;
+
+    const sharedDelegate = {
+      findUnique: async () => state.receipt,
+      create: async () => { throw new Error("unexpected create after claim race"); },
+      update: async ({ data }: any) => { state.receipt = { ...state.receipt!, ...data }; return state.receipt; },
+      updateMany: async ({ where, data }: any) => {
+        if (!state.receipt || state.receipt.auditPending !== where.auditPending) return { count: 0 };
+        state.receipt = { ...state.receipt, ...data }; return { count: 1 };
+      },
+    };
+    const auditDelegate = { create: async ({ data }: any) => { state.audits.push(data); return data; } };
+    const client = {
+      integrationCallbackReceipt: sharedDelegate,
+      $transaction: async <T>(operation: (transaction: any) => Promise<T>) => {
+        const transactionNumber = initialTransactions++;
+        if (transactionNumber >= 2) return operation({
+          integrationCallbackReceipt: sharedDelegate, integrationToolCallLog: auditDelegate,
+        });
+        let localReceipt: Receipt | null = null;
+        const tx = {
+          integrationCallbackReceipt: {
+            ...sharedDelegate,
+            findUnique: async () => null,
+            create: async ({ data }: any) => {
+              const claimNumber = claimArrivals++;
+              if (claimArrivals === 2) releaseClaims();
+              await claimsReached;
+              if (claimNumber === 1) {
+                await committed;
+                throw Object.assign(new Error("unique claim lost"), { code: "P2002" });
+              }
+              localReceipt = { ...data, responseCode: null, domainEntityId: null,
+                acknowledgment: null, dispatchPending: false, auditPending: false,
+                auditData: null, completedAt: null } as Receipt;
+              return localReceipt;
+            },
+            update: async ({ data }: any) => {
+              localReceipt = { ...localReceipt!, ...data }; return localReceipt;
+            },
+          },
+          integrationToolCallLog: auditDelegate,
+        };
+        try {
+          const result = await operation(tx);
+          if (localReceipt) state.receipt = localReceipt;
+          winnerCommitted();
+          return result;
+        } catch (error) {
+          throw error;
+        }
+      },
+    };
     let writes = 0;
-    let entered = 0;
     const input = {
-      client: harness.serializedClient, connectorId: "postmark-email", deliveryKey: "message-6",
+      client: client as any, connectorId: "postmark-email", deliveryKey: "message-6",
       redactedRequest: { kind: "inbound" },
       performDomainWrite: async () => {
-        entered += 1;
-        await Promise.resolve();
-        writes += 1;
-        harness.state.domains.push("inbound-6");
+        writes += 1; state.domains.push("inbound-6");
         return { domainEntityId: "inbound-6", responseCode: 200,
           acknowledgment: { ok: true, inboundId: "inbound-6" }, dispatchPending: false };
       },
     };
-    const pending = [executeCallbackTransaction(input), executeCallbackTransaction(input)];
-    expect(pending).toHaveLength(2);
-    const [left, right] = await Promise.all(pending);
-    expect(entered).toBe(1);
+    const [left, right] = await Promise.all([
+      executeCallbackTransaction(input), executeCallbackTransaction(input),
+    ]);
+    expect(claimArrivals).toBe(2);
     expect(writes).toBe(1);
-    expect(harness.state.domains).toEqual(["inbound-6"]);
-    expect(harness.state.receipts.size).toBe(1);
-    expect(harness.state.audits).toHaveLength(1);
+    expect(state.domains).toEqual(["inbound-6"]);
+    expect(state.receipt).toMatchObject({ connectorId: "postmark-email", deliveryKey: "message-6", status: "completed" });
+    expect(`${state.receipt!.connectorId}:${state.receipt!.deliveryKey}`).toBe(receiptKey);
+    expect(state.audits).toHaveLength(1);
     expect(left.acknowledgment).toEqual(right.acknowledgment);
+  });
+
+  it("reports audit and dispatch failures together and replay drains each independently", async () => {
+    const harness = callbackHarness();
+    harness.tx.integrationToolCallLog.create = async () => { throw new Error("audit down"); };
+    let dispatchAttempts = 0;
+    const responder = async () => { dispatchAttempts += 1; throw new Error("dispatch down"); };
+    const base = {
+      client: harness.client, connectorId: "postmark-email", deliveryKey: "message-7",
+      redactedRequest: {}, responder,
+      performDomainWrite: async () => ({ domainEntityId: "inbound-7", responseCode: 200,
+        acknowledgment: { ok: true }, dispatchPending: true }),
+    };
+    const first = await executeCallbackTransaction(base);
+    expect(new Set(first.operationalErrors)).toEqual(new Set(["callback_audit_pending", "callback_dispatch_failed"]));
+    harness.tx.integrationToolCallLog.create = async ({ data }: any) => { harness.state.audits.push(data); return data; };
+    const second = await executeCallbackTransaction(base);
+    expect(second.operationalErrors).toEqual(["callback_dispatch_failed"]);
+    expect(harness.state.audits).toHaveLength(1);
+    expect([...harness.state.receipts.values()][0]).toMatchObject({ auditPending: false, dispatchPending: true });
+    expect(dispatchAttempts).toBe(2);
   });
 });
