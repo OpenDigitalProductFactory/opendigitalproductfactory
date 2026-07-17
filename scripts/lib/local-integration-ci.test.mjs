@@ -137,6 +137,22 @@ describe("createLocalIntegrationPlan", () => {
       "exec next build",
     ));
   });
+
+  it("gives Windows web typecheck the same V8 heap headroom as host-next", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "fix/windows-typecheck-heap",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "win32",
+    });
+
+    assert.ok(plan.commands.map((command) => command.join(" ")).includes(
+      "node scripts/run-with-node-options.mjs --max-old-space-size=8192 -- pnpm --filter web typecheck",
+    ));
+    assert.ok(!plan.commands.map((command) => command.join(" ")).includes(
+      "pnpm --filter web typecheck",
+    ));
+  });
 });
 
 describe("createLocalIntegrationPlan migrate-deploy opt-in (BI-157DC9B2)", () => {

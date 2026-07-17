@@ -25,7 +25,8 @@ export function dockerBuildTag(candidateBranch) {
 // product build, so it poisons gate evidence exactly like sandbox staleness
 // did (and the freshness gate correctly stays green, so nothing else catches
 // it). Verified 2026-07-05: default heap SIGABRT; 8 GiB completes cleanly.
-export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=8192";
+export const BUILD_NODE_MAX_OLD_SPACE_SIZE = "--max-old-space-size=8192";
+export const HOST_BUILD_NODE_OPTIONS = `NODE_OPTIONS=${BUILD_NODE_MAX_OLD_SPACE_SIZE}`;
 
 function stableJson(value) {
   if (value === undefined) return "null";
@@ -117,12 +118,11 @@ export function createLocalIntegrationPlan(input) {
       : []),
     ["pnpm", "--filter", "web", "exec", "vitest", "run"],
     // typecheck needs the same heap headroom as the host-next build: with the
-    // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
-    // exactly like the build worker did (BI-B5011ACE) — observed live on the
-    // first BI-157DC9B2 gate run, 2026-07-06. Windows keeps the plain form
-    // (`env` is POSIX; win32 routes the build through docker anyway).
+    // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134).
+    // Windows uses a tiny Node wrapper instead of POSIX `env` so the existing
+    // `pnpm --filter web typecheck` script still runs with NODE_OPTIONS set.
     buildStrategy === "docker-build"
-      ? ["pnpm", "--filter", "web", "typecheck"]
+      ? ["node", "scripts/run-with-node-options.mjs", BUILD_NODE_MAX_OLD_SPACE_SIZE, "--", "pnpm", "--filter", "web", "typecheck"]
       : ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "typecheck"],
     productionBuildCommand,
   ];
