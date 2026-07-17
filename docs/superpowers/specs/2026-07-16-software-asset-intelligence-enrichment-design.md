@@ -87,12 +87,13 @@ Writes results onto `InventoryEntity` / `DigitalProduct` (§4.3), with lineage i
 
 Support-lifecycle signal (`supportStatus`, `updatePosture`, `latestKnownVersion`, `supportEndsAt`) rendered on `/ops/patches` tiles and on the estate + `DigitalProduct` detail pages. EOL/patch findings write into the existing `AssuranceFinding` ledger (`findingKind`: `unsupported-component` = EOL, `missing-patch`) — **no parallel finding table** (respect the EP-ASSURANCE-LEDGER one-substrate rule).
 
-### 4.6 Coworker & skills — extend, don't add a role
+### 4.6 Coworker & skills — extend, don't add a role — **LANDED**
 
-No new AI coworker role is required. The **Digital Product Estate Specialist** (`AGT-WS-INVENTORY`, `estate-specialist` / `inventory-specialist` prompts) already owns the daily Discovery Taxonomy Gap Triage, support posture, and dependency mapping — enrichment is a direct extension of its existing remit. What it needs added:
+No new AI coworker role is required. The **Digital Product Estate Specialist** (`AGT-WS-INVENTORY`, `estate-specialist` / `inventory-specialist` prompts) already owns the daily Discovery Taxonomy Gap Triage, support posture, and dependency mapping — enrichment is a direct extension of its existing remit. What was added (BI-1D25BC3C):
 
-- **Tool grants** on `packages/db/data/agent_registry.json`: `enrich_digital_product`, `request_re_enrichment`, and `contribute_to_hive` (today it has only `portfolio_read`, `registry_read/write`, `backlog_read/write`, `agent_control_read`).
-- **New coworker skills** (2026-04-18 §9.3): `improve-fingerprint-rule` (propose/refine a `FingerprintRule` from a resolution-log entry) and `show-identity-resolution` (show the full `IdentityResolutionLog` lineage for an item). These are named coworker skills, not a new persona.
+- **MCP tools** in the discovery-inventory pack: `enrich_digital_product` (run CPE + endoflife enrichment now for one product's identities and stamp `enrichmentStatus`) and `request_re_enrichment` (flag a product/entity so the next catalog sweep re-resolves it). Backing logic: `packages/db/src/enrich-digital-product.ts` (`enrichCatalogIdentity` / `enrichDigitalProduct` / `requestReEnrichment`).
+- **Tool grants** on `packages/db/data/agent_registry.json`: a dedicated finer grant **`enrichment_write`** (Pseudo-User Contract direction — scoped + auditable, not folded into the broad `registry_write`) gates the two enrich tools and is held by the estate-specialist. `contribute_to_hive` is already authorized for it via its existing `backlog_write` grant.
+- **New coworker skills** (2026-04-18 §9.3): `skills/inventory/improve-fingerprint-rule.skill.md` (propose/refine a `DiscoveryFingerprintRule` from a resolution-log miss) and `skills/inventory/show-identity-resolution.skill.md` (show the full `IdentityResolutionLog` lineage for an item), both `assignTo: inventory-specialist`.
 - **Reuse the existing sharing agent/loop:** the hive-scout agent + `contribute_to_hive` + `run_hive_scout_ingest` + the built device-fingerprint contribution path (`packages/db/src/device-fingerprint-contribution.ts` — `buildFingerprintContribution`/`decideInboundActivation`) already carry the outbound/inbound "hive-mind" loop. Enrichment plugs into it rather than inventing a second one.
 
 ### 4.7 Cross-customer sharing — public vs proprietary (reuse the egress boundary)
@@ -136,7 +137,7 @@ This is the kernel/org-overlay pattern again: component catalog entries are kern
 - SBOM → CatalogIdentity enrichment bridge (component=public, occurrence=private) — **BI-19FD07F9** — bridge **landed** in `packages/db/src/sbom-catalog-bridge.ts` (`parsePurl` + `bomComponentToCatalogIdentity` + `upsertIdentitiesForComponents`: BomComponent PURL → canonical CatalogIdentity, `source='sbom'`; the private `BomComponentOccurrence` graph is untouched). Linking `BomComponent.catalogIdentityId` (needs a migration) is the follow-up.
 
 **Enablement (coworker + sharing):**
-- Estate-specialist enrichment skills + hive-contribution grants + public/proprietary egress classification — **BI-1D25BC3C**
+- Estate-specialist enrichment skills + hive-contribution grants + public/proprietary egress classification — **BI-1D25BC3C** — **LANDED (tools + grants + skills):** `enrich_digital_product` / `request_re_enrichment` MCP tools (backed by `packages/db/src/enrich-digital-product.ts`), a dedicated `enrichment_write` grant on the estate-specialist (`contribute_to_hive` already via `backlog_write`), and the `improve-fingerprint-rule` / `show-identity-resolution` coworker skills. See §4.6.
 
 **Phase C — SAM (roadmap):**
 - License entitlement & compliance (ELP, contracts, true-up) — **BI-E454034B**

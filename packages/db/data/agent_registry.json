@@ -3218,6 +3218,7 @@
           "agent_control_read",
           "backlog_read",
           "backlog_write",
+          "enrichment_write",
           "file_read",
           "portfolio_read",
           "registry_read",
