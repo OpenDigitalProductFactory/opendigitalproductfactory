@@ -535,7 +535,9 @@
       "ports": [
         "9187:9187"
       ],
-      "volumes": [],
+      "volumes": [
+        "./monitoring/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro"
+      ],
       "dependsOn": [
         "postgres"
       ],
@@ -674,19 +676,6 @@
   ],
   "externalRuntimes": [
     {
-      "runtimeKey": "advanced-code-analysis",
-      "kind": "ai-runtime",
-      "activation": "provider-configuration",
-      "canonicalDataOwner": "postgres",
-      "healthSemantics": "provider-health-reconciliation",
-      "hostPlatforms": [
-        "windows",
-        "macos",
-        "linux"
-      ],
-      "boundaryReason": "External inference boundary."
-    },
-    {
       "runtimeKey": "anthropic",
       "kind": "ai-runtime",
       "activation": "provider-configuration",
@@ -778,33 +767,7 @@
       "boundaryReason": "External inference boundary."
     },
     {
-      "runtimeKey": "data-enrichment",
-      "kind": "ai-runtime",
-      "activation": "provider-configuration",
-      "canonicalDataOwner": "postgres",
-      "healthSemantics": "provider-health-reconciliation",
-      "hostPlatforms": [
-        "windows",
-        "macos",
-        "linux"
-      ],
-      "boundaryReason": "External inference boundary."
-    },
-    {
       "runtimeKey": "deepseek",
-      "kind": "ai-runtime",
-      "activation": "provider-configuration",
-      "canonicalDataOwner": "postgres",
-      "healthSemantics": "provider-health-reconciliation",
-      "hostPlatforms": [
-        "windows",
-        "macos",
-        "linux"
-      ],
-      "boundaryReason": "External inference boundary."
-    },
-    {
-      "runtimeKey": "document-parser",
       "kind": "ai-runtime",
       "activation": "provider-configuration",
       "canonicalDataOwner": "postgres",
