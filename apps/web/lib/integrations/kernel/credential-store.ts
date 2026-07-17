@@ -11,6 +11,7 @@ import {
   type ConnectorSafeValue,
   type ConnectorSetupState,
 } from "./setup-state";
+import { collectSensitiveText, redactConnectorText } from "./redaction";
 
 export type ConnectorCredentialValue = ConnectorSafeValue;
 export type ConnectorReconnectFields = { [key: string]: ConnectorCredentialValue };
@@ -153,32 +154,8 @@ function sanitizeErrorMessage(message: string): string {
   return (sanitized || "Connector connection failed.").slice(0, 500);
 }
 
-function collectSensitiveStrings(value: ConnectorCredentialValue, collected: Set<string>): void {
-  if (typeof value === "string") {
-    if (value.length >= 4) collected.add(value);
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectSensitiveStrings(item, collected));
-    return;
-  }
-  if (value !== null && typeof value === "object") {
-    Object.values(value).forEach((item) => collectSensitiveStrings(item, collected));
-  }
-}
-
-function redactString(value: string, sensitive: ReadonlySet<string>): string {
-  let redacted = value;
-  for (const secret of sensitive) redacted = redacted.split(secret).join("[REDACTED]");
-  redacted = redacted
-    .replace(/(authorization\s*:\s*(?:bearer|basic)\s+)\S+/gi, "$1[REDACTED]")
-    .replace(/([?&](?:access_token|token|api_key|apikey|password|secret)=)[^&#]*/gi, "$1[REDACTED]")
-    .replace(/(https?:\/\/)[^/@\s]+@/gi, "$1[REDACTED]@");
-  return redacted;
-}
-
 function redactSafeValue(value: ConnectorSafeValue, sensitive: ReadonlySet<string>): ConnectorSafeValue {
-  if (typeof value === "string") return redactString(value, sensitive);
+  if (typeof value === "string") return redactConnectorText(value, sensitive);
   if (Array.isArray(value)) return value.map((item) => redactSafeValue(item, sensitive));
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
@@ -194,8 +171,8 @@ function redactSafeProjection(
   tokenEnvelope: ConnectorTokenEnvelope = {},
 ): ConnectorSafeProjection {
   const sensitive = new Set<string>();
-  collectSensitiveStrings(secretFields, sensitive);
-  collectSensitiveStrings(tokenEnvelope, sensitive);
+  collectSensitiveText(secretFields, sensitive);
+  collectSensitiveText(tokenEnvelope, sensitive);
   return redactSafeValue(projection, sensitive) as ConnectorSafeProjection;
 }
 
@@ -331,9 +308,9 @@ export function createConnectorCredentialStore<TTransactionContext = ConnectorCr
       async recordFailedConnect(input: FailedConnectorCredential): Promise<void> {
         const failedAt = currentTime();
         const sensitive = new Set<string>();
-        collectSensitiveStrings(input.secretFields, sensitive);
-        collectSensitiveStrings(input.tokenEnvelope, sensitive);
-        const lastErrorMsg = sanitizeErrorMessage(redactString(input.error.safeMessage, sensitive));
+        collectSensitiveText(input.secretFields, sensitive);
+        collectSensitiveText(input.tokenEnvelope, sensitive);
+        const lastErrorMsg = sanitizeErrorMessage(redactConnectorText(input.error.safeMessage, sensitive));
         const existing = await transaction.findUnique({ integrationId: input.integrationId });
         if (existing?.status === "connected") {
           await transaction.update({

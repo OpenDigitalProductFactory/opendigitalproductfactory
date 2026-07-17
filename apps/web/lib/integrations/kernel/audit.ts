@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
 
+import type { ConnectorErrorKind } from "./error";
+import { redactConnectorText } from "./redaction";
+
 export const CONNECTOR_AUDIT_OPERATIONS = [
   "connect", "disconnect", "health", "refresh", "sync", "callback",
 ] as const;
@@ -36,8 +39,11 @@ export interface ConnectorAuditInput {
   responseKind: string;
   resultCount?: number | null;
   durationMs: number;
-  errorCode?: string | null;
-  errorMessage?: string | null;
+  error?: {
+    kind: ConnectorErrorKind;
+    safeMessage: string;
+    sensitiveValues?: readonly string[];
+  } | null;
 }
 
 function canonicalize(value: unknown): unknown {
@@ -72,8 +78,10 @@ function auditData(input: ConnectorAuditInput, calledAt: Date): ConnectorAuditCr
     responseKind: input.responseKind,
     resultCount: input.resultCount ?? null,
     durationMs: input.durationMs,
-    errorCode: input.errorCode ?? null,
-    errorMessage: input.errorMessage ?? null,
+    errorCode: input.error?.kind ?? null,
+    errorMessage: input.error
+      ? redactConnectorText(input.error.safeMessage, input.error.sensitiveValues)
+      : null,
   };
 }
 
@@ -109,6 +117,8 @@ export interface CallbackReceiptRow {
   domainEntityId: string | null;
   acknowledgment: unknown;
   dispatchPending: boolean;
+  auditPending: boolean;
+  auditData: unknown;
   completedAt: Date | null;
 }
 
@@ -122,6 +132,10 @@ interface CallbackReceiptDelegate {
     where: { connectorId_deliveryKey: { connectorId: string; deliveryKey: string } };
     data: Partial<CallbackReceiptRow>;
   }): Promise<CallbackReceiptRow>;
+  updateMany(args: {
+    where: { connectorId: string; deliveryKey: string; auditPending: true };
+    data: { auditPending: false; auditData: null };
+  }): Promise<{ count: number }>;
 }
 
 export interface ConnectorCallbackTransaction {
@@ -156,7 +170,7 @@ export interface CallbackExecutionResult<TAcknowledgment> {
   domainEntityId: string;
   acknowledgment: TAcknowledgment;
   replayed: boolean;
-  operationalError?: "callback_dispatch_failed";
+  operationalError?: "callback_dispatch_failed" | "callback_audit_pending";
 }
 
 const callbackKey = (connectorId: string, deliveryKey: string) => ({
@@ -214,13 +228,63 @@ async function drainDispatch<TTransaction extends ConnectorCallbackTransaction, 
   }
 }
 
+type PendingCallbackAudit = Omit<ConnectorAuditCreateData, "calledAt"> & { calledAt: string };
+
+function pendingAuditData(input: ConnectorAuditInput, calledAt: Date): PendingCallbackAudit {
+  const data = auditData(input, calledAt);
+  return { ...data, calledAt: data.calledAt.toISOString() };
+}
+
+function isPendingCallbackAudit(value: unknown): value is PendingCallbackAudit {
+  if (value === null || typeof value !== "object") return false;
+  const candidate = value as Partial<PendingCallbackAudit>;
+  return typeof candidate.calledAt === "string" && candidate.toolName === "callback" &&
+    typeof candidate.integration === "string" && typeof candidate.argsHash === "string";
+}
+
+async function drainAudit<TTransaction extends ConnectorCallbackTransaction, TAcknowledgment>(
+  input: ExecuteCallbackInput<TTransaction, TAcknowledgment>,
+  result: CallbackExecutionResult<TAcknowledgment>,
+  auditPending: boolean,
+  storedAudit: unknown,
+): Promise<CallbackExecutionResult<TAcknowledgment>> {
+  if (!auditPending) return result;
+  if (!isPendingCallbackAudit(storedAudit)) {
+    return { ...result, operationalError: "callback_audit_pending" };
+  }
+  try {
+    await input.client.$transaction(async (transaction) => {
+      const claimed = await transaction.integrationCallbackReceipt.updateMany({
+        where: {
+          connectorId: input.connectorId,
+          deliveryKey: input.deliveryKey,
+          auditPending: true,
+        },
+        data: { auditPending: false, auditData: null },
+      });
+      if (claimed.count === 0) return;
+      await transaction.integrationToolCallLog.create({
+        data: { ...storedAudit, calledAt: new Date(storedAudit.calledAt) },
+      });
+    });
+    return result;
+  } catch {
+    return { ...result, operationalError: "callback_audit_pending" };
+  }
+}
+
 export async function executeCallbackTransaction<
   TTransaction extends ConnectorCallbackTransaction,
   TAcknowledgment,
 >(input: ExecuteCallbackInput<TTransaction, TAcknowledgment>): Promise<CallbackExecutionResult<TAcknowledgment>> {
   const calledAt = input.now?.() ?? new Date();
   const requestHash = canonicalRedactedHash(input.redactedRequest);
-  let persisted: { result: CallbackExecutionResult<TAcknowledgment>; dispatchPending: boolean };
+  let persisted: {
+    result: CallbackExecutionResult<TAcknowledgment>;
+    dispatchPending: boolean;
+    auditPending: boolean;
+    auditData: unknown;
+  };
 
   try {
     persisted = await input.client.$transaction(async (transaction) => {
@@ -229,6 +293,8 @@ export async function executeCallbackTransaction<
       if (existing) return {
         result: completedResult<TAcknowledgment>(existing, true, requestHash),
         dispatchPending: existing.dispatchPending,
+        auditPending: existing.auditPending,
+        auditData: existing.auditData,
       };
 
       await transaction.integrationCallbackReceipt.create({
@@ -240,15 +306,16 @@ export async function executeCallbackTransaction<
         },
       });
       const domain = await input.performDomainWrite(transaction);
-      await transaction.integrationToolCallLog.create({ data: auditData({
+      const completedAt = input.now?.() ?? new Date();
+      const callbackAudit = pendingAuditData({
         connectorId: input.connectorId,
         actor: { coworkerId: "external-webhook", userId: null },
         operation: "callback",
         redactedInput: input.redactedRequest,
         responseKind: "success",
         resultCount: 1,
-        durationMs: Math.max(0, Date.now() - calledAt.getTime()),
-      }, calledAt) });
+        durationMs: Math.max(0, completedAt.getTime() - calledAt.getTime()),
+      }, calledAt);
       await transaction.integrationCallbackReceipt.update({
         where,
         data: {
@@ -257,7 +324,9 @@ export async function executeCallbackTransaction<
           domainEntityId: domain.domainEntityId,
           acknowledgment: domain.acknowledgment,
           dispatchPending: domain.dispatchPending,
-          completedAt: input.now?.() ?? new Date(),
+          auditPending: true,
+          auditData: callbackAudit,
+          completedAt,
         },
       });
       return {
@@ -268,6 +337,8 @@ export async function executeCallbackTransaction<
           replayed: false,
         },
         dispatchPending: domain.dispatchPending,
+        auditPending: true,
+        auditData: callbackAudit,
       };
     });
   } catch (error) {
@@ -279,8 +350,16 @@ export async function executeCallbackTransaction<
     persisted = {
       result: completedResult<TAcknowledgment>(existing, true, requestHash),
       dispatchPending: existing.dispatchPending,
+      auditPending: existing.auditPending,
+      auditData: existing.auditData,
     };
   }
 
-  return drainDispatch(input, persisted.result, persisted.dispatchPending);
+  const afterAudit = await drainAudit(
+    input,
+    persisted.result,
+    persisted.auditPending,
+    persisted.auditData,
+  );
+  return drainDispatch(input, afterAudit, persisted.dispatchPending);
 }

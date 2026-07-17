@@ -1909,12 +1909,14 @@ model IntegrationCallbackReceipt {
   domainEntityId   String?
   acknowledgment   Json?
   dispatchPending  Boolean   @default(false)
+  auditPending     Boolean   @default(false)
+  auditData        Json?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   completedAt      DateTime?
 
   @@unique([connectorId, deliveryKey])
-  @@index([status, dispatchPending, updatedAt])
+  @@index([status, dispatchPending, auditPending, updatedAt], map: "IntegrationCallbackReceipt_pending_idx")
   @@index([connectorId, createdAt])
 }
 
