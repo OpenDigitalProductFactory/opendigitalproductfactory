@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 559,
+  "routeCount": 563,
   "routes": [
     {
       "routePath": "/",
@@ -2770,6 +2770,76 @@
         "grantId"
       ],
       "file": "apps/web/app/api/v1/healthcare/intake/[packetId]/access-grants/[grantId]/revoke/route.ts"
+    },
+    {
+      "routePath": "/api/v1/healthcare/intake/[packetId]/consent-attestations",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "healthcare",
+        "intake",
+        "[packetId]",
+        "consent-attestations"
+      ],
+      "dynamicParams": [
+        "packetId"
+      ],
+      "file": "apps/web/app/api/v1/healthcare/intake/[packetId]/consent-attestations/route.ts"
+    },
+    {
+      "routePath": "/api/v1/healthcare/intake/[packetId]/consent-attestations/[attestationId]/decision",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "healthcare",
+        "intake",
+        "[packetId]",
+        "consent-attestations",
+        "[attestationId]",
+        "decision"
+      ],
+      "dynamicParams": [
+        "packetId",
+        "attestationId"
+      ],
+      "file": "apps/web/app/api/v1/healthcare/intake/[packetId]/consent-attestations/[attestationId]/decision/route.ts"
+    },
+    {
+      "routePath": "/api/v1/healthcare/intake/[packetId]/coverage-evidence",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "healthcare",
+        "intake",
+        "[packetId]",
+        "coverage-evidence"
+      ],
+      "dynamicParams": [
+        "packetId"
+      ],
+      "file": "apps/web/app/api/v1/healthcare/intake/[packetId]/coverage-evidence/route.ts"
+    },
+    {
+      "routePath": "/api/v1/healthcare/intake/[packetId]/coverage-evidence/[evidenceId]/decision",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "healthcare",
+        "intake",
+        "[packetId]",
+        "coverage-evidence",
+        "[evidenceId]",
+        "decision"
+      ],
+      "dynamicParams": [
+        "packetId",
+        "evidenceId"
+      ],
+      "file": "apps/web/app/api/v1/healthcare/intake/[packetId]/coverage-evidence/[evidenceId]/decision/route.ts"
     },
     {
       "routePath": "/api/v1/healthcare/intake/[packetId]/responses/[formId]",

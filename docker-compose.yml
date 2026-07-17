@@ -179,6 +179,11 @@ services:
       DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
+      # Portal-side live-readiness checks run inside the container, where
+      # process.cwd() is /app and not the host Git clone. Point git ancestry
+      # helpers at the mounted host source so verify_live_install_readiness can
+      # decide CAN-TEST vs MUST-ADVANCE without depending on github.com.
+      DPF_REPO_ROOT: /host-dpf
       # Forwarded so scripts/backup-neo4j.sh + scripts/restore-neo4j.sh can
       # translate the portal's /backups view to the host path that the
       # docker-in-docker dump container needs as its bind mount source.
@@ -825,7 +830,7 @@ services:
   # No profile gate — voice ships working on `docker compose up`.
   dpf-stt:
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-07-11 (the prior 44d7690a… digest was deleted from the
+    # resolved on 2026-07-17 (the prior 3ee18f84… digest was deleted from the
     # registry — Release Image Manifest Guard caught it again). The registry
     # owner re-pushes :latest periodically and prunes the previous index, so
     # this digest must be re-resolved every time the guard fails. Bump
@@ -835,7 +840,7 @@ services:
     # the sidecar won't start, set DPF_STT_IMAGE in .env to a reachable ref
     # (e.g. hwdsl2/whisper-server:latest) then `docker compose up -d dpf-stt`,
     # and open a PR re-resolving the digest here (this is that PR's pattern).
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:3ee18f84149389e886829e31ea4bec40b1919682d8fff7f2f0d447a278f196a6}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:120e4b7835898715d97b16e54e991e5226535fdfad506863a3b9cd4dd6d6377f}
     restart: unless-stopped
     logging: *default-logging
     environment:

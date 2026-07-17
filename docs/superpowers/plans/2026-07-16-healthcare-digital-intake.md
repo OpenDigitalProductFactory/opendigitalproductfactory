@@ -110,6 +110,22 @@ review or revocation writes canonical `AuthorizationDecisionLog` evidence.
 This implements workforce role-based minimum-necessary access and audit-control
 expectations without weakening the patient bearer-token policies.
 
+Reviewed evidence remains deliberately subordinate to its canonical domains.
+Employee routes require `operate_customer` to stage or decide evidence, bind
+every transaction to the organization, authenticated principal, exact packet
+patient, and `intake-review` purpose, and write an `AuthorizationDecisionLog`
+for staging and each accept/reject decision. Idempotency keys derive stable
+server evidence IDs; retries must match the original object references and
+SHA-256 digests or fail as conflicts. Responses disclose evidence IDs and
+review status, never governed object references or signature payloads.
+Acceptance marks intake evidence ready for downstream BI-HEALTHCARE-030 or the
+existing `PatientConsentDirective`; it does not create canonical coverage or
+change the consent directive itself. Decision DI-49F59890F88A selected
+database payload-immutability triggers over repository-only convention or a
+new fully append-only decision schema (high confidence, margin 1.006). The
+triggers retain both evidence types, freeze identity/linkage/provenance/digest
+fields, and leave only the modeled human review fields mutable.
+
 Rollback for 2A is route and repository removal; it adds no schema migration.
 Existing Phase 1 tables remain forward-compatible and contain no raw resume
 tokens.

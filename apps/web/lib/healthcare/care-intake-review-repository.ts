@@ -1,10 +1,13 @@
-import { randomUUID } from "node:crypto";
-
 import { prisma } from "@dpf/db";
 import {
   calculateIntakeReadiness,
   type CareIntakeRequirement,
 } from "@dpf/db/healthcare-care-intake";
+
+import {
+  recordCareIntakeStaffDecision,
+  setCareIntakeStaffContext,
+} from "./care-intake-staff-context";
 
 type ReviewPacketRow = {
   id: string;
@@ -51,41 +54,6 @@ function requirements(value: unknown): CareIntakeRequirement[] {
   return value as CareIntakeRequirement[];
 }
 
-async function setStaffReviewContext(
-  tx: Transaction,
-  input: { organizationId: string; actorPrincipalId: string },
-) {
-  await tx.$executeRaw`SELECT set_config('app.organization_id', ${input.organizationId}, true), set_config('app.care_intake_staff_principal_id', ${input.actorPrincipalId}, true), set_config('app.care_intake_access_purpose', 'intake-review', true)`;
-}
-
-async function recordAccessDecision(
-  tx: Transaction,
-  input: {
-    organizationId: string;
-    actorPrincipalId: string;
-    actionKey: string;
-    objectRef: string;
-    rationale: Record<string, unknown>;
-  },
-) {
-  await tx.authorizationDecisionLog.create({
-    data: {
-      decisionId: `intake-staff-decision-${randomUUID()}`,
-      actorType: "user",
-      actorRef: input.actorPrincipalId,
-      organizationId: input.organizationId,
-      purposeOfUse: "intake-review",
-      policyVersion: "healthcare-intake-staff-review/v1",
-      actionKey: input.actionKey,
-      objectRef: input.objectRef,
-      decision: "allow",
-      rationale: input.rationale,
-      routeContext: "/api/v1/healthcare/intake/review",
-      sensitivityLevel: "restricted",
-    },
-  });
-}
-
 export async function listCareIntakeReviewQueue(
   input: {
     organizationId: string;
@@ -97,7 +65,7 @@ export async function listCareIntakeReviewQueue(
 ) {
   const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
   return database.$transaction(async (tx) => {
-    await setStaffReviewContext(tx, input);
+    await setCareIntakeStaffContext(tx, input);
     const packets = await tx.careIntakePacket.findMany({
       where: {
         organizationId: input.organizationId,
@@ -151,11 +119,12 @@ export async function listCareIntakeReviewQueue(
         accessGrants: packet.accessGrants,
       };
     });
-    await recordAccessDecision(tx, {
+    await recordCareIntakeStaffDecision(tx, {
       organizationId: input.organizationId,
       actorPrincipalId: input.actorPrincipalId,
       actionKey: "healthcare.intake.review",
       objectRef: `care-intake-review:${input.organizationId}`,
+      routeContext: "/api/v1/healthcare/intake/review",
       rationale: { resultCount: items.length, payloadProjection: "readiness-no-answers" },
     });
     return { items };
@@ -174,7 +143,7 @@ export async function revokeCareIntakeAccessGrant(
 ) {
   if (!input.reason.trim() || input.reason.length > 500) throw new Error("Invalid revocation reason");
   return database.$transaction(async (tx) => {
-    await setStaffReviewContext(tx, input);
+    await setCareIntakeStaffContext(tx, input);
     const packet = await tx.careIntakePacket.findFirst({
       where: { packetId: input.packetId, organizationId: input.organizationId },
       select: { id: true, packetId: true, patientProfileId: true },
@@ -191,11 +160,12 @@ export async function revokeCareIntakeAccessGrant(
       data: { revokedAt, revocationReason: input.reason.trim() },
     });
     if (updated.count !== 1) throw new Error("stale-intake-grant");
-    await recordAccessDecision(tx, {
+    await recordCareIntakeStaffDecision(tx, {
       organizationId: input.organizationId,
       actorPrincipalId: input.actorPrincipalId,
       actionKey: "healthcare.intake.grant.revoke",
       objectRef: `care-intake-grant:${input.grantId}`,
+      routeContext: "/api/v1/healthcare/intake/:packetId/access-grants/:grantId/revoke",
       rationale: { packetId: input.packetId, reason: input.reason.trim() },
     });
     return { grantId: input.grantId, status: "revoked" as const, revokedAt };
