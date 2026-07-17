@@ -22,12 +22,16 @@
 //   node scripts/check-module-size.mjs            # check (CI)
 //   node scripts/check-module-size.mjs --update   # regenerate the baseline
 
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
+import {
+  MODULE_SIZE_HARD_CAP as HARD_CAP,
+  MODULE_SIZE_SOFT_CEILING as SOFT_CEILING,
+  scanModuleSizesSync,
+} from "./lib/module-size-scope.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SCAN_DIRS = ["apps", "packages", "scripts"].map((d) => join(REPO_ROOT, d));
 // Line-oriented `<path>\t<loc>` baseline, merged with git's built-in
 // `merge=union` driver (.gitattributes) so concurrent PRs that each re-baseline
 // never conflict (BI-3B0AD9CF). A union merge can leave duplicate paths; the
@@ -37,73 +41,7 @@ const BASELINE_PATH = join(REPO_ROOT, "scripts", "module-size-baseline.txt");
 
 // New files must stay under this; existing large files are carried in the
 // baseline and ratcheted down. Hard cap applies only to NEW files.
-const SOFT_CEILING = 800;
-const HARD_CAP = 1000;
-
-// Directories never worth scanning (build output, deps, snapshots).
-const SKIP_DIRS = new Set([
-  "node_modules",
-  ".next",
-  "dist",
-  "build",
-  ".turbo",
-  "coverage",
-  "__snapshots__",
-]);
-
-// Generated / seed / corpus files: data, not hand-edited modules. Their size is
-// a function of the dataset, not of code health, so they don't belong in a
-// module-size ratchet.
-const EXCLUDE_RE = [
-  /\.d\.ts$/,
-  /^packages\/db\/generated\//,
-  /^packages\/db\/src\/seed.*\.ts$/,
-  /^packages\/db\/src\/.*-corpus\.ts$/,
-  /^packages\/db\/scripts\/seed-.*\.ts$/,
-];
-
-function isExcluded(rel) {
-  return EXCLUDE_RE.some((re) => re.test(rel));
-}
-
-function listSourceFiles(dir) {
-  const out = [];
-  let entries;
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return out;
-  }
-  for (const entry of entries) {
-    if (SKIP_DIRS.has(entry)) continue;
-    const full = join(dir, entry);
-    let s;
-    try {
-      s = statSync(full);
-    } catch {
-      continue;
-    }
-    if (s.isDirectory()) out.push(...listSourceFiles(full));
-    else if (s.isFile() && /\.(ts|tsx)$/.test(entry)) out.push(full);
-  }
-  return out;
-}
-
-/** LOC per file (newline count, matching `wc -l` convention). */
-function scan() {
-  const sizes = {};
-  for (const dir of SCAN_DIRS) {
-    for (const file of listSourceFiles(dir)) {
-      const rel = relative(REPO_ROOT, file).replace(/\\/g, "/");
-      if (isExcluded(rel)) continue;
-      const loc = readFileSync(file, "utf8").split(/\r?\n/).length;
-      sizes[rel] = loc;
-    }
-  }
-  return sizes;
-}
-
-const sizes = scan();
+const sizes = scanModuleSizesSync({ repoRoot: REPO_ROOT });
 
 function serializeBaseline(baseline) {
   const lines = Object.keys(baseline)
