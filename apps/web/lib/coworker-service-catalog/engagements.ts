@@ -47,6 +47,7 @@ export type CreateCoworkerEngagementInput = {
     dataBoundaryRef?: string | null;
     [key: string]: unknown;
   } | null;
+  auditRefs?: unknown;
   metadata?: unknown;
 };
 
@@ -95,7 +96,7 @@ export async function createCoworkerEngagement(
       fundingContext: input.fundingContext ?? {},
       contractContext: input.contractContext ?? {},
       approvalContext,
-      auditRefs: {},
+      auditRefs: input.auditRefs ?? {},
       metadata: input.metadata ?? {},
       workCapsuleId: null,
     },

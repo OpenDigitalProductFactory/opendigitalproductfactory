@@ -4,6 +4,11 @@ import {
   createCoworkerEngagement,
   type CreateCoworkerEngagementInput,
 } from "./engagements";
+import {
+  createCoworkerDelegationReceipt,
+  type CoworkerDelegationReceipt,
+  type CoworkerDelegationReceiptAccessProfile,
+} from "./delegation-receipt";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -42,6 +47,7 @@ export type CoworkerA2aTask = {
     delegatingAgentGaid: string | null;
     delegatedAgentId: string;
     approvalContext: unknown;
+    delegationReceipt?: CoworkerDelegationReceipt;
   };
 };
 
@@ -51,9 +57,16 @@ export type CoworkerA2aTaskInput = {
   inputPayload?: unknown;
   fundingContext?: unknown;
   contractContext?: CreateCoworkerEngagementInput["contractContext"];
+  accessProfile?: CoworkerDelegationReceiptAccessProfile;
+  serviceId?: string | null;
   contextId?: string;
   actingAgentGaid?: string | null;
   delegatingAgentGaid?: string | null;
+  delegatedAgentId?: string | null;
+  delegatedAgentGaid?: string | null;
+  authorityBoundary?: string | null;
+  riskTier?: string | null;
+  requiredGrants?: string[];
   routingRationale?: {
     selectedOfferReason?: string;
     alternativesConsidered?: string[];
@@ -89,12 +102,47 @@ export async function createCoworkerA2aTask(
 ): Promise<CoworkerA2aTask> {
   const contextId = input.contextId ?? buildA2aContextId();
   const createEngagement = deps.createEngagement ?? createCoworkerEngagement;
+  const accessProfile = input.accessProfile ?? "internal-a2a";
+  const crossBoundary = accessProfile === "external-a2a" || accessProfile === "partner-a2a";
+  const actingAgentGaid = input.actingAgentGaid ?? null;
+  const delegatingAgentGaid = input.delegatingAgentGaid ?? null;
+  if (crossBoundary && (!actingAgentGaid || !delegatingAgentGaid)) {
+    throw new Error("Cross-boundary A2A tasks require actingAgentGaid and delegatingAgentGaid.");
+  }
+  if (crossBoundary && (!input.delegatedAgentId || !input.delegatedAgentGaid)) {
+    throw new Error("Cross-boundary A2A tasks require delegatedAgentId and delegatedAgentGaid.");
+  }
+
+  const delegationReceipt = actingAgentGaid && delegatingAgentGaid && input.delegatedAgentId && input.delegatedAgentGaid
+    ? createCoworkerDelegationReceipt({
+        protocol: "a2a",
+        accessProfile,
+        offerId: input.offerId,
+        serviceId: input.serviceId ?? "pending-service",
+        actingAgentGaid,
+        delegatingAgentGaid,
+        delegatedAgentId: input.delegatedAgentId,
+        delegatedAgentGaid: input.delegatedAgentGaid,
+        requestedOutcome: input.requestedOutcome,
+        authorityBoundary: input.authorityBoundary ?? "unknown",
+        riskTier: input.riskTier ?? "unknown",
+        requiredGrants: input.requiredGrants ?? [],
+        contractContext: input.contractContext ?? null,
+      })
+    : null;
   const metadata = {
     a2a: {
       contextId,
-      actingAgentGaid: input.actingAgentGaid ?? null,
-      delegatingAgentGaid: input.delegatingAgentGaid ?? null,
+      actingAgentGaid,
+      delegatingAgentGaid,
     },
+    callChain: {
+      actingAgentGaid,
+      delegatingAgentGaid,
+      delegatedAgentId: input.delegatedAgentId ?? null,
+      delegatedAgentGaid: input.delegatedAgentGaid ?? null,
+    },
+    ...(delegationReceipt ? { delegationReceipt } : {}),
     routingRationale: {
       selectedOfferReason: input.routingRationale?.selectedOfferReason ?? "A2A caller selected this coworker offer.",
       alternativesConsidered: input.routingRationale?.alternativesConsidered ?? [],
@@ -111,6 +159,12 @@ export async function createCoworkerA2aTask(
     fundingContext: input.fundingContext ?? {},
     contractContext: input.contractContext ?? null,
     metadata,
+    auditRefs: delegationReceipt
+      ? {
+          delegationReceiptId: delegationReceipt.receiptId,
+          delegationReceiptKind: delegationReceipt.receiptKind,
+        }
+      : {},
   });
 
   return mapCoworkerEngagementToA2aTask({
@@ -179,8 +233,16 @@ export function mapCoworkerEngagementToA2aTask(engagement: EngagementRow): Cowor
       delegatingAgentGaid: stringValue(a2a.delegatingAgentGaid),
       delegatedAgentId: engagement.providerAgentId,
       approvalContext: engagement.approvalContext,
+      delegationReceipt: parseDelegationReceipt(metadata.delegationReceipt),
     },
   };
+}
+
+function parseDelegationReceipt(value: unknown): CoworkerDelegationReceipt | undefined {
+  const receipt = record(value);
+  return receipt.receiptKind === "coworker-delegation"
+    ? (receipt as unknown as CoworkerDelegationReceipt)
+    : undefined;
 }
 
 function mapEngagementStatus(status: string): A2aTaskState {

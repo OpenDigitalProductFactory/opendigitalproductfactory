@@ -184,7 +184,7 @@ Different callers need different catalog projections:
 - Cross-organization A2A/API: sales, marketing, procurement, supplier-facing, and customer-facing coworkers require partner/external availability, GAID-federated or GAID-public identity, provider organization, authenticated card variants where needed, explicit terms, data boundary, audit, and revocation posture.
 - Back-office specialist boundaries: legal, finance, security, and HR specialists can be invoked by internal coordinators, but their offers should stay narrow, approval-aware, and hidden from external discovery unless an explicitly reviewed partner-facing offer exists.
 
-The first implementation slice delivers the human portal, MCP request surface, Build Studio requirements broker, a bounded Agent Card projection for selected coworker offers, GAID authority verification for cross-boundary Agent Cards, A2A-style task endpoints backed by `CoworkerEngagement`, and executable engagement-refinement analysis. Agent Cards are exposed at `/api/a2a/coworkers/[agentId]/offers/[offerId]`; external callers can submit a task with `POST` to that offer endpoint and read lifecycle state at `/api/a2a/tasks/[taskId]`. MCP callers can run `analyze_coworker_engagement_refinement` to find repeated engagement patterns and aggregate offer/playbook candidates without loading full raw history.
+The first implementation slice delivers the human portal, MCP request surface, Build Studio requirements broker, a bounded Agent Card projection for selected coworker offers, GAID authority verification for cross-boundary Agent Cards, A2A-style task endpoints backed by `CoworkerEngagement`, signed delegation receipts for A2A call chains, and executable engagement-refinement analysis. Agent Cards are exposed at `/api/a2a/coworkers/[agentId]/offers/[offerId]`; external callers can submit a task with `POST` to that offer endpoint and read lifecycle state at `/api/a2a/tasks/[taskId]`. Cross-boundary task submission requires acting and delegating GAIDs plus terms and data-boundary references before an engagement is created. MCP callers can run `analyze_coworker_engagement_refinement` to find repeated engagement patterns and aggregate offer/playbook candidates without loading full raw history.
 
 ## Build Studio Requirements Surface
 
@@ -300,6 +300,8 @@ Future A2A/GAID tools should not expand this first MCP list into a huge universa
 - Internal specialist offers, especially legal, default to trusted internal humans and trusted non-human principals only.
 - External/partner offers must be explicitly marked for that availability scope and must not inherit visibility from the provider coworker as a whole.
 - Cross-organization calls must preserve acting, delegating, and delegated agent identities, including GAID where applicable, so receipts can reconstruct the chain of custody.
+- A2A coworker task creation writes a `coworker-delegation` receipt into `CoworkerEngagement.metadata.delegationReceipt` and a receipt pointer into `CoworkerEngagement.auditRefs`. The receipt signs the selected offer, service, access profile, acting/delegating/delegated identities, requested outcome digest, authority boundary, risk tier, required grants, and contract/data-boundary references with HMAC-SHA256.
+- Cross-boundary A2A task creation rejects missing caller GAID chain, missing provider GAID authority, missing terms, or missing data-boundary references before engagement creation. These are 4xx protocol errors, not late service exceptions.
 - Public or partner-facing Agent Cards must not disclose internal-only skills, prompts, tools, pricing details, or privileged data-boundary metadata unless a reviewed external offer requires that disclosure.
 
 ## Refactoring Allocation
@@ -320,6 +322,7 @@ Reserve roughly 20 percent of the implementation effort for targeted refactoring
 - Legal Operations Counsel offers appear when the legal coworker identity is present.
 - UI route supports browse/filter/detail/request initiation.
 - MCP tools support coworker discovery and engagement request.
+- A2A task endpoints support selected-offer Agent Card resolution, governed task submission, signed delegation receipt persistence, receipt readback, and clean rejection for missing GAID/contract/data-boundary context.
 - Tests cover model boundaries, catalog projection, offer packaging, engagement creation, permissions/grants, and Legal Operations Counsel visibility.
 - UX verification is run on a governed running portal or shared local-integration lease.
 - Targeted tests and `pnpm --filter web build` are run before completion, with any pre-existing blocker clearly reported.

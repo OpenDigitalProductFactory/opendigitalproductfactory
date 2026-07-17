@@ -75,16 +75,46 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
   }
   const requestedOutcome = typeof body.requestedOutcome === "string" ? body.requestedOutcome.trim() : "";
   if (!requestedOutcome) return NextResponse.json({ error: "missing_requestedOutcome" }, { status: 400 });
+  const actingAgentGaid = stringValue(body.actingAgentGaid);
+  const delegatingAgentGaid = stringValue(body.delegatingAgentGaid) ?? actingAgentGaid;
+  if (accessProfile !== "internal-a2a" && (!actingAgentGaid || !delegatingAgentGaid)) {
+    return NextResponse.json(
+      {
+        error: "missing_gaid_call_chain",
+        message: "Cross-boundary A2A task submission requires actingAgentGaid and delegatingAgentGaid.",
+      },
+      { status: 400 },
+    );
+  }
+  const contractContext = recordOrNull(body.contractContext);
+  const missingContractContext = accessProfile === "internal-a2a" ? [] : missingCrossBoundaryContractFields(contractContext);
+  if (missingContractContext.length > 0) {
+    return NextResponse.json(
+      {
+        error: "missing_contract_context",
+        missing: missingContractContext,
+        message: "Cross-boundary A2A task submission requires termsRef and dataBoundaryRef.",
+      },
+      { status: 400 },
+    );
+  }
 
   const task = await createCoworkerA2aTask({
     offerId,
+    serviceId: projection.card.serviceId,
     requestedOutcome,
     inputPayload: body.inputPayload ?? {},
     fundingContext: body.fundingContext ?? {},
-    contractContext: recordOrNull(body.contractContext),
+    contractContext,
     contextId: stringValue(body.contextId) ?? undefined,
-    actingAgentGaid: stringValue(body.actingAgentGaid),
-    delegatingAgentGaid: stringValue(body.delegatingAgentGaid) ?? stringValue(body.actingAgentGaid),
+    accessProfile,
+    actingAgentGaid,
+    delegatingAgentGaid,
+    delegatedAgentId: projection.card.agentId,
+    delegatedAgentGaid: projection.card.identity.gaid,
+    authorityBoundary: projection.card.authorityBoundary,
+    riskTier: projection.card.riskTier,
+    requiredGrants: projection.card.security.requiredGrants,
   });
 
   return NextResponse.json(task, { status: 202 });
@@ -106,4 +136,11 @@ function recordOrNull(value: unknown): Record<string, unknown> | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function missingCrossBoundaryContractFields(contractContext: Record<string, unknown> | null): string[] {
+  const missing: string[] = [];
+  if (!stringValue(contractContext?.termsRef)) missing.push("termsRef");
+  if (!stringValue(contractContext?.dataBoundaryRef)) missing.push("dataBoundaryRef");
+  return missing;
 }
