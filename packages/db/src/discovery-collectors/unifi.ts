@@ -41,6 +41,9 @@ type UnifiDevice = {
   name?: string;
   type: string; // ugw, udm, uxg, usw, uap
   version?: string;
+  // Hardware serial the UniFi controller reports per device — the canonical asset match
+  // key for the estate bridges (BI-828998DC / BI-1093AF1C). Optional; absent on some models.
+  serial?: string;
   adopted?: boolean;
   state?: number; // 1 = connected
   port_table?: UnifiDevicePort[];
@@ -286,6 +289,8 @@ export async function collectUnifiDiscovery(
         osiLayerName: mapping.osiLayerName,
         networkAddress: device.ip,
         protocolFamily: "ipv4",
+        // Canonical serial key the estate bridges read off InventoryEntity.properties.
+        ...(device.serial ? { serialNumber: device.serial } : {}),
       },
     });
 
