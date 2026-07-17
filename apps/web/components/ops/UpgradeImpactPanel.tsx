@@ -13,7 +13,7 @@
 //
 // Advisory only — no buttons here queue or apply the upgrade.
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { SummaryResult, ImpactItem } from "@/lib/self-upgrade/impact/types";
 import { formatImpactCounts } from "@/lib/self-upgrade/impact/format";
 import { CollapsibleList } from "@/components/ui/report-kit";
@@ -140,6 +140,18 @@ export default function UpgradeImpactPanel({
       }
     });
   }
+
+  // Auto-generate the glance summary on first view when the page shipped no
+  // cached one. This is the git-walk (merge) + LLM work that used to run
+  // synchronously in the server render and block the whole page 30-60s on the
+  // first click after every upgrade (BI-4A400DE4). Moving it here lets the page
+  // paint immediately; the summary streams in behind the existing `isPending`
+  // affordance, and summarizeUpgradeImpact is cache-first so it only pays the
+  // cost once per (lineage, target). Fires once on mount.
+  useEffect(() => {
+    if (enabled && !initialSummary) run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!enabled) return null;
 

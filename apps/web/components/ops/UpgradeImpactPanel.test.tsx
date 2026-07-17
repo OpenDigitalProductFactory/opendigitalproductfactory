@@ -7,8 +7,8 @@
 // truncated list instead of extending it. The disclosure must reveal ONLY the
 // items not already shown, so each change appears exactly once.
 
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import type {
   ChangeCategory,
   ImpactItem,
@@ -114,5 +114,43 @@ describe("UpgradeImpactPanel — show-more disclosure", () => {
     expect(screen.queryByText(/more change/)).toBeNull();
     expect(screen.queryByText("Show fewer")).toBeNull();
     expect(screen.getAllByText("Top change one")).toHaveLength(1);
+  });
+});
+
+// BI-4A400DE4: the git-walk + LLM impact summary used to be generated
+// SYNCHRONOUSLY in the server render (page.tsx `await summarizeUpgradeImpact()`),
+// blocking the whole /ops/self-upgrade page 30-60s on the first view after each
+// upgrade (target changes every upgrade → cache miss). It now generates CLIENT-
+// side on mount so the page paints immediately; these guard that move.
+describe("UpgradeImpactPanel — auto-generate on first view (BI-4A400DE4)", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const one = [item("s1", "Change one")];
+
+  it("auto-fetches the summary on mount when enabled and the page shipped no cache", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => summaryWith(one, one) });
+    render(<UpgradeImpactPanel enabled initialSummary={null} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/ops/self-upgrade/impact-summary");
+    // the fetched summary renders without a click
+    await waitFor(() => expect(screen.getByText("Change one")).toBeTruthy());
+  });
+
+  it("does NOT auto-fetch when the server already provided a cached summary", async () => {
+    render(<UpgradeImpactPanel enabled initialSummary={summaryWith(one, one)} />);
+    await new Promise((r) => setTimeout(r, 25));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does NOT auto-fetch (and renders nothing) when there is no update to summarize", async () => {
+    const { container } = render(<UpgradeImpactPanel enabled={false} initialSummary={null} />);
+    await new Promise((r) => setTimeout(r, 25));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.firstChild).toBeNull();
   });
 });

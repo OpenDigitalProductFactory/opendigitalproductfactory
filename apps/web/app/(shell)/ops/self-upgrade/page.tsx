@@ -1,6 +1,6 @@
 import { getSelfUpgradeStatus, listSelfUpgradeRuns } from "@/lib/actions/promotions";
 import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
-import { loadPersistedImpactSummary, summarizeUpgradeImpact } from "@/lib/self-upgrade/impact";
+import { loadPersistedImpactSummary } from "@/lib/self-upgrade/impact";
 import SelfUpgradeClient from "@/components/ops/SelfUpgradeClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
@@ -20,18 +20,15 @@ export default async function SelfUpgradePage() {
     getLocalChangesLedger(),
   ]);
 
-  // The at-a-glance scope one-liner (headline + counts ribbon) shown on the
-  // "Update available" banner and fed to the panel below. When an update is
-  // available we auto-generate it on load (operator decision: glance-level
-  // characterization beats click-to-load) — summarizeUpgradeImpact is
-  // cache-first and never throws, so the first view per (lineage, target) pair
-  // pays the git-walk + LLM once and every later load reads the durable cache.
-  // When the build is fresh (or self-upgrade disabled), stay read-only: no work
-  // on a page that has nothing to summarize.
-  const initialImpactSummary =
-    status.enabled && !status.isFresh && status.targetSha
-      ? await summarizeUpgradeImpact()
-      : await loadPersistedImpactSummary(status.targetSha);
+  // Read the DURABLE CACHE only — never generate synchronously in the render.
+  // Generating (summarizeUpgradeImpact = git-walk merge + LLM) here blocked the
+  // whole page for 30-60s on the first view after each upgrade: the target SHA
+  // changes on every upgrade, so the per-(lineage,target) cache misses every
+  // time and each first click paid the full cost before a byte was returned
+  // ("eventually comes up"). The glance summary is now auto-generated CLIENT-side
+  // after paint (UpgradeImpactPanel), so the page renders promptly and the
+  // summary fills in with a loading affordance. BI-4A400DE4.
+  const initialImpactSummary = await loadPersistedImpactSummary(status.targetSha);
 
   const clientProps = JSON.parse(
     JSON.stringify({
