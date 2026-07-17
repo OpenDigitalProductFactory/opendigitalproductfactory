@@ -1,6 +1,6 @@
 # Unified Connector Kernel Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use `dpf-tdd`, `dpf-local-merge-ci-before-push`, and `dpf-pr-with-dco` while implementing this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Follow the repository's current `AGENTS.md` contracts for test-driven implementation, the governed local-CI convergence sandbox, DCO-signed commits, and ready-only pull requests. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace proof-provider-local connection lifecycle code with one provider-neutral connector definition, credential/state projection, health, audit, error, retry, sync, and callback contract.
 
@@ -11,6 +11,8 @@
 ---
 
 ## Chunk 1: Kernel contracts and durable state
+
+**Completion:** Tasks 1–5 are implemented and source-verified. Canonical delivery gates remain in Task 11.
 
 ### Task 1: Correct the proof-provider contract in the convergence spec
 
@@ -183,6 +185,8 @@ git commit -s -m "feat(integrations): add shared connector lifecycle"
 
 ## Chunk 2: Proof-provider migrations
 
+**Completion:** Tasks 6–8 are implemented and source-verified. Canonical delivery gates remain in Task 11.
+
 ### Task 6: Register and migrate Microsoft 365 Communications
 
 **Files:**
@@ -295,6 +299,8 @@ git commit -s -m "feat(integrations): register canonical connector definitions"
 
 ## Chunk 3: Enforcement, documentation, and delivery
 
+**Completion:** Tasks 9–10 are implemented. Task 11 remains open; no canonical build, runtime, publication, or backlog-completion claim is made here.
+
 ### Task 9: Prevent provider-local lifecycle duplication
 
 **Files:**
@@ -328,21 +334,23 @@ git commit -s -m "ci(integrations): guard connector lifecycle ownership"
 
 ### Task 10: Publish the connector-kernel contract
 
+**Status:** Complete at source level; Task 11 canonical verification remains pending.
+
 **Files:**
 - Create: `docs/architecture/unified-connector-kernel.md`
 - Modify: `docs/README.md`
 - Modify: `apps/web/lib/docs/doc-index.generated.json`
 - Modify: `docs/superpowers/plans/2026-07-17-unified-connector-kernel.md`
 
-- [ ] **Step 1: Document ownership and extension procedure**
+- [x] **Step 1: Document ownership and extension procedure**
 
 Explain kernel versus adapter responsibilities, auth/callback/error taxonomies, state and audit guarantees, migration steps, and why the kernel is not a connector mega-service.
 
-- [ ] **Step 2: Generate and verify documentation artifacts**
+- [x] **Step 2: Generate and verify documentation artifacts**
 
 Run: `pnpm docs:index` then `pnpm check:doc-links`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add docs/architecture/unified-connector-kernel.md docs/README.md apps/web/lib/docs/doc-index.generated.json docs/superpowers/plans/2026-07-17-unified-connector-kernel.md
