@@ -45,20 +45,34 @@ export interface WorkCaseAutonomyEnvelopeResolution {
   reason: string;
 }
 
+/**
+ * Map a coworker's (already risk-capped) autonomy level to the work-case
+ * decision mode. Exported so consumers that need only this projection — e.g. the
+ * AI-led volunteering resolver — reuse the canonical mapping instead of
+ * re-deriving it. `autonomous-action` is the sole mode that permits acting
+ * without a human turn.
+ */
+export function autonomyLevelToDecisionMode(level: AutonomyLevel): WorkCaseAutonomyDecisionMode {
+  switch (level) {
+    case "shadow":
+      return "shadow-only";
+    case "propose":
+      return "propose-for-approval";
+    case "supervised":
+      return "supervised-action";
+    case "autopilot":
+      return "autonomous-action";
+  }
+}
+
 function toWorkCaseAutonomy(level: AutonomyLevel): {
   autonomyMode: WorkCaseAutonomyMode;
   decisionMode: WorkCaseAutonomyDecisionMode;
 } {
-  switch (level) {
-    case "shadow":
-      return { autonomyMode: "observed", decisionMode: "shadow-only" };
-    case "propose":
-      return { autonomyMode: "supervised", decisionMode: "propose-for-approval" };
-    case "supervised":
-      return { autonomyMode: "supervised", decisionMode: "supervised-action" };
-    case "autopilot":
-      return { autonomyMode: "autonomous", decisionMode: "autonomous-action" };
-  }
+  const decisionMode = autonomyLevelToDecisionMode(level);
+  const autonomyMode: WorkCaseAutonomyMode =
+    level === "shadow" ? "observed" : level === "autopilot" ? "autonomous" : "supervised";
+  return { autonomyMode, decisionMode };
 }
 
 function requiresCoworkerEnvelope(

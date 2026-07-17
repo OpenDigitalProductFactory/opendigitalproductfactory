@@ -49,3 +49,19 @@ These **do not trivially map** (`constrained`/`autonomous` vs `propose`/`supervi
 - ⚠ Idempotency: re-funding or re-running approve must not double-claim. Guard on existing `claimStatus`.
 - ⚠ Proactivity level semantics: confirm exact level names + which "ask first". 
 - Verify-on-live for the Ready/bet render is blocked on BI-53D7E70C (dev-portal /ops/demand turbopack defect) — same caveat as phase 2.
+
+## ✅ Source-of-truth RESOLVED + shadow-first increment shipped (2026-07-15, focused session)
+The "which enum is authoritative" blocker is resolved, and a kernel decision set the shape.
+
+**Source-of-truth found.** The coworker execution-trust dial is `TrustState.currentLevel` (schema `TrustState`, unique on `[agentId, activityType, riskClass]`, values = the trust-graduation `AutonomyLevel` shadow|propose|supervised|autopilot, with `regulatoryCeiling`). It is *operator-confirmed* via `recommendTrustChange` and is the enum `resolveWorkCaseAutonomyEnvelope` consumes — so the `GovernanceProfile.autonomyLevel` (supervised|constrained|autonomous) enum is NOT the envelope authority; `TrustState.currentLevel` is. **But** the schema draws a load-bearing line: *"these tables measure trust only; they do not authorize runtime autonomy changes,"* and `resolveWorkCaseAutonomyEnvelope` has **zero production callers** — auto-claim would be its first adopter.
+
+**Kernel decision (`principle_decide`, in_platform_coworker, composite 9.10, margin 1.33, HIGH conf, no commandment conflict): `shadow_first`.** Beat `wire_now` (4.35 — crosses the "measure only" boundary as first-adopter; lost on Least-Privilege 0.35, HITL 0.36, Architecture-Over-Shortcuts, Never-auto-execute) and `capture_gap` (7.78). So: build the resolution + **shadow-record what auto-claim WOULD do**, keep the act ask-first, gate real auto-claim behind accumulated evidence + an explicit operator enable flag.
+
+**Shipped this increment (additive, no behaviour change to what actually happens):**
+- Pure `apps/web/lib/demand/funding-risk.ts` — `fundingRiskTier` (lifted out of the demand-scoring pack, now shared) + `riskTierToRiskClass`/`fundedItemRiskClass` mapping the tier onto the governed `RiskClass` (high→`outbound-or-floor` floor; medium→`internal-irreversible`; low→`internal-reversible`). Tested.
+- Exported `autonomyLevelToDecisionMode` from `autonomy-envelope.ts` (refactor, no duplication) so the demand seam reuses the canonical level→decisionMode mapping.
+- Pure `resolveVolunteeringAutonomy({trustLevel, risk, regulatoryCeiling})` in `volunteering.ts` — mirrors the envelope's cap math (risk ceiling → regulatory ceiling → trust, min) without the WorkCase source/action coupling; returns `{effectiveTrustLevel, decisionMode, decision}`. Tested (autopilot+low→auto_claim; autopilot+floor→ask_first; shadow→observe; regulatory ceiling caps).
+- `recordVolunteeringAutonomyShadow(item)` in `volunteering.server.ts` — reads `TrustState` for `(agentId, "demand_bet_pickup", riskClass)`, resolves autonomy, writes a `DecisionShadowLedger` row (proposed = would-be decision, actual = ask-first, agreement flag). Non-authoritative, best-effort.
+- Wired into `approveDemandForFundingHandler`'s funded transition (its own non-fatal try, alongside the shipped `offerFundedItemToCoworker`).
+
+**Remaining for real auto-claim (a future, evidence-gated step):** a graduation step that, once `DecisionShadowLedger` evidence + an explicit operator enable flag exist, flips `decision==="auto_claim"` from shadow-recorded to actually claiming + dispatching the run. The measurement now runs on every funded bet; nothing acts autonomously yet.
