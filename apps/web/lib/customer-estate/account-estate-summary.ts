@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
+import { correlateDiscoveryToEstate } from "@dpf/db";
 
 import { buildLifecycleReviewQueue } from "@/lib/shared/lifecycle-review";
 import { evaluateTechnologyLifecycle } from "./lifecycle-evaluation";
@@ -75,6 +76,16 @@ type CustomerEstateSummary = {
     recommendedAction: string;
     attentionLevel: string;
   }>;
+  // HAM Phase D2 (BI-828998DC): read-model correlation of the customer's DISCOVERED estate
+  // (InventoryEntity) against its MANAGED CIs (CustomerConfigurationItem). No authority move.
+  discoveryCorrelation: {
+    /** Managed CIs a discovered device corresponds to. */
+    managedAndDiscovered: number;
+    /** Managed CIs not seen in discovery — undiscovered / offline / out-of-scope. */
+    managedNotDiscovered: number;
+    /** Discovered devices with no managed CI — shadow / unmanaged estate. */
+    discoveredNotManaged: number;
+  };
 };
 
 const ATTENTION_ORDER: Record<string, number> = {
@@ -94,6 +105,13 @@ const CUSTOMER_CONFIGURATION_ITEM_SELECT: Prisma.CustomerConfigurationItemSelect
   supportModel: true,
   observedVersion: true,
   normalizedVersion: true,
+  // BI-828998DC bridge match keys.
+  manufacturer: true,
+  vendorName: true,
+  productModel: true,
+  productName: true,
+  serialNumber: true,
+  assetTag: true,
   warrantyEndAt: true,
   endOfSupportAt: true,
   endOfLifeAt: true,
@@ -109,7 +127,7 @@ export async function loadCustomerEstateSummary(
   accountId: string,
   asOf: Date = new Date(),
 ): Promise<CustomerEstateSummary> {
-  const [sites, configurationItems] = await Promise.all([
+  const [sites, configurationItems, discoveredDevices] = await Promise.all([
     prisma.customerSite.findMany({
       where: { accountId },
       select: {
@@ -123,7 +141,44 @@ export async function loadCustomerEstateSummary(
       select: CUSTOMER_CONFIGURATION_ITEM_SELECT,
       orderBy: { name: "asc" },
     }),
+    // HAM D2 (BI-828998DC): the account's discovered devices, for read-model correlation.
+    prisma.inventoryEntity.findMany({
+      where: { customerAccountId: accountId, status: { not: "stale" } },
+      select: {
+        id: true,
+        manufacturer: true,
+        productModel: true,
+        name: true,
+        customerAccountId: true,
+        customerSiteId: true,
+        properties: true,
+      },
+    }),
   ]);
+
+  // Correlate discovered devices with managed CIs (read-model, no authority move / no persistence).
+  const discoveryCorrelation = correlateDiscoveryToEstate(
+    discoveredDevices.map((d) => ({
+      id: d.id,
+      manufacturer: d.manufacturer,
+      productModel: d.productModel,
+      name: d.name,
+      customerAccountId: d.customerAccountId,
+      customerSiteId: d.customerSiteId,
+      properties: d.properties as Record<string, unknown> | null,
+    })),
+    configurationItems.map((c) => ({
+      id: c.id,
+      accountId,
+      siteId: c.siteId,
+      manufacturer: c.manufacturer,
+      vendorName: c.vendorName,
+      productModel: c.productModel,
+      productName: c.productName,
+      serialNumber: c.serialNumber,
+      assetTag: c.assetTag,
+    })),
+  );
 
   const evaluatedItems = configurationItems.map((item) => ({
     ...item,
@@ -260,5 +315,10 @@ export async function loadCustomerEstateSummary(
       recommendedAction: item.lifecycle.recommendedAction,
       attentionLevel: item.lifecycle.attentionLevel,
     })),
+    discoveryCorrelation: {
+      managedAndDiscovered: discoveryCorrelation.managedAndDiscovered,
+      managedNotDiscovered: discoveryCorrelation.managedNotDiscovered,
+      discoveredNotManaged: discoveryCorrelation.discoveredNotManaged,
+    },
   };
 }

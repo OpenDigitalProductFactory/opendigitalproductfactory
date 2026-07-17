@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockPrisma } = vi.hoisted(() => ({
+const { mockPrisma, mockCorrelate } = vi.hoisted(() => ({
   mockPrisma: {
     customerSite: {
       findMany: vi.fn(),
@@ -8,10 +8,16 @@ const { mockPrisma } = vi.hoisted(() => ({
     customerConfigurationItem: {
       findMany: vi.fn(),
     },
+    inventoryEntity: {
+      findMany: vi.fn(),
+    },
   },
+  // The correlation logic itself is covered by inventory-cci-bridge.test.ts; here it is a
+  // controllable stub so the summary test stays focused on the summary's own aggregation.
+  mockCorrelate: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
+vi.mock("@dpf/db", () => ({ prisma: mockPrisma, correlateDiscoveryToEstate: mockCorrelate }));
 
 import { loadCustomerEstateSummary } from "./account-estate-summary";
 
@@ -19,6 +25,10 @@ describe("loadCustomerEstateSummary", () => {
   beforeEach(() => {
     mockPrisma.customerSite.findMany.mockReset();
     mockPrisma.customerConfigurationItem.findMany.mockReset();
+    mockPrisma.inventoryEntity.findMany.mockReset();
+    mockPrisma.inventoryEntity.findMany.mockResolvedValue([]);
+    mockCorrelate.mockReset();
+    mockCorrelate.mockReturnValue({ matches: [], managedAndDiscovered: 0, managedNotDiscovered: 0, discoveredNotManaged: 0 });
   });
 
   it("summarizes site, lifecycle, and recurring-license attention", async () => {
@@ -95,6 +105,29 @@ describe("loadCustomerEstateSummary", () => {
     expect(summary.topAttentionItems[0]).toMatchObject({
       name: "SentinelOne Complete",
       recommendedAction: "renew",
+    });
+  });
+
+  it("surfaces the discovery↔managed-CI correlation counts (BI-828998DC)", async () => {
+    mockPrisma.customerSite.findMany.mockResolvedValue([]);
+    mockPrisma.customerConfigurationItem.findMany.mockResolvedValue([]);
+    mockPrisma.inventoryEntity.findMany.mockResolvedValue([
+      { id: "e-1", manufacturer: "Dell", productModel: "PowerEdge R750", name: "srv", customerAccountId: "acct-1", customerSiteId: null, properties: {} },
+    ]);
+    mockCorrelate.mockReturnValue({
+      matches: [{ inventoryEntityId: "e-1", configurationItemId: "cci-1", method: "model", confidence: 0.8 }],
+      managedAndDiscovered: 1,
+      managedNotDiscovered: 3,
+      discoveredNotManaged: 2,
+    });
+
+    const summary = await loadCustomerEstateSummary("acct-1");
+
+    expect(mockPrisma.inventoryEntity.findMany).toHaveBeenCalled();
+    expect(summary.discoveryCorrelation).toEqual({
+      managedAndDiscovered: 1,
+      managedNotDiscovered: 3,
+      discoveredNotManaged: 2,
     });
   });
 });
