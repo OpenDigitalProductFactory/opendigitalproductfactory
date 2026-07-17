@@ -171,6 +171,7 @@ export function scanSource(source, file) {
           const property = bindingPropertyName(element);
           if (property === "integrationCredential") add(credentialDelegates, element.name.text);
           if (property && carrier?.has(property)) add(credentialDelegates, element.name.text);
+          if (element.initializer && delegateExpression(element.initializer)) add(credentialDelegates, element.name.text);
           if (delegateExpression(value) && MUTATIONS.has(property)) add(mutationFunctions, element.name.text);
           if (RAW_METHODS.has(property)) add(rawFunctions, element.name.text);
         }

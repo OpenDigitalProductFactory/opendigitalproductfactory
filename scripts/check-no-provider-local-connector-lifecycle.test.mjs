@@ -29,6 +29,8 @@ test("rejects every IntegrationCredential delegate mutation outside the store", 
   assert.deepEqual(kinds("export {}; const holder = { c: prisma.integrationCredential }; const { c: rows = fallback } = holder; await rows.deleteMany({});"), ["integration-credential-mutation"]);
   assert.deepEqual(kinds('export {}; const holder = { c: prisma.integrationCredential }; const { ["c"]: rows } = holder; await rows.create({});'), ["integration-credential-mutation"]);
   assert.deepEqual(kinds("export {}; const holder = { c: prisma.integrationCredential }; let rows; ({ c: rows } = holder); await rows.upsert({});"), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; const { c = prisma.integrationCredential } = source; await c.update({});"), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; const { c: rows = (prisma.integrationCredential as any)! } = source; await rows.delete({});"), ["integration-credential-mutation"]);
 });
 
 test("does not exempt connector adapters, but exempts the canonical credential store", () => {
