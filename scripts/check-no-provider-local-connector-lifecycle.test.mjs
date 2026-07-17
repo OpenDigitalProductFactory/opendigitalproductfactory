@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { compareDebt, scanSource } from "./check-no-provider-local-connector-lifecycle.mjs";
@@ -102,4 +103,13 @@ test("ignores comments, strings, and test fixtures", () => {
   assert.deepEqual(kinds(source), []);
   assert.deepEqual(kinds("prisma.integrationCredential.upsert({})", "apps/web/lib/acme.test.ts"), []);
   assert.deepEqual(kinds("prisma.integrationCredential.upsert({})", "apps/web/lib/acme.generated.ts"), []);
+});
+
+test("Repo Guard Loop provisions the pinned isolated AST runtime", () => {
+  const runtimePackage = JSON.parse(readFileSync("packages/repo-guard-runtime/package.json", "utf8"));
+  assert.equal(runtimePackage.devDependencies?.typescript, "6.0.3");
+  const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+  const job = workflow.slice(workflow.indexOf("  repo-guard-loop:"), workflow.indexOf("  docs-link-integrity:"));
+  assert.match(job, /corepack prepare pnpm@10\.33\.2 --activate/);
+  assert.match(job, /pnpm install --frozen-lockfile --ignore-scripts --filter @dpf\/repo-guard-runtime/);
 });

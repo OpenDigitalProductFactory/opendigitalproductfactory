@@ -104,6 +104,12 @@ jobs:
         uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
+      - name: Install guard AST dependency
+        # Parser-grade guards use one isolated, pinned tool runtime; do not
+        # provision the root's browser/docs tooling or application workspaces.
+        run: |
+          corepack enable && corepack prepare pnpm@10.33.2 --activate
+          pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime
       - name: Run guard loop
         run: node scripts/check-guards.mjs
 
