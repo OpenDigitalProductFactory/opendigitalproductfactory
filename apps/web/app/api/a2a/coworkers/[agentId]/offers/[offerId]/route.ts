@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { apiErrorResponse } from "@/lib/api/error";
 import { loadCoworkerCatalog } from "@/lib/coworker-service-catalog/catalog";
 import { createCoworkerA2aTask } from "@/lib/coworker-service-catalog/a2a-tasks";
 import {
@@ -21,21 +22,23 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   const { agentId, offerId } = await context.params;
   const catalog = await loadCoworkerCatalog();
   const offer = catalog.offers.find((candidate) => candidate.offerId === offerId && candidate.provider.agentId === agentId);
-  if (!offer) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!offer) return apiErrorResponse("NOT_FOUND", "Offer not found", 404);
 
   const accessProfile = resolveAccessProfile(request, offer.availabilityScope);
-  if (!accessProfile) return NextResponse.json({ error: "invalid_accessProfile" }, { status: 400 });
+  if (!accessProfile) return apiErrorResponse("INVALID_ARGUMENT", "invalid_accessProfile", 400);
 
   if (accessProfile === "internal-a2a") {
     const session = await auth();
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session?.user) return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const projection = projectCoworkerOfferAgentCard(offer, { accessProfile });
   if (!projection.ok) {
-    return NextResponse.json(
-      { error: projection.reason, missing: projection.missing },
-      { status: projection.reason === "offer_not_available_for_access_profile" ? 403 : 409 },
+    return apiErrorResponse(
+      projection.reason === "offer_not_available_for_access_profile" ? "FORBIDDEN" : "CONFLICT",
+      projection.reason,
+      projection.reason === "offer_not_available_for_access_profile" ? 403 : 409,
+      { missing: projection.missing },
     );
   }
 
@@ -52,50 +55,49 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
   const { agentId, offerId } = await context.params;
   const catalog = await loadCoworkerCatalog();
   const offer = catalog.offers.find((candidate) => candidate.offerId === offerId && candidate.provider.agentId === agentId);
-  if (!offer) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!offer) return apiErrorResponse("NOT_FOUND", "Offer not found", 404);
 
   const accessProfile = resolveAccessProfile(request, offer.availabilityScope);
-  if (!accessProfile) return NextResponse.json({ error: "invalid_accessProfile" }, { status: 400 });
+  if (!accessProfile) return apiErrorResponse("INVALID_ARGUMENT", "invalid_accessProfile", 400);
   if (accessProfile === "internal-a2a") {
     const session = await auth();
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session?.user) return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const projection = projectCoworkerOfferAgentCard(offer, { accessProfile });
   if (!projection.ok) {
-    return NextResponse.json(
-      { error: projection.reason, missing: projection.missing },
-      { status: projection.reason === "offer_not_available_for_access_profile" ? 403 : 409 },
+    return apiErrorResponse(
+      projection.reason === "offer_not_available_for_access_profile" ? "FORBIDDEN" : "CONFLICT",
+      projection.reason,
+      projection.reason === "offer_not_available_for_access_profile" ? 403 : 409,
+      { missing: projection.missing },
     );
   }
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+    return apiErrorResponse("INVALID_ARGUMENT", "invalid_json", 400);
   }
   const requestedOutcome = typeof body.requestedOutcome === "string" ? body.requestedOutcome.trim() : "";
-  if (!requestedOutcome) return NextResponse.json({ error: "missing_requestedOutcome" }, { status: 400 });
+  if (!requestedOutcome) return apiErrorResponse("INVALID_ARGUMENT", "missing_requestedOutcome", 400);
   const actingAgentGaid = stringValue(body.actingAgentGaid);
   const delegatingAgentGaid = stringValue(body.delegatingAgentGaid) ?? actingAgentGaid;
   if (accessProfile !== "internal-a2a" && (!actingAgentGaid || !delegatingAgentGaid)) {
-    return NextResponse.json(
-      {
-        error: "missing_gaid_call_chain",
-        message: "Cross-boundary A2A task submission requires actingAgentGaid and delegatingAgentGaid.",
-      },
-      { status: 400 },
+    return apiErrorResponse(
+      "INVALID_ARGUMENT",
+      "Cross-boundary A2A task submission requires actingAgentGaid and delegatingAgentGaid.",
+      400,
+      { error: "missing_gaid_call_chain" },
     );
   }
   const contractContext = recordOrNull(body.contractContext);
   const missingContractContext = accessProfile === "internal-a2a" ? [] : missingCrossBoundaryContractFields(contractContext);
   if (missingContractContext.length > 0) {
-    return NextResponse.json(
-      {
-        error: "missing_contract_context",
-        missing: missingContractContext,
-        message: "Cross-boundary A2A task submission requires termsRef and dataBoundaryRef.",
-      },
-      { status: 400 },
+    return apiErrorResponse(
+      "INVALID_ARGUMENT",
+      "Cross-boundary A2A task submission requires termsRef and dataBoundaryRef.",
+      400,
+      { error: "missing_contract_context", missing: missingContractContext },
     );
   }
 
@@ -130,17 +132,19 @@ function resolveAccessProfile(request: Request, availabilityScope: string): Cowo
   return null;
 }
 
-function recordOrNull(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
 function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function missingCrossBoundaryContractFields(contractContext: Record<string, unknown> | null): string[] {
+function recordOrNull(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function missingCrossBoundaryContractFields(context: Record<string, unknown> | null): string[] {
+  if (!context) return ["termsRef", "dataBoundaryRef"];
   const missing: string[] = [];
-  if (!stringValue(contractContext?.termsRef)) missing.push("termsRef");
-  if (!stringValue(contractContext?.dataBoundaryRef)) missing.push("dataBoundaryRef");
+  if (!stringValue(context.termsRef)) missing.push("termsRef");
+  if (!stringValue(context.dataBoundaryRef)) missing.push("dataBoundaryRef");
   return missing;
 }
