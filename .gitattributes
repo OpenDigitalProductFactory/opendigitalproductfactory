@@ -44,6 +44,8 @@ scripts/route-error-baseline.txt merge=union
 
 scripts/docs-reference-baseline.txt merge=union
 
+scripts/private-identity-baseline.txt merge=union
+
 # The tool-pack registry is one-pack-per-line precisely so concurrent PRs that
 # each add a pack merge with the built-in union driver instead of colliding on
 # a shared line (BI-3B0AD9CF pattern applied to composeToolPacks). The

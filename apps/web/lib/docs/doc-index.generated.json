@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 513,
+  "pageCount": 514,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3873,6 +3873,21 @@
         "status-decisions-2026-06-25-objective-completed",
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
         "alert-delivery"
+      ]
+    },
+    "docs/operations/oss-repo-identity-hygiene.md": {
+      "publicHref": "/operations/oss-repo-identity-hygiene/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "oss-repo-identity-hygiene",
+        "what-is-and-isnt-allowed",
+        "how-it-is-enforced",
+        "the-ratchet",
+        "when-the-guard-fails-on-your-pr",
+        "protecting-a-new-entity",
+        "known-limits-defense-in-depth-not-a-wall"
       ]
     },
     "docs/operations/runtime-glossary.md": {
