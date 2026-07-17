@@ -18,6 +18,8 @@ import type { SummaryResult, ImpactItem } from "@/lib/self-upgrade/impact/types"
 import { formatImpactCounts } from "@/lib/self-upgrade/impact/format";
 import { CollapsibleList } from "@/components/ui/report-kit";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { InlineBusy } from "@/components/ui/InlineBusy";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const CATEGORY_LABEL: Record<ImpactItem["category"], string> = {
   breaking: "Breaking",
@@ -77,6 +79,34 @@ function ItemRow({
         </div>
       )}
     </li>
+  );
+}
+
+// Shape-of-content placeholder shown while the summary generates (on the
+// auto-fetch on first view, or a manual (re)summarize). Mirrors the OK-result
+// layout below (headline line, counts line, item rows) so the panel resolves in
+// place instead of popping. Decorative — the wrapping region carries aria-busy
+// and the live announcement.
+function SummarySkeleton() {
+  return (
+    <div className="space-y-3" data-summary-state="loading">
+      <Skeleton width="85%" height="0.9rem" />
+      <Skeleton width="35%" height="0.7rem" />
+      <ul className="space-y-2">
+        {[0, 1].map((i) => (
+          <li
+            key={i}
+            className="py-2 px-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-1.5"
+          >
+            <div className="flex items-start gap-2">
+              <Skeleton width="2.5rem" height="1rem" rounded />
+              <Skeleton width={i === 0 ? "70%" : "55%"} />
+            </div>
+            <Skeleton width="45%" height="0.7rem" />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -200,7 +230,13 @@ export default function UpgradeImpactPanel({
             aria-busy={isPending}
             className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
           >
-            {isPending ? "Summarizing..." : result ? "Re-open summary" : "Summarize update"}
+            {isPending ? (
+              <InlineBusy label="Summarizing…" />
+            ) : result ? (
+              "Re-open summary"
+            ) : (
+              "Summarize update"
+            )}
           </button>
         </div>
       </div>
@@ -208,6 +244,16 @@ export default function UpgradeImpactPanel({
       {error && (
         <div className="text-xs text-[var(--dpf-destructive)] p-2 rounded bg-[var(--dpf-destructive)]/10">
           {error}
+        </div>
+      )}
+
+      {/* First-time generation (auto on first view, or a manual summarize): a
+          shape-of-content skeleton so the activity is visible and the panel
+          resolves in place. Refreshing an existing summary keeps the prior
+          content (dimmed) below instead. */}
+      {isPending && !result && (
+        <div aria-busy="true">
+          <SummarySkeleton />
         </div>
       )}
 
@@ -221,7 +267,11 @@ export default function UpgradeImpactPanel({
       )}
 
       {result?.ok && (
-        <div className="space-y-3" data-summary-state="ok">
+        <div
+          className={`space-y-3 ${isPending ? "opacity-60 transition-opacity" : ""}`}
+          data-summary-state="ok"
+          aria-busy={isPending || undefined}
+        >
           {result.summary.phrased?.headline && (
             <p className="text-sm text-[var(--dpf-text)]">
               {result.summary.phrased.headline}

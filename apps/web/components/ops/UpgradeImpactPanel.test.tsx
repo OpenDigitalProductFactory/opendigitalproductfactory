@@ -154,3 +154,40 @@ describe("UpgradeImpactPanel — auto-generate on first view (BI-4A400DE4)", () 
     expect(container.firstChild).toBeNull();
   });
 });
+
+describe("UpgradeImpactPanel — activity indication", () => {
+  const top = [item("sha1", "Top change one"), item("sha2", "Top change two")];
+  const all = [...top, item("sha3", "Tail change three")];
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("shows an inline busy label and a panel skeleton while auto-generating on first view", async () => {
+    // No initialSummary → the panel auto-fetches on mount (BI-4A400DE4). A
+    // never-resolving fetch keeps the useTransition pending so the loading UI
+    // stays on screen — no click needed, the activity shows behind the fetch.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    render(<UpgradeImpactPanel enabled />);
+
+    // Trigger shows the inline busy affordance (spinner + live label)...
+    expect(await screen.findByText("Summarizing…")).toBeTruthy();
+    // ...and the panel renders a shape-of-content skeleton in a busy region.
+    const loading = document.querySelector('[data-summary-state="loading"]');
+    expect(loading).toBeTruthy();
+    expect(loading?.closest('[aria-busy="true"]')).toBeTruthy();
+  });
+
+  it("keeps the existing summary visible and marked busy while refreshing", async () => {
+    // With a cached summary there is no auto-fetch; the Refresh button drives it.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    render(<UpgradeImpactPanel enabled initialSummary={summaryWith(top, all)} />);
+
+    fireEvent.click(screen.getByText("Refresh"));
+
+    expect(await screen.findByText("Summarizing…")).toBeTruthy();
+    // No skeleton swap — prior content stays put, just dimmed and marked busy.
+    expect(document.querySelector('[data-summary-state="loading"]')).toBeNull();
+    expect(screen.getAllByText("Top change one")).toHaveLength(1);
+    const okRegion = document.querySelector('[data-summary-state="ok"]');
+    expect(okRegion?.getAttribute("aria-busy")).toBe("true");
+  });
+});

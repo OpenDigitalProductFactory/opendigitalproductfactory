@@ -4063,6 +4063,7 @@
         "prohibited-patterns",
         "allowed-hex-usage",
         "component-checklist",
+        "async-activity-loading-states",
         "progressive-disclosure",
         "readability-plain-language",
         "audience-tiers",
