@@ -20,6 +20,11 @@ export type EolRelease = {
   // end of extended support
   isEoes?: boolean;
   eoesFrom?: string | null;
+  // Hardware: device no longer sold / manufactured (end-of-sale). Present on
+  // endoflife.date hardware products; ignored by the software release mapping.
+  // Read by the HAM Phase D hardware mapper (hardware-lifecycle.ts).
+  isDiscontinued?: boolean;
+  discontinuedFrom?: string | null;
 };
 
 export type EolProduct = {

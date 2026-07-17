@@ -160,4 +160,35 @@ describe("runCatalogEnrichmentSweep", () => {
     expect(result.identitiesScanned).toBe(2);
     expect(result.identitiesTotal).toBe(5);
   });
+
+  it("routes part='h' identities to the hardware feed stage, not the software mapping (BI-84710E60)", async () => {
+    const identities: SweepIdentityRow[] = [
+      { id: "ci-r750", part: "h", manufacturer: "Dell", product: "PowerEdge R750", productVersion: null, edition: null },
+    ];
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [] };
+    const db = buildDb(identities, [], recorded);
+
+    // endoflife hardware page (discontinued + eol) for the R750 slug.
+    const hwEolFetch = (async (url: string) =>
+      typeof url === "string" && url.includes("/products/poweredge-r750/")
+        ? ({ ok: true, json: async () => ({ result: { name: "poweredge-r750", releases: [{ name: "R750", discontinuedFrom: "2026-01-01", eolFrom: "2029-03-01" }] } }) } as unknown as Response)
+        : ({ ok: false, json: async () => ({}) } as unknown as Response)) as unknown as typeof fetch;
+    const wikidataFetch = (async (url: string) =>
+      url.includes("wbsearchentities")
+        ? ({ ok: true, json: async () => ({ search: [{ id: "Q1" }] }) } as unknown as Response)
+        : ({ ok: true, json: async () => ({ claims: { P2669: [{ mainsnak: { datavalue: { value: { time: "+2026-01-01T00:00:00Z" } } } }] } }) } as unknown as Response)) as unknown as typeof fetch;
+
+    const result = await runCatalogEnrichmentSweep(db, { fetchers: { eolFetch: hwEolFetch, wikidataFetch } });
+
+    expect(result.hardwareIdentitiesEnriched).toBe(1);
+    expect(result.hardwareMilestonesWritten).toBeGreaterThan(0);
+    // The software endoflife path was NOT used for the hardware identity.
+    expect(result.lifecycleProductsMatched).toBe(0);
+    // CPE still resolved for hardware (part='h' CPEs are valid).
+    expect(result.cpeResolved).toBe(1);
+    // Milestones landed (end_of_sale from both sources + eol).
+    expect(recorded.lifecycleUpserts.map((m) => m.milestone)).toEqual(
+      expect.arrayContaining(["end_of_sale", "eol"]),
+    );
+  });
 });
