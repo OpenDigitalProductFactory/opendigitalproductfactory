@@ -1254,6 +1254,7 @@ export async function executeTool(
             // the schema default, so this is back-compat-safe.
             kind: true,
             originatingBacklogItemId: true,
+            parentEpicId: true,
             draftApprovedAt: true,
             designDoc: true,
             designReview: true,
@@ -1295,16 +1296,65 @@ export async function executeTool(
           const decomposeDecision = sizedReview?.sizeAssessment?.decision ?? null;
           const hasOverride = sizedReview?.decompositionOverride != null;
           if (decomposeDecision === "decompose-required" && !hasOverride) {
+            // Governed-backlog autopilot: rather than park a hands-off
+            // auto-promoted build at the operator decomposition gate forever
+            // (BI-C4F828B7 self-perpetuating loop), resolve it autonomously —
+            // auto-approve the top decomposition candidate, or auto-override to
+            // ship monolithically as a fallback. Operator-driven / non-governed
+            // builds return "park" and keep the original wait-for-operator gate.
+            const { autoResolveDecomposeRequiredGate } = await import(
+              "@/lib/build/auto-resolve-decompose-gate"
+            );
+            const auto = await autoResolveDecomposeRequiredGate({
+              build: {
+                buildId,
+                parentEpicId: updatedBuild.parentEpicId ?? null,
+                originatingBacklogItemId: updatedBuild.originatingBacklogItemId ?? null,
+                designReview: updatedBuild.designReview,
+              },
+              userId,
+              governedBacklogEnabled: governedConfig?.governedBacklogEnabled === true,
+            });
+
+            if (auto.action === "decomposed") {
+              logBuildActivity(
+                buildId,
+                "auto-decompose",
+                `Governed autopilot auto-decomposed into ${auto.childBuildIds.length} child build(s) under Epic ${auto.epicId} (candidate ${auto.candidateId}).`,
+              );
+              return {
+                success: true,
+                message: `Design review: ${review.decision}. Size assessment was decompose-required; under governed autopilot this build was auto-decomposed into ${auto.childBuildIds.length} child build(s) under Epic ${auto.epicId}, which now proceed independently.`,
+                data: {
+                  review,
+                  decomposed: true,
+                  epicId: auto.epicId,
+                  childBuildIds: auto.childBuildIds,
+                },
+              };
+            }
+
+            if (auto.action === "park") {
+              logBuildActivity(
+                buildId,
+                "phase:gate-blocked",
+                "decompose-required gate fired; advance blocked until decomposition or override.",
+              );
+              return {
+                success: true,
+                message: `Design review: ${review.decision}, but the size assessment is decompose-required. Before advancing to Plan, either call approve_decomposition with a chosen DecompositionCandidate (preferred) — see propose_decomposition to generate candidates — OR call record_decomposition_override with a one-line justification to ship monolithically.`,
+                data: { review, blocked: true, action: "decompose_or_override" },
+              };
+            }
+
+            // auto.action === "overridden": the monolithic override is now
+            // recorded in the DB, so the decompose gate no longer blocks. Fall
+            // through to the phase-advance logic below.
             logBuildActivity(
               buildId,
-              "phase:gate-blocked",
-              "decompose-required gate fired; advance blocked until decomposition or override.",
+              "auto-decompose-override",
+              `Governed autopilot recorded a monolithic override (${auto.reason}); proceeding to Plan as a single build.`,
             );
-            return {
-              success: true,
-              message: `Design review: ${review.decision}, but the size assessment is decompose-required. Before advancing to Plan, either call approve_decomposition with a chosen DecompositionCandidate (preferred) — see propose_decomposition to generate candidates — OR call record_decomposition_override with a one-line justification to ship monolithically.`,
-              data: { review, blocked: true, action: "decompose_or_override" },
-            };
           }
 
           const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
