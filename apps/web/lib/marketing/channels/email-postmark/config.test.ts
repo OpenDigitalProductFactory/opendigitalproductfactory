@@ -12,6 +12,11 @@ vi.mock("@dpf/db", () => ({ prisma: {
 import { saveEmailPostmarkCredential } from "./config";
 
 describe("Postmark config kernel boundary", () => {
+  it("preserves the exact legacy missing-required-fields error", async () => {
+    await expect(saveEmailPostmarkCredential({ serverToken: "", signingSecret: "", fromAddress: "" }))
+      .resolves.toEqual({ ok: false, error: "Missing server token, signing secret, or From address." });
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
   it("does not replace a connected credential when replacement input is invalid", async () => {
     const result = await saveEmailPostmarkCredential({
       serverToken: "replacement-token",

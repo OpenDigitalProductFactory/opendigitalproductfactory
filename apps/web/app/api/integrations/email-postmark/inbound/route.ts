@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
+import { randomUUID } from "node:crypto";
 
 import { readStoredEmailPostmarkCredential } from "@/lib/integrations/connectors/email-postmark";
 import {
@@ -10,7 +11,7 @@ import {
   type ExecuteCallbackInput,
 } from "@/lib/integrations/kernel/audit";
 import { parseInboundPayload, verifyInboundSignature } from "@/lib/marketing/channels/email-postmark/client";
-import { runInboundResponder } from "@/lib/marketing/channels/email-postmark/responder";
+import { inngest } from "@/lib/queue/inngest-client";
 
 export const dynamic = "force-dynamic";
 const INTEGRATION_ID = "email-postmark";
@@ -23,23 +24,34 @@ function json(error: string, status: number) {
   return NextResponse.json({ error }, { status });
 }
 
-async function auditTerminal(responseKind: string, errorCode: "authentication" | "invalid_payload" | "configuration") {
-  await createDurableConnectorAudit({ repository: prisma.integrationToolCallLog }).record({
-    connectorId: INTEGRATION_ID,
-    actor: { coworkerId: "external-webhook", userId: null },
-    operation: "callback",
-    redactedInput: { event: "inbound-email" },
-    responseKind,
-    durationMs: 0,
-    error: { kind: errorCode, safeMessage: responseKind },
-  });
+async function auditTerminal(responseKind: string, errorCode: "authentication" | "invalid_payload" | "configuration" | "not_connected") {
+  const eventKey = `${INTEGRATION_ID}:${responseKind}:${randomUUID()}`;
+  try {
+    await createDurableConnectorAudit({ repository: prisma.integrationToolCallLog }).record({
+      connectorId: INTEGRATION_ID, actor: { coworkerId: "external-webhook", userId: null },
+      operation: "callback", redactedInput: { event: "inbound-email" }, responseKind,
+      resultCount: 0, durationMs: 0, error: { kind: errorCode, safeMessage: responseKind },
+    });
+  } catch {
+    // Independent durable queue fallback when the database outbox is briefly
+    // unavailable. The event contains only the safe terminal projection.
+    await Promise.race([
+      inngest.send({ name: "integrations/postmark-callback.received", data: {
+        terminalAudit: { eventKey, responseKind, errorCode },
+      } }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("enqueue timeout")), 2_000)),
+    ]).catch(() => undefined);
+  }
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
   // The raw body is intentionally read exactly once and authenticated before parsing.
   const rawBody = await req.text();
   const credential = await prisma.integrationCredential.findUnique({ where: { integrationId: INTEGRATION_ID } });
-  if (!credential || credential.status !== "connected") return json("integration_not_connected", 503);
+  if (!credential || credential.status !== "connected") {
+    await auditTerminal("integration_not_connected", "not_connected");
+    return json("integration_not_connected", 503);
+  }
 
   const stored = readStoredEmailPostmarkCredential(credential);
   if (!stored?.signingSecret) {
@@ -63,7 +75,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     return json("malformed_payload", 400);
   }
   const organization = await prisma.organization.findFirst({ select: { id: true }, orderBy: { createdAt: "asc" } });
-  if (!organization) return json("no_organization", 500);
+  if (!organization) {
+    await auditTerminal("no_organization", "configuration");
+    return json("no_organization", 500);
+  }
 
   const callbackInput: ExecuteCallbackInput<PostmarkCallbackTransaction, PostmarkAcknowledgment> = {
     client: prisma as unknown as ConnectorCallbackClient<PostmarkCallbackTransaction>,
@@ -92,12 +107,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     },
   };
   const callback = await executeCallbackTransaction(callbackInput);
-  // Acknowledge independently of responder latency. Re-entering the completed
-  // receipt drains dispatchPending; a crash before/during this call leaves it
-  // recoverable by the next delivery or the pending-dispatch sweeper.
-  void executeCallbackTransaction({
-    ...callbackInput,
-    responder: async (inboundId) => { await runInboundResponder({ inboundId }); },
-  }).catch((error) => console.error("[email-postmark-inbound] responder dispatch failed:", error));
+  // The receipt + responder job are already durable. A bounded event enqueue
+  // lowers latency; the registered cron worker recovers any missed event.
+  await Promise.race([
+    inngest.send({ name: "integrations/postmark-callback.received", data: { deliveryKey: parsed.externalMessageId! } }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("enqueue timeout")), 2_000)),
+  ]).catch(() => undefined);
   return NextResponse.json(callback.acknowledgment, { status: callback.responseCode });
 }

@@ -1,6 +1,6 @@
 # Unified Connector Kernel Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Use `dpf-tdd`, `dpf-local-merge-ci-before-push`, and `dpf-pr-with-dco` while implementing this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace proof-provider-local connection lifecycle code with one provider-neutral connector definition, credential/state projection, health, audit, error, retry, sync, and callback contract.
 
@@ -230,6 +230,11 @@ git commit -s -m "refactor(integrations): migrate Microsoft communications to ke
 - Create: `apps/web/lib/marketing/channels/email-postmark/config.test.ts`
 - Modify: `apps/web/app/api/integrations/email-postmark/inbound/route.ts`
 - Create: `apps/web/app/api/integrations/email-postmark/inbound/route.test.ts`
+- Modify: `packages/db/prisma/schema.prisma`
+- Create: `packages/db/prisma/migrations/20260717211500_harden_connector_callback_dispatch/migration.sql`
+- Modify: `apps/web/lib/queue/functions/marketing-scheduler-dispatch.ts`
+- Modify: `apps/web/lib/queue/functions/index.ts`
+- Modify: `apps/web/lib/operate/scheduled-jobs/catalog.ts`
 
 - [ ] **Step 1: Write failing Postmark contract tests**
 
@@ -246,6 +251,8 @@ Keep server-token/signing-secret/from-address mapping and signature verification
 - [ ] **Step 4: Preserve route semantics**
 
 Keep exact 503/500/401/400/200 bodies, earliest-created organization selection, and every `InboundChannelMessage` field mapping. Derive the delivery key from Postmark's external message ID after signature verification; call the kernel transaction API so receipt claim, domain message creation, callback audit, and completed acknowledgment commit or roll back together. A completed replay returns the stored 200/inbound ID without a second message. The responder remains nonblocking and becomes idempotent by `inboundId`; receipt `dispatchPending` supports crash recovery and at-least-once dispatch without claiming impossible exactly-once execution. Terminal verification/parse errors are audited outside a delivery claim; transient persistence failures remain retryable.
+
+The durable implementation uses an atomic receipt dispatch lease, an Inngest event for low latency, and a registered five-minute sweep as the recovery path. The webhook awaits only the bounded event enqueue after its callback receipt is durable. Responder workers hold the PostgreSQL receipt lease; draft/engagement creation and inbound links commit in one transaction, with a partial unique index enforcing one inbound reply draft across processes. Terminal branches append directly to the durable audit log and fall back to a secret-free retrying Inngest event without allowing audit infrastructure failure to change the vendor response.
 
 - [ ] **Step 5: Verify Postmark happy and degraded paths**
 

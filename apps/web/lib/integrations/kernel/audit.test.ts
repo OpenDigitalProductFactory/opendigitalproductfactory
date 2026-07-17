@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   canonicalRedactedHash,
@@ -73,6 +73,7 @@ type Receipt = {
   connectorId: string; deliveryKey: string; requestHash: string; status: string;
   responseCode: number | null; domainEntityId: string | null; acknowledgment: unknown;
   dispatchPending: boolean; completedAt: Date | null;
+  dispatchLeaseToken?: string | null; dispatchLeaseExpiresAt?: Date | null;
   auditPending: boolean; auditData: unknown;
 };
 
@@ -101,7 +102,11 @@ function callbackHarness() {
       updateMany: async ({ where, data }: any) => {
         const mapKey = `${where.connectorId}:${where.deliveryKey}`;
         const existing = state.receipts.get(mapKey);
-        if (!existing || existing.auditPending !== where.auditPending) return { count: 0 };
+        if (!existing) return { count: 0 };
+        if (where.auditPending !== undefined && existing.auditPending !== where.auditPending) return { count: 0 };
+        if (where.dispatchPending !== undefined && existing.dispatchPending !== where.dispatchPending) return { count: 0 };
+        if (where.dispatchLeaseToken !== undefined && existing.dispatchLeaseToken !== where.dispatchLeaseToken) return { count: 0 };
+        if (where.OR && existing.dispatchLeaseExpiresAt && existing.dispatchLeaseExpiresAt > new Date()) return { count: 0 };
         state.receipts.set(mapKey, { ...existing, ...data });
         return { count: 1 };
       },
@@ -119,6 +124,25 @@ function callbackHarness() {
 }
 
 describe("callback idempotency", () => {
+  it("leases pending dispatch so concurrent replays invoke one responder", async () => {
+    const harness = callbackHarness();
+    const base = {
+      client: harness.client, connectorId: "postmark-email", deliveryKey: "lease-1", redactedRequest: {},
+      performDomainWrite: async () => ({ domainEntityId: "inbound-lease", responseCode: 200, acknowledgment: { ok: true }, dispatchPending: true }),
+    };
+    await executeCallbackTransaction(base);
+    let calls = 0;
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const responder = async () => { calls += 1; await blocked; };
+    const first = executeCallbackTransaction({ ...base, responder });
+    const second = executeCallbackTransaction({ ...base, responder });
+    await vi.waitFor(() => expect(calls).toBe(1));
+    release();
+    await Promise.all([first, second]);
+    expect(calls).toBe(1);
+    expect([...harness.state.receipts.values()][0].dispatchPending).toBe(false);
+  });
   it("atomically creates one domain entity, callback audit, receipt, and stored acknowledgment", async () => {
     const harness = callbackHarness();
     const input = {

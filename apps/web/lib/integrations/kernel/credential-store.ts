@@ -12,6 +12,7 @@ import {
   type ConnectorSetupState,
 } from "./setup-state";
 import { collectSensitiveText, redactConnectorText } from "./redaction";
+import { isRecord } from "@/lib/shared/coerce";
 
 export type ConnectorCredentialValue = ConnectorSafeValue;
 export type ConnectorReconnectFields = { [key: string]: ConnectorCredentialValue };
@@ -111,10 +112,6 @@ export interface ConnectorCredentialStoreDependencies<TTransactionContext = Conn
 
 const UNREADABLE_CREDENTIAL_MESSAGE = "Stored connector credential could not be read safely.";
 const MAX_TRANSACTION_ATTEMPTS = 3;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isCredentialValue(value: unknown): value is ConnectorCredentialValue {
   if (value === null || ["string", "number", "boolean"].includes(typeof value)) return true;

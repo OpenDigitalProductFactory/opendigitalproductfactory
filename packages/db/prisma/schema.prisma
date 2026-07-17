@@ -1909,6 +1909,8 @@ model IntegrationCallbackReceipt {
   domainEntityId   String?
   acknowledgment   Json?
   dispatchPending  Boolean   @default(false)
+  dispatchLeaseToken String?
+  dispatchLeaseExpiresAt DateTime?
   auditPending     Boolean   @default(false)
   auditData        Json?
   createdAt        DateTime  @default(now())

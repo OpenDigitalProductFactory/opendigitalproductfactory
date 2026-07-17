@@ -43,6 +43,9 @@ function kernel() {
 export async function saveEmailPostmarkCredential(
   rawInput: EmailPostmarkConnectInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!rawInput.serverToken || !rawInput.signingSecret || !rawInput.fromAddress) {
+    return { ok: false, error: "Missing server token, signing secret, or From address." };
+  }
   const parsed = EmailPostmarkConnectInputSchema.safeParse(rawInput);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid Postmark configuration." };
   const input = parsed.data;

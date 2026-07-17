@@ -12,6 +12,9 @@
 // `editable`, so an operator can disable it from /admin/scheduled-jobs.
 
 import { cron } from "inngest";
+import { prisma } from "@dpf/db";
+import { createDurableConnectorAudit, drainDurableCallbackDispatch } from "@/lib/integrations/kernel/audit";
+import { runInboundResponder } from "@/lib/marketing/channels/email-postmark/responder";
 
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
@@ -27,4 +30,35 @@ export const marketingSchedulerDispatch = inngest.createFunction(
       return tickScheduler();
     });
   },
+);
+
+async function drainPostmarkCallbacks(deliveryKey?: string, terminalAudit?: {
+  eventKey: string; responseKind: string; errorCode: string;
+}) {
+  if (terminalAudit) await createDurableConnectorAudit({ repository: prisma.integrationToolCallLog }).record({
+    connectorId: "email-postmark", actor: { coworkerId: "external-webhook", userId: null },
+    operation: "callback", redactedInput: { event: "inbound-email", eventKey: terminalAudit.eventKey },
+    responseKind: terminalAudit.responseKind, resultCount: 0, durationMs: 0,
+    error: { kind: terminalAudit.errorCode as "configuration", safeMessage: terminalAudit.responseKind },
+  });
+  const receipts = await prisma.integrationCallbackReceipt.findMany({
+    where: { connectorId: "email-postmark", status: "completed", dispatchPending: true, ...(deliveryKey ? { deliveryKey } : {}) },
+    select: { deliveryKey: true, domainEntityId: true }, orderBy: { updatedAt: "asc" }, take: deliveryKey ? 1 : 50,
+  });
+  for (const receipt of receipts) if (receipt.domainEntityId) await drainDurableCallbackDispatch({
+    client: prisma as unknown as Parameters<typeof drainDurableCallbackDispatch>[0]["client"],
+    connectorId: "email-postmark", deliveryKey: receipt.deliveryKey, domainEntityId: receipt.domainEntityId,
+    responder: async (inboundId) => { await runInboundResponder({ inboundId }); },
+  });
+  return { attempted: receipts.length, terminalAudits: terminalAudit ? 1 : 0 };
+}
+
+export const postmarkCallbackDispatchRequested = inngest.createFunction(
+  { id: "integrations/postmark-callback-dispatch", retries: 3, triggers: [{ event: "integrations/postmark-callback.received" }] },
+  async ({ event: received, step }) => step.run("drain-postmark-callback", () => drainPostmarkCallbacks(received.data.deliveryKey, received.data.terminalAudit)),
+);
+
+export const postmarkCallbackDispatchSweep = inngest.createFunction(
+  { id: "integrations/postmark-callback-sweep", retries: 2, triggers: [cron("*/5 * * * *")] },
+  async ({ step }) => step.run("sweep-postmark-callbacks", () => drainPostmarkCallbacks()),
 );

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import type { ConnectorErrorKind } from "./error";
 import { redactConnectorText } from "./redaction";
@@ -117,6 +117,8 @@ export interface CallbackReceiptRow {
   domainEntityId: string | null;
   acknowledgment: unknown;
   dispatchPending: boolean;
+  dispatchLeaseToken?: string | null;
+  dispatchLeaseExpiresAt?: Date | null;
   auditPending: boolean;
   auditData: unknown;
   completedAt: Date | null;
@@ -133,8 +135,8 @@ interface CallbackReceiptDelegate {
     data: Partial<CallbackReceiptRow>;
   }): Promise<CallbackReceiptRow>;
   updateMany(args: {
-    where: { connectorId: string; deliveryKey: string; auditPending: true };
-    data: { auditPending: false; auditData: null };
+    where: Record<string, unknown>;
+    data: Partial<CallbackReceiptRow>;
   }): Promise<{ count: number }>;
 }
 
@@ -226,18 +228,69 @@ async function drainDispatch<TTransaction extends ConnectorCallbackTransaction, 
   dispatchPending: boolean,
 ): Promise<CallbackExecutionResult<TAcknowledgment>> {
   if (!dispatchPending || !input.responder) return result;
+  const now = input.now?.() ?? new Date();
+  const leaseToken = randomUUID();
+  const leaseExpiresAt = new Date(now.getTime() + 60_000);
+  let claimed = false;
   try {
+    await input.client.$transaction(async (transaction) => {
+      const claim = await transaction.integrationCallbackReceipt.updateMany({
+        where: {
+          connectorId: input.connectorId,
+          deliveryKey: input.deliveryKey,
+          dispatchPending: true,
+          OR: [{ dispatchLeaseExpiresAt: null }, { dispatchLeaseExpiresAt: { lte: now } }],
+        },
+        data: { dispatchLeaseToken: leaseToken, dispatchLeaseExpiresAt: leaseExpiresAt },
+      });
+      claimed = claim.count === 1;
+    });
+    if (!claimed) return result;
     await input.responder(result.domainEntityId);
     await input.client.$transaction(async (transaction) => {
-      await transaction.integrationCallbackReceipt.update({
-        where: callbackKey(input.connectorId, input.deliveryKey),
-        data: { dispatchPending: false },
+      await transaction.integrationCallbackReceipt.updateMany({
+        where: { connectorId: input.connectorId, deliveryKey: input.deliveryKey, dispatchLeaseToken: leaseToken },
+        data: { dispatchPending: false, dispatchLeaseToken: null, dispatchLeaseExpiresAt: null },
       });
     });
     return result;
   } catch {
+    if (claimed) {
+      try {
+        await input.client.$transaction(async (transaction) => {
+          await transaction.integrationCallbackReceipt.updateMany({
+            where: { connectorId: input.connectorId, deliveryKey: input.deliveryKey, dispatchLeaseToken: leaseToken },
+            data: { dispatchLeaseToken: null, dispatchLeaseExpiresAt: null },
+          });
+        });
+      } catch { /* lease expiry remains the recovery backstop */ }
+    }
     return withOperationalError(result, "callback_dispatch_failed");
   }
+}
+
+/** Worker entry point for draining a completed receipt without replaying domain writes. */
+export async function drainDurableCallbackDispatch<TTransaction extends ConnectorCallbackTransaction>(input: {
+  client: ConnectorCallbackClient<TTransaction>;
+  connectorId: string;
+  deliveryKey: string;
+  domainEntityId: string;
+  responder(domainEntityId: string): Promise<void>;
+  now?: () => Date;
+}): Promise<{ claimedOrCompleted: boolean; retryableFailure: boolean }> {
+  const result = await drainDispatch(
+    {
+      ...input,
+      redactedRequest: {},
+      performDomainWrite: async () => { throw new Error("Worker dispatch cannot write callback domain state."); },
+    },
+    { responseCode: 200, domainEntityId: input.domainEntityId, acknowledgment: {}, replayed: true, operationalErrors: [] },
+    true,
+  );
+  return {
+    claimedOrCompleted: !result.operationalErrors.includes("callback_dispatch_failed"),
+    retryableFailure: result.operationalErrors.includes("callback_dispatch_failed"),
+  };
 }
 
 type PendingCallbackAudit = Omit<ConnectorAuditCreateData, "calledAt"> & { calledAt: string };

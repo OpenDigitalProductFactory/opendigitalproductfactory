@@ -6,7 +6,7 @@ const h = vi.hoisted(() => ({
   stored: { signingSecret: "sig", fromAddress: "a@b.com", replyToAddress: null, serverToken: "token" } as unknown,
   verified: true,
   parsed: { externalMessageId: "MSG-1", externalThreadId: "THREAD-1", fromAddress: "from@example.com", fromDisplayName: "Founder", subject: "Hello", textBody: "Body", receivedAt: new Date("2026-01-01"), metadata: { stream: "inbound" } } as unknown,
-  create: vi.fn(), responder: vi.fn(), audit: vi.fn(), execute: vi.fn(), verify: vi.fn(), parse: vi.fn(),
+  create: vi.fn(), send: vi.fn(), audit: vi.fn(), execute: vi.fn(), verify: vi.fn(), parse: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: {
@@ -19,7 +19,7 @@ vi.mock("@/lib/marketing/channels/email-postmark/client", () => ({
   verifyInboundSignature: h.verify,
   parseInboundPayload: h.parse,
 }));
-vi.mock("@/lib/marketing/channels/email-postmark/responder", () => ({ runInboundResponder: h.responder }));
+vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: h.send } }));
 vi.mock("@/lib/integrations/kernel/audit", () => ({
   createDurableConnectorAudit: () => ({ record: h.audit }),
   executeCallbackTransaction: h.execute,
@@ -42,16 +42,10 @@ beforeEach(() => {
   h.verify.mockImplementation(() => h.verified);
   h.parse.mockImplementation(() => h.parsed);
   h.create.mockResolvedValue({ inboundId: "inbound-1" });
-  h.responder.mockResolvedValue({});
+  h.send.mockResolvedValue({});
   h.audit.mockResolvedValue(undefined);
-  let completed: { responseCode: number; domainEntityId: string; acknowledgment: unknown } | null = null;
   h.execute.mockImplementation(async (input) => {
-    if (input.responder && completed) {
-      await input.responder(completed.domainEntityId);
-      return { ...completed, replayed: true, operationalErrors: [] };
-    }
     const domain = await input.performDomainWrite({ inboundChannelMessage: { create: h.create } });
-    completed = domain;
     return { ...domain, replayed: false, operationalErrors: [] };
   });
 });
@@ -90,7 +84,22 @@ describe("Postmark inbound compatibility", () => {
       metadata: { stream: "inbound" },
     }, select: { inboundId: true } });
     expect(h.execute).toHaveBeenCalledWith(expect.objectContaining({ connectorId: "email-postmark", deliveryKey: "MSG-1" }));
-    await vi.waitFor(() => expect(h.execute).toHaveBeenCalledTimes(2));
-    expect(h.responder).toHaveBeenCalledWith({ inboundId: "inbound-1" });
+    expect(h.execute).toHaveBeenCalledTimes(1);
+    expect(h.send).toHaveBeenCalledWith(expect.objectContaining({ name: "integrations/postmark-callback.received" }));
+  });
+
+  it("preserves terminal response when direct audit persistence is unavailable", async () => {
+    h.verified = false;
+    h.audit.mockRejectedValueOnce(new Error("database unavailable"));
+    const response = await POST(request() as never);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "invalid_signature" });
+    expect(h.create).not.toHaveBeenCalled();
+  });
+
+  it("does not acknowledge a transient callback persistence failure", async () => {
+    h.execute.mockRejectedValueOnce(Object.assign(new Error("serialization conflict"), { code: "P2034" }));
+    await expect(POST(request() as never)).rejects.toMatchObject({ code: "P2034" });
+    expect(h.send).not.toHaveBeenCalled();
   });
 });

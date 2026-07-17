@@ -64,7 +64,7 @@ import { edgeIncidentCorrelation } from "./edge-incident-correlation";
 import { remoteActionClaimTimeout } from "./remote-action-claim-timeout";
 import { alertDeliveryBridge } from "./alert-delivery-bridge";
 import { releaseHealthCheck } from "./release-health-check";
-import { marketingSchedulerDispatch } from "./marketing-scheduler-dispatch";
+import { marketingSchedulerDispatch, postmarkCallbackDispatchRequested, postmarkCallbackDispatchSweep } from "./marketing-scheduler-dispatch";
 import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
 import { siemCorrelationSweep } from "./siem-correlation-sweep";
 import { patchAssessmentSweep } from "./patch-assessment-sweep";
@@ -135,6 +135,7 @@ export const scheduledFunctions = [
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
+  postmarkCallbackDispatchSweep,
 ];
 
 export const eventFunctions = [
@@ -167,6 +168,7 @@ export const eventFunctions = [
   identityInferenceFallbackRequested, // EP-ASSET-INTELLIGENCE: AI identity-resolution fallback "run now" (poll-on-request)
   coworkerCertificationRunNow, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): operator "run now" certification sweep
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
+  postmarkCallbackDispatchRequested,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];
