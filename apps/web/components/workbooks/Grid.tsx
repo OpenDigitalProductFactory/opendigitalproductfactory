@@ -121,6 +121,7 @@ import {
   normalizeViewState,
 } from "./grid-named-views";
 import { GridViewsMenu } from "./GridViewsMenu";
+import { type PivotAgg, type SummaryMode } from "./grid-pivot";
 import {
   reorderColumnIds,
   applyColumnOrder,
@@ -371,7 +372,10 @@ export function WorkbookGrid({
   const [showSummary, setShowSummary] = useState(false);
   const [summaryGroupBy, setSummaryGroupBy] = useState("");
   const [summaryValue, setSummaryValue] = useState("");
-  const [summaryChart, setSummaryChart] = useState(false);
+  const [summaryMode, setSummaryMode] = useState<SummaryMode>("table");
+  // Pivot (2-D summary): the "across" column + the aggregate applied to cells.
+  const [summaryPivotCol, setSummaryPivotCol] = useState("");
+  const [summaryAgg, setSummaryAgg] = useState<PivotAgg>("count");
   const [filterGroup, setFilterGroup] = useState<FilterGroup>(EMPTY_FILTER_GROUP);
   const activeFilterCount = activeConditionCount(filterGroup);
   // Drag-to-reorder column order (column ids) + in-grid collapsible grouping.
@@ -1207,8 +1211,12 @@ export function WorkbookGrid({
           setSummaryGroupBy={setSummaryGroupBy}
           summaryValue={summaryValue}
           setSummaryValue={setSummaryValue}
-          summaryChart={summaryChart}
-          setSummaryChart={setSummaryChart}
+          summaryMode={summaryMode}
+          setSummaryMode={setSummaryMode}
+          summaryPivotCol={summaryPivotCol}
+          setSummaryPivotCol={setSummaryPivotCol}
+          summaryAgg={summaryAgg}
+          setSummaryAgg={setSummaryAgg}
         />
       )}
 
