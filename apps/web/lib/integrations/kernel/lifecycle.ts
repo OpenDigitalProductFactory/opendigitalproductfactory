@@ -1,5 +1,11 @@
 import { createDurableConnectorAudit, type ConnectorAuditInput, type ConnectorAuditRepository } from "./audit";
-import { ConnectorError, type ConnectorErrorKind } from "./error";
+import {
+  ConnectorAttemptFailedError,
+  toConnectorAttemptFailure,
+  type ConnectorAttemptFailure,
+} from "./error";
+export { ConnectorAttemptFailedError, toConnectorAttemptFailure } from "./error";
+export type { ConnectorAttemptFailure, ConnectorAttemptFailureKind } from "./error";
 import type { ConnectorRetryPolicy } from "./retry";
 import { retryConnectorOperation } from "./retry";
 import { createSingleFlight, type SingleFlight } from "./single-flight";
@@ -43,48 +49,21 @@ export async function recordConnectorAuditInTransaction(
 
 type AuditWrite<TDraft> = (draft: TDraft) => Promise<void>;
 
-export type ConnectorAttemptFailureKind = ConnectorErrorKind | "cancelled";
-export interface ConnectorAttemptFailure {
-  status: "failed";
-  kind: ConnectorAttemptFailureKind;
-  safeMessage: string;
-}
-
-export class ConnectorAttemptFailedError extends Error {
-  constructor(readonly failure: ConnectorAttemptFailure, options: { cause?: unknown } = {}) {
-    super(failure.safeMessage, { cause: options.cause });
-    this.name = "ConnectorAttemptFailedError";
-  }
-}
-
-const SAFE_FAILURE_MESSAGES: Record<ConnectorErrorKind, string> = {
-  configuration: "Connector configuration failed.",
-  authentication: "Connector authentication failed.",
-  authorization: "Connector authorization failed.",
-  rate_limited: "Connector request was rate limited.",
-  upstream_unavailable: "Connector provider is unavailable.",
-  invalid_payload: "Connector payload was invalid.",
-  not_connected: "Connector is not connected.",
-  internal: "Connector operation failed.",
-};
-
-export function toConnectorAttemptFailure(error: unknown): ConnectorAttemptFailure {
-  if (error instanceof ConnectorError) {
-    return { status: "failed", kind: error.kind, safeMessage: SAFE_FAILURE_MESSAGES[error.kind] };
-  }
-  if (error instanceof Error && error.name === "AbortError") {
-    return { status: "failed", kind: "cancelled", safeMessage: "Connector operation was cancelled." };
-  }
-  return { status: "failed", kind: "internal", safeMessage: SAFE_FAILURE_MESSAGES.internal };
-}
-
 async function recordFailedAttempt<TDraft>(
   persistence: LifecyclePersistence<TDraft>,
   auditFailure: (draft: TDraft, failure: ConnectorAttemptFailure) => Promise<void>,
   error: unknown,
 ): Promise<never> {
-  await persistence.transact((draft) => auditFailure(draft, toConnectorAttemptFailure(error)));
-  throw error;
+  const failure = toConnectorAttemptFailure(error);
+  try {
+    await persistence.transact((draft) => auditFailure(draft, failure));
+  } catch (auditError) {
+    const auditFailure = toConnectorAttemptFailure(auditError);
+    throw new ConnectorAttemptFailedError(auditFailure, {
+      cause: new AggregateError([error, auditError], "Connector operation and failure audit both failed."),
+    });
+  }
+  throw new ConnectorAttemptFailedError(failure, { cause: error });
 }
 
 interface PersistedTransition<TDraft, TResult> {
@@ -127,17 +106,29 @@ export function createConnectorLifecycle<TDraft, TRefreshResult = unknown>(depen
         result = await input.exchange();
       } catch (error) {
         const failure = toConnectorAttemptFailure(error);
-        await dependencies.persistence.transact(async (draft) => {
-          await input.persistFailure(draft, failure);
-          await input.auditFailure(draft, failure);
-        });
+        try {
+          await dependencies.persistence.transact(async (draft) => {
+            await input.persistFailure(draft, failure);
+            await input.auditFailure(draft, failure);
+          });
+        } catch (auditError) {
+          throw new ConnectorAttemptFailedError(toConnectorAttemptFailure(auditError), {
+            cause: new AggregateError([error, auditError], "Connect failure persistence/audit failed."),
+          });
+        }
         throw new ConnectorAttemptFailedError(failure, { cause: error });
       }
       try {
         return await commit(input, result);
       } catch (error) {
         const failure = toConnectorAttemptFailure(error);
-        await dependencies.persistence.transact((draft) => input.auditFailure(draft, failure));
+        try {
+          await dependencies.persistence.transact((draft) => input.auditFailure(draft, failure));
+        } catch (auditError) {
+          throw new ConnectorAttemptFailedError(toConnectorAttemptFailure(auditError), {
+            cause: new AggregateError([error, auditError], "Connect and failure audit both failed."),
+          });
+        }
         throw new ConnectorAttemptFailedError(failure, { cause: error });
       }
     },
@@ -204,7 +195,11 @@ export function createConnectorLifecycle<TDraft, TRefreshResult = unknown>(depen
         : { state: "degraded", error: "Connector health probe failed." };
       // Audit persistence is intentionally outside the provider catch: an audit
       // outage is operational failure, not evidence that the provider degraded.
-      await dependencies.persistence.transact((draft) => input.audit(draft, result));
+      try {
+        await dependencies.persistence.transact((draft) => input.audit(draft, result));
+      } catch (error) {
+        throw new ConnectorAttemptFailedError(toConnectorAttemptFailure(error), { cause: error });
+      }
       return result;
     },
   };

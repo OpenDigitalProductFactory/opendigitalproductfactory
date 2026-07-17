@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import type { ConnectorErrorKind } from "./error";
+import { ConnectorAttemptFailedError, toConnectorAttemptFailure } from "./error";
 import { redactConnectorText } from "./redaction";
 
 export const CONNECTOR_AUDIT_OPERATIONS = [
@@ -147,6 +148,7 @@ export interface ConnectorCallbackTransaction {
 
 export interface ConnectorCallbackClient<TTransaction extends ConnectorCallbackTransaction> {
   integrationCallbackReceipt: CallbackReceiptDelegate;
+  integrationToolCallLog: ConnectorAuditRepository;
   $transaction<T>(operation: (transaction: TTransaction) => Promise<T>): Promise<T>;
 }
 
@@ -408,7 +410,30 @@ export async function executeCallbackTransaction<
       };
     });
   } catch (error) {
-    if (!isUniqueConflict(error)) throw error;
+    if (error instanceof CallbackDeliveryIdentityConflictError) throw error;
+    if (!isUniqueConflict(error)) {
+      const failure = toConnectorAttemptFailure(error);
+      try {
+        await createDurableConnectorAudit({ repository: input.client.integrationToolCallLog, now: input.now }).record({
+          connectorId: input.connectorId,
+          actor: { coworkerId: "external-webhook", userId: null },
+          operation: "callback",
+          redactedInput: input.redactedRequest,
+          responseKind: "failed",
+          resultCount: 0,
+          durationMs: Math.max(0, (input.now?.() ?? new Date()).getTime() - calledAt.getTime()),
+          error: {
+            kind: failure.kind === "cancelled" ? "internal" : failure.kind,
+            safeMessage: failure.safeMessage,
+          },
+        });
+      } catch (auditError) {
+        throw new ConnectorAttemptFailedError(toConnectorAttemptFailure(auditError), {
+          cause: new AggregateError([error, auditError], "Callback transaction and failure audit both failed."),
+        });
+      }
+      throw new ConnectorAttemptFailedError(failure, { cause: error });
+    }
     const existing = await input.client.integrationCallbackReceipt.findUnique({
       where: callbackKey(input.connectorId, input.deliveryKey),
     });

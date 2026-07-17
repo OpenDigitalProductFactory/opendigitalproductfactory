@@ -115,6 +115,7 @@ function callbackHarness() {
   };
   const client = {
     integrationCallbackReceipt: tx.integrationCallbackReceipt,
+    integrationToolCallLog: tx.integrationToolCallLog,
     $transaction: async <T>(operation: (transaction: typeof tx) => Promise<T>) => {
       const saved = snapshot();
       try { return await operation(tx); } catch (error) { restore(saved); throw error; }
@@ -161,6 +162,43 @@ describe("callback idempotency", () => {
     expect(harness.state.domains).toEqual(["inbound-1"]);
     expect(harness.state.audits).toHaveLength(1);
     expect(harness.state.audits[0]).toMatchObject({ coworkerId: "external-webhook", userId: null, toolName: "callback" });
+  });
+
+  it("audits a rolled-back callback crash once with safe data and returns a typed retryable failure", async () => {
+    const harness = callbackHarness();
+    await expect(executeCallbackTransaction({
+      client: harness.client,
+      connectorId: "postmark-email", deliveryKey: "crash-1", redactedRequest: { kind: "inbound" },
+      performDomainWrite: async () => {
+        harness.state.domains.push("must-roll-back");
+        throw new Error("database leaked raw-payload-secret");
+      },
+    })).rejects.toMatchObject({
+      failure: { status: "failed", kind: "internal", safeMessage: "Connector operation failed." },
+    });
+    expect(harness.state.domains).toEqual([]);
+    expect(harness.state.receipts.size).toBe(0);
+    expect(harness.state.audits).toHaveLength(1);
+    expect(harness.state.audits[0]).toMatchObject({
+      toolName: "callback", responseKind: "failed", errorCode: "internal",
+      errorMessage: "Connector operation failed.",
+    });
+    expect(JSON.stringify(harness.state.audits)).not.toContain("raw-payload-secret");
+  });
+
+  it("fails closed without acknowledgment when callback rollback auditing is unavailable", async () => {
+    const harness = callbackHarness();
+    harness.client.integrationToolCallLog.create = async () => { throw new Error("audit store leaked secret"); };
+    await expect(executeCallbackTransaction({
+      client: harness.client,
+      connectorId: "postmark-email", deliveryKey: "crash-2", redactedRequest: { kind: "inbound" },
+      performDomainWrite: async () => { throw new Error("transaction leaked payload"); },
+    })).rejects.toMatchObject({
+      failure: { status: "failed", kind: "internal", safeMessage: "Connector operation failed." },
+    });
+    expect(harness.state.receipts.size).toBe(0);
+    expect(harness.state.domains).toEqual([]);
+    expect(harness.state.audits).toEqual([]);
   });
 
   it("returns the committed acknowledgment and preserves pending audit when audit delivery fails", async () => {

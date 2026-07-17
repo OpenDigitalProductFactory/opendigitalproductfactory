@@ -159,7 +159,7 @@ describe("connector lifecycle", () => {
           redactedInput: {}, responseKind: "authentication", durationMs: 1,
         });
       },
-    })).rejects.toThrow("Connector audit persistence failed");
+    })).rejects.toMatchObject({ failure: { kind: "internal", safeMessage: "Connector operation failed." } });
     expect(committed).toEqual([]);
   });
 
@@ -227,7 +227,7 @@ describe("connector lifecycle", () => {
       : operation === "disconnect"
         ? lifecycle.disconnect({ persist: async (d) => { delete d.token; }, audit, auditFailure: async () => undefined })
         : lifecycle.refresh({ connectorId: "one", refresh: async () => ({ token: "rotated" }), persist: async (d, s) => { d.token = s.token; }, audit, auditFailure: async () => undefined }))
-      .rejects.toThrow(operation === "connect" ? "Connector operation failed." : "audit unavailable");
+      .rejects.toMatchObject({ failure: { kind: "internal", safeMessage: "Connector operation failed." } });
     expect(db.state.token).toBe("valid");
   });
 
@@ -287,7 +287,7 @@ describe("connector lifecycle", () => {
         : operation === "refresh"
           ? lifecycle.refresh({ connectorId: "credential-row-id", refresh: async () => "refresh", persist: async (d) => d.credentials.mark("refresh"), audit, auditFailure: audit })
           : runConnectorSync({ request: { idempotencyKey: "sync-id" }, persistence, retry: { maxAttempts: 1, initialDelayMs: 0, maxDelayMs: 0 }, sync: async () => ({ resultCount: 1, checkpoint: "sync" }), persist: async (d) => d.credentials.mark("sync"), audit, auditFailure: audit });
-    await expect(execution).rejects.toThrow(operation === "connect" ? "Connector operation failed." : "Connector audit persistence failed");
+    await expect(execution).rejects.toMatchObject({ failure: { kind: "internal", safeMessage: "Connector operation failed." } });
     expect(committed).toEqual([]);
   });
 
@@ -306,7 +306,9 @@ describe("connector lifecycle", () => {
     expect(persist).toHaveBeenCalledTimes(1);
     expect(audit).toHaveBeenCalledTimes(1);
     expect(db.state.token).toBe("new");
-    await expect(lifecycle.refresh({ connectorId: "failed", refresh: async () => { throw new Error("nope"); }, persist: async () => undefined, audit: async () => undefined, auditFailure: async () => undefined })).rejects.toThrow("nope");
+    await expect(lifecycle.refresh({ connectorId: "failed", refresh: async () => { throw new Error("raw refresh secret"); }, persist: async () => undefined, audit: async () => undefined, auditFailure: async () => undefined })).rejects.toMatchObject({
+      failure: { kind: "internal", safeMessage: "Connector operation failed." },
+    });
     expect(db.state.token).toBe("new");
   });
 
@@ -355,7 +357,7 @@ describe("retry and sync", () => {
       probe: async () => ({ ok: true }),
       audit: async () => { throw new Error("audit store unavailable"); },
       auditFailure,
-    })).rejects.toThrow("audit store unavailable");
+    })).rejects.toMatchObject({ failure: { kind: "internal", safeMessage: "Connector operation failed." } });
     expect(auditFailure).not.toHaveBeenCalled();
   });
 
@@ -368,7 +370,7 @@ describe("retry and sync", () => {
       persist: async (draft, result) => { draft.state.token = result.token; },
       audit: refreshFixture.durableAudit("refresh", "success"),
       auditFailure: refreshFixture.durableAudit("refresh", "failed"),
-    })).rejects.toThrow("raw refresh token secret");
+    })).rejects.toMatchObject({ failure: { kind: "authentication", safeMessage: "Connector authentication failed." } });
     expect(refreshFixture.state().token).toBe("last-valid");
     expect(refreshFixture.auditRows).toHaveLength(1);
     expect(JSON.stringify(refreshFixture.auditRows)).not.toContain("raw refresh token secret");
@@ -381,7 +383,7 @@ describe("retry and sync", () => {
       persist: async () => undefined,
       audit: clientFixture.durableAudit("refresh", "success"),
       auditFailure: clientFixture.durableAudit("refresh", "failed"),
-    })).rejects.toThrow("raw client secret");
+    })).rejects.toMatchObject({ failure: { kind: "upstream_unavailable", safeMessage: "Connector provider is unavailable." } });
     expect(clientFixture.state().token).toBe("last-valid");
     expect(clientFixture.auditRows).toHaveLength(1);
     expect(JSON.stringify(clientFixture.auditRows)).not.toContain("raw client secret");
@@ -403,7 +405,10 @@ describe("retry and sync", () => {
       persist: async (draft, result) => { draft.state.checkpoint = result.checkpoint as string; },
       audit: fixture.durableAudit("sync", "success"),
       auditFailure: fixture.durableAudit("sync", "failed"),
-    })).rejects.toThrow();
+    })).rejects.toMatchObject({ failure: {
+      kind: abort ? "cancelled" : "upstream_unavailable",
+      safeMessage: abort ? "Connector operation was cancelled." : "Connector provider is unavailable.",
+    } });
     expect(calls).toBe(expectedCalls);
     expect(fixture.state().checkpoint).toBe("old");
     expect(fixture.auditRows).toHaveLength(1);
@@ -417,7 +422,7 @@ describe("retry and sync", () => {
       persist: async () => { throw new Error("delete failed"); },
       audit: fixture.durableAudit("disconnect", "success"),
       auditFailure: fixture.durableAudit("disconnect", "failed"),
-    })).rejects.toThrow("delete failed");
+    })).rejects.toMatchObject({ failure: { kind: "internal", safeMessage: "Connector operation failed." } });
     expect(fixture.state().token).toBe("valid");
     expect(fixture.auditRows).toHaveLength(1);
 
@@ -428,7 +433,7 @@ describe("retry and sync", () => {
       persist: async () => { throw new Error("delete failed"); },
       audit: async () => undefined,
       auditFailure: async () => { throw new Error("audit unavailable"); },
-    })).rejects.toThrow("audit unavailable");
+    })).rejects.toMatchObject({ failure: { kind: "internal", safeMessage: "Connector operation failed." } });
   });
 
   it("honors capped Retry-After and deterministic backoff while preserving the idempotency key", async () => {
@@ -479,7 +484,7 @@ describe("retry and sync", () => {
       sync: async () => ({ nextCursor: "c2", resultCount: 1, checkpoint: "p2" }),
       persist: async (draft, result) => { draft.checkpoint = result.checkpoint; }, audit: async () => { throw new Error("audit"); },
       auditFailure: async () => { throw new Error("audit"); },
-    })).rejects.toThrow("audit");
+    })).rejects.toMatchObject({ failure: { kind: "internal", safeMessage: "Connector operation failed." } });
     expect(db.state.checkpoint).toBe("p1");
   });
 
