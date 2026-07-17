@@ -34,6 +34,14 @@ import {
   CATALOG_SWEEP_CRON,
   CATALOG_SWEEP_CADENCE,
 } from "@/lib/asset-intelligence/catalog-sweep-constants";
+import {
+  IDENTITY_INFERENCE_JOB_ID,
+  IDENTITY_INFERENCE_JOB_NAME,
+  IDENTITY_INFERENCE_SCHEDULED_INNGEST_ID,
+  IDENTITY_INFERENCE_REQUESTED_EVENT,
+  IDENTITY_INFERENCE_CRON,
+  IDENTITY_INFERENCE_CADENCE,
+} from "@/lib/asset-intelligence/identity-inference-constants";
 
 /** core = platform-integrity cron, operator read-only. editable = cadence
  *  may be tuned by an operator after install. */
@@ -571,6 +579,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: true,
     runNowEvent: CATALOG_SWEEP_REQUESTED_EVENT,
+  },
+  {
+    jobId: IDENTITY_INFERENCE_JOB_ID,
+    inngestId: IDENTITY_INFERENCE_SCHEDULED_INNGEST_ID,
+    name: IDENTITY_INFERENCE_JOB_NAME,
+    purpose:
+      "EP-ASSET-INTELLIGENCE (spec §4.2/§8): resolves the ambiguous tail of inventory items that deterministic fingerprint rules could not identify, using a cheap model (batched + per-run inference budget cap). Logs each AI resolution, promotes repeated ones to shadow fingerprint rules, and auto-applies only at high confidence. If it stops, unidentified estate items never gain a canonical identity or support-lifecycle posture.",
+    cron: IDENTITY_INFERENCE_CRON,
+    cadence: IDENTITY_INFERENCE_CADENCE,
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: IDENTITY_INFERENCE_REQUESTED_EVENT,
   },
   {
     jobId: "coworker-certification",

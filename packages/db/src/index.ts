@@ -389,6 +389,11 @@ export * from "./enrich-digital-product";
 // — the governed loop that runs the endoflife.date / CPE / SBOM feeds over the
 // CatalogIdentity spine. The per-feed modules stay internal; the sweep is the surface.
 export * from "./catalog-enrichment-sweep";
+// Asset-intelligence AI identity-resolution fallback (EP-ASSET-INTELLIGENCE, spec §4.2/§8)
+// — the cheap-model fallback for the ambiguous tail deterministic rules don't resolve,
+// under a batching + per-run inference budget cost guardrail. Pure engine; the governed
+// apps/web runner wires the real prisma + a minimize_cost inference fn.
+export * from "./catalog-identity-inference";
 export * from "./device-placement";
 export * from "./portfolio-sources";
 export * from "./backlog-portfolio";
