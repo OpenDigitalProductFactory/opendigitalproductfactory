@@ -15,6 +15,7 @@ import {
   semanticMemoryErrors,
   semanticMemoryLatency,
 } from "@/lib/metrics";
+import type { RouteSensitivity } from "@/lib/tak/agent-sensitivity";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -22,6 +23,62 @@ import {
 function extractRouteDomain(routeContext: string): string {
   const seg = routeContext.replace(/^\//, "").split("/")[0];
   return seg || "unknown";
+}
+
+// ─── BI-DG-001: storage-time sensitivity gate ───────────────────────────────
+// Semantic memory is a derived copy of coworker conversation (spec §"Derived-data
+// contracts"): it must not persist raw content whose source route/agent is
+// `restricted`, and `confidential` content passes through a deterministic masking
+// seam before it is embedded or previewed. The declared route/agent sensitivity is
+// supplied by the caller — this module never recomputes a competing sensitivity.
+
+/** Default declared processing purpose for the coworker recall projection. */
+export const SEMANTIC_MEMORY_PURPOSE = "coworker-semantic-recall";
+
+/** Payload class recorded on each stored vector, per the derived-data contract. */
+export type MemoryPayloadClass = "content" | "masked-content";
+
+const KNOWN_SENSITIVITIES: readonly RouteSensitivity[] = [
+  "public",
+  "internal",
+  "confidential",
+  "restricted",
+];
+
+/**
+ * Interim deterministic masking seam for `confidential` content. It is intentionally
+ * conservative and pure (same input → same output) so recall stays stable and the
+ * seam is unit-testable; field-level protection policy (later BIs) replaces the body
+ * without moving the call site. It never introduces randomness or timestamps.
+ */
+export function maskConfidentialContent(content: string): string {
+  return content
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email]")
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, "[token]")
+    .replace(/\d[\d\s().+-]{4,}\d/g, "[number]");
+}
+
+/**
+ * Decide how (or whether) a conversation turn may be stored in the vector index.
+ * Fail-closed: `restricted` — or any value outside the known taxonomy — is blocked
+ * so neither the embedding nor a raw preview reaches the store. `confidential` is
+ * masked; `public`/`internal` preserve prior behavior until field policy lands.
+ */
+export function resolveMemoryStorageDisposition(
+  sensitivity: RouteSensitivity,
+  content: string,
+): { action: "store" | "block"; storedContent: string; payloadClass: MemoryPayloadClass } {
+  if (sensitivity === "restricted" || !KNOWN_SENSITIVITIES.includes(sensitivity)) {
+    return { action: "block", storedContent: "", payloadClass: "content" };
+  }
+  if (sensitivity === "confidential") {
+    return {
+      action: "store",
+      storedContent: maskConfidentialContent(content),
+      payloadClass: "masked-content",
+    };
+  }
+  return { action: "store", storedContent: content, payloadClass: "content" };
 }
 
 // ─── Store Conversation Memory ──────────────────────────────────────────────
@@ -34,11 +91,25 @@ export async function storeConversationMemory(params: {
   agentId: string;
   routeContext: string;
   threadId: string;
+  /** Declared route/agent sensitivity for this turn. Passed in by the caller;
+   *  never recomputed here. Absent/unknown values fail closed (no storage). */
+  sensitivity: RouteSensitivity;
+  /** Declared processing purpose for this derived copy. */
+  purpose?: string;
   operatingProfileFingerprint?: string | null;
 }): Promise<void> {
   const endTimer = semanticMemoryLatency.startTimer({ operation: "store" });
   try {
-    const embedding = await generateEmbedding(params.content);
+    const disposition = resolveMemoryStorageDisposition(params.sensitivity, params.content);
+    if (disposition.action === "block") {
+      // Fail-closed: restricted (or unrecognized) sensitivity never writes raw
+      // content or a raw preview to the vector store. Bounded evidence only.
+      semanticMemoryOps.inc({ operation: "store", status: "blocked" });
+      endTimer();
+      return;
+    }
+
+    const embedding = await generateEmbedding(disposition.storedContent);
     if (!embedding) {
       semanticMemoryOps.inc({ operation: "store", status: "skipped" });
       console.warn("[semantic-memory] store skipped — embedding unavailable");
@@ -58,7 +129,10 @@ export async function storeConversationMemory(params: {
           routeDomain: extractRouteDomain(params.routeContext),
           threadId: params.threadId,
           role: params.role,
-          contentPreview: params.content.slice(0, 300),
+          contentPreview: disposition.storedContent.slice(0, 300),
+          sensitivity: params.sensitivity,
+          payloadClass: disposition.payloadClass,
+          purpose: params.purpose ?? SEMANTIC_MEMORY_PURPOSE,
           operatingProfileFingerprint: params.operatingProfileFingerprint ?? null,
           timestamp: new Date().toISOString(),
         },
