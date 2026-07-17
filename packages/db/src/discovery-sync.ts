@@ -89,6 +89,21 @@ type DiscoverySyncTx = {
       update: Record<string, unknown>;
     }): Promise<unknown>;
   };
+  // Resolution-lineage audit (spec §4.1) — one row per NEW rule-resolved identity
+  // for an entity. findFirst is the idempotency guard so a repeated sweep that
+  // re-resolves the same entity→identity does not append a duplicate audit row;
+  // a resolution to a *different* CatalogIdentity does write a fresh lineage row.
+  identityResolutionLog: {
+    findFirst(args: {
+      where: {
+        inventoryEntityId: string;
+        catalogIdentityId: string;
+        resolutionType: string;
+      };
+      select: { id: true };
+    }): Promise<{ id: string } | null>;
+    create(args: { data: Record<string, unknown> }): Promise<unknown>;
+  };
   inventoryRelationship: {
     findMany(args: {
       where?: {
@@ -443,6 +458,37 @@ export async function persistBootstrapDiscoveryRun(
 
       entityIdsByDiscoveredKey.set(entity.discoveredKey, persistedEntity.id);
       entityIdsByEntityKey.set(entity.entityKey, persistedEntity.id);
+
+      // Resolution-lineage audit (spec §4.1). A deterministic fingerprint-rule
+      // match that resolved a CatalogIdentity writes an IdentityResolutionLog
+      // row (resolutionType='rule'). Idempotent: only the first resolution of
+      // this entity→identity is recorded, so a weekly re-sweep of an unchanged
+      // estate does not grow the audit log. A later resolution to a different
+      // identity writes a new lineage row. Human-confirmed rows are authored
+      // elsewhere and are never touched by this rule path (spec §4.1).
+      if (entity.catalogIdentityId && entity.identityStatus === "rule_resolved") {
+        const existingLog = await tx.identityResolutionLog.findFirst({
+          where: {
+            inventoryEntityId: persistedEntity.id,
+            catalogIdentityId: entity.catalogIdentityId,
+            resolutionType: "rule",
+          },
+          select: { id: true },
+        });
+        if (existingLog === null) {
+          await tx.identityResolutionLog.create({
+            data: {
+              inventoryEntityId: persistedEntity.id,
+              catalogIdentityId: entity.catalogIdentityId,
+              fingerprintRuleId: entity.fingerprintRuleId ?? null,
+              resolutionType: "rule",
+              confidence: entity.identityConfidence ?? null,
+              evidence: entity.attributionEvidence ?? null,
+              discoveryRunId: run.id,
+            },
+          });
+        }
+      }
 
       if (existed) {
         updatedEntities += 1;

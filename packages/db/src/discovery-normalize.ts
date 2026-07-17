@@ -50,6 +50,10 @@ export type NormalizedInventoryEntity = {
   catalogIdentityId?: string | null;
   identityStatus?: string | null;
   identityConfidence?: number | null;
+  // The DiscoveryFingerprintRule that produced the resolution — carried so the
+  // resolution-lineage audit (IdentityResolutionLog, spec §4.1) can point back
+  // at the rule the `improve-fingerprint-rule` coworker skill refines.
+  fingerprintRuleId?: string | null;
   properties: Record<string, unknown>;
 };
 
@@ -162,6 +166,7 @@ function fingerprintAttribution(
     candidateTaxonomy: [],
     evidence: {
       source: "discovery-fingerprint",
+      ruleId: match.ruleId,
       ruleKey: match.ruleKey,
       identityConfidence: match.identityConfidence,
       taxonomyConfidence: match.taxonomyConfidence,
@@ -171,6 +176,9 @@ function fingerprintAttribution(
     catalogIdentityId: match.catalogIdentityId,
     identityStatus: match.catalogIdentityId ? "rule_resolved" : null,
     identityConfidence: match.identityConfidence,
+    // Only carry the rule id when it actually resolved a canonical identity —
+    // an unlinked rule match leaves the lineage FK null (spec §4.1).
+    fingerprintRuleId: match.catalogIdentityId ? match.ruleId : null,
   };
 }
 
@@ -187,6 +195,8 @@ type DerivedAttribution = {
   catalogIdentityId?: string | null;
   identityStatus?: string | null;
   identityConfidence?: number | null;
+  // The matched DiscoveryFingerprintRule id (resolution-lineage audit, spec §4.1).
+  fingerprintRuleId?: string | null;
 };
 
 function mapEntityType(itemType: string): string {
@@ -303,6 +313,7 @@ function normalizeItem(
     catalogIdentityId: attributed.catalogIdentityId ?? null,
     identityStatus: attributed.identityStatus ?? null,
     identityConfidence: attributed.identityConfidence ?? null,
+    fingerprintRuleId: attributed.fingerprintRuleId ?? null,
     providerView: attributed.portfolioSlug ?? "foundational",
     properties: {
       ...(item.attributes ?? {}),
