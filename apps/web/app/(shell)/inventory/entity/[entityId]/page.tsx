@@ -33,6 +33,23 @@ export default async function InventoryEntityDetailPage({ params }: Props) {
       supportStatus: true,
       status: true,
       providerView: true,
+      // Enrichment linkage to the canonical identity spine (EP-ASSET-INTELLIGENCE / BI-9C0424E4).
+      updatePosture: true,
+      latestKnownVersion: true,
+      identityStatus: true,
+      identityConfidence: true,
+      catalogIdentity: {
+        select: {
+          manufacturer: true,
+          product: true,
+          productVersion: true,
+          cpe: true,
+          lifecycleMilestones: {
+            select: { milestone: true, date: true, source: true },
+            orderBy: { date: "asc" },
+          },
+        },
+      },
       attributionStatus: true,
       attributionConfidence: true,
       confidence: true,
@@ -120,8 +137,42 @@ export default async function InventoryEntityDetailPage({ params }: Props) {
         <Panel title="Version & support">
           <Field label="Observed version" value={entity.observedVersion ?? "—"} />
           <Field label="Normalized version" value={entity.normalizedVersion ?? "—"} />
+          <Field label="Latest known version" value={entity.latestKnownVersion ?? "—"} />
           <Field label="Support status" value={entity.supportStatus} />
+          <Field label="Update posture" value={entity.updatePosture} />
           <Field label="Provider view" value={entity.providerView} />
+        </Panel>
+
+        <Panel title="Canonical identity & lifecycle">
+          {entity.catalogIdentity ? (
+            <>
+              <Field
+                label="Identity"
+                value={`${entity.catalogIdentity.manufacturer} ${entity.catalogIdentity.product}${
+                  entity.catalogIdentity.productVersion ? ` ${entity.catalogIdentity.productVersion}` : ""
+                }`}
+              />
+              <Field label="CPE" value={entity.catalogIdentity.cpe ?? "—"} mono />
+              <Field label="Resolution" value={entity.identityStatus ?? "unresolved"} />
+              {entity.catalogIdentity.lifecycleMilestones.length > 0 ? (
+                <div className="mt-3 space-y-1">
+                  {entity.catalogIdentity.lifecycleMilestones.map((m) => (
+                    <div key={`${m.milestone}:${m.source}`} className="flex justify-between text-xs">
+                      <span className="text-[var(--dpf-muted)]">{m.milestone.replace(/_/g, " ")}</span>
+                      <span className="text-[var(--dpf-text)]">
+                        {m.date ? new Date(m.date).toISOString().slice(0, 10) : "—"}{" "}
+                        <span className="text-[var(--dpf-muted)]">({m.source})</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-[var(--dpf-muted)]">No support-lifecycle milestones yet.</p>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-[var(--dpf-muted)]">Not yet resolved to a canonical identity.</p>
+          )}
         </Panel>
       </section>
 

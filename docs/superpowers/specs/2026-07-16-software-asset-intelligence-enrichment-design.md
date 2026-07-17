@@ -132,7 +132,7 @@ This is the kernel/org-overlay pattern again: component catalog entries are kern
 **Phase B — Open support-lifecycle & vuln feeds:**
 - endoflife.date connector → CatalogLifecycleMilestone (+ optional vendor calendars) — **BI-3A2328D6** — feed logic **landed** in `packages/db/src/endoflife-lifecycle.ts` (`releaseToMilestones`/`selectRelease`/`fetchEolProduct`/`upsertLifecycleForIdentity`, endoflife.date→milestone mapping + idempotent upsert onto CatalogIdentity); the scheduled sweep that iterates CatalogIdentities + the CPE-keyed slug resolution are the follow-up wiring.
 - NVD CPE 2.3 crosswalk + broaden vuln beyond OSS — **BI-44B8B1E4**
-- OS-package patch coverage + EOL/support posture UI — **BI-9C0424E4**
+- OS-package patch coverage + EOL/support posture UI — **BI-9C0424E4** — the **UI half landed**: the inventory entity detail page (`apps/web/app/(shell)/inventory/entity/[entityId]/page.tsx`) now surfaces the enrichment — update posture, latest known version, the resolved CanonicalIdentity (manufacturer/product/CPE), and its endoflife.date support-lifecycle milestones. The OS-package patch-projector extension (patch-management P0) is the follow-up logic half.
 - SBOM → CatalogIdentity enrichment bridge (component=public, occurrence=private) — **BI-19FD07F9**
 
 **Enablement (coworker + sharing):**
