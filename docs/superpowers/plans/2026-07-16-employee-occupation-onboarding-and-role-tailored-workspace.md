@@ -52,6 +52,7 @@ This plan sequences the spec into independently reviewable slices. Each phase na
 - Resolver [`apps/web/lib/workforce/occupation.ts`](../../../apps/web/lib/workforce/occupation.ts): `resolveOccupationForEmployee` / `resolveOccupationForUser` / `getOccupationByKey`, DI-testable, with the `invalidateOccupationCache` seam P5's mover event consumes (employee→occupation walk stays uncached so a mover change is seen immediately).
 - Tests: `seed-occupations.test.ts` (referential integrity + fail-closed) and `occupation.test.ts` (resolver fallbacks, JSON parsing, memo + invalidation).
 - **Stewardship note:** `OnboardingTask.kind` from spec §6 maps onto the **existing** `OnboardingTask.checklistType` field — no new column. The `platform-intro` / `occupation-mover` values are introduced when P4/P5 create those rows; `baseAccessProfile` is a slug pending the P0.1 RBAC decision (seeded `workforce-member`); `wsidProfessionFamily` and roster `governanceProfileRef` are bound in P3.
+- **Seed-fit applicability decision:** `archetype-scoped`. The seeded occupations are canonical fleet defaults scoped by archetype category (healthcare-wellness, trades-maintenance), symmetric with the storefront archetype seeds — not global-default, not install-local. (Recorded here durably in addition to the `Seed-Fit-Decision:` PR trailer the CI gate reads.)
 
 ---
 
