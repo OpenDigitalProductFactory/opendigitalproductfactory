@@ -353,6 +353,87 @@
   cursor: grabbing;
 }
 
+/* Calendar view — dependency-free month grid. */
+.dpf-calendar-weekhead {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+}
+
+.dpf-calendar-weekhead-cell {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--dpf-muted);
+}
+
+.dpf-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: minmax(5rem, 1fr);
+  gap: 1px;
+  background: var(--dpf-border);
+  border: 1px solid var(--dpf-border);
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.dpf-calendar-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-block-size: 5rem;
+  padding: 0.25rem;
+  background: var(--dpf-surface-1);
+}
+
+.dpf-calendar-cell-muted {
+  background: var(--dpf-surface-2);
+}
+
+.dpf-calendar-cell-muted .dpf-calendar-daynum {
+  opacity: 0.45;
+}
+
+.dpf-calendar-cell-today {
+  outline: 2px solid var(--dpf-accent, #6366f1);
+  outline-offset: -2px;
+}
+
+.dpf-calendar-daynum {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--dpf-muted);
+}
+
+.dpf-calendar-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  overflow: hidden;
+}
+
+.dpf-calendar-event {
+  display: block;
+  inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 0.25rem;
+  border: none;
+  background: var(--dpf-surface-2);
+  padding: 0.1rem 0.35rem;
+  text-align: left;
+  font-size: 0.75rem;
+  color: var(--dpf-text);
+  cursor: pointer;
+}
+
+.dpf-calendar-event:hover {
+  background: var(--dpf-surface-3, var(--dpf-border));
+}
+
 /* Record detail modal — expand a row into a full-record editor. */
 .dpf-record-modal-backdrop {
   position: fixed;
