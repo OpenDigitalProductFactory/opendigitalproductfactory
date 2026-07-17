@@ -31,6 +31,10 @@ import {
   type BomComponentInput,
   type SbomBridgeClient,
 } from "./sbom-catalog-bridge";
+// Reuse the on-demand path's slug derivation so a product enriched by this weekly
+// loop and one enriched by enrich_digital_product resolve to the same endoflife slug
+// (single source of truth — avoids a duplicate `deriveEolSlug` / barrel-export clash).
+import { deriveEolSlug } from "./enrich-digital-product";
 
 const DEFAULT_LIMIT = 100;
 
@@ -93,20 +97,6 @@ export type CatalogSweepResult = {
   bomComponentsTotal: number;
   failures: number;
 };
-
-/**
- * Best-effort endoflife.date product slug from a CatalogIdentity. endoflife.date
- * keys products by short lowercase slugs (`postgresql`, `nginx`, `ubuntu`); we derive
- * one from the product name. Multi-word / vendor-abbreviated products (e.g. RHEL) may
- * not match — `fetchEolProduct` returns null for those and the manual overlay covers
- * the long tail (spec §4.4). Exported for testability.
- */
-export function deriveEolSlug(identity: { product: string }): string {
-  return identity.product
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 function bomRowToInput(row: SweepBomRow): BomComponentInput {
   return {

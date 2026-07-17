@@ -1,20 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  deriveEolSlug,
   runCatalogEnrichmentSweep,
   type CatalogSweepClient,
   type SweepBomRow,
   type SweepIdentityRow,
 } from "./catalog-enrichment-sweep";
 
-describe("deriveEolSlug", () => {
-  it("lowercases and hyphenates the product name", () => {
-    expect(deriveEolSlug({ product: "PostgreSQL" })).toBe("postgresql");
-    expect(deriveEolSlug({ product: "Red Hat Enterprise Linux" })).toBe("red-hat-enterprise-linux");
-    expect(deriveEolSlug({ product: "nginx" })).toBe("nginx");
-  });
-});
+// deriveEolSlug is defined + unit-tested in ./enrich-digital-product (the sweep reuses
+// it as the single source of truth); the cases live in enrich-digital-product.test.ts.
 
 type Recorded = {
   cpeUpdates: Array<{ id: string; cpe: string }>;
