@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 511,
+  "pageCount": 512,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2863,6 +2863,21 @@
         "spec-references"
       ]
     },
+    "docs/founder-kernel/wiki/principles/reporting-read-model-boundaries.md": {
+      "publicHref": "/founder-kernel/wiki/principles/reporting-read-model-boundaries/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/research-and-use-standards.md": {
       "publicHref": "/founder-kernel/wiki/principles/research-and-use-standards/",
       "portalHref": null,
@@ -2931,6 +2946,7 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "schema-audit-checklist",
         "decision-dimensions",
         "examples",
         "jurisdiction-policy-compilation-immutable-compliance-evidence",
