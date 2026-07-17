@@ -11,7 +11,9 @@
  */
 import {
   capabilityPresence,
+  clopeningPremium,
   credentialEligibility,
+  maxConsecutiveDays,
   maxHoursPremium,
   minNTogether,
   noOverlap,
@@ -37,6 +39,8 @@ export const PREDICATE_REGISTRY: Record<string, PredicateEvaluator> = {
   rest_gap: restGap,
   no_overlap: noOverlap,
   max_hours_premium: maxHoursPremium,
+  clopening_premium: clopeningPremium,
+  max_consecutive_days: maxConsecutiveDays,
 };
 
 /**

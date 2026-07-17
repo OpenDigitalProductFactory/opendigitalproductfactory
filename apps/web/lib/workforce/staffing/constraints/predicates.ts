@@ -244,6 +244,76 @@ export const maxHoursPremium: PredicateEvaluator = (rule, problem) => {
   return { premiums };
 };
 
+/**
+ * clopening_premium — a SOFT, priced cost (spec §9.4) for a short turnaround
+ * between an employee's consecutive shifts: the payable "clopening" premium that
+ * fair-workweek laws attach (e.g. NYC $100, Chicago 1.25×). Distinct from the
+ * HARD `rest_gap`: some jurisdictions forbid a short gap outright (hard), others
+ * merely price it (this). `parameters.minHours`, `parameters.premiumUnits`.
+ */
+export const clopeningPremium: PredicateEvaluator = (rule, problem) => {
+  const minHours = Number(rule.parameters.minHours ?? 11);
+  const premiumUnits = Number(rule.parameters.premiumUnits ?? 1);
+  const premiums = [];
+  for (const employee of problem.employees) {
+    const intervals = employeeIntervals(problem, employee.employeeProfileId).sort(
+      (a, b) => new Date(a.start.at).getTime() - new Date(b.start.at).getTime(),
+    );
+    for (let i = 1; i < intervals.length; i++) {
+      const gap = hoursBetween(intervals[i - 1].end.at, intervals[i].start.at);
+      if (gap < minHours) {
+        premiums.push({
+          ruleId: rule.ruleId,
+          predicateType: rule.predicateType,
+          subjectRef: employee.employeeProfileId,
+          units: premiumUnits,
+          message: `clopening premium: ${gap.toFixed(1)}h turnaround < ${minHours}h`,
+        });
+      }
+    }
+  }
+  return { premiums };
+};
+
+/**
+ * max_consecutive_days — HARD: an employee may not work more than N consecutive
+ * calendar days (spec §9.4 fatigue / day-of-rest rules, e.g. IL ODRISA one-day-
+ * rest-in-seven). Day is the UTC date of the shift start — a documented
+ * approximation; the effective-dated pack refines to the decision timezone.
+ * `parameters.maxDays`.
+ */
+export const maxConsecutiveDays: PredicateEvaluator = (rule, problem) => {
+  const maxDays = Number(rule.parameters.maxDays ?? 6);
+  const violations: ConstraintViolation[] = [];
+  for (const employee of problem.employees) {
+    const days = Array.from(
+      new Set(
+        employeeIntervals(problem, employee.employeeProfileId).map((iv) =>
+          iv.start.at.slice(0, 10),
+        ),
+      ),
+    ).sort();
+    let run = days.length > 0 ? 1 : 0;
+    let longest = run;
+    for (let i = 1; i < days.length; i++) {
+      const prev = new Date(`${days[i - 1]}T00:00:00Z`).getTime();
+      const cur = new Date(`${days[i]}T00:00:00Z`).getTime();
+      run = cur - prev === 86_400_000 ? run + 1 : 1;
+      if (run > longest) longest = run;
+    }
+    if (longest > maxDays) {
+      violations.push(
+        violation(
+          rule,
+          employee.employeeProfileId,
+          `${longest} consecutive days worked > max ${maxDays}`,
+        ),
+      );
+    }
+  }
+  return { violations };
+};
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function groupAssigneesByShift(problem: NormalizedStaffingProblem) {

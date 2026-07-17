@@ -201,6 +201,39 @@ describe("max_hours_premium (priced, not infeasible)", () => {
   });
 });
 
+describe("clopening_premium (soft, priced) vs rest_gap (hard)", () => {
+  const emp = { employeeProfileId: "e1", credentials: [], capabilities: [], roleKey: null, employmentType: null };
+  const shiftA = { shiftId: "s1", interval: { start: zi("2026-08-01T00:00:00Z"), end: zi("2026-08-01T08:00:00Z") }, workLocationId: null, requiredCredentials: [] };
+  const near = { shiftId: "s2", interval: { start: zi("2026-08-01T14:00:00Z"), end: zi("2026-08-01T22:00:00Z") }, workLocationId: null, requiredCredentials: [] };
+  const assigns = [
+    { assignmentId: "a1", shiftId: "s1", employeeProfileId: "e1", lifecycle: "confirmed" },
+    { assignmentId: "a2", shiftId: "s2", employeeProfileId: "e1", lifecycle: "confirmed" },
+  ];
+
+  it("prices a short turnaround as a premium without breaking feasibility", () => {
+    const r = evaluateConstraints(baseProblem({
+      shifts: [shiftA, near], assignments: assigns, employees: [emp],
+      rules: [{ ruleId: "clop", predicateType: "clopening_premium", severity: "soft", legallyWaivable: false, parameters: { minHours: 11, premiumUnits: 1 } }],
+    }));
+    expect(r.feasible).toBe(true); // 6h turnaround < 11h — priced, not infeasible
+    expect(r.premiums).toHaveLength(1);
+  });
+});
+
+describe("max_consecutive_days (hard, fatigue)", () => {
+  const emp = { employeeProfileId: "e1", credentials: [], capabilities: [], roleKey: null, employmentType: null };
+  const day = (n: number) => ({ shiftId: `s${n}`, interval: { start: zi(`2026-08-0${n}T09:00:00Z`), end: zi(`2026-08-0${n}T17:00:00Z`) }, workLocationId: null, requiredCredentials: [] });
+  const assign = (n: number) => ({ assignmentId: `a${n}`, shiftId: `s${n}`, employeeProfileId: "e1", lifecycle: "confirmed" });
+  const rule = HARD("max_consecutive_days", { maxDays: 6 });
+
+  it("passes at 6 consecutive days, fails at 7", () => {
+    const six = evaluateConstraints(baseProblem({ shifts: [1,2,3,4,5,6].map(day), assignments: [1,2,3,4,5,6].map(assign), employees: [emp], rules: [rule] }));
+    expect(six.feasible).toBe(true);
+    const seven = evaluateConstraints(baseProblem({ shifts: [1,2,3,4,5,6,7].map(day), assignments: [1,2,3,4,5,6,7].map(assign), employees: [emp], rules: [rule] }));
+    expect(seven.feasible).toBe(false);
+  });
+});
+
 describe("fail-closed jurisdiction (spec §6, §8.1)", () => {
   it("requires policy review when jurisdiction is unresolved and a safety-critical rule is in scope", () => {
     const r = evaluateConstraints(baseProblem({
