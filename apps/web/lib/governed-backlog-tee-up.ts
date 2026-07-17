@@ -4,6 +4,7 @@ import {
   deriveBuildProcessType,
   deriveBuildProcessSize,
 } from "@/lib/explore/build-process-matrix";
+import { warrantForBacklogItem } from "@/lib/decision/warrant-for-item";
 import {
   attachBuildStudioWorkCapsule,
   type BuildStudioCapsuleDb,
@@ -303,7 +304,24 @@ export async function promoteBacklogItemToBuildDraft(
       constrainedGoal,
     },
   });
-  const plan = { ...planBase, processSize };
+  // Decision-altitude control plane (EP-7B169558 / BI-8AB0E66D): derive the
+  // WorkWarrant + gate rightsizing-opts from day-one structural signals and
+  // persist them on the plan so checkPhaseGate right-sizes rigor by altitude +
+  // blast-radius, not effort size alone. deliverableSensitivity/qualityFirst are
+  // what the gate reads (rightsizingOptsFromEvidence); workWarrant carries the
+  // fuller object (lane/model tier/evidence/reporting) for downstream consumers.
+  const { warrant: workWarrant, opts: rightsizingOpts } = warrantForBacklogItem({
+    effortSize: item.effortSize ?? null,
+    workType: item.workType ?? null,
+    text: `${item.title} ${item.body ?? ""}`,
+  });
+  const plan = {
+    ...planBase,
+    processSize,
+    workWarrant,
+    deliverableSensitivity: rightsizingOpts.sensitivity,
+    qualityFirst: rightsizingOpts.qualityFirst,
+  };
 
   // Work-kind derivation + fix-context carry-through.
   // deriveBuildProcessType is the single source of truth for "given this BI,
