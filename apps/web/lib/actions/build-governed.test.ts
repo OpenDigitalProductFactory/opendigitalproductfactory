@@ -44,9 +44,15 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
     workCapsule: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      // BI-937128F6: unified WIP query reads active capsules across surfaces.
+      findMany: vi.fn(),
     },
     workCapsuleActivity: {
       create: vi.fn(),
+    },
+    // BI-937128F6: unified WIP query reads the active shared nonprod leases.
+    nonProductionEnvironmentLease: {
+      findMany: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -189,6 +195,8 @@ describe("governed build start approvals", () => {
     mockPrisma.calendarEvent.upsert.mockResolvedValue({});
     mockPrisma.backlogItemActivity.create.mockResolvedValue({});
     mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
+    mockPrisma.workCapsule.findMany.mockResolvedValue([]);
+    mockPrisma.nonProductionEnvironmentLease.findMany.mockResolvedValue([]);
     mockPrisma.workCapsule.create.mockResolvedValue({
       id: "capsule-row-direct",
       capsuleId: "WC-DIRECT1",

@@ -1151,7 +1151,9 @@ export function WorkbookGrid({
           topGroupIds={topGroupIds}
           setCollapsedGroups={setCollapsedGroups}
           setExtraExpanded={setExtraExpanded}
+          visibleCols={visibleCols}
           footerAgg={footerAgg}
+          setFooterAgg={setFooterAgg}
         />
       )}
 

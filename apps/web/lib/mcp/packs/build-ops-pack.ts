@@ -30,6 +30,7 @@ import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 
 import type { EndpointTestRunRequest, ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import type { UnifiedWipDb } from "@/lib/build/unified-wip-query";
 
 const definitions: ToolDefinition[] = [
   {
@@ -179,16 +180,20 @@ async function promoteToBuildStudioHandler(params: Record<string, unknown>, user
     }
   }
 
-  // WIP cap (shared with the createFeatureBuild start path): refuse to
-  // promote another build into Build Studio while too many are unfinished.
+  // WIP cap (BI-937128F6; shared with the createFeatureBuild start path): refuse
+  // to promote another build into Build Studio while the shared BS sandbox pool
+  // is saturated. Pressure is now the unified, pool-aware count across ALL
+  // surfaces' active WIP — a promote contends on the bs-sandbox pool, so it gates
+  // on that pool (capacity BUILD_WIP_CAP, unchanged), not a BS-only build count.
   {
-    const { wipCapReached, BUILD_WIP_CAP, BuildWipCapError, TERMINAL_BUILD_PHASES } =
-      await import("@/lib/build/wip-cap");
-    const activeBuilds = await prisma.featureBuild.count({
-      where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
-    });
-    if (wipCapReached(activeBuilds)) {
-      const err = new BuildWipCapError(activeBuilds, BUILD_WIP_CAP);
+    const { decideUnifiedWip, BuildWipCapError } = await import("@/lib/build/wip-cap");
+    const { loadActiveUnifiedWip, poolPressure } = await import(
+      "@/lib/build/unified-wip-query"
+    );
+    const wip = await loadActiveUnifiedWip(prisma as unknown as UnifiedWipDb);
+    const decision = decideUnifiedWip("bs-sandbox", poolPressure(wip, "bs-sandbox"));
+    if (!decision.admitted) {
+      const err = new BuildWipCapError(decision.pressure, decision.capacity);
       return { success: false, error: "wip_cap_reached", message: err.message };
     }
   }
