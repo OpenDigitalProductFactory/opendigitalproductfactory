@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createConnectorCredentialStore,
+  createPrismaConnectorCredentialRepository,
   type ConnectorCredentialRow,
   type ConnectorCredentialTransaction,
+  type PrismaConnectorCredentialClient,
 } from "./credential-store";
 
 function row(overrides: Partial<ConnectorCredentialRow> = {}): ConnectorCredentialRow {
@@ -47,10 +49,17 @@ function repository(initial?: ConnectorCredentialRow) {
     repo: {
       findUnique: tx.findUnique,
       transaction: async <T>(operation: (transaction: ConnectorCredentialTransaction) => Promise<T>) => {
+        const snapshot = stored ? { ...stored } : undefined;
         transactions.push("begin");
-        const result = await operation(tx);
-        transactions.push("commit");
-        return result;
+        try {
+          const result = await operation(tx);
+          transactions.push("commit");
+          return result;
+        } catch (error) {
+          stored = snapshot;
+          transactions.push("rollback");
+          throw error;
+        }
       },
     },
     tx,
@@ -61,6 +70,7 @@ function repository(initial?: ConnectorCredentialRow) {
 
 function crypto() {
   return {
+    assertReadyForWrite: vi.fn(async () => undefined),
     encryptJson: vi.fn((value: unknown) => `encrypted:${JSON.stringify(value)}`),
     decryptJson: vi.fn((stored: string) => {
       if (!stored.startsWith("encrypted:")) return null;
@@ -74,6 +84,24 @@ function crypto() {
 }
 
 describe("connector credential store", () => {
+  it("checks production encryption readiness before encryption or persistence", async () => {
+    const database = repository();
+    const crypt = crypto();
+    crypt.assertReadyForWrite.mockRejectedValue(new Error("encryption unavailable"));
+    const store = createConnectorCredentialStore({ repository: database.repo, crypto: crypt });
+
+    await expect(store.recordSuccessfulConnect({
+      integrationId: "acme",
+      provider: "acme-provider",
+      reconnectFields: {},
+      secretFields: { password: "secret" },
+      tokenEnvelope: {},
+      safeProjection: {},
+    })).rejects.toThrow("encryption unavailable");
+    expect(crypt.encryptJson).not.toHaveBeenCalled();
+    expect(database.transactions).toEqual([]);
+  });
+
   it("atomically replaces every encrypted section and clears previous errors on success", async () => {
     const database = repository(row({ lastErrorMsg: "old failure", lastErrorAt: new Date() }));
     const crypt = crypto();
@@ -122,7 +150,7 @@ describe("connector credential store", () => {
       reconnectFieldsReusable: true,
       secretFields: { password: "rejected" },
       tokenEnvelope: { accessToken: "rejected" },
-      errorMessage: "  invalid\n credentials \u0000 ",
+      error: { kind: "authentication", safeMessage: "  invalid\n credentials \u0000 " },
     });
 
     expect(crypt.encryptJson).not.toHaveBeenCalled();
@@ -145,7 +173,7 @@ describe("connector credential store", () => {
       reconnectFieldsReusable: true,
       secretFields: { password: "rejected" },
       tokenEnvelope: { accessToken: "rejected" },
-      errorMessage: "authentication rejected",
+      error: { kind: "authentication", safeMessage: "authentication rejected" },
     });
 
     expect(crypt.encryptJson).toHaveBeenCalledOnce();
@@ -170,7 +198,7 @@ describe("connector credential store", () => {
       reconnectFieldsReusable: false,
       secretFields: { password: "rejected" },
       tokenEnvelope: { accessToken: "rejected" },
-      errorMessage: "rejected",
+      error: { kind: "authentication", safeMessage: "rejected" },
     });
 
     expect(crypt.encryptJson).toHaveBeenCalledWith({
@@ -255,5 +283,161 @@ describe("connector credential store", () => {
       safeProjection: {},
       lastErrorMsg: "Stored connector credential could not be read safely.",
     });
+  });
+
+  it("supports a caller-owned transaction for atomic credential and audit composition", async () => {
+    const database = repository();
+    const crypt = crypto();
+    const store = createConnectorCredentialStore({ repository: database.repo, crypto: crypt });
+
+    await store.withTransaction(database.tx).recordSuccessfulConnect({
+      integrationId: "acme",
+      provider: "acme-provider",
+      reconnectFields: {},
+      secretFields: {},
+      tokenEnvelope: {},
+      safeProjection: {},
+    });
+
+    expect(database.transactions).toEqual([]);
+    expect(database.tx.upsert).toHaveBeenCalledOnce();
+  });
+
+  it("maps the production repository to exact Prisma where and data arguments", async () => {
+    const prismaRow = row();
+    const delegate = {
+      findUnique: vi.fn(async () => prismaRow),
+      upsert: vi.fn(async () => prismaRow),
+      update: vi.fn(async () => prismaRow),
+      delete: vi.fn(async () => prismaRow),
+    };
+    const transactionOptions: { isolationLevel: "Serializable" }[] = [];
+    const prisma: PrismaConnectorCredentialClient = {
+      integrationCredential: delegate,
+      $transaction: async (operation, options) => {
+        transactionOptions.push(options);
+        return operation({ integrationCredential: delegate });
+      },
+    };
+    const repo = createPrismaConnectorCredentialRepository(prisma);
+
+    await repo.findUnique({ integrationId: "acme" });
+    await repo.transaction(async (tx) => {
+      await tx.update({ integrationId: "acme", data: { status: "error" } });
+      await tx.delete({ integrationId: "acme" });
+    });
+
+    expect(delegate.findUnique).toHaveBeenCalledWith({ where: { integrationId: "acme" } });
+    expect(delegate.update).toHaveBeenCalledWith({
+      where: { integrationId: "acme" },
+      data: { status: "error" },
+    });
+    expect(delegate.delete).toHaveBeenCalledWith({ where: { integrationId: "acme" } });
+    expect(transactionOptions).toEqual([{ isolationLevel: "Serializable" }]);
+  });
+
+  it.each(["P2034", "P2002"])(
+    "retries %s conflicts so a concurrent success cannot be overwritten by failure",
+    async (conflictCode) => {
+    let stored: ConnectorCredentialRow | undefined;
+    let attempt = 0;
+    const base = repository();
+    const repo = {
+      findUnique: base.repo.findUnique,
+      transaction: async <T>(operation: (tx: ConnectorCredentialTransaction) => Promise<T>) => {
+        attempt += 1;
+        if (attempt === 1) {
+          await operation(base.tx);
+          stored = row({ fieldsEnc: "encrypted:winning", tokenCacheEnc: "encrypted:winning-token" });
+          const conflict = new Error("serialization conflict") as Error & { code: string };
+          conflict.code = conflictCode;
+          throw conflict;
+        }
+        const winnerRepo = repository(stored);
+        const result = await operation(winnerRepo.tx);
+        stored = winnerRepo.current();
+        return result;
+      },
+    };
+    const store = createConnectorCredentialStore({ repository: repo, crypto: crypto() });
+
+    await store.recordFailedConnect({
+      integrationId: "acme",
+      provider: "acme-provider",
+      reconnectFields: { tenant: "loser" },
+      reconnectFieldsReusable: true,
+      secretFields: { password: "loser-secret" },
+      tokenEnvelope: { accessToken: "loser-token" },
+      error: { kind: "authentication", safeMessage: "failed" },
+    });
+
+    expect(attempt).toBe(2);
+    expect(stored).toMatchObject({
+      status: "connected",
+      fieldsEnc: "encrypted:winning",
+      tokenCacheEnc: "encrypted:winning-token",
+      lastErrorMsg: "failed",
+    });
+    },
+  );
+
+  it("redacts submitted secret, token, header, and URL values from safe storage and reads", async () => {
+    const database = repository();
+    const crypt = crypto();
+    const store = createConnectorCredentialStore({ repository: database.repo, crypto: crypt });
+    await store.recordSuccessfulConnect({
+      integrationId: "acme",
+      provider: "acme-provider",
+      reconnectFields: {},
+      secretFields: { password: "top-secret" },
+      tokenEnvelope: { accessToken: "token-123" },
+      safeProjection: {
+        leaked: "top-secret",
+        header: "Authorization: Bearer token-123",
+        url: "https://user:top-secret@example.test/path?access_token=token-123&view=safe",
+      },
+    });
+
+    const encryptedFields = vi.mocked(crypt.encryptJson).mock.calls[0]![0];
+    expect(JSON.stringify(encryptedFields)).not.toContain('"leaked":"top-secret"');
+    const state = await store.readSetupState("acme");
+    expect(JSON.stringify(state.safeProjection)).not.toContain("top-secret");
+    expect(JSON.stringify(state.safeProjection)).not.toContain("token-123");
+  });
+
+  it("rolls back a failed fake transaction instead of exposing partial mutation", async () => {
+    let stored = row();
+    const tx = {
+      ...repository(stored).tx,
+      update: async ({ data }: { integrationId: string; data: Partial<ConnectorCredentialRow> }) => {
+        stored = { ...stored, ...data };
+        return stored;
+      },
+    } satisfies ConnectorCredentialTransaction;
+    const repo = {
+      findUnique: async () => stored,
+      transaction: async <T>(operation: (transaction: ConnectorCredentialTransaction) => Promise<T>) => {
+        const snapshot = { ...stored };
+        try {
+          const result = await operation(tx);
+          throw new Error(`audit failed after ${String(result)}`);
+        } catch (error) {
+          stored = snapshot;
+          throw error;
+        }
+      },
+    };
+    const store = createConnectorCredentialStore({ repository: repo, crypto: crypto() });
+
+    await expect(store.recordFailedConnect({
+      integrationId: "acme",
+      provider: "acme-provider",
+      reconnectFields: {},
+      reconnectFieldsReusable: false,
+      secretFields: {},
+      tokenEnvelope: {},
+      error: { kind: "authentication", safeMessage: "new failure" },
+    })).rejects.toThrow("audit failed");
+    expect(stored.lastErrorMsg).toBeNull();
   });
 });

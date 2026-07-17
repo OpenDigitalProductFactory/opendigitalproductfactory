@@ -1,4 +1,8 @@
-import { decryptJson, encryptJson } from "@/lib/govern/credential-crypto";
+import {
+  assertEncryptionReadyForCredentialWrite,
+  decryptJson,
+  encryptJson,
+} from "@/lib/govern/credential-crypto";
 
 import {
   projectConnectorSetupState,
@@ -58,6 +62,7 @@ export interface ConnectorCredentialRepository {
 }
 
 export interface ConnectorCredentialCrypto {
+  assertReadyForWrite(): Promise<void>;
   encryptJson(value: unknown): string;
   decryptJson(stored: string): unknown;
 }
@@ -71,9 +76,23 @@ export interface SuccessfulConnectorCredential {
   safeProjection: ConnectorSafeProjection;
 }
 
+export const CONNECTOR_SAFE_ERROR_KINDS = [
+  "authentication",
+  "authorization",
+  "configuration",
+  "network",
+  "provider",
+  "unknown",
+] as const;
+export type ConnectorSafeErrorKind = (typeof CONNECTOR_SAFE_ERROR_KINDS)[number];
+export interface ConnectorSafeError {
+  kind: ConnectorSafeErrorKind;
+  safeMessage: string;
+}
+
 export interface FailedConnectorCredential extends Omit<SuccessfulConnectorCredential, "safeProjection"> {
   reconnectFieldsReusable: boolean;
-  errorMessage: string;
+  error: ConnectorSafeError;
 }
 
 export interface ConnectorCredentialStoreDependencies {
@@ -83,6 +102,7 @@ export interface ConnectorCredentialStoreDependencies {
 }
 
 const UNREADABLE_CREDENTIAL_MESSAGE = "Stored connector credential could not be read safely.";
+const MAX_TRANSACTION_ATTEMPTS = 3;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -128,45 +148,166 @@ function sanitizeErrorMessage(message: string): string {
   return (sanitized || "Connector connection failed.").slice(0, 500);
 }
 
+function collectSensitiveStrings(value: ConnectorCredentialValue, collected: Set<string>): void {
+  if (typeof value === "string") {
+    if (value.length >= 4) collected.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectSensitiveStrings(item, collected));
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    Object.values(value).forEach((item) => collectSensitiveStrings(item, collected));
+  }
+}
+
+function redactString(value: string, sensitive: ReadonlySet<string>): string {
+  let redacted = value;
+  for (const secret of sensitive) redacted = redacted.split(secret).join("[REDACTED]");
+  redacted = redacted
+    .replace(/(authorization\s*:\s*(?:bearer|basic)\s+)\S+/gi, "$1[REDACTED]")
+    .replace(/([?&](?:access_token|token|api_key|apikey|password|secret)=)[^&#]*/gi, "$1[REDACTED]")
+    .replace(/(https?:\/\/)[^/@\s]+@/gi, "$1[REDACTED]@");
+  return redacted;
+}
+
+function redactSafeValue(value: ConnectorSafeValue, sensitive: ReadonlySet<string>): ConnectorSafeValue {
+  if (typeof value === "string") return redactString(value, sensitive);
+  if (Array.isArray(value)) return value.map((item) => redactSafeValue(item, sensitive));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactSafeValue(item, sensitive)]),
+    );
+  }
+  return value;
+}
+
+function redactSafeProjection(
+  projection: ConnectorSafeProjection,
+  secretFields: ConnectorSecretFields = {},
+  tokenEnvelope: ConnectorTokenEnvelope = {},
+): ConnectorSafeProjection {
+  const sensitive = new Set<string>();
+  collectSensitiveStrings(secretFields, sensitive);
+  collectSensitiveStrings(tokenEnvelope, sensitive);
+  return redactSafeValue(projection, sensitive) as ConnectorSafeProjection;
+}
+
+function isRetryableTransactionConflict(error: unknown): boolean {
+  return isRecord(error) && (error.code === "P2034" || error.code === "P2002");
+}
+
+export interface PrismaIntegrationCredentialDelegate {
+  findUnique(args: { where: { integrationId: string } }): Promise<ConnectorCredentialRow | null>;
+  upsert(args: {
+    where: { integrationId: string };
+    create: ConnectorCredentialRow;
+    update: ConnectorCredentialWriteData;
+  }): Promise<ConnectorCredentialRow>;
+  update(args: {
+    where: { integrationId: string };
+    data: Partial<ConnectorCredentialWriteData>;
+  }): Promise<ConnectorCredentialRow>;
+  delete(args: { where: { integrationId: string } }): Promise<ConnectorCredentialRow>;
+}
+
+export interface PrismaConnectorCredentialClient {
+  integrationCredential: PrismaIntegrationCredentialDelegate;
+  $transaction<T>(
+    operation: (transaction: { integrationCredential: PrismaIntegrationCredentialDelegate }) => Promise<T>,
+    options: { isolationLevel: "Serializable" },
+  ): Promise<T>;
+}
+
+function mapPrismaTransaction(delegate: PrismaIntegrationCredentialDelegate): ConnectorCredentialTransaction {
+  return {
+    findUnique: ({ integrationId }) => delegate.findUnique({ where: { integrationId } }),
+    upsert: ({ integrationId, create, update }) =>
+      delegate.upsert({ where: { integrationId }, create, update }),
+    update: ({ integrationId, data }) => delegate.update({ where: { integrationId }, data }),
+    delete: async ({ integrationId }) => {
+      await delegate.delete({ where: { integrationId } });
+    },
+  };
+}
+
+export function createPrismaConnectorCredentialRepository(
+  prisma: PrismaConnectorCredentialClient,
+): ConnectorCredentialRepository {
+  return {
+    findUnique: ({ integrationId }) =>
+      prisma.integrationCredential.findUnique({ where: { integrationId } }),
+    transaction: (operation) =>
+      prisma.$transaction(
+        (transaction) => operation(mapPrismaTransaction(transaction.integrationCredential)),
+        { isolationLevel: "Serializable" },
+      ),
+  };
+}
+
 export function createConnectorCredentialStore(dependencies: ConnectorCredentialStoreDependencies) {
-  const credentialCrypto: ConnectorCredentialCrypto = dependencies.crypto ?? { encryptJson, decryptJson };
+  const credentialCrypto: ConnectorCredentialCrypto = dependencies.crypto ?? {
+    assertReadyForWrite: assertEncryptionReadyForCredentialWrite,
+    encryptJson,
+    decryptJson,
+  };
   const currentTime = dependencies.now ?? (() => new Date());
 
-  return {
-    async recordSuccessfulConnect(input: SuccessfulConnectorCredential): Promise<void> {
-      const fieldsEnc = credentialCrypto.encryptJson({
-        schemaVersion: 1,
-        reconnectFields: input.reconnectFields,
-        secretFields: input.secretFields,
-        safeProjection: input.safeProjection,
-      } satisfies StoredCredentialFieldsEnvelope);
-      const tokenCacheEnc = credentialCrypto.encryptJson({
-        schemaVersion: 1,
-        tokenEnvelope: input.tokenEnvelope,
-      } satisfies StoredTokenEnvelope);
-      const testedAt = currentTime();
-      const data: ConnectorCredentialWriteData = {
-        provider: input.provider,
-        status: "connected",
-        fieldsEnc,
-        tokenCacheEnc,
-        lastTestedAt: testedAt,
-        lastErrorAt: null,
-        lastErrorMsg: null,
-      };
-      await dependencies.repository.transaction(async (transaction) => {
+  async function runTransactionWithRetry<T>(
+    operation: (transaction: ConnectorCredentialTransaction) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
+      try {
+        return await dependencies.repository.transaction(operation);
+      } catch (error) {
+        if (!isRetryableTransactionConflict(error) || attempt === MAX_TRANSACTION_ATTEMPTS) throw error;
+      }
+    }
+    throw new Error("Unreachable transaction retry state");
+  }
+
+  function boundStore(transaction: ConnectorCredentialTransaction, readinessAlreadyChecked = false) {
+    return {
+      async recordSuccessfulConnect(input: SuccessfulConnectorCredential): Promise<void> {
+        if (!readinessAlreadyChecked) await credentialCrypto.assertReadyForWrite();
+        const safeProjection = redactSafeProjection(
+          input.safeProjection,
+          input.secretFields,
+          input.tokenEnvelope,
+        );
+        const fieldsEnc = credentialCrypto.encryptJson({
+          schemaVersion: 1,
+          reconnectFields: input.reconnectFields,
+          secretFields: input.secretFields,
+          safeProjection,
+        } satisfies StoredCredentialFieldsEnvelope);
+        const tokenCacheEnc = credentialCrypto.encryptJson({
+          schemaVersion: 1,
+          tokenEnvelope: input.tokenEnvelope,
+        } satisfies StoredTokenEnvelope);
+        const data: ConnectorCredentialWriteData = {
+          provider: input.provider,
+          status: "connected",
+          fieldsEnc,
+          tokenCacheEnc,
+          lastTestedAt: currentTime(),
+          lastErrorAt: null,
+          lastErrorMsg: null,
+        };
         await transaction.upsert({
           integrationId: input.integrationId,
           create: { integrationId: input.integrationId, ...data },
           update: data,
         });
-      });
-    },
+      },
 
-    async recordFailedConnect(input: FailedConnectorCredential): Promise<void> {
-      const failedAt = currentTime();
-      const lastErrorMsg = sanitizeErrorMessage(input.errorMessage);
-      await dependencies.repository.transaction(async (transaction) => {
+      async recordFailedConnect(input: FailedConnectorCredential): Promise<void> {
+        const failedAt = currentTime();
+        const sensitive = new Set<string>();
+        collectSensitiveStrings(input.secretFields, sensitive);
+        collectSensitiveStrings(input.tokenEnvelope, sensitive);
+        const lastErrorMsg = sanitizeErrorMessage(redactString(input.error.safeMessage, sensitive));
         const existing = await transaction.findUnique({ integrationId: input.integrationId });
         if (existing?.status === "connected") {
           await transaction.update({
@@ -175,7 +316,7 @@ export function createConnectorCredentialStore(dependencies: ConnectorCredential
           });
           return;
         }
-
+        await credentialCrypto.assertReadyForWrite();
         const fieldsEnc = credentialCrypto.encryptJson({
           schemaVersion: 1,
           reconnectFields: input.reconnectFieldsReusable ? input.reconnectFields : {},
@@ -196,12 +337,31 @@ export function createConnectorCredentialStore(dependencies: ConnectorCredential
           create: { integrationId: input.integrationId, ...data },
           update: data,
         });
-      });
+      },
+
+      async disconnect(integrationId: string): Promise<void> {
+        await transaction.delete({ integrationId });
+      },
+    };
+  }
+
+  return {
+    async recordSuccessfulConnect(input: SuccessfulConnectorCredential): Promise<void> {
+      await credentialCrypto.assertReadyForWrite();
+      await runTransactionWithRetry((transaction) =>
+        boundStore(transaction, true).recordSuccessfulConnect(input),
+      );
+    },
+
+    async recordFailedConnect(input: FailedConnectorCredential): Promise<void> {
+      await runTransactionWithRetry((transaction) => boundStore(transaction).recordFailedConnect(input));
     },
 
     async disconnect(integrationId: string): Promise<void> {
-      await dependencies.repository.transaction((transaction) => transaction.delete({ integrationId }));
+      await runTransactionWithRetry((transaction) => boundStore(transaction).disconnect(integrationId));
     },
+
+    withTransaction: boundStore,
 
     async readSetupState(
       integrationId: string,
@@ -234,7 +394,7 @@ export function createConnectorCredentialStore(dependencies: ConnectorCredential
           integrationId,
           provider: credential.provider,
           status: credential.status,
-          safeProjection: envelope.safeProjection,
+          safeProjection: redactSafeProjection(envelope.safeProjection),
           lastErrorMsg: credential.lastErrorMsg,
           lastTestedAt: credential.lastTestedAt,
         },
