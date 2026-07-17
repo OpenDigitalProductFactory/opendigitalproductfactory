@@ -180,19 +180,33 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     expect(cmd).not.toContain("rm -rf");
   });
 
-  it("defaults isolation OFF — resolveBuildWorkdir returns the shared workspace (today's behaviour)", () => {
+  it("defaults isolation ON — resolveBuildWorkdir returns the per-build worktree", () => {
     const prev = process.env.DPF_BUILD_WORKTREE_ISOLATION;
     delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
     try {
-      expect(isBuildWorktreeIsolationEnabled()).toBe(false);
-      expect(resolveBuildWorkdir("FB-ABCD1234")).toBe("/workspace");
+      expect(isBuildWorktreeIsolationEnabled()).toBe(true);
+      expect(resolveBuildWorkdir("FB-ABCD1234")).toBe("/workspace/.builds/FB-ABCD1234");
     } finally {
       if (prev === undefined) delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
       else process.env.DPF_BUILD_WORKTREE_ISOLATION = prev;
     }
   });
 
-  it("routes the build workdir into the per-build worktree when isolation is enabled", () => {
+  it("can still opt out to the shared workspace for emergency rollback", () => {
+    const prev = process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    try {
+      for (const value of ["0", "false", "off"]) {
+        process.env.DPF_BUILD_WORKTREE_ISOLATION = value;
+        expect(isBuildWorktreeIsolationEnabled()).toBe(false);
+        expect(resolveBuildWorkdir("FB-ABCD1234")).toBe("/workspace");
+      }
+    } finally {
+      if (prev === undefined) delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+      else process.env.DPF_BUILD_WORKTREE_ISOLATION = prev;
+    }
+  });
+
+  it("treats explicit truthy values as isolation enabled", () => {
     const prev = process.env.DPF_BUILD_WORKTREE_ISOLATION;
     process.env.DPF_BUILD_WORKTREE_ISOLATION = "1";
     try {

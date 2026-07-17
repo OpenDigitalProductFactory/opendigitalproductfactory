@@ -221,6 +221,10 @@ services:
       # resumes across portal recycles) instead of the legacy in-process loop.
       # Default OFF during the burn-in window; flip per-install via host .env.
       DPF_BUILD_DURABLE_EXECUTION_ENABLED: ${DPF_BUILD_DURABLE_EXECUTION_ENABLED:-0}
+      # Per-build worktree isolation is the default Build Studio sandbox posture:
+      # each build runs file operations in /workspace/.builds/<buildId> instead
+      # of sharing one mutable checkout. Set to 0 only for emergency rollback.
+      DPF_BUILD_WORKTREE_ISOLATION: ${DPF_BUILD_WORKTREE_ISOLATION:-1}
       # Autonomous build completion (operator opt-in, default OFF). When on, a
       # verified build at `ship` auto-resolves its delivery forks (PR push +
       # product/promotion); the periodic reconciler then advances it ship→complete
@@ -345,6 +349,7 @@ services:
       QDRANT_INTERNAL_URL: http://qdrant:6333
       NODE_ENV: development
       DPF_ENVIRONMENT: sandbox
+      DPF_BUILD_WORKTREE_ISOLATION: ${DPF_BUILD_WORKTREE_ISOLATION:-1}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # required on native Linux Docker; harmless on Docker Desktop
     # Without this healthcheck the sandbox process can wedge (e.g. on a

@@ -137,14 +137,14 @@ export function buildWorktreePath(buildId: string, workspace: string = WORKSPACE
 }
 
 /**
- * Feature flag for per-build worktree isolation. Default OFF: until the
- * dispatchers and sandbox helpers are threaded to honor resolveBuildWorkdir,
- * builds must keep running in the shared /workspace tree, so the worktree path
- * must NOT be handed out yet. Flip `DPF_BUILD_WORKTREE_ISOLATION=1` only after
- * the end-to-end worktree build path is live-verified (the follow-up slice).
+ * Feature flag for per-build worktree isolation. Default ON after
+ * BI-410024ED: the dispatcher and sandbox helper path now routes through
+ * resolveBuildWorkdir, so fresh installs should stop sharing one mutable
+ * /workspace checkout. Set DPF_BUILD_WORKTREE_ISOLATION=0 only as an emergency
+ * rollback to the old shared-tree behavior.
  */
 export function isBuildWorktreeIsolationEnabled(): boolean {
-  return process.env.DPF_BUILD_WORKTREE_ISOLATION === "1";
+  return !["0", "false", "off"].includes(process.env.DPF_BUILD_WORKTREE_ISOLATION?.trim().toLowerCase() ?? "");
 }
 
 /**
