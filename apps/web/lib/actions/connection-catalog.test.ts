@@ -74,8 +74,8 @@ describe("getConnectionCatalog", () => {
   it("aggregates MCP, native, and built-in entries into separate sections", async () => {
     const result = await getConnectionCatalog({ query: "" });
 
-    expect(result.totalCount).toBe(15);
-    expect(result.counts).toEqual({ mcp: 1, native: 13, builtIn: 1 });
+    expect(result.totalCount).toBe(17);
+    expect(result.counts).toEqual({ mcp: 1, native: 15, builtIn: 1 });
     expect(result.sections.map((section) => section.title)).toEqual([
       "MCP Catalog",
       "Native Integrations",
@@ -92,6 +92,8 @@ describe("getConnectionCatalog", () => {
         expect.objectContaining({ kind: "native", id: "quickbooks", statusLabel: "Configured" }),
         expect.objectContaining({ kind: "native", id: "facebook-pages", name: "Facebook Pages" }),
         expect.objectContaining({ kind: "native", id: "google-business-profile", name: "Google Business Profile" }),
+        expect.objectContaining({ kind: "native", id: "whatsapp-business", name: "WhatsApp Business" }),
+        expect.objectContaining({ kind: "native", id: "instagram-business", name: "Instagram Business" }),
       ]),
     );
     expect(result.sections[2].entries[0]).toMatchObject({

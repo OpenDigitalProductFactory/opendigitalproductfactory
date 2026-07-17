@@ -284,6 +284,8 @@ interface ViewConfig {
 
 Kanban validation: when `viewType = "kanban"`, the `kanban.groupByColumnId` must reference a column with `fieldType` of `select` or a platform adapter column marked as `groupable: true` (e.g., status enums). This is validated at the API layer when saving a view — rejected with a descriptive error if the group-by column is incompatible.
 
+> **Update (2026-07, Slice 24 — named views):** as the grid gained grouping, conditional formatting, per-column footer aggregates, column freeze/hide/reorder, and row-density, `WorkbookView.config` now stores the richer client `GridViewState` blob (a superset of the `ViewConfig` above) so a saved view restores *exactly* what the user saw. The server treats `config` as opaque JSON; the grid owns its shape. The narrow `ViewConfig` remains the contract for pre-configured `dataSourceFilter`s and Kanban. Named views persist server-side (`WorkbookView`, shared) for custom tables and in `localStorage` (personal) for platform grids — unified behind one `GridViewsMenu`.
+
 ### Key Indexes and Constraints
 
 - `WorkbookCell(rowId, columnId)` — unique composite for cell lookup

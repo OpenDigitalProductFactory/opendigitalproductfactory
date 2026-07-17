@@ -57,10 +57,20 @@ export type BuildFailureClass =
   // migrate (data-preserving). Environment/image gap, not a main defect
   // (SUR-* 2026-07-14; fixed by PR #2969/#2978).
   | "pgvector-extension-missing"
+  // A migration FAILED TO APPLY (P3018) because a statement hit a unique-
+  // constraint violation (Postgres 23505 "duplicate key value"). The canonical
+  // case (SUR-859DB221/SUR-69A54F89, 2026-07-16): a data migration's bulk UPDATE
+  // over PlatformIssueReport re-validated the partial unique index
+  // `PlatformIssueReport_dedupeKey_open_key` and collided with the log-signature
+  // scanner concurrently writing the same hot table. The failed record then
+  // wedges ALL future upgrades (P3009) until resolved — and the resolve direction
+  // depends on whether the schema half applied. Distinct from the pgvector P3018
+  // (0A000 "extension vector") above, which is its own class.
+  | "migration-unique-violation"
   // A prior failed migration left Prisma's P3009 state, which blocks ALL later
   // migrations until the failed record is resolved (migrate resolve
-  // --rolled-back). Environment state from an earlier aborted attempt — often the
-  // pgvector failure above — not a main defect (promoter step-3a self-heals it).
+  // --rolled-back OR --applied — see summary). Environment state from an earlier
+  // aborted attempt — often the pgvector or unique-violation failure above.
   | "p3009-failed-migration"
   // The migrate/boot step cannot reach Postgres (Prisma P1001 "Can't reach
   // database server") — the DB is down or unreachable (e.g. postgres stranded in
@@ -133,6 +143,14 @@ const BET5_PLAYBOOK = "docs/runbooks/bet5-windows-self-upgrade.md";
 // not open extension control file ".../vector.control"`. Deliberately anchored on
 // the word "vector" so a generic missing-extension error stays unclassified.
 const PGVECTOR_MISSING = /extension\s+"?vector"?\s+is not available|could not open extension control file[^\n]*vector|vector\.control/i;
+// A migration that FAILED TO APPLY (P3018) on a UNIQUE-constraint violation
+// (Postgres 23505). Requires BOTH the apply-failure marker AND the duplicate-key
+// signal so a P3018 with a DIFFERENT underlying error (e.g. pgvector's 0A000,
+// handled above) is never swept in here. The constraint name is pulled out for a
+// specific diagnosis.
+const MIGRATION_APPLY_FAILED = /\bP3018\b|A migration failed to apply/i;
+const UNIQUE_VIOLATION = /duplicate key value violates unique constraint|Database error code:\s*23505|\bSqlState\(E?23505\)/i;
+const UNIQUE_CONSTRAINT_NAME = /violates unique constraint "([^"]+)"/i;
 // Prisma's P3009: a prior migration is recorded failed and blocks all later ones.
 // Anchored on the P3009 code / its exact phrasing — NOT a bare "migrate failed",
 // which is a different (unknown) failure that must not be mislabeled.
@@ -295,11 +313,28 @@ export function classifyBuildFailure(
     };
   }
 
+  // A migration that FAILED TO APPLY on a unique-constraint violation. Checked
+  // before P3009 because this is the FIRST-failure signature (P3018 + 23505); the
+  // P3009 block below is the downstream symptom the identical retry then hits.
+  if (MIGRATION_APPLY_FAILED.test(log) && UNIQUE_VIOLATION.test(log)) {
+    const constraint = log.match(UNIQUE_CONSTRAINT_NAME)?.[1] ?? null;
+    const constraintNote = constraint ? ` (unique index \`${constraint}\`)` : "";
+    return {
+      class: "migration-unique-violation",
+      summary:
+        `A migration failed to apply (P3018) on a duplicate-key / unique-constraint violation${constraintNote}. ` +
+        "The canonical cause is a data migration's bulk UPDATE/insert re-validating a partial unique index on a HOT table while the app is still writing it (SUR-859DB221, 2026-07-16: the log-signature scanner concurrently minting PlatformIssueReport rows during the staging-gate migration's backfill). RECOVERY depends on whether the schema half-applied: if the migration's columns/index are already present in the DB, run `prisma migrate resolve --applied <name>` (NOT --rolled-back, which would re-run the ADD COLUMN and fail 'already exists'); if the schema did not apply, de-duplicate the offending rows for that key, then `--rolled-back` + re-trigger. A failed record left here wedges ALL future upgrades via P3009. Deeper fix: keep a bulk data-migration off a table under active concurrent writes to a partial unique index.",
+      playbookLink: BET5_PLAYBOOK,
+      failingTrace: traceAround(log, UNIQUE_VIOLATION),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
   if (P3009_FAILED_MIGRATION.test(log)) {
     return {
       class: "p3009-failed-migration",
       summary:
-        "A prior failed migration left Prisma's P3009 state, which blocks ALL later migrations. Resolve the failed migration (`prisma migrate resolve --rolled-back <name>`) once its precondition is fixed — the promoter's step-3a self-heals the BET-5 pgvector migration automatically. Environment state from an earlier aborted attempt, not a main defect.",
+        "A prior failed migration left Prisma's P3009 state, which blocks ALL later migrations. Resolve the failed migration once its precondition is fixed, choosing the direction by what actually landed: `prisma migrate resolve --rolled-back <name>` when the migration did NOT apply its schema (e.g. the BET-5 pgvector case, which the promoter's step-3a self-heals), or `prisma migrate resolve --applied <name>` when the migration's schema changes are ALREADY present (a partial-apply, e.g. a data-collision failure — otherwise a re-run re-executes the DDL and fails 'already exists'). Environment state from an earlier aborted attempt, not a main defect.",
       playbookLink: BET5_PLAYBOOK,
       failingTrace: traceAround(log, P3009_FAILED_MIGRATION),
       isMainDefectVsEnvironment: "environment",

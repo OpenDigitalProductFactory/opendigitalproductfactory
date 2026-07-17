@@ -21,6 +21,26 @@ describe("native integration catalog readiness metadata", () => {
     ]);
   });
 
+  it("registers the built WhatsApp Business and Instagram Business Meta adapters", () => {
+    const whatsapp = NATIVE_INTEGRATIONS.find((integration) => integration.id === "whatsapp-business");
+    expect(whatsapp, "WhatsApp Business must be registered in NATIVE_INTEGRATIONS").toBeDefined();
+    expect(whatsapp).toMatchObject({
+      integrationId: "whatsapp-business",
+      provider: "facebook",
+      model: "native",
+      href: "/platform/tools/integrations/whatsapp-business",
+    });
+
+    const instagram = NATIVE_INTEGRATIONS.find((integration) => integration.id === "instagram-business");
+    expect(instagram, "Instagram Business must be registered in NATIVE_INTEGRATIONS").toBeDefined();
+    expect(instagram).toMatchObject({
+      integrationId: "instagram-business",
+      provider: "facebook",
+      model: "native",
+      href: "/platform/tools/integrations/instagram-business",
+    });
+  });
+
   it("describes the expanded QuickBooks read-only accounting families", () => {
     const quickBooks = NATIVE_INTEGRATIONS.find((integration) => integration.id === "quickbooks");
 

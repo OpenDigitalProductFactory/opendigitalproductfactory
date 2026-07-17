@@ -236,8 +236,20 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   Conditions combine with a single AND/OR toggle. Pure, unit-tested `grid-filter-builder.ts`
   (`applyFilterGroup`/`evaluateCondition`/`opsForField`); half-typed conditions never hide rows.
   Persisted as `filterGroup` in the view state (old `columnFilters` still parsed for back-compat).
-- **Remaining (not built):** named/shareable server-side views; calendar view (fullcalendar — needs a
-  date column); manual row reordering; full pivots + richer charts; metrics/semantic layer;
+- **Slice 24 — named/saved views (unified) — SHIPPED.** One "Views" dropdown on every grid: save the
+  current layout under a name, apply a saved view, rename (save over), delete, and mark a default that
+  auto-applies on load. A view snapshots the **full** grid view-state (`GridViewState` — filters, sort,
+  grouping, formatting, column order/visibility/freeze, row height, footer aggregates), a superset of
+  the spec's original `ViewConfig`, so a view restores exactly what the user saw. Two backends, one UI
+  (`GridViewsMenu`): **custom tables** persist server-side to the pre-existing `WorkbookView` model
+  (shared across everyone with table access, creator-attributed) via new `listViews`/`saveView`
+  (upsert-by-name) / `deleteView` / `setDefaultView` service fns + `*ViewAction` server actions;
+  **platform grids** persist to `localStorage` (personal), reusing the same view-state shape. Pure,
+  unit-tested store ops in `grid-named-views.ts` (`upsert`/`remove`/`setDefault`/`parse` +
+  `normalizeViewState`). No migration — the model already existed.
+- **Remaining (not built):** platform-grid *shareable* views (needs a `WorkbookView.tableId` schema
+  change — platform tables have no `WorkbookTable` row); calendar view (fullcalendar — needs a date
+  column); manual row reordering; full pivots + richer charts; metrics/semantic layer;
   operationalization lifecycle.
   **Debt (decomposition — largely paid down):** all five toolbar panels — Filter, Summary, Format,
   Group, Columns — now live as typed, presentational components in `GridPanels.tsx` (pure UI over

@@ -100,6 +100,20 @@ const P3009_BLOCKED_LOG = `Error: P3009
 migrate found failed migrations in the target database, new migrations will not be applied. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
 The \`20260714110000_bet5_pgvector_foundation\` migration started at 2026-07-14 11:02:03 UTC failed`;
 
+// Verbatim shape from SUR-859DB221 (2026-07-16): the staging-gate migration's
+// bulk backfill UPDATE over PlatformIssueReport collided with the log-signature
+// scanner still writing the same hot table, tripping the partial unique index.
+// P3018 + 23505 + a dedupeKey duplicate — NO "vector" text, so it must NOT be
+// swept up as pgvector, and it precedes the P3009 the identical retry hits.
+const MIGRATION_UNIQUE_VIOLATION_LOG = `Applying migration \`20260716130000_add_pir_reach_staging_gate\`
+Error: P3018
+A migration failed to apply. New migrations cannot be applied before the error is recovered from.
+Migration name: 20260716130000_add_pir_reach_staging_gate
+Database error code: 23505
+Database error:
+ERROR: duplicate key value violates unique constraint "PlatformIssueReport_dedupeKey_open_key"
+DETAIL: Key ("dedupeKey")=(log-sig:sandbox:3c148b45c3) already exists.`;
+
 // Verbatim shape from BI-D8C0D045 (run SUR-C8BC533B, 2026-07-15): postgres was
 // unreachable during the upgrade (stranded in `Created` by the pre-#2978
 // ensure-pgvector bug), so the boot backfill's Prisma write hit P1001.
@@ -209,12 +223,31 @@ describe("classifyBuildFailure", () => {
     expect(c.failingTrace).toContain("vector");
   });
 
-  it("classifies a P3009 blocked-migration state as environment, pointing at resolve --rolled-back", () => {
+  it("classifies a P3009 blocked-migration state as environment, pointing at BOTH resolve directions", () => {
     const c = classifyBuildFailure({ log: P3009_BLOCKED_LOG });
     expect(c.class).toBe("p3009-failed-migration");
     expect(c.isMainDefectVsEnvironment).toBe("environment");
+    // Guidance must offer both directions so a schema-already-applied failure
+    // (data-collision) is not mis-recovered with --rolled-back (SUR-859DB221).
     expect(c.summary).toContain("resolve --rolled-back");
+    expect(c.summary).toContain("resolve --applied");
     expect(c.playbookLink).toMatch(/bet5-windows-self-upgrade/);
+  });
+
+  it("classifies a P3018 unique-constraint migration failure as its own class with --applied guidance (SUR-859DB221)", () => {
+    const c = classifyBuildFailure({ log: MIGRATION_UNIQUE_VIOLATION_LOG });
+    expect(c.class).toBe("migration-unique-violation");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    // Names the offending constraint and steers to the correct resolve direction.
+    expect(c.summary).toContain("PlatformIssueReport_dedupeKey_open_key");
+    expect(c.summary).toContain("resolve --applied");
+    expect(c.failingTrace).toContain("duplicate key value violates unique constraint");
+  });
+
+  it("does NOT sweep the pgvector P3018 (0A000, no 23505) into the unique-violation class", () => {
+    // Both are P3018 apply failures; only the 23505 one is the unique-violation class.
+    expect(classifyBuildFailure({ log: PGVECTOR_MISSING_LOG }).class).toBe("pgvector-extension-missing");
+    expect(classifyBuildFailure({ log: MIGRATION_UNIQUE_VIOLATION_LOG }).class).toBe("migration-unique-violation");
   });
 
   it("prefers the pgvector root cause over P3009 when a log carries both", () => {
