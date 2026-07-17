@@ -99,11 +99,25 @@ After this PR lands, the operator runs Antigravity (`agy --headless --approve <p
 | BI | Title | Axis / Phase |
 |----|-------|--------------|
 | `BI-D49C4746` | `antigravity-desktop` executor kind + consumers | Axis 1 · Phase 0 |
-| `BI-FA5F49C6` | MCP provider enums (revised: no change needed — see seam finding) | Axis 1 · Phase 0 |
+| `BI-FA5F49C6` | MCP provider enums — **done** (delivered by Antigravity, PR #3223): unified `NONPROD_OWNER_PROVIDERS` as a single source of truth + added antigravity. The earlier "no change needed" seam read was wrong — it missed that `local-integration.ts` was inconsistent with the lease pack. | Axis 1 · Phase 0 |
 | `BI-EF0489B8` | `antigravity` token-snippet + confirm config shape | Axis 1 · Phase 0 |
 | `BI-ECAE3494` | `.antigravity-plugin` packaging + bootstrap wiring + onboarding doc | Axis 1 · Phase 0/1 |
 | `BI-47A81FEB` | **EVIDENCE GATE** — prove one governed `agy --headless` build | Gate |
 | `BI-D2E3F2FD` | Antigravity as BS in-sandbox dispatch engine | Axis 2 · **deferred** |
+
+---
+
+## Current status (updated 2026-07-17)
+
+**Axis 1 — external host-worktree CLI: SHIPPED and PROVEN.** Phase-0 scaffolding merged (PR #3187); opt-in `agy` install + toolchain recognition merged (PR #3193); onboarding runbook `docs/operations/antigravity-cli-onboarding.md` (PR #3216). Capability is proven, not hypothetical: Antigravity autonomously selected real backlog items and delivered **merged** PRs — #3155 and #3223. The reliable MCP wiring is to **ask agy to add the `dpf` server itself** (it writes to whatever config it reads), with a per-thread presence check as the guard.
+
+**Evidence gate (`BI-47A81FEB`): closed GREEN on capability, with one operational caveat.** agy connects to the DPF MCP and ships DCO PRs through CI. It does **not** auto-run the governed claim/evidence flow (no `antigravity-desktop` capsule was recorded) because the DPF skills/hooks don't auto-load on the agy surface — so until that hook/skill plane is wired, agy must be **prompted explicitly** to `claim_backlog_item_for_work` + record evidence.
+
+**Axis 2 — Build Studio in-sandbox engine: DEFERRED, blocked by two independent walls (`BI-D2E3F2FD`).** A live sandbox spike (kernel `DI-A6A8DC5A48C3`) plus web research established:
+1. **libc:** `agy` is glibc-only (requires glibc ≥ 2.28); the sandbox is Alpine/musl (`Dockerfile.sandbox: FROM node:24-alpine`). The glibc binary won't run on musl (`Error relocating: __read/__open/__lseek`), gcompat doesn't bridge it, and Google publishes **no** musl builds (`linux_*_musl` → 404). Not host-specific — it's the Alpine base, identical on every host; Mac only changes arch (arm64 vs amd64), and both lack musl builds.
+2. **headless-container auth (decisive, Google-side, open):** [`antigravity-cli` #479](https://github.com/google-antigravity/antigravity-cli/issues/479) — in headless containers agy writes its OAuth token but a re-invoked process can't read it back, re-triggering login every time; `GEMINI_API_KEY`/Vertex/ADC are also ignored. **Reproduced on Debian 12 (glibc)** — so switching our sandbox base to glibc would only reach this second wall. Build Studio re-invokes the engine per phase, which is exactly what #479 breaks.
+
+Consequence: a sandbox base-image change is **not** worth doing for Antigravity — it spends real blast radius (image size, full rebuild + revalidate all engines) and still stalls at blocker 2, which is outside our control. **Revisit trigger (both, Google-side + observable):** Google fixes #479, **and** ships musl builds (or a glibc base is separately justified). Until then Axis 2 is a **watch-item**, not a build-item. Antigravity's home is the host-CLI surface.
 
 ---
 
