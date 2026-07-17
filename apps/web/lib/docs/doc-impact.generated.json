@@ -1,0 +1,465 @@
+{
+  "generatedBy": "scripts/gen-doc-impact.mjs",
+  "routeToDocs": {
+    "/admin": [
+      "docs/user-guide/admin/index.md"
+    ],
+    "/admin/storefront": [
+      "docs/user-guide/storefront/index.md"
+    ],
+    "/admin/storefront/inbox": [
+      "docs/user-guide/storefront/inbox-and-enquiries.md"
+    ],
+    "/admin/storefront/items": [
+      "docs/user-guide/storefront/catalog-and-page-content.md"
+    ],
+    "/admin/storefront/sections": [
+      "docs/user-guide/storefront/catalog-and-page-content.md"
+    ],
+    "/admin/storefront/settings": [
+      "docs/user-guide/storefront/settings-business-and-operations.md"
+    ],
+    "/admin/storefront/setup": [
+      "docs/user-guide/storefront/setup-and-launch.md"
+    ],
+    "/admin/storefront/team": [
+      "docs/user-guide/storefront/team-and-fulfilment.md"
+    ],
+    "/build": [
+      "docs/user-guide/build-studio/index.md"
+    ],
+    "/compliance": [
+      "docs/user-guide/compliance/index.md"
+    ],
+    "/compliance/actions": [
+      "docs/user-guide/compliance/audits-and-corrective-actions.md"
+    ],
+    "/compliance/audits": [
+      "docs/user-guide/compliance/audits-and-corrective-actions.md"
+    ],
+    "/compliance/controls": [
+      "docs/user-guide/compliance/controls-and-evidence.md"
+    ],
+    "/compliance/evidence": [
+      "docs/user-guide/compliance/controls-and-evidence.md"
+    ],
+    "/compliance/gaps": [
+      "docs/user-guide/compliance/posture-and-gaps.md"
+    ],
+    "/compliance/incidents": [
+      "docs/user-guide/compliance/incidents-risks-and-response.md"
+    ],
+    "/compliance/licensing": [
+      "docs/user-guide/compliance/licensing-readiness.md"
+    ],
+    "/compliance/obligations": [
+      "docs/user-guide/compliance/regulations-and-obligations.md"
+    ],
+    "/compliance/onboard": [
+      "docs/user-guide/compliance/regulations-and-obligations.md"
+    ],
+    "/compliance/policies": [
+      "docs/user-guide/compliance/policies-and-acknowledgements.md"
+    ],
+    "/compliance/posture": [
+      "docs/user-guide/compliance/posture-and-gaps.md"
+    ],
+    "/compliance/regulations": [
+      "docs/user-guide/compliance/regulations-and-obligations.md"
+    ],
+    "/compliance/risks": [
+      "docs/user-guide/compliance/incidents-risks-and-response.md"
+    ],
+    "/compliance/submissions": [
+      "docs/user-guide/compliance/regulatory-submissions.md"
+    ],
+    "/coworker-decisions": [
+      "docs/user-guide/wiki/index.md"
+    ],
+    "/customer": [
+      "docs/user-guide/customers/index.md"
+    ],
+    "/customer/marketing": [
+      "docs/user-guide/customers/marketing.md"
+    ],
+    "/docs": [
+      "docs/user-guide/index.md"
+    ],
+    "/ea": [
+      "docs/user-guide/architecture/index.md"
+    ],
+    "/employee": [
+      "docs/user-guide/hr/index.md"
+    ],
+    "/finance": [
+      "docs/user-guide/finance/index.md"
+    ],
+    "/finance/banking": [
+      "docs/user-guide/finance/banking-and-reconciliation.md"
+    ],
+    "/finance/bills": [
+      "docs/user-guide/finance/accounts-payable.md"
+    ],
+    "/finance/close": [
+      "docs/user-guide/finance/reporting-and-close.md"
+    ],
+    "/finance/configuration": [
+      "docs/user-guide/finance/controls-and-automation.md"
+    ],
+    "/finance/expense-claims": [
+      "docs/user-guide/finance/expense-workflows.md"
+    ],
+    "/finance/invoices": [
+      "docs/user-guide/finance/accounts-receivable.md"
+    ],
+    "/finance/my-expenses": [
+      "docs/user-guide/finance/expense-workflows.md"
+    ],
+    "/finance/payment-runs": [
+      "docs/user-guide/finance/controls-and-automation.md"
+    ],
+    "/finance/payments": [
+      "docs/user-guide/finance/accounts-receivable.md"
+    ],
+    "/finance/purchase-orders": [
+      "docs/user-guide/finance/accounts-payable.md"
+    ],
+    "/finance/recurring": [
+      "docs/user-guide/finance/controls-and-automation.md"
+    ],
+    "/finance/reports": [
+      "docs/user-guide/finance/reporting-and-close.md"
+    ],
+    "/finance/revenue": [
+      "docs/user-guide/finance/accounts-receivable.md"
+    ],
+    "/finance/settings": [
+      "docs/user-guide/finance/controls-and-automation.md"
+    ],
+    "/finance/spend": [
+      "docs/user-guide/finance/accounts-payable.md"
+    ],
+    "/finance/suppliers": [
+      "docs/user-guide/finance/accounts-payable.md"
+    ],
+    "/inventory": [
+      "docs/user-guide/products/index.md"
+    ],
+    "/ops": [
+      "docs/user-guide/operations/index.md"
+    ],
+    "/platform": [
+      "docs/user-guide/platform/index.md"
+    ],
+    "/platform/ai": [
+      "docs/user-guide/ai-workforce/index.md"
+    ],
+    "/platform/ai/assignments": [
+      "docs/user-guide/platform/ai-operations.md"
+    ],
+    "/platform/ai/authority": [
+      "docs/user-guide/platform/authority-and-audit.md"
+    ],
+    "/platform/ai/build-studio": [
+      "docs/user-guide/build-studio/index.md"
+    ],
+    "/platform/ai/capability-needs": [
+      "docs/user-guide/platform/ai-operations.md"
+    ],
+    "/platform/ai/capacity-continuity": [
+      "docs/user-guide/platform/ai-operations.md"
+    ],
+    "/platform/ai/history": [
+      "docs/user-guide/platform/ai-operations.md"
+    ],
+    "/platform/ai/model-assignment": [
+      "docs/user-guide/ai-workforce/model-routing-lifecycle.md"
+    ],
+    "/platform/ai/operations": [
+      "docs/user-guide/platform/ai-operations.md"
+    ],
+    "/platform/ai/operations-map": [
+      "docs/user-guide/platform/ai-operations.md"
+    ],
+    "/platform/ai/providers": [
+      "docs/user-guide/ai-workforce/connecting-providers.md"
+    ],
+    "/platform/ai/routing": [
+      "docs/user-guide/ai-workforce/model-routing-lifecycle.md"
+    ],
+    "/platform/audit": [
+      "docs/user-guide/platform/authority-and-audit.md"
+    ],
+    "/platform/edge-nodes": [
+      "docs/user-guide/platform/edge-nodes.md"
+    ],
+    "/platform/identity": [
+      "docs/user-guide/platform/identity-and-access.md"
+    ],
+    "/platform/integrations": [
+      "docs/user-guide/platform/tools-and-integrations.md"
+    ],
+    "/platform/services": [
+      "docs/user-guide/platform/tools-and-integrations.md"
+    ],
+    "/platform/tools": [
+      "docs/user-guide/platform/tools-and-integrations.md"
+    ],
+    "/platform/tools/discovery": [
+      "docs/user-guide/platform/discovery-operations.md"
+    ],
+    "/platform/tools/integrations/google-business-profile": [
+      "docs/user-guide/platform/tools-and-integrations.md"
+    ],
+    "/platform/tools/integrations/google-marketing-intelligence": [
+      "docs/user-guide/platform/tools-and-integrations.md"
+    ],
+    "/portfolio": [
+      "docs/user-guide/portfolios/index.md"
+    ],
+    "/portfolio/product": [
+      "docs/user-guide/products/index.md"
+    ],
+    "/setup": [
+      "docs/user-guide/getting-started/setup-and-first-login.md"
+    ],
+    "/storefront": [
+      "docs/user-guide/storefront/index.md"
+    ],
+    "/storefront/inbox": [
+      "docs/user-guide/storefront/inbox-and-enquiries.md"
+    ],
+    "/storefront/items": [
+      "docs/user-guide/storefront/catalog-and-page-content.md"
+    ],
+    "/storefront/sections": [
+      "docs/user-guide/storefront/catalog-and-page-content.md"
+    ],
+    "/storefront/settings": [
+      "docs/user-guide/storefront/settings-business-and-operations.md"
+    ],
+    "/storefront/settings/business": [
+      "docs/user-guide/storefront/settings-business-and-operations.md"
+    ],
+    "/storefront/settings/operations": [
+      "docs/user-guide/storefront/settings-business-and-operations.md"
+    ],
+    "/storefront/setup": [
+      "docs/user-guide/storefront/setup-and-launch.md"
+    ],
+    "/storefront/team": [
+      "docs/user-guide/storefront/team-and-fulfilment.md"
+    ],
+    "/workspace": [
+      "docs/user-guide/workspace/index.md"
+    ],
+    "/workspace/documents": [
+      "docs/user-guide/workspace/documents.md"
+    ]
+  },
+  "codeToDocs": {
+    "apps/web/lib/ai-inference.ts": [
+      "docs/user-guide/ai-workforce/connecting-providers.md"
+    ],
+    "apps/web/lib/integrate/build-orchestrator.ts": [
+      "docs/user-guide/build-studio/index.md"
+    ],
+    "scripts/dpf-bootstrap-agent-toolchain.ps1": [
+      "docs/user-guide/getting-started/agent-dev-environments.md"
+    ],
+    "scripts/dpf-bootstrap-agent-toolchain.sh": [
+      "docs/user-guide/getting-started/agent-dev-environments.md"
+    ]
+  },
+  "docToRoutes": {
+    "docs/user-guide/admin/index.md": [
+      "/admin"
+    ],
+    "docs/user-guide/ai-workforce/connecting-providers.md": [
+      "/platform/ai/providers"
+    ],
+    "docs/user-guide/ai-workforce/index.md": [
+      "/platform/ai"
+    ],
+    "docs/user-guide/ai-workforce/model-routing-lifecycle.md": [
+      "/platform/ai/model-assignment",
+      "/platform/ai/routing"
+    ],
+    "docs/user-guide/architecture/index.md": [
+      "/ea"
+    ],
+    "docs/user-guide/build-studio/index.md": [
+      "/build",
+      "/platform/ai/build-studio"
+    ],
+    "docs/user-guide/compliance/audits-and-corrective-actions.md": [
+      "/compliance/actions",
+      "/compliance/audits"
+    ],
+    "docs/user-guide/compliance/controls-and-evidence.md": [
+      "/compliance/controls",
+      "/compliance/evidence"
+    ],
+    "docs/user-guide/compliance/incidents-risks-and-response.md": [
+      "/compliance/incidents",
+      "/compliance/risks"
+    ],
+    "docs/user-guide/compliance/index.md": [
+      "/compliance"
+    ],
+    "docs/user-guide/compliance/licensing-readiness.md": [
+      "/compliance/licensing"
+    ],
+    "docs/user-guide/compliance/policies-and-acknowledgements.md": [
+      "/compliance/policies"
+    ],
+    "docs/user-guide/compliance/posture-and-gaps.md": [
+      "/compliance/gaps",
+      "/compliance/posture"
+    ],
+    "docs/user-guide/compliance/regulations-and-obligations.md": [
+      "/compliance/obligations",
+      "/compliance/onboard",
+      "/compliance/regulations"
+    ],
+    "docs/user-guide/compliance/regulatory-submissions.md": [
+      "/compliance/submissions"
+    ],
+    "docs/user-guide/customers/index.md": [
+      "/customer"
+    ],
+    "docs/user-guide/customers/marketing.md": [
+      "/customer/marketing"
+    ],
+    "docs/user-guide/finance/accounts-payable.md": [
+      "/finance/bills",
+      "/finance/purchase-orders",
+      "/finance/spend",
+      "/finance/suppliers"
+    ],
+    "docs/user-guide/finance/accounts-receivable.md": [
+      "/finance/invoices",
+      "/finance/payments",
+      "/finance/revenue"
+    ],
+    "docs/user-guide/finance/banking-and-reconciliation.md": [
+      "/finance/banking"
+    ],
+    "docs/user-guide/finance/controls-and-automation.md": [
+      "/finance/configuration",
+      "/finance/payment-runs",
+      "/finance/recurring",
+      "/finance/settings"
+    ],
+    "docs/user-guide/finance/expense-workflows.md": [
+      "/finance/expense-claims",
+      "/finance/my-expenses"
+    ],
+    "docs/user-guide/finance/index.md": [
+      "/finance"
+    ],
+    "docs/user-guide/finance/reporting-and-close.md": [
+      "/finance/close",
+      "/finance/reports"
+    ],
+    "docs/user-guide/getting-started/setup-and-first-login.md": [
+      "/setup"
+    ],
+    "docs/user-guide/hr/index.md": [
+      "/employee"
+    ],
+    "docs/user-guide/index.md": [
+      "/docs"
+    ],
+    "docs/user-guide/operations/index.md": [
+      "/ops"
+    ],
+    "docs/user-guide/platform/ai-operations.md": [
+      "/platform/ai/assignments",
+      "/platform/ai/capability-needs",
+      "/platform/ai/capacity-continuity",
+      "/platform/ai/history",
+      "/platform/ai/operations",
+      "/platform/ai/operations-map"
+    ],
+    "docs/user-guide/platform/authority-and-audit.md": [
+      "/platform/ai/authority",
+      "/platform/audit"
+    ],
+    "docs/user-guide/platform/discovery-operations.md": [
+      "/platform/tools/discovery"
+    ],
+    "docs/user-guide/platform/edge-nodes.md": [
+      "/platform/edge-nodes"
+    ],
+    "docs/user-guide/platform/identity-and-access.md": [
+      "/platform/identity"
+    ],
+    "docs/user-guide/platform/index.md": [
+      "/platform"
+    ],
+    "docs/user-guide/platform/tools-and-integrations.md": [
+      "/platform/integrations",
+      "/platform/services",
+      "/platform/tools",
+      "/platform/tools/integrations/google-business-profile",
+      "/platform/tools/integrations/google-marketing-intelligence"
+    ],
+    "docs/user-guide/portfolios/index.md": [
+      "/portfolio"
+    ],
+    "docs/user-guide/products/index.md": [
+      "/inventory",
+      "/portfolio/product"
+    ],
+    "docs/user-guide/storefront/catalog-and-page-content.md": [
+      "/admin/storefront/items",
+      "/admin/storefront/sections",
+      "/storefront/items",
+      "/storefront/sections"
+    ],
+    "docs/user-guide/storefront/inbox-and-enquiries.md": [
+      "/admin/storefront/inbox",
+      "/storefront/inbox"
+    ],
+    "docs/user-guide/storefront/index.md": [
+      "/admin/storefront",
+      "/storefront"
+    ],
+    "docs/user-guide/storefront/settings-business-and-operations.md": [
+      "/admin/storefront/settings",
+      "/storefront/settings",
+      "/storefront/settings/business",
+      "/storefront/settings/operations"
+    ],
+    "docs/user-guide/storefront/setup-and-launch.md": [
+      "/admin/storefront/setup",
+      "/storefront/setup"
+    ],
+    "docs/user-guide/storefront/team-and-fulfilment.md": [
+      "/admin/storefront/team",
+      "/storefront/team"
+    ],
+    "docs/user-guide/wiki/index.md": [
+      "/coworker-decisions"
+    ],
+    "docs/user-guide/workspace/documents.md": [
+      "/workspace/documents"
+    ],
+    "docs/user-guide/workspace/index.md": [
+      "/workspace"
+    ]
+  },
+  "docToCode": {
+    "docs/user-guide/ai-workforce/connecting-providers.md": [
+      "apps/web/lib/ai-inference.ts"
+    ],
+    "docs/user-guide/build-studio/index.md": [
+      "apps/web/lib/integrate/build-orchestrator.ts"
+    ],
+    "docs/user-guide/getting-started/agent-dev-environments.md": [
+      "scripts/dpf-bootstrap-agent-toolchain.ps1",
+      "scripts/dpf-bootstrap-agent-toolchain.sh"
+    ]
+  }
+}

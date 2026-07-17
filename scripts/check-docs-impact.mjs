@@ -97,18 +97,29 @@ export function docFileForDocsPath(docsPath) {
   return `docs/user-guide/${rel}.md`;
 }
 
-export function computeImpact(changedFiles, entries) {
+export function computeImpact(changedFiles, entries, codeToDocs = {}) {
   const changed = new Set(changedFiles);
-  const pageFiles = changedFiles.filter((f) => PAGE_FILE_RE.test(f) && !EXCLUDE_RE.test(f));
-  const impacted = new Map(); // docFile -> [{route, page}]
-  for (const page of pageFiles) {
+  const impacted = new Map(); // docFile -> [{kind, route?, page?, code?}]
+  const add = (docFile, reason) => {
+    if (changed.has(docFile)) return; // its doc was updated in the same PR — satisfied
+    if (!impacted.has(docFile)) impacted.set(docFile, []);
+    if (!impacted.get(docFile).some((r) => r.kind === reason.kind && (r.route === reason.route) && (r.code === reason.code))) {
+      impacted.get(docFile).push(reason);
+    }
+  };
+
+  // Route-based: a documented user-facing page.tsx changed.
+  for (const page of changedFiles.filter((f) => PAGE_FILE_RE.test(f) && !EXCLUDE_RE.test(f))) {
     const route = routeForPageFile(page);
     const docsPath = docsPathForRoute(route, entries);
     if (!docsPath) continue; // undocumented route — not gated
-    const docFile = docFileForDocsPath(docsPath);
-    if (changed.has(docFile)) continue; // its doc was updated in the same PR — satisfied
-    if (!impacted.has(docFile)) impacted.set(docFile, []);
-    impacted.get(docFile).push({ route, page });
+    add(docFileForDocsPath(docsPath), { kind: "route", route, page });
+  }
+
+  // Code-based: a source file a page opted into via `relatedCode:` changed (a
+  // *functionality* change, not just a route-file edit). Opt-in per page.
+  for (const f of changedFiles) {
+    for (const docFile of codeToDocs[f] || []) add(docFile, { kind: "code", code: f });
   }
   return impacted;
 }
@@ -124,10 +135,16 @@ function main() {
     process.exit(0);
   }
   const entries = parseRouteMap(fs.readFileSync(ROUTE_MAP_TS, "utf-8"));
-  const impacted = computeImpact(changed, entries);
+  // Optional code->doc edges from the generated impact manifest (Phase 4).
+  let codeToDocs = {};
+  const manifestPath = path.join(REPO_ROOT, "apps", "web", "lib", "docs", "doc-impact.generated.json");
+  if (fs.existsSync(manifestPath)) {
+    try { codeToDocs = JSON.parse(fs.readFileSync(manifestPath, "utf-8")).codeToDocs || {}; } catch { /* advisory */ }
+  }
+  const impacted = computeImpact(changed, entries, codeToDocs);
 
   if (impacted.size === 0) {
-    console.log("[docs-impact-gate] No documented user-facing route changed without its user-guide page. OK.");
+    console.log("[docs-impact-gate] No documented route or related-code change without its user-guide page. OK.");
     process.exit(0);
   }
 
@@ -135,18 +152,20 @@ function main() {
   const prBody = process.env.PR_BODY || "";
   const attested = ATTESTATION_RE.test(commits) || ATTESTATION_RE.test(prBody);
 
+  const describe = (h) => (h.kind === "route" ? `route ${h.route} (${h.page})` : `code ${h.code}`);
+
   if (attested) {
-    console.log("[docs-impact-gate] Documented route change carries a Docs-Impact-Decision attestation. OK.");
-    for (const [doc, hits] of impacted) console.log(`  • ${doc} ← ${hits.map((h) => h.route).join(", ")}`);
+    console.log("[docs-impact-gate] Impacting change carries a Docs-Impact-Decision attestation. OK.");
+    for (const [doc, hits] of impacted) console.log(`  • ${doc} ← ${hits.map(describe).join(", ")}`);
     process.exit(0);
   }
 
   console.error("");
-  console.error("[docs-impact-gate] FAILED — a documented user-facing route changed without updating its user-guide page.");
+  console.error("[docs-impact-gate] FAILED — a documented route or related-code change without updating its user-guide page.");
   console.error("");
   for (const [doc, hits] of impacted) {
     console.error(`  ${doc}`);
-    for (const h of hits) console.error(`      route ${h.route}   (${h.page})`);
+    for (const h of hits) console.error(`      ${describe(h)}`);
   }
   console.error("");
   console.error("To resolve, EITHER:");

@@ -2,6 +2,8 @@
 title: "Connecting AI Providers"
 area: "ai-workforce"
 order: 2
+relatedCode:
+  - apps/web/lib/ai-inference.ts
 ---
 
 ## Overview

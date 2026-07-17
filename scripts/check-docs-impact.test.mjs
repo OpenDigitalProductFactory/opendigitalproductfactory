@@ -73,6 +73,28 @@ test("computeImpact ignores non-page and test files", () => {
   assert.equal(impacted.size, 0);
 });
 
+test("computeImpact flags a page whose relatedCode file changed", () => {
+  const codeToDocs = { "apps/web/lib/ai-inference.ts": ["docs/user-guide/ai-workforce/connecting-providers.md"] };
+  const impacted = computeImpact(["apps/web/lib/ai-inference.ts"], ENTRIES, codeToDocs);
+  assert.equal(impacted.size, 1);
+  assert.equal(impacted.get("docs/user-guide/ai-workforce/connecting-providers.md")[0].kind, "code");
+});
+
+test("computeImpact is satisfied when the code-linked doc is updated in the same PR", () => {
+  const codeToDocs = { "apps/web/lib/ai-inference.ts": ["docs/user-guide/ai-workforce/connecting-providers.md"] };
+  const impacted = computeImpact(
+    ["apps/web/lib/ai-inference.ts", "docs/user-guide/ai-workforce/connecting-providers.md"],
+    ENTRIES,
+    codeToDocs,
+  );
+  assert.equal(impacted.size, 0);
+});
+
+test("computeImpact ignores changed code with no relatedCode edge", () => {
+  const impacted = computeImpact(["apps/web/lib/unrelated.ts"], ENTRIES, { "apps/web/lib/ai-inference.ts": ["docs/x.md"] });
+  assert.equal(impacted.size, 0);
+});
+
 test("computeImpact groups multiple routes onto one doc", () => {
   const impacted = computeImpact(
     ["apps/web/app/(shell)/finance/invoices/page.tsx", "apps/web/app/(shell)/finance/payments/page.tsx"],
