@@ -6,8 +6,8 @@
 | Epic | `EP-WORKFORCE-OPS` |
 | Design spec | [`2026-07-17-organization-workforce-staffing-scheduling-design.md`](../specs/2026-07-17-organization-workforce-staffing-scheduling-design.md) |
 | Kernel records | `DI-C8BF6362B44C` (architecture: DPF domain + open solver adapter) · `DI-78788D22BE65` (solver-first: Timefold) |
-| Branch | `feat/workforce-staffing-substrate` (off `origin/main` @ `93a1e23b4`) |
-| Status | Phased plan; Phase 1 ready to build |
+| Branch | `feat/workforce-staffing-substrate` (Phase 1) · `feat/workforce-staffing-constraints` (Phase 2) |
+| Status | Phase 1 built + PR'd (#3204); Phase 2 constraint core built |
 
 ## Founder decisions applied (design §18)
 
@@ -42,13 +42,28 @@ Each phase becomes a child BI under `EP-WORKFORCE-OPS`. Phase 1 ships independen
 
 **Risk/rollback.** Additive migration referencing existing PKs — no change to existing tables; rollback = down-migration dropping the new tables (nothing else references staffing yet).
 
-### Phase 2 — Deterministic constraint & rule-pack engine
+### Phase 2 — Deterministic constraint & rule-pack engine *(core built)*
 
-**Deliverable.** Typed `StaffingConstraintRule` predicate registry implementing the §9.8 families (eligibility/credential-expiry, capability-presence, minimum-N-together, pairing-ratio, headcount-formula, rest-gap/turnaround-clock, per-employee-group overtime-regime selection, schedule-shape premium producing **cost** not infeasibility). Rule-pack loader (config: source URLs, effective dates, review owner, test cases). US-federal + California starter pack. Unknown jurisdiction → **requires policy review**, fail-closed (never assume US defaults).
+**Deliverable.** Typed predicate registry implementing the §9.8 families + a
+starter rule-pack. **Built in this slice** ([`apps/web/lib/workforce/staffing/`](../../../apps/web/lib/workforce/staffing/)):
+the normalized problem model (`constraints/types.ts`), seven predicates
+(`constraints/predicates.ts`) — `credential_eligibility` (expiry-aware),
+`capability_presence`, `min_n_together` (dual control), `pairing_ratio`
+(apprentice:journeyman), `rest_gap`/turnaround, `no_overlap`, and
+`max_hours_premium` (priced, not infeasible) — the registry + fail-closed
+evaluation loop (`constraints/evaluate.ts`), and the US-federal + California
+starter pack (`rule-packs/us.ts`). Unknown jurisdiction OR an unknown hard
+predicate → **requires policy review**, fail-closed (never assume US defaults).
 
-**Files.** `apps/web/lib/workforce/staffing/constraints/` (predicate registry + evaluators); `apps/web/lib/workforce/staffing/rule-packs/us-federal.ts`, `.../us-california.ts`.
+**Follow-up (same phase, later PRs):** the remaining §9.8 families
+(fair-workweek predictability pay, meal/reporting-time premiums, minor-hour
+windows, on-call compensability, headcount-formula, per-group overtime-regime
+selection), effective-dating, and DB-backed rule loading from
+`StaffingConstraintRule` rows.
 
-**Verification.** Constraint goldens — every rule in the pack ships one passing and one violating fixture; unknown-jurisdiction fail-closed test; overtime-regime selection test (FLSA-40 vs CA daily-OT).
+**Verification.** Constraint goldens — passing + violating fixture per predicate,
+unknown-jurisdiction and unknown-predicate fail-closed tests, priced-premium
+test, starter-pack resolver test (14 tests, `constraints/evaluate.test.ts`).
 
 ### Phase 3 — Solver adapter + Timefold packaging spike
 
