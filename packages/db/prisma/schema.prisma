@@ -1896,6 +1896,28 @@ model IntegrationToolCallLog {
   @@index([toolName, calledAt])
 }
 
+// Idempotency and recovery state for at-least-once connector callbacks.
+// requestHash and acknowledgment are safe, adapter-redacted projections; raw
+// callback payloads, signatures, and credentials must never be stored here.
+model IntegrationCallbackReceipt {
+  id               String    @id @default(cuid())
+  connectorId      String
+  deliveryKey      String
+  requestHash      String
+  status           String    @default("processing")
+  responseCode     Int?
+  domainEntityId   String?
+  acknowledgment   Json?
+  dispatchPending  Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  completedAt      DateTime?
+
+  @@unique([connectorId, deliveryKey])
+  @@index([status, dispatchPending, updatedAt])
+  @@index([connectorId, createdAt])
+}
+
 // Source-attributed import review queue for external provider records.
 // Stores review/link posture only; raw provider payloads stay outside DPF.
 model IntegrationImportBatch {
