@@ -109,3 +109,42 @@ export function enforceEvidenceIntegrity(params: {
   if (!isSubstantive) return { content, blocked: false };
   return { content: INV5_UNVERIFIED_MESSAGE, blocked: true };
 }
+
+/** The nudge that pushes a model toward fetching live data before it answers. */
+export const EVIDENCE_RECOVERY_NUDGE =
+  "That question is about the CURRENT state of live operational data, which changes over time. " +
+  "Do not answer from memory. Call one of your available tools to fetch the real data now, then " +
+  "answer using only what the tool returns.";
+
+/** Bounded recovery for an evidence-required turn: pass the answer, nudge once
+ *  for a tool, or refuse. Keeps the agentic loop's branch small and testable. */
+export type EvidenceRecoveryAction =
+  | { kind: "pass" }
+  | { kind: "nudge"; nudgeMessage: string }
+  | { kind: "refuse"; message: string };
+
+/**
+ * Decide what the loop should do when an evidence-required turn returns text.
+ * `pass` — the answer is verifiable (a tool ran) or not substantive; return it.
+ * `nudge` — block the unverifiable answer and ask the model to use a tool
+ *   (bounded by `maxRecoveryNudges`, default 1). `refuse` — recovery exhausted;
+ *   return the could-not-verify message instead of the model's guess.
+ */
+export function resolveEvidenceRecovery(params: {
+  required: boolean;
+  authoritativeToolExecutions: number;
+  content: string;
+  recoveryNudgesUsed: number;
+  maxRecoveryNudges?: number;
+}): EvidenceRecoveryAction {
+  const guard = enforceEvidenceIntegrity({
+    required: params.required,
+    authoritativeToolExecutions: params.authoritativeToolExecutions,
+    content: params.content,
+  });
+  if (!guard.blocked) return { kind: "pass" };
+  if (params.recoveryNudgesUsed < (params.maxRecoveryNudges ?? 1)) {
+    return { kind: "nudge", nudgeMessage: EVIDENCE_RECOVERY_NUDGE };
+  }
+  return { kind: "refuse", message: INV5_UNVERIFIED_MESSAGE };
+}

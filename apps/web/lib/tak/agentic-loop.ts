@@ -9,8 +9,7 @@ import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResu
 import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/actions/coworker-tool-budget";
 import {
   classifyEvidenceRequirement,
-  enforceEvidenceIntegrity,
-  INV5_UNVERIFIED_MESSAGE,
+  resolveEvidenceRecovery,
 } from "@/lib/tak/evidence-requirement";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
@@ -1883,50 +1882,36 @@ export async function runAgenticLoop(params: {
       }
 
       // Evidence-integrity gate (INV-1). When this turn's answer depends on live
-      // operational state and NO authoritative tool executed successfully, the
-      // model's factual prose is unverifiable — it is exactly the Scrum Master
-      // fabrication (a confident backlog answer with zero tool calls). Give the
-      // model ONE bounded, tool-forcing nudge; if it still won't call a tool,
-      // return the explicit could-not-verify message rather than let a guess
-      // reach the user. The nudge re-runs the normal iteration (no tool_choice or
-      // fallback-chain change), so recovery can never silently escalate to a paid
-      // provider (INV-4). load_tools is a meta-tool, not evidence.
+      // operational state and NO authoritative tool ran, the model's factual
+      // prose is unverifiable (the Scrum Master fabrication). Nudge once for a
+      // tool, then refuse rather than surface a guess. The nudge re-runs the
+      // normal iteration (no tool_choice/fallback-chain change), so recovery can
+      // never silently escalate to a paid provider (INV-4). load_tools is a
+      // meta-tool, not evidence.
       if (evidenceRequirement.required && trimmed.length > 0) {
         const authoritativeToolExecutions = executedTools.filter(
           (t) => t.result?.success && t.name !== LOAD_TOOLS_TOOL_NAME,
         ).length;
-        const guard = enforceEvidenceIntegrity({
+        const recovery = resolveEvidenceRecovery({
           required: true,
           authoritativeToolExecutions,
           content: trimmed,
+          recoveryNudgesUsed: evidenceRecoveryNudges,
         });
-        if (guard.blocked) {
-          if (evidenceRecoveryNudges < 1) {
-            evidenceRecoveryNudges++;
-            console.warn(
-              `[agentic-loop] evidence-required turn answered with zero authoritative tools ` +
-                `route=${JSON.stringify(routeContext)} taskClass=${JSON.stringify(evidenceRequirement.taskClass)}; ` +
-                `nudging to fetch live data before refusing.`,
-            );
-            messages = [
-              ...messages,
-              { role: "assistant" as const, content: result.content },
-              {
-                role: "user" as const,
-                content:
-                  "That question is about the CURRENT state of live operational data, which changes over time. " +
-                  "Do not answer from memory. Call one of your available tools to fetch the real data now, then " +
-                  "answer using only what the tool returns.",
-              },
-            ];
-            continue;
-          }
-          console.warn(
-            `[agentic-loop] evidence-required turn could not be tool-verified after recovery; ` +
-              `returning could-not-verify (INV-1/INV-5) route=${JSON.stringify(routeContext)}.`,
-          );
+        if (recovery.kind === "nudge") {
+          evidenceRecoveryNudges++;
+          console.warn(`[agentic-loop] evidence-required turn, zero authoritative tools; nudging. route=${JSON.stringify(routeContext)}`);
+          messages = [
+            ...messages,
+            { role: "assistant" as const, content: result.content },
+            { role: "user" as const, content: recovery.nudgeMessage },
+          ];
+          continue;
+        }
+        if (recovery.kind === "refuse") {
+          console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)}`);
           return {
-            content: INV5_UNVERIFIED_MESSAGE,
+            content: recovery.message,
             providerId: result.providerId,
             modelId: result.modelId,
             downgraded: result.downgraded,

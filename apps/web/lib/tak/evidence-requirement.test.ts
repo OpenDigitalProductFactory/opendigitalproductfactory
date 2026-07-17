@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   classifyEvidenceRequirement,
   enforceEvidenceIntegrity,
+  resolveEvidenceRecovery,
   INV5_UNVERIFIED_MESSAGE,
 } from "./evidence-requirement";
 
@@ -95,5 +96,38 @@ describe("enforceEvidenceIntegrity", () => {
       content: "Do you mean the open items on this board or across the whole backlog right now?",
     });
     expect(clarify.blocked).toBe(false);
+  });
+});
+
+describe("resolveEvidenceRecovery", () => {
+  const fabricated =
+    "Yes — 59 of 60 backlog items are done or deferred, and only one is still in progress right now.";
+
+  it("nudges on the first unverifiable answer, then refuses on the second", () => {
+    const first = resolveEvidenceRecovery({
+      required: true,
+      authoritativeToolExecutions: 0,
+      content: fabricated,
+      recoveryNudgesUsed: 0,
+    });
+    expect(first.kind).toBe("nudge");
+
+    const second = resolveEvidenceRecovery({
+      required: true,
+      authoritativeToolExecutions: 0,
+      content: fabricated,
+      recoveryNudgesUsed: 1,
+    });
+    expect(second.kind).toBe("refuse");
+    if (second.kind === "refuse") expect(second.message).toBe(INV5_UNVERIFIED_MESSAGE);
+  });
+
+  it("passes when a tool ran or the turn was not evidence-required", () => {
+    expect(
+      resolveEvidenceRecovery({ required: true, authoritativeToolExecutions: 1, content: fabricated, recoveryNudgesUsed: 0 }).kind,
+    ).toBe("pass");
+    expect(
+      resolveEvidenceRecovery({ required: false, authoritativeToolExecutions: 0, content: fabricated, recoveryNudgesUsed: 0 }).kind,
+    ).toBe("pass");
   });
 });
