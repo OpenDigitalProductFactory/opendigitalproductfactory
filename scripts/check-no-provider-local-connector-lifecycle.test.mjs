@@ -24,6 +24,11 @@ test("rejects every IntegrationCredential delegate mutation outside the store", 
   assert.deepEqual(kinds("export {}; await (prisma.integrationCredential as any)!.update({});"), ["integration-credential-mutation"]);
   assert.deepEqual(kinds("export {}; const rows = (prisma.integrationCredential satisfies unknown); await rows.delete({});"), ["integration-credential-mutation"]);
   assert.deepEqual(kinds("export {}; const holder = { c: prisma.integrationCredential }; await holder.c.upsert({});"), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; const d = prisma.integrationCredential; const holder = { d }; await holder.d.upsert({});"), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; const holder = { c: prisma.integrationCredential }; const { c } = holder; const rows = c; await rows.update({});"), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; const holder = { c: prisma.integrationCredential }; const { c: rows = fallback } = holder; await rows.deleteMany({});"), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds('export {}; const holder = { c: prisma.integrationCredential }; const { ["c"]: rows } = holder; await rows.create({});'), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; const holder = { c: prisma.integrationCredential }; let rows; ({ c: rows } = holder); await rows.upsert({});"), ["integration-credential-mutation"]);
 });
 
 test("does not exempt connector adapters, but exempts the canonical credential store", () => {

@@ -47,6 +47,11 @@ function bindingPropertyName(element) {
   if (property && ts.isComputedPropertyName(property) && ts.isStringLiteralLike(property.expression)) return property.expression.text;
   return ts.isIdentifier(element.name) ? element.name.text : null;
 }
+function staticPropertyName(node) {
+  if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
+  if (ts.isComputedPropertyName(node) && ts.isStringLiteralLike(node.expression)) return node.expression.text;
+  return null;
+}
 function lineOf(sourceFile, node) { return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1; }
 function isLowLevelTokenPrimitive(file) {
   return /(?:^|\/)(?:token-client|oauth-token|refresh-token-client)\.ts$/.test(file)
@@ -129,14 +134,19 @@ export function scanSource(source, file) {
       if (ts.isVariableDeclaration(node)) { target = node.name; value = node.initializer; }
       else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) { target = node.left; value = node.right; }
       if (!target || !value) continue;
+      target = unwrapExpression(target);
       if (ts.isIdentifier(target)) {
         if (delegateExpression(value)) add(credentialDelegates, target.text);
         const unwrappedValue = unwrapExpression(value);
         if (unwrappedValue && ts.isObjectLiteralExpression(unwrappedValue)) {
           const properties = delegateCarriers.get(target.text) ?? new Set();
-          for (const property of unwrappedValue.properties) if (ts.isPropertyAssignment(property)) {
-            const name = propertyName(property.name) ?? (ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name) ? property.name.text : null);
-            if (name && delegateExpression(property.initializer) && !properties.has(name)) { properties.add(name); changed = true; }
+          for (const property of unwrappedValue.properties) {
+            if (ts.isPropertyAssignment(property)) {
+              const name = staticPropertyName(property.name);
+              if (name && delegateExpression(property.initializer) && !properties.has(name)) { properties.add(name); changed = true; }
+            } else if (ts.isShorthandPropertyAssignment(property) && credentialDelegates.has(property.name.text) && !properties.has(property.name.text)) {
+              properties.add(property.name.text); changed = true;
+            }
           }
           if (properties.size) delegateCarriers.set(target.text, properties);
         }
@@ -155,12 +165,29 @@ export function scanSource(source, file) {
           if ([...sql].some((text) => !prior.has(text))) { sqlValues.set(target.text, new Set([...prior, ...sql])); changed = true; }
         }
       } else if (ts.isObjectBindingPattern(target)) {
+        const carrier = ts.isIdentifier(unwrapExpression(value)) ? delegateCarriers.get(unwrapExpression(value).text) : null;
         for (const element of target.elements) {
           if (!ts.isIdentifier(element.name)) continue;
           const property = bindingPropertyName(element);
           if (property === "integrationCredential") add(credentialDelegates, element.name.text);
+          if (property && carrier?.has(property)) add(credentialDelegates, element.name.text);
           if (delegateExpression(value) && MUTATIONS.has(property)) add(mutationFunctions, element.name.text);
           if (RAW_METHODS.has(property)) add(rawFunctions, element.name.text);
+        }
+      } else if (ts.isObjectLiteralExpression(target)) {
+        const carrierValue = unwrapExpression(value);
+        const carrier = ts.isIdentifier(carrierValue) ? delegateCarriers.get(carrierValue.text) : null;
+        if (!carrier) continue;
+        for (const property of target.properties) {
+          if (ts.isShorthandPropertyAssignment(property) && carrier.has(property.name.text)) add(credentialDelegates, property.name.text);
+          if (ts.isPropertyAssignment(property)) {
+            const sourceProperty = staticPropertyName(property.name);
+            const assigned = ts.isIdentifier(property.initializer)
+              ? property.initializer
+              : ts.isBinaryExpression(property.initializer) && property.initializer.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(property.initializer.left)
+                ? property.initializer.left : null;
+            if (sourceProperty && assigned && carrier.has(sourceProperty)) add(credentialDelegates, assigned.text);
+          }
         }
       }
     }
