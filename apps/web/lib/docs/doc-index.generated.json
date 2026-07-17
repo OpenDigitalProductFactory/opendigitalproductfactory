@@ -3714,7 +3714,8 @@
         "google-antigravity-agy-contributor-onboarding-runbook",
         "1-install-agy",
         "2-authenticate-to-google-headless-your-windows-server",
-        "3-wire-the-dpf-mcp-token",
+        "3-connect-the-dpf-mcp-token",
+        "3b-confirm-the-dpf-mcp-is-live-at-the-start-of-every-thread",
         "4-run-a-governed-build-the-evidence-gate-bi-47a81feb",
         "deferred-separate-decision"
       ]
