@@ -121,6 +121,53 @@ describe("runEstatePatchAssessment", () => {
     expect(db.runUpdates[0].data).toMatchObject({ status: "passed" });
   });
 
+  it("carries resolved CatalogIdentity CPE and lifecycle milestones from evidence or its InventoryEntity", async () => {
+    const seen: SoftwareEvidenceLike[] = [];
+    const db = new FakeDb([
+      {
+        id: "e-os",
+        evidenceKey: "os",
+        inventoryEntityId: "host-1",
+        rawProductName: "Ubuntu",
+        rawPackageName: "ubuntu",
+        rawVersion: "22.04",
+        packageManager: "dpkg",
+        catalogIdentity: null,
+        inventoryEntity: {
+          customerAccountId: "acct-1",
+          customerSiteId: "site-1",
+          catalogIdentity: {
+            id: "ci-os",
+            cpe: "cpe:2.3:o:canonical:ubuntu_linux:22.04:*:*:*:*:*:*:*",
+            part: "o",
+            lifecycleMilestones: [{ milestone: "eol", date: new Date("2027-04-01T00:00:00.000Z") }],
+          },
+        },
+      },
+    ]);
+
+    await runEstatePatchAssessment(
+      db,
+      (ev) => {
+        seen.push(ev);
+        return { latestSafeVersion: ev.rawVersion };
+      },
+      { now: NOW },
+    );
+
+    expect(seen[0]).toMatchObject({
+      customerAccountId: "acct-1",
+      customerSiteId: "site-1",
+      catalogIdentityId: "ci-os",
+      catalogIdentityCpe: "cpe:2.3:o:canonical:ubuntu_linux:22.04:*:*:*:*:*:*:*",
+      catalogIdentityPart: "o",
+    });
+    expect(seen[0].catalogLifecycleMilestones?.[0]).toMatchObject({
+      milestone: "eol",
+      date: new Date("2027-04-01T00:00:00.000Z"),
+    });
+  });
+
   it("resolves a previously-open patch finding that is now clean", async () => {
     const db = new FakeDb(EVIDENCE, [{ findingKey: "patch:stale", status: "open" }]);
     const summary = await runEstatePatchAssessment(db, provider, { now: NOW });

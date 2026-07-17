@@ -52,6 +52,44 @@ interface EvidenceRow {
   rawPackageName: string | null;
   rawVersion: string | null;
   packageManager: string | null;
+  catalogIdentity?: CatalogIdentityRow | null;
+  inventoryEntity?: {
+    customerAccountId?: string | null;
+    customerSiteId?: string | null;
+    catalogIdentity?: CatalogIdentityRow | null;
+  } | null;
+}
+
+interface CatalogIdentityRow {
+  id: string;
+  cpe: string | null;
+  part: string | null;
+  lifecycleMilestones?: Array<{
+    milestone: string;
+    date: Date | string | null;
+    source?: string | null;
+    confidence?: number | null;
+  }> | null;
+}
+
+function evidenceToSoftwareLike(row: EvidenceRow): SoftwareEvidenceLike {
+  const identity = row.catalogIdentity ?? row.inventoryEntity?.catalogIdentity ?? null;
+  return {
+    id: row.id,
+    evidenceKey: row.evidenceKey,
+    inventoryEntityId: row.inventoryEntityId,
+    rawVendor: row.rawVendor,
+    rawProductName: row.rawProductName,
+    rawPackageName: row.rawPackageName,
+    rawVersion: row.rawVersion,
+    packageManager: row.packageManager,
+    customerAccountId: row.inventoryEntity?.customerAccountId ?? null,
+    customerSiteId: row.inventoryEntity?.customerSiteId ?? null,
+    catalogIdentityId: identity?.id ?? null,
+    catalogIdentityCpe: identity?.cpe ?? null,
+    catalogIdentityPart: identity?.part ?? null,
+    catalogLifecycleMilestones: identity?.lifecycleMilestones ?? [],
+  };
 }
 
 /** Build a store bound to a specific AssuranceRun. */
@@ -71,9 +109,35 @@ export function createPrismaPatchStore(
           rawPackageName: true,
           rawVersion: true,
           packageManager: true,
+          catalogIdentity: {
+            select: {
+              id: true,
+              cpe: true,
+              part: true,
+              lifecycleMilestones: {
+                select: { milestone: true, date: true, source: true, confidence: true },
+              },
+            },
+          },
+          inventoryEntity: {
+            select: {
+              customerAccountId: true,
+              customerSiteId: true,
+              catalogIdentity: {
+                select: {
+                  id: true,
+                  cpe: true,
+                  part: true,
+                  lifecycleMilestones: {
+                    select: { milestone: true, date: true, source: true, confidence: true },
+                  },
+                },
+              },
+            },
+          },
         },
       })) as EvidenceRow[];
-      return rows.map((row) => ({ ...row }));
+      return rows.map(evidenceToSoftwareLike);
     },
 
     async upsertFinding(finding: PatchFindingUpsert): Promise<void> {

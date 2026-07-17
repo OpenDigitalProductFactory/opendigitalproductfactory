@@ -44,6 +44,10 @@ export interface AdvisoryInput {
   fixedVersion?: string | null;
   /** Whether this CVE is in the CISA Known Exploited Vulnerabilities catalog. */
   cisaKev?: boolean | null;
+  /** Source adapter that produced the advisory, e.g. osv or nvd. */
+  source?: string | null;
+  /** How this advisory should appear in patch posture. Defaults to vulnerability. */
+  findingKind?: Extract<PatchFindingKind, "patch-gap" | "vulnerability"> | null;
 }
 
 export interface PatchAssessmentInput {
@@ -78,6 +82,8 @@ export interface PatchAssessment {
   versionComparison: VersionComparison;
   /** Highest-priority advisory id, surfaced as AssuranceFinding.vendorIdentifier. */
   primaryAdvisoryId: string | null;
+  /** Source of the primary advisory, surfaced as the patch adapter key. */
+  primaryAdvisorySource: string | null;
   /** True if any affecting advisory is in the CISA KEV catalog. */
   cisaKev: boolean;
   remediationHint: RemediationHint;
@@ -268,16 +274,18 @@ export function assessPatchState(input: PatchAssessmentInput): PatchAssessment {
       primary?.fixedVersion ?? input.latestSafeVersion ?? input.latestStableVersion ?? null;
     let severity = maxSeverity(open.map((a) => a.severity)) ?? "high";
     if (anyKev) severity = atLeast(severity, "high"); // exploited-in-the-wild is never below high
+    const findingKind = primary?.findingKind ?? "vulnerability";
     return {
-      findingKind: "vulnerability",
+      findingKind,
       policySeverity: severity,
       versionComparison,
       primaryAdvisoryId: primary?.id ?? null,
+      primaryAdvisorySource: primary?.source ?? null,
       cisaKev: anyKev,
       remediationHint: baseHint(target),
       rationale: anyKev
         ? `Affected by ${open.length} advisory(ies) including a CISA KEV (actively exploited): ${primary?.id ?? "unknown"}.`
-        : `Affected by ${open.length} known vulnerability(ies); highest severity ${severity}.`,
+        : `Affected by ${open.length} known advisory(ies); highest severity ${severity}.`,
     };
   }
 
@@ -288,6 +296,7 @@ export function assessPatchState(input: PatchAssessmentInput): PatchAssessment {
       policySeverity: "high",
       versionComparison,
       primaryAdvisoryId: null,
+      primaryAdvisorySource: null,
       cisaKev: false,
       remediationHint: baseHint(input.latestStableVersion ?? null),
       rationale: "Installed version is past its end-of-life / end-of-support date.",
@@ -304,6 +313,7 @@ export function assessPatchState(input: PatchAssessmentInput): PatchAssessment {
       policySeverity: behindSafe ? "medium" : "low",
       versionComparison,
       primaryAdvisoryId: null,
+      primaryAdvisorySource: null,
       cisaKev: false,
       remediationHint: baseHint(input.latestSafeVersion ?? input.latestStableVersion ?? null),
       rationale: `A newer version is available (${input.latestSafeVersion ?? input.latestStableVersion}).`,
@@ -316,6 +326,7 @@ export function assessPatchState(input: PatchAssessmentInput): PatchAssessment {
     policySeverity: "info",
     versionComparison,
     primaryAdvisoryId: null,
+    primaryAdvisorySource: null,
     cisaKev: false,
     remediationHint: baseHint(null),
     rationale:

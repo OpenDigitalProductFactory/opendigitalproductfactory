@@ -60,6 +60,35 @@ describe("compareVersions", () => {
 });
 
 describe("assessPatchState — vulnerabilities", () => {
+  it("allows NVD CPE advisories to project as missing-patch posture instead of OSS vulnerability posture", () => {
+    const result = assessPatchState({
+      installedVersion: "22.04",
+      advisories: [
+        {
+          id: "CVE-2026-4242",
+          severity: "critical",
+          cisaKev: true,
+          source: "nvd",
+          findingKind: "patch-gap",
+        },
+      ],
+      defaultApplyVia: "apt",
+      confidence: "verified",
+      now: NOW,
+    });
+
+    expect(result.findingKind).toBe("patch-gap");
+    expect(result.policySeverity).toBe("critical");
+    expect(result.primaryAdvisoryId).toBe("CVE-2026-4242");
+    expect(result.primaryAdvisorySource).toBe("nvd");
+    expect(result.remediationHint).toMatchObject({
+      applyVia: "apt",
+      cisaKev: true,
+      confidence: "verified",
+    });
+    expect(result.rationale).toContain("CVE-2026-4242");
+  });
+
   it("flags an open advisory with no known fix as a vulnerability", () => {
     const input: PatchAssessmentInput = {
       installedVersion: "1.2.3",
