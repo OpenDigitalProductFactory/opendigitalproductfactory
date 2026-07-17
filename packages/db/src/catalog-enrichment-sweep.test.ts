@@ -15,6 +15,7 @@ type Recorded = {
   lifecycleUpserts: Array<{ catalogIdentityId: string; milestone: string }>;
   sbomUpserts: string[];
   bomLinks: Array<{ id: string; catalogIdentityId: string }>;
+  postureUpdates: Array<{ catalogIdentityId: string; supportStatus: string; supportLifecycleSource: string }>;
 };
 
 function buildDb(
@@ -52,6 +53,19 @@ function buildDb(
         return {};
       },
     },
+    inventoryEntity: {
+      updateMany: async ({ where, data }: {
+        where: { catalogIdentityId: string };
+        data: { supportStatus: string; supportLifecycleSource: string };
+      }) => {
+        recorded.postureUpdates.push({
+          catalogIdentityId: where.catalogIdentityId,
+          supportStatus: data.supportStatus,
+          supportLifecycleSource: data.supportLifecycleSource,
+        });
+        return { count: 2 };
+      },
+    },
   } as unknown as CatalogSweepClient;
 }
 
@@ -84,7 +98,7 @@ describe("runCatalogEnrichmentSweep", () => {
     const bomComponents: SweepBomRow[] = [
       { id: "bc-leftpad", name: "left-pad", version: "1.3.0", packageUrl: "pkg:npm/left-pad@1.3.0", supplierName: null, ecosystem: "npm" },
     ];
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
     const db = buildDb(identities, bomComponents, recorded);
 
     const result = await runCatalogEnrichmentSweep(db, {
@@ -114,7 +128,7 @@ describe("runCatalogEnrichmentSweep", () => {
       { id: "ci-a", part: "a", manufacturer: "A", product: "A", productVersion: null, edition: null },
       { id: "ci-b", part: "a", manufacturer: "B", product: "B", productVersion: null, edition: null },
     ];
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
     const db = buildDb(identities, [], recorded);
     // First CPE update throws; the sweep must count it and continue to ci-b.
     let calls = 0;
@@ -136,7 +150,7 @@ describe("runCatalogEnrichmentSweep", () => {
     const identities: SweepIdentityRow[] = Array.from({ length: 5 }, (_, i) => ({
       id: `ci-${i}`, part: "a", manufacturer: "M", product: "P", productVersion: null, edition: null,
     }));
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
     // findMany honors take in the real client; here we assert the option is passed through
     // by returning only the first `take` rows.
     const takeAware: CatalogSweepClient = {
@@ -165,7 +179,7 @@ describe("runCatalogEnrichmentSweep", () => {
     const identities: SweepIdentityRow[] = [
       { id: "ci-r750", part: "h", manufacturer: "Dell", product: "PowerEdge R750", productVersion: null, edition: null },
     ];
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
     const db = buildDb(identities, [], recorded);
 
     // endoflife hardware page (discontinued + eol) for the R750 slug.
@@ -178,7 +192,10 @@ describe("runCatalogEnrichmentSweep", () => {
         ? ({ ok: true, json: async () => ({ search: [{ id: "Q1" }] }) } as unknown as Response)
         : ({ ok: true, json: async () => ({ claims: { P2669: [{ mainsnak: { datavalue: { value: { time: "+2026-01-01T00:00:00Z" } } } }] } }) } as unknown as Response)) as unknown as typeof fetch;
 
-    const result = await runCatalogEnrichmentSweep(db, { fetchers: { eolFetch: hwEolFetch, wikidataFetch } });
+    const result = await runCatalogEnrichmentSweep(db, {
+      fetchers: { eolFetch: hwEolFetch, wikidataFetch },
+      now: new Date("2026-07-17T00:00:00Z"),
+    });
 
     expect(result.hardwareIdentitiesEnriched).toBe(1);
     expect(result.hardwareMilestonesWritten).toBeGreaterThan(0);
@@ -190,5 +207,33 @@ describe("runCatalogEnrichmentSweep", () => {
     expect(recorded.lifecycleUpserts.map((m) => m.milestone)).toEqual(
       expect.arrayContaining(["end_of_sale", "eol"]),
     );
+    // Support posture projected onto the model's discovered instances (BI-4731303B):
+    // eol 2029-03-01 is >180d out from the fixed clock → supported, from endoflife.date.
+    expect(recorded.postureUpdates).toEqual([
+      { catalogIdentityId: "ci-r750", supportStatus: "supported", supportLifecycleSource: "endoflife.date" },
+    ]);
+    expect(result.entitiesPostureProjected).toBe(2);
+  });
+
+  it("skips posture projection for a hardware model with no eol milestone", async () => {
+    const identities: SweepIdentityRow[] = [
+      { id: "ci-sensor", part: "h", manufacturer: "Acme", product: "Sensor", productVersion: null, edition: null },
+    ];
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
+    const db = buildDb(identities, [], recorded);
+    // endoflife page has only a release date (no eol) → posture cannot be derived.
+    const hwEolFetch = (async (url: string) =>
+      typeof url === "string" && url.includes("/products/sensor/")
+        ? ({ ok: true, json: async () => ({ result: { name: "sensor", releases: [{ name: "v1", releaseDate: "2020-01-01" }] } }) } as unknown as Response)
+        : ({ ok: false, json: async () => ({}) } as unknown as Response)) as unknown as typeof fetch;
+
+    const result = await runCatalogEnrichmentSweep(db, {
+      fetchers: { eolFetch: hwEolFetch },
+      now: new Date("2026-07-17T00:00:00Z"),
+    });
+
+    expect(result.hardwareMilestonesWritten).toBeGreaterThan(0); // release milestone written
+    expect(recorded.postureUpdates).toEqual([]); // but no posture projected
+    expect(result.entitiesPostureProjected).toBe(0);
   });
 });
