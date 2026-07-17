@@ -53,6 +53,11 @@ Give a non-technical operator a plain answer to: “Is my local source home heal
    - Verify: component test asserts the card answers “Local source repository” and exposes plain next actions.
 3. Merge hygiene.
    - Run targeted tests and typecheck. Runtime/browser verification can use the already-live `/platform/development/change-lanes` route after self-upgrade.
+4. Live-install inventory cwd hardening.
+   - Observation from self-upgrade verification: the card rendered on the live image, but the contributor inventory cron still ran Git from the portal process cwd (`/app`) instead of the mounted host clone (`/host-dpf`), so local Git snapshot sources reported `fatal: not a git repository`.
+   - Touch: `apps/web/lib/queue/functions/contributor-inventory-sync.ts`.
+   - Contract: default Git inventory readers must prefer `DPF_REPO_ROOT` when present and fall back to `process.cwd()` only for source-local/dev execution.
+   - Verify: regression test covers the `DPF_REPO_ROOT=/host-dpf`, `cwd=/app` case before relying on live inventory health.
 
 ## Risk and rollback
 
