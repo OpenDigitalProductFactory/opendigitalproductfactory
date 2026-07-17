@@ -77,6 +77,12 @@ describe("Coworker A2A task lifecycle", () => {
         requestedOutcome: "Qualify this customer inquiry.",
         inputPayload: { inquiry: "Need enterprise quote" },
         contractContext: { termsRef: "terms://sales", dataBoundaryRef: "boundary://sales" },
+        accessProfile: "external-a2a",
+        delegatedAgentId: "sales-coworker",
+        delegatedAgentGaid: "gaid:public:sales",
+        authorityBoundary: "proposal-only",
+        riskTier: "medium",
+        requiredGrants: ["registry_read"],
         contextId: "ctx-1",
         actingAgentGaid: "gaid:public:customer-agent",
         delegatingAgentGaid: "gaid:public:customer-agent",
@@ -96,6 +102,19 @@ describe("Coworker A2A task lifecycle", () => {
         requestedOutcome: "Qualify this customer inquiry.",
         metadata: expect.objectContaining({
           a2a: expect.objectContaining({ contextId: "ctx-1" }),
+          callChain: expect.objectContaining({
+            actingAgentGaid: "gaid:public:customer-agent",
+            delegatingAgentGaid: "gaid:public:customer-agent",
+            delegatedAgentGaid: "gaid:public:sales",
+            delegatedAgentId: "sales-coworker",
+          }),
+          delegationReceipt: expect.objectContaining({
+            receiptKind: "coworker-delegation",
+            actingAgentGaid: "gaid:public:customer-agent",
+            delegatingAgentGaid: "gaid:public:customer-agent",
+            delegatedAgentId: "sales-coworker",
+            delegatedAgentGaid: "gaid:public:sales",
+          }),
           routingRationale: expect.objectContaining({
             selectedOfferReason: "Sales qualification offer is externally exposed for customer inquiry triage.",
             alternativesConsidered: ["marketing-intake-coworker"],
@@ -104,6 +123,9 @@ describe("Coworker A2A task lifecycle", () => {
             stage: "repeatable",
             aggregateOfferKey: "aggregate-customer-intake",
           }),
+        }),
+        auditRefs: expect.objectContaining({
+          delegationReceiptId: expect.stringMatching(/^CDR-/),
         }),
       }),
     );
@@ -115,6 +137,27 @@ describe("Coworker A2A task lifecycle", () => {
       metadata: { delegatedAgentId: "sales-coworker" },
       status: { state: "submitted" },
     });
+    expect(task.metadata.delegationReceipt).toMatchObject({
+      receiptKind: "coworker-delegation",
+      delegatedAgentGaid: "gaid:public:sales",
+    });
+  });
+
+  it("rejects cross-boundary A2A tasks without an acting and delegating GAID chain", async () => {
+    await expect(
+      createCoworkerA2aTask(
+        {
+          offerId: "offer-sales",
+          requestedOutcome: "Qualify this customer inquiry.",
+          contractContext: { termsRef: "terms://sales", dataBoundaryRef: "boundary://sales" },
+          accessProfile: "external-a2a",
+          delegatedAgentGaid: "gaid:public:sales",
+          authorityBoundary: "proposal-only",
+          riskTier: "medium",
+        },
+        { createEngagement: vi.fn() },
+      ),
+    ).rejects.toThrow("Cross-boundary A2A tasks require actingAgentGaid and delegatingAgentGaid.");
   });
 
   it("reads an existing engagement task by id", async () => {
@@ -128,6 +171,40 @@ describe("Coworker A2A task lifecycle", () => {
       id: "CE-A2A",
       contextId: "ctx-1",
       status: { state: "submitted" },
+    });
+  });
+
+  it("returns the persisted delegation receipt in task readback metadata", () => {
+    const task = mapCoworkerEngagementToA2aTask({
+      engagementId: "CE-1",
+      offerId: "offer-1",
+      serviceId: "svc-1",
+      providerAgentId: "sales-coworker",
+      requestedOutcome: "Prepare packet.",
+      status: "requested",
+      inputPayload: {},
+      approvalContext: { required: false, reasons: [] },
+      metadata: {
+        a2a: {
+          contextId: "ctx-1",
+          actingAgentGaid: "gaid:public:buyer",
+          delegatingAgentGaid: "gaid:public:buyer",
+        },
+        delegationReceipt: {
+          receiptKind: "coworker-delegation",
+          receiptId: "CDR-1234",
+          delegatedAgentGaid: "gaid:public:sales",
+        },
+      },
+      createdAt: new Date("2026-06-30T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-30T00:01:00.000Z"),
+      completedAt: null,
+    });
+
+    expect(task.metadata.delegationReceipt).toMatchObject({
+      receiptKind: "coworker-delegation",
+      receiptId: "CDR-1234",
+      delegatedAgentGaid: "gaid:public:sales",
     });
   });
 });

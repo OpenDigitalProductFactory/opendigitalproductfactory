@@ -6,12 +6,14 @@ import type { BuildFlowState } from "@/lib/build-flow-state";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import { deriveReleaseDecisionCards, isMissingReleasableDiffError, type ReleaseDecisionTone } from "@/lib/build/release-decision";
+import { deriveContributionDecisionView } from "@/lib/build/contribution-decision";
 import {
   executeBuildPromotion,
   prepareBuildRelease,
   registerBuildRelease,
   scheduleBuildPromotion,
-  submitBuildContribution,
+  setBuildChangeDisposition,
+  shareBuildContribution,
 } from "@/lib/actions/build-release";
 import { resumeBuildImplementation } from "@/lib/actions/build";
 
@@ -25,7 +27,8 @@ type Props = {
 type PendingAction =
   | "prepare"
   | "register"
-  | "contribute"
+  | "keep"
+  | "share"
   | "deploy"
   | "schedule"
   | "resume"
@@ -75,6 +78,7 @@ export function ReleaseDecisionPanel({
 }: Props) {
   const router = useRouter();
   const cards = useMemo(() => deriveReleaseDecisionCards(build, flowState), [build, flowState]);
+  const contributionDecision = useMemo(() => deriveContributionDecisionView(build), [build]);
   const [productName, setProductName] = useState(build.title);
   const [portfolioSlug, setPortfolioSlug] = useState(() => {
     const matching = portfolios.find((portfolio) => portfolio.id === build.portfolioId);
@@ -293,17 +297,57 @@ export function ReleaseDecisionPanel({
         )}
 
         {releaseRegistered && (
-          <ActionStrip
-            title="3. Community Sharing"
-            description={upstreamDone
-              ? "A governed upstream pull request already exists for this build."
-              : "Submit the shipped change upstream so the community-sharing lane reaches a governed terminal state."}
-            primaryLabel={upstreamDone ? "Shared upstream" : pendingAction === "contribute" ? "Submitting PR..." : "Submit Upstream PR"}
-            onPrimary={() => runAction("contribute", () => submitBuildContribution(build.buildId))}
-            disabled={pendingAction != null || upstreamDone}
-            secondaryLabel="Review with coworker"
-            onSecondary={() => openCoworker("Summarize the upstream contribution readiness for this build and any risks before I open the PR.")}
-          />
+          <div className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[var(--dpf-text)]">3. Community Sharing</p>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-muted)]">
+                  Decide whether this change stays only on this system or is sent to the community project. The coworker recommendation considers project fit, archetype/market usefulness, and privacy risk.
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--dpf-text)]">
+                {contributionDecision.currentLabel}
+              </span>
+            </div>
+            <div className="mt-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+              <p className="text-xs font-semibold text-[var(--dpf-text)]">{contributionDecision.recommendationLabel}</p>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-muted)]">{contributionDecision.reason}</p>
+              <p className="mt-2 text-[11px] leading-relaxed text-[var(--dpf-muted)]">{contributionDecision.currentDetail}</p>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={pendingAction != null || upstreamDone}
+                onClick={() => runAction("keep", () => setBuildChangeDisposition(
+                  build.buildId,
+                  "private",
+                  "Operator chose Keep on my system from Build Studio release decisions.",
+                ))}
+                className="inline-flex items-center rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs font-semibold text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pendingAction === "keep" ? "Keeping local..." : "Keep on my system"}
+              </button>
+              <button
+                type="button"
+                disabled={pendingAction != null || upstreamDone || !contributionDecision.canShare}
+                onClick={() => runAction("share", () => shareBuildContribution(
+                  build.buildId,
+                  "Operator chose Share with the community from Build Studio release decisions.",
+                ))}
+                className="inline-flex items-center rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-[var(--dpf-bg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                title={contributionDecision.canShare ? undefined : "Ask the coworker to generalize or reassess this change before sharing."}
+              >
+                {upstreamDone ? "Shared with community" : pendingAction === "share" ? "Sharing..." : "Share with the community"}
+              </button>
+              <button
+                type="button"
+                onClick={() => openCoworker("Assess whether this build should be kept on this system, shared with the community, or generalized first. Consider DPF project viability, archetype and market usefulness, privacy risk, and maintenance burden.")}
+                className="inline-flex items-center rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs font-semibold text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)]"
+              >
+                Review with coworker
+              </button>
+            </div>
+          </div>
         )}
 
         {promotionId && (

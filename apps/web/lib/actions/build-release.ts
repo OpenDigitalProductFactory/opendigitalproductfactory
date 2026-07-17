@@ -89,6 +89,26 @@ export async function submitBuildContribution(buildId: string): Promise<ToolResu
   return executeTool("contribute_to_hive", { buildId }, userId, { routeContext: "/build" });
 }
 
+export async function setBuildChangeDisposition(
+  buildId: string,
+  disposition: "private" | "shareable",
+  reason?: string,
+): Promise<ToolResult> {
+  const { userId } = await requireBuildReleaseAccess(buildId);
+  return executeTool(
+    "set_change_disposition",
+    { buildId, disposition, reason },
+    userId,
+    { routeContext: "/build" },
+  );
+}
+
+export async function shareBuildContribution(buildId: string, reason?: string): Promise<ToolResult> {
+  const marked = await setBuildChangeDisposition(buildId, "shareable", reason);
+  if (marked.success === false) return marked;
+  return submitBuildContribution(buildId);
+}
+
 export async function executeBuildPromotion(promotionId: string): Promise<ToolResult> {
   const { userId } = await requirePromotionAccess(promotionId);
   return executeTool("execute_promotion", { promotion_id: promotionId }, userId, { routeContext: "/build" });

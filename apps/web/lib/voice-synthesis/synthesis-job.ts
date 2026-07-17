@@ -1,7 +1,7 @@
 import { prisma } from "@dpf/db"
 import { buildNarrationText } from "./narration-builder"
 import { applyPersonaStyle } from "./persona-style"
-import { synthesizeSpeech, VoiceSynthesisError, defaultProvider } from "./voice-service"
+import { synthesizeSpeech, defaultProvider } from "./voice-service"
 import { writeAudioBlob } from "./audio-storage"
 import type { NarrationOutcomeType } from "./types"
 
@@ -33,21 +33,23 @@ export async function runVoiceSynthesisJob(interactionId: string): Promise<void>
     return
   }
 
-  const personaSystemPrompt = (profile.personaConfig as { systemPrompt?: string } | null)?.systemPrompt
-
-  const rawNarrationText = buildNarrationText({
-    outcomeType: interaction.outcomeType as NarrationOutcomeType,
-    confidenceScore: interaction.confidenceAfter ?? 0,
-    rationale: interaction.rationale ?? "",
-    personaSystemPrompt,
-  })
-
-  const narrationText = await applyPersonaStyle({
-    narrationText: rawNarrationText,
-    personaSystemPrompt,
-  })
-
+  let stage: "style" | "synthesis" | "storage" = "style"
   try {
+    const personaSystemPrompt = (profile.personaConfig as { systemPrompt?: string } | null)?.systemPrompt
+
+    const rawNarrationText = buildNarrationText({
+      outcomeType: interaction.outcomeType as NarrationOutcomeType,
+      confidenceScore: interaction.confidenceAfter ?? 0,
+      rationale: interaction.rationale ?? "",
+      personaSystemPrompt,
+    })
+
+    const narrationText = await applyPersonaStyle({
+      narrationText: rawNarrationText,
+      personaSystemPrompt,
+    })
+
+    stage = "synthesis"
     // Honor the deployment-configured provider (TTS_PROVIDER env), not the
     // value stored on the profile at registration time — same reasoning as
     // /api/voice/synthesize. defaultProvider() falls back to "chatterbox".
@@ -57,6 +59,7 @@ export async function runVoiceSynthesisJob(interactionId: string): Promise<void>
       language: vp.language,
     })
 
+    stage = "storage"
     const { storageKey } = await writeAudioBlob({
       interactionId,
       audioBuffer: synthesis.audioBuffer,
@@ -81,8 +84,7 @@ export async function runVoiceSynthesisJob(interactionId: string): Promise<void>
 
     console.info(`${TRACE}.completed`, { interactionId, durationMs, provider: synthesis.provider })
   } catch (err) {
-    const tag = err instanceof VoiceSynthesisError ? "synthesis.failed" : "storage.failed"
-    console.error(`${TRACE}.${tag}`, { interactionId, error: String(err) })
+    console.error(`${TRACE}.${stage}.failed`, { interactionId, error: String(err) })
     // Do NOT rethrow — voice is non-blocking enrichment
   }
 }

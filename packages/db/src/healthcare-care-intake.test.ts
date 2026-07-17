@@ -4,22 +4,29 @@ import {
   CARE_INTAKE_RESPONSE_STATUSES,
   assertCareIntakeTransition,
   calculateIntakeReadiness,
+  requirementsForPinnedForm,
   validateMinimumNecessaryAnswers,
   type CareIntakeRequirement,
 } from "./healthcare-care-intake";
 
 const requirements: CareIntakeRequirement[] = [
   {
+    dynamicFormId: "form-row-intake",
+    dynamicFormVersion: 3,
     linkId: "contact-phone",
     dataCategory: "contact",
     required: true,
   },
   {
+    dynamicFormId: "form-row-intake",
+    dynamicFormVersion: 3,
     linkId: "visit-reason",
     dataCategory: "visit-reason",
     required: true,
   },
   {
+    dynamicFormId: "form-row-marketing",
+    dynamicFormVersion: 1,
     linkId: "marketing-source",
     dataCategory: "marketing",
     required: false,
@@ -75,6 +82,27 @@ describe("healthcare care intake contract", () => {
       ok: false,
       errors: ["data-category-not-authorized:marketing-source"],
     });
+  });
+
+  it("returns requirements only for the exact form row and version pinned by the packet", () => {
+    expect(
+      requirementsForPinnedForm(requirements, {
+        dynamicFormId: "form-row-intake",
+        dynamicFormVersion: 3,
+      }).map((requirement) => requirement.linkId),
+    ).toEqual(["contact-phone", "visit-reason"]);
+  });
+
+  it.each([
+    ["form-row-intake", 2],
+    ["form-row-unknown", 3],
+  ])("rejects an unpinned form/version", (dynamicFormId, dynamicFormVersion) => {
+    expect(() =>
+      requirementsForPinnedForm(requirements, {
+        dynamicFormId,
+        dynamicFormVersion,
+      }),
+    ).toThrow("Dynamic form is not assigned to this intake packet");
   });
 
   it.each([

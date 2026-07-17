@@ -157,6 +157,9 @@ describe("loadFingerprintCatalogIntoDb", () => {
           return {};
         },
       },
+      catalogIdentity: {
+        upsert: async () => ({ id: "catalog_identity_1" }),
+      },
     };
 
     const result = await loadFingerprintCatalogIntoDb(client, defaultCatalogPath(__dirname));

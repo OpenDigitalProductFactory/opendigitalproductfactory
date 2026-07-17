@@ -488,7 +488,6 @@ export type ScoutResult = {
 // no branch and fell through to a stale "Working" state. It is intentionally NOT
 // in VISIBLE_PHASES (terminal, off the happy-path stepper, like complete/failed).
 export type BuildPhase = "ideate" | "plan" | "build" | "review" | "ship" | "complete" | "failed" | "abandoned";
-
 export type FeatureBuildRow = {
   id: string;
   buildId: string;
@@ -510,6 +509,7 @@ export type FeatureBuildRow = {
   codingProvider: string | null;
   threadId: string | null;
   digitalProductId: string | null;
+  disposition?: "private" | "shareable" | string | null; dispositionReason?: string | null; dispositionSuggested?: "private" | "shareable" | string | null; dispositionSuggestionReason?: string | null;
   product: { productId: string; version: string; backlogCount: number } | null;
   createdById: string;
   createdAt: Date;

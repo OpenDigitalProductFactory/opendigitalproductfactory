@@ -1,0 +1,89 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-07-17",
+  "note": "EP-EMPLOYEE-OCCUPATION Phase 1. Reusable occupation templates scoped by storefront archetype category. agentSlug values MUST exist in COWORKER_AGENT_SEEDS (packages/db/src/workforce-seed.ts). archetypeCategories MUST exist in the storefront archetype catalog. baseAccessProfile is a slug for the RBAC floor finalized by the P0.1 decision (spec §5.6). wsidProfessionFamily and coworkerRoster[].governanceProfileRef are bound in Phase 3. tileAllowlist/navEmphasis are reconciled against ALL_TILES in Phase 2. interaction is the closed enum summon|assigned-only|read-only.",
+  "occupations": [
+    {
+      "occupationKey": "dental-hygienist",
+      "label": "Dental Hygienist",
+      "summary": "Runs patient hygiene visits: prepares the chair, records charting notes, and keeps recall/follow-up communication moving.",
+      "archetypeCategories": ["healthcare-wellness"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": null,
+      "featureSurface": {
+        "tileAllowlist": ["today-schedule", "needs-you", "calendar"],
+        "navEmphasis": ["/workspace", "/workspace/calendar", "/workspace/inbox"],
+        "workspaceHomeOccupationId": null
+      },
+      "coworkerRoster": [
+        { "agentSlug": "customer-advisor", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "storefront-advisor", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "compliance-officer", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-dental-hygienist",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "front-desk-coordinator",
+      "label": "Front-Desk Coordinator",
+      "summary": "Owns the front office: booking and confirming appointments, greeting patients, and handling inbound calls and messages.",
+      "archetypeCategories": ["healthcare-wellness"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": null,
+      "featureSurface": {
+        "tileAllowlist": ["today-schedule", "needs-you", "calendar", "customer-callbacks"],
+        "navEmphasis": ["/workspace", "/workspace/calendar", "/workspace/inbox"],
+        "workspaceHomeOccupationId": null
+      },
+      "coworkerRoster": [
+        { "agentSlug": "customer-advisor", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "storefront-advisor", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-front-desk-coordinator",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "field-service-technician",
+      "label": "Field Service Technician",
+      "summary": "Works assigned jobs in the field: checks the day's service calls, updates job status, and keeps customers posted on ETA.",
+      "archetypeCategories": ["trades-maintenance"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": null,
+      "featureSurface": {
+        "tileAllowlist": ["today-schedule", "needs-you", "customer-callbacks"],
+        "navEmphasis": ["/workspace", "/workspace/my-queue", "/workspace/inbox"],
+        "workspaceHomeOccupationId": null
+      },
+      "coworkerRoster": [
+        { "agentSlug": "dispatcher", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "customer-advisor", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-field-service-technician",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "field-dispatcher",
+      "label": "Field Dispatcher",
+      "summary": "Runs the dispatch board: assigns technicians to jobs, schedules service calls, and coordinates running-late customer notifications.",
+      "archetypeCategories": ["trades-maintenance"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": null,
+      "featureSurface": {
+        "tileAllowlist": ["today-schedule", "needs-you", "unassigned-work", "technician-load", "customer-callbacks"],
+        "navEmphasis": ["/workspace", "/workspace/calendar", "/workspace/inbox"],
+        "workspaceHomeOccupationId": null
+      },
+      "coworkerRoster": [
+        { "agentSlug": "dispatcher", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "customer-advisor", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "ops-coordinator", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-field-dispatcher",
+      "moverCurriculumId": null
+    }
+  ]
+}

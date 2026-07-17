@@ -222,17 +222,13 @@ async function assessContributionHandler(
   if (/customer.*name|client.*id|account.*number/i.test(diff)) concerns.push("Contains customer data references");
   const isSensitive = concerns.length > 0;
 
-  // ── Overall Recommendation ──
-  let recommendation: "contribute" | "contribute_with_mods" | "keep_local" | "user_decides";
-  if (isSensitive) {
-    recommendation = concerns.length > 2 ? "keep_local" : "contribute_with_mods";
-  } else if (visionScore === "high" && communityScore === "high") {
-    recommendation = "contribute";
-  } else if (visionScore === "low" && communityScore === "low") {
-    recommendation = "keep_local";
-  } else {
-    recommendation = "user_decides";
-  }
+  const contributionSignals = await (await import("@/lib/mcp/contribution-assessment-signals")).deriveContributionAssessmentSignals({ brief, diff, reusability, projectViability: visionScore, orgSpecificHits: concerns.length, hasReusabilityAnalysis: !!designDoc?.reusabilityAnalysis });
+  const dispositionRecommendation = contributionSignals.dispositionSuggestion.recommendation;
+  const recommendation: "contribute" | "contribute_with_mods" | "keep_local" | "user_decides" = isSensitive
+    ? concerns.length > 2 ? "keep_local" : "contribute_with_mods"
+    : dispositionRecommendation === "share" ? "contribute"
+      : dispositionRecommendation === "generalize_first" ? "contribute_with_mods"
+        : visionScore === "low" && communityScore === "low" ? "keep_local" : "user_decides";
 
   const summaryMap = {
     contribute: `This feature looks great for the community. It extends ${build.title} within the ${portfolioId} portfolio and other organizations would benefit. Would you like to contribute it to the Hive Mind?`,
@@ -244,11 +240,12 @@ async function assessContributionHandler(
   const assessment = {
     recommendation,
     criteria: {
-      visionAlignment: { score: visionScore, reasoning: visionReasoning },
-      communityValue: { score: communityScore, reasoning: communityReasoning },
+      visionAlignment: { score: visionScore, reasoning: visionReasoning }, communityValue: { score: communityScore, reasoning: communityReasoning },
+      archetypeMarketFit: { score: contributionSignals.archetypeMarketFit, reasoning: contributionSignals.archetypeMarketReasoning },
       augmentationLevel: { level: augLevel, reasoning: augReasoning },
       proprietarySensitivity: { sensitive: isSensitive, concerns },
     },
+    dispositionSuggestion: contributionSignals.dispositionSuggestion,
     summary: summaryMap[recommendation],
     suggestedMods: isSensitive ? concerns.map((c) => `Remove: ${c}`) : [],
     filesChanged: changedFiles.length,

@@ -129,3 +129,26 @@ BI-CFEB2B22 (P3)** — the `deriveDeliverableSensitivity` header names it: "repl
 heuristic with code-graph blast-radius." They should be consolidated: the code-graph + EA
 blast-radius feeds `sensitivity` (verify) and the warrant's blast-radius (promote) through
 one core, not two.
+
+## Promote wiring (feat/warrant-promote-wiring) — the plane takes effect
+
+Before this, `deliverableSensitivity` was never set on promoted builds, so
+EP-QUALITY-RIGHTSIZING's blast-radius escalation was DORMANT — rigor keyed on
+effort size alone.
+
+- `warrant-for-item.ts` `warrantForBacklogItem({effortSize, workType, text, context})`
+  is the pure, corpus-free promote-time entry: keyword sensitivity
+  (`deriveDeliverableSensitivity`, interim blast radius) → `classifyAltitude` →
+  `deriveWarrant` → `warrantToRightsizingOpts`. Returns `{warrant, opts}`.
+- `governed-backlog-tee-up.ts` calls it and persists on the build plan:
+  `plan.workWarrant` (full object) + `plan.deliverableSensitivity` +
+  `plan.qualityFirst` (what the gate reads).
+- The 4 `checkPhaseGate` evidence sites in `mcp-tools.ts` now thread
+  `deliverableSensitivity`/`qualityFirst` from the plan (mirroring `processSize`),
+  so `rightsizingOptsFromEvidence` escalates the policy by altitude + blast-radius.
+
+Effect: a security/auth/schema BI or an xlarge feature gets thorough review even
+when effort size is "small"; a small doc/chore stays light. Monotonic — can only
+raise rigor above the matrix baseline. When the code-graph + EA provider
+(BI-22250BA2) lands it swaps the interim keyword blast radius for the graph-derived
+one behind the same `warrantForBacklogItem` seam; no gate-site changes.

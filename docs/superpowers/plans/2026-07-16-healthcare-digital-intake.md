@@ -56,13 +56,79 @@ and exception records that those generic surfaces do not own.
 
 ## Phase 2 — patient/proxy and receptionist APIs
 
-1. Issue expiring, revocable resume grants after identity/proxy authorization.
-2. Expose minimum-necessary packet metadata and form definitions.
-3. Save partial responses idempotently and submit only after completeness
-   validation.
-4. Support staff-assisted and paper-transcribed provenance.
-5. Stage coverage/entitlement evidence for human review and bind accepted
-   consent attestations to `PatientConsentDirective`.
+1. Extend each requirement snapshot entry with the internal `DynamicForm.id`
+   and exact version it belongs to. Reject access or writes when a requested
+   form is not pinned by the packet; do not turn the global dynamic-form
+   catalog into a patient-visible discovery surface.
+2. Issue expiring, revocable `view` / `save` / `submit` resume grants only
+   after `PatientAuthority` permits the authenticated patient or proxy. Return
+   the high-entropy bearer token once and persist only its SHA-256 digest.
+3. Expose `/api/v1/healthcare/intake/:packetId` as a token-scoped,
+   minimum-necessary projection: packet lifecycle/readiness plus only the
+   pinned form definitions. Never include saved answer values in the packet
+   projection or receptionist projections.
+4. Save partial responses through
+   `/api/v1/healthcare/intake/:packetId/responses/:formId` with an
+   idempotency key, optimistic response version, minimum-necessary validation,
+   and patient/proxy/staff/paper provenance. Server-owned source keys provide
+   retry idempotency; clients cannot choose another source system.
+5. Submit through `/api/v1/healthcare/intake/:packetId/submit`; recompute
+   completeness inside the same patient-context transaction and reject
+   incomplete, expired, revoked, wrong-packet, or under-scoped grants.
+6. Keep coverage evidence and consent attestation acceptance as separate
+   reviewer-authorized endpoints. They are not part of the patient bearer-token
+   write surface and remain staged evidence rather than canonical coverage or
+   consent authority.
+
+### Phase 2 delivery slices
+
+- **2A — access and response API:** form-version pinning, tamper-resistant
+  resume-token codec, authority-gated grant issuance, minimum packet
+  projection, idempotent partial saves, and completeness-gated submit.
+- **2B — receptionist review API:** readiness/exception queue with no response
+  payloads, assisted/paper disclosure, grant revocation, and immutable audit
+  projections.
+- **2C — reviewed evidence API:** stage coverage documents and consent
+  attestations, then accept/reject them only through explicit human authority.
+
+Phase 2A is delivered as two reviewable checkpoints: the access/read checkpoint
+owns grant issuance, patient-context RLS correction, and the minimum packet
+projection; the response checkpoint owns retry-safe partial saves, the atomic
+`assigned` to `in-progress` transition, and completeness-gated submit. A ready
+submit completes current responses and advances the packet with one optimistic,
+append-only status event. An incomplete submit returns blocker codes and never
+advances packet state.
+
+Receptionist access uses the existing intake records rather than a duplicate
+projection store. Employee routes require `view_customer` for review and
+`operate_customer` for revocation, then establish an organization-bound,
+actor-and-purpose-scoped `intake-review` database context. Additive RLS policies
+grant that context `SELECT` only; the sole staff mutation policy permits
+`UPDATE` on access grants for revocation. Repository projections explicitly
+exclude response answers and document/signature payloads, and each allowed
+review or revocation writes canonical `AuthorizationDecisionLog` evidence.
+This implements workforce role-based minimum-necessary access and audit-control
+expectations without weakening the patient bearer-token policies.
+
+Reviewed evidence remains deliberately subordinate to its canonical domains.
+Employee routes require `operate_customer` to stage or decide evidence, bind
+every transaction to the organization, authenticated principal, exact packet
+patient, and `intake-review` purpose, and write an `AuthorizationDecisionLog`
+for staging and each accept/reject decision. Idempotency keys derive stable
+server evidence IDs; retries must match the original object references and
+SHA-256 digests or fail as conflicts. Responses disclose evidence IDs and
+review status, never governed object references or signature payloads.
+Acceptance marks intake evidence ready for downstream BI-HEALTHCARE-030 or the
+existing `PatientConsentDirective`; it does not create canonical coverage or
+change the consent directive itself. Decision DI-49F59890F88A selected
+database payload-immutability triggers over repository-only convention or a
+new fully append-only decision schema (high confidence, margin 1.006). The
+triggers retain both evidence types, freeze identity/linkage/provenance/digest
+fields, and leave only the modeled human review fields mutable.
+
+Rollback for 2A is route and repository removal; it adds no schema migration.
+Existing Phase 1 tables remain forward-compatible and contain no raw resume
+tokens.
 
 ## Phase 3 — user experience
 

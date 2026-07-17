@@ -71,6 +71,6 @@
   "apps/web/components/product/ProductSupplyChainPanel.tsx": 1,
   "apps/web/components/storefront/sections/LoanCalculatorSection.tsx": 1,
   "apps/web/components/wiki/WikiPageViewer.tsx": 1,
-  "apps/web/components/workbooks/GridPanels.tsx": 1,
+  "apps/web/components/workbooks/GridPanels.tsx": 2,
   "apps/web/components/workspace/PlatformReadinessMatrix.tsx": 1
 }

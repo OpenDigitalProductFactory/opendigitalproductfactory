@@ -177,11 +177,18 @@ export function resolveDocLink(sourcePath, authoredHref) {
   const ext = path.posix.extname(resolved).toLowerCase();
 
   if (IMAGE_EXTENSIONS.has(ext)) {
+    // Public (Jekyll) serves the asset as a static file with docs/ stripped.
+    // The portal only renders markdown under /docs, so user-guide assets are
+    // served through the /api/docs-asset route (see route.ts); assets outside
+    // the user guide fall back to the public static path.
+    const portalHref = resolved.startsWith(USER_GUIDE_PREFIX)
+      ? `/api/docs-asset/${resolved.slice(USER_GUIDE_PREFIX.length)}`
+      : `/${resolved.replace(/^docs\//, "")}`;
     return {
       kind: "asset",
       sourcePath: resolved,
       publicHref: `/${resolved.replace(/^docs\//, "")}`,
-      portalHref: `/${resolved.replace(/^docs\//, "")}`,
+      portalHref,
     };
   }
 

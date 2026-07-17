@@ -44,10 +44,27 @@ export type CareIntakeExceptionType =
   (typeof CARE_INTAKE_EXCEPTION_TYPES)[number];
 
 export type CareIntakeRequirement = {
+  dynamicFormId: string;
+  dynamicFormVersion: number;
   linkId: string;
   dataCategory: string;
   required: boolean;
 };
+
+export function requirementsForPinnedForm(
+  requirements: CareIntakeRequirement[],
+  form: { dynamicFormId: string; dynamicFormVersion: number },
+): CareIntakeRequirement[] {
+  const assigned = requirements.filter(
+    (requirement) =>
+      requirement.dynamicFormId === form.dynamicFormId
+      && requirement.dynamicFormVersion === form.dynamicFormVersion,
+  );
+  if (assigned.length === 0) {
+    throw new Error("Dynamic form is not assigned to this intake packet");
+  }
+  return assigned;
+}
 
 export type CareIntakeAnswerDescriptor = {
   linkId: string;

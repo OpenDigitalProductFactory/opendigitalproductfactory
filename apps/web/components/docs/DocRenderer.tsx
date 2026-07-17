@@ -2,6 +2,7 @@
 // Server component — no "use client". Renders on server, zero client JS cost.
 
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ReactNode } from "react";
 import { resolveDocLink, slugifyHeading } from "@/lib/docs/doc-link-resolver.mjs";
 import { diagramSlug, diagramPortalHref } from "@/lib/docs/diagram-assets.mjs";
@@ -90,6 +91,20 @@ function buildComponents(sourcePath: string) {
         </a>
       );
     },
+    img: ({ src, alt }: { src?: string | Blob; alt?: string }) => {
+      // Screenshots/images: resolve through the shared resolver so a relative
+      // src (e.g. ../assets/<page-slug>/foo.png) is served via /api/docs-asset
+      // in the portal. Diagrams use the language-mermaid path above, not this.
+      const { href } = resolvePortalLink(typeof src === "string" ? src : undefined, sourcePath);
+      // eslint-disable-next-line @next/next/no-img-element
+      return (
+        <img
+          src={href}
+          alt={alt ?? ""}
+          className="my-4 max-w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+        />
+      );
+    },
     code: ({ children, className }: C & { className?: string }) => {
       const isBlock = className?.startsWith("language-");
       if (className === "language-mermaid") {
@@ -136,7 +151,9 @@ function buildComponents(sourcePath: string) {
 export function DocRenderer({ content, sourcePath }: { content: string; sourcePath: string }) {
   return (
     <div className="docs-content">
-      <ReactMarkdown components={buildComponents(sourcePath)}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={buildComponents(sourcePath)}>
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }

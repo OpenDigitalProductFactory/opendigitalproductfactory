@@ -121,6 +121,9 @@ import {
   normalizeViewState,
 } from "./grid-named-views";
 import { GridViewsMenu } from "./GridViewsMenu";
+import { type PivotAgg, type SummaryMode } from "./grid-pivot";
+import { GridCalendar } from "./GridCalendar";
+import { dateColumns } from "./grid-calendar";
 import {
   reorderColumnIds,
   applyColumnOrder,
@@ -361,7 +364,9 @@ export function WorkbookGrid({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showProvenance, setShowProvenance] = useState(false);
-  const [gallery, setGallery] = useState(false);
+  // Client view mode: the data grid, the gallery cards, or the calendar.
+  const [viewMode, setViewMode] = useState<"grid" | "gallery" | "calendar">("grid");
+  const gallery = viewMode === "gallery";
   const [filterQuery, setFilterQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showFormat, setShowFormat] = useState(false);
@@ -371,7 +376,10 @@ export function WorkbookGrid({
   const [showSummary, setShowSummary] = useState(false);
   const [summaryGroupBy, setSummaryGroupBy] = useState("");
   const [summaryValue, setSummaryValue] = useState("");
-  const [summaryChart, setSummaryChart] = useState(false);
+  const [summaryMode, setSummaryMode] = useState<SummaryMode>("table");
+  // Pivot (2-D summary): the "across" column + the aggregate applied to cells.
+  const [summaryPivotCol, setSummaryPivotCol] = useState("");
+  const [summaryAgg, setSummaryAgg] = useState<PivotAgg>("count");
   const [filterGroup, setFilterGroup] = useState<FilterGroup>(EMPTY_FILTER_GROUP);
   const activeFilterCount = activeConditionCount(filterGroup);
   // Drag-to-reorder column order (column ids) + in-grid collapsible grouping.
@@ -625,6 +633,9 @@ export function WorkbookGrid({
     [orderedColumns, hiddenColumns],
   );
 
+  // The calendar view is only offered when a date/datetime column exists to plot.
+  const hasDateColumn = useMemo(() => dateColumns(columns).length > 0, [columns]);
+
   // Pin the leftmost N visible columns (clamped to leave one scrollable).
   const effectiveFrozen = clampFrozenCount(frozenCount, visibleCols.length);
 
@@ -637,7 +648,7 @@ export function WorkbookGrid({
     [groupBy, columns],
   );
   const groupColumnId = effectiveGroupBy[0];
-  const grouping = Boolean(groupColumnId) && !gallery && columns.length > 0;
+  const grouping = Boolean(groupColumnId) && viewMode === "grid" && columns.length > 0;
 
   // Manual row reordering (drag a row to a new slot). Optimistic: reorder the
   // local rows immediately, then persist the new order to WorkbookRow.position
@@ -1160,28 +1171,23 @@ export function WorkbookGrid({
           {showProvenance ? "Hide data sources" : "Show data sources"}
         </button>
         <div className="inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)] text-sm">
-          <button
-            type="button"
-            onClick={() => setGallery(false)}
-            className={
-              gallery
-                ? "px-2 py-1 text-[var(--dpf-muted)]"
-                : "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium text-[var(--dpf-text)]"
-            }
-          >
-            Grid
-          </button>
-          <button
-            type="button"
-            onClick={() => setGallery(true)}
-            className={
-              gallery
-                ? "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium text-[var(--dpf-text)]"
-                : "px-2 py-1 text-[var(--dpf-muted)]"
-            }
-          >
-            Gallery
-          </button>
+          {(hasDateColumn
+            ? (["grid", "gallery", "calendar"] as const)
+            : (["grid", "gallery"] as const)
+          ).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setViewMode(m)}
+              className={
+                viewMode === m
+                  ? "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium capitalize text-[var(--dpf-text)]"
+                  : "px-2 py-1 capitalize text-[var(--dpf-muted)]"
+              }
+            >
+              {m}
+            </button>
+          ))}
         </div>
         {error && <span className="text-sm text-[var(--dpf-error)]">{error}</span>}
       </div>
@@ -1207,8 +1213,12 @@ export function WorkbookGrid({
           setSummaryGroupBy={setSummaryGroupBy}
           summaryValue={summaryValue}
           setSummaryValue={setSummaryValue}
-          summaryChart={summaryChart}
-          setSummaryChart={setSummaryChart}
+          summaryMode={summaryMode}
+          setSummaryMode={setSummaryMode}
+          summaryPivotCol={summaryPivotCol}
+          setSummaryPivotCol={setSummaryPivotCol}
+          summaryAgg={summaryAgg}
+          setSummaryAgg={setSummaryAgg}
         />
       )}
 
@@ -1247,6 +1257,8 @@ export function WorkbookGrid({
         <div className="rounded-md border border-dashed border-[var(--dpf-border)] p-8 text-center text-[var(--dpf-muted)]">
           This table has no columns yet. Add a column to start entering data.
         </div>
+      ) : viewMode === "calendar" && hasDateColumn ? (
+        <GridCalendar rows={sortedRows} columns={visibleCols} onOpenRow={setOpenRowId} />
       ) : gallery ? (
         <div className="min-h-0 flex-1 overflow-auto">
           <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3 p-1">

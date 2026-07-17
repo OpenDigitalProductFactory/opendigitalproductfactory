@@ -27,6 +27,44 @@ export function dockerBuildTag(candidateBranch) {
 // it). Verified 2026-07-05: default heap SIGABRT; 8 GiB completes cleanly.
 export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=8192";
 
+export function resolveCommandInvocation(command, baseEnv = process.env) {
+  if (command[0] !== "env") {
+    return { command: command[0], args: command.slice(1), env: baseEnv };
+  }
+
+  const env = { ...baseEnv };
+  let commandIndex = 1;
+  while (commandIndex < command.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(command[commandIndex])) {
+    const assignment = command[commandIndex];
+    const separator = assignment.indexOf("=");
+    env[assignment.slice(0, separator)] = assignment.slice(separator + 1);
+    commandIndex += 1;
+  }
+  if (commandIndex < command.length && command[commandIndex].includes("=")) {
+    throw new Error(`invalid environment assignment in local-CI command: ${command[commandIndex]}`);
+  }
+  if (commandIndex >= command.length) {
+    throw new Error("environment-prefixed local-CI command is missing an executable");
+  }
+  return {
+    command: command[commandIndex],
+    args: command.slice(commandIndex + 1),
+    env,
+  };
+}
+
+export function resolveGitRevision(ref, { spawnSyncImpl = spawnSync, cwd } = {}) {
+  const result = spawnSyncImpl("git", ["rev-parse", "--verify", ref], {
+    cwd,
+    encoding: "utf8",
+    shell: false,
+  });
+  if (result.status !== 0) {
+    throw new Error(`failed to resolve ${ref}: ${result.stderr || result.stdout}`);
+  }
+  return result.stdout.trim();
+}
+
 function stableJson(value) {
   if (value === undefined) return "null";
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -79,7 +117,7 @@ export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd()
     platform: process.platform,
     arch: process.arch,
     lockfileSha256: fileSha256(`${cwd}/pnpm-lock.yaml`),
-    nodeOptions: buildStrategy === "host-next" ? HOST_BUILD_NODE_OPTIONS : "",
+    nodeOptions: HOST_BUILD_NODE_OPTIONS,
   });
 }
 
@@ -119,11 +157,9 @@ export function createLocalIntegrationPlan(input) {
     // typecheck needs the same heap headroom as the host-next build: with the
     // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
     // exactly like the build worker did (BI-B5011ACE) — observed live on the
-    // first BI-157DC9B2 gate run, 2026-07-06. Windows keeps the plain form
-    // (`env` is POSIX; win32 routes the build through docker anyway).
-    buildStrategy === "docker-build"
-      ? ["pnpm", "--filter", "web", "typecheck"]
-      : ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "typecheck"],
+    // first BI-157DC9B2 gate run, 2026-07-06. The runner interprets the `env`
+    // prefix itself, so this heap contract is identical on every host.
+    ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "typecheck"],
     productionBuildCommand,
   ];
   return {

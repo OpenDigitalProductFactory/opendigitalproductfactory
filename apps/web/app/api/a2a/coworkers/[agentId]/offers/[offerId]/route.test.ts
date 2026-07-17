@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET, POST } from "./route";
 
@@ -15,6 +15,10 @@ vi.mock("@/lib/coworker-service-catalog/catalog", () => ({
 vi.mock("@/lib/coworker-service-catalog/a2a-tasks", () => ({
   createCoworkerA2aTask: mockCreateCoworkerA2aTask,
 }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function catalogOffer(overrides: Record<string, unknown> = {}) {
   const provider = {
@@ -137,7 +141,13 @@ describe("A2A coworker offer route", () => {
       serviceId: "svc-sales",
       messages: [],
       artifacts: [],
-      metadata: { actingAgentGaid: "gaid:public:buyer", delegatingAgentGaid: "gaid:public:buyer", delegatedAgentId: "sales-coworker", approvalContext: {} },
+      metadata: {
+        actingAgentGaid: "gaid:public:buyer",
+        delegatingAgentGaid: "gaid:public:buyer",
+        delegatedAgentId: "sales-coworker",
+        approvalContext: {},
+        delegationReceipt: { receiptKind: "coworker-delegation", receiptId: "CDR-1234" },
+      },
     });
 
     const response = await POST(
@@ -161,8 +171,67 @@ describe("A2A coworker offer route", () => {
         requestedOutcome: "Qualify this buyer.",
         contextId: "ctx-1",
         actingAgentGaid: "gaid:public:buyer",
+        delegatingAgentGaid: "gaid:public:buyer",
+        delegatedAgentGaid: "gaid:public:sales",
+        accessProfile: "external-a2a",
+        authorityBoundary: "proposal-only",
+        riskTier: "medium",
+        requiredGrants: ["registry_read"],
       }),
     );
     await expect(response.json()).resolves.toMatchObject({ id: "CE-A2A", status: { state: "submitted" } });
+  });
+
+  it("rejects external A2A task submission without an acting GAID", async () => {
+    mockAuth.mockResolvedValue(null);
+    mockLoadCoworkerCatalog.mockResolvedValue({ services: [], offers: [catalogOffer()] });
+
+    const response = await POST(
+      new Request("http://test/api/a2a/coworkers/sales-coworker/offers/offer-sales", {
+        method: "POST",
+        body: JSON.stringify({
+          requestedOutcome: "Qualify this buyer.",
+          contractContext: { termsRef: "terms://sales", dataBoundaryRef: "boundary://sales" },
+        }),
+      }),
+      { params: Promise.resolve({ agentId: "sales-coworker", offerId: "offer-sales" }) },
+    );
+
+    expect(response.status).toBe(400);
+    // Canonical apiErrorResponse envelope (BI-81EE4A46): { code, message, details }
+    await expect(response.json()).resolves.toMatchObject({
+      code: "INVALID_ARGUMENT",
+      message: "Cross-boundary A2A task submission requires actingAgentGaid and delegatingAgentGaid.",
+      details: { error: "missing_gaid_call_chain" },
+    });
+    expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
+  });
+
+  it("rejects external A2A task submission without terms and data-boundary context", async () => {
+    mockAuth.mockResolvedValue(null);
+    mockLoadCoworkerCatalog.mockResolvedValue({ services: [], offers: [catalogOffer()] });
+
+    const response = await POST(
+      new Request("http://test/api/a2a/coworkers/sales-coworker/offers/offer-sales", {
+        method: "POST",
+        body: JSON.stringify({
+          requestedOutcome: "Qualify this buyer.",
+          actingAgentGaid: "gaid:public:buyer",
+          delegatingAgentGaid: "gaid:public:buyer",
+        }),
+      }),
+      { params: Promise.resolve({ agentId: "sales-coworker", offerId: "offer-sales" }) },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "INVALID_ARGUMENT",
+      message: "Cross-boundary A2A task submission requires termsRef and dataBoundaryRef.",
+      details: {
+        error: "missing_contract_context",
+        missing: ["termsRef", "dataBoundaryRef"],
+      },
+    });
+    expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
   });
 });

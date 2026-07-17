@@ -35,6 +35,15 @@ describe("isErrorLine", () => {
     expect(isErrorLine("final error sending batch, no retries left")).toBe(false);
   });
 
+  it("rejects compiler code-frame source lines with error-like import paths", () => {
+    expect(
+      isErrorLine('2 | import { getErrorMessage } from "@/lib/shared/get-error-message";'),
+    ).toBe(false);
+    expect(
+      isErrorLine('\x1b[90m329 |\x1b[0m       console.error("[tool-trace] wwmd.voice.dispatch.failed")'),
+    ).toBe(false);
+  });
+
   it("rejects empty/clean lines", () => {
     expect(isErrorLine("")).toBe(false);
     expect(isErrorLine("request completed in 12ms")).toBe(false);
