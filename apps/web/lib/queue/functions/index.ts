@@ -68,6 +68,10 @@ import { marketingSchedulerDispatch } from "./marketing-scheduler-dispatch";
 import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
 import { siemCorrelationSweep } from "./siem-correlation-sweep";
 import { patchAssessmentSweep } from "./patch-assessment-sweep";
+import {
+  catalogEnrichmentSweepScheduled,
+  catalogEnrichmentSweepRequested,
+} from "./catalog-enrichment-sweep";
 import { canonicalImprovementDigest } from "./canonical-improvement-digest";
 import {
   coworkerCertificationNightly,
@@ -120,6 +124,7 @@ export const scheduledFunctions = [
   recurringInvoiceDispatch,   // BI-SCHED-DORMANT: wire recurring-invoice generation, daily 06:30
   siemCorrelationSweep,       // BI-6D9496F1: EP-SOVEREIGN-SOC P1 — project internal audit -> SecurityEvent + run detection rules, every 15m
   patchAssessmentSweep,       // EP-PATCH-MANAGEMENT P0: daily estate patch posture sweep (OSV+KEV -> AssuranceFinding), 05:00
+  catalogEnrichmentSweepScheduled, // EP-ASSET-INTELLIGENCE: weekly CatalogIdentity enrichment loop (endoflife.date + CPE + SBOM), Mon 04:37
   remoteActionClaimTimeout,   // EP-REMOTE-ACTION P2: time out stale claimed RemoteActions so the pull queue can't wedge, every 10m (flag-gated)
   coworkerCertificationNightly, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): nightly golden-journey certification of every roster coworker, 04:40
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
@@ -153,6 +158,7 @@ export const eventFunctions = [
   dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run
   inngestRetentionSweepRequested, // BI-0AB96FE7: operator "run now" / dry-run for the Inngest retention sweep
   mdmStewardSweepRequested, // EP-4A12A7CB slice 4: Data Steward "run now" / dry-run
+  catalogEnrichmentSweepRequested, // EP-ASSET-INTELLIGENCE: catalog enrichment "run now" (poll-on-request)
   coworkerCertificationRunNow, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): operator "run now" certification sweep
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
 ];

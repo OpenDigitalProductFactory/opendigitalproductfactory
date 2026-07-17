@@ -26,6 +26,14 @@
 // reconciled (scheduling-surface review, 2026-06-21). Keep the parity test real.
 
 import { CODE_GRAPH_JOB_ID } from "@/lib/integrate/code-graph/constants";
+import {
+  CATALOG_SWEEP_JOB_ID,
+  CATALOG_SWEEP_JOB_NAME,
+  CATALOG_SWEEP_SCHEDULED_INNGEST_ID,
+  CATALOG_SWEEP_REQUESTED_EVENT,
+  CATALOG_SWEEP_CRON,
+  CATALOG_SWEEP_CADENCE,
+} from "@/lib/asset-intelligence/catalog-sweep-constants";
 
 /** core = platform-integrity cron, operator read-only. editable = cadence
  *  may be tuned by an operator after install. */
@@ -551,6 +559,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,
+  },
+  {
+    jobId: CATALOG_SWEEP_JOB_ID,
+    inngestId: CATALOG_SWEEP_SCHEDULED_INNGEST_ID,
+    name: CATALOG_SWEEP_JOB_NAME,
+    purpose:
+      "EP-ASSET-INTELLIGENCE (spec §4.2/§4.4): iterates the CatalogIdentity spine and runs the open enrichment feeds — SBOM→identity bridge, CPE 2.3 crosswalk, and endoflife.date support-lifecycle milestones. If it stops, normalized identity + EOL/EOS posture goes stale.",
+    cron: CATALOG_SWEEP_CRON,
+    cadence: CATALOG_SWEEP_CADENCE,
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: CATALOG_SWEEP_REQUESTED_EVENT,
   },
   {
     jobId: "coworker-certification",

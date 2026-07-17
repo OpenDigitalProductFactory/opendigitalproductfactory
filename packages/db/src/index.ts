@@ -385,6 +385,10 @@ export * from "./discovery-fingerprint-observation";
 // Asset-intelligence on-demand product enrichment (EP-ASSET-INTELLIGENCE, spec §4.2/§4.6)
 // — the enrich_digital_product / request_re_enrichment MCP tools' backing logic.
 export * from "./enrich-digital-product";
+// Asset-intelligence catalog enrichment sweep (EP-ASSET-INTELLIGENCE, spec §4.2/§4.4)
+// — the governed loop that runs the endoflife.date / CPE / SBOM feeds over the
+// CatalogIdentity spine. The per-feed modules stay internal; the sweep is the surface.
+export * from "./catalog-enrichment-sweep";
 export * from "./device-placement";
 export * from "./portfolio-sources";
 export * from "./backlog-portfolio";
