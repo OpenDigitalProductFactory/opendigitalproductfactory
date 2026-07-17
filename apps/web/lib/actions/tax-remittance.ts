@@ -6,20 +6,15 @@ import { encryptSecret } from "@/lib/govern/credential-crypto";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import {
-  MANAGED_TAX_ISSUE_TYPES,
   addDays,
   addMonths,
   appendNote,
   buildBillLiabilityDrafts,
-  buildCoworkerGuide,
   buildFilingPacketNotes,
   buildInvoiceLiabilityDrafts,
-  buildManagedTaxIssues,
   computeNextCronRun,
   credentialPublicId,
   decimalValue,
-  issueKey,
-  issuePublicId,
   nullableString,
   periodMonthsForFrequency,
   periodPublicId,
@@ -30,8 +25,16 @@ import {
   taxExecutionTaskId,
   taxMonitorTaskId,
   type LiabilityDraft,
-  type TaxRegistrationRecord,
 } from "@/lib/finance/tax-remittance-core";
+import {
+  createTaxNotification,
+  getOrCreateTaxProfile,
+  loadTaxWorkspaceState,
+  persistLiabilityDrafts,
+  reconcileTaxIssues,
+  resolveOperationalTaxIssue,
+  upsertOperationalTaxIssue,
+} from "@/lib/finance/tax-remittance-service";
 import {
   addTaxFilingArtifactSchema,
   createTaxRegistrationSchema,
@@ -50,8 +53,6 @@ import {
   type UpdateTaxRemittanceRunStatusInput,
   type VerifyTaxRegistrationInput,
 } from "@/lib/finance/tax-remittance-validation";
-
-type TaxProfileRecord = Awaited<ReturnType<typeof getOrCreateTaxProfile>>;
 
 async function requireManageFinance() {
   const session = await auth();
@@ -78,415 +79,11 @@ async function requireOrganization() {
   return organization;
 }
 
-async function getOrCreateTaxProfile(organizationId: string) {
-  const existing = await prisma.organizationTaxProfile.findFirst({
-    where: { organizationId },
-  });
-
-  if (existing) return existing;
-
-  return prisma.organizationTaxProfile.create({
-    data: {
-      organizationId,
-      setupMode: "unknown",
-      setupStatus: "draft",
-      taxModel: "hybrid",
-    },
-  });
-}
-
 function revalidateTaxRoutes() {
   revalidatePath("/finance");
   revalidatePath("/finance/settings");
   revalidatePath("/finance/settings/tax");
   revalidatePath("/finance/configuration");
-}
-
-async function createTaxNotification(userId: string, title: string, body: string) {
-  await prisma.notification.create({
-    data: {
-      userId,
-      type: "tax-remittance",
-      title,
-      body,
-      deepLink: "/finance/settings/tax",
-      read: false,
-    },
-  });
-}
-
-async function upsertOperationalTaxIssue(input: {
-  profileId: string;
-  issueType: string;
-  title: string;
-  details: string;
-  severity?: string;
-  registrationId?: string | null;
-  periodId?: string | null;
-}) {
-  const existing = await prisma.taxIssue.findMany({
-    where: {
-      organizationTaxProfileId: input.profileId,
-      issueType: input.issueType,
-      registrationId: input.registrationId ?? null,
-      periodId: input.periodId ?? null,
-      status: "open",
-    },
-  });
-
-  const openIssue = existing[0];
-  if (openIssue) {
-    return prisma.taxIssue.update({
-      where: { id: openIssue.id },
-      data: {
-        severity: input.severity ?? "high",
-        title: input.title,
-        details: input.details,
-      },
-    });
-  }
-
-  return prisma.taxIssue.create({
-    data: {
-      issueId: issuePublicId(),
-      organizationTaxProfileId: input.profileId,
-      registrationId: input.registrationId ?? null,
-      periodId: input.periodId ?? null,
-      issueType: input.issueType,
-      severity: input.severity ?? "high",
-      title: input.title,
-      details: input.details,
-      status: "open",
-    },
-  });
-}
-
-async function resolveOperationalTaxIssue(
-  issueType: string,
-  registrationId?: string | null,
-  periodId?: string | null,
-) {
-  const issues = await prisma.taxIssue.findMany({
-    where: {
-      issueType,
-      registrationId: registrationId ?? null,
-      periodId: periodId ?? null,
-      status: "open",
-    },
-  });
-
-  for (const issue of issues) {
-    await prisma.taxIssue.update({
-      where: { id: issue.id },
-      data: {
-        status: "resolved",
-        resolvedAt: new Date(),
-      },
-    });
-  }
-}
-
-async function persistLiabilityDrafts(
-  profileId: string,
-  registrationId: string,
-  periodId: string,
-  drafts: LiabilityDraft[],
-) {
-  await prisma.taxLiabilityEntry.deleteMany({
-    where: { periodId },
-  });
-
-  for (const draft of drafts) {
-    let decisionSnapshotId: string | null = null;
-
-    if (draft.snapshotId) {
-      const snapshot = await prisma.taxDecisionSnapshot.upsert({
-        where: { snapshotId: draft.snapshotId },
-        update: {
-          sourceType: draft.sourceType,
-          sourceId: draft.sourceId,
-          sourceLineItemId: draft.sourceLineItemId ?? null,
-          taxType: draft.taxType,
-          taxCode: draft.taxCode ?? null,
-          direction: draft.direction,
-          taxableAmount: draft.taxableAmount,
-          taxRate: draft.taxRate ?? null,
-          taxAmount: draft.taxAmount,
-          occurredAt: draft.occurredAt,
-          evidence: (draft.evidence ?? {}) as import("@dpf/db").Prisma.InputJsonValue,
-        },
-        create: {
-          snapshotId: draft.snapshotId,
-          organizationTaxProfileId: profileId,
-          registrationId,
-          sourceType: draft.sourceType,
-          sourceId: draft.sourceId,
-          sourceLineItemId: draft.sourceLineItemId ?? null,
-          taxType: draft.taxType,
-          taxCode: draft.taxCode ?? null,
-          direction: draft.direction,
-          taxableAmount: draft.taxableAmount,
-          taxRate: draft.taxRate ?? null,
-          taxAmount: draft.taxAmount,
-          jurisdictionRefId: null,
-          occurredAt: draft.occurredAt,
-          evidence: (draft.evidence ?? {}) as import("@dpf/db").Prisma.InputJsonValue,
-        },
-      });
-      decisionSnapshotId = snapshot.id;
-    }
-
-    await prisma.taxLiabilityEntry.upsert({
-      where: { entryId: draft.entryId },
-      update: {
-        periodId,
-        decisionSnapshotId,
-        sourceType: draft.sourceType,
-        sourceId: draft.sourceId,
-        sourceLineItemId: draft.sourceLineItemId ?? null,
-        direction: draft.direction,
-        taxableAmount: draft.taxableAmount,
-        taxAmount: draft.taxAmount,
-        currency: draft.currency,
-        notes: draft.notes ?? null,
-        occurredAt: draft.occurredAt,
-      },
-      create: {
-        entryId: draft.entryId,
-        organizationTaxProfileId: profileId,
-        registrationId,
-        periodId,
-        decisionSnapshotId,
-        sourceType: draft.sourceType,
-        sourceId: draft.sourceId,
-        sourceLineItemId: draft.sourceLineItemId ?? null,
-        direction: draft.direction,
-        taxableAmount: draft.taxableAmount,
-        taxAmount: draft.taxAmount,
-        currency: draft.currency,
-        notes: draft.notes ?? null,
-        occurredAt: draft.occurredAt,
-      },
-    });
-  }
-}
-
-async function reconcileTaxIssues(
-  profile: TaxProfileRecord,
-  registrations: TaxRegistrationRecord[],
-) {
-  const desiredIssues = buildManagedTaxIssues(profile, registrations);
-  const existingIssues = await prisma.taxIssue.findMany({
-    where: { organizationTaxProfileId: profile.id },
-    orderBy: [{ severity: "desc" }, { openedAt: "asc" }],
-  });
-
-  const existingByKey = new Map(
-    existingIssues
-      .filter((issue) => MANAGED_TAX_ISSUE_TYPES.has(issue.issueType))
-      .map((issue) => [issueKey(issue.issueType, issue.registrationId, issue.periodId), issue]),
-  );
-
-  const activeIssues: Array<(typeof existingIssues)[number]> = [];
-  const seenKeys = new Set<string>();
-
-  for (const desired of desiredIssues) {
-    const key = issueKey(desired.issueType, desired.registrationId, desired.periodId);
-    seenKeys.add(key);
-    const existing = existingByKey.get(key);
-
-    if (existing) {
-      const updated = existing.status === "open"
-        && existing.title === desired.title
-        && existing.details === desired.details
-        && existing.severity === desired.severity
-        ? existing
-        : await prisma.taxIssue.update({
-            where: { id: existing.id },
-            data: {
-              title: desired.title,
-              details: desired.details,
-              severity: desired.severity,
-              status: "open",
-              resolvedAt: null,
-            },
-          });
-      activeIssues.push(updated);
-      continue;
-    }
-
-    const created = await prisma.taxIssue.create({
-      data: {
-        issueId: issuePublicId(),
-        organizationTaxProfileId: profile.id,
-        registrationId: desired.registrationId ?? null,
-        periodId: desired.periodId ?? null,
-        issueType: desired.issueType,
-        severity: desired.severity,
-        status: "open",
-        title: desired.title,
-        details: desired.details,
-      },
-    });
-    activeIssues.push(created);
-  }
-
-  for (const existing of existingIssues) {
-    if (!MANAGED_TAX_ISSUE_TYPES.has(existing.issueType)) continue;
-    const key = issueKey(existing.issueType, existing.registrationId, existing.periodId);
-    if (seenKeys.has(key) || existing.status === "resolved") continue;
-    await prisma.taxIssue.update({
-      where: { id: existing.id },
-      data: {
-        status: "resolved",
-        resolvedAt: new Date(),
-      },
-    });
-  }
-
-  return activeIssues.sort((left, right) => {
-    if (left.severity === right.severity) {
-      return left.title.localeCompare(right.title);
-    }
-    return left.severity.localeCompare(right.severity);
-  });
-}
-
-async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUserId: string) {
-  const [registrations, periods, jurisdictionOptions, monitoringTask, rawAuthorityCredentials] = await Promise.all([
-    prisma.taxRegistration.findMany({
-      where: { organizationTaxProfileId: profile.id },
-      include: {
-        jurisdictionReference: {
-          select: {
-            id: true,
-            jurisdictionRefId: true,
-            authorityName: true,
-            countryCode: true,
-            stateProvinceCode: true,
-            authorityType: true,
-            taxTypes: true,
-          },
-        },
-      },
-      orderBy: [{ registrationStatus: "asc" }, { createdAt: "asc" }],
-    }),
-    prisma.taxObligationPeriod.findMany({
-      where: {
-        registration: {
-          organizationTaxProfileId: profile.id,
-        },
-      },
-      include: {
-        registration: {
-          include: {
-            jurisdictionReference: {
-              select: {
-                authorityName: true,
-                jurisdictionRefId: true,
-                countryCode: true,
-                stateProvinceCode: true,
-              },
-            },
-          },
-        },
-        artifacts: {
-          orderBy: { createdAt: "desc" },
-        },
-        liabilityEntries: {
-          orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
-        },
-        remittanceRuns: {
-          orderBy: [{ createdAt: "desc" }],
-        },
-      },
-      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
-      take: 12,
-    }),
-    prisma.taxJurisdictionReference.findMany({
-      orderBy: [{ countryCode: "asc" }, { stateProvinceCode: "asc" }, { authorityName: "asc" }],
-      take: 200,
-      select: {
-        id: true,
-        jurisdictionRefId: true,
-        authorityName: true,
-        countryCode: true,
-        stateProvinceCode: true,
-        authorityType: true,
-        taxTypes: true,
-      },
-    }),
-    prisma.scheduledAgentTask.findFirst({
-      where: {
-        ownerUserId,
-        routeContext: "/finance/settings/tax",
-        title: "Tax Remittance Monitor",
-      },
-      select: {
-        taskId: true,
-        title: true,
-        schedule: true,
-        isActive: true,
-        nextRunAt: true,
-        lastRunAt: true,
-        lastStatus: true,
-      },
-    }),
-    prisma.taxAuthorityCredential.findMany({
-      where: { organizationTaxProfileId: profile.id },
-      select: {
-        id: true,
-        credentialId: true,
-        registrationId: true,
-        authorityName: true,
-        portalBaseUrl: true,
-        credentialOwnerMode: true,
-        status: true,
-        authMode: true,
-        secretRef: true,
-        mfaMode: true,
-        lastVerifiedAt: true,
-        lastFailureAt: true,
-        lastFailureReason: true,
-        notes: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: [{ updatedAt: "desc" }],
-    }),
-  ]);
-
-  const authorityCredentials = rawAuthorityCredentials.map(({ secretRef, ...credential }) => ({
-    ...credential,
-    hasSecret: Boolean(secretRef),
-  }));
-
-  const openIssues = await reconcileTaxIssues(profile, registrations);
-  const coworkerGuide = buildCoworkerGuide(profile, registrations, openIssues);
-  const now = new Date();
-  const dueSoonCount = periods.filter((period) => {
-    if (["filed", "paid"].includes(period.status)) return false;
-    const dueDate = new Date(period.dueDate);
-    return dueDate >= now && dueDate <= addDays(now, 14);
-  }).length;
-  const overdueCount = periods.filter((period) => {
-    if (["filed", "paid"].includes(period.status)) return false;
-    return new Date(period.dueDate) < now;
-  }).length;
-
-  return {
-    registrations,
-    periods,
-    jurisdictionOptions,
-    openIssues,
-    authorityCredentials,
-    coworkerGuide,
-    monitoring: {
-      dueSoonCount,
-      overdueCount,
-      monitoringTask,
-    },
-  };
 }
 
 export async function getTaxRemittanceWorkspace() {
