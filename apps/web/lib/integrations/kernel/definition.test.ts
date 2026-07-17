@@ -212,4 +212,34 @@ describe("connectorDefinitionSchema", () => {
     expect(Reflect.set(definition.operations[0].retry, "maxAttempts", 9)).toBe(false);
     expect(definition.operations[0].retry.maxAttempts).toBe(3);
   });
+
+  it("deeply freezes successful schema.parse output", () => {
+    const definition = connectorDefinitionSchema.parse(validDefinition);
+
+    expectTypeOf(definition).toEqualTypeOf<ConnectorDefinition>();
+    expect(Object.isFrozen(definition)).toBe(true);
+    expect(Object.isFrozen(definition.capabilities)).toBe(true);
+    expect(Object.isFrozen(definition.operations[0].retry)).toBe(true);
+    expect(() => Array.prototype.push.call(definition.capabilities, "email.mutable")).toThrow(
+      TypeError,
+    );
+  });
+
+  it("deeply freezes successful schema.safeParse output while preserving failures", () => {
+    const success = connectorDefinitionSchema.safeParse(validDefinition);
+    expect(success.success).toBe(true);
+    if (!success.success) throw new Error("Expected valid connector definition");
+
+    expectTypeOf(success.data).toEqualTypeOf<ConnectorDefinition>();
+    expect(Object.isFrozen(success.data)).toBe(true);
+    expect(Object.isFrozen(success.data.authorities)).toBe(true);
+    expect(Object.isFrozen(success.data.authorities[0])).toBe(true);
+    expect(Reflect.set(success.data.authorities[0], "mode", "platform")).toBe(false);
+    expect(success.data.authorities[0].mode).toBe("source");
+
+    const failure = connectorDefinitionSchema.safeParse({ ...validDefinition, schemaVersion: 2 });
+    expect(failure.success).toBe(false);
+    if (failure.success) throw new Error("Expected invalid connector definition");
+    expect(failure.error.issues[0].path).toEqual(["schemaVersion"]);
+  });
 });

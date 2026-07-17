@@ -1,5 +1,23 @@
 import { z } from "zod";
 
+type DeepReadonly<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends readonly (infer TItem)[]
+    ? readonly DeepReadonly<TItem>[]
+    : T extends object
+      ? { readonly [TKey in keyof T]: DeepReadonly<T[TKey]> }
+      : T;
+
+function deepFreeze<T>(value: T): DeepReadonly<T> {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const nestedValue of Object.values(value)) {
+      deepFreeze(nestedValue);
+    }
+    Object.freeze(value);
+  }
+  return value as DeepReadonly<T>;
+}
+
 export const CONNECTOR_AUTH_KINDS = [
   "api-key",
   "oauth2-client-credentials",
@@ -141,15 +159,8 @@ export const connectorDefinitionSchema = z
         path: ["authorities"],
       });
     }
-  });
-
-type DeepReadonly<T> = T extends (...args: never[]) => unknown
-  ? T
-  : T extends readonly (infer TItem)[]
-    ? readonly DeepReadonly<TItem>[]
-    : T extends object
-      ? { readonly [TKey in keyof T]: DeepReadonly<T[TKey]> }
-      : T;
+  })
+  .transform(deepFreeze);
 
 export type ConnectorDefinition = DeepReadonly<z.infer<typeof connectorDefinitionSchema>>;
 export type ConnectorAuthStrategy = ConnectorDefinition["auth"];
@@ -159,18 +170,8 @@ export type ConnectorHealthPolicy = ConnectorDefinition["health"];
 export type ConnectorSyncPolicy = ConnectorDefinition["sync"];
 export type DataAuthorityPolicy = ConnectorDefinition["authorities"][number];
 
-function deepFreeze<T>(value: T): DeepReadonly<T> {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nestedValue of Object.values(value)) {
-      deepFreeze(nestedValue);
-    }
-    Object.freeze(value);
-  }
-  return value as DeepReadonly<T>;
-}
-
 export function parseConnectorDefinition(input: unknown): ConnectorDefinition {
-  return deepFreeze(connectorDefinitionSchema.parse(input));
+  return connectorDefinitionSchema.parse(input);
 }
 
 export interface ConnectorCredentialAdapter<TCredential, TSerializedCredential> {
