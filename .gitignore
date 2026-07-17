@@ -45,6 +45,7 @@ e2e-results/
 e2e/debug/
 e2e/.auth/
 test-results/
+apps/mobile/coverage/
 
 # Local agent / codex caches
 .codex/
