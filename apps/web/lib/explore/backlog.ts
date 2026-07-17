@@ -45,6 +45,9 @@ export type BacklogItemWithRelations = {
   riskOpportunity?: number | null;
   businessValue?: number | null;
   timeCriticality?: number | null;
+  // Ownership — who has actively claimed this item. Drives the "mine vs
+  // company-wide" scope split in the Needs-you-next band (BI-01CC2356).
+  claimedById?: string | null;
 };
 
 export type DigitalProductSelect = {

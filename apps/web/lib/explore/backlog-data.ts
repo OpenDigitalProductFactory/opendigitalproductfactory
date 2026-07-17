@@ -45,6 +45,8 @@ export const getBacklogItems = cache(async (): Promise<BacklogItemWithRelations[
       riskOpportunity: true,
       businessValue: true,
       timeCriticality: true,
+      // Ownership for the mine-vs-company scope split (BI-01CC2356).
+      claimedById: true,
     },
   });
 });
@@ -100,6 +102,8 @@ export const getEpics = cache(async (): Promise<EpicWithRelations[]> => {
           riskOpportunity: true,
           businessValue: true,
           timeCriticality: true,
+          // Ownership for the mine-vs-company scope split (BI-01CC2356).
+          claimedById: true,
         },
       },
     },
