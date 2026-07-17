@@ -1025,6 +1025,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "remark-gfm": {
+      "added": "2026-07-17",
+      "workspaces": [
+        "apps/web"
+      ],
+      "kinds": [
+        "prod"
+      ],
+      "note": "EP-DOCS-SYSTEM Phase 2 — GFM (pipe-table) support for the in-portal user-guide renderer, which otherwise shows tables as raw text. Official remark plugin from the same unifiedjs/remark ecosystem as the already-acknowledged react-markdown; MIT; no network/native/runtime-exec surface."
+    },
     "sharp": {
       "added": "2026-06-21",
       "workspaces": [

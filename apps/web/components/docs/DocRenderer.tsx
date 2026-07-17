@@ -2,6 +2,7 @@
 // Server component — no "use client". Renders on server, zero client JS cost.
 
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ReactNode } from "react";
 import { resolveDocLink, slugifyHeading } from "@/lib/docs/doc-link-resolver.mjs";
 import { diagramSlug, diagramPortalHref } from "@/lib/docs/diagram-assets.mjs";
@@ -150,7 +151,9 @@ function buildComponents(sourcePath: string) {
 export function DocRenderer({ content, sourcePath }: { content: string; sourcePath: string }) {
   return (
     <div className="docs-content">
-      <ReactMarkdown components={buildComponents(sourcePath)}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={buildComponents(sourcePath)}>
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }
