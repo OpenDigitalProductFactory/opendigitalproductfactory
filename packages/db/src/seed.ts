@@ -39,6 +39,7 @@ import {
   seedWorkforceReferenceData,
 } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
+import { seedOccupations } from "./seed-occupations.js";
 import { seedPublicSectorCompliance } from "./seed-public-sector-compliance.js";
 import { seedCooperativeCompliance } from "./seed-cooperative-compliance.js";
 import { seedLawEnforcementCompliance } from "./seed-law-enforcement-compliance.js";
@@ -2421,6 +2422,9 @@ async function main(): Promise<void> {
   await step("clientIdentity", () => seedClientIdentity());
   await step("hiveContributionCredential", () => seedHiveContributionCredential());
   await step("storefrontArchetypes", () => seedStorefrontArchetypes(prisma));
+  // EP-EMPLOYEE-OCCUPATION: occupation registry depends on the storefront archetype
+  // catalog (categories) + the coworker roster, so it seeds after both.
+  await step("occupations", () => seedOccupations(prisma));
   await step("publicSectorCompliance", () => seedPublicSectorCompliance(prisma));
   await step("cooperativeCompliance", () => seedCooperativeCompliance(prisma));
   await step("lawEnforcementCompliance", () => seedLawEnforcementCompliance(prisma));

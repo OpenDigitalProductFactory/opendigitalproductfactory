@@ -505,12 +505,54 @@ model Position {
   title      String
   jobFamily  String?
   jobLevel   String?
+  // Occupation dimension (EP-EMPLOYEE-OCCUPATION): a slug reference into the
+  // OccupationProfile registry (validated in app code, not an FK — mirrors the
+  // StorefrontConfig.archetypeId semantic-slug pattern). Nullable: an unmapped
+  // position resolves to the archetype/platform fallback, an honest degrade.
+  occupationKey String?
   status     String            @default("active")
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
   employees  EmployeeProfile[]
 
   @@index([status])
+  @@index([occupationKey])
+}
+
+// Reusable, archetype-scoped template describing a customer's in-trench JOB
+// (dental hygienist, field service technician) — the "occupation" dimension.
+// Config/template, NOT an identity Principal (AGENTS.md §11 principal-convergence
+// not triggered); seeded from packages/db/data/occupation_registry.json, mirrored
+// here like StorefrontArchetype. Occupation FOCUSES the workspace surface and ADDS
+// a governed coworker roster; it never widens the platform-management RBAC floor.
+// Spec: docs/superpowers/specs/2026-07-16-employee-occupation-onboarding-and-role-tailored-workspace-design.md §5.1
+model OccupationProfile {
+  id                     String   @id @default(cuid())
+  occupationKey          String   @unique
+  label                  String
+  summary                String
+  // Industries/business-types this occupation appears in (validated against the
+  // storefront archetype catalog at seed time).
+  archetypeCategories    String[]
+  archetypeIds           String[]
+  // The RBAC/capability floor this occupation sits on (see spec §5.6). Stored as a
+  // slug; the concrete platform-role binding is finalized by the P0.1 base-access
+  // decision. Occupation never widens beyond this floor.
+  baseAccessProfile      String
+  // Link to the WSID professional corpus (EP-WSID); bound in Phase 3.
+  wsidProfessionFamily   String?
+  // { tileAllowlist: string[], navEmphasis: string[], workspaceHomeOccupationId?: string }
+  featureSurface         Json
+  // OccupationCoworkerGrant[]: { agentSlug, interaction: summon|assigned-only|read-only, governanceProfileRef? }
+  coworkerRoster         Json
+  onboardingCurriculumId String
+  moverCurriculumId      String?
+  isActive               Boolean  @default(true)
+  isBuiltIn              Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([isActive])
 }
 
 model EmploymentType {
