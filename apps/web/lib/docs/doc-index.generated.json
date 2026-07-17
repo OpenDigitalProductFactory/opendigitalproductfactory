@@ -3704,22 +3704,6 @@
         "documentation-staleness-report"
       ]
     },
-    "docs/operations/arcamanus-preinstall-readiness.md": {
-      "publicHref": "/operations/arcamanus-preinstall-readiness/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "arcamanus-pre-install-readiness",
-        "decision-snapshot",
-        "pre-install-inputs",
-        "archetype-readiness",
-        "reseller-bi-to-github-path",
-        "non-technical-operator-handoff",
-        "day-zero-checklist",
-        "related-docs"
-      ]
-    },
     "docs/operations/autonomous-build-completion.md": {
       "publicHref": "/operations/autonomous-build-completion/",
       "portalHref": null,
@@ -3751,6 +3735,22 @@
         "gono-go-and-default-flip",
         "rollback",
         "status"
+      ]
+    },
+    "docs/operations/customer-zero-preinstall-readiness.md": {
+      "publicHref": "/operations/customer-zero-preinstall-readiness/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "customer-0-pre-install-readiness-software-platform-archetype",
+        "decision-snapshot",
+        "pre-install-inputs",
+        "archetype-readiness",
+        "reseller-bi-to-github-path",
+        "non-technical-operator-handoff",
+        "day-zero-checklist",
+        "related-docs"
       ]
     },
     "docs/operations/disaster-recovery.md": {

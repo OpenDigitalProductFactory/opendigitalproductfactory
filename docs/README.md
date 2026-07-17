@@ -24,7 +24,7 @@ Entry points for people using the platform day-to-day:
 - [Development Workspace](user-guide/development-workspace.md) — how Build Studio, VS Code, policy states, and validation environments fit together.
 - [AI Coworker](user-guide/getting-started/ai-coworker.md) — working with the context-aware AI assistant on every screen.
 - [Roles & Access](user-guide/getting-started/roles-and-access.md) — platform roles and what each one can do.
-- [Arcamanus Pre-Install Readiness](operations/arcamanus-preinstall-readiness.md) — Customer 0 checklist for the `software-platform` archetype, reseller feedback routing, and non-technical operator handoff.
+- [Customer 0 Pre-Install Readiness](operations/customer-zero-preinstall-readiness.md) — first-install checklist for the `software-platform` archetype, reseller feedback routing, and non-technical operator handoff.
 
 Domain-specific operating guides (admin, AI workforce, build studio, compliance, customers, finance, HR, operations, platform, portfolios, products, storefront, wiki, workspace) live in their own folders under [user-guide/](user-guide/).
 

@@ -1,6 +1,8 @@
-# Arcamanus Pre-Install Readiness
+# Customer 0 Pre-Install Readiness (`software-platform` archetype)
 
-Use this checklist before installing or handing off a Customer 0 DPF environment for Arcamanus LLC. It keeps three decisions together: the install runs as the `software-platform` archetype, reseller/customer feedback must have a governed path back to GitHub, and the first operator should not need platform-internal vocabulary to get started.
+Use this checklist before installing or handing off a **Customer 0** DPF environment — the first production dogfood install that runs as the `software-platform` archetype. It keeps three decisions together: the install runs as the `software-platform` archetype, reseller/customer feedback must have a governed path back to GitHub, and the first operator should not need platform-internal vocabulary to get started.
+
+> **Scope note.** This is an archetype-level readiness guide. It deliberately does **not** name a specific customer, operator, person, IP address, or account. Fill the operator-owned inputs below from your own install's onboarding record — keep the real identity in the install's private configuration, not in this repository.
 
 Backlog link: `BI-2F0CEB86`
 
@@ -8,7 +10,7 @@ Backlog link: `BI-2F0CEB86`
 
 | Area | Readiness decision | Evidence or next action |
 | --- | --- | --- |
-| Customer identity | Treat Arcamanus LLC as the publisher/operator identity for Customer 0. | Mobile store docs already use Arcamanus LLC as publisher; keep legal/account names consistent across install, app-store, and customer-facing docs. |
+| Customer identity | Treat the first-install organization as the publisher/operator identity for Customer 0. | Keep the legal/account name consistent across install, app-store, and customer-facing config — recorded in the install's private onboarding data, not in the OSS repo. |
 | Archetype | Use `software-platform` for the production dogfood install. | `software-platform` is the DPF-on-DPF archetype; it is the one case where platform/operator language is legitimate day-to-day vocabulary. |
 | Public story | Use `docs/index.html` for pre-install orientation. | Keep the public tour focused on what DPF does before asking a user to run or operate the platform. |
 | Feedback path | Route reseller/customer product feedback into a governed BI -> GitHub path, not ad hoc messages. | Use the upstream feedback escalation design as the source pattern: local report, consent/rate-limit, relay/direct bridge, GitHub link persisted back to the install. |
@@ -16,16 +18,16 @@ Backlog link: `BI-2F0CEB86`
 
 ## Pre-Install Inputs
 
-Collect these before the installer or first-run setup starts.
+Collect these before the installer or first-run setup starts. They are **operator-owned**: record them in the install's private onboarding configuration, not in committed documentation.
 
 | Input | Owner | Notes |
 | --- | --- | --- |
-| Legal entity name | Arcamanus operator | Use `Arcamanus LLC` consistently for publisher and customer-zero references. |
-| Primary operator email | Arcamanus operator | This becomes the first admin handoff target. Do not use a disposable inbox. |
+| Legal entity name | Customer 0 operator | Use one consistent legal name for publisher and customer-zero references. Store it in the install config, not in the repo. |
+| Primary operator email | Customer 0 operator | This becomes the first admin handoff target. Do not use a disposable inbox. |
 | GitHub upstream target | Platform maintainer | Confirm the target repo or relay target that receives governed feedback. |
 | Reseller target, if any | Reseller or platform maintainer | If a reseller intermediates support, record whether feedback goes to the reseller relay first or directly upstream. |
 | Customer-facing promise | Platform maintainer | Keep this to plain outcomes: what the business can run, what coworkers help with, and what setup decisions remain human-owned. |
-| Mobile publishing posture | Arcamanus operator | If mobile is in scope, use the Arcamanus LLC store-launch runbook before promising TestFlight, Play testing, or production store availability. |
+| Mobile publishing posture | Customer 0 operator | If mobile is in scope, use the store-launch runbook (which names the actual App Store / Play Store publisher entity) before promising TestFlight, Play testing, or production store availability. |
 
 ## Archetype Readiness
 
@@ -79,7 +81,7 @@ Give the first operator this four-part path, not a source-code tour.
    Verify organization name, operator email, and visible product name.
 
 2. **Open the workspace.**
-   Confirm the first screen shows what Arcamanus is operating now, what needs attention, and which coworker can help.
+   Confirm the first screen shows what the organization is operating now, what needs attention, and which coworker can help.
 
 3. **Ask the AI coworker one concrete question.**
    Suggested prompt: "What should I check first before showing this DPF install to a customer or reseller?"
@@ -91,7 +93,7 @@ Do not ask the operator to run shell commands, inspect Docker, or manage Git. If
 
 ## Day-Zero Checklist
 
-- [ ] Arcamanus LLC legal/publisher identity is confirmed.
+- [ ] Customer 0 legal/publisher identity is confirmed (recorded in the install config, not the repo).
 - [ ] Primary operator account is ready.
 - [ ] Install archetype is `software-platform`.
 - [ ] Public pre-install tour link is available.
