@@ -4,6 +4,7 @@
 import ReactMarkdown from "react-markdown";
 import type { ReactNode } from "react";
 import { resolveDocLink, slugifyHeading } from "@/lib/docs/doc-link-resolver.mjs";
+import { diagramSlug, diagramPortalHref } from "@/lib/docs/diagram-assets.mjs";
 
 type C = { children?: ReactNode };
 
@@ -34,6 +35,11 @@ function resolvePortalLink(href: string | undefined, sourcePath: string): { href
 }
 
 function buildComponents(sourcePath: string) {
+  const slug = diagramSlug(sourcePath);
+  // ```mermaid fences are pre-rendered to committed SVGs (build-time, WWMD
+  // DI-5C7B16CA4472); the Nth fence on the page maps to the Nth committed asset.
+  // Counting here in document order matches scripts/render-doc-diagrams.mjs.
+  let mermaidIndex = 0;
   return {
     h2: ({ children }: C) => (
       <h2
@@ -86,6 +92,17 @@ function buildComponents(sourcePath: string) {
     },
     code: ({ children, className }: C & { className?: string }) => {
       const isBlock = className?.startsWith("language-");
+      if (className === "language-mermaid") {
+        const src = diagramPortalHref(slug, mermaidIndex++);
+        // eslint-disable-next-line @next/next/no-img-element
+        return (
+          <img
+            src={src}
+            alt="Diagram"
+            className="my-4 max-w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2"
+          />
+        );
+      }
       if (isBlock) {
         return (
           <pre className="text-xs bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md p-3 overflow-x-auto mb-3">

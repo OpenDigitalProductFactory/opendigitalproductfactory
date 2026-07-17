@@ -1,0 +1,53 @@
+// apps/web/app/api/docs-asset/[...path]/route.ts
+//
+// Serves static assets that live under docs/user-guide/assets/** to the in-portal
+// docs renderer. The /docs route only renders markdown, and Next serves /public —
+// so build-time-rendered Mermaid SVGs and screenshots (committed under the docs
+// tree, EP-DOCS-SYSTEM Phase 2) need this route to reach the portal. Read-only,
+// path-traversal-guarded, long-cache (assets are content-addressed by ordinal +
+// change with the source markdown).
+
+import fs from "node:fs";
+import path from "node:path";
+import { NextResponse } from "next/server";
+
+// Mirror of the user-guide dir resolution in apps/web/lib/shared/docs.ts.
+const prodDir = path.join(process.cwd(), "docs", "user-guide", "assets");
+const devDir = path.resolve(process.cwd(), "..", "..", "docs", "user-guide", "assets");
+const ASSETS_ROOT = fs.existsSync(prodDir) ? prodDir : devDir;
+
+const CONTENT_TYPES: Record<string, string> = {
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+
+export async function GET(_req: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  const { path: segments } = await params;
+  const rel = (segments ?? []).join("/");
+  const resolved = path.resolve(ASSETS_ROOT, rel);
+
+  // Path-traversal guard: the resolved path must stay under ASSETS_ROOT.
+  if (resolved !== ASSETS_ROOT && !resolved.startsWith(ASSETS_ROOT + path.sep)) {
+    return new NextResponse("Not found", { status: 404 });
+  }
+  const ext = path.extname(resolved).toLowerCase();
+  const contentType = CONTENT_TYPES[ext];
+  if (!contentType || !fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+    return new NextResponse("Not found", { status: 404 });
+  }
+
+  const body = fs.readFileSync(resolved);
+  return new NextResponse(body, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=3600",
+      // SVGs are sanitized at render time; still forbid inline script execution.
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+    },
+  });
+}

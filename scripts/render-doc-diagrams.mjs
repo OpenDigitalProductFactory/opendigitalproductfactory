@@ -1,0 +1,142 @@
+#!/usr/bin/env node
+// scripts/render-doc-diagrams.mjs
+//
+// Build-time Mermaid rendering (EP-DOCS-SYSTEM Phase 2, WWMD DI-5C7B16CA4472).
+// Renders every ```mermaid fence in the user guide to a committed, sanitized
+// static SVG so BOTH surfaces (public Jekyll site + in-portal renderer) show an
+// identical diagram with no client-side Mermaid runtime and no external CDN.
+//
+// Diagrams are keyed by ORDINAL (page slug + fence index), not content hash, so
+// the Jekyll browser shim and the portal renderer can derive the same asset URL
+// without re-canonicalizing the fence text. A manifest records the content hash
+// of each fence purely to power `--check` freshness in CI.
+//
+//   node scripts/render-doc-diagrams.mjs           # render/refresh SVGs
+//   node scripts/render-doc-diagrams.mjs --check    # fail if any SVG is stale/missing/orphaned
+//
+// Requires mmdc (@mermaid-js/mermaid-cli) — runs in the convergence sandbox or a
+// compile-ready environment, NOT a source-only worktree. Override the binary
+// with MMDC=/path/to/mmdc.
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { diagramSlug, DIAGRAMS_DIR } from "../apps/web/lib/docs/diagram-assets.mjs";
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const USER_GUIDE_DIR = path.join(REPO_ROOT, "docs", "user-guide");
+const DIAGRAMS_ABS = path.join(REPO_ROOT, DIAGRAMS_DIR);
+const MANIFEST = path.join(DIAGRAMS_ABS, "manifest.json");
+const MMDC = process.env.MMDC || path.join(REPO_ROOT, "node_modules", ".bin", "mmdc");
+
+/** Collect every ```mermaid fence: { slug, index, content }. */
+function collectFences() {
+  const fences = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(full); continue; }
+      if (!e.name.endsWith(".md")) continue;
+      const rel = path.relative(REPO_ROOT, full).split(path.sep).join("/");
+      const slug = diagramSlug(rel);
+      const lines = fs.readFileSync(full, "utf-8").split("\n");
+      let fence = null;
+      let buf = [];
+      let index = 0;
+      for (const line of lines) {
+        const m = line.match(/^\s*(```+|~~~+)\s*mermaid\s*$/i);
+        if (!fence && m) { fence = m[1].slice(0, 3); buf = []; continue; }
+        if (fence && line.trimStart().startsWith(fence)) {
+          fences.push({ slug, index: index++, content: buf.join("\n").trim() });
+          fence = null;
+          continue;
+        }
+        if (fence) buf.push(line);
+      }
+    }
+  };
+  walk(USER_GUIDE_DIR);
+  return fences;
+}
+
+const sha = (s) => crypto.createHash("sha256").update(s).digest("hex").slice(0, 16);
+const assetRel = (slug, index) => `${DIAGRAMS_DIR}/${slug}/${index}.svg`;
+
+// No output sanitization step: the SVGs are trusted build-time content (rendered
+// from repo-authored ```mermaid fences, not user input) and are consumed only
+// via <img src> — an <img>-loaded SVG is non-scriptable by the HTML spec — and
+// the portal route additionally serves them under a `default-src 'none'` CSP.
+// Regex-based HTML sanitization is intentionally NOT used (it is provably
+// incomplete; the architectural control above is the real boundary).
+
+function renderOne(content, outAbs, tmpDir, puppeteerCfg) {
+  const tmp = path.join(tmpDir, `d-${sha(content)}.mmd`);
+  fs.writeFileSync(tmp, `${content}\n`);
+  fs.mkdirSync(path.dirname(outAbs), { recursive: true });
+  execFileSync(MMDC, ["-i", tmp, "-o", outAbs, "-b", "transparent", "--puppeteerConfigFile", puppeteerCfg], {
+    stdio: ["ignore", "ignore", "inherit"],
+  });
+  fs.rmSync(tmp, { force: true });
+}
+
+function loadManifest() {
+  try { return JSON.parse(fs.readFileSync(MANIFEST, "utf-8")).diagrams || {}; } catch { return {}; }
+}
+
+function main() {
+  const check = process.argv.includes("--check");
+  const fences = collectFences();
+  const wanted = new Map(fences.map((f) => [`${f.slug}/${f.index}`, f]));
+  const manifest = loadManifest();
+
+  if (check) {
+    const problems = [];
+    for (const [key, f] of wanted) {
+      const abs = path.join(REPO_ROOT, assetRel(f.slug, f.index));
+      if (!fs.existsSync(abs)) problems.push(`missing SVG for ${key} — run: pnpm docs:diagrams`);
+      else if (manifest[key] !== sha(f.content)) problems.push(`stale SVG for ${key} (fence changed) — run: pnpm docs:diagrams`);
+    }
+    for (const key of Object.keys(manifest)) if (!wanted.has(key)) problems.push(`orphaned diagram ${key} — run: pnpm docs:diagrams`);
+    if (problems.length) { console.error("Doc diagrams out of date:\n  " + problems.join("\n  ")); process.exit(1); }
+    console.log(`Doc diagrams fresh (${wanted.size}).`);
+    return;
+  }
+
+  // Render mode. Prune orphans, render/refresh, rewrite manifest.
+  fs.mkdirSync(DIAGRAMS_ABS, { recursive: true });
+  // Unique, unpredictable per-run temp dir (mkdtemp) for the intermediate .mmd
+  // and puppeteer config — avoids the predictable-temp-path race/symlink class.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dpf-diagrams-"));
+  const puppeteerCfg = path.join(tmpDir, "puppeteer.json");
+  const cfg = { args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"] };
+  // On Alpine/musl (the convergence sandbox), point at the system chromium —
+  // Google's glibc Chrome cannot run there. Set PUPPETEER_EXECUTABLE_PATH.
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) cfg.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  fs.writeFileSync(puppeteerCfg, JSON.stringify(cfg));
+
+  try {
+    for (const key of Object.keys(manifest)) {
+      if (!wanted.has(key)) {
+        const abs = path.join(REPO_ROOT, `${DIAGRAMS_DIR}/${key}.svg`);
+        fs.rmSync(abs, { force: true });
+      }
+    }
+    const next = {};
+    let rendered = 0;
+    for (const [key, f] of wanted) {
+      const abs = path.join(REPO_ROOT, assetRel(f.slug, f.index));
+      const hash = sha(f.content);
+      if (manifest[key] !== hash || !fs.existsSync(abs)) { renderOne(f.content, abs, tmpDir, puppeteerCfg); rendered++; }
+      next[key] = hash;
+    }
+    fs.writeFileSync(MANIFEST, `${JSON.stringify({ generatedBy: "scripts/render-doc-diagrams.mjs", diagrams: next }, null, 2)}\n`);
+    console.log(`Rendered ${rendered} diagram(s); ${wanted.size} total in manifest.`);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+main();
