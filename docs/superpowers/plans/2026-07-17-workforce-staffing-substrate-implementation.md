@@ -88,33 +88,98 @@ and the post-solve gate: rejects a rogue option that double-books despite the
 solver self-reporting zero violations, and withholds publish when the
 jurisdiction is unresolved (6 tests, `solver/adapter.test.ts`).
 
-### Phase 4 — AI Staffing Coworker proposal flow + human-authority boundary
+### Phase 4 — AI Staffing Coworker proposal flow + human-authority boundary *(core built)*
 
-**Deliverable.** Phase-1 coworker authority (design §11): read governed facts, prepare demand, run validation/optimization, compare options, create `AgentActionProposal` with typed staffing links (reuse existing governance substrate). Cannot publish or message employees without approval. Publish/exception/leave/notify require a valid actor + delegation + evidence; publish authority bound to the owner/operator capability (decision 2), delegable by scope later.
+**Deliverable.** Phase-1 coworker authority (design §11). **Built in this slice**
+(`apps/web/lib/workforce/staffing/coworker/`): `authority.ts` — the pure
+authorization boundary (`authorizeStaffingAction`): prepare/refresh are the
+coworker's unattended Phase-1 authority; publish/notify need a human with the
+`staffing.publish` capability (decision 2) or a matching, unexpired, scoped
+`DelegationGrant`; leave/exception are **human-only and never delegable** (spec
+§2.2, §11). `prepare-proposal.ts` — composes the `AgentActionProposal` payload
+(`staffing.publish_schedule`) from DPF-validated solver options, offering only
+publishable ones and returning an honest `noFeasibleSchedule` proposal when none
+qualify (spec §8.3); `autoPublish` is always false — composing never publishes.
+
+**Pending (integration):** wiring the payload to the real `AgentActionProposal`
+row (thread/message context) + `DelegationGrant` reads + `DecisionInteraction`
+evidence — a thin governed wrapper over the coworker runtime.
 
 **Files.** `apps/web/lib/workforce/staffing/coworker/`; governance links reuse `AgentActionProposal`/`DelegationGrant`/`DecisionInteraction`.
 
-**Verification.** No publication/exception/notification without a valid actor + evidence record; a proposal never mutates assignments; delegation scope enforced.
+**Verification.** 9 tests (`coworker/coworker.test.ts`): coworker may prepare/
+refresh but not publish without a grant; valid/expired/revoked/exhausted/org-
+and location-scoped delegations; leave/exception non-delegable even with a grant;
+human publish gated on capability; proposal recommends fewest-unfilled publishable
+option and never auto-publishes; honest no-feasible-schedule path.
 
-### Phase 5 — MCP staffing tool pack
+### Phase 5 — MCP staffing tool pack *(read surface built)*
 
-**Deliverable.** New `staffing-pack.ts` (or a scoped extension of `workforce-pack.ts`): read tools (coverage, unscheduled demand, minimum-necessary availability/eligibility outcomes), proposal tools, employee availability/preference write tools — all deny-by-default grants. Registered via `pack-registry.ts`.
+**Deliverable.** New `staffing-pack.ts`. **Built in this slice:** the read
+surface — `list_staffing_demand` and `get_staffing_coverage` (minimum-necessary
+counts, not private employee detail), on the `registry_read` coworker baseline,
+registered via `pack-registry.ts`, with grants mirrored into `agent-grants.ts
+TOOL_TO_GRANTS` (the gating source). **Follow-up:** the write/proposal tools
+(declare availability, set preference, prepare/publish proposal) as deny-by-
+default tools carrying their own scoped grants and routing through the Phase 4
+human-authority boundary.
 
-**Files.** `apps/web/lib/mcp/packs/staffing-pack.ts` + test; `pack-registry.ts` registration.
+**Files.** `apps/web/lib/mcp/packs/staffing-pack.ts` (+ test); `pack-registry.ts` registration; `apps/web/lib/tak/agent-grants.ts` grant mirror.
 
-**Verification.** Pack tests (grant shapes, tool contracts); tools callable via MCP JSON-RPC against the running portal.
+**Verification.** Pack-shape test (4) + the cross-pack drift guard (40, asserts
+grants match TOOL_TO_GRANTS) + pack-registry & agent-grants guards (139 total) —
+all DB-free and green. DB-backed handler execution verified in CI. Live MCP
+JSON-RPC callability is a live-verification item for Phase 8.
 
-### Phase 6 — UX surface: People → Staffing (golden = appointment + field-crew)
+### Phase 6 — UX surface: People → Staffing (golden = appointment + field-crew) *(view-model built; React render pending live)*
 
-**Deliverable.** Extend `/employee` with `?view=staffing` (coordinator) per §15.1; first viewport per §15.2 (planning window, team/location scope, coverage status, unscheduled demand, hard conflicts, last-minute changes, pending decisions; actions Prepare / Compare / Approve-and-publish). Comparison of 2–4 options with the §8.3 explanation contract. Employee "my schedule / availability" scoped to self; approver deep-links from the attention inbox. Golden seed/demo data for one appointment-coverage archetype + one trades field-crew.
+**Deliverable.** Extend `/employee` with `?view=staffing` (coordinator) per §15.1;
+first viewport per §15.2. **Built in this slice** (`apps/web/lib/workforce/staffing/view/coordinator-view.ts`):
+`buildCoordinatorView` — the pure computation of the first-viewport model
+(coverage classification covered/partial/uncovered + rate, unscheduled-demand
+shortfalls soonest-first, hard conflicts from the constraint engine, last-minute
+changes newest-first, pending-decision count) with planning-window + location
+scoping; and `maskEventForCoordinator` — the single place the privacy contract
+(spec §11, §13.4) is enforced: a coordinator sees a `Busy` mask, never a private
+event title.
 
-**Files.** `apps/web/app/(shell)/employee/` (staffing view components); `apps/web/components/employee/` (staffing components); demo/seed data.
+**Pending — needs the live portal:** the React surface that renders this model at
+`/employee?view=staffing` (+ the comparison view and employee self-view), and the
+golden seed/demo data. Component tests run in jsdom (the env broken headless), so
+rendering is verified live per the design's deferred-visual-verification.
 
-**Verification.** Live portal (contributor preview :3001) — coordinator happy path, employee correction, infeasible ("no feasible schedule") explanation without fabricated fill, private-title redaction, keyboard/accessible table operation, employee-timezone clarity.
+**Files.** `apps/web/lib/workforce/staffing/view/` (pure view-model — built); `apps/web/app/(shell)/employee/` + `apps/web/components/employee/` (render — pending); demo/seed data.
 
-### Phase 7 — Calendar & comms projections
+**Verification.** 10 tests (`view/coordinator-view.test.ts`): coverage
+classification, window/scope/cancelled exclusion, shortfall ordering, conflict
+surfacing, change ordering, and the privacy mask (private→Busy, public→title,
+default-mask non-public). Live-portal render + a11y verification is a Phase-8
+live-install item.
 
-**Deliverable.** Project confirmed assignments into `CalendarEventView` (no second canonical calendar copy); harden `calendar-data.ts` `employeeProfileId` scoping (§3.3 prerequisite) before private staffing projections depend on it. Comms candidate-fact flow (time-off intent → employee confirmation → `LeaveRequest(pending)` → approved-leave hard constraint → repair proposal); minimal source envelope only.
+### Phase 7 — Calendar & comms projections *(pure projections built)*
+
+**Deliverable.** Project confirmed assignments into the calendar; the
+time-off-intent comms flow. **Built in this slice**
+(`apps/web/lib/workforce/staffing/projections/`): `assignment-to-calendar.ts` —
+`projectAssignmentsToCalendar` projects only confirmed/published assignments into
+read-only, idempotent (`sourceRef`) calendar-view rows (staffing is authoritative;
+the calendar is a one-way projection, never a second canonical copy — spec §5.2);
+`candidate-fact-flow.ts` — `applyEmployeeReview`, the pure state machine that
+enforces **a message is not leave** (spec §2.2): a time-off intent promotes only
+to a *pending* `LeaveRequest` and only after employee confirmation with a resolved
+identity — never approved leave, never from an unresolved/ambiguous subject or a
+non-intent fact.
+
+**Pending — needs the live substrate:** wiring the projection into
+`CalendarEventView` writes and hardening `calendar-data.ts` `employeeProfileId`
+scoping (§3.3 prerequisite); persisting the pending `LeaveRequest` through the
+governed leave workflow; the impacted-schedule repair proposal.
+
+**Verification.** 8 tests (`projections/projections.test.ts`): projection filters
+to confirmed/published + read-only + stable idempotency key; and the
+message-is-not-leave matrix — pending-only promotion, block on unresolved/
+ambiguous identity, block on non-intent kind, reject path, employee date edit,
+inverted/incomplete range block.
 
 **Files.** `apps/web/lib/workforce/calendar-data.ts` (scoping fix); `apps/web/lib/workforce/staffing/projections/`; candidate-fact ingestion module.
 

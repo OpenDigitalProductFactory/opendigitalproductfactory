@@ -99,6 +99,27 @@ export type AttentionAudience = {
   assigneePrincipalId?: string;
 };
 
+/** Optional source facts used by the owner projection. This is still read-model
+ * metadata: source rows remain canonical and no parallel attention record is
+ * persisted. A source should populate only facts it genuinely owns. */
+export type AttentionTechnicalMetadata = {
+  workType?: string;
+  effort?: string;
+  epic?: string;
+  ownershipDomain?: string;
+  backlogItemId?: string;
+  featureBuildId?: string;
+  detectedBy?: string;
+};
+
+/** Proactivity evidence carried by a coworker-owned source. The existing closed
+ * level union remains canonical; the owner UI calls `quiet` “Reactive”. */
+export type AttentionProactivity = {
+  level: import("@/lib/proactivity/proactivity-types").ProactivityLevel;
+  actorId?: string;
+  policyId?: string;
+};
+
 export type AttentionItem = {
   /** Stable per source row, e.g. "escalation:PIR-…", "ai-decision:DI-…". */
   id: string;
@@ -123,4 +144,9 @@ export type AttentionItem = {
   /** To the owning surface for heavy context; never reimplemented in the inbox. */
   deepLink: string;
   audience: AttentionAudience;
+  /** Per-coworker policy when the source resolved one; otherwise the owner
+   * projection uses its balanced fallback. */
+  proactivity?: AttentionProactivity;
+  /** Builder-grade facts preserved for progressive disclosure. */
+  technical?: AttentionTechnicalMetadata;
 };

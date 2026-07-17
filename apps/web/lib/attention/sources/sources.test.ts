@@ -123,12 +123,27 @@ describe("pausedAiToAttentionItem", () => {
   };
 
   it("treats a high-risk input-required pause as irreversible (override-eligible)", () => {
-    const item = pausedAiToAttentionItem(base);
+    const item = pausedAiToAttentionItem({
+      ...base,
+      a2aMetadata: {
+        riskClass: "high-risk",
+        proactivity: {
+          resolvedLevel: "assertive",
+          policyId: "proactivity:customer-communication:assertive",
+          evidenceRefs: [{ kind: "agent", id: "marketing-coworker" }],
+        },
+      },
+    });
     expect(item.riskClass).toBe("high-risk");
     expect(item.triage.residueReason).toBe("input-required");
     expect(item.triage.irreversible).toBe(true);
     expect(item.context).toContain("4,000 recipients");
     expect(item.audience.assigneePrincipalId).toBe("principal-7");
+    expect(item.proactivity).toEqual({
+      level: "assertive",
+      actorId: "marketing-coworker",
+      policyId: "proactivity:customer-communication:assertive",
+    });
   });
 
   it("treats auth-required as a missing-credential review, not judgment or irreversible", () => {
@@ -207,6 +222,11 @@ describe("agentProposalToAttentionItem", () => {
     expect(item.actions).toContainEqual({ kind: "open-in-context", label: "Review proactivity change", href: "/platform/ai" });
     expect(item.actions).toContainEqual({ kind: "snooze", label: "Snooze" });
     expect(item.context).not.toMatch(/AP-|queue|diagnostic/i);
+    expect(item.proactivity).toEqual({
+      level: "balanced",
+      actorId: "dispatcher",
+      policyId: "proactivity:field-dispatch-appointment:balanced",
+    });
   });
 });
 
@@ -254,6 +274,11 @@ describe("scheduledTaskToAttentionItem", () => {
       { kind: "open-in-context", label: "Review scheduled work", href: "/platform/schedule" },
       { kind: "snooze", label: "Snooze" },
     ]);
+    expect(item.proactivity).toEqual({
+      level: "assertive",
+      actorId: "customer-success",
+      policyId: "proactivity:scheduled-task:assertive",
+    });
     expect(item.context).not.toMatch(/TR-|customer-follow-up-daily|Provider timeout|queue|diagnostic/i);
   });
 

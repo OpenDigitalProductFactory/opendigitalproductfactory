@@ -45,6 +45,7 @@ import { nonprodLeasePack } from "./packs/nonprod-lease-pack";
 import { knowledgePack } from "./packs/knowledge-pack";
 import { demandScoringPack } from "./packs/demand-scoring-pack";
 import { workforcePack } from "./packs/workforce-pack";
+import { staffingPack } from "./packs/staffing-pack";
 import { versionHistoryPack } from "./packs/version-history-pack";
 import { eaOntologyPack } from "./packs/ea-ontology-pack";
 import { discoveryInventoryPack } from "./packs/discovery-inventory-pack";
@@ -115,6 +116,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   knowledgePack,
   demandScoringPack,
   workforcePack,
+  staffingPack,
   versionHistoryPack,
   eaOntologyPack,
   discoveryInventoryPack,

@@ -206,7 +206,13 @@ async function approveProactivityChangeProposal(
 }
 
 async function rejectProactivityChangeProposal(
-  proposal: { proposalId: string; actionType: string; parameters: unknown },
+  proposal: {
+    proposalId: string;
+    actionType: string;
+    parameters: unknown;
+    agentId: string;
+    threadId: string;
+  },
   userId: string,
   reason?: string,
 ): Promise<{ success: boolean; error?: string }> {
@@ -245,6 +251,15 @@ async function rejectProactivityChangeProposal(
       },
     },
   });
+
+  await prisma.agentMessage.create({
+    data: {
+      threadId: proposal.threadId,
+      role: "system",
+      content: `Proactivity proposal declined: ${reason ?? "Keep the current level"}.`,
+      agentId: proposal.agentId,
+    },
+  }).catch(() => {});
 
   return { success: true };
 }

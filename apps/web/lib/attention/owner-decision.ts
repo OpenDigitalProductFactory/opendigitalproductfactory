@@ -1,0 +1,113 @@
+import type { AttentionAction, AttentionItem, AttentionSource } from "./types";
+import {
+  consequenceFor,
+  headlineFor,
+  recommendationFor,
+  specialistFor,
+  whyItMattersFor,
+} from "./owner-decision-copy";
+import { builderActions, technicalFields } from "./owner-technical-detail";
+
+export type OwnerDecisionTag = {
+  label: string;
+  kind: "money" | "public" | "reversible" | "deadline";
+};
+
+export type OwnerDecisionChoice = AttentionAction & { href: string };
+
+export type OwnerTechnicalField = { label: string; value: string };
+
+export type OwnerDecisionCard = {
+  id: string;
+  source: AttentionSource;
+  headline: string;
+  whyItMatters: string;
+  ifYouDoNothing: string;
+  recommendation: {
+    lead: "Your COO recommends";
+    text: string;
+    specialistByline: string;
+  };
+  choices: OwnerDecisionChoice[];
+  tags: OwnerDecisionTag[];
+  technical: {
+    fields: OwnerTechnicalField[];
+    builderActions: OwnerDecisionChoice[];
+  };
+};
+
+export function translateAttentionToOwnerDecision(
+  item: AttentionItem,
+  nowMs: number,
+): OwnerDecisionCard {
+  return {
+    id: item.id,
+    source: item.source,
+    headline: headlineFor(item),
+    whyItMatters: whyItMattersFor(item),
+    ifYouDoNothing: consequenceFor(item),
+    recommendation: {
+      lead: "Your COO recommends",
+      text: recommendationFor(item),
+      specialistByline: specialistFor(item.source),
+    },
+    choices: ownerChoices(item),
+    tags: tagsFor(item, nowMs),
+    technical: {
+      fields: technicalFields(item),
+      builderActions: builderActions(item),
+    },
+  };
+}
+
+function ownerChoices(item: AttentionItem): OwnerDecisionChoice[] {
+  const linked = item.actions.filter(
+    (action): action is OwnerDecisionChoice =>
+      typeof action.href === "string" && isOwnerSafeHref(action.href),
+  );
+  if (linked.length > 0) return linked.slice(0, 3).map(withPlainChoiceLabel);
+  return [
+    {
+      kind: "open-in-context",
+      label: "Review this decision",
+      href: `/workspace/inbox?attentionId=${encodeURIComponent(item.id)}`,
+    },
+  ];
+}
+
+function isOwnerSafeHref(href: string): boolean {
+  return href.startsWith("/") && !/^\/(?:ops|build|admin|platform)(?:\/|\?|#|$)/i.test(href);
+}
+
+function withPlainChoiceLabel(action: OwnerDecisionChoice): OwnerDecisionChoice {
+  const label = action.label
+    .replace(/AI Workforce/gi, "your digital team")
+    .replace(/System Health/gi, "technical health")
+    .replace(/routing workbench/gi, "routing choice")
+    .replace(/scheduled work/gi, "scheduled task");
+  return { ...action, label };
+}
+
+function tagsFor(item: AttentionItem, nowMs: number): OwnerDecisionTag[] {
+  const tags: OwnerDecisionTag[] = [];
+  if (item.source === "approval-bill" || item.source === "approval-expense") {
+    tags.push({ label: "Costs money", kind: "money" });
+  }
+  if (item.source === "approval-outbound" || item.source === "compliance-submission") {
+    tags.push({ label: "Goes public", kind: "public" });
+  }
+  if (!item.triage.irreversible) tags.push({ label: "Reversible", kind: "reversible" });
+  const due = dueLabel(item.triage.deadlineIso, nowMs);
+  if (due) tags.push({ label: due, kind: "deadline" });
+  return tags;
+}
+
+function dueLabel(deadlineIso: string | undefined, nowMs: number): string | null {
+  if (!deadlineIso) return null;
+  const deadline = new Date(deadlineIso).getTime();
+  if (!Number.isFinite(deadline)) return null;
+  const days = Math.ceil((deadline - nowMs) / 86_400_000);
+  if (days < 0) return "Past due";
+  if (days === 0) return "Due today";
+  return `Due in ${days} day${days === 1 ? "" : "s"}`;
+}

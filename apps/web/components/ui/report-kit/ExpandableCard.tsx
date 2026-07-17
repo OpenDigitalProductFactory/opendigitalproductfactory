@@ -11,6 +11,10 @@ export interface ExpandableCardProps {
   onOpenChange: (open: boolean) => void;
   /** Always-visible record summary. Render domain labels, badges, and metadata here. */
   summary: ReactNode;
+  /** Optional always-visible controls rendered outside the disclosure button.
+   * Use this when the record has primary actions that must not be nested in the
+   * interactive summary trigger. */
+  actions?: ReactNode;
   /** Inline detail content revealed below the summary. */
   children: ReactNode;
   /** Heading level appropriate to the surrounding page hierarchy. Default 3. */
@@ -31,6 +35,7 @@ export function ExpandableCard({
   open,
   onOpenChange,
   summary,
+  actions,
   children,
   headingLevel = 3,
   className = "",
@@ -68,6 +73,10 @@ export function ExpandableCard({
           </span>
         </button>
       </Heading>
+
+      {actions ? (
+        <div className="border-t border-[var(--dpf-border)] px-4 py-3">{actions}</div>
+      ) : null}
 
       {open && (
         <div

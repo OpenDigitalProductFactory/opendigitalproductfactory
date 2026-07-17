@@ -17,6 +17,24 @@ The label "customer-blocking & high-risk first" is also unbacked — none of the
 
 Net: even a college-educated technical founder was lost; for the target plumber persona the task is impossible. The intent (`EP-ATTENTION-SURFACE`, "NO composite score" triage) is right; the realization leaks builder-grade vocabulary and volume onto the owner.
 
+## Research & Benchmarking
+
+### Open-source leaders and their data models
+
+- **GitLab To-Do List.** GitLab models an attention item as an explicit action plus a typed target: `action_name`, `target_type`, target payload/URL, author, state, and timestamps. Its product surface describes the queue as items “waiting for your input” and supports snooze, done, undo, and bulk actions. We adopt the separation between *why attention was created* and *the underlying record*, but translate both into an owner decision before rendering. Sources: [To-Do List API](https://docs.gitlab.com/api/todos/), [To-Do List product behavior](https://docs.gitlab.com/user/todos/).
+- **Novu Inbox.** Novu's current inbox contract preserves a rich notification record — subject/body, recipient, read/seen/archive/snooze state, timestamps, primary and secondary actions, redirect, tags, custom data, workflow, and severity — behind a composable inbox UI. We adopt the full-fidelity record plus replaceable presentation layer, and reject using unread state or generic severity as a proxy for owner priority. Sources: [Inbox architecture](https://docs.novu.co/platform/inbox), [Inbox notification data transfer object](https://github.com/novuhq/novu/blob/7c05fe37d186178dcafcfaada686d0bb928ea1f4/apps/api/src/app/inbox/dtos/inbox-notification.dto.ts).
+- **Plane.** Plane's notification model keeps entity identity, raw title/message/data, sender/trigger actor, recipient, and separate `read_at`, `snoozed_till`, and `archived_at` lifecycle fields. We adopt its durable separation between source detail and inbox disposition, while rejecting a single chronological notification stream for business owners. Source: [Plane notification model](https://github.com/makeplane/plane/blob/7cef741c29cf61d3bca18dc892e6af11a1e7becc/apps/api/plane/db/models/notification.py).
+
+### Commercial leaders
+
+- **Linear Inbox and Pulse.** Linear puts work needing attention in one inbox, supports contextual actions and snooze, and delivers lower-urgency project updates as daily or weekly summaries. We adopt action-in-context and scheduled batching. We reject its broad “all subscribed notifications arrive” rule because the DPF owner lane must exclude platform plumbing. Sources: [Linear Inbox](https://linear.app/docs/inbox), [Linear Pulse](https://linear.app/docs/pulse).
+- **Slack Activity.** Slack offers dense and detailed layouts, filters, direct actions, bulk clearing, and a recoverable Cleared view. We adopt the principle that clearing or demoting an item does not destroy its history. We reject owner-configured feed complexity as the default; the proactivity classifier should do that sorting. Source: [Slack Activity](https://slack.com/help/articles/19693583638803-Get-your-work-done-from-the-Activity-view).
+- **Microsoft Teams Activity.** Teams distinguishes notification types and provides unread and category filters, but presents a broad activity timeline and expires entries after 30 days. We adopt recognizable type cues only where words improve the decision, and reject time-based loss of technical detail. Source: [Teams Activity feed](https://support.microsoft.com/en-us/teams/chat-channels/explore-the-activity-feed-in-microsoft-teams).
+
+### Standards and resulting choices
+
+The technical drawer follows the [WAI-ARIA disclosure pattern](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/): a button owns the expanded state, exposes `aria-expanded`, references the controlled panel, and works with Enter and Space. The benchmark gap this design fills is altitude: the products above optimize notification triage, while DPF must first decide whether an item belongs to the owner, a weekly review, or the technical custodian. The adopted contract therefore preserves the rich source record, projects a separate owner question, and keeps irreversible money/public decisions above every proactivity setting.
+
 ## Design principles
 
 - **Progressive disclosure** (founder patent domain): plain decision on top, full technical detail one click down — *never deleted*.
@@ -46,10 +64,10 @@ Card contract (each layer mandatory):
 - Tags — risk/impact in words (Costs money · Goes public · Reversible · Due in 3 days).
 
 ### 3. Technical-detail drawer (detail preserved)
-A collapsed "Technical detail — for builders and your AI team" expander holds every field that exists on the backlog today: original title, work type / effort, source, epic, ownership domain, FB/BI IDs, detected date + actor, and the builder verbs (Open in Operations, Resume build, Edit fields). Nothing is deleted; it moves to where a builder looks.
+A collapsed "Technical detail — for builders and your digital team" expander holds every field that exists on the backlog today: original title, work type / effort, source, epic, ownership domain, FB/BI IDs, detected date + actor, and the builder verbs (Open in Operations, Resume build, Edit fields). Nothing is deleted; it moves to where a builder looks.
 
 ### 4. Calm, honest counts
-Lead with "N things need you today". Demote the 3040-item / 138-epic / "276 builds" workload to a quiet "your AI is handling — no action needed" strip. Those counts are the AI's workload, not the owner's.
+Lead with "N things need you today". Demote the 3040-item / 138-epic / "276 builds" workload to a quiet "your digital team is handling — no action needed" strip. Those counts are the digital team's workload, not the owner's.
 
 ### 5. Batching + coworker self-tuning
 - **Weekly digest** — low-urgency batchable items (e.g. "85 improvement proposals need review", coworker-gap suggestions, upcoming-bill previews) collect into a Friday digest, not the daily inbox. Actions: "Looks good, no changes" / "Snooze to next week" / per-item "Review".
