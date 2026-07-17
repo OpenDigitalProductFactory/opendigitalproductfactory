@@ -20,6 +20,10 @@ import type { ActivityContract } from "./activity-contract";
 import type { ActivityHarnessConfidenceOverride } from "./activity-harness-governance";
 import { filterByPolicy } from "./pipeline";
 import { checkModelCapacity, getEndpointRuntimeState } from "./rate-tracker";
+import {
+  applyCapacitySoftExclusion,
+  type CapacitySnapshot,
+} from "./capacity-routing-exclude";
 import { cliSaturationPercent } from "./cli-concurrency";
 import { usesCodexCli, usesCliAdapter } from "./provider-utils";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
@@ -169,6 +173,12 @@ interface HardFilterResultV2 {
 function filterHardV2(
   endpoints: EndpointManifest[],
   contract: RequestContract,
+  /**
+   * Optional ProviderCapacityStatus snapshots (BI-3607DDDA). Soft-excludes
+   * reauth/rate-limited/billing providers when a healthy peer remains.
+   */
+  capacityByProvider: ReadonlyMap<string, CapacitySnapshot> = new Map(),
+  nowMs: number = Date.now(),
 ): HardFilterResultV2 {
   const eligible: EndpointManifest[] = [];
   const excluded: CandidateTrace[] = [];
@@ -215,6 +225,7 @@ function filterHardV2(
     }
   }
 
+  let afterRuntime: EndpointManifest[];
   if (cooled.length > 0 && live.length > 0) {
     for (const { ep, reason } of cooled) {
       excluded.push({
@@ -229,12 +240,42 @@ function filterHardV2(
         excludedReason: reason,
       });
     }
-    return { eligible: live, excluded };
+    afterRuntime = live;
+  } else {
+    // All eligible endpoints are cooled down (or none are) — keep `eligible` as-is
+    // so the turn can still proceed against the least-bad option.
+    afterRuntime = eligible;
   }
 
-  // All eligible endpoints are cooled down (or none are) — keep `eligible` as-is
-  // so the turn can still proceed against the least-bad option.
-  return { eligible, excluded };
+  // ── Persisted capacity snapshot — SOFT exclusion (BI-3607DDDA) ───────────
+  // ProviderCapacityStatus records OBSERVED 401/rate-limit/billing from real
+  // API responses. Without this, ModelProvider.status stays "active" and the
+  // router keeps ranking a dead codex/OAuth provider #1 until it is manually
+  // retired. Same soft contract as the runtime circuit: only drop when a peer
+  // remains eligible.
+  if (capacityByProvider.size > 0) {
+    const cap = applyCapacitySoftExclusion({
+      endpoints: afterRuntime,
+      capacityByProvider,
+      nowMs,
+    });
+    for (const { endpoint: ep, reason } of cap.excluded) {
+      excluded.push({
+        endpointId: ep.id,
+        providerId: ep.providerId,
+        modelId: ep.modelId,
+        endpointName: ep.name,
+        fitnessScore: 0,
+        dimensionScores: {},
+        costPerOutputMToken: ep.costPerOutputMToken,
+        excluded: true,
+        excludedReason: reason,
+      });
+    }
+    return { eligible: cap.eligible, excluded };
+  }
+
+  return { eligible: afterRuntime, excluded };
 }
 
 // ── Full pipeline: routeEndpointV2 ──────────────────────────────────────────
@@ -268,6 +309,13 @@ export async function routeEndpointV2(
     skipRecipe?: boolean;
     activityContract?: ActivityContract;
     activityHarnessConfidenceOverrides?: ActivityHarnessConfidenceOverride[];
+    /**
+     * Optional ProviderCapacityStatus map (providerId → snapshot). When
+     * omitted, the pipeline loads fresh rows from the DB (BI-3607DDDA). Tests
+     * pass an empty Map to skip IO.
+     */
+    capacityByProvider?: ReadonlyMap<string, CapacitySnapshot>;
+    nowMs?: number;
   },
 ): Promise<RouteDecision> {
   const timestamp = new Date();
@@ -380,8 +428,28 @@ export async function routeEndpointV2(
     );
   }
 
-  // ── Stage 3: Hard filter (V2 — contract-based) ──────────────────────────
-  const hardResult = filterHardV2(working, contract);
+  // ── Stage 3: Hard filter (V2 — contract-based) + capacity soft exclude ──
+  const nowMs = opts?.nowMs ?? Date.now();
+  let capacityByProvider = opts?.capacityByProvider;
+  if (!capacityByProvider) {
+    try {
+      const { prisma } = await import("@dpf/db");
+      const rows = await prisma.providerCapacityStatus.findMany({
+        select: { providerId: true, state: true, retryAt: true },
+      });
+      const map = new Map<string, CapacitySnapshot>();
+      for (const row of rows) {
+        map.set(row.providerId, {
+          state: row.state,
+          retryAtMs: row.retryAt ? row.retryAt.getTime() : null,
+        });
+      }
+      capacityByProvider = map;
+    } catch {
+      capacityByProvider = new Map();
+    }
+  }
+  const hardResult = filterHardV2(working, contract, capacityByProvider, nowMs);
   working = hardResult.eligible;
 
   for (const trace of hardResult.excluded) {
