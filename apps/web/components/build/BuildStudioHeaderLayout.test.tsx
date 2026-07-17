@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import {
@@ -18,6 +18,11 @@ const routerMocks = vi.hoisted(() => ({
   replace: vi.fn(),
 }));
 
+const backlogBuildMocks = vi.hoisted(() => ({
+  createBuildStudioBacklogIntake: vi.fn(),
+  startBacklogBuild: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: routerMocks.refresh,
@@ -32,6 +37,11 @@ vi.mock("@/lib/actions/build", () => ({
   deleteFeatureBuild: vi.fn(),
   resetBuildExecution: vi.fn(),
   retryBuildExecution: vi.fn(),
+}));
+
+vi.mock("@/lib/actions/backlog-build", () => ({
+  createBuildStudioBacklogIntake: backlogBuildMocks.createBuildStudioBacklogIntake,
+  startBacklogBuild: backlogBuildMocks.startBacklogBuild,
 }));
 
 vi.mock("@/lib/actions/build-read", () => ({
@@ -211,6 +221,10 @@ function makeEpicRollup(overrides: Partial<EpicRollupView> = {}): EpicRollupView
 }
 
 describe("BuildStudio active-build header layout", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("intake CTA is labelled 'Start a new build' not just 'New' (BI-950FE085)", () => {
     // Regression guard: Dale had no idea what "New" created. The CTA must
     // name the action + artifact so it's discoverable without training.
@@ -225,6 +239,46 @@ describe("BuildStudio active-build header layout", () => {
     );
     expect(html).toContain("Start a new build");
     expect(html).not.toContain(">New<");
+  });
+
+  it("files a portfolio-attributed backlog item before promotion from the Build Studio sidebar", async () => {
+    backlogBuildMocks.createBuildStudioBacklogIntake.mockResolvedValueOnce({
+      status: "created",
+      item: {
+        itemId: "BI-NEW1234",
+        title: "Improve customer onboarding",
+        portfolioId: "portfolio-foundational",
+        portfolioName: "Foundational",
+      },
+    });
+
+    render(
+      <BuildStudio
+        builds={[]}
+        portfolios={[{ id: "portfolio-foundational", slug: "foundational", name: "Foundational" }]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/Describe a new feature/i), {
+      target: { value: "Improve customer onboarding" },
+    });
+    fireEvent.change(screen.getByLabelText("Portfolio"), {
+      target: { value: "portfolio-foundational" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "File backlog item" }));
+
+    await waitFor(() => {
+      expect(backlogBuildMocks.createBuildStudioBacklogIntake).toHaveBeenCalledWith({
+        title: "Improve customer onboarding",
+        portfolioId: "portfolio-foundational",
+      });
+    });
+    expect(await screen.findByText("BI-NEW1234")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Promote to Feature Build" })).toBeTruthy();
+    expect(backlogBuildMocks.startBacklogBuild).not.toHaveBeenCalled();
   });
 
   it("renders the empty state instead of crashing when server data arrays are missing", () => {

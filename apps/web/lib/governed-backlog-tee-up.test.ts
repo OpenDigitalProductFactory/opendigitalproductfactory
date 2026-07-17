@@ -209,6 +209,7 @@ describe("governed backlog tee-up", () => {
         effortSize: "medium",
         activeBuildId: null,
         digitalProductId: "product-1",
+        portfolioId: "portfolio-1",
         epicId: "epic-1",
         createdAt: new Date("2026-04-24T10:00:00.000Z"),
         epic: { status: "open" },
@@ -239,6 +240,7 @@ describe("governed backlog tee-up", () => {
         effortSize: "medium",
         activeBuildId: null,
         digitalProductId: "product-1",
+        portfolioId: "portfolio-1",
         epicId: "epic-1",
         taxonomyNodeId: "taxonomy-node-1",
         createdAt: new Date("2026-04-24T10:00:00.000Z"),
@@ -295,6 +297,7 @@ describe("governed backlog tee-up", () => {
           title: "Epic-backed workflow work",
           description: "Implement governed workflow details",
           digitalProductId: "product-1",
+          portfolioId: "portfolio-1",
           originatingBacklogItemId: "backlog-epic",
           // BI-52022707 axis D: draft created with draftApprovedAt=null;
           // the auto-approve happens as a separate featureBuild.update

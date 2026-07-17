@@ -3,6 +3,7 @@
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { prisma } from "@dpf/db";
+import * as crypto from "crypto";
 import { revalidatePath } from "next/cache";
 
 // A build in one of these phases is no longer live, so it must not block a
@@ -21,6 +22,86 @@ export type StartBacklogBuildResult =
     status: "blocked";
     error: string;
   };
+
+export type BuildStudioBacklogIntakeResult =
+  | {
+    status: "created";
+    item: {
+      itemId: string;
+      title: string;
+      portfolioId: string;
+      portfolioName: string;
+    };
+  }
+  | {
+    status: "blocked";
+    error: string;
+  };
+
+export async function createBuildStudioBacklogIntake(input: {
+  title: string;
+  portfolioId: string;
+}): Promise<BuildStudioBacklogIntakeResult> {
+  const userId = await requireBuildAccess();
+  const title = input.title.trim();
+  const portfolioId = input.portfolioId.trim();
+  if (!title) return { status: "blocked", error: "Title is required." };
+  if (!portfolioId) return { status: "blocked", error: "Portfolio is required." };
+
+  const portfolio = await prisma.portfolio.findUnique({
+    where: { id: portfolioId },
+    select: { id: true, name: true },
+  });
+  if (!portfolio) return { status: "blocked", error: "Choose a valid portfolio." };
+
+  const item = await prisma.backlogItem.create({
+    data: {
+      itemId: `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      title,
+      type: "portfolio",
+      workType: "feature",
+      source: "user-request",
+      status: "open",
+      triageOutcome: "build",
+      effortSize: "medium",
+      portfolioId: portfolio.id,
+      submittedById: userId,
+      body: title,
+    },
+    select: {
+      id: true,
+      itemId: true,
+      title: true,
+      portfolioId: true,
+    },
+  });
+
+  await prisma.backlogItemActivity.create({
+    data: {
+      backlogItemId: item.id,
+      kind: "build-studio-intake",
+      summary: `Build Studio intake filed ${item.itemId} for ${portfolio.name}.`,
+      recordedById: userId,
+      payload: {
+        portfolioId: portfolio.id,
+        portfolioName: portfolio.name,
+      },
+    },
+  }).catch(() => {});
+
+  revalidatePath("/ops");
+  revalidatePath("/build");
+
+  return {
+    status: "created",
+    item: {
+      itemId: item.itemId,
+      title: item.title,
+      portfolioId: item.portfolioId ?? portfolio.id,
+      portfolioName: portfolio.name,
+    },
+  };
+}
 
 export async function startBacklogBuild(itemId: string): Promise<StartBacklogBuildResult> {
   const userId = await requireBuildAccess();
