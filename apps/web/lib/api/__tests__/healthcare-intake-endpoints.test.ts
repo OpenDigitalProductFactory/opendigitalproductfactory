@@ -6,6 +6,8 @@ vi.mock("../../api/auth-middleware.js", () => ({
 vi.mock("../../healthcare/care-intake-api-repository.js", () => ({
   authorizeAndIssueCareIntakeResumeGrant: vi.fn(),
   getCareIntakePacketProjection: vi.fn(),
+  saveCareIntakePartialResponse: vi.fn(),
+  submitCareIntakePacket: vi.fn(),
 }));
 vi.mock("../../identity/principal-linking.js", () => ({
   resolvePrincipalRecordIdForSessionIdentity: vi.fn(),
@@ -13,10 +15,14 @@ vi.mock("../../identity/principal-linking.js", () => ({
 
 import { POST as issueGrant } from "../../../app/api/v1/healthcare/intake/[packetId]/access-grants/route.js";
 import { GET as getPacket } from "../../../app/api/v1/healthcare/intake/[packetId]/route.js";
+import { PUT as saveResponse } from "../../../app/api/v1/healthcare/intake/[packetId]/responses/[formId]/route.js";
+import { POST as submitPacket } from "../../../app/api/v1/healthcare/intake/[packetId]/submit/route.js";
 import { authenticateRequest } from "../../api/auth-middleware.js";
 import {
   authorizeAndIssueCareIntakeResumeGrant,
   getCareIntakePacketProjection,
+  saveCareIntakePartialResponse,
+  submitCareIntakePacket,
 } from "../../healthcare/care-intake-api-repository.js";
 import { resolvePrincipalRecordIdForSessionIdentity } from "../../identity/principal-linking.js";
 
@@ -25,6 +31,46 @@ const params = { params: Promise.resolve({ packetId: "intake-a" }) };
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers().setSystemTime("2026-08-01T14:00:00.000Z");
+});
+
+describe("PUT /api/v1/healthcare/intake/:packetId/responses/:formId", () => {
+  it("passes an idempotent partial save to the token-scoped repository", async () => {
+    vi.mocked(saveCareIntakePartialResponse).mockResolvedValue({
+      responseId: "intake-response-a", status: "in-progress", version: 1,
+      answeredLinkIds: ["visit-reason"],
+    });
+    const response = await saveResponse(new Request("http://localhost", {
+      method: "PUT",
+      headers: { "content-type": "application/json", "x-intake-resume-token": "opaque-token" },
+      body: JSON.stringify({
+        idempotencyKey: "device-a-save-1", expectedVersion: null, sourceMode: "patient-web",
+        answers: { "visit-reason": "Routine" }, dataCategories: { "visit-reason": "visit-reason" },
+      }),
+    }), { params: Promise.resolve({ packetId: "intake-a", formId: "medical-history" }) });
+    expect(response.status).toBe(200);
+    expect(saveCareIntakePartialResponse).toHaveBeenCalledWith(expect.objectContaining({
+      packetId: "intake-a", formId: "medical-history", token: "opaque-token",
+    }));
+  });
+});
+
+describe("POST /api/v1/healthcare/intake/:packetId/submit", () => {
+  it("returns completeness blockers without advancing an incomplete packet", async () => {
+    vi.mocked(submitCareIntakePacket).mockResolvedValue({
+      ok: false, blockers: ["required-answers-missing"],
+      missingRequiredLinkIds: ["visit-reason"], completionPercent: 50,
+    });
+    const response = await submitPacket(new Request("http://localhost", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-intake-resume-token": "opaque-token" },
+      body: JSON.stringify({ expectedVersion: 2, sourceMode: "patient-web" }),
+    }), params);
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual(expect.objectContaining({
+      blockers: ["required-answers-missing"], missingRequiredLinkIds: ["visit-reason"],
+    }));
+  });
 });
 
 describe("GET /api/v1/healthcare/intake/:packetId", () => {
