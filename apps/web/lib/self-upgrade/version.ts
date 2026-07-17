@@ -125,11 +125,29 @@ async function defaultReadCurrentVersion(): Promise<{ version: string; comparabl
   }
 }
 
+/**
+ * Hard ceiling on the version-resolution git calls (rev-parse the remote-tracking
+ * head, etc.). These run INSIDE the /ops/self-upgrade render (getSelfUpgradeStatus
+ * → getCurrentImpactSummaryId → resolveTargetSha). Without a timeout, a git call
+ * that stalls — waiting on the host clone's index/ref lock held by a concurrent
+ * self-upgrade prep merge, or slow process-spawn under Windows/WSL2 contention —
+ * hangs the whole page render for tens of seconds (observed 2026-07-17: the page
+ * "eventually comes up" only when the running upgrade's `git merge` releases).
+ * A timed-out call is killed and surfaces as an error, which resolveTargetSha
+ * already degrades to `null` (target-unknown) so the page renders promptly. This
+ * mirrors defaultGitRunner's timeout in prepare-source.ts (BI-4A400DE4). 8s is
+ * far above a healthy local rev-parse yet bounds the render.
+ */
+const VERSION_GIT_TIMEOUT_MS = 8_000;
+
 async function defaultExecFile(cmd: string, args: string[]): Promise<{ stdout: string }> {
   const { execFile: nodeExecFile } = await import("node:child_process");
   const { promisify } = await import("node:util");
   const execAsync = promisify(nodeExecFile);
-  const result = await execAsync(cmd, args);
+  const result = await execAsync(cmd, args, {
+    timeout: VERSION_GIT_TIMEOUT_MS,
+    killSignal: "SIGKILL",
+  });
   return { stdout: result.stdout.toString() };
 }
 
