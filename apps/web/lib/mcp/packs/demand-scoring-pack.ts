@@ -12,6 +12,7 @@ import { DEMAND_SCORE_FRAMEWORKS, DEMAND_STAGE_VALUES, INVESTMENT_BUCKET_VALUES 
 import type { DemandScoreFramework } from "@/lib/explore/backlog";
 import type { DemandScoreInputs, DemandScoreResult } from "@/lib/demand/scoring";
 import { resolveEstimateProvenance } from "@/lib/demand/estimate-provenance";
+import { fundingRiskTier } from "@/lib/demand/funding-risk";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
 
@@ -567,13 +568,6 @@ async function sweepDuplicateDemandHandler(params: Record<string, unknown>): Pro
   };
 }
 
-/** Investment risk tier from bucket + effort: transform bets and xlarge work rank higher. */
-function fundingRiskTier(investmentBucket: string | null, effortSize: string | null): "low" | "medium" | "high" {
-  if (investmentBucket === "transform" || effortSize === "xlarge") return "high";
-  if (effortSize === "large") return "medium";
-  return "low";
-}
-
 async function approveDemandForFundingHandler(
   params: Record<string, unknown>,
   userId: string,
@@ -625,6 +619,16 @@ async function approveDemandForFundingHandler(
     try {
       const { offerFundedItemToCoworker } = await import("@/lib/demand/volunteering.server");
       volunteered = await offerFundedItemToCoworker(item);
+    } catch {
+      // non-fatal
+    }
+    // Shadow-measure what an autonomous auto-claim WOULD do (kernel: shadow_first)
+    // — resolves the coworker's autonomy envelope and records it against the
+    // ask-first act, building graduation evidence without acting on it. Its own
+    // try so the measurement records even if the offer above failed.
+    try {
+      const { recordVolunteeringAutonomyShadow } = await import("@/lib/demand/volunteering.server");
+      await recordVolunteeringAutonomyShadow(item);
     } catch {
       // non-fatal
     }

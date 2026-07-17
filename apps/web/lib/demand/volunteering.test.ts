@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { decideVolunteering, shouldOfferToCoworker } from "./volunteering";
+import { decideVolunteering, resolveVolunteeringAutonomy, shouldOfferToCoworker } from "./volunteering";
 
 describe("decideVolunteering", () => {
   it("auto-claims only when the autonomy envelope grants autonomous-action", () => {
@@ -14,6 +14,44 @@ describe("decideVolunteering", () => {
 
   it("observes (no claim, no ask) when shadow-only", () => {
     expect(decideVolunteering("shadow-only")).toBe("observe");
+  });
+});
+
+describe("resolveVolunteeringAutonomy", () => {
+  it("auto-claims when a fully-trusted coworker takes a low-risk (reversible) bet", () => {
+    const r = resolveVolunteeringAutonomy({ trustLevel: "autopilot", risk: "internal-reversible" });
+    expect(r.effectiveTrustLevel).toBe("autopilot");
+    expect(r.decisionMode).toBe("autonomous-action");
+    expect(r.decision).toBe("auto_claim");
+  });
+
+  it("caps even a fully-trusted coworker to ask-first on a high-risk (floor) bet", () => {
+    // outbound-or-floor ceiling is `propose` — autopilot is capped down to it.
+    const r = resolveVolunteeringAutonomy({ trustLevel: "autopilot", risk: "outbound-or-floor" });
+    expect(r.effectiveTrustLevel).toBe("propose");
+    expect(r.decision).toBe("ask_first");
+  });
+
+  it("observes when no trust is established (shadow), regardless of risk", () => {
+    expect(resolveVolunteeringAutonomy({ trustLevel: "shadow", risk: "internal-reversible" }).decision).toBe(
+      "observe",
+    );
+  });
+
+  it("asks first for a supervised coworker on a reversible bet", () => {
+    expect(resolveVolunteeringAutonomy({ trustLevel: "supervised", risk: "internal-reversible" }).decision).toBe(
+      "ask_first",
+    );
+  });
+
+  it("lets a regulatory ceiling cap autonomy below the risk ceiling", () => {
+    const r = resolveVolunteeringAutonomy({
+      trustLevel: "autopilot",
+      risk: "internal-reversible", // risk ceiling autopilot…
+      regulatoryCeiling: "propose", // …but regulation caps to propose.
+    });
+    expect(r.effectiveTrustLevel).toBe("propose");
+    expect(r.decision).toBe("ask_first");
   });
 });
 

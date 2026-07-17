@@ -23,7 +23,16 @@
 // §"AI-led execution (the synced bet)". Plan:
 // docs/superpowers/plans/2026-07-15-ai-led-volunteering-plan.md.
 
-import type { WorkCaseAutonomyDecisionMode } from "@/lib/work-management/autonomy-envelope";
+import {
+  autonomyLevelToDecisionMode,
+  type WorkCaseAutonomyDecisionMode,
+} from "@/lib/work-management/autonomy-envelope";
+import {
+  DEFAULT_RISK_CEILINGS,
+  minLevel,
+  type AutonomyLevel,
+  type RiskClass,
+} from "@/lib/autonomy/trust-graduation";
 
 /**
  * What a coworker does with a freshly-funded item, given its resolved autonomy
@@ -54,6 +63,40 @@ export function decideVolunteering(decisionMode: WorkCaseAutonomyDecisionMode): 
     case "supervised-action":
       return "ask_first";
   }
+}
+
+/** A coworker's resolved auto-claim authority for a funded bet. */
+export type VolunteeringAutonomy = {
+  /** The coworker's trust level after the risk + regulatory ceilings apply. */
+  effectiveTrustLevel: AutonomyLevel;
+  /** The work-case decision mode that effective level projects to. */
+  decisionMode: WorkCaseAutonomyDecisionMode;
+  /** What the coworker may do with the bet under that mode. */
+  decision: VolunteeringDecision;
+};
+
+/**
+ * Resolve how a coworker may volunteer for a funded bet from its governed
+ * autonomy inputs. Pure — mirrors the work-management autonomy envelope's cap
+ * math (risk ceiling, then any regulatory ceiling, then the coworker's own trust
+ * level, taking the minimum) without the WorkCase source/action coupling, so the
+ * demand seam can resolve a decision from just (trustLevel, risk, regulatory).
+ *
+ * The ceiling is what makes this safe: a fully-trusted (`autopilot`) coworker is
+ * still capped to `propose` on a high-risk (`outbound-or-floor`) bet, so it must
+ * ask first; a coworker with no established trust (`shadow`) only observes.
+ */
+export function resolveVolunteeringAutonomy(input: {
+  trustLevel: AutonomyLevel;
+  risk: RiskClass;
+  regulatoryCeiling?: AutonomyLevel | null;
+  ceilings?: Record<RiskClass, AutonomyLevel>;
+}): VolunteeringAutonomy {
+  const riskCeiling = (input.ceilings ?? DEFAULT_RISK_CEILINGS)[input.risk];
+  const ceiling = input.regulatoryCeiling ? minLevel(riskCeiling, input.regulatoryCeiling) : riskCeiling;
+  const effectiveTrustLevel = minLevel(input.trustLevel, ceiling);
+  const decisionMode = autonomyLevelToDecisionMode(effectiveTrustLevel);
+  return { effectiveTrustLevel, decisionMode, decision: decideVolunteering(decisionMode) };
 }
 
 /**
