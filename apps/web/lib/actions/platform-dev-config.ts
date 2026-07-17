@@ -19,10 +19,6 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { lazyChildProcess, lazyFs, lazyPath, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
 
-// Re-export the validation shapes from their new domain-core home so existing
-// public importers of these types keep resolving them from this action module.
-export type { ValidateTokenInput, ValidateTokenResult };
-
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 
 async function requireManagePlatform(): Promise<string> {
