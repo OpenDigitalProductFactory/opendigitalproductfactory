@@ -26,15 +26,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Detects whether a PR touches anything beyond documentation. A docs-only PR
-  # (every changed file under docs/ or ending .md/.mdx) skips the expensive
-  # build/test/typecheck WORK while the required status checks still report
-  # success — the jobs run but short-circuit after this gate. A workflow-level
-  # `paths:` filter cannot be used: a skipped REQUIRED check stays "pending"
-  # forever under branch protection and blocks the merge. Fails safe to
-  # heavy=true on any non-PR event (push to main, future merge_group) or if the
-  # diff cannot be computed. SHAs are passed via env, never interpolated into
-  # the script body (actions-injection-safe).
+  # Detects whether a PR touches documentation, mobile app code, shared mobile
+  # package code, or the broader web/platform surface. Required checks cannot
+  # disappear under branch protection, so jobs run and short-circuit after this
+  # gate instead of relying on workflow-level `paths:` filters. Fails safe to
+  # heavy=true on non-PR events or if the diff cannot be computed.
+  # SHAs are passed via env, never interpolated into the script body
+  # (actions-injection-safe).
   changes:
     name: Detect change scope
     runs-on: ubuntu-latest
@@ -65,14 +63,7 @@ jobs:
           fi
           echo "Changed files:"
           printf '%s\n' "$changed"
-          # Heavy unless EVERY changed file is documentation (docs/ or *.md|*.mdx).
-          if printf '%s\n' "$changed" | grep -qvE '(^docs/|\.mdx?$)'; then
-            echo "-> non-docs changes present: full CI."
-            echo "heavy=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "-> docs-only change: skipping heavy jobs."
-            echo "heavy=false" >> "$GITHUB_OUTPUT"
-          fi
+          printf '%s\n' "$changed" | node scripts/ci-change-scope.mjs --github-output "$GITHUB_OUTPUT"
 
   typecheck:
     name: Typecheck
