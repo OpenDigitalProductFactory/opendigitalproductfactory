@@ -159,6 +159,16 @@ export const INTENTIONAL_FIELD_REMOVALS = new Set([
   "ModelProvider.supportedModalities",
   // 2026-06-19: deprecated duplicate of the canonical StorefrontConfig.archetypeId.
   "BusinessContext.archetypeId",
+  // 2026-07-16 BI-PIR-7d69a445 (part 2): drop the `@unique` on
+  // InventoryRelationship.relationshipKey — the COLUMN is KEPT (still written for
+  // provenance/back-compat), only its source-scoped uniqueness is removed so the
+  // discovery-sync upsert can target the canonical
+  // @@unique([fromEntityId, toEntityId, relationshipType]) tuple and stop the
+  // cross-run P2002. Migration:
+  // 20260716230000_inventoryrelationship_tuple_canonical. Prune once shipped to
+  // every environment. (This guard keys the skip by field name; the field itself
+  // is not dropped, so no other line for it can regress.)
+  "InventoryRelationship.relationshipKey",
 ]);
 
 export function diffSchemas(base, head, allowlist = INTENTIONAL_FIELD_REMOVALS) {

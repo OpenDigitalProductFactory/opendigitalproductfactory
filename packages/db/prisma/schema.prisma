@@ -4673,7 +4673,15 @@ model InventoryEntity {
 
 model InventoryRelationship {
   id                      String                   @id @default(cuid())
-  relationshipKey         String                   @unique
+  // BI-PIR-7d69a445 (part 2): relationshipKey is SOURCE-SCOPED provenance that
+  // varies per source/scope for the same real relationship, so it is NOT the
+  // canonical identity — it is intentionally non-unique. The canonical identity
+  // is the compound @@unique([fromEntityId, toEntityId, relationshipType]) below.
+  // Per-run relationshipKey provenance is preserved on DiscoveredRelationship
+  // (@@unique([discoveryRunId, relationshipKey])); nothing looks up
+  // InventoryRelationship by relationshipKey, so dropping its @unique loses
+  // nothing and ends the cross-run P2002 (the upsert now targets the tuple).
+  relationshipKey         String
   relationshipType        String
   status                  String                   @default("active")
   confidence              Float?

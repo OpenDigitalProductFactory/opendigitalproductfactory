@@ -1,0 +1,31 @@
+-- BI-PIR-7d69a445 (part 2): make the (fromEntityId, toEntityId, relationshipType)
+-- tuple the CANONICAL identity of an InventoryRelationship and demote
+-- relationshipKey to non-unique.
+--
+-- InventoryRelationship carried TWO uniques: relationshipKey (source-scoped) and
+-- the compound (fromEntityId, toEntityId, relationshipType) (persisted-entity
+-- level). Entity dedup can map two distinct discovered refs onto ONE persisted
+-- entity id, so relationships with DISTINCT relationshipKeys resolve to the SAME
+-- tuple. The discovery-sync upsert targeted `where: { relationshipKey }` but its
+-- `create` wrote the tuple, so when a PRIOR run had already persisted that tuple
+-- under a different relationshipKey the create path violated the compound
+-- @@unique -> P2002 aborted the whole persistence transaction. Re-pointing the
+-- upsert at the tuple (in the same commit) fixes that; this migration removes the
+-- now-wrong global uniqueness on relationshipKey.
+--
+-- relationshipKey stays as a plain column (still written for provenance /
+-- back-compat). Nothing looks up InventoryRelationship by relationshipKey
+-- (no findUnique/where on it outside discovery-sync), and per-run relationshipKey
+-- provenance is preserved on DiscoveredRelationship via its own
+-- @@unique([discoveryRunId, relationshipKey]) -- so demoting this @unique loses
+-- nothing.
+--
+-- @migration-safety: data-safe: dropping a UNIQUE index is a metadata-only
+-- catalog change (no table rewrite, no heap scan of existing rows) and only
+-- LOOSENS a constraint, so it cannot fail on existing data. No new/tightened
+-- constraint is introduced. The canonical tuple @@unique
+-- ("InventoryRelationship_fromEntityId_toEntityId_relationshipType_key") is
+-- UNCHANGED and remains enforced, so no duplicate tuple can appear as a result of
+-- this change (verified: 0 duplicate-tuple groups on the live estate before
+-- migration).
+DROP INDEX "InventoryRelationship_relationshipKey_key";

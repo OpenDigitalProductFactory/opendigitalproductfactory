@@ -19,7 +19,14 @@ type FindManyArgs = {
     scopeKey?: string;
     lastConfirmedRun?: { sourceSlug?: string };
   };
-  select: { entityKey?: true; relationshipKey?: true };
+  select: {
+    entityKey?: true;
+    id?: true;
+    relationshipKey?: true;
+    fromEntityId?: true;
+    toEntityId?: true;
+    relationshipType?: true;
+  };
 };
 
 function buildStubDb(opts: {
@@ -37,8 +44,15 @@ function buildStubDb(opts: {
   const entityUpdateMany = vi.fn().mockResolvedValue({ count: 0 });
   const relationshipFindMany = vi.fn(async (args: FindManyArgs) => {
     const sourceSlug = args.where?.lastConfirmedRun?.sourceSlug ?? "__unknown__";
+    // BI-PIR-7d69a445 (part 2): existing relationships are keyed by tuple now, so
+    // the stub synthesizes a distinct tuple + id per relationshipKey. The stale
+    // sweep marks rows by id, so `id` maps 1:1 back to the source relationshipKey.
     return (opts.relationshipsBySource?.[sourceSlug] ?? []).map((relationshipKey) => ({
+      id: `relationship:${relationshipKey}`,
       relationshipKey,
+      fromEntityId: `from:${relationshipKey}`,
+      toEntityId: `to:${relationshipKey}`,
+      relationshipType: "hosts",
     }));
   });
   const relationshipUpdateMany = vi.fn().mockResolvedValue({ count: 0 });
@@ -63,10 +77,16 @@ function buildStubDb(opts: {
         discoveredSoftwareEvidence: { upsert: async () => ({}) },
         inventoryRelationship: {
           findMany: relationshipFindMany,
-          upsert: async ({ where }: { where: { relationshipKey: string } }) => ({
-            id: `relationship:${where.relationshipKey}`,
-            relationshipKey: where.relationshipKey,
-          }),
+          upsert: async ({ where, create }: {
+            where: { fromEntityId_toEntityId_relationshipType: { fromEntityId: string; toEntityId: string; relationshipType: string } };
+            create: { relationshipKey: string };
+          }) => {
+            const { fromEntityId, toEntityId, relationshipType } = where.fromEntityId_toEntityId_relationshipType;
+            return {
+              id: `relationship:${fromEntityId}|${toEntityId}|${relationshipType}`,
+              relationshipKey: create.relationshipKey,
+            };
+          },
           updateMany: relationshipUpdateMany,
         },
         discoveredRelationship: { create: async () => ({}) },
@@ -225,16 +245,25 @@ describe("persistBootstrapDiscoveryRun source attribution", () => {
         scopeKey,
         lastConfirmedRun: { sourceSlug: "unifi" },
       },
-      select: { relationshipKey: true },
+      // BI-PIR-7d69a445 (part 2): read by canonical tuple columns (+ id, + key).
+      select: {
+        id: true,
+        relationshipKey: true,
+        fromEntityId: true,
+        toEntityId: true,
+        relationshipType: true,
+      },
     });
 
-    // Only unifi's relationship key is a stale candidate.
+    // Only unifi's relationship is a stale candidate — the stale sweep now targets
+    // rows by id (the tuple's row), and unifi's row id maps back to its own key.
+    // edge-node:node-a's row was never even read by unifi's sweep.
     const updateCallArgs = relationshipUpdateMany.mock.calls[0]?.[0];
-    expect(updateCallArgs?.where.relationshipKey.in).toEqual([
-      `${scopeKey}:unifi:hosts:r1->r2`,
+    expect(updateCallArgs?.where.id.in).toEqual([
+      `relationship:${scopeKey}:unifi:hosts:r1->r2`,
     ]);
-    expect(updateCallArgs?.where.relationshipKey.in).not.toContain(
-      `${scopeKey}:edge:hosts:r3->r4`,
+    expect(updateCallArgs?.where.id.in).not.toContain(
+      `relationship:${scopeKey}:edge:hosts:r3->r4`,
     );
   });
 });
