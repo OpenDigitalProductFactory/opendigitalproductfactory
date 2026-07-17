@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   reorderColumnIds,
   applyColumnOrder,
+  reorderRowsByDrag,
   groupRowsByColumn,
   groupKeys,
   expandedGroupSet,
@@ -85,6 +86,33 @@ describe("applyColumnOrder", () => {
       "b",
       "c",
     ]);
+  });
+});
+
+describe("reorderRowsByDrag", () => {
+  const rows = [
+    { rowId: "a", n: 1 },
+    { rowId: "b", n: 2 },
+    { rowId: "c", n: 3 },
+    { rowId: "d", n: 4 },
+  ];
+
+  it("moves a dragged row into the drop target's slot (downward)", () => {
+    expect(reorderRowsByDrag(rows, "a", "c").map((r) => r.rowId)).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("moves a dragged row into the drop target's slot (upward)", () => {
+    expect(reorderRowsByDrag(rows, "d", "b").map((r) => r.rowId)).toEqual(["a", "d", "b", "c"]);
+  });
+
+  it("preserves the row objects (not just ids)", () => {
+    expect(reorderRowsByDrag(rows, "a", "b")[0]).toEqual({ rowId: "b", n: 2 });
+  });
+
+  it("is a no-op for an unknown id and does not mutate the input", () => {
+    const input = [...rows];
+    expect(reorderRowsByDrag(rows, "z", "b").map((r) => r.rowId)).toEqual(["a", "b", "c", "d"]);
+    expect(input).toEqual(rows);
   });
 });
 

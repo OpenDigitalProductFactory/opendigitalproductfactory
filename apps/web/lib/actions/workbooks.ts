@@ -25,6 +25,7 @@ import {
   createRow as svcCreateRow,
   updateCells as svcUpdateCells,
   deleteRow as svcDeleteRow,
+  reorderRows as svcReorderRows,
   getTableGridData as svcGetTableGridData,
   getTableSchema as svcGetTableSchema,
   queryRows as svcQueryRows,
@@ -205,6 +206,19 @@ export async function deleteRowAction(tableId: string, rowId: string): Promise<A
   try {
     const user = await requireUser("manage_workbooks");
     await svcDeleteRow(user, tableId, rowId);
+    return ok();
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function reorderRowsAction(
+  tableId: string,
+  orderedRowIds: string[],
+): Promise<ActionResult> {
+  try {
+    const user = await requireUser("manage_workbooks");
+    await svcReorderRows(user, tableId, orderedRowIds);
     return ok();
   } catch (e) {
     return fail(e);

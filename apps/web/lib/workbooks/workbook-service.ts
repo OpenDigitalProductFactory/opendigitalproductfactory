@@ -451,6 +451,31 @@ export async function deleteRow(
   await adapter.deleteRow(t.internalId, rowId, { userId: user.id, workbookRole: t.role });
 }
 
+/**
+ * Manually reorder a custom table's rows: rewrite `WorkbookRow.position` to match
+ * the given id order (custom-table rows are queried `orderBy position asc`, so
+ * this becomes the displayed order). Only ids belonging to the table are touched;
+ * platform tables have no stored rows and are rejected.
+ */
+export async function reorderRows(
+  user: ServiceUser,
+  tableId: string,
+  orderedRowIds: string[],
+): Promise<void> {
+  const t = await resolveTable(user, tableId, "editor");
+  if (t.dataSource !== "custom") {
+    throw new WorkbookError("Only custom-table rows can be reordered", 400);
+  }
+  await prisma.$transaction(
+    orderedRowIds.map((rowId, i) =>
+      prisma.workbookRow.updateMany({
+        where: { rowId, tableId: t.internalId },
+        data: { position: i },
+      }),
+    ),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Views
 // ---------------------------------------------------------------------------

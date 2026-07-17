@@ -250,10 +250,18 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   **platform grids** persist to `localStorage` (personal), reusing the same view-state shape. Pure,
   unit-tested store ops in `grid-named-views.ts` (`upsert`/`remove`/`setDefault`/`parse` +
   `normalizeViewState`). No migration — the model already existed.
-- **Remaining (not built):** platform-grid *shareable* views (needs a `WorkbookView.tableId` schema
-  change — platform tables have no `WorkbookTable` row); calendar view (fullcalendar — needs a date
-  column); manual row reordering; full pivots + richer charts; metrics/semantic layer;
-  operationalization lifecycle.
+- **Slice 25 — manual row reordering — SHIPPED (custom tables).** A drag-handle column (⠿) lets the
+  user drag a row into a new slot (the Smartsheet affordance). Optimistic: the local rows reorder
+  immediately (pure, unit-tested `reorderRowsByDrag`, reusing the `reorderColumnIds` move algorithm),
+  then the new order persists to `WorkbookRow.position` via a new `reorderRows` service + `reorderRowsAction`
+  (custom tables only — `WorkbookRow.position` already exists and is what the adapter queries
+  `orderBy asc`, so no migration). The handle is shown only when a manual order is actually in effect —
+  custom source, editable, **no active sort and no grouping** (a sort/group defines the order and
+  overrides the manual one). Platform grids (large, DB-ordered) are intentionally out of scope.
+- **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
+  order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
+  schema change — platform tables have no `WorkbookTable` row); calendar view (fullcalendar — needs a date
+  column); full pivots + richer charts; metrics/semantic layer; operationalization lifecycle.
   **Debt (decomposition — largely paid down):** all five toolbar panels — Filter, Summary, Format,
   Group, Columns — now live as typed, presentational components in `GridPanels.tsx` (pure UI over
   props the Grid owns). This dropped `Grid.tsx` from 1298 → 1094 LOC. Remaining `Grid.tsx` bulk is the

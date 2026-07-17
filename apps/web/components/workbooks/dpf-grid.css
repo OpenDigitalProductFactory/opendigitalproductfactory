@@ -333,6 +333,26 @@
   color: var(--dpf-text);
 }
 
+/* Drag handle — manual row reordering (custom tables, unsorted/ungrouped). */
+.dpf-grid-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  block-size: 100%;
+  cursor: grab;
+  color: var(--dpf-muted);
+  user-select: none;
+}
+
+.dpf-grid-drag-handle:hover {
+  color: var(--dpf-text);
+}
+
+.dpf-grid-drag-handle:active {
+  cursor: grabbing;
+}
+
 /* Record detail modal — expand a row into a full-record editor. */
 .dpf-record-modal-backdrop {
   position: fixed;
