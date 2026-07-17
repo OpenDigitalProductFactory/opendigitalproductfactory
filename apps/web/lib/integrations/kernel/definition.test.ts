@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   connectorDefinitionSchema,
+  parseConnectorDefinition,
   type ConnectorDefinition,
 } from "./definition";
 import { ConnectorError, CONNECTOR_ERROR_KINDS } from "./error";
@@ -31,6 +32,12 @@ describe("connectorDefinitionSchema", () => {
   });
 
   it.each([0, -1, 1.5])("rejects invalid schema version %s", (schemaVersion) => {
+    expect(
+      connectorDefinitionSchema.safeParse({ ...validDefinition, schemaVersion }).success,
+    ).toBe(false);
+  });
+
+  it.each([2, 999])("rejects unsupported positive schema version %s", (schemaVersion) => {
     expect(
       connectorDefinitionSchema.safeParse({ ...validDefinition, schemaVersion }).success,
     ).toBe(false);
@@ -119,6 +126,40 @@ describe("connectorDefinitionSchema", () => {
     expect(connectorDefinitionSchema.safeParse(withoutSync).success).toBe(false);
   });
 
+  it("requires every operation capability to be declared", () => {
+    expect(
+      connectorDefinitionSchema.safeParse({
+        ...validDefinition,
+        operations: [
+          { ...validDefinition.operations[0], capability: "email.undeclared" },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each(["full", "incremental"] as const)(
+    "requires a %s sync operation to reference a declared operation",
+    (kind) => {
+      const sync =
+        kind === "full"
+          ? { kind, operationId: "missing-operation" }
+          : { kind, operationId: "missing-operation", cursorField: "cursor" };
+      expect(connectorDefinitionSchema.safeParse({ ...validDefinition, sync }).success).toBe(false);
+    },
+  );
+
+  it("requires authority resources to be unique even when modes conflict", () => {
+    expect(
+      connectorDefinitionSchema.safeParse({
+        ...validDefinition,
+        authorities: [
+          { resource: "email.delivery-status", mode: "source" },
+          { resource: "email.delivery-status", mode: "platform" },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it("allows oauth callbacks only for authorization-code auth", () => {
     expect(
       connectorDefinitionSchema.safeParse({
@@ -149,5 +190,26 @@ describe("connectorDefinitionSchema", () => {
       retryAfterMs: 1_000,
       message: "Slow down",
     });
+  });
+
+  it("returns a deeply frozen, readonly definition", () => {
+    const definition = parseConnectorDefinition(validDefinition);
+
+    expectTypeOf(definition).toEqualTypeOf<ConnectorDefinition>();
+    expect(Object.isFrozen(definition)).toBe(true);
+    expect(Object.isFrozen(definition.capabilities)).toBe(true);
+    expect(Object.isFrozen(definition.auth)).toBe(true);
+    expect(Object.isFrozen(definition.operations)).toBe(true);
+    expect(Object.isFrozen(definition.operations[0])).toBe(true);
+    expect(Object.isFrozen(definition.operations[0].retry)).toBe(true);
+    expect(Object.isFrozen(definition.sync)).toBe(true);
+    expect(Object.isFrozen(definition.authorities)).toBe(true);
+    expect(Object.isFrozen(definition.authorities[0])).toBe(true);
+    expectTypeOf(definition.capabilities).toEqualTypeOf<readonly string[]>();
+    expect(() => Array.prototype.push.call(definition.capabilities, "email.mutable")).toThrow(
+      TypeError,
+    );
+    expect(Reflect.set(definition.operations[0].retry, "maxAttempts", 9)).toBe(false);
+    expect(definition.operations[0].retry.maxAttempts).toBe(3);
   });
 });

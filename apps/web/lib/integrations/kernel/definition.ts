@@ -50,7 +50,7 @@ const syncPolicySchema = z.discriminatedUnion("kind", [
 
 export const connectorDefinitionSchema = z
   .object({
-    schemaVersion: z.number().int().positive(),
+    schemaVersion: z.literal(1),
     key: nonemptyIdentifier,
     displayName: z.string().trim().min(1),
     capabilities: z.array(nonemptyIdentifier).min(1),
@@ -110,15 +110,68 @@ export const connectorDefinitionSchema = z
         path: ["callback", "kind"],
       });
     }
+
+    const declaredCapabilities = new Set(definition.capabilities);
+    for (const [index, operation] of definition.operations.entries()) {
+      if (!declaredCapabilities.has(operation.capability)) {
+        context.addIssue({
+          code: "custom",
+          message: "Operation capability must be declared by the connector",
+          path: ["operations", index, "capability"],
+        });
+      }
+    }
+
+    if (definition.sync.kind !== "none") {
+      const syncOperationId = definition.sync.operationId;
+      if (!definition.operations.some(({ id }) => id === syncOperationId)) {
+        context.addIssue({
+          code: "custom",
+          message: "Sync operationId must reference a declared operation",
+          path: ["sync", "operationId"],
+        });
+      }
+    }
+
+    const authorityResources = definition.authorities.map(({ resource }) => resource);
+    if (new Set(authorityResources).size !== authorityResources.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Authority resources must be unique",
+        path: ["authorities"],
+      });
+    }
   });
 
-export type ConnectorDefinition = z.infer<typeof connectorDefinitionSchema>;
+type DeepReadonly<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends readonly (infer TItem)[]
+    ? readonly DeepReadonly<TItem>[]
+    : T extends object
+      ? { readonly [TKey in keyof T]: DeepReadonly<T[TKey]> }
+      : T;
+
+export type ConnectorDefinition = DeepReadonly<z.infer<typeof connectorDefinitionSchema>>;
 export type ConnectorAuthStrategy = ConnectorDefinition["auth"];
 export type ConnectorCallbackPolicy = ConnectorDefinition["callback"];
 export type ConnectorOperation = ConnectorDefinition["operations"][number];
 export type ConnectorHealthPolicy = ConnectorDefinition["health"];
 export type ConnectorSyncPolicy = ConnectorDefinition["sync"];
 export type DataAuthorityPolicy = ConnectorDefinition["authorities"][number];
+
+function deepFreeze<T>(value: T): DeepReadonly<T> {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const nestedValue of Object.values(value)) {
+      deepFreeze(nestedValue);
+    }
+    Object.freeze(value);
+  }
+  return value as DeepReadonly<T>;
+}
+
+export function parseConnectorDefinition(input: unknown): ConnectorDefinition {
+  return deepFreeze(connectorDefinitionSchema.parse(input));
+}
 
 export interface ConnectorCredentialAdapter<TCredential, TSerializedCredential> {
   validate(input: unknown): Promise<TCredential>;
