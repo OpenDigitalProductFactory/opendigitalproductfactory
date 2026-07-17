@@ -403,6 +403,12 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   attribute_entity_to_product: ["registry_write"],
   dismiss_entity: ["registry_write"],
   resolve_portfolio_quality_issue: ["registry_write"],
+  // Asset-intelligence enrichment (EP-ASSET-INTELLIGENCE, spec §4.6). A dedicated
+  // finer grant (Pseudo-User Contract direction) so enrichment mutation is scoped
+  // and auditable rather than folded into the broad registry_write — held today by
+  // the estate-specialist (AGT-WS-INVENTORY) via agent_registry.json.
+  enrich_digital_product: ["enrichment_write"],
+  request_re_enrichment: ["enrichment_write"],
   configure_gateway_scan: ["agent_control_read"],
 
   // UX / Page evaluation

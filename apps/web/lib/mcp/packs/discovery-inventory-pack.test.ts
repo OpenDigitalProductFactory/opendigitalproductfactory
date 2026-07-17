@@ -22,6 +22,8 @@ vi.mock("@/lib/actions/inventory", () => inventory);
 const db = vi.hoisted(() => ({
   DISCOVERY_TRIAGE_AGENT_ID: "agent-discovery-triage",
   prisma: { taxonomyNode: { findFirst: vi.fn() } },
+  enrichDigitalProduct: vi.fn(),
+  requestReEnrichment: vi.fn(),
 }));
 vi.mock("@dpf/db", () => db);
 
@@ -35,6 +37,8 @@ const EXPECTED_TOOLS = [
   "attribute_entity_to_product",
   "dismiss_entity",
   "resolve_portfolio_quality_issue",
+  "enrich_digital_product",
+  "request_re_enrichment",
   "configure_gateway_scan",
 ];
 
@@ -45,6 +49,8 @@ const EXPECTED_GRANTS: Record<string, string[]> = {
   attribute_entity_to_product: ["registry_write"],
   dismiss_entity: ["registry_write"],
   resolve_portfolio_quality_issue: ["registry_write"],
+  enrich_digital_product: ["enrichment_write"],
+  request_re_enrichment: ["enrichment_write"],
   configure_gateway_scan: ["agent_control_read"],
 };
 
@@ -53,7 +59,7 @@ beforeEach(() => {
 });
 
 describe("discovery-inventory pack — registration", () => {
-  it("exposes exactly the seven discovery/inventory tools", () => {
+  it("exposes exactly the nine discovery/inventory tools", () => {
     expect(discoveryInventoryPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(discoveryInventoryPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -278,6 +284,59 @@ describe("discovery-inventory pack — handler behavior (delegation preserved)",
     expect(noName.error).toBe("missing_name");
     const noUrl = await discoveryInventoryPack.handlers.configure_gateway_scan({ name: "x" }, "u1");
     expect(noUrl.error).toBe("missing_endpoint_url");
+  });
+
+  it("enrich_digital_product requires a digitalProductId", async () => {
+    const res = await discoveryInventoryPack.handlers.enrich_digital_product({}, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("missing_digital_product_id");
+  });
+
+  it("enrich_digital_product reports the enrichment summary", async () => {
+    db.enrichDigitalProduct.mockResolvedValue({
+      digitalProductId: "dp-1",
+      enrichmentStatus: "enriched",
+      identitiesEnriched: 2,
+      identitiesFailed: 0,
+      lifecycleMilestonesWritten: 5,
+    });
+    const res = await discoveryInventoryPack.handlers.enrich_digital_product({ digitalProductId: "dp-1" }, "u1");
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("Enriched 2 identities");
+    expect(res.message).toContain("status enriched");
+  });
+
+  it("enrich_digital_product surfaces a missing product", async () => {
+    db.enrichDigitalProduct.mockResolvedValue({
+      digitalProductId: "missing",
+      enrichmentStatus: "failed",
+      identitiesEnriched: 0,
+      identitiesFailed: 0,
+      lifecycleMilestonesWritten: 0,
+    });
+    const res = await discoveryInventoryPack.handlers.enrich_digital_product({ digitalProductId: "missing" }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("digital_product_not_found");
+  });
+
+  it("request_re_enrichment requires a target", async () => {
+    const res = await discoveryInventoryPack.handlers.request_re_enrichment({}, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("missing_target");
+  });
+
+  it("request_re_enrichment flags a product for re-enrichment", async () => {
+    db.requestReEnrichment.mockResolvedValue({ flaggedProduct: true, flaggedEntity: false });
+    const res = await discoveryInventoryPack.handlers.request_re_enrichment({ digitalProductId: "dp-1" }, "u1");
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("product dp-1");
+  });
+
+  it("request_re_enrichment reports when nothing was flagged", async () => {
+    db.requestReEnrichment.mockResolvedValue({ flaggedProduct: false, flaggedEntity: false });
+    const res = await discoveryInventoryPack.handlers.request_re_enrichment({ inventoryEntityId: "gone" }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("target_not_found");
   });
 });
 

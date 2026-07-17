@@ -382,6 +382,9 @@ export * from "./discovery-fingerprint-policy";
 export * from "./discovery-fingerprint-rules";
 export * from "./discovery-mac-classification";
 export * from "./discovery-fingerprint-observation";
+// Asset-intelligence on-demand product enrichment (EP-ASSET-INTELLIGENCE, spec §4.2/§4.6)
+// — the enrich_digital_product / request_re_enrichment MCP tools' backing logic.
+export * from "./enrich-digital-product";
 export * from "./device-placement";
 export * from "./portfolio-sources";
 export * from "./backlog-portfolio";

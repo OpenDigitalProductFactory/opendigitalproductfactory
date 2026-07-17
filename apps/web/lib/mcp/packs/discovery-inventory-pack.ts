@@ -152,6 +152,34 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "enrich_digital_product",
+    description: "Run enrichment now for one digital product: resolve the CPE 2.3 identity and endoflife.date support-lifecycle (EOL/EOS) for every CatalogIdentity its inventory entities map to, and stamp the product's enrichmentStatus. Use to refresh a product's support posture on demand instead of waiting for the weekly catalog sweep.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        digitalProductId: { type: "string", description: "DigitalProduct id (cuid) to enrich" },
+      },
+      required: ["digitalProductId"],
+    },
+    requiredCapability: "manage_provider_connections",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "request_re_enrichment",
+    description: "Flag a digital product (or a single inventory entity) for re-enrichment so the next catalog sweep re-resolves its identity + lifecycle. Sets the product's enrichmentStatus back to 'pending' and/or clears the entity's identity resolution. Human-confirmed identities are never overwritten.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        digitalProductId: { type: "string", description: "DigitalProduct id (cuid) to flag for re-enrichment" },
+        inventoryEntityId: { type: "string", description: "InventoryEntity id (cuid) to flag for re-resolution" },
+      },
+      required: [],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
     name: "configure_gateway_scan",
     description: "Create or update a DiscoveryConnection for an ARP/subnet gateway scan so physical LAN segments (e.g. 192.168.x) become visible. Use to resolve gateway_connection_needed issues.",
     inputSchema: {
@@ -300,6 +328,63 @@ async function resolvePortfolioQualityIssueHandler(params: Record<string, unknow
   };
 }
 
+async function enrichDigitalProductHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const digitalProductId = String(params["digitalProductId"] ?? "").trim();
+  if (!digitalProductId) {
+    return { success: false, message: "digitalProductId is required", error: "missing_digital_product_id" };
+  }
+
+  const { prisma, enrichDigitalProduct } = await import("@dpf/db");
+  const result = await enrichDigitalProduct(
+    // The @dpf/db enrichment module types its prisma surface as a minimal hand-rolled
+    // client (method-shorthand, bivariant); the real client satisfies it structurally.
+    prisma as unknown as Parameters<typeof enrichDigitalProduct>[0],
+    digitalProductId,
+    { eolFetch: fetch, nvdFetch: fetch },
+  );
+  if (result.enrichmentStatus === "failed" && result.identitiesEnriched === 0 && result.identitiesFailed === 0) {
+    return { success: false, message: `Digital product ${digitalProductId} not found`, error: "digital_product_not_found" };
+  }
+  return {
+    success: true,
+    entityId: digitalProductId,
+    message:
+      `Enriched ${result.identitiesEnriched} identit${result.identitiesEnriched === 1 ? "y" : "ies"} ` +
+      `(${result.lifecycleMilestonesWritten} lifecycle milestone${result.lifecycleMilestonesWritten === 1 ? "" : "s"}` +
+      `${result.identitiesFailed > 0 ? `, ${result.identitiesFailed} failed` : ""}); status ${result.enrichmentStatus}.`,
+    data: result as unknown as Record<string, unknown>,
+  };
+}
+
+async function requestReEnrichmentHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const digitalProductId = typeof params["digitalProductId"] === "string" ? params["digitalProductId"].trim() : "";
+  const inventoryEntityId = typeof params["inventoryEntityId"] === "string" ? params["inventoryEntityId"].trim() : "";
+  if (!digitalProductId && !inventoryEntityId) {
+    return { success: false, message: "Provide digitalProductId or inventoryEntityId", error: "missing_target" };
+  }
+
+  const { prisma, requestReEnrichment } = await import("@dpf/db");
+  const result = await requestReEnrichment(
+    prisma as unknown as Parameters<typeof requestReEnrichment>[0],
+    {
+      ...(digitalProductId ? { digitalProductId } : {}),
+      ...(inventoryEntityId ? { inventoryEntityId } : {}),
+    },
+  );
+  if (!result.flaggedProduct && !result.flaggedEntity) {
+    return { success: false, message: "Target not found — nothing flagged for re-enrichment", error: "target_not_found" };
+  }
+  const flagged = [
+    result.flaggedProduct ? `product ${digitalProductId}` : null,
+    result.flaggedEntity ? `entity ${inventoryEntityId}` : null,
+  ].filter(Boolean).join(" and ");
+  return {
+    success: true,
+    message: `Flagged ${flagged} for re-enrichment; the next catalog sweep will re-resolve it.`,
+    data: result as unknown as Record<string, unknown>,
+  };
+}
+
 async function configureGatewayScanHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const name = String(params["name"] ?? "").trim();
   const endpointUrl = String(params["endpointUrl"] ?? "").trim();
@@ -346,6 +431,8 @@ const handlers: Record<string, ToolPackHandler> = {
   attribute_entity_to_product: (params) => attributeEntityToProductHandler(params),
   dismiss_entity: (params) => dismissEntityHandler(params),
   resolve_portfolio_quality_issue: (params) => resolvePortfolioQualityIssueHandler(params),
+  enrich_digital_product: (params) => enrichDigitalProductHandler(params),
+  request_re_enrichment: (params) => requestReEnrichmentHandler(params),
   configure_gateway_scan: (params) => configureGatewayScanHandler(params),
 };
 
@@ -360,6 +447,8 @@ export const discoveryInventoryPack: ToolPack = {
     attribute_entity_to_product: ["registry_write"],
     dismiss_entity: ["registry_write"],
     resolve_portfolio_quality_issue: ["registry_write"],
+    enrich_digital_product: ["enrichment_write"],
+    request_re_enrichment: ["enrichment_write"],
     configure_gateway_scan: ["agent_control_read"],
   },
 };
