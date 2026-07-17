@@ -60,6 +60,7 @@ describe("work capsule enums", () => {
     expect(WORK_CAPSULE_SOURCES).toContain("external-adoption");
     expect(WORK_CAPSULE_EXECUTOR_KINDS).toContain("codex-desktop");
     expect(WORK_CAPSULE_EXECUTOR_KINDS).toContain("grok-desktop");
+    expect(WORK_CAPSULE_EXECUTOR_KINDS).toContain("antigravity-desktop");
     expect(WORK_CAPSULE_ACTIVITY_KINDS).toContain("evidence-recorded");
   });
 });

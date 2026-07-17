@@ -28,7 +28,7 @@ export type WipPool = "bs-sandbox" | "shared-lease" | "host-worktree" | "none";
 
 /** A single unit of active work, surface-tagged via its capsule executorKind. */
 export interface ActiveWipItem {
-  /** WorkCapsule executorKind: build-studio | claude/codex/grok-desktop | dpf-native | human | git-webhook. */
+  /** WorkCapsule executorKind: build-studio | claude/codex/grok/antigravity-desktop | dpf-native | human | git-webhook. */
   readonly executorKind: string;
   /** True when this work currently holds a shared singleton lease (e.g. the :3001 nonprod lease). */
   readonly holdsSharedLease?: boolean;

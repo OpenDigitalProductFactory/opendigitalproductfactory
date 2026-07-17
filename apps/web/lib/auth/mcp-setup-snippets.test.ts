@@ -45,6 +45,17 @@ describe("buildSetupSnippets", () => {
     expect(grok).not.toContain(TOKEN);
   });
 
+  it("antigravity produces a JSON mcpServers.dpf block (http, env-backed auth) and never embeds the secret", () => {
+    const { antigravity } = buildSetupSnippets(TOKEN, BASE);
+    const parsed = JSON.parse(antigravity) as {
+      mcpServers?: { dpf?: { type?: string; url?: string; headers?: { Authorization?: string } } };
+    };
+    expect(parsed.mcpServers?.dpf?.type).toBe("http");
+    expect(parsed.mcpServers?.dpf?.url).toBe(LOCAL_MCP_URL);
+    expect(parsed.mcpServers?.dpf?.headers?.Authorization).toBe("Bearer ${DPF_MCP_BEARER_TOKEN}");
+    expect(antigravity).not.toContain(TOKEN);
+  });
+
   it("env and runtime refresh snippets carry the full plaintext token", () => {
     const t = "dpfmcp_UNIQUETOKEN";
     const { envPowerShell, runtimeRefreshPowerShell } = buildSetupSnippets(t, BASE);

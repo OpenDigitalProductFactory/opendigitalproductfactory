@@ -43,7 +43,7 @@ apps/web/lib/marketing.ts	1367
 apps/web/lib/mcp-tools-backlog.test.ts	920
 apps/web/lib/mcp-tools.ts	1957
 apps/web/lib/mcp/packs/backlog-pack.ts	1328
-apps/web/lib/mcp/packs/contribution-hive-pack.ts	861
+apps/web/lib/mcp/packs/contribution-hive-pack.ts	858
 apps/web/lib/mcp/packs/sandbox-pack.ts	920
 apps/web/lib/navigation/portal-navigation-model.ts	937
 apps/web/lib/operate/coworker-regression-detector.ts	935
@@ -62,7 +62,7 @@ apps/web/lib/tak/route-context-map.ts	1226
 apps/web/lib/tak/route-context.ts	1239
 apps/web/lib/work-capsules/mcp-handlers.ts	884
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1103
-apps/web/lib/work-capsules/work-capsule-store.ts	1041
+apps/web/lib/work-capsules/work-capsule-store.ts	1042
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace/command-center.ts	1118

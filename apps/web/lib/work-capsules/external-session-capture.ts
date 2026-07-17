@@ -24,6 +24,7 @@ export function providerToExecutorKind(provider: string): WorkCapsuleExecutorKin
   if (normalized.includes("claude")) return "claude-desktop";
   if (normalized.includes("codex")) return "codex-desktop";
   if (normalized.includes("grok")) return "grok-desktop";
+  if (normalized.includes("antigravity")) return "antigravity-desktop";
   return "human";
 }
 
