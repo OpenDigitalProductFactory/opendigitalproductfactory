@@ -1,13 +1,123 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
   enumerateExternalRuntimes,
+  collectRepositoryMeasurements,
   parseComposeServices,
+  stableSerialize,
   SUPPORTED_MANIFEST_VERSION,
   validateSubstrateManifest,
 } from "./platform-substrate-measurements.mjs";
+
+async function withFixture(files, run) {
+  const root = await mkdtemp(join(tmpdir(), "substrate-measurements-"));
+  try {
+    for (const [path, content] of Object.entries(files)) {
+      const target = join(root, ...path.split("/"));
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, content);
+    }
+    return await run(root);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+const measurementManifest = {
+  services: [
+    { service: "portal", class: "universal-core", defaultRequired: true },
+    { service: "worker", class: "capability-activated", defaultRequired: false },
+    { service: "postgres", class: "universal-core", defaultRequired: true },
+  ],
+};
+
+const measurementFiles = {
+  "packages/db/prisma/schema.prisma": "model User {\n  id String @id\n}\n\nmodel Team {\n  id String @id\n}\n",
+  "packages/db/src/seed.ts": "export async function seed() {\n  return true;\n}\n",
+  "apps/web/lib/domain/publish.ts": 'import { inngest } from "@/lib/queue/inngest-client";\n',
+  "apps/web/lib/domain/multiline.ts": 'import {\n  inngest\n} from "@/lib/queue/inngest-client";\n',
+  "apps/web/lib/domain/reexport.ts": 'export { inngest } from "@/lib/queue/inngest-client";\n',
+  "apps/web/lib/domain/near-miss.ts": 'import { retention } from "@/lib/operate/inngest-retention/constants";\n',
+  "apps/web/lib/execution/adapters/inngest.ts": 'import { Inngest } from "inngest";\n',
+  "apps/web/app/api/inngest/route.ts": 'import { serve } from "inngest/next";\n',
+  "apps/web/app/api/integrations/slack/connect/route.ts": "export function GET() {}\n",
+  "apps/web/app/api/integrations/microsoft/teams/connect/route.ts": "export function GET() {}\n",
+  "apps/web/app/api/integrations/github/callback/route.ts": "export function GET() {}\n",
+  "apps/web/lib/integrate/slack/connection-state.ts": "export const state = {};\n",
+  "apps/web/lib/domain/large.ts": `${Array.from({ length: 801 }, (_, index) => `export const n${index} = ${index};`).join("\n")}\n`,
+  "apps/web/lib/domain/small.ts": "export const small = true;\n",
+  "apps/web/lib/domain/large.test.ts": `${"test();\n".repeat(900)}`,
+  "apps/web/lib/domain/__snapshots__/large.ts": `${"snapshot();\n".repeat(900)}`,
+  "scripts/check-module-size.mjs": "const SOFT_CEILING = 800;\n",
+  "assets/binary.dat": Buffer.from([0, 255, 0, 255]),
+};
+
+test("collects deterministic repository complexity measurements", async () => {
+  await withFixture(measurementFiles, async (repoRoot) => {
+    const inputs = {
+      repoRoot,
+      manifest: measurementManifest,
+      generatedAt: "2026-07-17T00:00:00.000Z",
+      gitSha: "abc123",
+    };
+    const first = await collectRepositoryMeasurements(inputs);
+    const second = await collectRepositoryMeasurements({
+      ...inputs,
+      generatedAt: "2026-07-17T00:01:00.000Z",
+      gitSha: "def456",
+    });
+
+    assert.deepEqual(first.services, {
+      total: 3,
+      defaultRequired: 2,
+      byClass: { "capability-activated": 1, "universal-core": 2 },
+    });
+    assert.equal(first.prismaModelCount, 2);
+    assert.deepEqual(first.directInngestImports, [
+      "apps/web/lib/domain/multiline.ts",
+      "apps/web/lib/domain/publish.ts",
+      "apps/web/lib/domain/reexport.ts",
+    ]);
+    assert.deepEqual(first.integrationConnectRoutes, [
+      "apps/web/app/api/integrations/microsoft/teams/connect/route.ts",
+      "apps/web/app/api/integrations/slack/connect/route.ts",
+    ]);
+    assert.deepEqual(first.providerConnectionStateProjectors, ["apps/web/lib/integrate/slack/connection-state.ts"]);
+    assert.deepEqual(first.productionModulesAboveSoftCeiling, [
+      { lines: 901, path: "apps/web/lib/domain/large.test.ts" },
+      { lines: 802, path: "apps/web/lib/domain/large.ts" },
+    ]);
+    assert.deepEqual(first.lineCounts, { prismaSchema: 8, seedCoordinator: 4 });
+
+    const withoutProvenance = ({ generatedAt: _generatedAt, gitSha: _gitSha, ...value }) => value;
+    assert.equal(
+      stableSerialize(withoutProvenance(first)),
+      stableSerialize(withoutProvenance(second)),
+    );
+  });
+});
+
+test("requires the canonical schema and seed coordinator", async () => {
+  await withFixture({ "scripts/check-module-size.mjs": "const SOFT_CEILING = 800;\n" }, async (repoRoot) => {
+    await assert.rejects(
+      collectRepositoryMeasurements({ repoRoot, manifest: measurementManifest }),
+      /packages\/db\/prisma\/schema\.prisma/,
+    );
+  });
+  await withFixture({
+    "scripts/check-module-size.mjs": "const SOFT_CEILING = 800;\n",
+    "packages/db/prisma/schema.prisma": "model User { id String @id }\n",
+  }, async (repoRoot) => {
+    await assert.rejects(
+      collectRepositoryMeasurements({ repoRoot, manifest: measurementManifest }),
+      /packages\/db\/src\/seed\.ts/,
+    );
+  });
+});
 
 const validService = {
   service: "portal",

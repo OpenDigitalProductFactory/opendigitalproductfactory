@@ -1,3 +1,12 @@
+import { readFile as nativeReadFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  listModuleSourcePaths,
+  MODULE_SIZE_SOFT_CEILING,
+  moduleSizesFromSources,
+  readModuleSources,
+} from "./module-size-scope.mjs";
+
 export const SUPPORTED_MANIFEST_VERSION = 1;
 export const SUBSTRATE_CLASSES = [
   "universal-core",
@@ -40,6 +49,86 @@ const REQUIRED_RUNTIME_FIELDS = [
   "hostPlatforms",
   "boundaryReason",
 ];
+
+function lineCount(content) {
+  return content.replace(/\r\n?/g, "\n").split("\n").length;
+}
+
+function sortedObject(value) {
+  if (Array.isArray(value)) return value.map(sortedObject);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortedObject(value[key])]));
+  }
+  return value;
+}
+
+export function stableSerialize(value) {
+  return `${JSON.stringify(sortedObject(value), null, 2)}\n`;
+}
+
+function hasDirectInngestImport(content) {
+  const specifiers = [
+    ...content.matchAll(/(?:^|[;\n])\s*(?:import|export)\s+(?:[^;]*?\s+from\s+)?["']([^"']+)["']/g),
+    ...content.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g),
+  ].map((match) => match[1]);
+  return specifiers.some((specifier) => specifier === "inngest"
+    || specifier.startsWith("inngest/")
+    || /(?:^|\/)queue\/inngest-client$/.test(specifier));
+}
+
+function isApprovedInngestPath(path) {
+  return path === "apps/web/app/api/inngest/route.ts"
+    || path.startsWith("apps/web/lib/execution/adapters/")
+    || path.startsWith("apps/web/lib/queue/");
+}
+
+async function readRequired(repoRoot, path, readFile) {
+  try {
+    return await readFile(join(repoRoot, ...path.split("/")), "utf8");
+  } catch (error) {
+    throw new Error(`Unable to read required repository file ${path}`, { cause: error });
+  }
+}
+
+export async function collectRepositoryMeasurements({
+  repoRoot,
+  manifest,
+  generatedAt,
+  gitSha,
+  io = {},
+}) {
+  const readFile = io.readFile ?? nativeReadFile;
+  const files = await listModuleSourcePaths({ repoRoot, readdir: io.readdir });
+  const contents = await readModuleSources({ repoRoot, paths: files, readFile });
+  const sizes = moduleSizesFromSources(contents);
+  const schemaContent = await readRequired(repoRoot, "packages/db/prisma/schema.prisma", readFile);
+  const seedContent = await readRequired(repoRoot, "packages/db/src/seed.ts", readFile);
+  const services = Array.isArray(manifest?.services) ? manifest.services : [];
+  const byClass = {};
+  for (const service of services) byClass[service.class] = (byClass[service.class] ?? 0) + 1;
+
+  return {
+    generatedAt,
+    gitSha,
+    services: {
+      total: services.length,
+      defaultRequired: services.filter((service) => service.defaultRequired).length,
+      byClass: sortedObject(byClass),
+    },
+    prismaModelCount: [...schemaContent.matchAll(/^model\s+[A-Za-z_]\w*\s*\{/gm)].length,
+    directInngestImports: files.filter((path) => !isApprovedInngestPath(path) && hasDirectInngestImport(contents.get(path))),
+    integrationConnectRoutes: files.filter((path) => /^apps\/web\/app\/api\/integrations\/.+\/connect\/route\.ts$/.test(path)),
+    providerConnectionStateProjectors: files.filter((path) => /^apps\/web\/lib\/integrate\/[^/]+\/connection-state\.ts$/.test(path)),
+    productionModulesAboveSoftCeiling: files
+      .map((path) => ({ lines: sizes[path], path }))
+      .filter(({ lines }) => lines > MODULE_SIZE_SOFT_CEILING)
+      .sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0),
+    lineCounts: {
+      prismaSchema: lineCount(schemaContent),
+      seedCoordinator: lineCount(seedContent),
+    },
+  };
+}
 
 function indentation(line) {
   return line.match(/^ */)[0].length;
