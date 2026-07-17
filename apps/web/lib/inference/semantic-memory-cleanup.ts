@@ -15,10 +15,16 @@ import {
   type QdrantFilter,
 } from "@dpf/db";
 
-const AGENT_MEMORY = QDRANT_COLLECTIONS.AGENT_MEMORY;
-
 /** Upper bound on how many candidate points one cleanup/reconcile pass inspects. */
 export const SEMANTIC_MEMORY_SCAN_LIMIT = 5000;
+
+// Read the collection name lazily (inside functions), never at module load: this
+// module is pulled in transitively by the queue barrel, and reading an imported
+// `@dpf/db` value at top level can hit a mocked/circular-init `undefined` and crash
+// unrelated importers before any function runs.
+function agentMemoryCollection(): string {
+  return QDRANT_COLLECTIONS.AGENT_MEMORY;
+}
 
 export type CleanupSourceKind = "message" | "thread" | "orphan-reconcile";
 
@@ -60,6 +66,7 @@ export async function purgeConversationVectorsBySource(params: {
   messageIds?: string[];
   threadIds?: string[];
 }): Promise<CleanupEvidence> {
+  const AGENT_MEMORY = agentMemoryCollection();
   const messageIds = dedupe(params.messageIds);
   const threadIds = dedupe(params.threadIds);
   const sourceKind: CleanupSourceKind = threadIds.length > 0 ? "thread" : "message";
@@ -106,6 +113,7 @@ export async function reconcileOrphanConversationVectors(params: {
   existsResolver: (messageIds: string[]) => Promise<Set<string>>;
   cappedAtScan?: boolean;
 }): Promise<CleanupEvidence & { orphanMessageIds: string[] }> {
+  const AGENT_MEMORY = agentMemoryCollection();
   const candidateMessageIds = dedupe(params.candidateMessageIds);
   const evidence: CleanupEvidence & { orphanMessageIds: string[] } = {
     collection: AGENT_MEMORY,
