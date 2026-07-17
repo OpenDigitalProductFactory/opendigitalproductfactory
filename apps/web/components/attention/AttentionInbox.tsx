@@ -5,7 +5,11 @@ import type { OwnerAttentionProjection } from "@/lib/attention/owner-projection"
 import type { AttentionSource } from "@/lib/attention/types";
 import type { WeeklyDigestDisposition } from "@/lib/attention/weekly-digest-preferences";
 import { OwnerDecisionCards } from "./OwnerDecisionCards";
-import { DigitalTeamHandlingStrip, OwnerAttentionCount } from "./OwnerAttentionStatus";
+import {
+  DigitalTeamHandlingStrip,
+  OwnerAllCaughtUp,
+  OwnerAttentionCount,
+} from "./OwnerAttentionStatus";
 import { WeeklyDigestPanel } from "./WeeklyDigestPanel";
 
 export function AttentionInbox({
@@ -30,7 +34,12 @@ export function AttentionInbox({
       <div>
         <OwnerAttentionCount count={projection.count} />
         {projection.count === 0 ? (
-          <p className="mt-1 text-sm text-[var(--dpf-muted)]">Nothing needs you right now.</p>
+          <div className="mt-2">
+            <OwnerAllCaughtUp
+              handlingCount={projection.custodian.length}
+              examples={projection.custodian.slice(0, 3).map((entry) => entry.card.headline)}
+            />
+          </div>
         ) : (
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--dpf-muted)]">
             Review the business choices below. Open technical detail only when a builder or your
@@ -42,7 +51,7 @@ export function AttentionInbox({
       {projection.count > 0 ? <OwnerDecisionCards entries={projection.needsYouNow} /> : null}
 
       <DigitalTeamHandlingStrip
-        custodianCount={projection.custodian.length}
+        custodianCount={projection.count === 0 ? 0 : projection.custodian.length}
         digestCount={digestDisposition ? 0 : projection.weeklyDigest.length}
       />
 
