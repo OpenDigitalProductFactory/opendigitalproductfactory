@@ -19,16 +19,16 @@
 - Create: `scripts/lib/platform-substrate-measurements.mjs`
 - Test: `scripts/lib/platform-substrate-measurements.test.mjs`
 
-- [ ] **Step 1: Write the failing manifest validation tests**
+- [x] **Step 1: Write the failing manifest validation tests**
 
 Test that validation rejects duplicate services, unknown classes, missing boundary reasons for specialist services, and services present in Compose but absent from the manifest. Test missing/incorrect profiles, ports, volumes, dependencies, data owner, backup policy, health semantics, host platforms, and target classification. Test that the checked-in manifest validates against `docker-compose.yml` and that every configured external AI runtime appears in the external-runtime inventory.
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run: `node --test scripts/lib/platform-substrate-measurements.test.mjs`  
 Expected: FAIL because the module and manifest do not exist.
 
-- [ ] **Step 3: Add the minimal manifest and validation implementation**
+- [x] **Step 3: Add the minimal manifest and validation implementation**
 
 Use these closed classes:
 
@@ -44,16 +44,16 @@ export const SUBSTRATE_CLASSES = [
 
 Manifest records cover every Compose service and configured external AI runtime. Static external-runtime enumeration comes from `packages/db/data/providers-registry.json` plus runtime declarations in `docker-compose.yml`; the canonical-runtime collector separately records live `AIProvider`/runtime reconciliation without making live DB state a source-file dependency. Service records contain `service`, `class`, `capability`, `boundaryReason`, `defaultRequired`, `profiles`, `ports`, `volumes`, `dependsOn`, `canonicalDataOwner`, `backupPolicy`, `healthSemantics`, `hostPlatforms`, and `targetClassification`. External runtime records contain `runtimeKey`, `kind`, `activation`, `canonicalDataOwner`, `healthSemantics`, `hostPlatforms`, and `boundaryReason`. Volumes and top-level Compose keys are not services. Parsed Compose profiles, ports, volumes, and dependencies must equal the manifest.
 
-- [ ] **Step 4: Run the tests and verify GREEN**
+- [x] **Step 4: Run the tests and verify GREEN**
 
 Run: `node --test scripts/lib/platform-substrate-measurements.test.mjs`  
 Expected: PASS.
 
-- [ ] **Step 5: Refactor parsing and validation while green**
+- [x] **Step 5: Refactor parsing and validation while green**
 
 Keep parsing pure and deterministic. Do not add a YAML dependency; support the repository's service/profile syntax and fail clearly on unsupported structure.
 
-- [ ] **Step 6: Commit the contract**
+- [x] **Step 6: Commit the contract**
 
 ```powershell
 git add scripts/platform-substrate-manifest.json scripts/lib/platform-substrate-measurements.mjs scripts/lib/platform-substrate-measurements.test.mjs
@@ -66,7 +66,7 @@ git commit -s -m "feat(architecture): classify platform substrate services"
 - Modify: `scripts/lib/platform-substrate-measurements.mjs`
 - Modify: `scripts/lib/platform-substrate-measurements.test.mjs`
 
-- [ ] **Step 1: Write failing measurement tests**
+- [x] **Step 1: Write failing measurement tests**
 
 Use temporary fixture trees and assert measurements for:
 
@@ -79,23 +79,23 @@ Use temporary fixture trees and assert measurements for:
 
 Run collection twice against the same fixture, strip only `generatedAt` and `gitSha`, serialize with the production stable serializer, and assert byte-for-byte equality.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the targeted Node test and confirm missing measurement functions cause the expected failures.
 
-- [ ] **Step 3: Implement the minimal pure collectors**
+- [x] **Step 3: Implement the minimal pure collectors**
 
 Collectors accept explicit repository paths/content so tests do not mock process state. Reuse the module-size ceiling semantics rather than create a competing definition.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the targeted test and confirm all fixture cases pass.
 
-- [ ] **Step 5: Refactor shared file walking and normalization**
+- [x] **Step 5: Refactor shared file walking and normalization**
 
 Keep path normalization cross-platform and results stably sorted.
 
-- [ ] **Step 6: Commit measurements**
+- [x] **Step 6: Commit measurements**
 
 ```powershell
 git add scripts/lib/platform-substrate-measurements.mjs scripts/lib/platform-substrate-measurements.test.mjs
@@ -110,23 +110,23 @@ git commit -s -m "feat(architecture): measure substrate complexity"
 - Modify: `scripts/lib/platform-substrate-measurements.mjs`
 - Modify: `scripts/lib/platform-substrate-measurements.test.mjs`
 
-- [ ] **Step 1: Write failing comparison tests**
+- [x] **Step 1: Write failing comparison tests**
 
 Assert that increased service/default/vendor-import/duplication/model/hotspot counts fail, unchanged counts pass, decreases pass with a stale-baseline advisory, and explicitly informational metrics never fail.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the targeted test and confirm the comparison API is missing.
 
-- [ ] **Step 3: Implement minimal comparison semantics**
+- [x] **Step 3: Implement minimal comparison semantics**
 
 Every baseline metric declares `direction: "non-increasing" | "informational"`. Never infer direction from the metric name.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the targeted test.
 
-- [ ] **Step 5: Commit ratchet logic**
+- [x] **Step 5: Commit ratchet logic**
 
 ```powershell
 git add scripts/lib/platform-substrate-measurements.mjs scripts/lib/platform-substrate-measurements.test.mjs
@@ -143,16 +143,16 @@ git commit -s -m "feat(architecture): ratchet substrate complexity"
 - Create: `scripts/platform-substrate-baseline.json`
 - Modify: `package.json`
 
-- [ ] **Step 1: Write failing CLI tests**
+- [x] **Step 1: Write failing CLI tests**
 
 Test `--json`, `--update`, default ratchet checking, missing baseline, invalid manifest, and nonzero exit on regression using injected fixture paths. Add a RED test proving the `check-no-substrate-regression.mjs` wrapper calls the same checker and is discovered by the existing `check-no-*` convention.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `node --test scripts/measure-platform-substrate.test.mjs scripts/check-no-substrate-regression.test.mjs`  
 Expected: FAIL because the CLI is absent.
 
-- [ ] **Step 3: Implement the CLI**
+- [x] **Step 3: Implement the CLI**
 
 Add commands:
 
@@ -165,21 +165,21 @@ Add commands:
 
 Default output is concise and human-readable. `--update` writes stable JSON with provenance (`generatedAt`, git SHA, manifest version) and metric policies.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `node --test scripts/measure-platform-substrate.test.mjs scripts/check-no-substrate-regression.test.mjs` and then `pnpm check:guards`. Confirm the wrapper, real guard discovery, and live CLI are green.
 
-- [ ] **Step 5: Generate and validate the baseline**
+- [x] **Step 5: Generate and validate the baseline**
 
 Run: `node scripts/measure-platform-substrate.mjs --update`  
 Then: `node scripts/measure-platform-substrate.mjs`  
 Expected: baseline written, then PASS with no regressions.
 
-- [ ] **Step 6: Add the auto-discovered guard wrapper**
+- [x] **Step 6: Add the auto-discovered guard wrapper**
 
 `check-no-substrate-regression.mjs` is a thin wrapper with a sibling Node test, so existing `check-guards.mjs` and CI discover it without workflow edits. Verify discovery through the wrapper test; edit CI only if fresh inspection proves the convention changed.
 
-- [ ] **Step 7: Commit CLI and baseline**
+- [x] **Step 7: Commit CLI and baseline**
 
 ```powershell
 git add scripts/measure-platform-substrate.mjs scripts/measure-platform-substrate.test.mjs scripts/check-no-substrate-regression.mjs scripts/check-no-substrate-regression.test.mjs scripts/platform-substrate-baseline.json package.json
@@ -194,24 +194,24 @@ git commit -s -m "ci(architecture): enforce substrate complexity budget"
 - Create: `scripts/platform-substrate-runtime-baseline.json`
 - Modify: `package.json`
 
-- [ ] **Step 1: Write failing runtime collector tests**
+- [x] **Step 1: Write failing runtime collector tests**
 
 Inject fixtures for `docker compose ps --format json`, `docker stats --no-stream --format json`, and portal health/version responses. Assert required running service count, total idle container RSS, portal idle RSS, unhealthy required count, optional inactive/degraded counts, served identity, malformed-output failure, and byte-for-byte stable serialization after removing timestamp/SHA.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `node --test scripts/measure-platform-substrate-runtime.test.mjs`  
 Expected: FAIL because the collector is absent.
 
-- [ ] **Step 3: Implement the read-only collector**
+- [x] **Step 3: Implement the read-only collector**
 
 The collector never starts, stops, or rebuilds services. It consumes the capability/service projection and observes only the leased canonical runtime. Non-increasing budgets are required running service count, total idle RSS, portal idle RSS, and unhealthy required count; identity and optional-state counts are informational.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the targeted test. Partial Docker output must fail closed without overwriting a baseline.
 
-- [ ] **Step 5: Add package commands**
+- [x] **Step 5: Add package commands**
 
 Add `measure:substrate:runtime` and `check:substrate:runtime`. The checker refuses a baseline from an unleased or unidentifiable runtime.
 
@@ -235,19 +235,19 @@ git commit -s -m "feat(architecture): baseline runtime substrate footprint"
 - Modify: `docs/install/platform-support-watchlist.md` only if measurement reveals a new platform-specific runtime assumption
 - Modify: `docs/superpowers/specs/2026-07-17-platform-substrate-convergence-design.md` only for confirmed implementation learnings
 
-- [ ] **Step 1: Document metric semantics and exclusions**
+- [x] **Step 1: Document metric semantics and exclusions**
 
 Explain service classes, boundary-reason rules, static versus runtime evidence, ratchet directions, update procedure, and why fewer containers alone is not success.
 
-- [ ] **Step 2: Link the manifest, CLI, baseline, epic, and design**
+- [x] **Step 2: Link the manifest, CLI, baseline, epic, and design**
 
 Keep one source of truth; documentation points to measured artifacts rather than copying values.
 
-- [ ] **Step 3: Run documentation gates**
+- [x] **Step 3: Run documentation gates**
 
 Run: `pnpm docs:index` then `pnpm check:doc-links` or the repository's narrower required doc commands. Fix generated artifacts through the canonical generator.
 
-- [ ] **Step 4: Commit documentation**
+- [x] **Step 4: Commit documentation**
 
 ```powershell
 git add docs/architecture/platform-substrate-boundaries.md docs/install/platform-support-watchlist.md docs/superpowers/specs/2026-07-17-platform-substrate-convergence-design.md apps/web/lib/docs/doc-index.generated.json
@@ -269,6 +269,8 @@ pnpm check:guards
 pnpm --filter web typecheck
 ```
 
+Current evidence: the source measurement suites, static substrate guard, documentation gates, and independent implementation reviews are green. The governed `local-integration-ci` merged candidate passed Prisma generation/migrations and the complete test run (1,934 test files; 16,771 tests; evidence activity `cmroen0ik00u701mw9pcu3vei`). Windows typecheck subsequently exited 134 because the runner did not provide the required 8 GiB Node heap (blocked/fail evidence activity `cmroen0ji00u901mw7q4i4tgs`; tracked by `BI-LOCAL-CI-WINDOWS-TYPECHECK-HEAP`). Therefore this step remains open.
+
 - [ ] **Step 2: Inspect the full diff and requirements checklist**
 
 Confirm every acceptance item in BI-PSC-001 and the design spec has direct evidence.
@@ -277,7 +279,9 @@ Confirm every acceptance item in BI-PSC-001 and the design spec has direct evide
 
 Claim `local-integration-ci`, run the production build and `pnpm check:substrate:runtime` there, record build and runtime-budget evidence, and release the lease. Do not claim worktree-only runtime evidence.
 
-- [ ] **Step 4: Commit plan evidence updates**
+The governed candidate and database/test portions are verified as recorded above. Production build evidence and the canonical runtime baseline remain outstanding.
+
+- [x] **Step 4: Commit plan evidence updates**
 
 ```powershell
 git add docs/superpowers/plans/2026-07-17-platform-substrate-measurement-ratchets.md
@@ -295,3 +299,5 @@ Run `pnpm pr:health`, address review/CI findings with reviewed commits, and conf
 - [ ] **Step 7: Record evidence and complete the backlog item**
 
 Use DPF MCP to attach source tests, canonical build/runtime budget, and merged PR/SHA evidence; then mark BI-PSC-001 done. Leave the epic open for BI-PSC-002.
+
+Pending completion evidence: successful Windows typecheck with the required heap, production build, canonical runtime baseline/check, ready PR, merge SHA, and BI closure.
