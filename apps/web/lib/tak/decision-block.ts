@@ -150,23 +150,26 @@ export function parseDecisionFromContent(content: string): {
   cleanedContent: string;
   decision: CoworkerDecision | null;
 } {
-  if (!content || !content.includes("dpf-decision")) {
-    return { cleanedContent: content, decision: null };
+  if (!content) return { cleanedContent: content, decision: null };
+
+  // 1. Prefer an explicit sentinel when present.
+  if (content.includes("dpf-decision")) {
+    const match = content.match(DECISION_SENTINEL_RE);
+    if (match) {
+      const cleanedContent = content.replace(DECISION_SENTINEL_RE, "").trim();
+      let decision: CoworkerDecision | null = null;
+      try {
+        decision = normalizeDecision(JSON.parse(match[1]!));
+      } catch {
+        decision = null; // malformed JSON → strip sentinel, then try prose below
+      }
+      // A malformed sentinel is still stripped; fall back to prose on the cleaned text.
+      return { cleanedContent, decision: decision ?? deriveDecisionFromProse(cleanedContent) };
+    }
   }
 
-  const match = content.match(DECISION_SENTINEL_RE);
-  if (!match) return { cleanedContent: content, decision: null };
-
-  const cleanedContent = content.replace(DECISION_SENTINEL_RE, "").trim();
-
-  let decision: CoworkerDecision | null = null;
-  try {
-    decision = normalizeDecision(JSON.parse(match[1]!));
-  } catch {
-    decision = null; // malformed JSON → strip sentinel, degrade to prose
-  }
-
-  return { cleanedContent, decision };
+  // 2. No sentinel — recover buttons from a clear prose choice (content unchanged).
+  return { cleanedContent: content, decision: deriveDecisionFromProse(content) };
 }
 
 /**
@@ -176,4 +179,93 @@ export function parseDecisionFromContent(content: string): {
  */
 export function formatDecisionSentinel(decision: CoworkerDecision): string {
   return `<!--dpf-decision:${JSON.stringify(decision)}-->`;
+}
+
+// --- Prose fallback ---------------------------------------------------------
+// The coworker is *instructed* to emit a sentinel, but a smaller model does not
+// always comply — it sometimes ends on a plain "…A, or B?" question with no
+// sentinel (observed live: Haiku 4.5 skipped it on a follow-up turn). This
+// deterministic fallback recovers buttons for the highest-confidence case: a
+// final question that ENUMERATES alternatives with a "comma-or" (", or ").
+//
+// The comma-or guard is deliberate. It fires on a real choice
+// ("break this into work items, or move to the next priority?") but NOT on a
+// noun disjunction ("tagged for reliability or incidents?", which has no comma)
+// — a wrong button is worse than no button, so we only act on the strong signal.
+
+// Lead-in phrases that precede the actual options in a choice question.
+const PROSE_LEADIN_RE =
+  /^(?:what(?:'s| is) your call|what would you like(?: me to do)?|which would you prefer|would you like me to|do you want me to|want me to|should i|shall i|shall we|should we|do you want to|do you want)\b[\s,:—–-]*/i;
+
+const PROSE_OPTION_PREFIX_RE = /^(?:perhaps|maybe|instead|else|or|either)\s+/i;
+
+const PROSE_LABEL_MAX = 56;
+
+/** Isolate the final sentence when the trimmed content ends with a question. */
+function finalQuestion(content: string): string | null {
+  const trimmed = content.trim();
+  if (!/\?\s*$/.test(trimmed)) return null;
+  const body = trimmed.replace(/\?+\s*$/, "");
+  // Start of the last sentence = after the last sentence terminator / newline.
+  let start = 0;
+  for (const m of body.matchAll(/[.!?\n]+\s+/g)) {
+    start = m.index! + m[0].length;
+  }
+  return body.slice(start).trim() || null;
+}
+
+/**
+ * Derive a decision from a coworker's plain-prose closeout when no sentinel was
+ * emitted. Conservative by construction — returns null unless the final question
+ * clearly enumerates 2–3 alternatives via a comma-or, each a clean clause.
+ */
+export function deriveDecisionFromProse(content: string): CoworkerDecision | null {
+  if (!content || !/,\s+or\s+/i.test(content)) return null;
+
+  const question = finalQuestion(content);
+  // Require the comma-or to live inside the FINAL question, not earlier prose.
+  if (!question || !/,\s+or\s+/i.test(question)) return null;
+
+  // Drop a leading lead-in clause: an explicit verb phrase, or a short prefix
+  // terminated by an em/en dash or colon (e.g. "What's your call — ").
+  let body = question.replace(PROSE_LEADIN_RE, "");
+  body = body.replace(/^[^—–:]{0,44}[—–:]\s*/, (m) => (/,\s+or\s+/i.test(m) ? m : ""));
+  body = body.replace(PROSE_LEADIN_RE, "").trim();
+
+  const rawParts = body.split(/,\s+or\s+/i);
+  if (rawParts.length < 2 || rawParts.length > 3) return null;
+
+  const options: CoworkerDecisionOption[] = [];
+  rawParts.forEach((part, index) => {
+    const clause = part
+      .replace(PROSE_OPTION_PREFIX_RE, "")
+      .replace(/\s+/g, " ")
+      .replace(/[.,;:\s]+$/, "")
+      .trim();
+    // Guardrails: each option must be a clean, sentence-free clause with letters.
+    if (clause.length < 4 || clause.length > 90) return;
+    if (!/[a-z]/i.test(clause)) return;
+    if (/[.!?]/.test(clause)) return; // a period/bang means we split across sentences
+    const value = clause.charAt(0).toUpperCase() + clause.slice(1);
+    const label =
+      value.length > PROSE_LABEL_MAX ? `${value.slice(0, PROSE_LABEL_MAX - 1).trimEnd()}…` : value;
+    const option: CoworkerDecisionOption = {
+      id: slugify(clause, index),
+      label,
+      value,
+      kind: "answer",
+    };
+    if (index === 0) option.recommended = true;
+    options.push(option);
+  });
+
+  // All parts must have survived the guards, and labels must be distinct.
+  if (options.length !== rawParts.length) return null;
+  const labels = new Set(options.map((o) => o.label.toLowerCase()));
+  if (labels.size !== options.length) return null;
+
+  const decision: CoworkerDecision = { options, freeTextAllowed: true };
+  const prompt = question.replace(/\s+/g, " ").trim();
+  if (prompt) decision.prompt = prompt;
+  return decision;
 }
