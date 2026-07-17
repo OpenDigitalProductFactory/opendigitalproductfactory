@@ -131,7 +131,7 @@ This is the kernel/org-overlay pattern again: component catalog entries are kern
 
 **Phase B — Open support-lifecycle & vuln feeds:**
 - endoflife.date connector → CatalogLifecycleMilestone (+ optional vendor calendars) — **BI-3A2328D6** — feed logic **landed** in `packages/db/src/endoflife-lifecycle.ts` (`releaseToMilestones`/`selectRelease`/`fetchEolProduct`/`upsertLifecycleForIdentity`, endoflife.date→milestone mapping + idempotent upsert onto CatalogIdentity); the scheduled sweep that iterates CatalogIdentities + the CPE-keyed slug resolution are the follow-up wiring.
-- NVD CPE 2.3 crosswalk + broaden vuln beyond OSS — **BI-44B8B1E4**
+- NVD CPE 2.3 crosswalk + broaden vuln beyond OSS — **BI-44B8B1E4** — crosswalk **landed** in `packages/db/src/cpe-crosswalk.ts` (`buildCpe23` deterministic CPE 2.3 from a CatalogIdentity, `fetchNvdCpeNames` NVD-dictionary resolution, `resolveCatalogIdentityCpe` sets `CatalogIdentity.cpe`); broadening vuln lookups to installed/commercial products via the resolved CPE is the follow-up.
 - OS-package patch coverage + EOL/support posture UI — **BI-9C0424E4**
 - SBOM → CatalogIdentity enrichment bridge (component=public, occurrence=private) — **BI-19FD07F9**
 
