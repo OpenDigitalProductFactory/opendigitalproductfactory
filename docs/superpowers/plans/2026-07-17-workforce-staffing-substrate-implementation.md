@@ -156,9 +156,30 @@ surfacing, change ordering, and the privacy mask (private→Busy, public→title
 default-mask non-public). Live-portal render + a11y verification is a Phase-8
 live-install item.
 
-### Phase 7 — Calendar & comms projections
+### Phase 7 — Calendar & comms projections *(pure projections built)*
 
-**Deliverable.** Project confirmed assignments into `CalendarEventView` (no second canonical calendar copy); harden `calendar-data.ts` `employeeProfileId` scoping (§3.3 prerequisite) before private staffing projections depend on it. Comms candidate-fact flow (time-off intent → employee confirmation → `LeaveRequest(pending)` → approved-leave hard constraint → repair proposal); minimal source envelope only.
+**Deliverable.** Project confirmed assignments into the calendar; the
+time-off-intent comms flow. **Built in this slice**
+(`apps/web/lib/workforce/staffing/projections/`): `assignment-to-calendar.ts` —
+`projectAssignmentsToCalendar` projects only confirmed/published assignments into
+read-only, idempotent (`sourceRef`) calendar-view rows (staffing is authoritative;
+the calendar is a one-way projection, never a second canonical copy — spec §5.2);
+`candidate-fact-flow.ts` — `applyEmployeeReview`, the pure state machine that
+enforces **a message is not leave** (spec §2.2): a time-off intent promotes only
+to a *pending* `LeaveRequest` and only after employee confirmation with a resolved
+identity — never approved leave, never from an unresolved/ambiguous subject or a
+non-intent fact.
+
+**Pending — needs the live substrate:** wiring the projection into
+`CalendarEventView` writes and hardening `calendar-data.ts` `employeeProfileId`
+scoping (§3.3 prerequisite); persisting the pending `LeaveRequest` through the
+governed leave workflow; the impacted-schedule repair proposal.
+
+**Verification.** 8 tests (`projections/projections.test.ts`): projection filters
+to confirmed/published + read-only + stable idempotency key; and the
+message-is-not-leave matrix — pending-only promotion, block on unresolved/
+ambiguous identity, block on non-intent kind, reject path, employee date edit,
+inverted/incomplete range block.
 
 **Files.** `apps/web/lib/workforce/calendar-data.ts` (scoping fix); `apps/web/lib/workforce/staffing/projections/`; candidate-fact ingestion module.
 
