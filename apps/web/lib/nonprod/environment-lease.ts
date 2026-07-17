@@ -2,7 +2,23 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 
 export type NonprodEnvironmentKey = "active-candidate" | "local-integration-ci";
-export type NonprodOwnerProvider = "build-studio" | "claude" | "codex" | "coworker";
+/** Host-worktree coding surfaces + BS/coworker that may claim a shared nonprod lease. */
+export type NonprodOwnerProvider =
+  | "build-studio"
+  | "claude"
+  | "codex"
+  | "grok"
+  | "antigravity"
+  | "coworker";
+
+export const NONPROD_OWNER_PROVIDERS: readonly NonprodOwnerProvider[] = [
+  "build-studio",
+  "claude",
+  "codex",
+  "grok",
+  "antigravity",
+  "coworker",
+] as const;
 
 type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease">;
 

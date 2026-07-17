@@ -43,7 +43,10 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         environmentKey: { type: "string", enum: ["active-candidate", "local-integration-ci"] },
-        ownerProvider: { type: "string", enum: ["build-studio", "claude", "codex", "grok", "coworker"] },
+        ownerProvider: {
+          type: "string",
+          enum: ["build-studio", "claude", "codex", "grok", "antigravity", "coworker"],
+        },
         ownerSessionId: { type: "string" },
         purpose: { type: "string" },
         url: { type: "string" },
@@ -139,7 +142,8 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
   if (!["active-candidate", "local-integration-ci"].includes(environmentKey)) {
     return { success: false, error: "invalid_environment_key", message: `Unsupported environmentKey: ${environmentKey}` };
   }
-  if (!["build-studio", "claude", "codex", "coworker"].includes(ownerProvider)) {
+  const { NONPROD_OWNER_PROVIDERS } = await import("@/lib/nonprod/environment-lease");
+  if (!(NONPROD_OWNER_PROVIDERS as readonly string[]).includes(ownerProvider)) {
     return { success: false, error: "invalid_owner_provider", message: `Unsupported ownerProvider: ${ownerProvider}` };
   }
   const expiresAt = new Date(expiresAtText);
@@ -149,7 +153,7 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
 
   const result = await claimNonprodEnvironmentLease({
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci",
-    ownerProvider: ownerProvider as "build-studio" | "claude" | "codex" | "coworker",
+    ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
     ownerSessionId,
     purpose,
     url,
