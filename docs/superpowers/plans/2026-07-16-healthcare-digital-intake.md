@@ -56,13 +56,44 @@ and exception records that those generic surfaces do not own.
 
 ## Phase 2 — patient/proxy and receptionist APIs
 
-1. Issue expiring, revocable resume grants after identity/proxy authorization.
-2. Expose minimum-necessary packet metadata and form definitions.
-3. Save partial responses idempotently and submit only after completeness
-   validation.
-4. Support staff-assisted and paper-transcribed provenance.
-5. Stage coverage/entitlement evidence for human review and bind accepted
-   consent attestations to `PatientConsentDirective`.
+1. Extend each requirement snapshot entry with the internal `DynamicForm.id`
+   and exact version it belongs to. Reject access or writes when a requested
+   form is not pinned by the packet; do not turn the global dynamic-form
+   catalog into a patient-visible discovery surface.
+2. Issue expiring, revocable `view` / `save` / `submit` resume grants only
+   after `PatientAuthority` permits the authenticated patient or proxy. Return
+   the high-entropy bearer token once and persist only its SHA-256 digest.
+3. Expose `/api/v1/healthcare/intake/:packetId` as a token-scoped,
+   minimum-necessary projection: packet lifecycle/readiness plus only the
+   pinned form definitions. Never include saved answer values in the packet
+   projection or receptionist projections.
+4. Save partial responses through
+   `/api/v1/healthcare/intake/:packetId/responses/:formId` with an
+   idempotency key, optimistic response version, minimum-necessary validation,
+   and patient/proxy/staff/paper provenance. Server-owned source keys provide
+   retry idempotency; clients cannot choose another source system.
+5. Submit through `/api/v1/healthcare/intake/:packetId/submit`; recompute
+   completeness inside the same patient-context transaction and reject
+   incomplete, expired, revoked, wrong-packet, or under-scoped grants.
+6. Keep coverage evidence and consent attestation acceptance as separate
+   reviewer-authorized endpoints. They are not part of the patient bearer-token
+   write surface and remain staged evidence rather than canonical coverage or
+   consent authority.
+
+### Phase 2 delivery slices
+
+- **2A — access and response API:** form-version pinning, tamper-resistant
+  resume-token codec, authority-gated grant issuance, minimum packet
+  projection, idempotent partial saves, and completeness-gated submit.
+- **2B — receptionist review API:** readiness/exception queue with no response
+  payloads, assisted/paper disclosure, grant revocation, and immutable audit
+  projections.
+- **2C — reviewed evidence API:** stage coverage documents and consent
+  attestations, then accept/reject them only through explicit human authority.
+
+Rollback for 2A is route and repository removal; it adds no schema migration.
+Existing Phase 1 tables remain forward-compatible and contain no raw resume
+tokens.
 
 ## Phase 3 — user experience
 
