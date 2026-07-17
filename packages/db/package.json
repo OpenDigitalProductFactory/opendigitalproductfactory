@@ -47,6 +47,7 @@
     "./agent-model-defaults": "./src/agent-model-defaults.ts",
     "./healthcare-patient-authority": "./src/healthcare-patient-authority.ts",
     "./healthcare-care-appointment": "./src/healthcare-care-appointment.ts",
+    "./healthcare-care-intake": "./src/healthcare-care-intake.ts",
     "./seed-skills": "./src/seed-skills.ts",
     "./patch": "./src/patch/index.ts"
   },

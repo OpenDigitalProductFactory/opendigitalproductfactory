@@ -351,6 +351,20 @@ model Principal {
   careAppointmentsCreated             CareAppointment[]                   @relation("CareAppointmentCreator")
   careAppointmentsOverbooked          CareAppointment[]                   @relation("CareAppointmentOverbookAuthorizer")
   careAppointmentStatusEvents         CareAppointmentStatusEvent[]        @relation("CareAppointmentStatusActor")
+  careIntakePacketsSourced            CareIntakePacket[]                  @relation("CareIntakePacketSource")
+  careIntakePacketsRecorded           CareIntakePacket[]                  @relation("CareIntakePacketRecorder")
+  careIntakeResponsesSourced          CareIntakeResponse[]                @relation("CareIntakeResponseSource")
+  careIntakeResponsesRecorded         CareIntakeResponse[]                @relation("CareIntakeResponseRecorder")
+  careIntakeAccessGrants              CareIntakeAccessGrant[]             @relation("CareIntakeAccessGrantee")
+  careIntakeAccessGrantsIssued        CareIntakeAccessGrant[]             @relation("CareIntakeAccessIssuer")
+  careConsentAttestationsSigned       CareConsentAttestation[]            @relation("CareConsentAttestationSigner")
+  careConsentAttestationsWitnessed    CareConsentAttestation[]            @relation("CareConsentAttestationWitness")
+  careConsentAttestationsAccepted     CareConsentAttestation[]            @relation("CareConsentAttestationAcceptor")
+  careCoverageEvidenceResponsible     CareCoverageEvidence[]              @relation("CareCoverageResponsibleParty")
+  careCoverageEvidenceVerified        CareCoverageEvidence[]              @relation("CareCoverageEvidenceVerifier")
+  careIntakeExceptionsAssigned        CareIntakeException[]               @relation("CareIntakeExceptionAssignee")
+  careIntakeExceptionsResolved        CareIntakeException[]               @relation("CareIntakeExceptionResolver")
+  careIntakeStatusEvents              CareIntakeStatusEvent[]             @relation("CareIntakeStatusActor")
   createdAt                           DateTime                            @default(now())
   updatedAt                           DateTime                            @updatedAt
 
@@ -2830,6 +2844,11 @@ model PatientProfile {
   authorities                PatientAuthority[]
   consentDirectives          PatientConsentDirective[]
   careAppointments           CareAppointment[]
+  careIntakePackets          CareIntakePacket[]
+  careIntakeResponses        CareIntakeResponse[]
+  careConsentAttestations    CareConsentAttestation[]
+  careCoverageEvidence       CareCoverageEvidence[]
+  careIntakeExceptions       CareIntakeException[]
 
   @@unique([organizationId, principalId])
   @@unique([id, organizationId])
@@ -2923,6 +2942,7 @@ model PatientConsentDirective {
   supersedesDirective      PatientConsentDirective?   @relation("PatientConsentDirectiveVersion", fields: [supersedesDirectiveId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
   supersededByDirectives   PatientConsentDirective[]  @relation("PatientConsentDirectiveVersion")
   authorizationDecisions   AuthorizationDecisionLog[]
+  careConsentAttestations  CareConsentAttestation[]
 
   @@unique([id, organizationId, patientProfileId])
   @@index([organizationId, patientProfileId, status])
@@ -3659,6 +3679,7 @@ model Organization {
   careResources                 CareResource[]
   careSchedulingPolicies        CareSchedulingPolicy[]
   careAppointments              CareAppointment[]
+  careIntakePackets             CareIntakePacket[]
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -5388,15 +5409,18 @@ model CommunicationDeliveryAttempt {
 }
 
 model DynamicForm {
-  id             String   @id @default(cuid())
-  formId         String   @unique
-  title          String
-  version        Int      @default(1)
-  fields         Json
-  submitAction   String?
-  offlineCapable Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  String               @id @default(cuid())
+  formId              String               @unique
+  title               String
+  version             Int                  @default(1)
+  fields              Json
+  submitAction        String?
+  offlineCapable      Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  careIntakeResponses CareIntakeResponse[]
+
+  @@unique([id, version])
 }
 
 model DynamicView {
@@ -9098,6 +9122,7 @@ model CareAppointment {
   resources                       CareAppointmentResource[]
   statusEvents                    CareAppointmentStatusEvent[]
   syncEvents                      AppointmentSyncEvent[]
+  intakePackets                   CareIntakePacket[]
 
   @@unique([id, organizationId])
   @@unique([storefrontBookingId, organizationId])
@@ -9197,6 +9222,254 @@ model AppointmentSyncEvent {
   @@unique([organizationId, correlationId])
   @@index([organizationId, appointmentId, occurredAt])
   @@index([organizationId, outcome, occurredAt])
+}
+
+/// Patient/proxy/staff intake assignment linked to the canonical patient and,
+/// when applicable, appointment. requirementSnapshot pins the required form
+/// items and minimum-necessary data categories for this assignment.
+model CareIntakePacket {
+  id                       String                   @id @default(cuid())
+  packetId                 String                   @unique
+  organizationId           String
+  patientProfileId         String
+  appointmentId            String?
+  status                   String                   @default("assigned")
+  version                  Int                      @default(1)
+  sourceMode               String
+  purposeOfUse             String
+  allowedDataCategories    String[]                 @default([])
+  requirementSnapshot      Json
+  requiredConsentCount     Int                      @default(0)
+  requiresCoverageEvidence Boolean                  @default(false)
+  completionPercent        Int                      @default(0)
+  dueAt                    DateTime?
+  startedAt                DateTime?
+  completedAt              DateTime?
+  stoppedAt                DateTime?
+  enteredInErrorAt         DateTime?
+  sourcePrincipalId        String?
+  recordedByPrincipalId    String
+  sourceSystem             String?
+  sourceId                 String?
+  sourceVersion            String?
+  sensitivityLabels        String[]                 @default([])
+  retentionClass           String?
+  legalHold                Boolean                  @default(false)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  organization             Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  patientProfile           PatientProfile           @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  appointment              CareAppointment?         @relation(fields: [appointmentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  sourcePrincipal          Principal?               @relation("CareIntakePacketSource", fields: [sourcePrincipalId], references: [id], onDelete: Restrict)
+  recordedByPrincipal      Principal                @relation("CareIntakePacketRecorder", fields: [recordedByPrincipalId], references: [id], onDelete: Restrict)
+  responses                CareIntakeResponse[]
+  accessGrants             CareIntakeAccessGrant[]
+  consentAttestations      CareConsentAttestation[]
+  coverageEvidence         CareCoverageEvidence[]
+  exceptions               CareIntakeException[]
+  statusEvents             CareIntakeStatusEvent[]
+
+  @@unique([id, organizationId, patientProfileId])
+  @@unique([organizationId, sourceSystem, sourceId])
+  @@index([organizationId, patientProfileId, status])
+  @@index([organizationId, appointmentId])
+  @@index([organizationId, status, dueAt])
+}
+
+/// Versioned response to one exact DynamicForm version. Answer values remain
+/// PHI-bearing and are never part of the receptionist readiness projection.
+model CareIntakeResponse {
+  id                    String                   @id @default(cuid())
+  responseId            String                   @unique
+  organizationId        String
+  packetId              String
+  patientProfileId      String
+  dynamicFormId         String
+  dynamicFormVersion    Int
+  formSnapshot          Json
+  formDigest            String
+  status                String                   @default("in-progress")
+  version               Int                      @default(1)
+  answers               Json
+  answeredLinkIds       String[]                 @default([])
+  dataCategories        String[]                 @default([])
+  sourceMode            String
+  sourcePrincipalId     String?
+  recordedByPrincipalId String
+  authoredAt            DateTime                 @default(now())
+  completedAt           DateTime?
+  supersedesResponseId  String?
+  sourceSystem          String?
+  sourceId              String?
+  sourceVersion         String?
+  sensitivityLabels     String[]                 @default([])
+  retentionClass        String?
+  legalHold             Boolean                  @default(false)
+  enteredInErrorAt      DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  packet                CareIntakePacket         @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  patientProfile        PatientProfile           @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  dynamicForm           DynamicForm              @relation(fields: [dynamicFormId, dynamicFormVersion], references: [id, version], onDelete: Restrict, onUpdate: Restrict)
+  sourcePrincipal       Principal?               @relation("CareIntakeResponseSource", fields: [sourcePrincipalId], references: [id], onDelete: Restrict)
+  recordedByPrincipal   Principal                @relation("CareIntakeResponseRecorder", fields: [recordedByPrincipalId], references: [id], onDelete: Restrict)
+  supersedesResponse    CareIntakeResponse?      @relation("CareIntakeResponseVersion", fields: [supersedesResponseId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  supersededByResponses CareIntakeResponse[]     @relation("CareIntakeResponseVersion")
+  consentAttestations   CareConsentAttestation[]
+
+  @@unique([id, organizationId, patientProfileId])
+  @@unique([organizationId, sourceSystem, sourceId])
+  @@index([organizationId, packetId, status])
+  @@index([organizationId, patientProfileId, authoredAt])
+  @@index([dynamicFormId, dynamicFormVersion])
+  @@index([supersedesResponseId])
+}
+
+/// Expiring save/resume authority. Only a digest of the bearer token is stored.
+model CareIntakeAccessGrant {
+  id                  String           @id @default(cuid())
+  grantId             String           @unique
+  organizationId      String
+  packetId            String
+  patientProfileId    String
+  tokenDigest         String           @unique
+  granteePrincipalId  String?
+  permittedOperations String[]         @default([])
+  issuedByPrincipalId String
+  issuedAt            DateTime         @default(now())
+  expiresAt           DateTime
+  lastUsedAt          DateTime?
+  revokedAt           DateTime?
+  revocationReason    String?
+  createdAt           DateTime         @default(now())
+  packet              CareIntakePacket @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  granteePrincipal    Principal?       @relation("CareIntakeAccessGrantee", fields: [granteePrincipalId], references: [id], onDelete: Restrict)
+  issuedByPrincipal   Principal        @relation("CareIntakeAccessIssuer", fields: [issuedByPrincipalId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, packetId, expiresAt])
+  @@index([granteePrincipalId, expiresAt])
+}
+
+/// Immutable signature/document evidence supporting a versioned patient
+/// consent directive. Signature images remain in governed object storage.
+model CareConsentAttestation {
+  id                        String                  @id @default(cuid())
+  attestationId             String                  @unique
+  organizationId            String
+  packetId                  String
+  patientProfileId          String
+  responseId                String?
+  patientConsentDirectiveId String
+  status                    String                  @default("pending-review")
+  documentRef               String
+  documentDigest            String
+  documentVersion           String
+  signatureEvidenceRef      String
+  signatureDigest           String
+  signatureMethod           String
+  signerPrincipalId         String
+  witnessPrincipalId        String?
+  acceptedByPrincipalId     String?
+  attestedAt                DateTime
+  acceptedAt                DateTime?
+  rejectionReason           String?
+  createdAt                 DateTime                @default(now())
+  packet                    CareIntakePacket        @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  patientProfile            PatientProfile          @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  response                  CareIntakeResponse?     @relation(fields: [responseId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  patientConsentDirective   PatientConsentDirective @relation(fields: [patientConsentDirectiveId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  signerPrincipal           Principal               @relation("CareConsentAttestationSigner", fields: [signerPrincipalId], references: [id], onDelete: Restrict)
+  witnessPrincipal          Principal?              @relation("CareConsentAttestationWitness", fields: [witnessPrincipalId], references: [id], onDelete: Restrict)
+  acceptedByPrincipal       Principal?              @relation("CareConsentAttestationAcceptor", fields: [acceptedByPrincipalId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, packetId, status])
+  @@index([organizationId, patientProfileId, attestedAt])
+  @@index([patientConsentDirectiveId])
+}
+
+/// Staged payer/public-entitlement evidence. It is not canonical Coverage;
+/// accepted evidence will be consumed by BI-HEALTHCARE-030.
+model CareCoverageEvidence {
+  id                          String           @id @default(cuid())
+  evidenceId                  String           @unique
+  organizationId              String
+  packetId                    String
+  patientProfileId            String
+  status                      String           @default("pending-review")
+  fundingType                 String
+  payerOrProgramName          String?
+  memberIdentifierLast4       String?
+  responsiblePartyPrincipalId String?
+  evidenceRef                 String
+  evidenceDigest              String
+  effectiveFrom               DateTime?
+  effectiveUntil              DateTime?
+  sourceSystem                String?
+  sourceId                    String?
+  sourceVersion               String?
+  verifiedAt                  DateTime?
+  verifiedByPrincipalId       String?
+  rejectionReason             String?
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
+  packet                      CareIntakePacket @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  patientProfile              PatientProfile   @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  responsiblePartyPrincipal   Principal?       @relation("CareCoverageResponsibleParty", fields: [responsiblePartyPrincipalId], references: [id], onDelete: Restrict)
+  verifiedByPrincipal         Principal?       @relation("CareCoverageEvidenceVerifier", fields: [verifiedByPrincipalId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, sourceSystem, sourceId])
+  @@index([organizationId, packetId, status])
+  @@index([organizationId, patientProfileId, status])
+}
+
+/// Human work queue for incomplete, ambiguous, or conflicting intake.
+model CareIntakeException {
+  id                    String           @id @default(cuid())
+  exceptionId           String           @unique
+  organizationId        String
+  packetId              String
+  patientProfileId      String
+  exceptionType         String
+  status                String           @default("open")
+  severity              String           @default("routine")
+  summary               String
+  detail                Json?
+  assignedToPrincipalId String?
+  resolvedByPrincipalId String?
+  resolution            String?
+  openedAt              DateTime         @default(now())
+  resolvedAt            DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  packet                CareIntakePacket @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  patientProfile        PatientProfile   @relation(fields: [patientProfileId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  assignedToPrincipal   Principal?       @relation("CareIntakeExceptionAssignee", fields: [assignedToPrincipalId], references: [id], onDelete: Restrict)
+  resolvedByPrincipal   Principal?       @relation("CareIntakeExceptionResolver", fields: [resolvedByPrincipalId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, openedAt])
+  @@index([organizationId, packetId, status])
+  @@index([assignedToPrincipalId, status])
+}
+
+/// Append-only packet lifecycle evidence.
+model CareIntakeStatusEvent {
+  id               String           @id @default(cuid())
+  eventId          String           @unique
+  organizationId   String
+  packetId         String
+  patientProfileId String
+  packetVersion    Int
+  fromStatus       String?
+  toStatus         String
+  reason           String?
+  sourceMode       String
+  actorPrincipalId String
+  occurredAt       DateTime         @default(now())
+  packet           CareIntakePacket @relation(fields: [packetId, organizationId, patientProfileId], references: [id, organizationId, patientProfileId], onDelete: Restrict)
+  actorPrincipal   Principal        @relation("CareIntakeStatusActor", fields: [actorPrincipalId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, packetId, packetVersion])
+  @@index([organizationId, packetId, occurredAt])
 }
 
 model StorefrontOrder {
