@@ -1,16 +1,44 @@
-# Archetype Audit Plan — All 56 Archetypes
+# Archetype Audit Plan — All 87 Archetypes
 
-**Status:** Revised — 2026-06-10 (architecture / UX / operations review applied)  
+**Status:** Revised — 2026-07-17 (inventory re-grounded to 87 archetypes / 19 categories; field-dispatch + real-estate-construction runs added)  
 **Scope:** Full audit of every seeded archetype via browser-driven fresh installs. Produces gap backlog items for post-audit execution.  
 **Related:** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) (value-stream rationale — read first), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
 
-> **Inventory ground truth (verified 2026-06-12 against `origin/main` `packages/storefront-templates/src/archetypes/`):** 56 seeded archetypes across 15 categories. The five archetypes previously flagged "not yet confirmed" (`landscaping`, `cleaning-service`, `personal-trainer`, `counselling`, `wholesale-distribution`) ARE seeded and are placed in Runs 1, 2, 3, and 6. `pet-rescue` is seeded once (category `nonprofit-community`) and is tested only in Run 11. The rental / shared-asset value stream (EP-ARCH-8D4F2A, merged #1725/#1726) added three: `equipment-rental` + `self-storage` (new `asset-rental` category) and `agricultural-cooperative` (category `nonprofit-community`, derives both member-owned and rental capability sets) — all in Run 17.
+> **Inventory ground truth (verified 2026-07-17 against `origin/main` `packages/storefront-templates/src/archetypes/`):** **87 seeded archetypes across 19 categories.** Derived by enumerating `ALL_ARCHETYPES` in [`index.ts`](../../packages/storefront-templates/src/archetypes/index.ts) (19 category arrays spread in order) and cross-checked against the uniqueness + per-archetype invariants asserted in [`archetypes.test.ts`](../../packages/storefront-templates/src/archetypes/archetypes.test.ts) (which CI seeds from). Distinct `category` string values = 19, matching per-file `archetypeId` counts exactly. Per-category counts: healthcare-wellness 8, beauty-personal-care 6, trades-maintenance 11, professional-services 8, software-platform 1, education-training 4, pet-services 5, food-hospitality 3, retail-goods 5, fitness-recreation 3, nonprofit-community 8, hoa-property-management 3, banking-financial-services 3, public-sector 3, asset-rental 2, real-estate-construction 2, automotive-services 6, moving-and-logistics 4, security-services 2 (= **87**).
+>
+> There is **no** separate `medical`, `dental`, `media-production`, or `live-events-venues` category — `dental-practice`, `optician`, and the medical-mobile leaves are archetypes *under* `healthcare-wellness`. Do not reintroduce those category names.
+
+---
+
+## 0. What changed since the 2026-06-12 baseline (56 / 15 → 87 / 19)
+
+The prior revision of this plan ("All 56 Archetypes", inventory verified 2026-06-12) covered **56 archetypes across 15 categories** in Runs 0–17 (+ composition Run 18). The registry has since grown to **87 / 19** — a delta of **+31 archetypes and +4 categories** — none of which the old Run 0–18 structure covered. This revision assigns every one of the 31 to a run (Runs 19–27) using the plan's existing methodology unchanged.
+
+**The +31, by origin (all three tranches trace to the 2026-06-13 field-dispatch gap analysis + the EP-GRID-BUILDER home-builder work):**
+
+- **Gap-A field-dispatch leaves folded into existing categories (17)** — a mobile resource travels to the customer's site/asset/person; each shares its category's value-stream profile and composes under `service-operations` until the horizontal Field Dispatch capability ships:
+  - trades-maintenance (+6): `hvac-contractor`, `pest-control`, `appliance-repair`, `pool-spa-service`, `pressure-washing`, `roofing-gutters` → **Run 19**
+  - healthcare-wellness (+3, regulated): `home-health-care`, `mobile-phlebotomy`, `dme-delivery` → **Run 20**
+  - pet-services (+2): `mobile-pet-grooming`, `mobile-vet` → **Run 21**
+  - professional-services (+3): `field-inspection`, `land-surveying`, `process-serving-notary` → **Run 22**
+  - beauty-personal-care (+1): `mobile-beauty`; nonprofit-community (+1): `meal-delivery-program`; retail-goods (+1): `furniture-delivery-install` → **Run 23**
+- **Gap-B new dispatch-native categories (12, whole categories new):**
+  - `automotive-services` (+6): `auto-glass`, `mobile-mechanic`, `mobile-detailing`, `mobile-tire`, `roadside-assistance`, `locksmith` → **Run 24**
+  - `moving-and-logistics` (+4): `moving-company`, `junk-removal`, `courier-delivery`, `last-mile-freight` → **Run 25**
+  - `security-services` (+2, regulated): `guard-patrol`, `alarm-cctv-install` → **Run 26**
+- **New `real-estate-construction` category (2):** `new-home-builder`, `custom-home-builder` (EP-GRID-BUILDER) → **Run 27**
+
+**Methodology is unchanged.** Every new archetype gets its own fresh install (DB-only reset from the golden dump, Section 5) and the full Phase A–F checklist plus Phases G/H/O/K, driven browser-only at `http://localhost:3000`. Common `[C]` mechanics remain proven once in Run 0; only archetype-specific `[A]` dimensions are re-evaluated per leaf. Severity is still derived from the value stream (Section 4 rule), and the operator-persona lens (WWWD / business-owner experience, not developer) still governs grading.
+
+**Touchpoints for the 4 new categories (adding-an-ArchetypeCategory checklist):** the new categories are already seeded with their coverage tests (`archetypes.test.ts`: the Gap-B "three dispatch-native categories" assertion and the "home builder archetypes" assertion) and the Seed-Fit CI gate already applies to them. **No new audit scaffolding is required** — this revision is docs-only.
+
+**Regulated calibration (Phase O):** the medical-mobile leaves (`home-health-care`, `mobile-phlebotomy`, `dme-delivery`), the security leaves (`guard-patrol`, `alarm-cctv-install`), and the licensed professional leaf `land-surveying` are newly-regulated. Their per-run scripts (Runs 20, 26, 22) name the specific licensing/regulatory obligation an operator would get wrong, per the plan's existing rule: **silence on a mandatory license = Level 0.**
 
 ---
 
 ## 1. Purpose
 
-DPF ships 56 archetypes across 15 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
+DPF ships 87 archetypes across 19 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
 
 **Out of scope for this plan:** executing the gap items. This thread produces the plan, the backlog snapshot, and the per-run scripts. Execution follows in a separate thread.
 
@@ -35,6 +63,15 @@ This is the **first systematic evaluation of DPF from a customer-of-DPF standpoi
 A feature can technically pass and still score Level 1 on operator value. Both are tracked separately.
 
 **Regulated archetypes and Phase O:** businesses in regulated industries (dental, legal, financial, trades with Gas Safe/NICEIC, food, childcare) have significant licensing and compliance requirements that operators routinely get wrong. Phase O's compliance check (O5) and setup intelligence check (O6) are specifically calibrated to surface whether DPF helps or stays silent on these obligations. Silence on a mandatory license = Level 0.
+
+**Newly-regulated archetypes (added Runs 19–27) with calibrated Phase O:** the medical-mobile leaves and the licensed field trades raise the compliance bar further, and their per-run scripts (Runs 20, 22, 26) state the exact obligation an operator would get wrong so Phase O O5/O6 can be scored against it — again, silence on a mandatory license = Level 0:
+- `home-health-care` — state home-health-agency license, Medicare/Medicaid certification (CMS Conditions of Participation), caregiver background checks, RN/LPN supervision, HIPAA.
+- `mobile-phlebotomy` — state phlebotomy certification where required (e.g. CA CPT), CLIA linkage of the ordering lab, OSHA bloodborne-pathogens, specimen chain-of-custody, HIPAA.
+- `dme-delivery` — Medicare DMEPOS supplier enrollment + accreditation + surety bond, state DME licensure, FDA rules for specific devices, HIPAA.
+- `land-surveying` — a genuine hard state license (Professional Land Surveyor / PLS); an operator who publishes survey work without a licensed surveyor of record is exposed. Silence here is Level 0, not Level 1.
+- `guard-patrol` — state security-officer / PSO licensing (e.g. a state board such as CA BSIS), armed-vs-unarmed firearms permits, company bonding/insurance.
+- `alarm-cctv-install` — low-voltage / alarm-installer license (state-specific), alarm-company-operator registration, false-alarm ordinances, monitoring-center listing.
+Lighter but still license-bearing (score O5, do not treat as unregulated): `pest-control` (pesticide-applicator license / EPA), `roofing-gutters` (state contractor license), `process-serving-notary` (notary commission + process-server registration), `new-home-builder` / `custom-home-builder` (state contractor/builder license + warranty obligations).
 
 **Locale and tax jurisdiction gap (known, first run):** the current audit runs primarily in USD/GBP on `.com`/`.co` domains. Two specific gaps to note as recurring findings across runs:
 - No EUR run (no `Europe/Berlin` or `€` currency path exercised)
@@ -62,15 +99,15 @@ Not everything needs to be tested 18 times. The audit evaluates two distinct dim
 
 ### Common platform mechanics — test once, deeply, in Run 0
 
-These are shared UI surfaces that behave the same regardless of archetype. Run 0 is the only run that **evaluates** them (pass/fail, finds bugs). Runs 1–17 **use** them as setup tools without re-evaluating the mechanics.
+These are shared UI surfaces that behave the same regardless of archetype. Run 0 is the only run that **evaluates** them (pass/fail, finds bugs). Runs 1–27 **use** them as setup tools without re-evaluating the mechanics.
 
-Checklist items tagged `[C]` below fall in this category. In Runs 1–17, execute the step, but do not log a finding if the mechanics work correctly — you have already proved they do. Only log if the step **fails** in a run where it worked in Run 0 (that would indicate a regression, not an archetype gap).
+Checklist items tagged `[C]` below fall in this category. In Runs 1–27, execute the step, but do not log a finding if the mechanics work correctly — you have already proved they do. Only log if the step **fails** in a run where it worked in Run 0 (that would indicate a regression, not an archetype gap).
 
 | Surface | What Run 0 proves |
 |---------|------------------|
 | Brand URL scrape engine | Returns meaningful suggestions; handles `.co`, `.co.uk`, `.com` variants |
 | Setup wizard step mechanics | Each step saves, next/back navigation works, financial step pre-fills correctly |
-| Archetype grid | All 56 archetypes visible; grid navigable; card renders name + category + CTA type |
+| Archetype grid | All 87 archetypes visible; grid navigable; card renders name + category + CTA type |
 | `/storefront/team` CRUD | Add/edit/delete provider; availability day-of-week grid saves and syncs |
 | `/storefront/settings/operations` | Operating hours editor: all 7 days toggleable, open/close time pickers, timezone selector, save triggers ProviderAvailability sync |
 | `/storefront/items` CRUD | Add/edit/delete/reorder items; priceAmount field accepts decimal; ctaType selector works |
@@ -135,7 +172,7 @@ events (PR #1810)** = W-CAL.
 
 ### Archetype-specific dimensions — evaluated on every archetype
 
-These are the reasons we run 56 evaluations. If they are wrong they indicate an archetype gap, not a platform mechanics bug.
+These are the reasons we run 87 evaluations. If they are wrong they indicate an archetype gap, not a platform mechanics bug.
 
 | Dimension | What changes per archetype |
 |-----------|---------------------------|
@@ -166,7 +203,7 @@ Any step where the auditor had to think "a real operator would struggle here" �
 
 ## 3. Audit Run Strategy
 
-56 archetypes across **Run 0 (pilot) + grouped install runs**. **Every archetype gets its own fresh install** and the full Phase A–F checklist. Archetypes are grouped into runs by category only for scheduling and findings organization — each archetype in a run still begins from a clean DB state (DB-only reset from golden dump, see Section 5).
+87 archetypes across **Run 0 (pilot) + grouped install runs**. **Every archetype gets its own fresh install** and the full Phase A–F checklist. Archetypes are grouped into runs by category only for scheduling and findings organization — each archetype in a run still begins from a clean DB state (DB-only reset from golden dump, see Section 5). Runs 0–17 cover the original 56; Runs 19–27 cover the 31 added since (Section 0); Run 18 is composition (no additional fresh installs).
 
 > **Why full installs, not API swaps:** using `archetype-reset` to swap between archetypes leaves prior company identity (name, slug, hero copy, inbox history) in place. A real operator always installs fresh; an audit that swaps via API tests a different — and rarer — path. Run 1 swap testing (2026-06-12) confirmed this: all swap archetypes presented as the lead archetype's business identity to customers. Per-archetype fresh installs eliminate this class of false and misleading findings.
 
@@ -195,8 +232,17 @@ Any step where the auditor had to think "a real operator would struggle here" �
 | 18a | Multi-Archetype: Same category | (1) self-storage **+** equipment-rental; (2) plumber **+** retail-goods (supplies reorder) | rental, inquiry |
 | 18b | Multi-Archetype: Cross-category concern | (3) hair-salon **+** retail-goods; (4) bakery **+** professional-services (custom-order inquiry) | booking, inquiry |
 | 18c | Multi-Archetype: Regulated / acute | (5) community-bank **+** healthcare-wellness | inquiry (KYC) |
+| 19 | Trades Field-Dispatch (Gap-A) | hvac-contractor, pest-control, appliance-repair, pool-spa-service, pressure-washing, roofing-gutters | inquiry (field dispatch) |
+| 20 | Healthcare Field-Dispatch (Gap-A, regulated) | home-health-care, mobile-phlebotomy, dme-delivery | inquiry, booking (in-home clinical) |
+| 21 | Pet Field-Dispatch (Gap-A) | mobile-pet-grooming, mobile-vet | booking (at-home) |
+| 22 | Professional Field-Services (Gap-A) | field-inspection, land-surveying, process-serving-notary | inquiry (site visit) |
+| 23 | Beauty / Nonprofit / Retail Dispatch Leaves (Gap-A) | mobile-beauty, meal-delivery-program, furniture-delivery-install | booking, donation, inquiry |
+| 24 | Automotive Services (Gap-B — new category) | auto-glass, mobile-mechanic, mobile-detailing, mobile-tire, roadside-assistance, locksmith | inquiry (mobile) |
+| 25 | Moving & Logistics (Gap-B — new category) | moving-company, junk-removal, courier-delivery, last-mile-freight | inquiry (mobile) |
+| 26 | Security Services (Gap-B — new category, regulated) | guard-patrol, alarm-cctv-install | inquiry (licensed) |
+| 27 | Real Estate & Construction (new category) | new-home-builder, custom-home-builder | inquiry (+ booking item) |
 
-Total fresh installs: 56 (one per archetype, Runs 0–17). Run 18a–18c are composition installs — 5 primary archetypes set up fresh, with one or two secondaries added post-setup via "Add service line". No additional fresh installs are needed for secondaries. See Section 3c.
+Total fresh installs: 87 (one per archetype — 56 in Runs 0–17, 31 in Runs 19–27). Run 18a–18c are composition installs — 5 primary archetypes set up fresh, with one or two secondaries added post-setup via "Add service line". No additional fresh installs are needed for secondaries. See Section 3c.
 
 ### 3b. Representative Quality Bar (12 archetypes — must all Pass before audit is considered representative)
 
@@ -223,12 +269,12 @@ Treat these as priority-1 within their runs. If time or resets run short, these 
 
 ### 3a. Run 0 — Pilot / calibration + Platform Core Mechanics (MANDATORY before Run 1)
 
-Run 0 serves two goals: (a) validate the audit harness so the remaining 19 resets test the platform rather than the plan's assumptions; (b) prove all common platform mechanics (Section 2a) once so Runs 1–17 can treat them as reliable setup tools rather than evaluation subjects. Every item in the Section 2a common-mechanics table must be exercised and confirmed in Run 0.
+Run 0 serves two goals: (a) validate the audit harness so the remaining resets test the platform rather than the plan's assumptions; (b) prove all common platform mechanics (Section 2a) once so Runs 1–27 can treat them as reliable setup tools rather than evaluation subjects. Every item in the Section 2a common-mechanics table must be exercised and confirmed in Run 0.
 
 **Harness validation steps:**
 
 1. **Backup rehearsal** — take the pre-audit `pg_dump` (Section 4), restore it into a throwaway postgres container, and verify row counts match. Do not proceed to any wipe until the restore is proven.
-2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 56 seeded archetypes; reconcile against the seed list in this doc's header. File a BI for any mismatch.
+2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 87 seeded archetypes; reconcile against the per-category counts in this doc's header (Inventory ground truth). File a BI for any mismatch.
 3. **Provider bootstrap check** — verify Anthropic is auto-configured from the environment on a fresh install. If providers need manual re-entry, document the exact re-setup steps and time; add that time to every run's budget.
 4. **Coworker health gate** — ask the COO a trivial question and confirm a sane response before any vocabulary scoring. Routing failures get misattributed as archetype gaps in every run if this gate is skipped.
 5. **Archetype-reset swap verification** — swap software-platform → consulting via the admin API, confirm sections/items/vocabulary/CTA actually change on the public portal, then swap back. Empirically validates the Tier-B/E/F strategy for all multi-archetype runs.
@@ -470,7 +516,7 @@ while ((Get-Date) -lt $deadline) {
 
 1. Navigate to `http://localhost:3000`
 2. Confirm redirect to `/welcome` (no organization exists)
-3. Confirm archetype grid renders with all 56 archetypes visible
+3. Confirm archetype grid renders with all 87 archetypes visible
 4. Navigate to `/platform/ai/providers` → confirm providers show healthy status (restored from golden dump — no re-entry needed)
 
 **Step 5 — Coworker health gate**
@@ -500,7 +546,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 > **Validity:** every archetype gets a fresh install and all phases. There are no "swap-only" or "partial" archetypes. Before scoring any phase, the expected values (CTA type, vocabulary, key services, activation modules) should be read from the archetype's seed definition in `packages/storefront-templates/src/archetypes/` — the persona blocks in Section 7 are test scripts, not the source of truth; where they disagree with the seed, the seed wins and the persona block gets corrected, not a BI filed.
 >
-> **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–17, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run 56 iterations.**
+> **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–27, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run 87 iterations.**
 
 ### Phase A — Onboarding (SETUP)
 - [ ] **A1** Navigate to `/welcome` → Setup wizard loads (SETUP step 1)
@@ -515,11 +561,11 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 > Run after Phase A, before Phase B. These steps seed real staff, items, operating hours, and a test customer so Phase B5 exercises a live business scenario, not an empty shell. For swapped (non-lead) archetypes running only B/E/F, run the applicable P sub-section below before Phase B.
 >
-> **`[C]` mechanics vs. `[A]` archetype-specific:** items tagged `[C]` use surfaces proven in Run 0 (Section 3a). In Runs 1–17, execute them as setup steps; do not score them as findings unless they outright fail. Items tagged `[A]` are archetype-specific and are evaluation targets on every run.
+> **`[C]` mechanics vs. `[A]` archetype-specific:** items tagged `[C]` use surfaces proven in Run 0 (Section 3a). In Runs 1–27, execute them as setup steps; do not score them as findings unless they outright fail. Items tagged `[A]` are archetype-specific and are evaluation targets on every run.
 >
 > **Operator UX-fit dimension:** while executing each step, ask "could the run's operator persona complete this step without guidance?" (Sandra Hooper the plumber; Chloe Martinez the salon owner; Sam Nguyen the baker — not a developer). Flag non-obvious navigation or terminology as a `minor` UX finding. Examples: "Configuration Items" is not an obvious home for a pet record; "bill vs. invoice" distinction may confuse a non-accountant. These feed EP-9FC5D2FD (Dale/operator persona hardening).
 
-#### P-BOOKING — booking CTA archetypes (hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer, veterinary-clinic, dental-practice, physiotherapy, counselling, pet-grooming, pet-boarding, dog-walking, restaurant, tutoring, driving-school, music-school, dance-studio)
+#### P-BOOKING — booking CTA archetypes (hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer, veterinary-clinic, dental-practice, physiotherapy, counselling, pet-grooming, pet-boarding, dog-walking, restaurant, tutoring, driving-school, music-school, dance-studio; **+ field-dispatch booking leaves:** mobile-phlebotomy, mobile-pet-grooming, mobile-vet, mobile-beauty)
 
 - [ ] **P1** `[C]` Navigate to `/storefront/team` → Add the lead staff member from the run script (name, role title, email address). Save. Confirm the provider appears in the team list. *(UX-fit: would the operator persona know to go here to add a staff member?)*
 - [ ] **P2** `[C]` On the team record just created → open availability settings → set Mon–Fri 09:00–17:00 (adjust to archetype-specific hours if noted in the run script). Confirm the provider now appears as selectable in the booking calendar. *(UX-fit: is the availability day/time editor self-explanatory?)*
@@ -536,12 +582,12 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - [ ] **P3** `[C]` Navigate to `/customer` → Add a test customer account using the run script's buyer name (e.g., "Test Buyer R5") with a contact email. This account will be linked to the Phase B5 order and used in Phase G for the invoice.
 - [ ] **P4** `[C]` Navigate to `/storefront/settings/operations` → Set archetype-appropriate hours (retail/bakery Mon–Sat 08:00–18:00; gym/yoga/sports Mon–Sun 06:00–21:00). Save.
 
-#### P-INQUIRY — inquiry CTA archetypes (all trades, catering, consulting, legal, marketing, accounting, IT MSP, landscaping, cleaning-service, wholesale-distribution, HOA, property management, public sector, banking/mortgage)
+#### P-INQUIRY — inquiry CTA archetypes (all trades, catering, consulting, legal, marketing, accounting, IT MSP, landscaping, cleaning-service, wholesale-distribution, HOA, property management, public sector, banking/mortgage; **+ field-dispatch inquiry leaves:** hvac-contractor, pest-control, appliance-repair, pool-spa-service, pressure-washing, roofing-gutters, home-health-care, dme-delivery, field-inspection, land-surveying, process-serving-notary, furniture-delivery-install; **+ new dispatch-native categories:** all of automotive-services, moving-and-logistics, security-services; **+ real-estate-construction:** new-home-builder, custom-home-builder — note both builders also carry a booking item (model-home tour / design consultation), so they additionally run the P-BOOKING scheduling-defaults check)
 
 - [ ] **P1** `[C/A]` Navigate to `/storefront/items` → `[C]` Confirm items are visible. `[A]` Confirm seeded service item names match the archetype's expected services (inquiry items don't require prices, but blank names must be corrected as a minor finding).
 - [ ] **P2** `[C]` Navigate to `/storefront/settings/operations` → Set archetype-appropriate hours (trades Mon–Fri 07:00–18:00; professional services Mon–Fri 09:00–17:30; public sector Mon–Fri 08:30–16:30). Save.
 
-#### P-DONATION — donation CTA archetypes (charity, pet-rescue, animal-shelter, community-shelter, cooperative)
+#### P-DONATION — donation CTA archetypes (charity, pet-rescue, animal-shelter, community-shelter, cooperative, meal-delivery-program — note meal-delivery-program is a delivery *program* with a `donation` CTA plus a "Request Meal Service" recipient-intake item and a "Volunteer as a Driver" item; verify the donate/sponsor path AND the recipient-intake path)
 
 - [ ] **P1** `[C/A]` Navigate to `/storefront/items` → `[C]` Confirm items are visible. `[A]` Confirm donation tier items are present with meaningful amounts (e.g., "Sponsor an Animal — £10/month"). If all amounts are £0/$0, log as an important finding.
 - [ ] **P2** `[C]` Operating hours are optional for nonprofit public portals — skip unless the portal UI requires operating hours before the donation CTA renders.
@@ -876,7 +922,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 **CTA:** inquiry  
 **Key services to verify:** Planned Maintenance Contract, HVAC Servicing, Reactive Repair, Building Inspection, Emergency Call-Out  
 **Special — HVAC/AC test:** Ask coworker "A tenant is complaining about no cold air — what do we do?" → Response should reference HVAC Servicing, not technical platform terms.  
-**Gap check:** BI-FS-001 (HVAC/AC Contractor Storefront Archetype) is an open backlog item — confirm whether a dedicated `hvac-contractor` leaf is present. If not, note the gap (it is not in the 56-archetype verified inventory).
+**Gap check:** BI-FS-001 (HVAC/AC Contractor Storefront Archetype) requested a dedicated HVAC leaf. As of the 2026-07-17 inventory this leaf **now exists** — `hvac-contractor` is seeded (category `trades-maintenance`) and is audited in **Run 19** (Gap-A field-dispatch). Treat BI-FS-001 as satisfied by the registry; confirm the leaf renders on the grid rather than logging it as a gap.
 
 **Before starting facilities-maintenance:** execute Tier 2 DB-only reset (Section 5, restore from golden dump). Verify `/welcome` redirect. Then run Phase A setup wizard with: company name "ProSite Facilities Group", select `facilities-maintenance` archetype, owner name "Jamie Chen", currency USD. Operating hours Mon–Fri 07:00–18:00.
 
@@ -892,7 +938,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 5. Description: "Annual HVAC servicing for 3-storey office building"
 6. Submit → reference number shown
 7. `/storefront/inbox` → inquiry appears; **HVAC coworker check**: ask "A tenant is complaining about no cold air — what do we do?" → response should reference HVAC Servicing, not platform terms
-8. BI-FS-001 gap check: confirm no dedicated `hvac-contractor` leaf exists (noted as a known gap — do not refile)
+8. BI-FS-001 check: `hvac-contractor` leaf now exists (seeded; audited in Run 19) — confirm it renders on the grid; BI-FS-001 is satisfied by the registry, do not refile as a gap
 
 **Run-1 Phase G (`facilities-maintenance` — inquiry archetype):**
 - G1: Supplier "Facility Maintenance Supplies Ltd" at `/finance/suppliers`
@@ -3122,6 +3168,127 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 
 ---
 
+### Runs 19–23 — Field-Dispatch Leaves Folded Into Existing Categories (Gap-A)
+
+**Fresh install per archetype.** These 17 leaves (2026-06-13 field-dispatch gap analysis) are businesses where a **mobile resource travels to the customer's site, asset, or person**. They were folded into their existing categories, so each **shares its category's value-stream profile** (see [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) §6 for the parent category and §10.2 for the cross-category field-dispatch pattern) and composes under `service-operations` until the horizontal Field Dispatch capability ships. They are **not** new categories — no new audit scaffolding; they run the standard Phase A–F + G/H/O/K checklist with one run-specific addition below.
+
+> **Phase FD — Field-Dispatch Readiness (run-specific, Runs 19–26).** Analogous to Run 17's Phase R (rental) and Run 14's KYC pack: a small block that checks whether the platform models the *travel-to-customer* shape these archetypes need. There is **no dedicated dispatch board yet** — the capability derives from the operating-model axes (`form=services`, `delivery=physical`, `consumptionChannel=onsite-plus-portal`) and is a parallel effort (value-streams §10.2). So Phase FD is mostly a **gap-discovery** pass; absences here are expected findings that feed the build backlog, not blockers.
+> - **FD1** `[A]` **Service address capture:** drive the inquiry/booking CTA. Does the form capture the *customer's* service location (address / site), not just contact details? A field-dispatch business that cannot record where the work happens → `important`.
+> - **FD2** `[A]` **Assignment surface:** at `/storefront/team` or the inbox, can the operator see who would be dispatched (skill × availability)? A route/job-board equivalent counts. Absence → note as a Field Dispatch capability gap (expected; link to value-streams §10.2), not an archetype defect.
+> - **FD3** `[A]` **En-route / ETA + on-site capture:** is there any "on my way" / ETA or on-site completion/notes surface? Expected absent on first run — record as the field-dispatch backlog signal.
+> - **FD4** `[A]` **Coworker dispatch framing:** ask the COO the archetype's dispatch question (in each block). Does it reason about travel/route/on-site work rather than premises-based booking? Score against Phase O maturity.
+> - **FD5** `[A]` **Vocabulary:** the persona should not see premises-only language ("Book an appointment at our salon") where the work is at the customer's location. Mislabel → `minor` (or `important` if the CTA is actively misleading).
+
+---
+
+#### Run 19 — Trades Field-Dispatch (Gap-A trades)
+
+Parent category value stream: [§6.1 Trades & Maintenance](../architecture/archetype-business-value-streams.md). Load-bearing stages S2 Capture → S3 Schedule & Assign → S4 On-site. All six carry `inquiry` CTA.
+
+**`hvac-contractor`** — Maplewood Heating & Air (`maplewoodhvac.com`) · Operator: Owner-Dispatcher Ray Alonzo · Emergency-reactive + seasonal (AC repair peaks summer, heating winter; ~20% capacity held for emergencies). CTA: inquiry. Key services (seed): AC Repair, Heating/Furnace Repair, System Installation, Maintenance Plan, Indoor Air Quality, Emergency Call-Out. Provisioning: category default. **Special:** recurring Maintenance Plan should read as a service-agreement, not a one-off; FD4 question: *"A customer has no heat tonight — how do I get someone out and see who's closest?"* **Phase O (light-regulated):** O5 should name EPA 608 refrigerant certification; silence → Level 0–1.
+**`pest-control`** — Maplewood Pest Solutions (`maplewoodpest.com`) · Operator: Route Manager Gwen Petrakis · Recurring-protection + seasonal. CTA: inquiry. Key services: General Pest Treatment, Recurring Protection Plan, Termite Inspection & Treatment, Rodent Control, Bed Bug Treatment, Wildlife Removal. **Special:** Recurring Protection Plan = service-agreement/route cadence; FD4: *"Set up a quarterly protection plan for a new customer on the north-side route."* **Phase O:** O5 should name state pesticide-applicator licensing / EPA registration.
+**`appliance-repair`** — Maplewood Appliance Repair (`maplewoodappliance.com`) · Operator: Owner-Tech Dan Okafor · Diagnostic-visit-then-quote. CTA: inquiry. Key services: Diagnostic Visit, Refrigerator/Freezer Repair, Washer/Dryer Repair, Oven/Range/Cooktop Repair, Dishwasher Repair. **Special:** the Diagnostic Visit is a paid trip-charge that converts to a repair job — verify the flow can capture the visit fee and roll it into the job.
+**`pool-spa-service`** — Maplewood Pool & Spa (`maplewoodpoolspa.com`) · Operator: Service Lead Bianca Ruiz · Weekly-recurring service + seasonal open/close. CTA: inquiry. Key services: Weekly Pool Service, Pool Opening/Closing, Equipment Repair, Green-to-Clean Recovery, Leak Detection & Repair. **Special:** Weekly Pool Service = recurring route; confirm the seasonal open/close is expressible.
+**`pressure-washing`** — Maplewood Exterior Cleaning (`maplewoodwash.com`) · Operator: Owner Curtis Hale · One-off + quotable. CTA: inquiry. Key services: House Soft Wash, Driveway & Concrete Cleaning, Deck & Fence Cleaning, Roof Cleaning, Gutter Clearing. **Special:** photo-quote intake (before/after) is the natural fit — note absence as a field-dispatch capability gap.
+**`roofing-gutters`** — Maplewood Roofing & Gutters (`maplewoodroofing.com`) · Operator: Estimator-Owner Priya Menon · Inspection → estimate → project, plus storm-emergency. CTA: inquiry. Key services: Roof Inspection, Roof Repair, Roof Replacement, Gutter Installation, Storm Damage & Emergency Tarp. **Special:** Storm Damage / Emergency Tarp is the reactive path; Roof Replacement is a project (verify it reads as a larger engagement, not a same-day booking). **Phase O:** O5 should name state contractor licensing + insurance/bonding.
+
+**Run-19 Phase G (representative — `hvac-contractor`):** Supplier "HVAC Parts Wholesale"; Bill "Compressor + refrigerant restock" £2,100; Invoice to a customer account "AC system install — labour + unit" £3,400; P&L shows both.
+
+---
+
+#### Run 20 — Healthcare Field-Dispatch (Gap-A healthcare — REGULATED)
+
+Parent value stream: [§6.3 Healthcare & Wellness](../architecture/archetype-business-value-streams.md) (`episode-of-care` posture). These are the **highest-compliance** additions in the Gap-A set — in-home clinical work under HIPAA and CMS/CLIA. Phase O is calibrated hard here (see §1a); silence on a mandatory license/certification = **Level 0**.
+
+**`home-health-care`** — Maplewood Home Health (`maplewoodhomehealth.com`) · Operator: Agency Director Nurse Ophelia Grant · In-home skilled + personal care; episode-of-care; caregiver rostering. CTA: inquiry (Free Care Assessment as the front door). Key services (seed): Free Care Assessment, Skilled Nursing Visit, Personal Care & Companionship, Post-Hospital Recovery Care, Respite Care, 24-Hour / Live-In Care. **Special:** the Free Care Assessment is an intake episode, not a sale; verify patient/client + caregiver both model. **Phase O (O5/O6):** must name state home-health-agency license, Medicare/Medicaid certification (CMS Conditions of Participation), caregiver background checks, RN/LPN supervision, HIPAA. FD4: *"A hospital is discharging a patient tomorrow who needs daily nursing at home — how do I set up their care plan and assign a nurse?"*
+**`mobile-phlebotomy`** — Maplewood Mobile Labs (`maplewoodmobilelabs.com`) · Operator: Lead Phlebotomist Marcus Vale · At-home specimen collection; `booking` CTA (timed draws). Key services: At-Home Blood Draw, Lab Test Panel Collection, Fasting Draw (Early AM), Corporate / Group Draw. **Special:** early-AM fasting draws stress operating-hours + slot windows; specimen chain-of-custody has no surface yet → expected gap. **Phase O:** state phlebotomy certification where required (e.g. CA CPT), CLIA linkage of the ordering lab, OSHA bloodborne-pathogens, HIPAA.
+**`dme-delivery`** — Maplewood Medical Equipment (`maplewooddme.com`) · Operator: DME Coordinator Rhonda Iyer · Deliver-and-setup of durable medical equipment; `account-with-billing`. CTA: inquiry. Key services: Hospital Bed Delivery & Setup, Oxygen Equipment Setup, Mobility Equipment, CPAP / Respiratory Setup, Equipment Service & Pickup. **Special:** equipment is an asset placed at the patient's home (CI-like) with a pickup lifecycle — verify the setup→service→pickup arc is expressible. **Phase O:** Medicare DMEPOS supplier enrollment + accreditation + surety bond, state DME licensure, FDA rules for specific devices, HIPAA.
+
+**Run-20 Phase G (representative — `home-health-care`):** Supplier "Medical Supplies & PPE Co"; Bill "PPE + wound-care consumables" £1,200; Invoice to a payer/family account "Skilled nursing — 20 visits" £3,000 (note: real reimbursement is via Medicare/insurance — flag any missing payer/claims surface as an `important` gap); P&L shows both.
+
+---
+
+#### Run 21 — Pet Field-Dispatch (Gap-A pet)
+
+Parent value stream: [§6.4 Pet Services](../architecture/archetype-business-value-streams.md). Both carry `booking` CTA (at-home appointments).
+
+**`mobile-pet-grooming`** — Maplewood Mobile Pet Spa (`maplewoodmobilepets.com`) · Operator: Owner-Groomer Tanya Brooks · Van-based grooming at the owner's home; route + slot capacity. CTA: booking. Key services: Mobile Full Groom, Mobile Bath & Brush, Nail Trim & Tidy, De-shedding Treatment, Cat Mobile Groom. **Special:** pet CI (species/breed/size) drives duration exactly as premises pet-grooming (Run 4) — verify size-based duration + the address is captured (FD1). FD4: *"I've got five grooms booked across town tomorrow — what order should I do them in?"* (route optimisation — expected gap).
+**`mobile-vet`** — Maplewood Mobile Vet (`maplewoodmobilevet.com`) · Operator: Dr. Elena Sarto DVM · In-home veterinary visits incl. end-of-life; `account-with-billing`. CTA: booking. Key services: Home Wellness Visit, Sick Visit, Vaccination Visit, Farm / Large Animal Call, End-of-Life & Hospice Care. **Special:** shares vet clinical vocabulary (patient/pet, owner) with `veterinary-clinic` (Run 3) but delivered at the client's location; End-of-Life & Hospice must be handled with appropriate tone — spot-check coworker sensitivity. **Phase O:** O5 should name RCVS/state veterinary licensure + controlled-drug handling for in-home euthanasia.
+
+---
+
+#### Run 22 — Professional Field-Services (Gap-A professional)
+
+Parent value stream: [§6.9 Professional Services A](../architecture/archetype-business-value-streams.md). All `inquiry`; work happens at the client's site/asset. `land-surveying` is **regulated** (hard state license).
+
+**`field-inspection`** — Maplewood Property Inspections (`maplewoodinspect.com`) · Operator: Inspector-Owner Grant Whitlow (display name "Property & Field Inspection") · Site inspection → report deliverable. CTA: inquiry. Key services: Home Buyer's Inspection, Pre-Listing Inspection, Specialty Inspection, Insurance / 4-Point Inspection, Commercial Property Inspection, Re-Inspection. **Special:** the deliverable is a *report* — verify the job can attach/produce a report artifact (FD3 on-site capture is the natural home); note absence as gap. FD4: *"Schedule a buyer's inspection for 42 Oak Street Thursday and note the agent's contact."*
+**`land-surveying`** — Maplewood Land Surveying (`maplewoodsurvey.com`) · Operator: PLS-of-record Dana Kohl · Boundary/topographic survey; `account-with-billing`; project-shaped. CTA: inquiry. Key services: Boundary Survey, Topographic Survey, ALTA / Title Survey, Subdivision / Plat, Elevation Certificate, Construction Staking. **Special:** ALTA/Subdivision are multi-week projects (verify project framing, not same-day). **Phase O (REGULATED — Level 0 if silent):** O5 must name the **Professional Land Surveyor (PLS)** license and the surveyor-of-record obligation; publishing survey work without a licensed PLS is the mistake to surface.
+**`process-serving-notary`** — Maplewood Legal Support (`maplewoodlegalsupport.com`) · Operator: Owner Val Ndiaye · Serve documents / mobile notary; fast-turn. CTA: inquiry. Key services: Serve Legal Documents, Rush / Same-Day Service, Skip Trace, Mobile Notary, Loan Signing, Court Filing & Courier. **Special:** Rush/Same-Day stresses time-critical dispatch; proof-of-service is the deliverable (FD3). **Phase O:** O5 should name notary commission + state process-server registration/bond where required.
+
+---
+
+#### Run 23 — Beauty / Nonprofit / Retail Dispatch Leaves (Gap-A remainder)
+
+Three leaves from three different parents; each fresh install runs its parent category's profile.
+
+**`mobile-beauty`** — Maplewood Mobile Glam (`maplewoodglam.com`) · Parent: [§6.2 Beauty & Personal Care](../architecture/archetype-business-value-streams.md) · Operator: Owner-Stylist Nadia Cole · On-location bridal/event glam; `booking`. Key services: Bridal Hair & Makeup, Event / Party Glam, Mobile Haircut & Style, Spray Tan, Lash & Brow. **Special:** Bridal/Event glam is a scheduled on-location engagement (often a deposit + trip) — verify address capture (FD1) and that the CTA does not read "book at our salon" (FD5). Shares scheduling/activation with the beauty booking siblings (guarded by `archetypes.test.ts` personal-trainer parity test — confirm no divergence).
+**`meal-delivery-program`** — Maplewood Meals on Wheels (`maplewoodmeals.org`) · Parent: [§6.11 Nonprofit & Community](../architecture/archetype-business-value-streams.md) · Operator: Program Coordinator Frank Ellison · Charitable meal delivery; `donation` CTA + recipient intake + volunteer drivers; `provisioning: none`. Key services (seed): Donate, Sponsor a Route, Request Meal Service, Volunteer as a Driver. **Special:** this is the one Gap-A leaf whose CTA is `donation`, but it also has a **recipient-intake** path ("Request Meal Service") and a **volunteer** path — verify BOTH the donor/sponsor flow AND the recipient-intake flow, and that "Sponsor a Route" reads as recurring giving. Donation-receipt rule (Phase G no-purchase receipt) applies as in Run 11. FD4: *"How do I assign tomorrow's routes to our volunteer drivers?"* (route + volunteer roster — expected gap).
+**`furniture-delivery-install`** — Maplewood Delivery & Install (`maplewooddelivery.com`) · Parent: [§6.6 Retail & Goods](../architecture/archetype-business-value-streams.md) · Operator: Ops Lead Hector Salas · White-glove delivery/assembly; `account-with-billing`; `inquiry`. Key services: White-Glove Delivery, Furniture Assembly, Appliance Delivery & Install, TV & Wall Mounting, Haul-Away of Old Item. **Special:** delivery-window scheduling + two-person job sizing; Haul-Away is a reverse-logistics add-on. Verify a delivery date/window can be captured (FD1/FD3).
+
+---
+
+### Runs 24–26 — Dispatch-Native New Categories (Gap-B)
+
+**Fresh install per archetype.** Three **whole new categories** (2026-06-13) that are field-dispatch by nature — every leaf carries `form=services`, `delivery=physical`, `consumptionChannel=onsite-plus-portal` and composes under `service-operations`. Value-stream profiles: [§6.16 Automotive](../architecture/archetype-business-value-streams.md) / §6.17 Moving & Logistics / §6.18 Security Services. Run the standard checklist + **Phase FD** (above). **Adding-an-ArchetypeCategory touchpoints:** coverage tests already exist (`archetypes.test.ts` "three dispatch-native categories" Gap-B assertion) and the Seed-Fit gate already covers them — no new scaffolding.
+
+#### Run 24 — Automotive Services (new category)
+
+All `inquiry`; mobile-to-vehicle. Value stream §6.16. Constrained unit: technician-hours × drive-time.
+
+**`auto-glass`** — Maplewood Auto Glass (`maplewoodautoglass.com`) · Operator: Owner Sami Reyes · Windshield replacement + **ADAS calibration** (the category's named compliance example; carries the `adas` tag per `archetypes.test.ts`). CTA: inquiry. Key services: Windshield Replacement, Rock Chip / Crack Repair, Side & Rear Glass, ADAS Calibration, Mobile Service, Fleet & Commercial Glass. **Special:** verify insurance-claim + VIN/vehicle capture is at least attemptable; **Phase O:** O5 should surface ADAS-calibration as a safety-critical step post-replacement.
+**`mobile-mechanic`** — Maplewood Mobile Mechanic (`maplewoodmobilemech.com`) · Operator: Owner-Tech Cole Barrett · Repairs at the customer's vehicle. Key services: Diagnostic Visit, Brake Service, Battery/Alternator/Starter, Oil & Filter Change, Pre-Purchase Inspection, No-Start / Won't-Run. **Special:** No-Start is emergency-reactive; Pre-Purchase Inspection is a report deliverable.
+**`mobile-detailing`** — Maplewood Mobile Detailing (`maplewooddetailing.com`) · Operator: Owner Jaz Mwangi · On-site cleaning/ceramic. Key services: Full Detail, Interior Detail, Exterior Wash & Wax, Ceramic Coating, Headlight Restoration. **Special:** water/power on-site logistics; packages fit a menu.
+**`mobile-tire`** — Maplewood Mobile Tire (`maplewoodmobiletire.com`) · Operator: Owner Dev Anand · Roadside/at-home tire work. Key services: Tire Replacement, Flat Repair, Rotation & Balance, TPMS Service, Seasonal Swap. **Special:** Seasonal Swap is a recurring/seasonal signal.
+**`roadside-assistance`** — Maplewood Roadside & Towing (`maplewoodroadside.com`) · Operator: Dispatch Owner Marco Bianchi · **Emergency-reactive**, 24/7, GPS-critical. Key services: Jump Start, Lockout Service, Flat Tire Change, Fuel Delivery, Towing, Winch-Out / Recovery. **Special:** this is the sharpest emergency-dispatch case — FD1 location capture and FD3 ETA are load-bearing; their absence is `important`, not `minor`. FD4: *"Someone's broken down on the interstate right now — how do I get the nearest truck to them?"*
+**`locksmith`** — Maplewood Locksmith (`maplewoodlock.com`) · Operator: Owner Reg Fontaine · Auto + residential lockout/rekey; emergency + scheduled. Key services: Car Lockout, Car Key Replacement & Programming, Home/Business Lockout, Rekey & Lock Change, Lock Installation & Upgrade. **Special:** lockouts are emergency; **Phase O:** O5 should name state locksmith licensing + ID-verification obligation before opening a lock/home (a genuine trust gate).
+
+**Run-24 Phase G (representative — `auto-glass`):** Supplier "Auto Glass & Adhesive Wholesale"; Bill "OEM windshields + urethane restock" £1,800; Invoice to a customer account "Windshield replacement + ADAS calibration" £520; P&L shows both.
+
+#### Run 25 — Moving & Logistics (new category)
+
+All `inquiry`; crew + vehicle + route. Value stream §6.17. `roadside`/DOT-adjacent compliance for the movers/freight leaves.
+
+**`moving-company`** — Maplewood Movers (`maplewoodmovers.com`) · Operator: Owner Trish Donovan · Local + long-distance household moves; survey → quote → move-day. Key services: Local Move, Long-Distance Move, Packing & Unpacking, Loading/Unloading Only, Specialty Item Move, Short-Term Storage. **Special:** the in-home/virtual survey→estimate is the intake; move-day is a scheduled crew job; **Phase O:** O5 should name DOT / interstate mover registration (USDOT number) for long-distance.
+**`junk-removal`** — Maplewood Junk Removal (`maplewoodjunk.com`) · Operator: Owner Blake Ferris · Volume-priced haul-away. Key services: Single-Item Pickup, Truck-Load Haul, Furniture & Appliance Removal, Estate/Property Cleanout, Construction Debris. **Special:** truck-load volume pricing + disposal-fee pass-through; photo-quote intake fits.
+**`courier-delivery`** — Maplewood Courier (`maplewoodcourier.com`) · Operator: Dispatch Lead Amara Osei · Same-day + scheduled routes incl. medical/legal; `Account Setup` item signals B2B accounts. Key services: Same-Day Courier, Scheduled Route, Medical/Lab Courier, Legal & Document Courier, Account Setup. **Special:** Medical/Lab Courier carries HIPAA + chain-of-custody (spot-check Phase O); B2B account setup implies recurring accounts.
+**`last-mile-freight`** — Maplewood Last-Mile Freight (`maplewoodfreight.com`) · Operator: Ops Manager Nils Berger · LTL/white-glove + reverse logistics; B2B. Key services: LTL / Local Freight, White-Glove Freight, Scheduled Distribution Route, Returns & Reverse Logistics. **Special:** appointment-based delivery windows + returns; verify B2B account + scheduled-route framing.
+
+**Run-25 Phase G (representative — `moving-company`):** Supplier "Packing Materials & Truck Lease Co"; Bill "Boxes, blankets, monthly truck lease" £2,400; Invoice to a customer account "3-bed local move — crew of 3, 6 hrs" £960; P&L shows both.
+
+#### Run 26 — Security Services (new category — REGULATED)
+
+Value stream §6.18. Both `account-with-billing`; recurring-agreement-heavy. **Regulated** — Phase O calibrated to security licensing (silence = Level 0).
+
+**`guard-patrol`** — Maplewood Security Guarding (`maplewoodsecurity.com`) · Operator: Ops Director Yusuf Kaplan · Manned guarding + mobile patrol under service agreements; shift rostering. CTA: inquiry. Key services: Manned Guarding, Mobile Patrol, Event Security, Alarm Response & Keyholding, Concierge / Front-of-House, Loss Prevention. **Special:** contracts are recurring service-agreements with shift coverage (24/7 rostering is the capacity model); Alarm Response & Keyholding is reactive-dispatch. `archetypes.test.ts` asserts guard-patrol derives `service-agreements` = required — verify the agreement surface. **Phase O (REGULATED — Level 0 if silent):** O5 must name state security-officer / PSO licensing (e.g. a board such as CA BSIS), armed-vs-unarmed firearms permits, and company bonding/insurance. FD4: *"I need to staff a 24/7 guard post at a warehouse starting Monday — how do I roster it?"*
+**`alarm-cctv-install`** — Maplewood Alarm & CCTV (`maplewoodalarms.com`) · Operator: Owner Petra Lindqvist · Install + recurring monitoring plans. CTA: inquiry. Key services: Alarm System Installation, CCTV Installation, Access Control, Monitoring Plan, Smart-Home Security, Service & Upgrade. **Special:** Monitoring Plan = recurring service-agreement; installs are project-shaped. **Phase O (REGULATED):** O5 must name low-voltage/alarm-installer licensing (state-specific), alarm-company-operator registration, false-alarm ordinances, and monitoring-center listing.
+
+**Run-26 Phase G (representative — `guard-patrol`):** Supplier "Uniforms & Radio Equipment Co"; Bill "Guard uniforms + radios" £1,100; Invoice to a client account "Manned guarding — 168 hrs @ £18" £3,024; P&L shows both.
+
+---
+
+### Run 27 — Real Estate & Construction (new category)
+
+**Fresh install per archetype.** New `real-estate-construction` category (EP-GRID-BUILDER). Both leaves sell **physical goods to households** (`form=goods`, `primaryConsumer=household`, `delivery=physical`) with **milestone billing** (`billingReadinessMode: prepared-not-prescribed`, `modules` include `billing-readiness` + `projects`), and each carries a **booking item** with `schedulingDefaults` (model-home tour / design consultation) even though the top-level CTA is `inquiry` — so both additionally run the P-BOOKING scheduling-defaults check. These invariants are guarded by the `archetypes.test.ts` "home builder archetypes" assertion (verify no divergence). CTA: inquiry.
+
+> **Value-streams doc gap (noted + proposed here):** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) §6 claims coverage of "all 87 archetypes" but its per-category profiles run §6.1–§6.18 and its 2026-06-13 changelog math (56 + 17 Gap-A + 12 Gap-B = 85) **omits these two builders** — real-estate-construction has no §6.x profile. This revision proposes the addition as **§6.19** in that doc (see the value-streams changelog entry dated 2026-07-17). Until it lands, grade Run 27 against the profile stated in this block.
+
+**`new-home-builder`** — Maplewood Homes (`maplewoodhomes.com`) · Operator: Sales Manager Karen Blythe · **Production/spec builder**: model homes open 7 days (seed gives Sunday hours), plan-book selling, design-centre options. CTA: inquiry (+ Model Home Tour booking). Key services (seed): Model Home Tour, Design Centre Appointment, 3-Bedroom Home Plans, 4-Bedroom Home Plans, Community Information Pack. Provisioning: `account-with-billing`. Vocabulary: category default (no leaf override). **Load-bearing stages:** S1 Attract (model-home tour / community pack) → S2 Capture (plan selection) → S4/S5 milestone-billed build. **Special:** verify the Model Home Tour is a bookable slot (scheduling-defaults present incl. Sunday); milestone payments should read as prepared-not-prescribed, not a single invoice. **Phase O:** O5 should name state contractor/home-builder license + new-home warranty obligations.
+**`custom-home-builder`** — Maplewood Custom Homes (`maplewoodcustomhomes.com`) · Operator: **Build Consultant** (agentName override) · **Bespoke builder**: business-hours only (no weekend model homes — seed omits Sat/Sun), consultative design→contract→build, active subcontractor coordination (`service-operations` module). CTA: inquiry (+ Initial Design Consultation booking). Key services: Initial Design Consultation, Custom Home Design, Full Build Contract, Knockdown & Rebuild, Renovation & Extension. Provisioning: `account-with-billing`. **Vocabulary (leaf override — verify):** stakeholders = **"Clients"**, team = **"Build Team"**, coworker = **"Build Consultant"** (asserted in `archetypes.test.ts`; a leak to "Customers"/generic agent → `important`). **Special:** the Initial Design Consultation is the booking front door; Full Build Contract + Renovation are multi-milestone projects — confirm project + billing-readiness framing and that no Saturday/Sunday tour slots are offered (business-hours-only is intentional). **Phase O:** O5 should name state contractor license + design/architectural sign-off obligations.
+
+**Run-27 Phase G (representative — `custom-home-builder`):** Supplier "Building Materials & Subcontractor Payments"; Bill "Framing package + subcontractor draw" £48,000; Invoice to a client account "Design + foundation milestone" £65,000 (verify milestone/draw framing, not a lump sum); P&L shows both.
+
+---
+
 ## 8. Gap Capture
 
 ### 8a. The fundamental constraint: every DB reset wipes portal state
@@ -3227,7 +3394,7 @@ These issues are visible to the team immediately and survive all resets. After t
 
 ### 8d. Common mechanics failures are platform findings, not archetype gaps
 
-If a `[C]`-marked step (Section 2a / Phase P) fails in Runs 1–17 and it passed in Run 0, that is a **regression** — log with severity `critical` and the note "regression vs. Run 0" and open a GitHub issue immediately. Do not continue the current run until the regression is triaged (it will affect all remaining runs if it is a platform-wide failure).
+If a `[C]`-marked step (Section 2a / Phase P) fails in Runs 1–27 and it passed in Run 0, that is a **regression** — log with severity `critical` and the note "regression vs. Run 0" and open a GitHub issue immediately. Do not continue the current run until the regression is triaged (it will affect all remaining runs if it is a platform-wide failure).
 
 ### 8f. Closing GitHub Issues when a fix PR merges
 
@@ -3250,7 +3417,7 @@ The "do not close during audit" rule in Section 8b applies only while the audit 
 
 ### 8e. Known pre-existing gaps (do not refile)
 
-- **BI-FS-001**: HVAC/AC Contractor Storefront Archetype (Run 1 — facilities-maintenance)
+- **BI-FS-001**: HVAC/AC Contractor Storefront Archetype — **now satisfied** by the seeded `hvac-contractor` leaf (audited in Run 19); no longer a gap, do not refile
 - **BI-FS-002**: WorkItem Field-Service Lifecycle
 - **BI-FS-003**: Customer Notification Preference Fields
 - **BI-85A1E175**: Trades/HVAC archetype detection keywords in onboarding scrape
@@ -3298,7 +3465,7 @@ After all runs are complete (or the abort criteria fire):
 2. **Compile gap list** — consolidate the git-committed per-run findings files (`docs/testing/archetype-audit-findings/run-NN-<category>.md`) into a single summary. Dedupe cross-run repeats of the same root cause: one BI per root cause with an affected-archetypes list, not one BI per archetype symptom.
 3. **Close GitHub Issues → file portal BIs** — for every GitHub issue opened during the audit (Section 8b Channel 2): create the portal BI via `create_backlog_item` MCP, record the new portal BI ID in the GitHub issue body, then close the issue. This closes the loop between real-time team visibility and the permanent backlog record.
 4. **Triage by severity** — `critical` gaps → priority 1 BIs; `important` → priority 2; swapped-archetype `observation`-tier A/C/D findings only graduate to BIs after fresh-install reproduction confirms them.
-5. **Separate platform regressions from archetype gaps** — any `[C]`-marked finding that failed in Runs 1–17 (mechanics already proven in Run 0) is a platform regression BI, not an archetype BI. Link regressions to the appropriate platform epic; link archetype gaps to EP-ARCH-8D4F2A or EP-9FC5D2FD.
+5. **Separate platform regressions from archetype gaps** — any `[C]`-marked finding that failed in Runs 1–27 (mechanics already proven in Run 0) is a platform regression BI, not an archetype BI. Link regressions to the appropriate platform epic; link archetype gaps to EP-ARCH-8D4F2A or EP-9FC5D2FD.
 6. **Operator UX-fit batch** — collect all `minor` UX-fit findings from Phase P and Phase B5 steps across all runs. These are operator persona accessibility gaps; link them to EP-9FC5D2FD (Dale persona hardening).
 7. **Link to epics** — archetype vocabulary/CTA/coworker gaps → EP-ARCH-8D4F2A. Operator UX-fit → EP-9FC5D2FD. Platform mechanics regressions → appropriate existing platform epic.
 8. **Create new epic if needed** — if total archetype-gap BI count exceeds 20 items, create EP-ARCHETYPE-AUDIT-2026 to contain them.
