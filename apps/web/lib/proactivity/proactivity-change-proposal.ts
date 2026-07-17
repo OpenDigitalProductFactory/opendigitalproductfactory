@@ -8,6 +8,7 @@ import {
 export const PROACTIVITY_CHANGE_ACTION = "propose_proactivity_change" as const;
 
 export type ProactivityChangeScope = "agent" | "activity-family" | "route-context" | "organization";
+export type ProactivityHardFloor = "money-out" | "public";
 
 export type ProactivityChangeProposalParameters = {
   kind: "proactivity-change";
@@ -21,6 +22,13 @@ export type ProactivityChangeProposalParameters = {
   evidenceRefs: Array<{ kind: string; id: string }>;
   spendImpact: string;
   authorityImpact: string;
+  /** Optional business boundary proposed by the coworker, such as recurring
+   * bills below a stated amount. */
+  operatingBoundary?: string;
+  /** Evidence count used for an explainable self-tune proposal. */
+  approvedUnchangedCount?: number;
+  /** These approval floors survive every proactivity level. */
+  hardFloors?: ProactivityHardFloor[];
 };
 
 export type BuildProactivityChangeProposalInput = Omit<
@@ -38,6 +46,7 @@ export function buildProactivityChangeProposalParameters(
       ...input,
       spendImpact: "may increase monitoring and notification spend within existing authority",
       authorityImpact: "does not grant new tools, permissions, or approval bypasses",
+      hardFloors: input.hardFloors ?? ["money-out", "public"],
     },
   };
 }
@@ -65,7 +74,47 @@ export function parseProactivityChangeProposalParameters(
     evidenceRefs: readEvidenceRefs(record.evidenceRefs),
     spendImpact: readString(record.spendImpact) ?? "may change monitoring or notification spend within existing authority",
     authorityImpact: readString(record.authorityImpact) ?? "does not grant new tools, permissions, or approval bypasses",
+    operatingBoundary: readOptionalString(record.operatingBoundary) ?? undefined,
+    approvedUnchangedCount: readOptionalCount(record.approvedUnchangedCount),
+    hardFloors: readHardFloors(record.hardFloors),
   };
+}
+
+export type ProactivitySelfTuneInput = {
+  agentId: string;
+  activityFamily: ProactivityActivityFamily;
+  currentLevel: ProactivityLevel;
+  approvedUnchangedCount: number;
+  operatingBoundary: string;
+  evidenceRefs: Array<{ kind: string; id: string }>;
+  minimumCount?: number;
+};
+
+/** Turn repeated, unchanged approvals into a bounded proposal. The coworker can
+ * suggest one step more initiative, but cannot change its own level or remove
+ * the money/public approval floors. */
+export function buildProactivitySelfTuneCandidate(
+  input: ProactivitySelfTuneInput,
+): ReturnType<typeof buildProactivityChangeProposalParameters> | null {
+  const minimumCount = input.minimumCount ?? 5;
+  if (input.approvedUnchangedCount < minimumCount || input.currentLevel === "assertive") {
+    return null;
+  }
+  const proposedLevel: ProactivityLevel =
+    input.currentLevel === "quiet" ? "balanced" : "assertive";
+  return buildProactivityChangeProposalParameters({
+    agentId: input.agentId,
+    activityFamily: input.activityFamily,
+    routeContext: null,
+    currentLevel: input.currentLevel,
+    proposedLevel,
+    scope: "activity-family",
+    rationale: `You approved my last ${input.approvedUnchangedCount} matching decisions unchanged. I can take more initiative for ${input.operatingBoundary}, while money leaving the business and anything public still come to you.`,
+    evidenceRefs: input.evidenceRefs,
+    operatingBoundary: input.operatingBoundary,
+    approvedUnchangedCount: input.approvedUnchangedCount,
+    hardFloors: ["money-out", "public"],
+  });
 }
 
 function isScope(value: unknown): value is ProactivityChangeScope {
@@ -85,6 +134,18 @@ function readString(value: unknown): string | null {
 function readOptionalString(value: unknown): string | null {
   if (value == null) return null;
   return readString(value);
+}
+
+function readOptionalCount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+function readHardFloors(value: unknown): ProactivityHardFloor[] {
+  if (!Array.isArray(value)) return ["money-out", "public"];
+  const floors = value.filter(
+    (entry): entry is ProactivityHardFloor => entry === "money-out" || entry === "public",
+  );
+  return floors.length > 0 ? [...new Set(floors)] : ["money-out", "public"];
 }
 
 function readEvidenceRefs(value: unknown): Array<{ kind: string; id: string }> {

@@ -5,6 +5,9 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { loadAttentionItems, filterAttentionForAudience } from "@/lib/attention/aggregate";
+import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
+import { buildWeeklyDigest } from "@/lib/attention/weekly-digest";
+import { loadWeeklyDigestDisposition } from "@/lib/attention/weekly-digest-preferences";
 import { runEscalationHygiene } from "@/lib/quality/escalation-hygiene-runner";
 import { AttentionInbox } from "@/components/attention/AttentionInbox";
 
@@ -24,18 +27,32 @@ export default async function WorkspaceInboxPage() {
   });
   // V1 operator-view; worker scoping (own approvals only) is BI-AS-4.
   const visible = filterAttentionForAudience(items, { operator: true });
+  const nowMs = Date.now();
+  const projection = buildOwnerAttentionProjection(visible, {
+    fallbackLevel: "balanced",
+    nowMs,
+  });
+  const digest = buildWeeklyDigest(projection.weeklyDigest, nowMs);
+  const digestDisposition =
+    digest.status === "ready"
+      ? await loadWeeklyDigestDisposition(prisma, session.user.id, digest.reviewOnIso)
+      : null;
 
   return (
     <main className="space-y-4 text-[var(--dpf-text)]">
       <div>
-        <h1 className="text-lg font-semibold">Needs you</h1>
+        <h1 className="text-lg font-semibold">What needs you now</h1>
         <p className="mt-1 max-w-prose text-sm text-[var(--dpf-muted)]">
-          Decisions routed to you after the governed scopes couldn&apos;t resolve them — escalations,
-          approvals, paused coworkers — ordered by what&apos;s most pressing, each with why it needs
-          you. The work backlog lives in Operations.
+          Business choices only, written in plain language. Your digital team keeps technical recovery
+          and low-urgency review out of today&apos;s count. The work backlog stays in Operations.
         </p>
       </div>
-      <AttentionInbox items={visible} failedSources={failedSources} nowMs={Date.now()} />
+      <AttentionInbox
+        projection={projection}
+        failedSources={failedSources}
+        nowMs={nowMs}
+        digestDisposition={digestDisposition}
+      />
     </main>
   );
 }

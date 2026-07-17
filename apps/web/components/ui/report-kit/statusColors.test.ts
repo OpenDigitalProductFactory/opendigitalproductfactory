@@ -53,6 +53,13 @@ describe("statusColors", () => {
     expect(resolveIntent("complaintStatus", "resolved")).toBe("success");
   });
 
+  it("maps owner decision impact tags through the shared intent registry", () => {
+    expect(resolveIntent("ownerDecisionImpact", "money")).toBe("warning");
+    expect(resolveIntent("ownerDecisionImpact", "public")).toBe("danger");
+    expect(resolveIntent("ownerDecisionImpact", "reversible")).toBe("info");
+    expect(resolveIntent("ownerDecisionImpact", "deadline")).toBe("warning");
+  });
+
   it("maps marketing lifecycle statuses to operational intents", () => {
     expect(resolveIntent("marketing", "draft")).toBe("neutral");
     expect(resolveIntent("marketing", "pending-review")).toBe("warning");
