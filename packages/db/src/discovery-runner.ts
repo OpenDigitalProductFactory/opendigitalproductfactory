@@ -148,6 +148,7 @@ export async function executeBootstrapDiscovery(
                 identityConfidence: true;
                 taxonomyConfidence: true;
                 resolvedIdentity: true;
+                catalogIdentityId: true;
                 taxonomyNode: { select: { nodeId: true } };
               };
             }): Promise<Array<{
@@ -159,6 +160,7 @@ export async function executeBootstrapDiscovery(
               identityConfidence: number;
               taxonomyConfidence: number;
               resolvedIdentity: unknown;
+              catalogIdentityId: string | null;
               taxonomyNode: { nodeId: string } | null;
             }>>;
           };
@@ -173,6 +175,7 @@ export async function executeBootstrapDiscovery(
             identityConfidence: true,
             taxonomyConfidence: true,
             resolvedIdentity: true,
+            catalogIdentityId: true,
             taxonomyNode: { select: { nodeId: true } },
           },
         })).map((rule): AdapterRule => ({
@@ -185,6 +188,7 @@ export async function executeBootstrapDiscovery(
           identityConfidence: rule.identityConfidence,
           taxonomyConfidence: rule.taxonomyConfidence,
           resolvedIdentity: (rule.resolvedIdentity ?? {}) as ResolvedIdentity,
+          catalogIdentityId: rule.catalogIdentityId ?? null,
         }))
       : undefined);
 

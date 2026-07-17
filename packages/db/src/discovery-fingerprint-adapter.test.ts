@@ -47,6 +47,13 @@ describe("matchInventoryEntity", () => {
     expect(result!.combinedConfidence).toBeCloseTo(1.75);
   });
 
+  it("carries the rule's catalogIdentityId through the match (BI-27EE2AF7)", () => {
+    const linked: AdapterRule = { ...baseRule, catalogIdentityId: "ci_postgres" };
+    expect(matchInventoryEntity(obsPostgres, { rules: [linked] })!.catalogIdentityId).toBe("ci_postgres");
+    // A rule not yet linked to the identity spine yields a null catalogIdentityId.
+    expect(matchInventoryEntity(obsPostgres, { rules: [baseRule] })!.catalogIdentityId).toBeNull();
+  });
+
   it("returns the highest-combined-confidence match when multiple match", () => {
     const lowConfRule: AdapterRule = {
       ...baseRule,
