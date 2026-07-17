@@ -93,6 +93,7 @@ importers:
       docx:
         specifier: ^9.7.1
         version: 9.7.1
+
   apps/mobile:
     dependencies:
       '@dpf/api-client':
@@ -392,12 +393,6 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(jsdom@29.1.1(@noble/hashes@1.8.0))(msw@2.14.7(@types/node@26.1.1)(typescript@6.0.3))(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.0)(yaml@2.9.0))
 
-  packages/repo-guard-runtime:
-    devDependencies:
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
-
   packages/api-client:
     dependencies:
       '@dpf/types':
@@ -524,6 +519,12 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(jsdom@29.1.1(@noble/hashes@1.8.0))(msw@2.14.7(@types/node@26.1.1)(typescript@6.0.3))(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.0)(yaml@2.9.0))
+
+  packages/repo-guard-runtime:
+    devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
   packages/storefront-templates:
     devDependencies:
