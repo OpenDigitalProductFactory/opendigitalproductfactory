@@ -5113,6 +5113,12 @@ model ToolExecution {
   chatMessageId           String?
   envelopeId              String?
   envelope                CoworkerActionEnvelope?  @relation(fields: [envelopeId], references: [id])
+  // EP-31815F97 S2 (BI-F82F4E04): chain-of-custody link. When this tool call is
+  // part of an agent→agent DelegationChain, this is that chain's grouping
+  // chainId; the human origin is on userId/delegatingUserId. Null for direct
+  // human→coworker calls (still traceable via userId). Joins ToolExecution to
+  // getChainOfCustody(chainId) so every action traces back to a human (TAK §7.1).
+  delegationChainId       String?
 
   @@index([agentId, createdAt])
   @@index([userId, createdAt])
@@ -5125,6 +5131,7 @@ model ToolExecution {
   @@index([skillId, createdAt(sort: Desc)])
   @@index([envelopeId])
   @@index([delegatingUserId, createdAt(sort: Desc)])
+  @@index([delegationChainId])
   @@index([createdAt])
 }
 
