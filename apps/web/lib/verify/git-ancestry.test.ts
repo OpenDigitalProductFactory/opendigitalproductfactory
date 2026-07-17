@@ -64,13 +64,13 @@ describe("ancestryFailureDetail", () => {
 });
 
 describe("gitRepoRootCandidates", () => {
-  it("prefers DPF_REPO_ROOT then cwd", () => {
+  it("prefers DPF_REPO_ROOT then well-known portal mounts then cwd (BI-1D55A2AD)", () => {
     expect(
       gitRepoRootCandidates(
         { DPF_REPO_ROOT: "/clone", DPF_GIT_WORK_TREE: "/clone" } as unknown as NodeJS.ProcessEnv,
         "/cwd",
       ),
-    ).toEqual(["/clone", "/cwd"]);
+    ).toEqual(["/clone", "/host-dpf", "/host-source", "/workspace", "/cwd"]);
   });
 
   it("derives work tree from GIT_DIR ending in .git", () => {
@@ -79,7 +79,17 @@ describe("gitRepoRootCandidates", () => {
         { GIT_DIR: "/clone/.git" } as unknown as NodeJS.ProcessEnv,
         "/cwd",
       ),
-    ).toEqual(["/clone", "/cwd"]);
+    ).toEqual(["/clone", "/host-dpf", "/host-source", "/workspace", "/cwd"]);
+  });
+
+  it("includes PROJECT_ROOT and does not depend on cwd being the repo", () => {
+    const roots = gitRepoRootCandidates(
+      { PROJECT_ROOT: "/app-project" } as unknown as NodeJS.ProcessEnv,
+      "/app",
+    );
+    expect(roots[0]).toBe("/app-project");
+    expect(roots).toContain("/host-dpf");
+    expect(roots).toContain("/app");
   });
 });
 
