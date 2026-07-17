@@ -41,7 +41,7 @@ apps/web/lib/integrate/build-orchestrator.ts	1779
 apps/web/lib/integrate/sandbox/build-branch.ts	854
 apps/web/lib/marketing.ts	1367
 apps/web/lib/mcp-tools-backlog.test.ts	920
-apps/web/lib/mcp-tools.ts	1957
+apps/web/lib/mcp-tools.ts	2007
 apps/web/lib/mcp/packs/backlog-pack.ts	1328
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	858
 apps/web/lib/mcp/packs/sandbox-pack.ts	920
