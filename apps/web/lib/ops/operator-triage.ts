@@ -21,11 +21,24 @@ export type OperatorTriageReason =
   | "blocked" // work claim explicitly blocked — needs unblocking
   | "stalled"; // flagged stale and still live — needs a call
 
+/**
+ * Whose plate is this on (BI-01CC2356)?
+ * - "mine": genuinely on the current operator's plate now — work they've claimed,
+ *   or a broken/blocked item a human must personally intervene on.
+ * - "company": routine platform throughput (triage / launch / stale calls) that
+ *   is company-wide, not a personal must-decide-now item.
+ * The band defaults to "mine" and lets the operator opt into the "company" pool,
+ * so a 171-wide queue stops masquerading as 171 personal decisions.
+ */
+export type OperatorTriageScope = "mine" | "company";
+
 export type OperatorTriageEntry = {
   item: BacklogItemWithRelations;
   reason: OperatorTriageReason;
   /** True when the item plausibly blocks a customer or business outcome. */
   blocksBusinessOutcome: boolean;
+  /** Whose plate the item is on — the mine-vs-company lens. */
+  scope: OperatorTriageScope;
   /** Ordering keys (exposed for tests + UI transparency). */
   businessScore: number;
   riskScore: number;
@@ -125,6 +138,23 @@ function riskScore(item: BacklogItemWithRelations, reason: OperatorTriageReason)
 }
 
 /**
+ * Whose plate is this item on (BI-01CC2356)? "mine" when the current principal
+ * has actively claimed it, OR when it is broken/blocked and a human must step in
+ * (build-attention / blocked). Everything else — routine triage, launch, and
+ * stale calls — is company-wide throughput. With no principalId, ownership can't
+ * be resolved, so the split degrades to the urgency signal alone.
+ */
+export function resolveOperatorScope(
+  item: BacklogItemWithRelations,
+  reason: OperatorTriageReason,
+  principalId?: string | null,
+): OperatorTriageScope {
+  if (principalId && item.claimedById && item.claimedById === principalId) return "mine";
+  if (reason === "build-attention" || reason === "blocked") return "mine";
+  return "company";
+}
+
+/**
  * Select and prioritize the small set of items awaiting an operator decision.
  *
  * Ordering (BI-9952EA9E): business-outcome first → risk/severity → staleness,
@@ -132,10 +162,14 @@ function riskScore(item: BacklogItemWithRelations, reason: OperatorTriageReason)
  *
  * @param items every backlog item (unassigned + epic children, flattened)
  * @param now injectable clock for staleness (defaults to wall-clock)
+ * @param principalId current operator's user id — resolves the "mine" scope
+ *   (BI-01CC2356). Optional; when omitted the scope split uses the urgency
+ *   signal only.
  */
 export function selectOperatorQueue(
   items: BacklogItemWithRelations[],
   now: Date = new Date(),
+  principalId?: string | null,
 ): OperatorTriageEntry[] {
   const entries: OperatorTriageEntry[] = [];
   for (const item of items) {
@@ -145,6 +179,7 @@ export function selectOperatorQueue(
       item,
       reason,
       blocksBusinessOutcome: blocksBusinessOutcome(item),
+      scope: resolveOperatorScope(item, reason, principalId),
       businessScore: businessScore(item),
       riskScore: riskScore(item, reason),
       stalenessDays: daysBetween(item.stalenessDetectedAt ?? item.updatedAt, now),
@@ -164,4 +199,34 @@ export function selectOperatorQueue(
     if (ca !== cb) return ca - cb;
     return a.item.itemId.localeCompare(b.item.itemId);
   });
+}
+
+export type OperatorQueuePartition = {
+  /** Genuinely on the operator's plate now — the default lens. */
+  mine: OperatorTriageEntry[];
+  /** Company-wide platform throughput — opt-in, not personal decisions. */
+  company: OperatorTriageEntry[];
+};
+
+/**
+ * Split the prioritized operator queue into a personal lens and the company-wide
+ * pool (BI-01CC2356). Preserves the existing ordering within each side — this is
+ * a pure partition, not a re-sort — so "mine" leads with the most urgent item.
+ *
+ * @param items every backlog item (unassigned + epic children, flattened)
+ * @param principalId current operator's user id (resolves claim ownership)
+ * @param now injectable clock for staleness
+ */
+export function partitionOperatorQueue(
+  items: BacklogItemWithRelations[],
+  principalId?: string | null,
+  now: Date = new Date(),
+): OperatorQueuePartition {
+  const queue = selectOperatorQueue(items, now, principalId);
+  const mine: OperatorTriageEntry[] = [];
+  const company: OperatorTriageEntry[] = [];
+  for (const entry of queue) {
+    (entry.scope === "mine" ? mine : company).push(entry);
+  }
+  return { mine, company };
 }

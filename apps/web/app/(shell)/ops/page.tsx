@@ -5,6 +5,7 @@ import { reconcileCapabilityNeedBacklog } from "@/lib/coworker-self-assessment/c
 import { runEscalationHygiene } from "@/lib/quality/escalation-hygiene-runner";
 import { OpsClient } from "@/components/ops/OpsClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { auth } from "@/lib/auth";
 import { SurfaceViewSwitcher } from "@/components/workbooks/SurfaceViewSwitcher";
 import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
 
@@ -34,13 +35,17 @@ export default async function OpsPage({ searchParams }: Props) {
     runEscalationHygiene().catch(() => {}),
   ]);
 
-  const [items, digitalProducts, taxonomyNodes, epics, portfolios] = await Promise.all([
+  const [items, digitalProducts, taxonomyNodes, epics, portfolios, session] = await Promise.all([
     getBacklogItems(),
     getDigitalProductsForSelect(),
     getTaxonomyNodesFlat(),
     getEpics(),
     getPortfoliosForSelect(),
+    auth(),
   ]);
+  // Current operator — resolves the "mine" scope in the Needs-you-next band
+  // (BI-01CC2356). Optional: the band degrades to an urgency-only split when absent.
+  const currentUserId = session?.user?.id ?? undefined;
 
   return (
     <div>
@@ -66,6 +71,7 @@ export default async function OpsPage({ searchParams }: Props) {
           portfolios={portfolios}
           focusedItemId={sp?.itemId}
           initialOrigin={sp?.origin}
+          currentUserId={currentUserId}
         />
       )}
     </div>

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   classifyOperatorReason,
   selectOperatorQueue,
+  partitionOperatorQueue,
+  resolveOperatorScope,
   type OperatorTriageReason,
 } from "./operator-triage";
 import type { BacklogItemWithRelations } from "@/lib/backlog";
@@ -171,5 +173,70 @@ describe("selectOperatorQueue", () => {
     const snapshot = input.map((i) => i.itemId);
     selectOperatorQueue(input, NOW);
     expect(input.map((i) => i.itemId)).toEqual(snapshot);
+  });
+
+  it("tags each entry with a mine/company scope", () => {
+    const queue = selectOperatorQueue([item({ itemId: "BI-BLK", claimStatus: "blocked" })], NOW);
+    expect(queue[0]?.scope).toBe("mine");
+  });
+});
+
+describe("resolveOperatorScope (BI-01CC2356)", () => {
+  it("puts broken/blocked work on the operator's plate even with no principal", () => {
+    expect(resolveOperatorScope(item({}), "build-attention")).toBe("mine");
+    expect(resolveOperatorScope(item({}), "blocked")).toBe("mine");
+  });
+
+  it("treats routine throughput (triage / launch / stale) as company-wide", () => {
+    expect(resolveOperatorScope(item({}), "awaiting-triage")).toBe("company");
+    expect(resolveOperatorScope(item({}), "ready-to-build")).toBe("company");
+    expect(resolveOperatorScope(item({}), "stalled")).toBe("company");
+  });
+
+  it("claims an item as mine when the current principal owns it", () => {
+    const mineItem = item({ claimedById: "user-1" });
+    expect(resolveOperatorScope(mineItem, "awaiting-triage", "user-1")).toBe("mine");
+  });
+
+  it("does not claim an item owned by someone else", () => {
+    const theirs = item({ claimedById: "user-2" });
+    expect(resolveOperatorScope(theirs, "awaiting-triage", "user-1")).toBe("company");
+  });
+
+  it("ignores claim ownership when no principal is provided", () => {
+    const claimed = item({ claimedById: "user-1" });
+    expect(resolveOperatorScope(claimed, "awaiting-triage")).toBe("company");
+  });
+});
+
+describe("partitionOperatorQueue (BI-01CC2356)", () => {
+  it("splits the queue into a personal lens and the company-wide pool", () => {
+    const broken = item({ itemId: "BI-BROKEN", activeBuildId: "b", activeBuild: null }); // build-attention → mine
+    const routine = item({ itemId: "BI-ROUTINE", status: "triaging" }); // awaiting-triage → company
+    const { mine, company } = partitionOperatorQueue([routine, broken], undefined, NOW);
+    expect(mine.map((e) => e.item.itemId)).toEqual(["BI-BROKEN"]);
+    expect(company.map((e) => e.item.itemId)).toEqual(["BI-ROUTINE"]);
+  });
+
+  it("routes a principal's claimed routine item into the personal lens", () => {
+    const claimedRoutine = item({ itemId: "BI-MINE", status: "triaging", claimedById: "user-1" });
+    const otherRoutine = item({ itemId: "BI-OTHER", status: "triaging" });
+    const { mine, company } = partitionOperatorQueue([claimedRoutine, otherRoutine], "user-1", NOW);
+    expect(mine.map((e) => e.item.itemId)).toEqual(["BI-MINE"]);
+    expect(company.map((e) => e.item.itemId)).toEqual(["BI-OTHER"]);
+  });
+
+  it("preserves the full-queue ordering within each side and loses no items", () => {
+    const items = [
+      item({ itemId: "BI-A", status: "triaging", businessValue: 5 }),
+      item({ itemId: "BI-B", claimStatus: "blocked" }),
+      item({ itemId: "BI-C", status: "triaging", riskOpportunity: 9 }),
+    ];
+    const full = selectOperatorQueue(items, NOW);
+    const { mine, company } = partitionOperatorQueue(items, undefined, NOW);
+    expect(mine.length + company.length).toBe(full.length);
+    // Company side keeps the same relative order it had in the full queue.
+    const fullCompanyOrder = full.filter((e) => e.scope === "company").map((e) => e.item.itemId);
+    expect(company.map((e) => e.item.itemId)).toEqual(fullCompanyOrder);
   });
 });

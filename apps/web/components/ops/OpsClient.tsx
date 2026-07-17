@@ -43,6 +43,9 @@ type Props = {
    *  the Source pill already active — so the navigation reads as "capability needs live
    *  here", not an unexplained jump into the full backlog. */
   initialOrigin?: string;
+  /** Current operator's user id — resolves the "mine" scope in the Needs-you-next
+   *  band (BI-01CC2356). */
+  currentUserId?: string;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -102,7 +105,7 @@ function SortButton({ label, field, sort, onSort }: {
   );
 }
 
-export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfolios, focusedItemId, initialOrigin }: Props) {
+export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfolios, focusedItemId, initialOrigin, currentUserId }: Props) {
   const [panel, setPanel] = useState<ItemPanelState>({ open: false });
   const [epicPanel, setEpicPanel] = useState<EpicPanelState>(null);
   const [epicSort, setEpicSort] = useState<SortState>(null);
@@ -183,7 +186,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
       {/* Operator triage lens (BI-9952EA9E) — the small, prioritized set of items
           awaiting an operator decision, above the raw wall. Spans ALL items (not
           narrowed by the source/portfolio lenses below). */}
-      <OperatorTriageBand items={items} onEdit={openEdit} focusedItemId={focusedItemId} />
+      <OperatorTriageBand items={items} onEdit={openEdit} focusedItemId={focusedItemId} currentUserId={currentUserId} />
 
       {/* Source + portfolio lenses — narrow the one Operations surface */}
       <FilterBar
