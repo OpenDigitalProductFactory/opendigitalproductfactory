@@ -3774,6 +3774,7 @@ model BusinessContext {
   companyStage    String?
   companySize     String?
   geographicScope String?
+  sourceSystem    String?
   // US state/province code driving statutory defaults (records-request response
   // deadlines, retention schedules) for public-sector archetypes. Org-level
   // configuration on seeded obligations — not 50 seed variants (civic spec $10).

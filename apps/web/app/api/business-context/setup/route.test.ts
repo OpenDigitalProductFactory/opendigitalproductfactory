@@ -53,4 +53,19 @@ describe("POST /api/business-context/setup", () => {
     expect(call?.create.description).toBe("Hello");
     expect(call?.create.targetMarket).toBe("Locals");
   });
+
+  it("persists the source system when captured during setup", async () => {
+    await POST(makeReq({ description: "Hello", sourceSystem: "QuickBooks and spreadsheets" }));
+    const call = mockBusinessContext.upsert.mock.calls[0]?.[0];
+
+    expect(call?.create.sourceSystem).toBe("QuickBooks and spreadsheets");
+    expect(call?.update.sourceSystem).toBe("QuickBooks and spreadsheets");
+  });
+
+  it("does not overwrite source system when omitted from a partial update", async () => {
+    await POST(makeReq({ description: "Hello" }));
+    const call = mockBusinessContext.upsert.mock.calls[0]?.[0];
+
+    expect(call?.update).not.toHaveProperty("sourceSystem");
+  });
 });
