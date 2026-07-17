@@ -127,7 +127,11 @@ describe("promoteInventoryEntities", () => {
 
   // --- Task 2.1 new behaviors ---
 
-  it("skips network_client (no governance.promotion) with type_not_promotable + writes quality issue", async () => {
+  it("skips network_client (structural-type-gate) WITHOUT writing a quality issue — terminal, not actionable (BI-62846516)", async () => {
+    // network_client is infrastructure: the structural-type-gate correctly skips
+    // it. That is a terminal classification, not an actionable gap, so it must
+    // NOT open a PortfolioQualityIssue (these accumulated as permanent-open noise
+    // burying the real queue). Still counted as skipped from promotion.
     mockPrisma.inventoryEntity.findMany.mockResolvedValue([{
       id: "ent_nc",
       entityKey: "network_client:1",
@@ -151,19 +155,17 @@ describe("promoteInventoryEntities", () => {
     expect(result.promoted).toBe(0);
     expect(result.skipped).toBe(1);
     expect(mockPrisma.digitalProduct.upsert).not.toHaveBeenCalled();
-    expect(mockPrisma.portfolioQualityIssue.upsert).toHaveBeenCalledTimes(1);
-    const upsertArgs = mockPrisma.portfolioQualityIssue.upsert.mock.calls[0][0];
-    expect(upsertArgs.where.issueKey).toContain("type_not_promotable");
-    expect(upsertArgs.create.issueType).toBe("type_not_promotable");
+    expect(mockPrisma.portfolioQualityIssue.upsert).not.toHaveBeenCalled();
   });
 
-  it("skips an infra entityType (network_client) even with auto governance.promotion + classifyAs", async () => {
+  it("skips an infra entityType (network_client) with auto policy WITHOUT writing a quality issue", async () => {
     // Estate-accuracy structural-type-gate: a network_client is infrastructure,
     // never a product — even when its taxonomy node
     // ("foundational/network_management/network_connectivity") is mode:auto with
     // classifyAs:"infrastructure_endpoint" and the name clears the runtime-
     // artifact name-gate. This is the live leak that promoted "Access Point" /
-    // "eth0 (172.18.0.11)" rows into the product portfolio.
+    // "eth0 (172.18.0.11)" rows into the product portfolio. The skip is terminal
+    // (source structural-type-gate) so it opens no quality issue (BI-62846516).
     mockPrisma.inventoryEntity.findMany.mockResolvedValue([{
       id: "ent_nc2",
       entityKey: "network_client:2",
@@ -187,8 +189,36 @@ describe("promoteInventoryEntities", () => {
     expect(result.promoted).toBe(0);
     expect(result.skipped).toBe(1);
     expect(mockPrisma.digitalProduct.upsert).not.toHaveBeenCalled();
-    const issueArgs = mockPrisma.portfolioQualityIssue.upsert.mock.calls[0][0];
-    expect(issueArgs.create.issueType).toBe("type_not_promotable");
+    expect(mockPrisma.portfolioQualityIssue.upsert).not.toHaveBeenCalled();
+  });
+
+  it("skips a runtime-named entity (name-gate) WITHOUT writing a quality issue — terminal (BI-62846516)", async () => {
+    // "dpf-redis-1" is structurally a container. The name-gate skip is terminal;
+    // no PortfolioQualityIssue is opened even though gates 1-3 passed.
+    mockPrisma.inventoryEntity.findMany.mockResolvedValue([{
+      id: "ent_rt",
+      entityKey: "container:dpf-redis-1",
+      entityType: "database",
+      name: "dpf-redis-1",
+      attributionStatus: "attributed",
+      attributionConfidence: 0.98,
+      taxonomyNodeId: "tn_db",
+      digitalProductId: null,
+      properties: {},
+    }]);
+    mockPrisma.taxonomyNode.findUnique.mockResolvedValue({
+      id: "tn_db",
+      nodeId: "foundational/data_and_storage_management/database",
+      governance: { promotion: { mode: "auto" } },
+    });
+    mockPrisma.portfolio.findUnique.mockResolvedValue({ id: "port_1" });
+
+    const result = await promoteInventoryEntities(mockPrisma as never);
+
+    expect(result.promoted).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(mockPrisma.digitalProduct.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.portfolioQualityIssue.upsert).not.toHaveBeenCalled();
   });
 
   it("skips low-confidence entity with low_confidence_promotion + writes quality issue", async () => {

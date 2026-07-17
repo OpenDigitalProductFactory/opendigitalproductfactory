@@ -153,6 +153,47 @@ export type PromotionDecision =
   | { decision: "promote"; classifyAs?: string; reason?: undefined; evidence: PromotionEvidence }
   | { decision: "skip"; classifyAs?: undefined; reason: PromotionSkipReason; evidence: PromotionEvidence };
 
+// ── Terminal structural skips vs. actionable gaps ────────────────────────────
+//
+// A skip decision can mean one of two very different things:
+//
+//   1. A TERMINAL STRUCTURAL classification — "this entity is infrastructure /
+//      a runtime instance, and is CORRECTLY not a digital product." The name-gate
+//      ("dpf-redis-1", raw IPs) and the structural-type-gate (host/container/
+//      subnet/NIC/gateway) produce these. Nothing an operator does will ever make
+//      a Docker container a product; the decision is final and correct.
+//
+//   2. An ACTIONABLE GAP — "this entity could be promoted, but something is
+//      missing/wrong": no_taxonomy (attribute it), low_confidence_promotion
+//      (re-run attribution), no_portfolio_root (seed the portfolio), or a
+//      type_not_promotable from the legacy-list / non-auto node policy (add a
+//      governance.promotion policy).
+//
+// Only class (2) belongs in the operator-facing PortfolioQualityIssue queue.
+// Recording class (1) there was the original design mistake (BI-62846516): the
+// dev install accumulated 378 permanent-open name/type_not_promotable rows for
+// its own Docker self-scan, drowning the handful of real, fixable issues. These
+// are keyed by the decision's `evidence.source`, which is the precise
+// discriminator — `type_not_promotable` alone is ambiguous (it also covers the
+// actionable legacy-list / node-policy cases), but its SOURCE is not.
+export const TERMINAL_STRUCTURAL_SKIP_SOURCES: ReadonlySet<string> = new Set([
+  "name-gate",
+  "structural-type-gate",
+]);
+
+/**
+ * True when a decision is a TERMINAL STRUCTURAL skip — a correct "this is
+ * infrastructure, not a product" classification that must NOT be surfaced as an
+ * open portfolio quality issue (it can never be resolved). Distinguished from
+ * actionable gaps by `evidence.source`, not by the skip `reason` (which is
+ * ambiguous for `type_not_promotable`). Returns false for promote decisions.
+ */
+export function isTerminalStructuralSkip(decision: PromotionDecision): boolean {
+  if (decision.decision !== "skip") return false;
+  const source = decision.evidence.source;
+  return typeof source === "string" && TERMINAL_STRUCTURAL_SKIP_SOURCES.has(source);
+}
+
 /**
  * Loose input shapes — callers may pass richer Prisma rows; only these
  * fields are read.

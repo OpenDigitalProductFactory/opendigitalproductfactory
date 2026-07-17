@@ -3,7 +3,12 @@
 // CI test job).
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createLocalIntegrationPlan, createToolchainFingerprint } from "./local-integration-ci.mjs";
+import {
+  createLocalIntegrationPlan,
+  createToolchainFingerprint,
+  resolveGitRevision,
+  resolveCommandInvocation,
+} from "./local-integration-ci.mjs";
 
 describe("createLocalIntegrationPlan", () => {
   it("creates a stable toolchain fingerprint for local-CI evidence (BI-76551B2D)", () => {
@@ -136,6 +141,57 @@ describe("createLocalIntegrationPlan", () => {
     assert.ok(!plan.commands.map((command) => command.join(" ")).join("\n").includes(
       "exec next build",
     ));
+    assert.ok(plan.commands.map((command) => command.join(" ")).includes(
+      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
+    ));
+  });
+
+  it("resolves environment-prefixed commands without relying on a host env binary", () => {
+    const invocation = resolveCommandInvocation(
+      ["env", "NODE_OPTIONS=--max-old-space-size=8192", "pnpm", "--filter", "web", "typecheck"],
+      { PATH: "test-path", NODE_OPTIONS: "--trace-warnings" },
+    );
+
+    assert.equal(invocation.command, "pnpm");
+    assert.deepEqual(invocation.args, ["--filter", "web", "typecheck"]);
+    assert.deepEqual(invocation.env, {
+      PATH: "test-path",
+      NODE_OPTIONS: "--max-old-space-size=8192",
+    });
+  });
+
+  it("preserves plain commands and their base environment", () => {
+    const baseEnv = { PATH: "test-path" };
+    assert.deepEqual(resolveCommandInvocation(["pnpm", "test"], baseEnv), {
+      command: "pnpm",
+      args: ["test"],
+      env: baseEnv,
+    });
+  });
+
+  it("supports multiple, empty, and embedded-equals environment values", () => {
+    assert.deepEqual(resolveCommandInvocation([
+      "env",
+      "EMPTY=",
+      "TOKEN=left=right",
+      "pnpm",
+      "test",
+    ], { PATH: "test-path" }), {
+      command: "pnpm",
+      args: ["test"],
+      env: { PATH: "test-path", EMPTY: "", TOKEN: "left=right" },
+    });
+  });
+
+  it("rejects missing executables and malformed environment assignments", () => {
+    assert.throws(
+      () => resolveCommandInvocation(["env", "NODE_OPTIONS=--trace-warnings"]),
+      /missing an executable/,
+    );
+    assert.throws(
+      () => resolveCommandInvocation(["env", "1BAD=value", "pnpm", "test"]),
+      /invalid environment assignment/,
+    );
   });
 });
 
@@ -164,5 +220,28 @@ describe("createLocalIntegrationPlan migrate-deploy opt-in (BI-157DC9B2)", () =>
       hostPlatform: "linux",
     });
     assert.ok(!plan.commands.map((command) => command.join(" ")).some((c) => c.includes("migrate deploy")));
+  });
+});
+
+describe("resolveGitRevision", () => {
+  it("passes revision expressions directly to Git without a Windows shell", () => {
+    const calls = [];
+    const revision = resolveGitRevision("HEAD^{tree}", {
+      spawnSyncImpl(command, args, options) {
+        calls.push({ command, args, options });
+        return { status: 0, stdout: "tree-sha\n", stderr: "" };
+      },
+    });
+
+    assert.equal(revision, "tree-sha");
+    assert.equal(calls[0].command, "git");
+    assert.deepEqual(calls[0].args, ["rev-parse", "--verify", "HEAD^{tree}"]);
+    assert.equal(calls[0].options.shell, false);
+  });
+
+  it("reports the rejected revision when Git fails", () => {
+    assert.throws(() => resolveGitRevision("missing", {
+      spawnSyncImpl: () => ({ status: 128, stdout: "", stderr: "fatal: bad revision\n" }),
+    }), /failed to resolve missing: fatal: bad revision/);
   });
 });

@@ -66,5 +66,5 @@ apps/web/lib/work-capsules/work-capsule-store.ts	1041
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace/command-center.ts	1118
-packages/db/src/discovery-sync.ts	822
+packages/db/src/discovery-sync.ts	837
 packages/db/src/wiki-store.test.ts	824

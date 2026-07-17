@@ -32,6 +32,12 @@ export interface AdapterRule {
   identityConfidence: number;
   taxonomyConfidence: number;
   resolvedIdentity: ResolvedIdentity;
+  /**
+   * Canonical CatalogIdentity this rule resolves to (BI-27EE2AF7 — the enrich
+   * pipeline). Populated by the seed loader (BI-0528AD01); null for rules not
+   * yet linked to the identity spine.
+   */
+  catalogIdentityId?: string | null;
 }
 
 export interface AdapterMatch {
@@ -49,6 +55,8 @@ export interface AdapterMatch {
   combinedConfidence: number;
   /** The matched rule's resolved identity ({kind,name,vendor,model,deviceClass}). */
   resolvedIdentity: ResolvedIdentity;
+  /** Canonical CatalogIdentity the matched rule resolves to, or null (BI-27EE2AF7). */
+  catalogIdentityId: string | null;
 }
 
 /**
@@ -109,5 +117,6 @@ export function matchInventoryEntity(
     taxonomyConfidence: rule.taxonomyConfidence,
     combinedConfidence,
     resolvedIdentity: rule.resolvedIdentity,
+    catalogIdentityId: rule.catalogIdentityId ?? null,
   };
 }
