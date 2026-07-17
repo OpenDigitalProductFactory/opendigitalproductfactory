@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 512,
+  "pageCount": 513,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -797,6 +797,21 @@
         "practical-tiers",
         "current-local-model-auto-selection",
         "summary"
+      ]
+    },
+    "docs/architecture/platform-substrate-boundaries.md": {
+      "publicHref": "/architecture/platform-substrate-boundaries/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "platform-substrate-boundaries-and-budgets",
+        "boundary-inventory",
+        "evidence-and-ratchets",
+        "update-and-check-procedure",
+        "scope-and-exclusions",
+        "completion-evidence",
+        "what-success-means"
       ]
     },
     "docs/architecture/section-navigation.md": {

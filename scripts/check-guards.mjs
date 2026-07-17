@@ -26,15 +26,21 @@ import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPTS_DIR, "..");
 
-const entries = readdirSync(SCRIPTS_DIR).sort();
-const guards = entries.filter(
-  (f) => /^check-no-.*\.mjs$/.test(f) && !f.endsWith(".test.mjs"),
-);
-const tests = new Set(entries.filter((f) => /^check-no-.*\.test\.mjs$/.test(f)));
+export function discoverGuardFiles(entries) {
+  const sorted=[...entries].sort();
+  return {
+    guards: sorted.filter((f) => /^check-no-.*\.mjs$/.test(f) && !f.endsWith(".test.mjs")),
+    tests: new Set(sorted.filter((f) => /^check-no-.*\.test\.mjs$/.test(f))),
+  };
+}
+
+export function main() {
+const { guards, tests } = discoverGuardFiles(readdirSync(SCRIPTS_DIR));
 
 if (guards.length === 0) {
   console.error("No scripts/check-no-*.mjs guards found — that is itself a failure.");
@@ -69,3 +75,6 @@ if (failed.length > 0) {
   process.exit(1);
 }
 console.log(`Guard loop OK — ${guards.length} guards passed (${tests.size} self-tests).`);
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();

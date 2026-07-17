@@ -70,6 +70,17 @@ export type SyncSourceReaders = {
   githubPr: () => Promise<SyncSourceResult>;
 };
 
+export function resolveContributorInventoryGitCwd({
+  env = process.env,
+  cwd = process.cwd(),
+}: {
+  env?: Record<string, string | undefined>;
+  cwd?: string;
+} = {}): string {
+  const repoRoot = env.DPF_REPO_ROOT?.trim();
+  return repoRoot || cwd;
+}
+
 export type RunSyncOptions = {
   triggeredBy?: "cron" | "mcp" | "ui" | string;
   reapStuckRuns?: boolean;
@@ -528,7 +539,7 @@ async function createDefaultReaders(): Promise<SyncSourceReaders> {
     parseGitBranchList,
   } = await import("@/lib/contributor-change-lanes/git-inventory");
 
-  const cwd = process.cwd();
+  const cwd = resolveContributorInventoryGitCwd();
   const TIMEOUT_MS = 8_000;
   const MAX_BUFFER = 4 * 1024 * 1024;
 

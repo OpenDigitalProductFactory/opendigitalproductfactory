@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
-import { collectToolchainFingerprint, createLocalIntegrationPlan } from "./lib/local-integration-ci.mjs";
+import {
+  collectToolchainFingerprint,
+  createLocalIntegrationPlan,
+  resolveCommandInvocation,
+  resolveGitRevision,
+} from "./lib/local-integration-ci.mjs";
 
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
@@ -37,35 +42,27 @@ const plan = createLocalIntegrationPlan({
 const startedAt = new Date().toISOString();
 for (const command of plan.commands) {
   console.log(`[local-integration-ci] ${command.join(" ")}`);
-  const result = spawnSync(command[0], command.slice(1), {
+  const invocation = resolveCommandInvocation(command);
+  const result = spawnSync(invocation.command, invocation.args, {
     stdio: "inherit",
     shell: process.platform === "win32",
+    env: invocation.env,
   });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 if (metadataOut) {
-  const revParse = (ref) => {
-    const result = spawnSync("git", ["rev-parse", "--verify", ref], {
-      encoding: "utf8",
-      shell: process.platform === "win32",
-    });
-    if (result.status !== 0) {
-      throw new Error(`failed to resolve ${ref}: ${result.stderr || result.stdout}`);
-    }
-    return result.stdout.trim();
-  };
   const payload = {
     schemaVersion: 1,
     bi: "BI-76551B2D",
     mode,
     candidateRef: candidateBranch,
-    candidateSha: candidateSha || revParse(candidateBranch),
+    candidateSha: candidateSha || resolveGitRevision(candidateBranch),
     baseRef,
     fetchBase,
-    baseSha: baseSha || revParse(baseRef),
+    baseSha: baseSha || resolveGitRevision(baseRef),
     integrationBranch: plan.integrationBranch,
-    integrationCommitSha: revParse("HEAD"),
-    synthesizedTreeSha: revParse("HEAD^{tree}"),
+    integrationCommitSha: resolveGitRevision("HEAD"),
+    synthesizedTreeSha: resolveGitRevision("HEAD^{tree}"),
     buildStrategy: plan.buildStrategy,
     ...collectToolchainFingerprint({ buildStrategy: plan.buildStrategy }),
     commands: plan.commands.map((command) => command.join(" ")),
