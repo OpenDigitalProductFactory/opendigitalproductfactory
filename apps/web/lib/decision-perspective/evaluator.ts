@@ -1,7 +1,16 @@
 import {
   isMaterialApplicable,
+  resolveProfileMaterial,
+  resolveProfileMaterialForOrg,
   scorePerspectiveMaterial,
 } from "./material";
+import {
+  createDecisionInteractionId,
+  findExistingDecisionInteraction,
+  persistDecisionInteraction,
+} from "./persistence";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import type {
   DecisionPerspectiveEvaluationInput,
   DecisionPerspectiveEvaluationResult,
@@ -10,6 +19,7 @@ import type {
   DecisionRiskTier,
   PerspectiveMaterial,
   PerspectiveMaterialScore,
+  DecisionEvidenceItem,
 } from "./types";
 
 export { scorePerspectiveMaterial } from "./material";
@@ -274,5 +284,428 @@ export function evaluateDecisionPerspective(
     outcomeType: "recommend",
     rationale:
       `Recommend a direction with profile confidence ${confidence}; arbitration is not authorized for this risk and confidence combination.`,
+  };
+}
+
+export interface GateEvaluator {
+  (input: DecisionPerspectiveEvaluationInput): DecisionPerspectiveEvaluationResult;
+}
+
+export type DecisionGateCaller = {
+  client?: string | null;
+  apiTokenId?: string | null;
+  authSource?: string | null;
+  agentId?: string | null;
+  threadId?: string | null;
+} | null;
+
+type PerspectiveGateBuild = {
+  buildId: string;
+  planReview: { decision: string; summary: string | null } | null;
+  deliberationSummary: {
+    plan?: {
+      deliberationRunId: string;
+      evidenceQuality: string;
+      rationaleSummary: string;
+    } | null;
+  } | null;
+};
+
+export function errorClass(error: unknown): string {
+  return error instanceof Error && error.name ? error.name : "UnknownError";
+}
+
+export function errorMessage(error: unknown): string {
+  return getErrorMessage(error);
+}
+
+function planDeliberationRunId(build: PerspectiveGateBuild): string | null {
+  return build.deliberationSummary?.plan?.deliberationRunId ?? null;
+}
+
+export function failClosedEvaluation(input: {
+  profile: DecisionPerspectiveProfile;
+  question: string;
+  options: string[];
+  domainClass: DecisionDomainClass;
+  riskTier: DecisionRiskTier;
+  error: unknown;
+  resolvedProfileChain: string[];
+  isWwwd?: boolean;
+}): DecisionPerspectiveEvaluationResult {
+  const className = errorClass(input.error);
+  const isWwwd = input.isWwwd ?? false;
+  const rationale = isWwwd
+    ? `WWWD fail-closed escalation: ${className}. The decision could not be safely evaluated, so it routes to a human.`
+    : `WWMD fail-closed escalation: ${className}. The decision kernel could not safely evaluate this advancement request.`;
+
+  return {
+    outcomeType: "escalate",
+    selectedProfileId: input.profile.profileId,
+    fallbackProfileId: null,
+    profileVersionId: input.profile.currentVersion.versionId,
+    confidenceBefore: 0,
+    confidenceAfter: 0,
+    confidenceScore: 0,
+    coverageGap: false,
+    principleConflict: false,
+    domainClass: input.domainClass,
+    resolvedProfileChain: input.resolvedProfileChain,
+    materialCount: 0,
+    freshnessDistribution: { current: 0, stale: 0, superseded: 0, contradicted: 0 },
+    riskTier: input.riskTier,
+    question: input.question,
+    options: input.options,
+    rationale,
+    materialScores: [],
+    sources: [],
+    gapReason: "material-below-confidence",
+  };
+}
+
+export function operatorMessageFor(
+  evaluation: DecisionPerspectiveEvaluationResult,
+  orgProfileSelected = false,
+  isWwwd = false,
+): string {
+  if (isWwwd) {
+    const scope = orgProfileSelected
+      ? "your organization's recorded stance"
+      : "platform defaults (your organization has not recorded a stance here yet)";
+    switch (evaluation.outcomeType) {
+      case "defer":
+        return `No applicable business stance found via ${scope}. ${evaluation.rationale}`;
+      case "escalate":
+        return `This business decision needs your call (${scope}). ${evaluation.rationale}`;
+      case "arbitrate":
+        return `Decided from ${scope} at ${evaluation.confidenceScore} confidence.`;
+      default:
+        return `Recommended from ${scope} at ${evaluation.confidenceScore} confidence.`;
+    }
+  }
+
+  // WWMD (build studio gate)
+  if (evaluation.outcomeType === "defer") {
+    return `WWMD found a coverage gap for this decision class. ${evaluation.rationale}`;
+  }
+  if (evaluation.outcomeType === "escalate") {
+    return `WWMD requires escalation before implementation starts. ${evaluation.rationale}`;
+  }
+  if (evaluation.outcomeType === "arbitrate") {
+    return `WWMD arbitrated this low-risk decision with ${evaluation.confidenceScore} confidence.`;
+  }
+  return `WWMD recommends starting implementation with ${evaluation.confidenceScore} confidence.`;
+}
+
+async function getRecentOverrideCount(input: {
+  db: any;
+  profileId: string;
+  domainClass: DecisionDomainClass;
+  now: Date;
+}): Promise<number> {
+  if (!input.db.escalationCapture?.count) return 0;
+  const gte = new Date(input.now.getTime() - RECENT_OVERRIDE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  return input.db.escalationCapture.count({
+    where: {
+      domainClass: input.domainClass,
+      createdAt: { gte },
+      interaction: { profileId: input.profileId },
+    },
+  });
+}
+
+export async function evaluatePerspectiveGate(input: {
+  db: any;
+  organizationId?: string | null | undefined;
+  profileId?: string;
+  fallbackProfileId?: string;
+  question: string;
+  options: string[];
+  domainClass: DecisionDomainClass;
+  riskTier: DecisionRiskTier;
+  routeContext: string;
+  build?: PerspectiveGateBuild | null;
+  phaseFrom?: string | null;
+  phaseTo?: string | null;
+  evidence?: DecisionEvidenceItem[];
+  triggeredByUserId?: string | null;
+  taskRunId?: string | null;
+  caller?: DecisionGateCaller;
+  recentOverrideCount?: number;
+  evaluator?: GateEvaluator;
+  resolver?: any;
+  now?: Date;
+  coverageGapRationale?: string;
+  onComplete?: (interactionId: string) => Promise<void> | void;
+}): Promise<{
+  allowed: boolean;
+  interactionId: string;
+  evaluation: DecisionPerspectiveEvaluationResult;
+  operatorMessage: string;
+  orgProfileSelected: boolean;
+}> {
+  const interactionId = createDecisionInteractionId();
+  const isWwwd = input.organizationId !== undefined;
+  const prefix = isWwwd ? "wwwd" : "wwmd";
+  const now = input.now ?? new Date();
+
+  let resolved;
+  let profile: DecisionPerspectiveProfile = MARK_DPF_PLATFORM_PROFILE;
+  let orgProfileSelected = false;
+
+  try {
+    if (isWwwd) {
+      const resolve = input.resolver ?? resolveProfileMaterialForOrg;
+      resolved = await resolve({
+        db: input.db,
+        organizationId: input.organizationId,
+        domainClass: input.domainClass,
+        fallbackProfileId: input.fallbackProfileId,
+      });
+      profile = resolved.selectedProfile ?? MARK_DPF_PLATFORM_PROFILE;
+      orgProfileSelected = resolved.orgProfileSelected;
+    } else {
+      const resolve = input.resolver ?? resolveProfileMaterial;
+      resolved = await resolve({
+        db: input.db,
+        profileId: input.profileId ?? MARK_DPF_PLATFORM_PROFILE.profileId,
+        domainClass: input.domainClass,
+      });
+      profile = resolved.selectedProfile ?? MARK_DPF_PLATFORM_PROFILE;
+    }
+  } catch (error) {
+    const evaluation = failClosedEvaluation({
+      profile,
+      question: input.question,
+      options: input.options,
+      domainClass: input.domainClass,
+      riskTier: input.riskTier,
+      error,
+      resolvedProfileChain: [input.profileId ?? profile.profileId],
+      isWwwd,
+    });
+
+    const invokeEvent = isWwwd ? "wwwd.org-gate.invoked" : "wwmd.gate.invoked";
+    console.info(
+      `[tool-trace] ${invokeEvent} ${JSON.stringify({
+        interactionId,
+        organizationId: input.organizationId ?? null,
+        domainClass: input.domainClass,
+        riskTier: input.riskTier,
+        routeContext: input.routeContext,
+        featureBuildId: input.build?.buildId ?? null,
+        triggeredByUserId: input.triggeredByUserId ?? null,
+      })}`
+    );
+
+    console.info(
+      `[tool-trace] ${prefix}.evaluator.failed ${JSON.stringify({
+        interactionId,
+        errorClass: errorClass(error),
+        errorMessage: errorMessage(error),
+      })}`
+    );
+
+    await persistDecisionInteraction({
+      db: input.db,
+      build: input.build,
+      evaluation,
+      deliberationRunId: input.build ? planDeliberationRunId(input.build) : null,
+      triggeredByUserId: input.triggeredByUserId,
+      taskRunId: input.taskRunId,
+      interactionId,
+      routeContext: input.routeContext,
+      phaseFrom: input.phaseFrom === undefined ? (input.build ? "plan" : null) : input.phaseFrom,
+      phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
+      outcomePayloadExtra: isWwwd
+        ? { orgProfileSelected, caller: input.caller ?? null }
+        : undefined,
+    });
+
+    console.info(
+      `[tool-trace] ${prefix}.ledger.written ${JSON.stringify({
+        interactionId,
+        outcomeType: evaluation.outcomeType,
+      })}`
+    );
+
+    return {
+      allowed: false,
+      interactionId,
+      evaluation,
+      operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),
+      orgProfileSelected,
+    };
+  }
+
+  const invokeEvent = isWwwd ? "wwwd.org-gate.invoked" : "wwmd.gate.invoked";
+  console.info(
+    `[tool-trace] ${invokeEvent} ${JSON.stringify({
+      interactionId,
+      organizationId: input.organizationId ?? null,
+      profileId: profile.profileId,
+      orgProfileSelected,
+      domainClass: input.domainClass,
+      riskTier: input.riskTier,
+      routeContext: input.routeContext,
+      featureBuildId: input.build?.buildId ?? null,
+      triggeredByUserId: input.triggeredByUserId ?? null,
+    })}`
+  );
+
+  console.info(
+    `[tool-trace] ${prefix}.profile.resolved ${JSON.stringify({
+      interactionId,
+      resolvedProfileChain: resolved.resolvedProfileChain,
+      materialCount: resolved.materials.length,
+      coverageGap: resolved.coverageGap,
+      orgProfileSelected,
+    })}`
+  );
+
+  if (input.build) {
+    const phaseFrom = input.phaseFrom ?? "plan";
+    const phaseTo = input.phaseTo ?? "build";
+    const existing = await findExistingDecisionInteraction({
+      db: input.db,
+      build: input.build,
+      phaseFrom,
+      phaseTo,
+      profileVersionId: profile.currentVersion.versionId,
+    });
+    if (existing) {
+      console.info(
+        `[tool-trace] ${prefix}.idempotent.hit ${JSON.stringify({
+          interactionId: existing.interactionId,
+          featureBuildId: input.build.buildId,
+          phaseFrom,
+          phaseTo,
+        })}`
+      );
+      return {
+        allowed: existing.evaluation.outcomeType === "recommend" || existing.evaluation.outcomeType === "arbitrate",
+        interactionId: existing.interactionId,
+        evaluation: existing.evaluation,
+        operatorMessage: operatorMessageFor(existing.evaluation, orgProfileSelected, isWwwd),
+        orgProfileSelected,
+      };
+    }
+  }
+
+  const overrides = input.recentOverrideCount
+    ?? await getRecentOverrideCount({ db: input.db, profileId: profile.profileId, domainClass: input.domainClass, now });
+
+  let evidence = input.evidence;
+  if (!evidence && input.build) {
+    evidence = [
+      {
+        label: "Plan review",
+        sourceType: "build-studio-plan-review",
+        grade: input.build.planReview?.decision === "pass" ? "A" : "C",
+        summary: input.build.planReview?.summary ?? "No plan review summary recorded.",
+      },
+      ...(input.build.deliberationSummary?.plan
+        ? [{
+          label: "Plan deliberation",
+          sourceType: "deliberation-outcome",
+          grade: input.build.deliberationSummary.plan.evidenceQuality === "source-backed" ? "A" as const : "B" as const,
+          summary: input.build.deliberationSummary.plan.rationaleSummary,
+        }]
+        : []),
+    ];
+  }
+
+  const evaluator = input.evaluator ?? evaluateDecisionPerspective;
+  let evaluation: DecisionPerspectiveEvaluationResult;
+
+  try {
+    evaluation = evaluator({
+      profile,
+      fallbackProfiles: [],
+      materials: resolved.materials,
+      question: input.question,
+      questionDomain: input.domainClass,
+      options: input.options,
+      riskTier: input.riskTier,
+      recentOverrideCount: overrides,
+      evidence,
+    });
+  } catch (error) {
+    evaluation = failClosedEvaluation({
+      profile,
+      question: input.question,
+      options: input.options,
+      domainClass: input.domainClass,
+      riskTier: input.riskTier,
+      error,
+      resolvedProfileChain: resolved.resolvedProfileChain,
+      isWwwd,
+    });
+    console.info(
+      `[tool-trace] ${prefix}.evaluator.failed ${JSON.stringify({
+        interactionId,
+        errorClass: errorClass(error),
+        errorMessage: errorMessage(error),
+      })}`
+    );
+  }
+
+  if (resolved.coverageGap) {
+    evaluation.outcomeType = "defer";
+    evaluation.coverageGap = true;
+    evaluation.rationale = input.coverageGapRationale ?? (isWwwd
+      ? "No applicable business stance: neither the organization's profile nor any fallback has material for this decision class."
+      : "Decision perspective coverage gap: no active profile or fallback profile has applicable material for Build Studio plan advancement.");
+    evaluation.resolvedProfileChain = resolved.resolvedProfileChain;
+  }
+
+  console.info(
+    `[tool-trace] ${prefix}.evaluator.complete ${JSON.stringify({
+      interactionId,
+      confidenceScore: evaluation.confidenceScore,
+      outcomeType: evaluation.outcomeType,
+      principleConflict: evaluation.principleConflict,
+      freshnessDistribution: evaluation.freshnessDistribution,
+    })}`
+  );
+
+  const persisted = await persistDecisionInteraction({
+    db: input.db,
+    build: input.build,
+    evaluation,
+    deliberationRunId: input.build ? planDeliberationRunId(input.build) : null,
+    triggeredByUserId: input.triggeredByUserId,
+    taskRunId: input.taskRunId,
+    interactionId,
+    routeContext: input.routeContext,
+    phaseFrom: input.phaseFrom === undefined ? (input.build ? "plan" : null) : input.phaseFrom,
+    phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
+    outcomePayloadExtra: isWwwd ? { orgProfileSelected } : undefined,
+  });
+
+  console.info(
+    `[tool-trace] ${prefix}.ledger.written ${JSON.stringify({
+      interactionId: persisted.interactionId,
+      outcomeType: evaluation.outcomeType,
+    })}`
+  );
+
+  if (input.onComplete) {
+    setTimeout(() => {
+      Promise.resolve(input.onComplete!(persisted.interactionId)).catch((err: unknown) => {
+        console.error(`[tool-trace] gate.onComplete.failed`, {
+          interactionId: persisted.interactionId,
+          error: String(err),
+        });
+      });
+    });
+  }
+
+  return {
+    allowed: evaluation.outcomeType === "recommend" || evaluation.outcomeType === "arbitrate",
+    interactionId: persisted.interactionId,
+    evaluation,
+    operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),
+    orgProfileSelected,
   };
 }

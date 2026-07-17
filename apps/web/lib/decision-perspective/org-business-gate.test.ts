@@ -125,15 +125,23 @@ describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
 
   it("fail-closed: a resolver error escalates to a human and is still recorded", async () => {
     const db = makeDb();
+    const caller = {
+      client: "codex",
+      apiTokenId: "token-1",
+      threadId: "thread-1",
+    };
     const result = await evaluateOrgBusinessDecisionGate({
       ...base,
       db: db as never,
       resolver: vi.fn().mockRejectedValue(new Error("db down")) as never,
+      caller,
     });
     expect(result.allowed).toBe(false);
     expect(result.evaluation.outcomeType).toBe("escalate");
     expect(result.evaluation.rationale).toMatch(/fail-closed/);
     expect(db.decisionInteraction.create).toHaveBeenCalled();
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    expect((data.outcomePayload as { caller?: unknown }).caller).toEqual(caller);
   });
 
   it("a non-recommend org outcome (e.g. escalate) is not allowed", async () => {

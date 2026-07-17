@@ -278,6 +278,23 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
     expect(result.evaluation.confidenceScore).toBe(0.6);
   });
 
+  it("preserves a caller-provided graduated risk tier", async () => {
+    const db = makeDb();
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      riskTier: "low",
+    });
+
+    expect(result.evaluation.riskTier).toBe("low");
+    expect(db.decisionInteraction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ riskTier: "low" }),
+      }),
+    );
+  });
+
   it("fails closed and writes an escalation interaction when evaluation throws", async () => {
     const db = makeDb();
     const trace = vi.spyOn(console, "info").mockImplementation(() => {});
