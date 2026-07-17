@@ -60,15 +60,19 @@ const OUTBOUND_REQUEST_NOISE = /\[responses-adapter\]\s+REQUEST|Error Report PIR
 // class minted ~6 duplicate BI-PIR-* during the 2026-07-15 self-upgrade window.
 const DB_LIFECYCLE_NOISE =
   /database system is (starting up|shutting down)|terminating connection due to administrator command|error scraping (target|dsn)/i;
+const ANSI_COLOR = /\x1b\[[0-9;]*m/g;
+const CODE_FRAME_LINE = /^\s*\d+\s*\|/;
 
 /** True when a line is a genuine error worth clustering (not info/debug/self-noise). */
 export function isErrorLine(line: string): boolean {
   if (!line) return false;
-  if (SELF_NOISE.test(line)) return false;
-  if (INFO_DEBUG.test(line)) return false;
-  if (OUTBOUND_REQUEST_NOISE.test(line)) return false;
-  if (DB_LIFECYCLE_NOISE.test(line)) return false;
-  return ERROR_TOKEN.test(line);
+  const plain = line.replace(ANSI_COLOR, "");
+  if (CODE_FRAME_LINE.test(plain)) return false;
+  if (SELF_NOISE.test(plain)) return false;
+  if (INFO_DEBUG.test(plain)) return false;
+  if (OUTBOUND_REQUEST_NOISE.test(plain)) return false;
+  if (DB_LIFECYCLE_NOISE.test(plain)) return false;
+  return ERROR_TOKEN.test(plain);
 }
 
 /** Collapse a log line to a stable template by masking variable tokens. */
