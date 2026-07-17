@@ -8,7 +8,6 @@ const h = vi.hoisted(() => ({
   crashOnce: false,
 }));
 
-vi.mock("@/lib/routed-inference", () => ({ routeAndCall: vi.fn(async () => ({ content: "qualified-inquiry" })) }));
 vi.mock("@dpf/db", () => {
   const inbound = {
     inboundId: "inbound-concurrent-12345678", organizationId: "org-1", fromAddress: "founder@example.com",
@@ -28,12 +27,18 @@ vi.mock("@dpf/db", () => {
     engagement: { upsert: async () => { if (!h.engagement) { h.engagement = { id: "engagement-1" }; h.engagementCreates += 1; } return h.engagement; } },
     outboundDraft: {
       findFirst: async () => h.draft,
-      create: async () => { h.draftCreates += 1; h.draft = { draftId: "draft-1" }; return h.draft; },
+      create: async () => {
+        if (h.draft) throw Object.assign(new Error("partial unique conflict"), { code: "P2002" });
+        h.draftCreates += 1; h.draft = { draftId: "draft-1" }; return h.draft;
+      },
     },
     $transaction: async (operation: (tx: unknown) => Promise<unknown>) => {
       const snapshot = structuredClone({ draft: h.draft, engagement: h.engagement, draftCreates: h.draftCreates, engagementCreates: h.engagementCreates });
       try { return await operation(prisma); }
-      catch (error) { Object.assign(h, snapshot); throw error; }
+      catch (error) {
+        if (!(typeof error === "object" && error !== null && "code" in error && error.code === "P2002")) Object.assign(h, snapshot);
+        throw error;
+      }
     },
   });
   return { prisma };
@@ -47,23 +52,27 @@ beforeEach(() => {
 
 describe("durable Postmark responder", () => {
   it("allows one cross-worker claim and replays the completed result without duplicate effects", async () => {
+    let arrivals = 0;
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => { release = resolve; });
+    const classify = async () => { arrivals += 1; if (arrivals === 2) release(); await barrier; return "qualified-inquiry" as const; };
     const [first, concurrent] = await Promise.allSettled([
-      runInboundResponder({ inboundId: "inbound-concurrent-12345678" }),
-      runInboundResponder({ inboundId: "inbound-concurrent-12345678" }),
+      runInboundResponder({ inboundId: "inbound-concurrent-12345678", classify }),
+      runInboundResponder({ inboundId: "inbound-concurrent-12345678", classify }),
     ]);
     expect(first.status).toBe("fulfilled");
-    expect(concurrent.status).toBe("fulfilled");
-    await expect(runInboundResponder({ inboundId: "inbound-concurrent-12345678" })).resolves.toMatchObject({ draftId: "draft-1", engagementId: "engagement-1" });
+    expect(concurrent.status).toBe("rejected");
+    await expect(runInboundResponder({ inboundId: "inbound-concurrent-12345678", classify: async () => "qualified-inquiry" })).resolves.toMatchObject({ draftId: "draft-1", engagementId: "engagement-1" });
     expect(h.draftCreates).toBe(1);
     expect(h.engagementCreates).toBe(1);
   });
 
   it("rolls back draft and engagement on a crash and recovers after lease expiry", async () => {
     h.crashOnce = true;
-    await expect(runInboundResponder({ inboundId: "inbound-concurrent-12345678" })).rejects.toThrow("injected transaction crash");
+    await expect(runInboundResponder({ inboundId: "inbound-concurrent-12345678", classify: async () => "qualified-inquiry" })).rejects.toThrow("injected transaction crash");
     expect(h.draft).toBeNull();
     expect(h.engagement).toBeNull();
-    await expect(runInboundResponder({ inboundId: "inbound-concurrent-12345678" })).resolves.toMatchObject({ draftId: "draft-1", engagementId: "engagement-1" });
+    await expect(runInboundResponder({ inboundId: "inbound-concurrent-12345678", classify: async () => "qualified-inquiry" })).resolves.toMatchObject({ draftId: "draft-1", engagementId: "engagement-1" });
     expect(h.draftCreates).toBe(1);
     expect(h.engagementCreates).toBe(1);
   });

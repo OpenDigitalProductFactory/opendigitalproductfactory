@@ -32,6 +32,38 @@ export const marketingSchedulerDispatch = inngest.createFunction(
   },
 );
 
+export class PostmarkCallbackDispatchRetryableError extends Error {
+  constructor(readonly failedDeliveries: readonly string[]) {
+    super(`Postmark callback dispatch remains pending for ${failedDeliveries.length} delivery(s).`);
+    this.name = "PostmarkCallbackDispatchRetryableError";
+  }
+}
+
+type PostmarkReceipt = { deliveryKey: string; domainEntityId: string | null };
+type PostmarkDrain = (receipt: { deliveryKey: string; domainEntityId: string }) => Promise<{
+  claimedOrCompleted: boolean; retryableFailure: boolean;
+}>;
+
+export async function drainPostmarkCallbackBatch(
+  receipts: readonly PostmarkReceipt[],
+  drain: PostmarkDrain,
+): Promise<{ attempted: number }> {
+  const failures: string[] = [];
+  let attempted = 0;
+  for (const receipt of receipts) {
+    if (!receipt.domainEntityId) continue;
+    attempted += 1;
+    try {
+      const result = await drain({ ...receipt, domainEntityId: receipt.domainEntityId });
+      if (result.retryableFailure) failures.push(receipt.deliveryKey);
+    } catch {
+      failures.push(receipt.deliveryKey);
+    }
+  }
+  if (failures.length > 0) throw new PostmarkCallbackDispatchRetryableError(failures);
+  return { attempted };
+}
+
 async function drainPostmarkCallbacks(deliveryKey?: string, terminalAudit?: {
   eventKey: string; responseKind: string; errorCode: string;
 }) {
@@ -45,12 +77,12 @@ async function drainPostmarkCallbacks(deliveryKey?: string, terminalAudit?: {
     where: { connectorId: "email-postmark", status: "completed", dispatchPending: true, ...(deliveryKey ? { deliveryKey } : {}) },
     select: { deliveryKey: true, domainEntityId: true }, orderBy: { updatedAt: "asc" }, take: deliveryKey ? 1 : 50,
   });
-  for (const receipt of receipts) if (receipt.domainEntityId) await drainDurableCallbackDispatch({
+  const batch = await drainPostmarkCallbackBatch(receipts, (receipt) => drainDurableCallbackDispatch({
     client: prisma as unknown as Parameters<typeof drainDurableCallbackDispatch>[0]["client"],
-    connectorId: "email-postmark", deliveryKey: receipt.deliveryKey, domainEntityId: receipt.domainEntityId,
+    connectorId: "email-postmark", ...receipt,
     responder: async (inboundId) => { await runInboundResponder({ inboundId }); },
-  });
-  return { attempted: receipts.length, terminalAudits: terminalAudit ? 1 : 0 };
+  }));
+  return { attempted: batch.attempted, terminalAudits: terminalAudit ? 1 : 0 };
 }
 
 export const postmarkCallbackDispatchRequested = inngest.createFunction(

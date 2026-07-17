@@ -43,11 +43,15 @@ export type ResponderResult = {
 
 export function runInboundResponder(input: {
   inboundId: string;
+  classify?: (subject: string, body: string) => Promise<InboundClassification>;
 }): Promise<ResponderResult> {
   return runInboundResponderOnce(input);
 }
 
-async function runInboundResponderOnce(input: { inboundId: string }): Promise<ResponderResult> {
+async function runInboundResponderOnce(input: {
+  inboundId: string;
+  classify?: (subject: string, body: string) => Promise<InboundClassification>;
+}): Promise<ResponderResult> {
   const inbound = await prisma.inboundChannelMessage.findUnique({
     where: { inboundId: input.inboundId },
   });
@@ -57,7 +61,7 @@ async function runInboundResponderOnce(input: { inboundId: string }): Promise<Re
 
   // 1. Rule-based pre-filter.
   const classification = preFilter(inbound.fromAddress, inbound.subject ?? "", inbound.body)
-    ?? (await classifyWithLlm(inbound.subject ?? "", inbound.body));
+    ?? (await (input.classify ?? classifyWithLlm)(inbound.subject ?? "", inbound.body));
   return prisma.$transaction(async (tx) => {
     let engagementId: string | null = null;
     if (classification === "qualified-inquiry" && inbound.fromAddress) {
