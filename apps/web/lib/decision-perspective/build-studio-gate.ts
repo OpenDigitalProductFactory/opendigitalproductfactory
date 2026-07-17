@@ -7,6 +7,7 @@ import { evaluatePerspectiveGate } from "./evaluator";
 import type {
   DecisionPerspectiveEvaluationInput,
   DecisionPerspectiveEvaluationResult,
+  DecisionRiskTier,
 } from "./types";
 import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
 import { runVoiceSynthesisJob } from "../voice-synthesis/synthesis-job";
@@ -49,10 +50,11 @@ export async function evaluateBuildStudioPlanAdvancementGate(input: {
   triggeredByUserId?: string | null;
   evaluator?: GateEvaluator;
   now?: Date;
+  riskTier?: DecisionRiskTier;
 }): Promise<BuildStudioDecisionGateResult> {
   const question = planAdvancementQuestion(input.build);
   const options = planAdvancementOptions();
-  const riskTier = "medium" as const;
+  const riskTier = input.riskTier ?? "medium";
 
   const result = await evaluatePerspectiveGate({
     db: input.db,

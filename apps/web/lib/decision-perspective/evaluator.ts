@@ -9,6 +9,7 @@ import {
   findExistingDecisionInteraction,
   persistDecisionInteraction,
 } from "./persistence";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import type {
   DecisionPerspectiveEvaluationInput,
@@ -290,15 +291,35 @@ export interface GateEvaluator {
   (input: DecisionPerspectiveEvaluationInput): DecisionPerspectiveEvaluationResult;
 }
 
+export type DecisionGateCaller = {
+  client?: string | null;
+  apiTokenId?: string | null;
+  authSource?: string | null;
+  agentId?: string | null;
+  threadId?: string | null;
+} | null;
+
+type PerspectiveGateBuild = {
+  buildId: string;
+  planReview: { decision: string; summary: string | null } | null;
+  deliberationSummary: {
+    plan?: {
+      deliberationRunId: string;
+      evidenceQuality: string;
+      rationaleSummary: string;
+    } | null;
+  } | null;
+};
+
 export function errorClass(error: unknown): string {
   return error instanceof Error && error.name ? error.name : "UnknownError";
 }
 
 export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return getErrorMessage(error);
 }
 
-function planDeliberationRunId(build: { deliberationSummary?: { plan?: { deliberationRunId: string } | null } | null }): string | null {
+function planDeliberationRunId(build: PerspectiveGateBuild): string | null {
   return build.deliberationSummary?.plan?.deliberationRunId ?? null;
 }
 
@@ -403,16 +424,13 @@ export async function evaluatePerspectiveGate(input: {
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   routeContext: string;
-  build?: {
-    buildId: string;
-    planReview: { decision: string; summary: string | null } | null;
-    deliberationSummary: { plan?: { evidenceQuality: string; rationaleSummary: string } | null } | null;
-  } | null;
+  build?: PerspectiveGateBuild | null;
   phaseFrom?: string | null;
   phaseTo?: string | null;
   evidence?: DecisionEvidenceItem[];
   triggeredByUserId?: string | null;
   taskRunId?: string | null;
+  caller?: DecisionGateCaller;
   recentOverrideCount?: number;
   evaluator?: GateEvaluator;
   resolver?: any;
@@ -499,7 +517,9 @@ export async function evaluatePerspectiveGate(input: {
       routeContext: input.routeContext,
       phaseFrom: input.phaseFrom === undefined ? (input.build ? "plan" : null) : input.phaseFrom,
       phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
-      outcomePayloadExtra: isWwwd ? { orgProfileSelected } : undefined,
+      outcomePayloadExtra: isWwwd
+        ? { orgProfileSelected, caller: input.caller ?? null }
+        : undefined,
     });
 
     console.info(
@@ -671,7 +691,7 @@ export async function evaluatePerspectiveGate(input: {
   );
 
   if (input.onComplete) {
-    setImmediate(() => {
+    setTimeout(() => {
       Promise.resolve(input.onComplete!(persisted.interactionId)).catch((err: unknown) => {
         console.error(`[tool-trace] gate.onComplete.failed`, {
           interactionId: persisted.interactionId,

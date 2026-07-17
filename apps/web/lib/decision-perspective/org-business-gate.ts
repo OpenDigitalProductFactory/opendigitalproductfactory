@@ -18,6 +18,7 @@
 // error escalates to a human and is still recorded.
 
 import { evaluatePerspectiveGate } from "./evaluator";
+import type { DecisionGateCaller } from "./evaluator";
 import { resolveProfileMaterialForOrg } from "./material";
 import type {
   DecisionDomainClass,
@@ -60,6 +61,7 @@ export async function evaluateOrgBusinessDecisionGate(input: {
   fallbackProfileId?: string;
   triggeredByUserId?: string | null;
   taskRunId?: string | null;
+  caller?: DecisionGateCaller;
   evaluator?: GateEvaluator;
   resolver?: typeof resolveProfileMaterialForOrg;
   now?: Date;
@@ -79,6 +81,7 @@ export async function evaluateOrgBusinessDecisionGate(input: {
     evidence: input.evidence,
     triggeredByUserId: input.triggeredByUserId,
     taskRunId: input.taskRunId,
+    caller: input.caller,
     evaluator: input.evaluator,
     resolver: input.resolver,
     now: input.now,
