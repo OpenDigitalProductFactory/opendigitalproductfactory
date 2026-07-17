@@ -55,11 +55,13 @@ evaluation loop (`constraints/evaluate.ts`), and the US-federal + California
 starter pack (`rule-packs/us.ts`). Unknown jurisdiction OR an unknown hard
 predicate → **requires policy review**, fail-closed (never assume US defaults).
 
-**Follow-up (same phase, later PRs):** the remaining §9.8 families
-(fair-workweek predictability pay, meal/reporting-time premiums, minor-hour
-windows, on-call compensability, headcount-formula, per-group overtime-regime
-selection), effective-dating, and DB-backed rule loading from
-`StaffingConstraintRule` rows.
+**Follow-up (same phase, later PRs):** `clopening_premium` (soft, priced — the
+payable fair-workweek clopening penalty, distinct from hard `rest_gap`) and
+`max_consecutive_days` (hard fatigue / one-day-rest-in-seven) are now landed
+(9 predicates total). Still open: fair-workweek predictability pay, meal/
+reporting-time premiums, minor-hour windows, on-call compensability, headcount-
+formula, per-group overtime-regime selection, effective-dating, and DB-backed
+rule loading from `StaffingConstraintRule` rows.
 
 **Verification.** Constraint goldens — passing + violating fixture per predicate,
 unknown-jurisdiction and unknown-predicate fail-closed tests, priced-premium
