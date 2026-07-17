@@ -367,6 +367,12 @@ export async function persistBootstrapDiscoveryRun(
           attributionConfidence: entity.attributionConfidence ?? null,
           attributionEvidence: entity.attributionEvidence ?? null,
           candidateTaxonomy: entity.candidateTaxonomy ?? undefined,
+          // Enrichment linkage to the canonical identity spine (BI-27EE2AF7).
+          catalogIdentity: entity.catalogIdentityId
+            ? { connect: { id: entity.catalogIdentityId } }
+            : undefined,
+          identityStatus: entity.identityStatus ?? null,
+          identityConfidence: entity.identityConfidence ?? null,
           providerView: entity.providerView,
           confidence: entity.confidence ?? null,
           portfolio: entity.portfolioSlug
@@ -404,6 +410,15 @@ export async function persistBootstrapDiscoveryRun(
           attributionConfidence: entity.attributionConfidence ?? null,
           attributionEvidence: entity.attributionEvidence ?? null,
           candidateTaxonomy: entity.candidateTaxonomy ?? undefined,
+          // Enrichment linkage (BI-27EE2AF7) — only written on a fresh rule match
+          // that resolved a CatalogIdentity; never clobber an existing link with null.
+          ...(entity.catalogIdentityId
+            ? {
+                catalogIdentity: { connect: { id: entity.catalogIdentityId } },
+                identityStatus: entity.identityStatus ?? null,
+                identityConfidence: entity.identityConfidence ?? null,
+              }
+            : {}),
           providerView: entity.providerView,
           confidence: entity.confidence ?? null,
           portfolio: entity.portfolioSlug

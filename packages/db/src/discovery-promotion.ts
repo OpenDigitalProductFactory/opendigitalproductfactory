@@ -14,6 +14,7 @@
 import {
   resolvePromotionDecision,
   classifyEstateProvenance,
+  isTerminalStructuralSkip,
   type PromotionTaxonomyNodeInput,
 } from "./discovery-promotion-policy";
 import {
@@ -188,17 +189,28 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
       );
 
       if (decision.decision === "skip") {
-        await openOrUpdateQualityIssue({
-          db,
-          issueType: decision.reason,
-          scope: {
-            inventoryEntityId: entity.id,
-            taxonomyNodeId: taxonomyNode?.id,
-            portfolioId: portfolio?.id,
-          },
-          summary: skipSummaryFor(decision.reason, entity.entityKey, entity.entityType),
-          details: decision.evidence,
-        });
+        // Terminal structural skips (name-gate / structural-type-gate) are
+        // CORRECT "this is infrastructure, not a product" classifications — not
+        // actionable gaps. Recording them as open PortfolioQualityIssue rows was
+        // the original design mistake (BI-62846516): they can never be resolved,
+        // so the platform's own Docker self-scan accumulated 378 permanent-open
+        // rows that buried the real, fixable issues. Skip the write; still count
+        // the entity as skipped from promotion. Actionable skips (no_taxonomy,
+        // low_confidence_promotion, no_portfolio_root, legacy-list/node-policy
+        // type_not_promotable) still open a quality issue below.
+        if (!isTerminalStructuralSkip(decision)) {
+          await openOrUpdateQualityIssue({
+            db,
+            issueType: decision.reason,
+            scope: {
+              inventoryEntityId: entity.id,
+              taxonomyNodeId: taxonomyNode?.id,
+              portfolioId: portfolio?.id,
+            },
+            summary: skipSummaryFor(decision.reason, entity.entityKey, entity.entityType),
+            details: decision.evidence,
+          });
+        }
         summary.skipped++;
         continue;
       }

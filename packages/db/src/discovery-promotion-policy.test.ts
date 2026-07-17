@@ -5,6 +5,8 @@ import {
   isNonProductEntityType,
   classifyEstateProvenance,
   resolvePromotionDecision,
+  isTerminalStructuralSkip,
+  TERMINAL_STRUCTURAL_SKIP_SOURCES,
 } from "./discovery-promotion-policy";
 
 describe("resolvePromotionDecision", () => {
@@ -232,6 +234,66 @@ describe("resolvePromotionDecision — estate provenance", () => {
     const d = resolvePromotionDecision({ ...realDevice, name: "dpf-redis-1", provenance: "real_estate" }, node, portfolio);
     expect(d.decision).toBe("skip");
     expect(d.reason).toBe("name_not_promotable");
+  });
+});
+
+describe("isTerminalStructuralSkip (BI-62846516)", () => {
+  const node = { id: "tn_1", nodeId: "foundational/compute/servers", governance: null };
+  const portfolio = { id: "p_1", slug: "foundational" };
+  const base = {
+    entityType: "application",
+    name: "Real Product",
+    attributionStatus: "attributed" as const,
+    attributionConfidence: 0.95,
+    digitalProductId: null,
+    taxonomyNodeId: "tn_1",
+  };
+
+  it("TERMINAL_STRUCTURAL_SKIP_SOURCES is exactly the two structural gates", () => {
+    expect([...TERMINAL_STRUCTURAL_SKIP_SOURCES].sort()).toEqual([
+      "name-gate",
+      "structural-type-gate",
+    ]);
+  });
+
+  it("classifies a name-gate skip (dpf-redis-1) as terminal", () => {
+    const d = resolvePromotionDecision({ ...base, name: "dpf-redis-1" }, node, portfolio);
+    expect(d.reason).toBe("name_not_promotable");
+    expect(isTerminalStructuralSkip(d)).toBe(true);
+  });
+
+  it("classifies a structural-type-gate skip (host) as terminal", () => {
+    const d = resolvePromotionDecision(
+      { ...base, entityType: "host", name: "LAN Host 172.18.0.5" },
+      node,
+      portfolio,
+    );
+    expect(d.reason).toBe("type_not_promotable");
+    expect(d.evidence.source).toBe("structural-type-gate");
+    expect(isTerminalStructuralSkip(d)).toBe(true);
+  });
+
+  it("does NOT classify actionable gaps (no_taxonomy / low_confidence / no_portfolio_root) as terminal", () => {
+    expect(isTerminalStructuralSkip(resolvePromotionDecision({ ...base, taxonomyNodeId: null }, null, portfolio))).toBe(false);
+    expect(isTerminalStructuralSkip(resolvePromotionDecision({ ...base, attributionConfidence: 0.5 }, node, portfolio))).toBe(false);
+    expect(isTerminalStructuralSkip(resolvePromotionDecision(base, node, null))).toBe(false);
+  });
+
+  it("does NOT classify an actionable legacy-list type_not_promotable as terminal", () => {
+    // A non-infra type with no governance policy is an actionable gap (add a
+    // promotion policy), not a terminal structural rejection — its source is
+    // "legacy-list", not "structural-type-gate".
+    const d = resolvePromotionDecision({ ...base, entityType: "custom_widget" }, node, portfolio);
+    expect(d.reason).toBe("type_not_promotable");
+    expect(d.evidence.source).toBe("legacy-list");
+    expect(isTerminalStructuralSkip(d)).toBe(false);
+  });
+
+  it("does NOT classify a promote decision as terminal", () => {
+    const autoNode = { ...node, governance: { promotion: { mode: "auto" } } };
+    const d = resolvePromotionDecision(base, autoNode, portfolio);
+    expect(d.decision).toBe("promote");
+    expect(isTerminalStructuralSkip(d)).toBe(false);
   });
 });
 

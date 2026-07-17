@@ -116,7 +116,7 @@ export function taxableBaseFromLine(lineTotal: unknown, taxAmount: number) {
 
 // ---------------------------------------------------------------------------
 // BI-OPT-FAT-ACTIONS (tax-remittance remainder): additional pure domain logic
-// relocated verbatim from lib/actions/tax-remittance.ts — structural record
+// relocated verbatim from lib/actions/tax-remittance.ts - structural record
 // shapes, liability-draft builders, period/date math, filing-packet notes, and
 // the managed-issue / coworker-guide projections. No prisma / auth / Next.js.
 // Behavior byte-for-byte preserved; orchestration stays in the action file.

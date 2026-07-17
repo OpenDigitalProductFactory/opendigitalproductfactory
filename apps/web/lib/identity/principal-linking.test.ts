@@ -28,6 +28,7 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import {
+  resolvePrincipalRecordIdForSessionIdentity,
   syncAgentPrincipal,
   syncCustomerPrincipal,
   syncEmployeePrincipal,
@@ -234,5 +235,24 @@ describe("syncCustomerPrincipal", () => {
     await expect(syncCustomerPrincipal("missing-contact")).rejects.toThrow(
       /CustomerContact missing-contact not found/,
     );
+  });
+});
+
+describe("resolvePrincipalRecordIdForSessionIdentity", () => {
+  it.each([
+    ["admin", "user-1", "user"],
+    ["customer", "contact-1", "customer_contact"],
+  ] as const)("resolves the relational principal for %s sessions", async (type, id, aliasType) => {
+    vi.mocked(prisma.principalAlias.findFirst).mockResolvedValue({
+      principal: { id: "principal-db-1" },
+    } as never);
+
+    await expect(
+      resolvePrincipalRecordIdForSessionIdentity({ type, id }),
+    ).resolves.toBe("principal-db-1");
+    expect(prisma.principalAlias.findFirst).toHaveBeenCalledWith({
+      where: { aliasType, aliasValue: id, issuer: "" },
+      include: { principal: { select: { id: true } } },
+    });
   });
 });

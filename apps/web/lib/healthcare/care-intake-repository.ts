@@ -52,7 +52,7 @@ function requirements(value: unknown): CareIntakeRequirement[] {
 }
 
 async function setContext(tx: Transaction, input: CareIntakeContext) {
-  await tx.$executeRaw`SELECT set_config('app.organization_id', ${input.organizationId}, true), set_config('app.patient_principal_id', ${input.patientPrincipalId}, true)`;
+  await tx.$executeRaw`SELECT set_config('app.organization_id', ${input.organizationId}, true), set_config('app.patient_profile_ids', ${input.patientProfileId}, true), set_config('app.patient_principal_id', ${input.patientPrincipalId}, true)`;
 }
 
 async function readiness(tx: Transaction, packet: PacketRow) {

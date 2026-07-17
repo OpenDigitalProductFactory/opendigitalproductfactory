@@ -57,6 +57,11 @@ export type PreflightInput = {
    * was unavailable locally.
    */
   featureContainedInServed: boolean | null;
+  /**
+   * Optional operator-facing detail when featureContainedInServed is null
+   * (BI-08BE758C) — e.g. missing DPF_REPO_ROOT, missing objects, no git.
+   */
+  ancestryUncomputableDetail?: string | null;
 };
 
 const SELF_UPGRADE_PATH = "/ops/self-upgrade";
@@ -143,7 +148,11 @@ export function computePreflightVerdict(input: PreflightInput): PreflightResult 
 
   // featureContainedInServed === null: served is a git SHA but ancestry could
   // not be computed (commit not fetched locally, or git unavailable). Don't
-  // guess — BLOCKED with a concrete unblock.
+  // guess — BLOCKED with a concrete unblock (detail may name DPF_REPO_ROOT /
+  // missing objects per BI-08BE758C).
+  const detail =
+    (input.ancestryUncomputableDetail && input.ancestryUncomputableDetail.trim()) ||
+    "Fetch the served and feature commits locally (git fetch; set DPF_REPO_ROOT to the clone when the portal process has no .git) and re-run the preflight. If still uncomputable, file a blocker BI and stop.";
   return {
     verdict: "BLOCKED",
     reason: `Cannot determine whether served bytes (${shortSha(servedImage.raw)}) contain feature commit ${shortSha(featureSha)} — ancestry was not computable.`,
@@ -151,8 +160,7 @@ export function computePreflightVerdict(input: PreflightInput): PreflightResult 
     feature: { sha: featureSha },
     nextAction: {
       kind: "file-blocker-bi",
-      detail:
-        "Fetch the served and feature commits locally (git fetch) and re-run the preflight. If still uncomputable, file a blocker BI and stop.",
+      detail,
     },
   };
 }

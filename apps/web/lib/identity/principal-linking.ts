@@ -407,6 +407,30 @@ export async function resolvePrincipalIdForUser(
 }
 
 /**
+ * Resolve the relational Principal.id used by healthcare foreign keys and
+ * patient-authority comparisons. This is deliberately distinct from the
+ * public Principal.principalId returned by resolvePrincipalIdForUser.
+ */
+export async function resolvePrincipalRecordIdForSessionIdentity(
+  identity: { type: "admin" | "customer"; id: string },
+  db: PrincipalDb = prisma,
+): Promise<string | null> {
+  const alias = await db.principalAlias.findFirst({
+    where: {
+      aliasType: identity.type === "admin" ? "user" : "customer_contact",
+      aliasValue: identity.id,
+      issuer: INTERNAL_ISSUER,
+    },
+    include: {
+      principal: {
+        select: { id: true },
+      },
+    },
+  });
+  return alias?.principal?.id ?? null;
+}
+
+/**
  * Resolve the Principal id behind an agent (coworker) id, via the
  * `aliasType: "agent"` PrincipalAlias (principal-convergence, AGENTS.md §11).
  * Sibling of resolvePrincipalIdForUser; used by decision caller-context

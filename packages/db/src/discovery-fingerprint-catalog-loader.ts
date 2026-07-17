@@ -54,6 +54,9 @@ export type FingerprintCatalogLoaderClient = {
   discoveryFingerprintRule: {
     upsert(args: unknown): Promise<unknown>;
   };
+  catalogIdentity: {
+    upsert(args: unknown): Promise<{ id: string }>;
+  };
 };
 
 export type FingerprintCatalogLoadResult = {
@@ -61,6 +64,8 @@ export type FingerprintCatalogLoadResult = {
   version: string;
   loaded: number;
   unresolvedTaxonomy: string[];
+  /** How many rules were linked to a canonical CatalogIdentity (BI-0528AD01). */
+  catalogIdentitiesLinked: number;
 };
 
 async function readJson<T>(filePath: string): Promise<T> {
@@ -70,6 +75,29 @@ async function readJson<T>(filePath: string): Promise<T> {
 /** Only string fixture refs are persisted on the rule row; inline fixtures are validation-only. */
 function stringFixtureRefs(refs: unknown[] | undefined): string[] {
   return (refs ?? []).filter((ref): ref is string => typeof ref === "string");
+}
+
+/**
+ * Derive a canonical CatalogIdentity from a rule's inline `resolvedIdentity`
+ * (BI-0528AD01 — the bridge to the identity spine landed by #3123). A rule's
+ * `resolvedIdentity` is `{ kind, name, vendor }`; the CatalogIdentity is the
+ * normalized manufacturer→product row a fingerprint resolves to. Returns null
+ * when the identity lacks a product+manufacturer (rule then loads identity-only,
+ * catalogIdentityId stays null — same tolerance as an unresolved taxonomy).
+ */
+export function deriveCatalogIdentity(
+  resolvedIdentity: unknown,
+): { identityKey: string; part: string; manufacturer: string; product: string } | null {
+  if (!resolvedIdentity || typeof resolvedIdentity !== "object") return null;
+  const ri = resolvedIdentity as { kind?: unknown; name?: unknown; vendor?: unknown };
+  const product = typeof ri.name === "string" ? ri.name.trim() : "";
+  const manufacturer = typeof ri.vendor === "string" ? ri.vendor.trim() : "";
+  if (!product || !manufacturer) return null;
+  // CPE 2.3 part: hardware → h, OS → o, everything else → a (application).
+  const part = ri.kind === "hardware" ? "h" : ri.kind === "os" ? "o" : "a";
+  const slug = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  return { identityKey: `${part}:${slug(manufacturer)}:${slug(product)}`, part, manufacturer, product };
 }
 
 /**
@@ -105,6 +133,7 @@ export async function loadFingerprintCatalogIntoDb(
 
   const unresolvedTaxonomy: string[] = [];
   let loaded = 0;
+  let catalogIdentitiesLinked = 0;
 
   for (const ruleRef of manifest.rules ?? []) {
     const content = await readJson<CatalogRule | CatalogRule[]>(path.join(catalogDir, ruleRef));
@@ -122,6 +151,29 @@ export async function loadFingerprintCatalogIntoDb(
         }
       }
 
+      // Bridge to the canonical identity spine (BI-0528AD01): upsert the
+      // CatalogIdentity this rule resolves to and link it. Idempotent on
+      // identityKey; null when the rule has no product+manufacturer.
+      let catalogIdentityId: string | null = null;
+      const identity = deriveCatalogIdentity(rule.resolvedIdentity);
+      if (identity) {
+        const row = await db.catalogIdentity.upsert({
+          where: { identityKey: identity.identityKey },
+          update: { part: identity.part, manufacturer: identity.manufacturer, product: identity.product, source: "seeded" },
+          create: {
+            identityKey: identity.identityKey,
+            part: identity.part,
+            manufacturer: identity.manufacturer,
+            product: identity.product,
+            source: "seeded",
+            confidence: rule.identityConfidence ?? null,
+          },
+          select: { id: true },
+        });
+        catalogIdentityId = row.id;
+        catalogIdentitiesLinked += 1;
+      }
+
       const data = {
         catalogVersionId: catalogVersion.id,
         status: rule.status ?? "active",
@@ -130,6 +182,7 @@ export async function loadFingerprintCatalogIntoDb(
         matchExpression: rule.matchExpression as FingerprintMatchExpression,
         requiredEvidenceFamilies: rule.requiredEvidenceFamilies ?? [],
         resolvedIdentity: (rule.resolvedIdentity ?? {}) as object,
+        catalogIdentityId,
         taxonomyNodeId: taxonomyCuid,
         identityConfidence: rule.identityConfidence ?? 0,
         taxonomyConfidence: rule.taxonomyConfidence ?? 0,
@@ -150,5 +203,6 @@ export async function loadFingerprintCatalogIntoDb(
     version: manifest.version,
     loaded,
     unresolvedTaxonomy,
+    catalogIdentitiesLinked,
   };
 }

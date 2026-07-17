@@ -18,8 +18,8 @@ function makeDatabase() {
         status: "in-progress",
         version: 2,
         requirementSnapshot: [
-          { linkId: "phone", dataCategory: "contact", required: true },
-          { linkId: "reason", dataCategory: "visit-reason", required: true },
+          { dynamicFormId: "form-row-intake", dynamicFormVersion: 1, linkId: "phone", dataCategory: "contact", required: true },
+          { dynamicFormId: "form-row-intake", dynamicFormVersion: 1, linkId: "reason", dataCategory: "visit-reason", required: true },
         ],
         requiredConsentCount: 1,
         requiresCoverageEvidence: true,

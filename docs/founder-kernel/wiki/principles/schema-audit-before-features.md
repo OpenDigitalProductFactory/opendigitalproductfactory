@@ -38,6 +38,18 @@ In-platform coworkers proposing schema changes, external coding agents writing m
 
 Before adding a new model, search the existing schema for the same conceptual entity under a different name. Search for the same field shape in other models. Ask: does this belong as a column on an existing model, as a polymorphic alias, as a derived projection, or genuinely as its own table? Default to extension; reach for "new parallel table" only when extension would compromise the existing model. The Principal convergence work (after 2026-05-09) is the canonical example of this principle being cashed in: parallel identity tables (`User`, `CustomerContact`, `Agent`, `EdgeNode`, `MobileDevice`, `ServiceAccount`) converge to `Principal` + `PrincipalAlias` instead.
 
+## Schema Audit Checklist
+
+When a design or PR claims a "schema audit," structure it so the next agent can verify it without inventing a format (BI-IMP-26E71D86):
+
+1. **Fields** — list every new or modified column/field with type, nullability, and default (if any).
+2. **Relationships** — document foreign keys, join paths, and cascade/delete behavior.
+3. **Denormalization** — call out any duplicated data and *why* it is not derived.
+4. **Migrations** — name required migrations; note whether backfill is inline vs expand→contract; cite the fleet-safe migration-safety rules when tightening.
+5. **Debt / cleanup** — note intentional debt, quarantine plans (prefer quarantine over destroy), and follow-up BIs.
+
+Link this checklist from any rubric that requires `schema-audit-before-features`.
+
 ## Decision Dimensions
 
 - `long_term_maintainability: 0.8` — schema convergence pays back over years; parallel models compound debt.
