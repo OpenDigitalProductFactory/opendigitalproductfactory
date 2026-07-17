@@ -6,9 +6,24 @@ const dispatchIdeateMock = vi.fn();
 const dispatchDesignFixMock = vi.fn();
 const dispatchPlanMock = vi.fn();
 const executeToolMock = vi.fn();
+const txFindUniqueMock = vi.fn();
+const txUpdateMock = vi.fn();
+const txActivityCreateMock = vi.fn();
 
 vi.mock("@dpf/db", () => ({
-  prisma: { featureBuild: { findUnique: (...args: unknown[]) => findUniqueMock(...args) } },
+  prisma: {
+    featureBuild: { findUnique: (...args: unknown[]) => findUniqueMock(...args) },
+    // abandonStrandedPreBuild wraps its work in a $transaction; run the callback
+    // immediately with a tx exposing the row re-check + mutation methods.
+    $transaction: (fn: (tx: unknown) => unknown) =>
+      fn({
+        featureBuild: {
+          findUnique: (...args: unknown[]) => txFindUniqueMock(...args),
+          update: (...args: unknown[]) => txUpdateMock(...args),
+        },
+        buildActivity: { create: (...args: unknown[]) => txActivityCreateMock(...args) },
+      }),
+  },
 }));
 vi.mock("@/lib/build-review-verification-trigger", () => ({
   queueBuildReviewVerification: (...args: unknown[]) => queueBuildReviewVerificationMock(...args),
@@ -24,7 +39,12 @@ vi.mock("@/lib/mcp-tools", () => ({
   executeTool: (...args: unknown[]) => executeToolMock(...args),
 }));
 
-import { resumePreBuildPhase } from "./resume-pre-build-phase";
+import {
+  resumePreBuildPhase,
+  isStrandedPreBuildAbandonable,
+  abandonStrandedPreBuild,
+  STRANDED_ABANDON_MS,
+} from "./resume-pre-build-phase";
 
 describe("resumePreBuildPhase (BI-9257CF19)", () => {
   beforeEach(() => {
@@ -218,5 +238,87 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     const out = await resumePreBuildPhase({ buildId: "FB-7", phase: "plan", userId: "u7" });
     expect(out).toMatchObject({ kind: "failed", phase: "plan" });
     expect((out as { error: string }).error).toContain("boom");
+  });
+});
+
+// ── Age-out cap (BI-A009313E) ───────────────────────────────────────────────
+describe("isStrandedPreBuildAbandonable", () => {
+  const now = new Date("2026-07-17T12:00:00Z");
+  const old = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000); // 10 days
+  const recent = new Date(now.getTime() - 60 * 60 * 1000); // 1 hour
+  const thresholdMs = 7 * 24 * 60 * 60 * 1000;
+
+  it("is true for a pre-build strand older than the threshold", () => {
+    for (const phase of ["ideate", "plan", "review"]) {
+      expect(
+        isStrandedPreBuildAbandonable({ phase, createdAt: old, parentEpicId: null, now, thresholdMs }),
+      ).toBe(true);
+    }
+  });
+
+  it("is false for a strand younger than the threshold", () => {
+    expect(
+      isStrandedPreBuildAbandonable({ phase: "ideate", createdAt: recent, parentEpicId: null, now, thresholdMs }),
+    ).toBe(false);
+  });
+
+  it("is false for the `build` phase (it has its own step-machine resume) and non-pre-build phases", () => {
+    for (const phase of ["build", "ship", "complete", "abandoned", "failed"]) {
+      expect(
+        isStrandedPreBuildAbandonable({ phase, createdAt: old, parentEpicId: null, now, thresholdMs }),
+      ).toBe(false);
+    }
+  });
+
+  it("is false for an epic-decomposed child even when old (coordinated by the epic)", () => {
+    expect(
+      isStrandedPreBuildAbandonable({ phase: "ideate", createdAt: old, parentEpicId: "EP-1", now, thresholdMs }),
+    ).toBe(false);
+  });
+
+  it("defaults the cap to 7 days (survives travel + weekly rate-limit reset)", () => {
+    expect(STRANDED_ABANDON_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe("abandonStrandedPreBuild", () => {
+  beforeEach(() => {
+    txFindUniqueMock.mockReset();
+    txUpdateMock.mockReset().mockResolvedValue({});
+    txActivityCreateMock.mockReset().mockResolvedValue({});
+  });
+
+  it("abandons a still-pre-build row, recording reason + activity", async () => {
+    txFindUniqueMock.mockResolvedValue({ phase: "ideate", abandonedAt: null });
+    const now = new Date("2026-07-17T12:00:00Z");
+    const ok = await abandonStrandedPreBuild({ buildId: "FB-DEAD", phase: "ideate", ageMs: 20 * 86_400_000, now });
+
+    expect(ok).toBe(true);
+    const updateArg = txUpdateMock.mock.calls[0]![0] as { data: { phase: string; abandonedAt: Date; abandonReason: string } };
+    expect(updateArg.data.phase).toBe("abandoned");
+    expect(updateArg.data.abandonedAt).toBe(now);
+    expect(updateArg.data.abandonReason).toContain("Auto-aged-out");
+    expect(updateArg.data.abandonReason).toContain("BI-A009313E");
+    expect(txActivityCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is idempotent: no-op when the row is already abandoned", async () => {
+    txFindUniqueMock.mockResolvedValue({ phase: "abandoned", abandonedAt: new Date() });
+    const ok = await abandonStrandedPreBuild({ buildId: "FB-X", phase: "ideate", ageMs: 20 * 86_400_000 });
+    expect(ok).toBe(false);
+    expect(txUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("no-ops when the row advanced out of a pre-build phase since the scan", async () => {
+    txFindUniqueMock.mockResolvedValue({ phase: "build", abandonedAt: null });
+    const ok = await abandonStrandedPreBuild({ buildId: "FB-ADV", phase: "ideate", ageMs: 20 * 86_400_000 });
+    expect(ok).toBe(false);
+    expect(txUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("never throws — returns false when the row is missing", async () => {
+    txFindUniqueMock.mockResolvedValue(null);
+    const ok = await abandonStrandedPreBuild({ buildId: "FB-GONE", phase: "ideate", ageMs: 20 * 86_400_000 });
+    expect(ok).toBe(false);
   });
 });
