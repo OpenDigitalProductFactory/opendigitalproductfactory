@@ -21,6 +21,8 @@ export type MaterializeInputs = {
   codexWired: boolean;
   /** Optional, additive third client. Defaults to false when omitted. */
   grokWired?: boolean;
+  /** Optional, additive client (Google Antigravity `agy`). Defaults to false when omitted. */
+  antigravityWired?: boolean;
   memorySeededAt: string | null;
   mcpReadiness: McpReadinessProbeResult;
   smokeTest: SmokeTestResult;
@@ -33,6 +35,7 @@ export function materializeAgentToolchainState(
     claudeCodeWired: inputs.claudeCodeWired,
     codexWired: inputs.codexWired,
     grokWired: inputs.grokWired ?? false,
+    antigravityWired: inputs.antigravityWired ?? false,
     mcpReadiness: inputs.mcpReadiness,
     smokeTest: inputs.smokeTest,
   });
@@ -44,6 +47,7 @@ export function materializeAgentToolchainState(
     claudeCodeWired: inputs.claudeCodeWired,
     codexWired: inputs.codexWired,
     grokWired: inputs.grokWired ?? false,
+    antigravityWired: inputs.antigravityWired ?? false,
     memorySeededAt: inputs.memorySeededAt,
     mcpReadiness: inputs.mcpReadiness,
     smokeTest: inputs.smokeTest,

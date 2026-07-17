@@ -34,7 +34,11 @@ param(
     [switch]$NoAutoMint,
     # Scope of the auto-minted token: read | write | admin. `write` gives an
     # external coding agent all side-effecting MCP tools without admin powers.
-    [string]$MintScope = "write"
+    [string]$MintScope = "write",
+    # Opt-in: install Google Antigravity's `agy` CLI (runs the official vendor
+    # installer) when absent, then wire the DPF MCP config. OFF by default — we
+    # never run a vendor installer silently (kernel DI-B91843F8C157).
+    [switch]$InstallAntigravity
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,10 +70,25 @@ if (-not (Test-Path -LiteralPath $SkillPackManifestPath)) {
 }
 $expectedVersion = (Get-Content -LiteralPath $SkillPackManifestPath -Raw | ConvertFrom-Json).version
 
+# --- Opt-in install of Google Antigravity (agy) -------------------------------
+# Runs the OFFICIAL Windows installer only when the operator passed
+# -InstallAntigravity and `agy` is absent. Never silent. agy is a standalone Go
+# binary; the installer drops it under %LOCALAPPDATA%\Antigravity.
+if ($InstallAntigravity -and ($null -eq (Get-Command agy -ErrorAction SilentlyContinue))) {
+    if ($DryRun) {
+        Write-Info "Antigravity CLI  : would run the official agy installer (-DryRun)"
+    } else {
+        Write-Info "Antigravity CLI  : not found; running the official installer (opt-in)"
+        try { Invoke-RestMethod -Uri "https://antigravity.google/cli/install.ps1" | Invoke-Expression }
+        catch { Write-Warn2 "agy install failed; install manually per docs/operations/antigravity-cli-onboarding.md" }
+    }
+}
+
 # --- Detect CLIs + token ------------------------------------------------------
 $ClaudePresent = $null -ne (Get-Command claude -ErrorAction SilentlyContinue)
 $CodexPresent  = $null -ne (Get-Command codex  -ErrorAction SilentlyContinue)
 $GrokPresent   = $null -ne (Get-Command grok   -ErrorAction SilentlyContinue)
+$AgyPresent    = $null -ne (Get-Command agy    -ErrorAction SilentlyContinue)
 $HasToken      = -not [string]::IsNullOrWhiteSpace($env:DPF_MCP_BEARER_TOKEN)
 
 Write-Host ""
@@ -78,6 +97,7 @@ Write-Info "Repo root        : $RepoRoot"
 Write-Info "Claude CLI       : $(if ($ClaudePresent) { 'present' } else { 'missing' })"
 Write-Info "Codex CLI        : $(if ($CodexPresent)  { 'present' } else { 'missing' })"
 Write-Info "Grok CLI         : $(if ($GrokPresent)   { 'present' } else { 'missing' })"
+Write-Info "Antigravity CLI  : $(if ($AgyPresent)    { 'present' } else { 'missing' })"
 Write-Info "DPF MCP token    : $(if ($HasToken)      { 'present' } else { 'missing' })"
 Write-Info "Skill pack ver.  : $expectedVersion"
 
@@ -172,6 +192,7 @@ $nodeArgs = @(
 if ($ClaudePresent)        { $nodeArgs += "--claude-cli-present" }
 if ($CodexPresent)         { $nodeArgs += "--codex-cli-present" }
 if ($GrokPresent)          { $nodeArgs += "--grok-cli-present" }
+if ($AgyPresent)           { $nodeArgs += "--antigravity-cli-present" }
 if ($HasToken)             { $nodeArgs += "--has-token" }
 if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries" }
 
@@ -194,6 +215,7 @@ Write-Info "Plan preview: $($plan.preview.readinessState)"
 $claudeWired = $false
 $codexWired  = $false
 $grokWired   = $false
+$agyWired    = $false
 $memorySeededAt = $null
 
 # 1. Claude Code: run `claude plugin install` if a write is planned.
@@ -286,6 +308,18 @@ if ($plan.grok -and $plan.grok.config -and $plan.grok.config.writes.Count -gt 0)
     Write-Ok "Grok CLI detected (config already converged)."
 } else {
     Write-Skip "Grok CLI not installed; skipping (will appear when `grok` is on PATH)."
+}
+
+# 2d. Antigravity (agy) recognition. Additive/optional -- never gates readiness.
+# The DPF MCP config write is delegated to update_agent_toolchain.py /
+# `issue-mcp-token --format antigravity` (see docs/operations/antigravity-cli-onboarding.md):
+# agy's exact MCP-config path is pending confirmation on a live install
+# (BI-ECAE3494), so we do not write to an unverified path from here.
+if ($AgyPresent) {
+    $agyWired = $true
+    Write-Ok "Antigravity CLI (agy) detected; wire MCP config per the onboarding runbook."
+} else {
+    Write-Skip "Antigravity CLI not installed; skipping (pass -InstallAntigravity to opt in)."
 }
 
 # 2b. MCP client config (.mcp.json + .vscode/mcp.json) -- env-backed, no secret.
@@ -396,6 +430,7 @@ $state = [ordered]@{
     claudeCodeWired     = $claudeWired
     codexWired          = $codexWired
     grokWired           = $grokWired
+    antigravityWired    = $agyWired
     memorySeededAt      = $memorySeededAt
     mcpReadiness        = $mcpReadiness
     smokeTest           = $smokeResult
@@ -405,7 +440,7 @@ $state = [ordered]@{
 # Recompute readinessState from the applied facts + probe outcomes. Mirrors
 # computeReadinessState() in @dpf/bootstrap/readiness-state.ts: order-of-checks
 # is most-fundamental-first so the primary remediation is unambiguous.
-if (-not $claudeWired -and -not $codexWired -and -not $grokWired) {
+if (-not $claudeWired -and -not $codexWired -and -not $grokWired -and -not $agyWired) {
     $state.readinessState = "missing_cli"
 } elseif (-not $mcpReadiness.ok) {
     if ($mcpReadiness.reason -in @("no_token", "scope_insufficient")) {
@@ -460,6 +495,7 @@ if ($ShowSubstrate.IsPresent) {
     Write-Host "    Claude plugin     : $($state.claudeCodeWired)" -ForegroundColor DarkGray
     Write-Host "    Codex plugin      : $($state.codexWired)" -ForegroundColor DarkGray
     Write-Host "    Grok plugin       : $($state.grokWired)" -ForegroundColor DarkGray
+    Write-Host "    Antigravity (agy) : $($state.antigravityWired)" -ForegroundColor DarkGray
     Write-Host "    Memory seeded at  : $($state.memorySeededAt)" -ForegroundColor DarkGray
     Write-Host "    DPF platform ver  : $($state.dpfPlatformVersion)" -ForegroundColor DarkGray
     Write-Host "    State file        : $(Get-DpfStatePath)" -ForegroundColor DarkGray

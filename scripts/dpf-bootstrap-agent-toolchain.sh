@@ -48,12 +48,17 @@ AUTO_MINT="${DPF_AUTO_MINT:-1}"
 # side-effecting MCP tools (backlog, evidence, Build Studio handoff) without the
 # token-issuance powers of `admin`. Override with --mint-scope admin|read.
 MINT_SCOPE="${DPF_MINT_SCOPE:-write}"
+# Opt-in install of Google Antigravity's `agy` CLI. OFF by default: it runs a
+# vendor install script, so we never do it silently (kernel DI-B91843F8C157,
+# least-privilege deny-by-default). Enable with --install-antigravity.
+INSTALL_ANTIGRAVITY="${DPF_INSTALL_ANTIGRAVITY:-0}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)                  DRY_RUN=1 ;;
     --headless)                 HEADLESS=1 ;;
     --reconcile-stale-entries)  RECONCILE_STALE=1 ;;
+    --install-antigravity)      INSTALL_ANTIGRAVITY=1 ;;
     --show-substrate)           SHOW_SUBSTRATE=1 ;;
     --auto-mint)                AUTO_MINT=1 ;;
     --no-auto-mint)             AUTO_MINT=0 ;;
@@ -69,6 +74,9 @@ Flags:
   --dry-run                   Plan and print but apply no writes.
   --headless                  Suppress interactive prompts (default in CI).
   --reconcile-stale-entries   Remove stale installed_plugins.json entries.
+  --install-antigravity       Opt-in: run the official installer for Google
+                              Antigravity's 'agy' CLI if it is not present,
+                              then wire the DPF MCP config.
   --show-substrate            Show substrate detail under the banner.
   --auto-mint                 Issue + persist an MCP token if none is present (default).
   --no-auto-mint              Never issue a token; only wire what a present token allows.
@@ -230,18 +238,52 @@ resolve_grok_bin() {
   return 1
 }
 
+resolve_agy_bin() {
+  if command -v agy >/dev/null 2>&1; then command -v agy; return 0; fi
+  for c in \
+    "$HOME/.local/bin/agy" \
+    "/opt/homebrew/bin/agy" \
+    "/usr/local/bin/agy"; do
+    [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
+# Opt-in install of `agy` (Google Antigravity). Runs the OFFICIAL vendor
+# installer only when the operator passed --install-antigravity and the binary
+# is absent. Never silent. The install command is the documented one; the CLI is
+# a standalone Go binary (no npm).
+maybe_install_agy() {
+  [ "$INSTALL_ANTIGRAVITY" -eq 1 ] || return 0
+  resolve_agy_bin >/dev/null 2>&1 && return 0
+  if [ "$DRY_RUN" -eq 1 ]; then
+    info "Antigravity CLI  : would run the official agy installer (--dry-run)"
+    return 0
+  fi
+  info "Antigravity CLI  : not found; running the official installer (opt-in)"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL https://antigravity.google/cli/install.sh | bash || warn "agy install failed; install manually per docs/operations/antigravity-cli-onboarding.md"
+  else
+    warn "curl not found; install agy manually per docs/operations/antigravity-cli-onboarding.md"
+  fi
+}
+
 CLAUDE_PRESENT=0
 CODEX_PRESENT=0
 GROK_PRESENT=0
+AGY_PRESENT=0
 HAS_TOKEN=0
+maybe_install_agy
 CLAUDE_BIN="$(resolve_claude_bin || true)"
 CODEX_BIN="$(resolve_codex_bin || true)"
 GROK_BIN="$(resolve_grok_bin || true)"
+AGY_BIN="$(resolve_agy_bin || true)"
 [ -n "$CLAUDE_BIN" ] && CLAUDE_PRESENT=1
 # Codex wiring is file-based (config.toml), so a present-but-not-on-PATH Codex
 # (or an existing Codex config dir) is still wirable.
 { [ -n "$CODEX_BIN" ] || [ -f "$CODEX_CONFIG_PATH" ]; } && CODEX_PRESENT=1
 [ -n "$GROK_BIN" ] && GROK_PRESENT=1
+[ -n "$AGY_BIN" ] && AGY_PRESENT=1
 if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then
   HAS_TOKEN=1
 fi
@@ -251,6 +293,7 @@ info "Repo root        : $REPO_ROOT"
 info "Claude CLI       : $([ $CLAUDE_PRESENT -eq 1 ] && echo present || echo missing)"
 info "Codex CLI        : $([ $CODEX_PRESENT  -eq 1 ] && echo present || echo missing)"
 info "Grok CLI         : $([ $GROK_PRESENT    -eq 1 ] && echo present || echo missing)"
+info "Antigravity CLI  : $([ $AGY_PRESENT     -eq 1 ] && echo present || echo missing)"
 # Note: Host OS (this script is POSIX/mac/Linux) vs Windows PowerShell sibling only affects
 # local detection paths and config.toml location for direct `grok` CLI usage.
 # Build Studio Grok dispatch (grok-dispatch.ts) is containerized Linux execution and is identical.
@@ -388,6 +431,7 @@ bridge_args=(
 [ $CLAUDE_PRESENT  -eq 1 ] && bridge_args+=(--claude-cli-present)
 [ $CODEX_PRESENT   -eq 1 ] && bridge_args+=(--codex-cli-present)
 [ $GROK_PRESENT    -eq 1 ] && bridge_args+=(--grok-cli-present)
+[ $AGY_PRESENT     -eq 1 ] && bridge_args+=(--antigravity-cli-present)
 [ $HAS_TOKEN       -eq 1 ] && bridge_args+=(--has-token)
 [ $RECONCILE_STALE -eq 1 ] && bridge_args+=(--reconcile-stale-entries)
 
@@ -473,6 +517,7 @@ info "Plan preview     : $PLAN_PREVIEW_STATE"
 CLAUDE_WIRED=0
 CODEX_WIRED=0
 GROK_WIRED=0
+AGY_WIRED=0
 MEMORY_SEEDED_AT=""
 
 # 1. Claude plugin install.
@@ -604,6 +649,18 @@ EOF
     skip "Grok CLI not installed; skipping (will appear when 'grok' is on PATH)."
   fi
 
+  # Antigravity (agy) recognition. Additive/optional — never gates readiness.
+  # The DPF MCP config write is delegated to update_agent_toolchain.py /
+  # `issue-mcp-token --format antigravity` (see docs/operations/antigravity-cli-onboarding.md):
+  # agy's exact MCP-config path is pending confirmation on a live install
+  # (BI-ECAE3494), so we do not write to an unverified path from here.
+  if [ "$AGY_PRESENT" -eq 1 ]; then
+    ok "Antigravity CLI (agy) detected; wire MCP config per the onboarding runbook."
+    AGY_WIRED=1
+  else
+    skip "Antigravity CLI not installed; skipping (pass --install-antigravity to opt in)."
+  fi
+
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
     ok "MCP client config written ($PLAN_MCP_CLIENT_WRITES_COUNT file(s): .mcp.json / .vscode/mcp.json)."
   else
@@ -719,6 +776,7 @@ AGENT_TOOLCHAIN_JSON="$(cat <<JSON
   "claudeCodeWired": $([ $CLAUDE_WIRED -eq 1 ] && echo true || echo false),
   "codexWired": $([ $CODEX_WIRED -eq 1 ] && echo true || echo false),
   "grokWired": $([ $GROK_WIRED -eq 1 ] && echo true || echo false),
+  "antigravityWired": $([ $AGY_WIRED -eq 1 ] && echo true || echo false),
   "memorySeededAt": $MEMORY_SEEDED_AT_JSON,
   "mcpReadiness": $MCP_READINESS,
   "smokeTest": $SMOKE_TEST,

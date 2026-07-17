@@ -387,6 +387,73 @@ def resolve_grok_binary() -> str | None:
     return None
 
 
+def resolve_antigravity_binary() -> str | None:
+    """Locate Google Antigravity's `agy` CLI (a standalone Go binary).
+
+    The official installer drops `agy` in ~/.local/bin on Unix and under
+    %LOCALAPPDATA%\\Antigravity on Windows. Detection only — this script never
+    runs the vendor installer; that stays an explicit operator opt-in in the
+    bootstrap adapters (kernel DI-B91843F8C157, least-privilege deny-by-default).
+    """
+    found = shutil.which("agy")
+    if found:
+        return found
+    home = Path.home()
+    candidates: list[str] = []
+    if platform.system() == "Windows":
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            candidates.append(str(Path(local) / "Antigravity" / "agy.exe"))
+        candidates.append(str(home / ".local" / "bin" / "agy.exe"))
+    else:
+        candidates.extend([
+            str(home / ".local" / "bin" / "agy"),
+            "/opt/homebrew/bin/agy",
+            "/usr/local/bin/agy",
+        ])
+    for candidate in candidates:
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
+def antigravity_mcp_config_path(home: Path) -> Path:
+    # Antigravity is Windsurf/VS Code-derived; its MCP config is a JSON block
+    # keyed by `mcpServers`. The exact path is not yet pinned in public docs —
+    # this is the documented default; the live install confirms it during the
+    # EP-ANTIGRAVITY-001 evidence gate (BI-ECAE3494 / BI-47A81FEB).
+    return home / ".antigravity" / "mcp_config.json"
+
+
+def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool) -> str:
+    """Upsert the DPF `mcpServers.dpf` block into agy's JSON MCP config.
+
+    Env-backed (no secret written): the CLI reads the token from
+    DPF_MCP_BEARER_TOKEN at runtime. Idempotent — merges into any existing
+    config rather than clobbering the operator's other MCP servers. Skips
+    cleanly when `agy` is not installed (nothing to wire).
+    """
+    if resolve_antigravity_binary() is None:
+        return "skipped: Antigravity CLI (agy) not found"
+    path = antigravity_mcp_config_path(home)
+    data = read_json(path, {})
+    if not isinstance(data, dict):
+        data = {}
+    servers = data.get("mcpServers")
+    if not isinstance(servers, dict):
+        servers = {}
+    servers["dpf"] = {
+        "type": "http",
+        "url": mcp_url,
+        "headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"},
+    }
+    data["mcpServers"] = servers
+    if dry_run:
+        return f"dry-run: would upsert dpf server into {path}"
+    changed = write_json(path, data)
+    return "converged" if changed else "already current"
+
+
 def install_grok_plugin(managed: Path, dry_run: bool) -> str:
     """Install the plugin into Grok's OWN plugin store.
 
@@ -705,13 +772,18 @@ def guard_liveness_advisory() -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok agent skills and MCP wiring.")
+    parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL", DEFAULT_MCP_URL))
     parser.add_argument("--codex-only", action="store_true")
     parser.add_argument("--claude-only", action="store_true")
     parser.add_argument("--skip-claude-cli-install", action="store_true")
     parser.add_argument("--skip-grok-cli-install", action="store_true")
+    parser.add_argument(
+        "--skip-antigravity-cli-install",
+        action="store_true",
+        help="Skip wiring the DPF MCP config into Antigravity's (agy) config.",
+    )
     parser.add_argument(
         "--require-codex-hook-trust",
         action="store_true",
@@ -753,6 +825,13 @@ def main(argv: list[str]) -> int:
         # blocking guards are delivered via the always-trusted global hook plane.
         grok_hooks_status = install_grok_hooks(managed, home, args.dry_run)
         print(f"  Grok hooks : {grok_hooks_status}")
+        # Antigravity (agy): MCP-config wiring only. Its plugin-install verb and
+        # hook plane are unconfirmed (EP-ANTIGRAVITY-001 evidence gate), so we do
+        # not install a plugin or hooks here — just wire the governed MCP server.
+        antigravity_status = "skipped by flag"
+        if not args.skip_antigravity_cli_install:
+            antigravity_status = ensure_antigravity_mcp_config(home, args.mcp_url, args.dry_run)
+        print(f"  Antigravity: MCP config {antigravity_status}")
 
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)

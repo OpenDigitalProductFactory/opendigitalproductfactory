@@ -145,6 +145,32 @@ describe("computeReadinessState", () => {
     ).toBe("partial");
   });
 
+  it("treats Antigravity (agy) as additive: agy-only install is not missing_cli, but does not reach ready without claude+codex", () => {
+    // agy present, claude+codex absent → counts toward "not missing_cli" but
+    // readiness stays anchored on the claude+codex pair (→ partial).
+    expect(
+      computeReadinessState({
+        claudeCodeWired: false,
+        codexWired: false,
+        antigravityWired: true,
+        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-07-17T00:00:00.000Z" },
+        smokeTest: { result: "skipped", reason: "no_token" },
+      }),
+    ).toBe("partial");
+  });
+
+  it("does not regress a ready claude+codex install when Antigravity is absent", () => {
+    expect(
+      computeReadinessState({
+        claudeCodeWired: true,
+        codexWired: true,
+        antigravityWired: false,
+        mcpReadiness: { ok: true, toolCount: 5, observedAt: "2026-07-17T00:00:00.000Z" },
+        smokeTest: { result: "passed", kernelPrincipleObserved: "destructive-actions-require-explicit-go", transcript: "..." },
+      }),
+    ).toBe("ready");
+  });
+
   it("returns ready when everything is wired, probe ok, smoke passed", () => {
     expect(
       computeReadinessState({
