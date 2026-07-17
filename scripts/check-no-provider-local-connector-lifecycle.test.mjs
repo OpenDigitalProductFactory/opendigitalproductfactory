@@ -20,6 +20,10 @@ test("rejects every IntegrationCredential delegate mutation outside the store", 
     await write({});
   `), ["integration-credential-mutation"]);
   assert.deepEqual(kinds('const { ["integrationCredential"]: rows } = prisma; const remove = rows.deleteMany; await remove({});'), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; await (prisma.integrationCredential).upsert({});"), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; await (prisma.integrationCredential as any)!.update({});"), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; const rows = (prisma.integrationCredential satisfies unknown); await rows.delete({});"), ["integration-credential-mutation"]);
+  assert.deepEqual(kinds("export {}; const holder = { c: prisma.integrationCredential }; await holder.c.upsert({});"), ["integration-credential-mutation"]);
 });
 
 test("does not exempt connector adapters, but exempts the canonical credential store", () => {
@@ -43,6 +47,7 @@ test("rejects raw SQL IntegrationCredential mutations", () => {
   assert.deepEqual(kinds('const statement = Prisma.sql`UPDATE "IntegrationCredential" SET status = ${status}`; const run = prisma.$executeRaw; await run(statement);'), ["integration-credential-raw-sql"]);
   assert.deepEqual(kinds('const { $executeRawUnsafe: run } = prisma; const statement = "DELETE FROM \\"IntegrationCredential\\""; await run(statement);'), ["integration-credential-raw-sql"]);
   assert.deepEqual(kinds('const run = prisma.$executeRawUnsafe; await run(userSuppliedSql);'), ["integration-credential-dynamic-raw-sql"]);
+  assert.deepEqual(kinds('const run = (prisma.$executeRawUnsafe as any)!; await run("TRUNCATE IntegrationCredential");'), ["integration-credential-raw-sql"]);
 });
 
 test("rejects provider-local connection-state unions", () => {
@@ -53,6 +58,11 @@ test("rejects provider-local connection-state unions", () => {
   assert.deepEqual(kinds('type ButtonState = "connected" | "error";', "apps/web/components/Button.tsx"), []);
   assert.deepEqual(kinds('type ConnectionState = "connected" | "error";', "apps/web/lib/providers/acme/state.ts"), ["provider-connection-state"]);
   assert.deepEqual(kinds('import { connectorRegistry } from "@/lib/integrations/connectors"; type SetupState = "connected" | "error";', "apps/web/app/api/acme/route.ts"), ["provider-connection-state"]);
+  assert.deepEqual(kinds('type ConnectorState = { connection: { status: "connected" | "error" } };'), ["provider-connection-state"]);
+  assert.deepEqual(kinds('type S = "connected" | "error"; type ConnectorState = { status: S } & { metadata: string };'), ["provider-connection-state"]);
+  assert.deepEqual(kinds('enum S { Ready = "connected", Failed = "error" } type ConnectorState = { status: S[] };'), ["provider-connection-state"]);
+  assert.deepEqual(kinds('const S = { ready: "connected", failed: "error" } as const; type ConnectorState = { status: (typeof S)[keyof typeof S] };'), ["provider-connection-state"]);
+  assert.deepEqual(kinds('type S = "connected" | "error"; interface Base { status: S } interface ConnectorState extends Base {}'), ["provider-connection-state"]);
 });
 
 test("rejects refresh orchestration but permits explicitly low-level token primitives", () => {

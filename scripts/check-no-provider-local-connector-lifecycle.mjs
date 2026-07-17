@@ -68,7 +68,8 @@ function templateText(node) {
   return null;
 }
 function unwrapExpression(node) {
-  while (node && (ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isParenthesizedExpression(node))) node = node.expression;
+  while (node && (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node)
+    || ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node) || ts.isPartiallyEmittedExpression(node))) node = node.expression;
   return node;
 }
 
@@ -81,6 +82,7 @@ export function scanSource(source, file) {
     && ts.isStringLiteralLike(statement.moduleSpecifier) && PROVIDER_IMPORT.test(statement.moduleSpecifier.text));
   const providerSurface = PROVIDER_ROOT.test(file) || importsProvider;
   const credentialDelegates = new Set(["integrationCredential"]);
+  const delegateCarriers = new Map();
   const mutationFunctions = new Set();
   const rawFunctions = new Set();
   const sqlValues = new Map();
@@ -89,11 +91,19 @@ export function scanSource(source, file) {
   collect(sourceFile);
 
   const delegateExpression = (expression) => {
+    expression = unwrapExpression(expression);
     if (!expression) return false;
     if (ts.isIdentifier(expression)) return credentialDelegates.has(expression.text);
-    return propertyName(expression) === "integrationCredential";
+    if (propertyName(expression) === "integrationCredential") return true;
+    if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
+      const owner = unwrapExpression(expression.expression);
+      const property = propertyName(expression);
+      return ts.isIdentifier(owner) && property !== null && delegateCarriers.get(owner.text)?.has(property);
+    }
+    return false;
   };
   const resolveSql = (expression, seen = new Set()) => {
+    expression = unwrapExpression(expression);
     if (!expression) return null;
     const literal = templateText(expression);
     if (literal !== null) return new Set([literal]);
@@ -121,10 +131,24 @@ export function scanSource(source, file) {
       if (!target || !value) continue;
       if (ts.isIdentifier(target)) {
         if (delegateExpression(value)) add(credentialDelegates, target.text);
-        if (ts.isIdentifier(value) && mutationFunctions.has(value.text)) add(mutationFunctions, target.text);
-        if ((ts.isPropertyAccessExpression(value) || ts.isElementAccessExpression(value)) && delegateExpression(value.expression) && MUTATIONS.has(propertyName(value))) add(mutationFunctions, target.text);
-        if (ts.isIdentifier(value) && rawFunctions.has(value.text)) add(rawFunctions, target.text);
-        if ((ts.isPropertyAccessExpression(value) || ts.isElementAccessExpression(value)) && RAW_METHODS.has(propertyName(value))) add(rawFunctions, target.text);
+        const unwrappedValue = unwrapExpression(value);
+        if (unwrappedValue && ts.isObjectLiteralExpression(unwrappedValue)) {
+          const properties = delegateCarriers.get(target.text) ?? new Set();
+          for (const property of unwrappedValue.properties) if (ts.isPropertyAssignment(property)) {
+            const name = propertyName(property.name) ?? (ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name) ? property.name.text : null);
+            if (name && delegateExpression(property.initializer) && !properties.has(name)) { properties.add(name); changed = true; }
+          }
+          if (properties.size) delegateCarriers.set(target.text, properties);
+        }
+        if (unwrappedValue && ts.isIdentifier(unwrappedValue) && delegateCarriers.has(unwrappedValue.text)) {
+          const prior = delegateCarriers.get(target.text) ?? new Set();
+          const next = new Set([...prior, ...delegateCarriers.get(unwrappedValue.text)]);
+          if (next.size !== prior.size) { delegateCarriers.set(target.text, next); changed = true; }
+        }
+        if (unwrappedValue && ts.isIdentifier(unwrappedValue) && mutationFunctions.has(unwrappedValue.text)) add(mutationFunctions, target.text);
+        if (unwrappedValue && (ts.isPropertyAccessExpression(unwrappedValue) || ts.isElementAccessExpression(unwrappedValue)) && delegateExpression(unwrappedValue.expression) && MUTATIONS.has(propertyName(unwrappedValue))) add(mutationFunctions, target.text);
+        if (unwrappedValue && ts.isIdentifier(unwrappedValue) && rawFunctions.has(unwrappedValue.text)) add(rawFunctions, target.text);
+        if (unwrappedValue && (ts.isPropertyAccessExpression(unwrappedValue) || ts.isElementAccessExpression(unwrappedValue)) && RAW_METHODS.has(propertyName(unwrappedValue))) add(rawFunctions, target.text);
         const sql = resolveSql(value);
         if (sql !== null) {
           const prior = sqlValues.get(target.text) ?? new Set();
@@ -145,25 +169,49 @@ export function scanSource(source, file) {
   const literalStates = (type, seen = new Set()) => {
     if (ts.isLiteralTypeNode(type) && ts.isStringLiteralLike(type.literal) && CONNECTION_STATES.has(type.literal.text)) return new Set([type.literal.text]);
     if (ts.isUnionTypeNode(type)) return new Set(type.types.flatMap((item) => [...literalStates(item, seen)]));
-    if (ts.isTypeLiteralNode(type)) return new Set(type.members
-      .filter(ts.isPropertySignature)
-      .filter((member) => member.type && (!member.name || propertyName(member.name) === "status" || (ts.isIdentifier(member.name) && member.name.text === "status")))
-      .flatMap((member) => [...literalStates(member.type, seen)]));
+    if (ts.isTypeLiteralNode(type)) return new Set(type.members.filter(ts.isPropertySignature).filter((member) => member.type).flatMap((member) => [...literalStates(member.type, new Set(seen))]));
+    if (ts.isIntersectionTypeNode(type)) return new Set(type.types.flatMap((item) => [...literalStates(item, new Set(seen))]));
+    if (ts.isArrayTypeNode(type)) return literalStates(type.elementType, seen);
+    if (ts.isTypeOperatorNode(type)) return literalStates(type.type, seen);
+    if (ts.isIndexedAccessTypeNode(type)) return new Set([...literalStates(type.objectType, new Set(seen)), ...literalStates(type.indexType, new Set(seen))]);
+    if (ts.isMappedTypeNode(type) && type.type) return literalStates(type.type, seen);
+    if (ts.isConditionalTypeNode(type)) return new Set([...literalStates(type.trueType, new Set(seen)), ...literalStates(type.falseType, new Set(seen))]);
+    if (ts.isTupleTypeNode(type)) return new Set(type.elements.flatMap((item) => [...literalStates(item, new Set(seen))]));
     if (ts.isParenthesizedTypeNode(type)) return literalStates(type.type, seen);
     if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && !seen.has(type.typeName.text)) {
       seen.add(type.typeName.text);
-      return stateAliases.get(type.typeName.text) ?? new Set();
+      return new Set([...(stateAliases.get(type.typeName.text) ?? []), ...type.typeArguments?.flatMap((item) => [...literalStates(item, new Set(seen))]) ?? []]);
     }
+    if (ts.isTypeQueryNode(type) && ts.isIdentifier(type.exprName)) return stateAliases.get(type.exprName.text) ?? new Set();
     return new Set();
   };
+  const valueStates = (expression, seen = new Set()) => {
+    expression = unwrapExpression(expression);
+    const literal = templateText(expression);
+    if (literal !== null && CONNECTION_STATES.has(literal)) return new Set([literal]);
+    if (expression && ts.isIdentifier(expression) && !seen.has(expression.text)) { seen.add(expression.text); return stateAliases.get(expression.text) ?? new Set(); }
+    if (expression && ts.isObjectLiteralExpression(expression)) return new Set(expression.properties.filter(ts.isPropertyAssignment).flatMap((property) => [...valueStates(property.initializer, new Set(seen))]));
+    if (expression && ts.isArrayLiteralExpression(expression)) return new Set(expression.elements.flatMap((element) => [...valueStates(element, new Set(seen))]));
+    return new Set();
+  };
+  const heritageStates = (node) => new Set((node.heritageClauses ?? []).flatMap((clause) => clause.types.flatMap((heritage) => {
+    const inherited = ts.isIdentifier(heritage.expression) ? stateAliases.get(heritage.expression.text) ?? new Set() : new Set();
+    return [...inherited, ...(heritage.typeArguments ?? []).flatMap((type) => [...literalStates(type)])];
+  })));
   if (providerSurface) {
     // Resolve local union aliases to a fixed point before reporting declarations.
     for (let pass = 0; pass < nodes.length; pass++) {
       let grew = false;
-      for (const node of nodes) if (ts.isTypeAliasDeclaration(node)) {
-        const states = literalStates(node.type, new Set([node.name.text]));
-        const prior = stateAliases.get(node.name.text) ?? new Set();
-        if ([...states].some((state) => !prior.has(state))) { stateAliases.set(node.name.text, new Set([...prior, ...states])); grew = true; }
+      for (const node of nodes) {
+        let name = null; let states = new Set();
+        if (ts.isTypeAliasDeclaration(node)) { name = node.name.text; states = literalStates(node.type, new Set([name])); }
+        else if (ts.isInterfaceDeclaration(node)) { name = node.name.text; states = new Set([...node.members.filter(ts.isPropertySignature).filter((member) => member.type).flatMap((member) => [...literalStates(member.type)]), ...heritageStates(node)]); }
+        else if (ts.isEnumDeclaration(node)) { name = node.name.text; states = new Set(node.members.map((member) => member.initializer).filter(Boolean).flatMap((value) => [...valueStates(value)])); }
+        else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) { name = node.name.text; states = valueStates(node.initializer); }
+        if (name) {
+          const prior = stateAliases.get(name) ?? new Set();
+          if ([...states].some((state) => !prior.has(state))) { stateAliases.set(name, new Set([...prior, ...states])); grew = true; }
+        }
       }
       if (!grew) break;
     }
@@ -196,9 +244,7 @@ export function scanSource(source, file) {
     if (providerSurface && !file.startsWith(KERNEL_PREFIX)) {
       if (ts.isTypeAliasDeclaration(node) && relevantStateName(node.name.text) && (stateAliases.get(node.name.text)?.size ?? 0) >= 2) add("provider-connection-state", node);
       if (ts.isInterfaceDeclaration(node) && relevantStateName(node.name.text)) {
-        const states = new Set(node.members.filter(ts.isPropertySignature)
-          .filter((member) => member.type && member.name && ts.isIdentifier(member.name) && member.name.text === "status")
-          .flatMap((member) => [...literalStates(member.type)]));
+        const states = stateAliases.get(node.name.text) ?? new Set();
         if (states.size >= 2) add("provider-connection-state", node);
       }
       if (ts.isEnumDeclaration(node) && relevantStateName(node.name.text)) {
