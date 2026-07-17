@@ -36,6 +36,7 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 - **Skills** live in `skills/<category>/<name>.skill.md`, seeded to `SkillDefinition` + `SkillAssignment`. Belong to coworkers, not routes.
 - **Portal archetype.** `StorefrontConfig.archetypeId` is the single source of truth for portal industry. `Organization.industry` and `BusinessContext.industry` are derived. Vocabulary resolution: `resolveVocabularyKey({ archetypeCategory, industry })` — archetype wins.
 - **Portal routes.** Internal management lives at `/storefront`. `/portal` is reserved for external/customer experience. `/admin/storefront`, `/admin/business-context`, `/admin/operating-hours` are legacy redirects.
+- **Channel adapter capabilities (BI-IMP-27126FA9).** When an operation is contractually defined on a channel adapter interface but operationally unsupported by a specific provider, the adapter must explicitly signal support status using capability flags rather than silent failure. Unimplemented methods must throw a typed error or return a structured unsupported response (e.g., throwing an `IntegrationApiError` with status code `UNSUPPORTED_OPERATION` or returning a `supported: false` status) to allow the caller to degrade gracefully. For example, a marketing channel adapter that contractually implements engagement tracking but lacks underlying API support on a specific provider must advertise this via its capability registration.
 
 ## 3. Strongly-Typed String Enums (mandatory)
 
