@@ -21,7 +21,7 @@ function database() {
         requiredConsentCount: 0, requiresCoverageEvidence: false,
         responses: [{ answeredLinkIds: ["visit-reason"], sourceMode: "staff-assisted", status: "in-progress", authoredAt: new Date("2026-08-01") }],
         exceptions: [], consentAttestations: [], coverageEvidence: [],
-        accessGrants: [{ grantId: "grant-a", granteePrincipalId: "principal-patient-a", permittedOperations: ["view"], expiresAt: new Date("2026-08-02"), lastUsedAt: null, revokedAt: null }],
+        accessGrants: [{ grantId: "grant-a", permittedOperations: ["view"], expiresAt: new Date("2026-08-02"), lastUsedAt: null, revokedAt: null }],
       }]),
       findFirst: vi.fn().mockResolvedValue({ id: "packet-row-a", packetId: "intake-a", patientProfileId: "patient-a" }),
     },
@@ -46,8 +46,13 @@ describe("care intake receptionist review repository", () => {
     expect(result.items[0]).toEqual(expect.objectContaining({
       packetId: "intake-a", ready: true, completionPercent: 100,
       sourceModes: ["staff-assisted"], openExceptions: [],
+      patientReference: expect.stringMatching(/^[A-F0-9]{10}$/),
+      appointmentLinked: true,
     }));
     expect(JSON.stringify(result)).not.toContain("answers");
+    expect(result.items[0]).not.toHaveProperty("patientProfileId");
+    expect(result.items[0]).not.toHaveProperty("appointmentId");
+    expect(JSON.stringify(result)).not.toContain("patient-a");
     expect(tx.authorizationDecisionLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       actorRef: "principal-receptionist", actionKey: "healthcare.intake.review",
       purposeOfUse: "intake-review", decision: "allow",

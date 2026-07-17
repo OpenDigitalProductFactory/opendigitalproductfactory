@@ -39,6 +39,8 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
   // Dispatch board is the field-service surface — only trades-maintenance
   // storefronts assign confirmed bookings to a crew.
   const showDispatch = config?.archetype?.category === "trades-maintenance";
+  // Intake is a front-desk care workflow, not a generic storefront concept.
+  const showIntake = config?.archetype?.category === "healthcare-wellness";
 
   return (
     <div>
@@ -50,6 +52,7 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
         showAnimals={showAnimals}
         showUnits={showUnits}
         showDispatch={showDispatch}
+        showIntake={showIntake}
       />
       {children}
     </div>

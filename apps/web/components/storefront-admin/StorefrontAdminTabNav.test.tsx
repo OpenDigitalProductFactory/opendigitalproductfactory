@@ -53,4 +53,18 @@ describe("StorefrontAdminTabNav", () => {
     expect(html).toContain(">Requests<");
     expect(html).toContain(">Settings<");
   });
+
+  it("shows Intake only when the healthcare workspace enables it", () => {
+    pathname = "/storefront/intake";
+    const healthcareHtml = renderToStaticMarkup(
+      <StorefrontAdminTabNav vocabulary={vocabulary} showIntake />,
+    );
+    const generalHtml = renderToStaticMarkup(
+      <StorefrontAdminTabNav vocabulary={vocabulary} />,
+    );
+
+    expect(healthcareHtml).toContain('href="/storefront/intake"');
+    expect(healthcareHtml).toContain(">Intake<");
+    expect(generalHtml).not.toContain('href="/storefront/intake"');
+  });
 });

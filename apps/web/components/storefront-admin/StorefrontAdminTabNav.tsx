@@ -11,6 +11,8 @@ type Props = {
   showUnits?: boolean;
   /** Show the Dispatch tab — only for field-service (trades-maintenance) storefronts. */
   showDispatch?: boolean;
+  /** Show the Intake tab — only for healthcare and dental practice storefronts. */
+  showIntake?: boolean;
 };
 
 // Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper owns
@@ -22,6 +24,7 @@ export function StorefrontAdminTabNav({
   showAnimals = false,
   showUnits = false,
   showDispatch = false,
+  showIntake = false,
 }: Props) {
   const path = usePathname();
 
@@ -33,6 +36,7 @@ export function StorefrontAdminTabNav({
     ...(showAnimals ? [{ label: "Animals", href: "/storefront/animals" }] : []),
     { label: vocabulary.teamLabel, href: "/storefront/team" },
     ...(showDispatch ? [{ label: "Dispatch", href: "/storefront/dispatch" }] : []),
+    ...(showIntake ? [{ label: "Intake", href: "/storefront/intake" }] : []),
     { label: vocabulary.inboxLabel, href: "/storefront/inbox" },
     { label: "Settings", href: "/storefront/settings" },
   ];

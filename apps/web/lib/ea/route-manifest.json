@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 567,
+  "routeCount": 568,
   "routes": [
     {
       "routePath": "/",
@@ -6477,6 +6477,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/storefront/inbox/page.tsx"
+    },
+    {
+      "routePath": "/storefront/intake",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "intake"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/intake/page.tsx"
     },
     {
       "routePath": "/storefront/items",
