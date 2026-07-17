@@ -440,9 +440,9 @@ If mode is "private":
 
 If mode is "contributing":
   - Call assess_contribution to get the per-change suggestion (Keep / Share)
-    and its reason.
+    and its reason; it must weigh project viability, archetype/market usefulness, reuse readiness, privacy risk, and maintenance burden.
   - Present the suggestion and recommendation to the user in plain language:
-    "Keep on my system" vs "Share with the community".
+    "Keep on my system" vs "Share with the community" (or "Generalize first" when promising but not safe/generic enough yet).
   - The human makes the final call. Default to Keep if there is no explicit
     choice — never contribute without the human's confirmation (fail-closed).
   - Call contribute_to_hive only when the user explicitly chooses to Share.
