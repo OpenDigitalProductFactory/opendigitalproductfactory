@@ -19,8 +19,8 @@ apps/web/lib/actions/agent-coworker-external.test.ts	867
 apps/web/lib/actions/agent-coworker.ts	2778
 apps/web/lib/actions/agent-task-scheduler.test.ts	1121
 apps/web/lib/actions/ai-providers.ts	915
-apps/web/lib/actions/build-governed.test.ts	1134
-apps/web/lib/actions/build.ts	1807
+apps/web/lib/actions/build-governed.test.ts	1142
+apps/web/lib/actions/build.ts	1808
 apps/web/lib/actions/compliance.ts	1068
 apps/web/lib/actions/crm.ts	1423
 apps/web/lib/actions/ea.ts	1055
@@ -40,7 +40,7 @@ apps/web/lib/integrate/build-agent-prompts.ts	1054
 apps/web/lib/integrate/build-orchestrator.ts	1779
 apps/web/lib/integrate/sandbox/build-branch.ts	854
 apps/web/lib/marketing.ts	1367
-apps/web/lib/mcp-tools-backlog.test.ts	912
+apps/web/lib/mcp-tools-backlog.test.ts	920
 apps/web/lib/mcp-tools.ts	1947
 apps/web/lib/mcp/packs/backlog-pack.ts	1328
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	861
