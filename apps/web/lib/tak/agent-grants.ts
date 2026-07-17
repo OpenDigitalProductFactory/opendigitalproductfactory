@@ -628,6 +628,10 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // HR — query
   query_employees: ["consumer_read", "registry_read"],
 
+  // Workforce staffing (EP-WORKFORCE-OPS / BI-4AD09A35) read surface.
+  list_staffing_demand: ["registry_read"],
+  get_staffing_coverage: ["registry_read"],
+
   // ─── Pseudo-User Contract: screen_* view-command family (BI-DF6079E9) ─────
   // Three finer grants (coworker_screen_read / drive / fill) carry the view-
   // command surface. screen_scroll_to is read-class per the chief-architect
