@@ -41,6 +41,7 @@ import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
 import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
 import { BuildCustomerStatusBand } from "./BuildCustomerStatusBand";
+import { BuildWorkWarrantBand } from "./BuildWorkWarrantBand";
 import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
 import { BuildOperatorHeaderDetails, BuildWorkRequestStrip, formatOperatorPhaseLabel } from "./BuildOperatorContext";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
@@ -265,6 +266,7 @@ export function BuildStudio({
     buildTitle: activeBuild?.title ?? null,
     workspaceBranch: projectBranch,
   });
+  const activeWorkWarrant = (activeBuild?.plan as Record<string, unknown> | null | undefined)?.workWarrant;
   const activeLifecycleLabel = activeBuild
     ? deriveLifecycleLabel({
       backlogItem: activeBuild.originator
@@ -874,6 +876,11 @@ export function BuildStudio({
                     setDrawerOpen(true);
                   }}
                 />
+                {activeWorkWarrant !== null && activeWorkWarrant !== undefined && (
+                  <div className="border-b border-[var(--dpf-border)] px-4 py-3">
+                    <BuildWorkWarrantBand warrant={activeWorkWarrant} />
+                  </div>
+                )}
                 {activeBuild && activeBuild.phase === "ship" && (
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
                     <ReleaseDecisionPanel

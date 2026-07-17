@@ -130,6 +130,34 @@ heuristic with code-graph blast-radius." They should be consolidated: the code-g
 blast-radius feeds `sensitivity` (verify) and the warrant's blast-radius (promote) through
 one core, not two.
 
+## Operator visibility slice (feat/work-warrant-visibility)
+
+UX fit: fits-with-guardrails.
+
+- Owning area: Platform > Build Studio.
+- Route family: `/build`.
+- Primary persona: founder/operator or contributor who needs to understand how much rigor a build will use without reading JSON or enum names.
+- Navigation layer: no navigation change; existing active-build pane only.
+- Reuse/convergence: compose report-kit `StatusBadge` and existing Build Studio status-band styling; no new route, dashboard, tab, or one-off badge palette.
+- Source truth: `FeatureBuild.plan.workWarrant`.
+- Empty/failure behavior: older builds without `plan.workWarrant` render no band, avoiding false certainty.
+- AI boundary: informational only; no prompt-send or coworker action.
+
+Implementation:
+
+- Add a plain-language WorkWarrant band to the active-build pane:
+  - “Architecture-level work — governed review, strong model, ledger evidence”
+  - “Business-level work — operator-confirmed business review”
+  - “Craft-level work — lightweight execution”
+- Carry the warrant’s first concrete reason into the band as “Why: …” so the operator can see what caused the rigor level.
+
+Evidence before merge:
+
+```bash
+pnpm --filter web exec vitest run components/build/BuildWorkWarrantBand.test.tsx components/build/BuildStudioHeaderLayout.test.tsx
+pnpm --filter web typecheck
+```
+
 ## Promote wiring (feat/warrant-promote-wiring) — the plane takes effect
 
 Before this, `deliverableSensitivity` was never set on promoted builds, so
