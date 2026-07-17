@@ -585,4 +585,152 @@ describe("persistBootstrapDiscoveryRun", () => {
       { relationshipKey: "rel:k2", connectId: tupleId },
     ]);
   });
+
+  describe("IdentityResolutionLog audit (spec §4.1)", () => {
+    // A rule-resolved entity fixture: the fingerprint pipeline attributed it to a
+    // CatalogIdentity, so discovery-sync must record the resolution lineage.
+    const ruleResolvedRun = {
+      discoveredItems: [
+        {
+          discoveredKey: "dpf_bootstrap:database:database:pg-primary",
+          sourceKind: "dpf_bootstrap",
+          itemType: "database",
+          name: "pg-primary",
+          externalRef: "database:pg-primary",
+          attributes: {},
+        },
+      ],
+      inventoryEntities: [
+        {
+          entityKey: "database:instance:pg-primary",
+          entityType: "database",
+          name: "pg-primary",
+          discoveredKey: "dpf_bootstrap:database:database:pg-primary",
+          portfolioSlug: "foundational",
+          taxonomyNodeId: "foundational/data/relational_database",
+          attributionStatus: "attributed" as const,
+          attributionMethod: "rule" as const,
+          attributionConfidence: 0.98,
+          attributionEvidence: {
+            source: "discovery-fingerprint",
+            ruleId: "rule-postgres",
+            ruleKey: "postgres_server",
+          },
+          catalogIdentityId: "ci-postgres",
+          identityStatus: "rule_resolved",
+          identityConfidence: 0.98,
+          fingerprintRuleId: "rule-postgres",
+          providerView: "foundational",
+          properties: {},
+        },
+      ],
+      inventoryRelationships: [],
+      softwareEvidence: [],
+    };
+
+    function buildDb(
+      findFirst: () => Promise<{ id: string } | null>,
+      resolutionLogCreates: Array<Record<string, unknown>>,
+    ) {
+      return {
+        $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+          discoveryRun: { create: async () => ({ id: "run-res" }) },
+          inventoryEntity: {
+            findMany: async () => [],
+            upsert: async ({ where }: { where: { entityKey: string } }) => ({
+              id: `entity:${where.entityKey}`,
+              entityKey: where.entityKey,
+            }),
+            updateMany: async () => ({ count: 0 }),
+          },
+          discoveredItem: {
+            create: async ({ data }: { data: { observedKey: string } }) => ({
+              id: `discovered:${data.observedKey}`,
+            }),
+          },
+          discoveredSoftwareEvidence: { upsert: async () => ({}) },
+          inventoryRelationship: {
+            findMany: async () => [],
+            upsert: async () => ({ id: "rel", relationshipKey: "rel" }),
+            updateMany: async () => ({ count: 0 }),
+          },
+          discoveredRelationship: { create: async () => ({}) },
+          portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}) },
+          identityResolutionLog: {
+            findFirst,
+            create: async ({ data }: { data: Record<string, unknown> }) => {
+              resolutionLogCreates.push(data);
+              return {};
+            },
+          },
+        }),
+      };
+    }
+
+    it("writes a rule resolution-log row on a first-time rule-resolved match", async () => {
+      const resolutionLogCreates: Array<Record<string, unknown>> = [];
+      const db = buildDb(async () => null, resolutionLogCreates);
+
+      await persistBootstrapDiscoveryRun(db, ruleResolvedRun, {
+        runKey: "run-res",
+        sourceSlug: "dpf_bootstrap",
+      }, {
+        projectInventoryEntity: async () => undefined,
+        projectInventoryRelationship: async () => undefined,
+      });
+
+      expect(resolutionLogCreates).toHaveLength(1);
+      expect(resolutionLogCreates[0]).toMatchObject({
+        inventoryEntityId: "entity:database:instance:pg-primary",
+        catalogIdentityId: "ci-postgres",
+        fingerprintRuleId: "rule-postgres",
+        resolutionType: "rule",
+        confidence: 0.98,
+        discoveryRunId: "run-res",
+      });
+    });
+
+    it("does not append a duplicate row when the same resolution already exists", async () => {
+      const resolutionLogCreates: Array<Record<string, unknown>> = [];
+      const db = buildDb(async () => ({ id: "existing-log" }), resolutionLogCreates);
+
+      await persistBootstrapDiscoveryRun(db, ruleResolvedRun, {
+        runKey: "run-res",
+        sourceSlug: "dpf_bootstrap",
+      }, {
+        projectInventoryEntity: async () => undefined,
+        projectInventoryRelationship: async () => undefined,
+      });
+
+      expect(resolutionLogCreates).toHaveLength(0);
+    });
+
+    it("writes no resolution-log row for a heuristic entity with no catalog identity", async () => {
+      const resolutionLogCreates: Array<Record<string, unknown>> = [];
+      const db = buildDb(async () => null, resolutionLogCreates);
+
+      await persistBootstrapDiscoveryRun(db, {
+        ...ruleResolvedRun,
+        inventoryEntities: [
+          {
+            ...ruleResolvedRun.inventoryEntities[0]!,
+            attributionStatus: "needs_review" as const,
+            attributionMethod: "heuristic" as const,
+            catalogIdentityId: null,
+            identityStatus: null,
+            identityConfidence: null,
+            fingerprintRuleId: null,
+          },
+        ],
+      }, {
+        runKey: "run-res",
+        sourceSlug: "dpf_bootstrap",
+      }, {
+        projectInventoryEntity: async () => undefined,
+        projectInventoryRelationship: async () => undefined,
+      });
+
+      expect(resolutionLogCreates).toHaveLength(0);
+    });
+  });
 });
