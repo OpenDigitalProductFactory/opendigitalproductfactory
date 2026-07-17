@@ -46,6 +46,13 @@ This plan sequences the spec into independently reviewable slices. Each phase na
 
 **Exit:** an employee can be resolved to an occupation (or an honest null) server-side.
 
+**Implementation status (landed 2026-07-17):** Phase 1 substrate implemented.
+- `OccupationProfile` model + nullable `Position.occupationKey` (slug reference, not an FK — mirrors `StorefrontConfig.archetypeId`) — [`packages/db/prisma/schema.prisma`](../../../packages/db/prisma/schema.prisma); migration `20260717000000_add_occupation_dimension` (data-safe, hand-authored — worktree is source-only so `prisma migrate dev` runs in the sandbox).
+- Registry data [`packages/db/data/occupation_registry.json`](../../../packages/db/data/occupation_registry.json) (dental-hygienist, front-desk-coordinator, field-service-technician, field-dispatcher) + fail-closed seed [`packages/db/src/seed-occupations.ts`](../../../packages/db/src/seed-occupations.ts) wired into `seed.ts` after `storefrontArchetypes`. Seed validates every occupation against the live archetype-category catalog and the seeded coworker slugs (`COWORKER_AGENT_SEEDS`); `interaction` is the closed `summon|assigned-only|read-only` enum.
+- Resolver [`apps/web/lib/workforce/occupation.ts`](../../../apps/web/lib/workforce/occupation.ts): `resolveOccupationForEmployee` / `resolveOccupationForUser` / `getOccupationByKey`, DI-testable, with the `invalidateOccupationCache` seam P5's mover event consumes (employee→occupation walk stays uncached so a mover change is seen immediately).
+- Tests: `seed-occupations.test.ts` (referential integrity + fail-closed) and `occupation.test.ts` (resolver fallbacks, JSON parsing, memo + invalidation).
+- **Stewardship note:** `OnboardingTask.kind` from spec §6 maps onto the **existing** `OnboardingTask.checklistType` field — no new column. The `platform-intro` / `occupation-mover` values are introduced when P4/P5 create those rows; `baseAccessProfile` is a slug pending the P0.1 RBAC decision (seeded `workforce-member`); `wsidProfessionFamily` and roster `governanceProfileRef` are bound in P3.
+
 ---
 
 ## Phase 2 — Role-tailored workspace (extend the dormant vertical-home resolver)
