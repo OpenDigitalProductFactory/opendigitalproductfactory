@@ -31,7 +31,12 @@ import {
   operatorNeedsValue,
 } from "./grid-conditional-format";
 import { ROW_HEIGHTS, type RowHeight } from "./grid-view-options";
-import type { FooterAgg } from "./grid-footer-summary";
+import {
+  availableAggs,
+  toFooterAgg,
+  FOOTER_AGG_LABELS,
+  type FooterAgg,
+} from "./grid-footer-summary";
 
 const PANEL = "flex flex-col gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2";
 const CTRL = "rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]";
@@ -411,7 +416,10 @@ export interface GridGroupPanelProps {
   topGroupIds: readonly string[];
   setCollapsedGroups: Dispatch<SetStateAction<ReadonlySet<unknown>>>;
   setExtraExpanded: Dispatch<SetStateAction<ReadonlySet<unknown>>>;
+  /** Visible columns (in order) — used for the per-column subtotal pickers. */
+  visibleCols: ColumnDefinition[];
   footerAgg: Record<string, FooterAgg>;
+  setFooterAgg: Dispatch<SetStateAction<Record<string, FooterAgg>>>;
 }
 
 export function GridGroupPanel({
@@ -423,7 +431,9 @@ export function GridGroupPanel({
   topGroupIds,
   setCollapsedGroups,
   setExtraExpanded,
+  visibleCols,
   footerAgg,
+  setFooterAgg,
 }: GridGroupPanelProps): ReactNode {
   const available = columns.filter((c) => !effectiveGroupBy.includes(c.columnId));
   return (
@@ -496,11 +506,34 @@ export function GridGroupPanel({
             {effectiveGroupBy.length > 1 ? `${effectiveGroupBy.length} levels · ` : ""}
             {topGroupIds.length} group{topGroupIds.length === 1 ? "" : "s"}
           </span>
-          {!Object.values(footerAgg).some((a) => a && a !== "none") && (
-            <span className="text-xs italic text-[var(--dpf-muted)]">
-              Tip: pick an aggregate in the Summary bar (Columns) to show subtotals per group.
-            </span>
-          )}
+          {/* Per-column subtotal pickers — shown here (not just the footer bar,
+              which TreeDataGrid hides while grouped) so a subtotal aggregate is
+              always reachable while grouping. Drives the same footerAgg state. */}
+          <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--dpf-border)] pt-2">
+            <span className="text-xs uppercase tracking-wide text-[var(--dpf-muted)]">Subtotals</span>
+            {visibleCols.map((c) => (
+              <label
+                key={c.columnId}
+                className="inline-flex items-center gap-1 text-sm text-[var(--dpf-text)]"
+              >
+                <span className="text-[var(--dpf-muted)]">{c.name}</span>
+                <select
+                  value={footerAgg[c.columnId] ?? "none"}
+                  onChange={(e) =>
+                    setFooterAgg((prev) => ({ ...prev, [c.columnId]: toFooterAgg(e.target.value) }))
+                  }
+                  aria-label={`Subtotal for ${c.name}`}
+                  className={CTRL}
+                >
+                  {availableAggs(c.fieldType).map((a) => (
+                    <option key={a} value={a}>
+                      {FOOTER_AGG_LABELS[a]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
         </>
       )}
     </div>

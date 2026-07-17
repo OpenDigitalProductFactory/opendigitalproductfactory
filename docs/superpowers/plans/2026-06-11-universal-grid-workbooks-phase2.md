@@ -206,8 +206,11 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   selection that drives the footer bar, so one summary function reads as both per-group subtotal and
   grand total — Excel/Smartsheet behavior — with no new config, state, or persistence. Group-by columns
   are left untouched so `TreeDataGrid` keeps rendering their toggle + value + child count. Reuses the
-  pure, unit-tested `computeFooter` (`grid-footer-summary.ts`); a Group-panel tip points the user to the
-  Summary bar to pick aggregates. This closes the grouping-parity follow-up noted in Slice 22.
+  pure, unit-tested `computeFooter` (`grid-footer-summary.ts`). This closes the grouping-parity
+  follow-up noted in Slice 22. **UX fix (2026-07):** the per-column subtotal aggregate is now picked
+  from a "Subtotals" row **inside the Group panel** (not only the footer bar, which `TreeDataGrid`
+  hides while grouped) — so the aggregate is always reachable while grouping, and the earlier
+  "use the Summary bar" tip is no longer a dead end. Both surfaces drive the same `footerAgg` state.
 - **Slice 18 — table ergonomics: hide fields + frozen columns + row height — SHIPPED.** A "Columns"
   toolbar panel (progressive disclosure) with per-field show/hide checkboxes, a "Freeze first N
   columns" selector (pins the leftmost visible columns on horizontal scroll via react-data-grid
