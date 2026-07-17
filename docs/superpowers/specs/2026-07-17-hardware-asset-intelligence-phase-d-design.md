@@ -148,7 +148,7 @@ Proposed BIs:
 
 Proposed BIs after D1 evidence:
 
-5. **BI-828998DC - InventoryEntity <-> CustomerConfigurationItem bridge** - define matching rules and read-model joins for customer/site equipment records without moving authority.
+5. **BI-828998DC - InventoryEntity <-> CustomerConfigurationItem bridge** - define matching rules and read-model joins for customer/site equipment records without moving authority. **Read-model matcher LANDED** (kernel decision DI-56B99A37FA40 chose the read-model over a nullable-FK / link-table persist — a fuzzy match must not be asserted authoritative without human confirmation). `packages/db/src/inventory-cci-bridge.ts`: `matchInventoryEntityToCci` matches a discovered device to a managed CI **within customer/site scope** by serial → asset-tag → manufacturer+model precedence (fail-closed below model — a false link is worse than an unmatched device; discovery collects no serial/asset-tag today so matches are model-level), and `correlateDiscoveryToEstate` buckets an account into managed-and-discovered / managed-not-discovered / discovered-not-managed (shadow). Surfaced read-only on the customer-estate summary (`loadCustomerEstateSummary.discoveryCorrelation`) — **no authority move, no persistence**. Persisting a *confirmed* link (a link table + human confirmation workflow) is the deliberate D2 follow-up once match quality is validated; a firmware-GUID/serial collector would raise the match rate.
 6. **BI-1093AF1C - InventoryEntity <-> FixedAsset bridge** - define optional serial/assetTag/catalogIdentity matching and origin trace fields needed before any finance-facing HAM automation.
 
 ### Deferred initiative - Full HAM financial lifecycle

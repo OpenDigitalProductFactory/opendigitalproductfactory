@@ -394,6 +394,9 @@ export * from "./catalog-enrichment-sweep";
 // under a batching + per-run inference budget cost guardrail. Pure engine; the governed
 // apps/web runner wires the real prisma + a minimize_cost inference fn.
 export * from "./catalog-identity-inference";
+// HAM Phase D2 (BI-828998DC, spec §7): read-model correlation of discovered InventoryEntity
+// to managed CustomerConfigurationItem — no authority move, no persistence.
+export * from "./inventory-cci-bridge";
 export * from "./device-placement";
 export * from "./portfolio-sources";
 export * from "./backlog-portfolio";
