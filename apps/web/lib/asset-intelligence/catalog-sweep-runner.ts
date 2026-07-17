@@ -6,6 +6,7 @@
 // switch (ScheduledJob.enabled=false) like the other governed sweeps.
 
 import type { CatalogSweepResult } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   CATALOG_SWEEP_JOB_ID,
   CATALOG_SWEEP_JOB_NAME,
@@ -81,7 +82,7 @@ export async function runCatalogEnrichmentSweepJob(
 
     return { skipped: false, ...result };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = getErrorMessage(err);
     await prisma.scheduledJob
       .update({
         where: { jobId: CATALOG_SWEEP_JOB_ID },
