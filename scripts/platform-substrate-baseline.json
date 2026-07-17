@@ -1,6 +1,9 @@
 {
-  "generatedAt": "2026-07-17T19:17:03.691Z",
-  "gitSha": "77bb92d190a3c630e47543e7c3b2c23be8e5d544",
+  "changeRationale": {
+    "prismaModelCount": "IntegrationCallbackReceipt is the single durable idempotency/outbox record required to consolidate provider-local callback recovery in the connector kernel."
+  },
+  "generatedAt": "2026-07-17T21:49:34.178Z",
+  "gitSha": "9c2f4790b987957e7b9327daf117353ef6a13367",
   "manifestVersion": 1,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -17,7 +20,7 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 509
+      "value": 510
     },
     "prismaSchemaLines": {
       "direction": "informational",

@@ -1,4 +1,6 @@
 export type ConnectorSetupStatus = "unconfigured" | "connected" | "error" | "degraded";
+/** Persisted compatibility status; `degraded` is a kernel-derived health projection. */
+export type ConnectorPersistedSetupStatus = Exclude<ConnectorSetupStatus, "degraded">;
 
 export type ConnectorSafeScalar = string | number | boolean | null;
 export type ConnectorSafeValue =

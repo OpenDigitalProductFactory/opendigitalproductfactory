@@ -8,6 +8,7 @@ import {
   type EmailPostmarkConnectInput as KernelEmailPostmarkConnectInput,
 } from "@/lib/integrations/connectors/email-postmark";
 import type { ConnectorAuditRepository } from "@/lib/integrations/kernel/audit";
+import type { ConnectorPersistedSetupStatus } from "@/lib/integrations/kernel/setup-state";
 import {
   createConnectorCredentialStore,
   createPrismaConnectorCredentialRepository,
@@ -20,7 +21,7 @@ import {
 
 export type EmailPostmarkConnectInput = KernelEmailPostmarkConnectInput;
 export type EmailPostmarkConnectionState = {
-  status: "unconfigured" | "connected" | "error";
+  status: ConnectorPersistedSetupStatus;
   fromAddress: string | null;
   replyToAddress: string | null;
   lastErrorMsg: string | null;

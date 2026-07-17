@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { EmailInput } from "@/components/ui/EmailInput";
+import type { ConnectorPersistedSetupStatus } from "@/lib/integrations/kernel/setup-state";
 
 export interface Microsoft365CommunicationsConnectionState {
-  status: "unconfigured" | "connected" | "error";
+  status: ConnectorPersistedSetupStatus;
   tenantDisplayName: string | null;
   mailboxDisplayName: string | null;
   mailboxUserPrincipalName: string | null;

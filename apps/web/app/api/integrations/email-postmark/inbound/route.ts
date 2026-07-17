@@ -11,7 +11,7 @@ import {
   type ExecuteCallbackInput,
 } from "@/lib/integrations/kernel/audit";
 import { parseInboundPayload, verifyInboundSignature } from "@/lib/marketing/channels/email-postmark/client";
-import { inngest } from "@/lib/queue/inngest-client";
+import { enqueuePostmarkCallback } from "@/lib/queue/connector-callback-events";
 
 export const dynamic = "force-dynamic";
 const INTEGRATION_ID = "email-postmark";
@@ -36,9 +36,9 @@ async function auditTerminal(responseKind: string, errorCode: "authentication" |
     // Independent durable queue fallback when the database outbox is briefly
     // unavailable. The event contains only the safe terminal projection.
     await Promise.race([
-      inngest.send({ name: "integrations/postmark-callback.received", data: {
+      enqueuePostmarkCallback({
         terminalAudit: { eventKey, responseKind, errorCode },
-      } }),
+      }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("enqueue timeout")), 2_000)),
     ]).catch(() => undefined);
   }
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // The receipt + responder job are already durable. A bounded event enqueue
   // lowers latency; the registered cron worker recovers any missed event.
   await Promise.race([
-    inngest.send({ name: "integrations/postmark-callback.received", data: { deliveryKey: parsed.externalMessageId! } }),
+    enqueuePostmarkCallback({ deliveryKey: parsed.externalMessageId! }),
     new Promise((_, reject) => setTimeout(() => reject(new Error("enqueue timeout")), 2_000)),
   ]).catch(() => undefined);
   return NextResponse.json(callback.acknowledgment, { status: callback.responseCode });
