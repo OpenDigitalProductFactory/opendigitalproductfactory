@@ -2,13 +2,12 @@
 
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
-import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "..");
-const requireGuardRuntime = createRequire(resolve(REPO_ROOT, "packages/repo-guard-runtime/package.json"));
-const ts = requireGuardRuntime("typescript");
+const ts = loadPinnedGuardTypeScript({ repoRoot: REPO_ROOT });
 const WEB_ROOT = resolve(REPO_ROOT, "apps/web");
 const BASELINE_PATH = resolve(SCRIPT_DIR, "provider-local-connector-lifecycle-baseline.json");
 const MAX_FILES = 10_000;

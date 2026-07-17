@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { compareDebt, scanSource } from "./check-no-provider-local-connector-lifecycle.mjs";
+import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 
 const kinds = (source, file = "apps/web/lib/integrations/connectors/acme.ts") =>
   scanSource(source, file).map(({ kind }) => kind);
@@ -112,4 +113,14 @@ test("Repo Guard Loop provisions the pinned isolated AST runtime", () => {
   const job = workflow.slice(workflow.indexOf("  repo-guard-loop:"), workflow.indexOf("  docs-link-integrity:"));
   assert.match(job, /corepack prepare pnpm@10\.33\.2 --activate/);
   assert.match(job, /pnpm install --frozen-lockfile --ignore-scripts --filter @dpf\/repo-guard-runtime/);
+
+  const base = {
+    runtimeManifest: { devDependencies: { typescript: "6.0.3" } },
+    lockText: "  packages/repo-guard-runtime:\n    devDependencies:\n      typescript:\n        specifier: 6.0.3\n        version: 6.0.3\n",
+    resolvedPackagePath: "/repo/node_modules/typescript/package.json",
+    repoRoot: "/repo",
+  };
+  assert.throws(() => loadPinnedGuardTypeScript({ ...base, resolvePackage: () => { throw new Error("missing"); } }), /pnpm install --frozen-lockfile.*repo-guard-runtime/);
+  assert.throws(() => loadPinnedGuardTypeScript({ ...base, resolvePackage: () => base.resolvedPackagePath, readResolvedPackage: () => ({ version: "6.0.2" }), loadModule: () => ({ version: "6.0.2" }) }), /expected 6\.0\.3.*resolved 6\.0\.2/);
+  assert.equal(loadPinnedGuardTypeScript({ ...base, resolvePackage: () => base.resolvedPackagePath, readResolvedPackage: () => ({ version: "6.0.3" }), loadModule: () => ({ version: "6.0.3" }) }).version, "6.0.3");
 });
