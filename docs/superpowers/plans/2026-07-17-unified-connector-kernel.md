@@ -366,7 +366,7 @@ git commit -s -m "docs(architecture): publish unified connector kernel"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-17-unified-connector-kernel.md`
 
-- [ ] **Step 1: Run focused source verification**
+- [x] **Step 1: Run focused source verification**
 
 Run:
 
@@ -381,19 +381,29 @@ git diff --check
 
 Expected: all PASS.
 
-- [ ] **Step 2: Run web typecheck**
+Evidence (2026-07-17): candidate `3308c31acefcf360ac8630db6b6781fc0e831745` passed the focused connector/kernel suite (20 files, 180 tests, including the callback-batch and scheduling-contention regressions), the lifecycle guard unit suite (7 tests), the live lifecycle guard (77 audited occurrences across 45 exact debt keys), all 21 repository guards, documentation link/diagram checks, Prisma validation/generation, and `git diff --check`.
+
+- [x] **Step 2: Run web typecheck**
 
 Run: `pnpm --filter web typecheck`
 
 Expected: PASS.
 
-- [ ] **Step 3: Request independent implementation and spec reviews**
+Evidence (2026-07-17): `NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck` passed on Windows, including Next.js route type generation and `tsc --noEmit`.
+
+- [x] **Step 3: Request independent implementation and spec reviews**
 
 Resolve every Important/Critical finding and rerun focused checks.
 
-- [ ] **Step 4: Run governed canonical gates**
+Evidence (2026-07-17): each implementation task received separate specification-compliance and code-quality review. Findings were returned to the original implementer, corrected, and re-reviewed before the next task began; the final health-audit review found no unresolved Important or Critical finding.
+
+- [x] **Step 4: Run governed canonical gates**
 
 Run `& 'C:\Program Files\Git\bin\bash.exe' scripts/gate-worktree.sh` from this worktree at the exact candidate SHA. Confirm the metadata explicitly contains `pnpm --filter @dpf/db exec prisma migrate deploy` and the `add_integration_callback_receipt` migration applied or was already current, plus full tests, Windows typecheck, and production build. For live-install UX/functional evidence, first run `pnpm verify:preflight -- --feature-sha <candidate-sha> --portal-url http://127.0.0.1:3000` and obey `CAN-TEST | MUST-ADVANCE | BLOCKED`; otherwise use the leased convergence runtime URL. Exercise Microsoft validation/auth/probe/success result contracts and Postmark connect plus disconnected/missing-secret/invalid-signature/invalid-JSON/malformed/no-org/success/concurrent-replay/crash-recovery paths. Record separate `test_pass`, `build_pass`, `ux_verified`, migration, and review evidence activities through DPF MCP before opening the ready PR.
+
+Evidence (2026-07-17): the governed `local-integration-ci` gate passed candidate `3308c31acefcf360ac8630db6b6781fc0e831745` under lease `NPEL-0B68E865EE` and recorded evidence `cmrpjizon04pd01mjt4jyog1e`. Its metadata records Prisma generation, `pnpm --filter @dpf/db exec prisma migrate deploy`, the full web Vitest suite, the 8 GB Windows web typecheck, and the production Docker build. The first governed attempt applied `20260717151000_add_integration_callback_receipt`, `20260717152000_add_integration_callback_audit_outbox`, and `20260717211500_harden_connector_callback_dispatch`; the passing rerun confirmed no pending migrations. The production build exported manifest list `sha256:41960024378f5be781b38e65c183394c24916e6b2c0be17f062b300b27b8aa45`.
+
+Workflow-contract UX evidence covers the Microsoft validation/auth/probe/success result contracts and the Postmark connect, rejection, success, concurrent replay, rollback, and crash-recovery paths in the focused and full canonical suites. Live-install preflight correctly returned `MUST-ADVANCE` for the unmerged candidate; the live portal was not claimed to serve this branch. Runtime UX evidence request `SUR-D7594898` is queued for the governed post-merge advance path.
 
 - [ ] **Step 5: Push and open a ready PR**
 
