@@ -76,10 +76,13 @@ Lead with "N things need you today". Demote the 3040-item / 138-epic / "276 buil
 ## Attribution voice (open)
 Per founder: the overseer is the **COO** persona, intentionally **un-named** (naming over-personifies AI; less-technical users anthropomorphize, researchers guard against it). The COO is the single overseer/router/funnel, deferring to specialists. The exact attribution contract (COO voice vs. named-function specialist bylines, anthropomorphization guardrails, overseer↔specialist handoff in UI) is scoped to `BI-7D29937E` and likely warrants a formal deliberation. This redesign adopts whatever that thread decides.
 
-## Out of scope (designed conceptually, not in this cut)
-- Off-site notification channel (email/SMS/push + signed one-click for the reversible class) — see `BI-C7D25599`.
-- First-run onboarding screen that sets per-coworker proactivity defaults.
-- The reassuring empty ("nothing needs you right now") state.
+## Deferred surfaces — now designed (2026-07-17 addendum)
+
+These three were deferred from the first cut and have since been designed and captured, grounded in existing substrate (verify-substrate-first):
+
+1. **Off-site channel** — the owner rarely sits at a desk, so reach is primary. Rides the existing dispatch spine (`apps/web/lib/communications/`: `channel-bindings`, `dispatcher`, `dispatch-policy`, `delivery-evidence`, `expo-push-adapter`, `in-app-adapter`). One-tap approve only for the low-risk reversible class; money-out/public link to the authenticated app for full review, never one-tap. Owned by existing **`BI-C7D25599`** (email/message deep-link + signed one-click) — no duplicate filed; enriched with the dispatch-spine pointer.
+2. **Proactivity confirm/adjust (owner-facing)** — per "derive, don't ask", per-coworker proactivity defaults are already derived from the industry risk posture (`EP-ONBOARDING-INTAKE`: `BI-527E5C40` done, `BI-E0E977BC` done, `BI-E93A3437` open). The gap is an owner-facing plain-language view that shows the derived defaults per coworker, explains their origin, and lets the owner confirm/adjust one (writes back `AgentGovernanceProfile.autonomyLevel` / `hitlTierDefault`); money-out + public floors shown non-overridable. New: **`BI-65D622EA`**.
+3. **Empty state** — a "you're all caught up" zero-state that reads as a good day (plus what the AI handled today + link to activity), not an idle/nagging to-do list. Composes with the "AI is handling" strip (`BI-6A1BB18C`) and `WorkspaceAttentionItem` (`apps/web/lib/workspace/command-center.ts`). New: **`BI-5547A4F2`**.
 
 ## Implementation items (filed under EP-ATTENTION-SURFACE)
 See the BIs created 2026-07-17 for moves 1–5 and the plain-language translation contract.
