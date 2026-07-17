@@ -5,7 +5,7 @@ status: published
 abstract: Analytics and reporting UX compose domain data through boundary-owned authorization, canonical identity joins, and partial-failure result contracts — not ad-hoc UI imports of write paths.
 principleTier: core
 principleDirection: Keep reporting as a composed read model — authorize at the boundary, join on canonical identity, fail partial not silent.
-principleDimensionVector: {"long_term_maintainability": 0.7, "schema_grounding": 0.6, "human_cognitive_load": 0.4}
+principleDimensionVector: {"long_term_maintainability": 0.7, "schema_grounding": 0.6, "human_cognitive_load": -0.4}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -47,7 +47,7 @@ Specs and PRs that add KPI tiles, report tables, engagement rollups, multi-adapt
 
 - `long_term_maintainability: 0.7` — one reporting composition style scales across domains.
 - `schema_grounding: 0.6` — joins on canonical identity prevent parallel truth.
-- `human_cognitive_load: 0.4` — partial, labeled gaps beat silent wrong numbers.
+- `human_cognitive_load: -0.4` — partial, labeled gaps beat silent wrong numbers (cost axis: lower load is better).
 
 ## Examples
 
