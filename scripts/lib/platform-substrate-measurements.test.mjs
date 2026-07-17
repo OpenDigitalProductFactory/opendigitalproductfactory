@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
+  buildStaticRatchetMetrics,
+  compareRatchetMetrics,
   enumerateExternalRuntimes,
   collectRepositoryMeasurements,
   parseComposeServices,
@@ -12,6 +14,143 @@ import {
   SUPPORTED_MANIFEST_VERSION,
   validateSubstrateManifest,
 } from "./platform-substrate-measurements.mjs";
+
+const ratchetMeasurements = {
+  services: { total: 10, defaultRequired: 3, byClass: {} },
+  prismaModelCount: 20,
+  directInngestImports: ["one", "two"],
+  integrationConnectRoutes: ["one", "two", "three"],
+  providerConnectionStateProjectors: ["one"],
+  productionModulesAboveSoftCeiling: [{ path: "large.ts", lines: 900 }],
+  lineCounts: { prismaSchema: 100, seedCoordinator: 50 },
+};
+
+test("every static metric declares an explicit ratchet direction", () => {
+  const metrics = buildStaticRatchetMetrics(ratchetMeasurements);
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(metrics).map(([name, metric]) => [name, metric.direction])),
+    {
+      defaultRequiredServiceCount: "non-increasing",
+      directInngestImportCount: "non-increasing",
+      integrationConnectRouteCount: "non-increasing",
+      prismaModelCount: "non-increasing",
+      prismaSchemaLines: "informational",
+      productionModuleHotspotCount: "non-increasing",
+      providerConnectionStateProjectorCount: "non-increasing",
+      seedCoordinatorLines: "informational",
+      serviceCount: "non-increasing",
+    },
+  );
+});
+
+test("non-increasing metrics fail above baseline, pass unchanged, and advise when improved", () => {
+  const baseline = buildStaticRatchetMetrics(ratchetMeasurements);
+  for (const name of [
+    "serviceCount",
+    "defaultRequiredServiceCount",
+    "directInngestImportCount",
+    "integrationConnectRouteCount",
+    "providerConnectionStateProjectorCount",
+    "prismaModelCount",
+    "productionModuleHotspotCount",
+  ]) {
+    const increased = structuredClone(baseline);
+    increased[name].value += 1;
+    const regression = compareRatchetMetrics({ baseline, current: increased });
+    assert.equal(regression.passed, false, `${name} increase must fail`);
+    assert.deepEqual(regression.regressions.map(({ metric }) => metric), [name]);
+
+    const unchanged = compareRatchetMetrics({ baseline, current: structuredClone(baseline) });
+    assert.equal(unchanged.passed, true, `${name} unchanged must pass`);
+    assert.deepEqual(unchanged.regressions, []);
+
+    const decreased = structuredClone(baseline);
+    decreased[name].value -= 1;
+    const improvement = compareRatchetMetrics({ baseline, current: decreased });
+    assert.equal(improvement.passed, true, `${name} decrease must pass`);
+    assert.deepEqual(improvement.advisories.map(({ metric }) => metric), [name]);
+  }
+});
+
+test("informational metrics never fail or create stale-baseline advisories", () => {
+  const baseline = buildStaticRatchetMetrics(ratchetMeasurements);
+  for (const name of ["prismaSchemaLines", "seedCoordinatorLines"]) {
+    for (const delta of [-1, 0, 1]) {
+      const current = structuredClone(baseline);
+      current[name].value += delta;
+      const comparison = compareRatchetMetrics({ baseline, current });
+      assert.equal(comparison.passed, true);
+      assert.deepEqual(comparison.regressions, []);
+      assert.deepEqual(comparison.advisories, []);
+    }
+  }
+});
+
+test("comparison rejects missing or unsupported explicit baseline directions", () => {
+  const current = { serviceCount: { value: 10, direction: "non-increasing" } };
+  assert.throws(
+    () => compareRatchetMetrics({ baseline: { serviceCount: { value: 10 } }, current }),
+    /serviceCount.*direction/i,
+  );
+  assert.throws(
+    () => compareRatchetMetrics({ baseline: { serviceCount: { value: 10, direction: "decreasing" } }, current }),
+    /serviceCount.*direction/i,
+  );
+});
+
+test("comparison follows declared policy rather than inferring it from metric names", () => {
+  const comparison = compareRatchetMetrics({
+    baseline: {
+      serviceCount: { value: 1, direction: "informational" },
+      harmlessLabel: { value: 1, direction: "non-increasing" },
+    },
+    current: {
+      serviceCount: { value: 999, direction: "informational" },
+      harmlessLabel: { value: 2, direction: "non-increasing" },
+    },
+  });
+  assert.equal(comparison.passed, false);
+  assert.deepEqual(comparison.regressions.map(({ metric }) => metric), ["harmlessLabel"]);
+});
+
+test("comparison fails closed for empty metric inventories", () => {
+  assert.throws(
+    () => compareRatchetMetrics({ baseline: {}, current: {} }),
+    /non-empty/i,
+  );
+});
+
+test("comparison rejects canonical metrics omitted from the baseline", () => {
+  const current = buildStaticRatchetMetrics(ratchetMeasurements);
+  const baseline = structuredClone(current);
+  delete baseline.serviceCount;
+  assert.throws(
+    () => compareRatchetMetrics({ baseline, current }),
+    /metric inventories.*serviceCount/i,
+  );
+});
+
+test("comparison rejects newly introduced current metrics absent from the baseline", () => {
+  const baseline = buildStaticRatchetMetrics(ratchetMeasurements);
+  const current = {
+    ...structuredClone(baseline),
+    newlyMeasuredMovingPart: { value: 1, direction: "non-increasing" },
+  };
+  assert.throws(
+    () => compareRatchetMetrics({ baseline, current }),
+    /metric inventories.*newlyMeasuredMovingPart/i,
+  );
+});
+
+test("comparison rejects current metrics missing from the measured result", () => {
+  const baseline = buildStaticRatchetMetrics(ratchetMeasurements);
+  const current = structuredClone(baseline);
+  delete current.prismaModelCount;
+  assert.throws(
+    () => compareRatchetMetrics({ baseline, current }),
+    /metric inventories.*prismaModelCount/i,
+  );
+});
 
 async function withFixture(files, run) {
   const root = await mkdtemp(join(tmpdir(), "substrate-measurements-"));

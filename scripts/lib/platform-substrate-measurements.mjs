@@ -66,6 +66,76 @@ export function stableSerialize(value) {
   return `${JSON.stringify(sortedObject(value), null, 2)}\n`;
 }
 
+const RATCHET_DIRECTIONS = ["non-increasing", "informational"];
+
+const STATIC_RATCHET_METRICS = [
+  ["defaultRequiredServiceCount", "non-increasing", (measurement) => measurement.services.defaultRequired],
+  ["directInngestImportCount", "non-increasing", (measurement) => measurement.directInngestImports.length],
+  ["integrationConnectRouteCount", "non-increasing", (measurement) => measurement.integrationConnectRoutes.length],
+  ["prismaModelCount", "non-increasing", (measurement) => measurement.prismaModelCount],
+  ["prismaSchemaLines", "informational", (measurement) => measurement.lineCounts.prismaSchema],
+  ["productionModuleHotspotCount", "non-increasing", (measurement) => measurement.productionModulesAboveSoftCeiling.length],
+  ["providerConnectionStateProjectorCount", "non-increasing", (measurement) => measurement.providerConnectionStateProjectors.length],
+  ["seedCoordinatorLines", "informational", (measurement) => measurement.lineCounts.seedCoordinator],
+  ["serviceCount", "non-increasing", (measurement) => measurement.services.total],
+];
+
+export function buildStaticRatchetMetrics(measurement) {
+  return Object.fromEntries(STATIC_RATCHET_METRICS.map(([name, direction, read]) => [
+    name,
+    { direction, value: read(measurement) },
+  ]));
+}
+
+function validateRatchetMetric(name, metric, source) {
+  if (!metric || !RATCHET_DIRECTIONS.includes(metric.direction)) {
+    throw new Error(`${source} metric ${name} must declare direction as ${RATCHET_DIRECTIONS.join(" or ")}`);
+  }
+  if (typeof metric.value !== "number" || !Number.isFinite(metric.value)) {
+    throw new Error(`${source} metric ${name} must have a finite numeric value`);
+  }
+}
+
+export function compareRatchetMetrics({ baseline, current }) {
+  const baselineNames = Object.keys(baseline ?? {}).sort();
+  const currentNames = Object.keys(current ?? {}).sort();
+  if (baselineNames.length === 0 || currentNames.length === 0) {
+    throw new Error("Ratchet metric inventories must be non-empty");
+  }
+  const baselineOnly = baselineNames.filter((name) => !Object.hasOwn(current, name));
+  const currentOnly = currentNames.filter((name) => !Object.hasOwn(baseline, name));
+  if (baselineOnly.length > 0 || currentOnly.length > 0) {
+    throw new Error(`Ratchet metric inventories must match; baseline only: ${baselineOnly.join(", ") || "none"}; current only: ${currentOnly.join(", ") || "none"}`);
+  }
+  const regressions = [];
+  const advisories = [];
+  for (const name of baselineNames) {
+    const baselineMetric = baseline[name];
+    validateRatchetMetric(name, baselineMetric, "Baseline");
+    const currentMetric = current?.[name];
+    validateRatchetMetric(name, currentMetric, "Current");
+    if (currentMetric.direction !== baselineMetric.direction) {
+      throw new Error(`Current metric ${name} direction must match the baseline direction`);
+    }
+    if (baselineMetric.direction === "informational") continue;
+    if (currentMetric.value > baselineMetric.value) {
+      regressions.push({
+        metric: name,
+        baseline: baselineMetric.value,
+        current: currentMetric.value,
+      });
+    } else if (currentMetric.value < baselineMetric.value) {
+      advisories.push({
+        metric: name,
+        baseline: baselineMetric.value,
+        current: currentMetric.value,
+        message: `${name} improved; update the stale baseline`,
+      });
+    }
+  }
+  return { passed: regressions.length === 0, regressions, advisories };
+}
+
 function hasDirectInngestImport(content) {
   const specifiers = [
     ...content.matchAll(/(?:^|[;\n])\s*(?:import|export)\s+(?:[^;]*?\s+from\s+)?["']([^"']+)["']/g),
