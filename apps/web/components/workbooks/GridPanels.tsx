@@ -22,6 +22,13 @@ import {
 } from "./grid-filter-builder";
 import { numericColumns, summarize, summaryChartBars } from "./grid-summary";
 import {
+  pivot,
+  pivotAggNeedsValue,
+  PIVOT_AGG_LABELS,
+  type PivotAgg,
+  type SummaryMode,
+} from "./grid-pivot";
+import {
   type ConditionalRule,
   CF_OPERATORS,
   CF_OPERATOR_LABELS,
@@ -182,9 +189,18 @@ export interface GridSummaryPanelProps {
   setSummaryGroupBy: Dispatch<SetStateAction<string>>;
   summaryValue: string;
   setSummaryValue: Dispatch<SetStateAction<string>>;
-  summaryChart: boolean;
-  setSummaryChart: Dispatch<SetStateAction<boolean>>;
+  summaryMode: SummaryMode;
+  setSummaryMode: Dispatch<SetStateAction<SummaryMode>>;
+  /** Pivot "across" column + the aggregate applied to each cell. */
+  summaryPivotCol: string;
+  setSummaryPivotCol: Dispatch<SetStateAction<string>>;
+  summaryAgg: PivotAgg;
+  setSummaryAgg: Dispatch<SetStateAction<PivotAgg>>;
 }
+
+const MODES: SummaryMode[] = ["table", "chart", "pivot"];
+const MODE_LABELS: Record<SummaryMode, string> = { table: "Table", chart: "Chart", pivot: "Pivot" };
+const PIVOT_AGGS: PivotAgg[] = ["count", "sum", "avg", "min", "max"];
 
 export function GridSummaryPanel({
   columns,
@@ -193,22 +209,33 @@ export function GridSummaryPanel({
   setSummaryGroupBy,
   summaryValue,
   setSummaryValue,
-  summaryChart,
-  setSummaryChart,
+  summaryMode,
+  setSummaryMode,
+  summaryPivotCol,
+  setSummaryPivotCol,
+  summaryAgg,
+  setSummaryAgg,
 }: GridSummaryPanelProps): ReactNode {
   const groupBy = summaryGroupBy || columns[0]!.columnId;
   const valueCol = summaryValue || undefined;
   const numCols = numericColumns(columns);
   const summary = summarize(sortedRows, groupBy, valueCol);
+  // Pivot "across" axis defaults to the first column that isn't the row axis.
+  const pivotCol =
+    summaryPivotCol || columns.find((c) => c.columnId !== groupBy)?.columnId || columns[0]!.columnId;
+  const showValuePicker = summaryMode !== "pivot" || pivotAggNeedsValue(summaryAgg);
+  const p = summaryMode === "pivot" ? pivot(sortedRows, groupBy, pivotCol, valueCol, summaryAgg) : null;
 
   return (
     <div className={PANEL}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-[var(--dpf-muted)]">Group by</span>
+        <span className="text-sm text-[var(--dpf-muted)]">
+          {summaryMode === "pivot" ? "Rows" : "Group by"}
+        </span>
         <select
           value={groupBy}
           onChange={(e) => setSummaryGroupBy(e.target.value)}
-          aria-label="Group by column"
+          aria-label={summaryMode === "pivot" ? "Pivot row column" : "Group by column"}
           className={CTRL}
         >
           {columns.map((c) => (
@@ -217,46 +244,115 @@ export function GridSummaryPanel({
             </option>
           ))}
         </select>
-        <span className="text-sm text-[var(--dpf-muted)]">summarize</span>
-        <select
-          value={summaryValue}
-          onChange={(e) => setSummaryValue(e.target.value)}
-          aria-label="Value column"
-          className={CTRL}
-        >
-          <option value="">count only</option>
-          {numCols.map((c) => (
-            <option key={c.columnId} value={c.columnId}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        {summaryMode === "pivot" && (
+          <>
+            <span className="text-sm text-[var(--dpf-muted)]">Columns</span>
+            <select
+              value={pivotCol}
+              onChange={(e) => setSummaryPivotCol(e.target.value)}
+              aria-label="Pivot column"
+              className={CTRL}
+            >
+              {columns.map((c) => (
+                <option key={c.columnId} value={c.columnId}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={summaryAgg}
+              onChange={(e) => setSummaryAgg(e.target.value as PivotAgg)}
+              aria-label="Pivot aggregate"
+              className={CTRL}
+            >
+              {PIVOT_AGGS.map((a) => (
+                <option key={a} value={a}>
+                  {PIVOT_AGG_LABELS[a]}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        {showValuePicker && (
+          <>
+            <span className="text-sm text-[var(--dpf-muted)]">
+              {summaryMode === "pivot" ? "of" : "summarize"}
+            </span>
+            <select
+              value={summaryValue}
+              onChange={(e) => setSummaryValue(e.target.value)}
+              aria-label="Value column"
+              className={CTRL}
+            >
+              <option value="">{summaryMode === "pivot" ? "—" : "count only"}</option>
+              {numCols.map((c) => (
+                <option key={c.columnId} value={c.columnId}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <div className="ml-auto inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)] text-sm">
-          <button
-            type="button"
-            onClick={() => setSummaryChart(false)}
-            className={
-              summaryChart
-                ? "px-2 py-1 text-[var(--dpf-muted)]"
-                : "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium text-[var(--dpf-text)]"
-            }
-          >
-            Table
-          </button>
-          <button
-            type="button"
-            onClick={() => setSummaryChart(true)}
-            className={
-              summaryChart
-                ? "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium text-[var(--dpf-text)]"
-                : "px-2 py-1 text-[var(--dpf-muted)]"
-            }
-          >
-            Chart
-          </button>
+          {MODES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setSummaryMode(m)}
+              className={
+                summaryMode === m
+                  ? "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium text-[var(--dpf-text)]"
+                  : "px-2 py-1 text-[var(--dpf-muted)]"
+              }
+            >
+              {MODE_LABELS[m]}
+            </button>
+          ))}
         </div>
       </div>
-      {summaryChart ? (
+      {summaryMode === "pivot" && p ? (
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[var(--dpf-muted)]">
+                <th className="px-2 py-1" />
+                {p.colKeys.map((ck) => (
+                  <th key={ck} className="px-2 py-1 text-right tabular-nums">
+                    {ck}
+                  </th>
+                ))}
+                <th className="px-2 py-1 text-right font-semibold">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.rowKeys.map((rk) => (
+                <tr key={rk} className="border-t border-[var(--dpf-border)]">
+                  <th className="px-2 py-1 text-left font-normal text-[var(--dpf-muted)]">{rk}</th>
+                  {p.colKeys.map((ck) => (
+                    <td key={ck} className="px-2 py-1 text-right tabular-nums text-[var(--dpf-text)]">
+                      {p.cells[rk]![ck]}
+                    </td>
+                  ))}
+                  <td className="px-2 py-1 text-right font-semibold tabular-nums text-[var(--dpf-text)]">
+                    {p.rowTotals[rk]}
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t border-[var(--dpf-border)] font-semibold">
+                <th className="px-2 py-1 text-left">Total</th>
+                {p.colKeys.map((ck) => (
+                  <td key={ck} className="px-2 py-1 text-right tabular-nums text-[var(--dpf-text)]">
+                    {p.colTotals[ck]}
+                  </td>
+                ))}
+                <td className="px-2 py-1 text-right tabular-nums text-[var(--dpf-text)]">
+                  {p.grandTotal}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : summaryMode === "chart" ? (
         <div className="flex flex-col gap-1">
           {summaryChartBars(summary, Boolean(valueCol)).map((bar) => (
             <div key={bar.group} className="flex items-center gap-2 text-sm">

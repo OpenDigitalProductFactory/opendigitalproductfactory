@@ -258,10 +258,17 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   `orderBy asc`, so no migration). The handle is shown only when a manual order is actually in effect —
   custom source, editable, **no active sort and no grouping** (a sort/group defines the order and
   overrides the manual one). Platform grids (large, DB-ordered) are intentionally out of scope.
+- **Slice 26 — pivot table — SHIPPED.** The Summary panel's Table/Chart toggle becomes Table/Chart/**Pivot**.
+  Pivot mode crosses a **Rows** column against a **Columns** column and aggregates a value (or count) into
+  a matrix with row / column / grand totals — the 2-D generalization of the group-by summary. Pure,
+  unit-tested `pivot()` in `grid-pivot.ts`: incremental `{count,sum,min,max,n}` accumulators per cell /
+  row / col / grand, so an `avg`/`min`/`max` **total is over the raw values, not an average-of-averages**.
+  Aggregates: count / sum / average / min / max (numeric aggregates need a value column). Over the loaded
+  rows (SQL push-down is later work). Reuses `toSummaryNumber`/`cellSearchText`; no contract change.
 - **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
   order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
   schema change — platform tables have no `WorkbookTable` row); calendar view (fullcalendar — needs a date
-  column); full pivots + richer charts; metrics/semantic layer; operationalization lifecycle.
+  column); richer charts (grouped/stacked/line); metrics/semantic layer; operationalization lifecycle.
   **Debt (decomposition — largely paid down):** all five toolbar panels — Filter, Summary, Format,
   Group, Columns — now live as typed, presentational components in `GridPanels.tsx` (pure UI over
   props the Grid owns). This dropped `Grid.tsx` from 1298 → 1094 LOC. Remaining `Grid.tsx` bulk is the
