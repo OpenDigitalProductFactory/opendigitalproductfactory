@@ -39,6 +39,27 @@ Each Build runtime instance is isolated from the Live portal at every layer:
 
 The Build runtime has no access to your `.env` file, secrets, API keys, or the Docker socket. It cannot start, stop, or modify the Live portal's containers. Schema changes and database migrations in the Build runtime do not touch the live database.
 
+## Build dispatch engines
+
+Inside the Build runtime, code generation is driven by a **dispatch engine** — the CLI agent that executes build tasks in the sandbox. You choose it under **Platform → AI → Build Studio → Build Dispatch Engine**. Every engine advances the same governed lifecycle and passes the same quality gates; they differ only in the model and vendor behind the code generation. An engine must be **installed in the Build runtime** and have valid credentials before it can run — the selector shows readiness per engine and warns if the selected one is missing.
+
+| Engine | Backing | Status | Notes |
+|--------|---------|--------|-------|
+| **Claude Code** | Anthropic models | Supported | Needs Anthropic credentials (External Services). |
+| **Codex** | OpenAI models | Supported | Needs OpenAI credentials. |
+| **Grok** | xAI models | Supported (preview) | Headless `grok -p`; needs xAI credentials. |
+| **Local model (OpenCode)** | Your own local LLM | Supported (preview) | Runs offline, no credential required. |
+| **Agentic Loop** | Built-in tool-calling loop | Legacy | Fallback path. |
+
+### Why Google Antigravity is not a dispatch engine (yet)
+
+[Google Antigravity](../../operations/antigravity-cli-onboarding.md) (`agy`) is fully supported as a **host contributor CLI** — you run it on your own machine or server to develop the platform, and it connects to DPF over MCP like Claude Code, Codex, and Grok. It is **not** available as an in-sandbox Build Studio dispatch engine today, for two reasons that are outside DPF's control:
+
+1. **Binary compatibility.** The Build runtime image is Alpine Linux (musl libc). Antigravity ships only glibc binaries and publishes no musl build, so `agy` cannot execute inside the sandbox.
+2. **Headless-container sign-in.** Antigravity's CLI cannot currently persist its Google sign-in across process restarts inside a headless container (a known upstream limitation) — which is exactly the pattern a dispatch engine needs, since Build Studio re-invokes the engine at each phase.
+
+The second issue reproduces even on a glibc base, so changing the Build runtime image would not resolve it on its own. **Recommendation:** use Antigravity as a host CLI (see the [onboarding runbook](../../operations/antigravity-cli-onboarding.md)); it will be reconsidered as a dispatch engine if and when Google ships a musl build and fixes headless-container authentication.
+
 ## AI Coworker Tools
 
 The AI Coworker has a complete set of development tools for working inside the Build runtime. These tools are purpose-built to be safe (Build-runtime-only) and on par with what a professional developer uses. The tool names retain the `sandbox` prefix because they are MCP-bound identifiers and a Phase 1 rename would break callers; the user-facing description has switched to "Build runtime":

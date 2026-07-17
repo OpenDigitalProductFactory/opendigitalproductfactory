@@ -2,6 +2,8 @@
 
 Onboards the Antigravity CLI as a DPF external coding surface (peer to Claude Code / Codex / Grok), per [EP-ANTIGRAVITY-001](../superpowers/specs/2026-07-17-antigravity-first-class-support-design.md). Kernel decision `DI-B91843F8C157`: **opt-in install + facilitate agy's native Google OAuth** (the platform does not broker Google auth).
 
+> **Scope:** Antigravity is supported as a **host contributor CLI** (this runbook). It is **not** a Build Studio in-sandbox dispatch engine — see [why](../user-guide/build-studio/sandbox.md#why-google-antigravity-is-not-a-dispatch-engine-yet).
+
 There are **two orthogonal credentials**. Keep them separate:
 
 | Credential | Who owns it | How it's obtained |
