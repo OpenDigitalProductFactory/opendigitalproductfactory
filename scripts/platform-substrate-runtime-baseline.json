@@ -1,0 +1,59 @@
+{
+  "commands": [
+    "docker compose ps --format json --all",
+    "docker stats --no-stream --format {{json .}}",
+    "GET /api/health",
+    "GET /api/platform/version"
+  ],
+  "generatedAt": "2026-07-17T05:01:22.851Z",
+  "gitSha": "98ed83b67820f893b84c8ec9555d7f535b13b301",
+  "hostProfile": "win32-x64",
+  "lease": {
+    "environmentKey": "local-integration-ci",
+    "id": "NPEL-E1D03C5F6E"
+  },
+  "manifestVersion": 1,
+  "metrics": {
+    "optionalDegradedServices": {
+      "direction": "informational",
+      "value": 0
+    },
+    "optionalInactiveServices": {
+      "direction": "informational",
+      "value": 5
+    },
+    "portalIdleRssBytes": {
+      "direction": "non-increasing",
+      "value": 814324122
+    },
+    "requiredRunningServices": {
+      "direction": "non-increasing",
+      "value": 13
+    },
+    "servedIdentity": {
+      "direction": "informational",
+      "value": {
+        "gitSha": "98ed83b67820f893b84c8ec9555d7f535b13b301",
+        "imageVersion": {
+          "raw": "98ed83b67820f893b84c8ec9555d7f535b13b301",
+          "source": "git-sha"
+        },
+        "version": "98ed83b67"
+      }
+    },
+    "totalIdleContainerRssBytes": {
+      "direction": "non-increasing",
+      "value": 7058359321
+    },
+    "unhealthyRequiredServices": {
+      "direction": "non-increasing",
+      "value": 0
+    }
+  },
+  "sampling": {
+    "maxVariancePercent": 5,
+    "samples": 2,
+    "selection": "higher-non-increasing-budget"
+  },
+  "version": 1
+}

@@ -7,6 +7,7 @@ import type { ContributorChangeLane } from "@/lib/contributor-change-lanes/types
 
 import { ChangeLaneSourceSummary } from "./ChangeLaneSourceSummary";
 import { ChangeLaneTable } from "./ChangeLaneTable";
+import { LocalRepositoryHealthCard } from "./LocalRepositoryHealthCard";
 
 const TABS = [
   { id: "all", label: "All work" },
@@ -70,6 +71,8 @@ export function ChangeLanesDashboard({
       </header>
 
       <ChangeLaneSourceSummary freshness={freshness} isAdmin={isAdmin} />
+
+      <LocalRepositoryHealthCard lanes={lanes} freshness={freshness} />
 
       <div
         className="flex flex-wrap gap-1 border-b text-xs"
