@@ -1029,7 +1029,8 @@ export async function executeTool(
         }
         let fixPhaseGateBlocker: string | null = null;
         try {
-          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, fixContext: fc, designReview: review });
+          const fixPlan = (build.plan as Record<string, unknown> | null);
+          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, deliverableSensitivity: fixPlan?.deliverableSensitivity, qualityFirst: fixPlan?.qualityFirst === true, fixContext: fc, designReview: review });
           if (gate.allowed) {
             const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
             void completeBuildPhaseRun(buildId, "ideate");
@@ -1425,9 +1426,12 @@ export async function executeTool(
             }
           }
 
+          const idpPlan = (updatedBuild.plan as Record<string, unknown> | null);
           const gate = checkPhaseGate("ideate", "plan", {
             kind: updatedBuild.kind,
-            processSize: ((updatedBuild.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium",
+            processSize: (idpPlan?.processSize as string | undefined) ?? "medium",
+            deliverableSensitivity: idpPlan?.deliverableSensitivity,
+            qualityFirst: idpPlan?.qualityFirst === true,
             designDoc: updatedBuild.designDoc,
             designReview: updatedBuild.designReview,
             happyPathState,
@@ -1703,6 +1707,8 @@ export async function executeTool(
             const fgGate = cgFail("plan", "build", {
               kind: fgBuild.kind,
               processSize: (fgPlan.processSize as string | undefined) ?? "medium",
+              deliverableSensitivity: fgPlan.deliverableSensitivity,
+              qualityFirst: fgPlan.qualityFirst === true,
               buildPlan: fgBuild.buildPlan,
               planReview: review, // the FAILED review — the gate decides if it matters
               happyPathState: nhpsFail(fgPlan.happyPathState),
@@ -1760,8 +1766,12 @@ export async function executeTool(
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
           const gate = checkPhaseGate("plan", "build", {
             kind: updatedBuild.kind,
-            // Right-sizing matrix: persisted on plan.processSize at promote time.
+            // Right-sizing matrix: persisted on the plan at promote time. The
+            // warrant supplies deliverableSensitivity/qualityFirst so rigor
+            // scales by altitude + blast-radius, not effort size alone.
             processSize: (plan.processSize as string | undefined) ?? "medium",
+            deliverableSensitivity: plan.deliverableSensitivity,
+            qualityFirst: plan.qualityFirst === true,
             buildPlan: updatedBuild.buildPlan,
             planReview: updatedBuild.planReview,
             happyPathState,

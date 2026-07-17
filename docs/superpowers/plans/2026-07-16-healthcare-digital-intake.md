@@ -91,6 +91,41 @@ and exception records that those generic surfaces do not own.
 - **2C — reviewed evidence API:** stage coverage documents and consent
   attestations, then accept/reject them only through explicit human authority.
 
+Phase 2A is delivered as two reviewable checkpoints: the access/read checkpoint
+owns grant issuance, patient-context RLS correction, and the minimum packet
+projection; the response checkpoint owns retry-safe partial saves, the atomic
+`assigned` to `in-progress` transition, and completeness-gated submit. A ready
+submit completes current responses and advances the packet with one optimistic,
+append-only status event. An incomplete submit returns blocker codes and never
+advances packet state.
+
+Receptionist access uses the existing intake records rather than a duplicate
+projection store. Employee routes require `view_customer` for review and
+`operate_customer` for revocation, then establish an organization-bound,
+actor-and-purpose-scoped `intake-review` database context. Additive RLS policies
+grant that context `SELECT` only; the sole staff mutation policy permits
+`UPDATE` on access grants for revocation. Repository projections explicitly
+exclude response answers and document/signature payloads, and each allowed
+review or revocation writes canonical `AuthorizationDecisionLog` evidence.
+This implements workforce role-based minimum-necessary access and audit-control
+expectations without weakening the patient bearer-token policies.
+
+Reviewed evidence remains deliberately subordinate to its canonical domains.
+Employee routes require `operate_customer` to stage or decide evidence, bind
+every transaction to the organization, authenticated principal, exact packet
+patient, and `intake-review` purpose, and write an `AuthorizationDecisionLog`
+for staging and each accept/reject decision. Idempotency keys derive stable
+server evidence IDs; retries must match the original object references and
+SHA-256 digests or fail as conflicts. Responses disclose evidence IDs and
+review status, never governed object references or signature payloads.
+Acceptance marks intake evidence ready for downstream BI-HEALTHCARE-030 or the
+existing `PatientConsentDirective`; it does not create canonical coverage or
+change the consent directive itself. Decision DI-49F59890F88A selected
+database payload-immutability triggers over repository-only convention or a
+new fully append-only decision schema (high confidence, margin 1.006). The
+triggers retain both evidence types, freeze identity/linkage/provenance/digest
+fields, and leave only the modeled human review fields mutable.
+
 Rollback for 2A is route and repository removal; it adds no schema migration.
 Existing Phase 1 tables remain forward-compatible and contain no raw resume
 tokens.

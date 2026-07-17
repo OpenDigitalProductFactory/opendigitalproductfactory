@@ -1,9 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
 import {
+  calculateIntakeReadiness,
   requirementsForPinnedForm,
+  validateMinimumNecessaryAnswers,
   type CareIntakeRequirement,
+  type CareIntakeSourceMode,
 } from "@dpf/db/healthcare-care-intake";
 
 import {
@@ -29,6 +32,7 @@ type PacketRow = {
   requirementSnapshot: unknown;
   requiredConsentCount: number;
   requiresCoverageEvidence: boolean;
+  allowedDataCategories: string[];
 };
 
 type GrantRow = {
@@ -39,6 +43,7 @@ type GrantRow = {
   permittedOperations: string[];
   expiresAt: Date;
   revokedAt: Date | null;
+  granteePrincipalId: string | null;
 };
 
 type DynamicFormRow = {
@@ -53,13 +58,39 @@ type DynamicFormRow = {
 
 type Transaction = {
   $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
-  careIntakePacket: { findFirst(args: unknown): Promise<PacketRow | null> };
+  careIntakePacket: {
+    findFirst(args: unknown): Promise<PacketRow | null>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
   careIntakeAccessGrant: {
     create(args: unknown): Promise<GrantRow>;
     findFirst(args: unknown): Promise<GrantRow | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
-  dynamicForm: { findMany(args: unknown): Promise<DynamicFormRow[]> };
+  dynamicForm: {
+    findMany(args: unknown): Promise<DynamicFormRow[]>;
+    findFirst(args: unknown): Promise<DynamicFormRow | null>;
+  };
+  careIntakeResponse: {
+    findFirst(args: unknown): Promise<{
+      id: string;
+      responseId: string;
+      version: number;
+      sourceVersion: string | null;
+      answeredLinkIds: string[];
+    } | null>;
+    findMany(args: unknown): Promise<Array<{ answeredLinkIds: string[] }>>;
+    create(args: unknown): Promise<{
+      responseId: string;
+      version: number;
+      answeredLinkIds: string[];
+    }>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
+  careIntakeException: { count(args: unknown): Promise<number> };
+  careConsentAttestation: { count(args: unknown): Promise<number> };
+  careCoverageEvidence: { count(args: unknown): Promise<number> };
+  careIntakeStatusEvent: { create(args: unknown): Promise<unknown> };
 };
 
 export type CareIntakeApiDatabase = {
@@ -107,6 +138,43 @@ function validateOperations(
     throw new Error("Invalid care intake grant operations");
   }
   return unique;
+}
+
+async function markPacketInProgressAfterFirstSave(
+  tx: Transaction,
+  packet: PacketRow,
+  input: { sourceMode: CareIntakeSourceMode; actorPrincipalId: string },
+) {
+  if (packet.status !== "assigned") return;
+  const version = packet.version + 1;
+  const updated = await tx.careIntakePacket.updateMany({
+    where: {
+      id: packet.id,
+      organizationId: packet.organizationId,
+      status: "assigned",
+      version: packet.version,
+    },
+    data: {
+      status: "in-progress",
+      version,
+      startedAt: new Date(),
+    },
+  });
+  if (updated.count !== 1) throw new Error("stale-intake-packet-version");
+  await tx.careIntakeStatusEvent.create({
+    data: {
+      eventId: `intake-event-${randomUUID()}`,
+      organizationId: packet.organizationId,
+      packetId: packet.id,
+      patientProfileId: packet.patientProfileId,
+      packetVersion: version,
+      fromStatus: "assigned",
+      toStatus: "in-progress",
+      reason: "first-response-saved",
+      sourceMode: input.sourceMode,
+      actorPrincipalId: input.actorPrincipalId,
+    },
+  });
 }
 
 export async function issueCareIntakeResumeGrant(
@@ -323,6 +391,303 @@ export async function getCareIntakePacketProjection(
           offlineCapable: form.offlineCapable,
         };
       }),
+    };
+  });
+}
+
+export async function saveCareIntakePartialResponse(
+  input: {
+    packetId: string;
+    formId: string;
+    token: string;
+    idempotencyKey: string;
+    expectedVersion: number | null;
+    sourceMode: CareIntakeSourceMode;
+    answers: Record<string, unknown>;
+    dataCategories: Record<string, string>;
+  },
+  database: CareIntakeApiDatabase = prisma as unknown as CareIntakeApiDatabase,
+) {
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(input.idempotencyKey)) {
+    throw new Error("Invalid intake idempotency key");
+  }
+  const claims = parseCareIntakeResumeToken(input.token);
+  const digest = digestCareIntakeResumeToken(input.token);
+  return database.$transaction(async (tx) => {
+    await setPatientContext(tx, claims);
+    const packet = await tx.careIntakePacket.findFirst({
+      where: {
+        packetId: input.packetId,
+        organizationId: claims.organizationId,
+        patientProfileId: claims.patientProfileId,
+      },
+    });
+    if (!packet || !["assigned", "in-progress", "amended"].includes(packet.status)) {
+      throw new Error("Care intake access denied");
+    }
+    const grant = await tx.careIntakeAccessGrant.findFirst({
+      where: {
+        grantId: claims.grantId,
+        organizationId: claims.organizationId,
+        patientProfileId: claims.patientProfileId,
+      },
+    });
+    if (!grant || !grant.granteePrincipalId) throw new Error("Care intake access denied");
+    assertCareIntakeGrant(grant, {
+      digest,
+      grantId: claims.grantId,
+      packetRowId: packet.id,
+      patientProfileId: claims.patientProfileId,
+      operation: "save",
+      at: new Date(),
+    });
+    const form = await tx.dynamicForm.findFirst({ where: { formId: input.formId } });
+    if (!form) throw new Error("Dynamic form is not assigned to this intake packet");
+    const assigned = requirementsForPinnedForm(
+      packetRequirements(packet.requirementSnapshot),
+      { dynamicFormId: form.id, dynamicFormVersion: form.version },
+    );
+    const answerDescriptors = Object.keys(input.answers).map((linkId) => ({
+      linkId,
+      dataCategory: input.dataCategories[linkId] ?? "",
+    }));
+    const minimumNecessary = validateMinimumNecessaryAnswers({
+      requirements: assigned,
+      allowedDataCategories: packet.allowedDataCategories,
+      answers: answerDescriptors,
+    });
+    if (!minimumNecessary.ok) throw new Error(minimumNecessary.errors.join(","));
+
+    const existing = await tx.careIntakeResponse.findFirst({
+      where: {
+        organizationId: claims.organizationId,
+        packetId: packet.id,
+        dynamicFormId: form.id,
+        status: { not: "entered-in-error" },
+      },
+      orderBy: { version: "desc" },
+    });
+    if (existing?.sourceVersion === input.idempotencyKey) {
+      await markPacketInProgressAfterFirstSave(tx, packet, {
+        sourceMode: input.sourceMode,
+        actorPrincipalId: grant.granteePrincipalId,
+      });
+      await tx.careIntakeAccessGrant.updateMany({
+        where: { grantId: claims.grantId, tokenDigest: digest },
+        data: { lastUsedAt: new Date() },
+      });
+      return {
+        responseId: existing.responseId,
+        status: "in-progress" as const,
+        version: existing.version,
+        answeredLinkIds: existing.answeredLinkIds,
+      };
+    }
+    const answeredLinkIds = Object.keys(input.answers).sort();
+    const formSnapshot = { formId: form.formId, title: form.title, version: form.version, fields: form.fields };
+    const formDigest = createHash("sha256")
+      .update(JSON.stringify(formSnapshot))
+      .digest("hex");
+
+    if (existing) {
+      if (input.expectedVersion !== existing.version) {
+        throw new Error("stale-intake-response-version");
+      }
+      const version = existing.version + 1;
+      const updated = await tx.careIntakeResponse.updateMany({
+        where: { id: existing.id, version: existing.version },
+        data: {
+          version,
+          answers: input.answers,
+          answeredLinkIds,
+          dataCategories: [...new Set(answerDescriptors.map((item) => item.dataCategory))],
+          sourceMode: input.sourceMode,
+          sourcePrincipalId: grant.granteePrincipalId,
+          recordedByPrincipalId: grant.granteePrincipalId,
+          sourceVersion: input.idempotencyKey,
+          authoredAt: new Date(),
+        },
+      });
+      if (updated.count !== 1) throw new Error("stale-intake-response-version");
+      await markPacketInProgressAfterFirstSave(tx, packet, {
+        sourceMode: input.sourceMode,
+        actorPrincipalId: grant.granteePrincipalId,
+      });
+      await tx.careIntakeAccessGrant.updateMany({
+        where: { grantId: claims.grantId, tokenDigest: digest },
+        data: { lastUsedAt: new Date() },
+      });
+      return { responseId: existing.responseId, status: "in-progress" as const, version, answeredLinkIds };
+    }
+    if (input.expectedVersion !== null) throw new Error("stale-intake-response-version");
+    const response = await tx.careIntakeResponse.create({
+      data: {
+        responseId: `intake-response-${randomUUID()}`,
+        organizationId: claims.organizationId,
+        packetId: packet.id,
+        patientProfileId: claims.patientProfileId,
+        dynamicFormId: form.id,
+        dynamicFormVersion: form.version,
+        formSnapshot,
+        formDigest,
+        answers: input.answers,
+        answeredLinkIds,
+        dataCategories: [...new Set(answerDescriptors.map((item) => item.dataCategory))],
+        sourceMode: input.sourceMode,
+        sourcePrincipalId: grant.granteePrincipalId,
+        recordedByPrincipalId: grant.granteePrincipalId,
+        sourceSystem: "care-intake-api",
+        sourceId: `${packet.id}:${form.id}`,
+        sourceVersion: input.idempotencyKey,
+      },
+    });
+    await markPacketInProgressAfterFirstSave(tx, packet, {
+      sourceMode: input.sourceMode,
+      actorPrincipalId: grant.granteePrincipalId,
+    });
+    await tx.careIntakeAccessGrant.updateMany({
+      where: { grantId: claims.grantId, tokenDigest: digest },
+      data: { lastUsedAt: new Date() },
+    });
+    return {
+      responseId: response.responseId,
+      status: "in-progress" as const,
+      version: response.version,
+      answeredLinkIds: response.answeredLinkIds,
+    };
+  });
+}
+
+export async function submitCareIntakePacket(
+  input: {
+    packetId: string;
+    token: string;
+    expectedVersion: number;
+    sourceMode: CareIntakeSourceMode;
+  },
+  database: CareIntakeApiDatabase = prisma as unknown as CareIntakeApiDatabase,
+) {
+  if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
+    throw new Error("Invalid intake packet version");
+  }
+  const claims = parseCareIntakeResumeToken(input.token);
+  const digest = digestCareIntakeResumeToken(input.token);
+  return database.$transaction(async (tx) => {
+    await setPatientContext(tx, claims);
+    const packet = await tx.careIntakePacket.findFirst({
+      where: {
+        packetId: input.packetId,
+        organizationId: claims.organizationId,
+        patientProfileId: claims.patientProfileId,
+      },
+    });
+    if (!packet || packet.status !== "in-progress") {
+      throw new Error("Care intake access denied");
+    }
+    const grant = await tx.careIntakeAccessGrant.findFirst({
+      where: {
+        grantId: claims.grantId,
+        organizationId: claims.organizationId,
+        patientProfileId: claims.patientProfileId,
+      },
+    });
+    if (!grant || !grant.granteePrincipalId) throw new Error("Care intake access denied");
+    assertCareIntakeGrant(grant, {
+      digest,
+      grantId: claims.grantId,
+      packetRowId: packet.id,
+      patientProfileId: claims.patientProfileId,
+      operation: "submit",
+      at: new Date(),
+    });
+
+    const [responses, unresolvedExceptionCount, acceptedConsentCount, acceptedCoverageEvidenceCount] =
+      await Promise.all([
+        tx.careIntakeResponse.findMany({
+          where: {
+            packetId: packet.id,
+            organizationId: claims.organizationId,
+            status: { not: "entered-in-error" },
+          },
+          select: { answeredLinkIds: true },
+        }),
+        tx.careIntakeException.count({
+          where: {
+            packetId: packet.id,
+            organizationId: claims.organizationId,
+            status: { in: ["open", "in-progress"] },
+          },
+        }),
+        tx.careConsentAttestation.count({
+          where: { packetId: packet.id, organizationId: claims.organizationId, status: "accepted" },
+        }),
+        tx.careCoverageEvidence.count({
+          where: { packetId: packet.id, organizationId: claims.organizationId, status: "accepted" },
+        }),
+      ]);
+    const readiness = calculateIntakeReadiness({
+      requirements: packetRequirements(packet.requirementSnapshot),
+      answeredLinkIds: [...new Set(responses.flatMap((row) => row.answeredLinkIds))],
+      unresolvedExceptionCount,
+      requiredConsentCount: packet.requiredConsentCount,
+      acceptedConsentCount,
+      requiredCoverageEvidence: packet.requiresCoverageEvidence,
+      acceptedCoverageEvidenceCount,
+    });
+    await tx.careIntakeAccessGrant.updateMany({
+      where: { grantId: claims.grantId, tokenDigest: digest },
+      data: { lastUsedAt: new Date() },
+    });
+    if (!readiness.ready) {
+      return {
+        ok: false as const,
+        blockers: readiness.blockers,
+        missingRequiredLinkIds: readiness.missingRequiredLinkIds,
+        completionPercent: readiness.completionPercent,
+      };
+    }
+
+    const completedAt = new Date();
+    const version = packet.version + 1;
+    const updated = await tx.careIntakePacket.updateMany({
+      where: {
+        id: packet.id,
+        organizationId: claims.organizationId,
+        status: "in-progress",
+        version: input.expectedVersion,
+      },
+      data: {
+        status: "completed",
+        version,
+        completionPercent: readiness.completionPercent,
+        completedAt,
+      },
+    });
+    if (updated.count !== 1) throw new Error("stale-intake-packet-version");
+    await tx.careIntakeResponse.updateMany({
+      where: { packetId: packet.id, organizationId: claims.organizationId, status: "in-progress" },
+      data: { status: "completed", completedAt },
+    });
+    await tx.careIntakeStatusEvent.create({
+      data: {
+        eventId: `intake-event-${randomUUID()}`,
+        organizationId: claims.organizationId,
+        packetId: packet.id,
+        patientProfileId: claims.patientProfileId,
+        packetVersion: version,
+        fromStatus: "in-progress",
+        toStatus: "completed",
+        reason: "patient-submitted",
+        sourceMode: input.sourceMode,
+        actorPrincipalId: grant.granteePrincipalId,
+      },
+    });
+    return {
+      ok: true as const,
+      packetId: packet.packetId,
+      status: "completed" as const,
+      version,
+      completionPercent: readiness.completionPercent,
     };
   });
 }

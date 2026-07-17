@@ -46,6 +46,10 @@ export type NormalizedInventoryEntity = {
   candidateTaxonomy?: RankedTaxonomyCandidate[];
   providerView: string;
   confidence?: number;
+  // Enrichment linkage (BI-27EE2AF7) — the canonical identity a rule resolved to.
+  catalogIdentityId?: string | null;
+  identityStatus?: string | null;
+  identityConfidence?: number | null;
   properties: Record<string, unknown>;
 };
 
@@ -162,7 +166,11 @@ function fingerprintAttribution(
       identityConfidence: match.identityConfidence,
       taxonomyConfidence: match.taxonomyConfidence,
       resolvedIdentity: match.resolvedIdentity,
+      catalogIdentityId: match.catalogIdentityId,
     },
+    catalogIdentityId: match.catalogIdentityId,
+    identityStatus: match.catalogIdentityId ? "rule_resolved" : null,
+    identityConfidence: match.identityConfidence,
   };
 }
 
@@ -174,6 +182,11 @@ type DerivedAttribution = {
   taxonomyNodeId: string | null;
   candidateTaxonomy: RankedTaxonomyCandidate[];
   evidence: Record<string, unknown>;
+  // Enrichment linkage to the canonical identity spine (BI-27EE2AF7). Set only
+  // on a deterministic fingerprint-rule match that resolves to a CatalogIdentity.
+  catalogIdentityId?: string | null;
+  identityStatus?: string | null;
+  identityConfidence?: number | null;
 };
 
 function mapEntityType(itemType: string): string {
@@ -287,6 +300,9 @@ function normalizeItem(
     attributionConfidence: attributed.confidence,
     attributionEvidence: attributed.evidence,
     candidateTaxonomy: attributed.candidateTaxonomy,
+    catalogIdentityId: attributed.catalogIdentityId ?? null,
+    identityStatus: attributed.identityStatus ?? null,
+    identityConfidence: attributed.identityConfidence ?? null,
     providerView: attributed.portfolioSlug ?? "foundational",
     properties: {
       ...(item.attributes ?? {}),

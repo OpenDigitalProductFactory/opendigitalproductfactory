@@ -12,10 +12,20 @@
  */
 
 export type Disposition = "private" | "shareable";
+export type ContributionRecommendation = "keep_local" | "share" | "generalize_first";
+export type ContributionSignalScore = "high" | "medium" | "low" | "unknown";
 
 export interface SuggestionInputs {
   /** designDoc.reusabilityAnalysis.scope, if known. */
   reusabilityScope?: "one_off" | "parameterizable" | "already_generic" | null;
+  /** designDoc.reusabilityAnalysis.contributionReadiness, if known. */
+  contributionReadiness?: "high" | "medium" | "low" | null;
+  /** How well this change advances the DPF project itself. */
+  projectViability?: ContributionSignalScore | null;
+  /** How broadly this appears useful across target archetypes / market verticals. */
+  archetypeMarketFit?: ContributionSignalScore | null;
+  /** Confidence in the viability analysis; unknown keeps the recommendation fail-closed. */
+  confidence?: ContributionSignalScore | null;
   /** Count of org-specific / proprietary hits from the sanitization scan. */
   orgSpecificHits?: number;
   /** Whether the post-strip outbound diff is empty (everything was private-path). */
@@ -24,7 +34,21 @@ export interface SuggestionInputs {
 
 export interface DispositionSuggestion {
   suggested: Disposition;
+  recommendation: ContributionRecommendation;
   reason: string;
+  evidence: string[];
+}
+
+function scoreAtLeast(score: ContributionSignalScore | null | undefined, floor: "medium" | "high"): boolean {
+  if (floor === "high") return score === "high";
+  return score === "high" || score === "medium";
+}
+
+function hasExplicitViabilityAnalysis(inputs: SuggestionInputs): boolean {
+  return !!inputs.projectViability && !!inputs.archetypeMarketFit && !!inputs.confidence
+    && inputs.projectViability !== "unknown"
+    && inputs.archetypeMarketFit !== "unknown"
+    && inputs.confidence !== "unknown";
 }
 
 /**
@@ -33,42 +57,105 @@ export interface DispositionSuggestion {
  * still confirms — this only pre-fills the recommendation.
  */
 export function suggestDisposition(inputs: SuggestionInputs): DispositionSuggestion {
-  const { reusabilityScope, orgSpecificHits = 0, outboundEmpty = false } = inputs;
+  const {
+    reusabilityScope,
+    contributionReadiness = null,
+    projectViability,
+    archetypeMarketFit,
+    confidence,
+    orgSpecificHits = 0,
+    outboundEmpty = false,
+  } = inputs;
 
   if (outboundEmpty) {
     return {
       suggested: "private",
+      recommendation: "keep_local",
       reason: "This change only affects parts of your system marked private — nothing to share.",
+      evidence: ["Outbound public diff is empty after private-path stripping."],
     };
   }
   if (orgSpecificHits > 0) {
     return {
       suggested: "private",
+      recommendation: "keep_local",
       reason: `Contains ${orgSpecificHits} piece(s) of business-specific content (names, pricing, or data) — suggest keeping it on your system.`,
+      evidence: [`Sanitization found ${orgSpecificHits} must-fix business-specific item(s).`],
     };
   }
+
+  const evidence = [
+    `Project viability: ${projectViability ?? "unknown"}.`,
+    `Archetype/market fit: ${archetypeMarketFit ?? "unknown"}.`,
+    `Reuse scope: ${reusabilityScope ?? "unknown"}.`,
+    `Contribution readiness: ${contributionReadiness ?? "unknown"}.`,
+  ];
+
+  if (!hasExplicitViabilityAnalysis(inputs)) {
+    return {
+      suggested: "private",
+      recommendation: "keep_local",
+      reason: "No contribution viability assessment was captured yet — keep this change on your system until the coworker can assess project fit and archetype/market usefulness.",
+      evidence,
+    };
+  }
+
   if (reusabilityScope === "one_off") {
     return {
       suggested: "private",
+      recommendation: "keep_local",
       reason: "Looks specific to your business — suggest keeping it on your system.",
+      evidence,
     };
   }
+
+  const viableForProject = scoreAtLeast(projectViability, "medium");
+  const usefulInMarket = scoreAtLeast(archetypeMarketFit, "medium");
+  const confidentEnough = scoreAtLeast(confidence, "medium");
+  const strongValue = scoreAtLeast(projectViability, "high") && scoreAtLeast(archetypeMarketFit, "high");
+
+  if (!viableForProject || !usefulInMarket || !confidentEnough) {
+    return {
+      suggested: "private",
+      recommendation: "keep_local",
+      reason: "The coworker does not yet see enough project, archetype, and market evidence to recommend sharing — keep this change on your system.",
+      evidence,
+    };
+  }
+
+  if (reusabilityScope === "parameterizable" && contributionReadiness !== "high") {
+    return {
+      suggested: "private",
+      recommendation: "generalize_first",
+      reason: strongValue
+        ? "This could help the community across relevant archetypes and markets, but it should be generalized before sharing."
+        : "This may help others, but it should be generalized before sharing.",
+      evidence,
+    };
+  }
+
   if (reusabilityScope === "already_generic") {
     return {
       suggested: "shareable",
-      reason: "Looks broadly reusable and carries no business-specific content — a good candidate to share.",
+      recommendation: "share",
+      reason: "Looks broadly reusable, viable for the DPF project, and useful across relevant archetypes/markets — a good candidate to share.",
+      evidence,
     };
   }
   if (reusabilityScope === "parameterizable") {
     return {
       suggested: "shareable",
-      reason: "Could benefit others once generalized, and carries no business-specific content — consider sharing.",
+      recommendation: "share",
+      reason: "Looks parameterized enough to benefit others across relevant archetypes/markets, and carries no business-specific content — consider sharing.",
+      evidence,
     };
   }
   // Unknown reusability + clean: lean conservative (private) — fail-closed.
   return {
     suggested: "private",
+    recommendation: "keep_local",
     reason: "Not clearly reusable — suggest keeping it on your system unless you intend to share it.",
+    evidence,
   };
 }
 

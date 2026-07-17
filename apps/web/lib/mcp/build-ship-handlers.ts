@@ -20,7 +20,16 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
-    select: { sandboxId: true, buildBranch: true, phase: true, createdById: true, designDoc: true },
+    select: {
+      title: true,
+      sandboxId: true,
+      buildBranch: true,
+      phase: true,
+      createdById: true,
+      portfolioId: true,
+      brief: true,
+      designDoc: true,
+    },
   });
   if (!build || build.createdById !== userId) {
     return { success: false, error: "Build not found.", message: `No active build ${buildId} was found for this user.` };
@@ -151,9 +160,18 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
     ).kept.trim();
     let reusabilityScope: "one_off" | "parameterizable" | "already_generic" | null = null;
     const dd = build.designDoc as Record<string, unknown> | null;
-    const scope = (dd?.reusabilityAnalysis as { scope?: string } | undefined)?.scope;
+    const reusability = dd?.reusabilityAnalysis as { scope?: string; contributionReadiness?: string } | undefined;
+    const scope = reusability?.scope;
     if (scope === "one_off" || scope === "parameterizable" || scope === "already_generic") {
       reusabilityScope = scope;
+    }
+    let contributionReadiness: "high" | "medium" | "low" | null = null;
+    if (
+      reusability?.contributionReadiness === "high"
+      || reusability?.contributionReadiness === "medium"
+      || reusability?.contributionReadiness === "low"
+    ) {
+      contributionReadiness = reusability.contributionReadiness;
     }
     let orgSpecificHits = 0;
     try {
@@ -161,7 +179,30 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
       const san = await runSanitizationScan(extracted.fullDiff);
       orgSpecificHits = san.mustFixCount;
     } catch { /* sanitization optional */ }
-    const suggestion = suggestDisposition({ reusabilityScope, orgSpecificHits, outboundEmpty });
+    let archetypeMarketFit: "high" | "medium" | "low" | "unknown" = "unknown";
+    try {
+      const { tagBusinessVerticals } = await import("@/lib/integrate/contribution-review");
+      const verticals = await tagBusinessVerticals(build.brief as Record<string, unknown> | null, extracted.fullDiff);
+      const primary = verticals.applicableVerticals.filter((vertical) => vertical.relevance === "primary").length;
+      const applicable = verticals.applicableVerticals.filter((vertical) => vertical.relevance === "applicable").length;
+      archetypeMarketFit = primary > 0 ? "high" : applicable > 0 ? "medium" : "low";
+    } catch { /* vertical tagging optional */ }
+    const titleAndBrief = `${build.title ?? ""} ${JSON.stringify(build.brief ?? {})}`;
+    const projectViability = build.portfolioId
+      ? /product|portfolio|lifecycle|taxonomy|backlog|compliance|operations|build studio|coworker|archetype|market/i.test(titleAndBrief)
+        ? "high"
+        : "medium"
+      : "low";
+    const confidence = dd?.reusabilityAnalysis && archetypeMarketFit !== "unknown" ? "high" : "medium";
+    const suggestion = suggestDisposition({
+      reusabilityScope,
+      contributionReadiness,
+      projectViability,
+      archetypeMarketFit,
+      confidence,
+      orgSpecificHits,
+      outboundEmpty,
+    });
     await prisma.featureBuild.update({
       where: { buildId },
       data: {
@@ -622,4 +663,3 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     },
   };
 }
-
