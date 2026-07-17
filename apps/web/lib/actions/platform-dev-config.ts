@@ -4,10 +4,24 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { getPlatformDevPolicyState, type PlatformDevPolicyState } from "@/lib/platform-dev-policy";
+import {
+  detectAuthMethod,
+  isMissingGitReferenceError,
+  parseExpiryHeader,
+  parseScopesHeader,
+  scopeSatisfies,
+  shellQuote,
+  type ValidateTokenInput,
+  type ValidateTokenResult,
+} from "@/lib/platform-config/platform-dev-config-core";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { lazyChildProcess, lazyFs, lazyPath, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
+
+// Re-export the validation shapes from their new domain-core home so existing
+// public importers of these types keep resolving them from this action module.
+export type { ValidateTokenInput, ValidateTokenResult };
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 
@@ -323,67 +337,8 @@ export async function getGitHubConnectedState(): Promise<{
 // -mode plan (Task 5.2), which can land before or after this change. They are
 // accepted here so callers that already pass them don't break the compile.
 
-export interface ValidateTokenInput {
-  token: string;
-  requiredScope?: "public_repo" | "repo" | "contents:write";
-  expectedOwner?: string;
-  requireNonExpired?: boolean;
-  authMethod?: "oauth-device" | "fine-grained-pat" | "classic-pat" | "auto";
-  model?: "maintainer-direct" | "fork-pr";
-  machineUser?: boolean;
-}
-
-export interface ValidateTokenResult {
-  valid: boolean;
-  username?: string;
-  scope?: string;
-  expiresAt?: Date | null;
-  authMethod?: "oauth-device" | "fine-grained-pat" | "classic-pat";
-  error?: string;
-}
-
 /** Hard-coded fallback when PlatformDevConfig doesn't carry an upstream URL. */
 const UPSTREAM_OWNER_REPO_FALLBACK = "OpenDigitalProductFactory/opendigitalproductfactory";
-
-function detectAuthMethod(
-  token: string,
-): "oauth-device" | "fine-grained-pat" | "classic-pat" | null {
-  if (token.startsWith("gho_")) return "oauth-device";
-  if (token.startsWith("github_pat_")) return "fine-grained-pat";
-  if (token.startsWith("ghp_")) return "classic-pat";
-  return null; // ghs_ (app install), ghr_ (refresh), or malformed
-}
-
-function parseScopesHeader(headerValue: string | null): Set<string> {
-  if (!headerValue) return new Set();
-  return new Set(
-    headerValue
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
-}
-
-/**
- * Does the token carry enough scope for the caller's requirement?
- *
- * GitHub's classic-PAT scopes form a small hierarchy: `repo` is a superset of
- * `public_repo`, and (at the repo level) also grants write on file contents
- * which is what `contents:write` represents for fine-grained PATs. We treat
- * `repo` as satisfying any of our three required values.
- */
-function scopeSatisfies(granted: Set<string>, required: ValidateTokenInput["requiredScope"]): boolean {
-  if (!required) return true;
-  if (granted.has("repo")) return true;
-  return granted.has(required);
-}
-
-function parseExpiryHeader(headerValue: string | null): Date | null {
-  if (!headerValue) return null;
-  const parsed = new Date(headerValue);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-}
 
 /**
  * Validate a GitHub token by making a test API call.
@@ -790,10 +745,6 @@ const MERGE_EOL_TOLERANT_OPTS = "-X ignore-cr-at-eol";
 const GIT_ATTRIBUTES_FILE = ".gitattributes";
 const GIT_ATTRIBUTES_POLICY = "* text=auto eol=lf\n";
 
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
 async function ensureWorkspaceSafeDirectory(
   execUpdate: ExecUpdate,
   gitOpts: ExecUpdateOptions,
@@ -889,30 +840,6 @@ async function gitBranchExists(
   } catch {
     return false;
   }
-}
-
-function gitErrorText(err: unknown): string {
-  if (!err || typeof err !== "object") {
-    return getErrorMessage(err);
-  }
-  const record = err as { message?: unknown; stderr?: unknown; stdout?: unknown };
-  return [record.message, record.stderr, record.stdout]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .join("\n");
-}
-
-function isMissingGitReferenceError(err: unknown, ref: string): boolean {
-  const text = gitErrorText(err).toLowerCase();
-  const normalizedRef = ref.toLowerCase();
-  return (
-    text.includes(normalizedRef) &&
-    (text.includes("pathspec") ||
-      text.includes("did not match") ||
-      text.includes("not a commit") ||
-      text.includes("unknown revision") ||
-      text.includes("invalid reference") ||
-      text.includes("could not resolve"))
-  );
 }
 
 async function ensureManagedUpdateBranches(
