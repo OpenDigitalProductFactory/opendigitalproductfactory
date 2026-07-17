@@ -70,13 +70,15 @@ describe("connector lifecycle", () => {
       exchange: async () => { networkFinished = true; return { token: "new" }; },
       persist: async (draft, session) => { expect(networkFinished).toBe(true); draft.token = session.token; },
       audit: async () => undefined,
-      onFailure: async () => undefined,
+      persistFailure: async () => undefined,
+      auditFailure: async () => undefined,
     });
     expect(db.state.token).toBe("new");
   });
 
   it("records an initial connect error and a successful recovery clears it", async () => {
-    type RecoveryDraft = { token?: string; checkpoint?: string; error?: string; audited?: boolean };
+    type RecoveryDraft = { token?: string; checkpoint?: string; error?: string };
+    const failureAudits: string[] = [];
     const db = persistence() as ReturnType<typeof persistence> & { state: RecoveryDraft };
     const lifecycle = createConnectorLifecycle<RecoveryDraft>({
       persistence: db as unknown as LifecyclePersistence<RecoveryDraft>,
@@ -85,14 +87,17 @@ describe("connector lifecycle", () => {
       exchange: async () => { throw new ConnectorError("authentication", "rejected"); },
       persist: async () => undefined,
       audit: async () => undefined,
-      onFailure: async (draft, error) => { draft.error = (error as Error).message; draft.audited = true; },
+      persistFailure: async (draft, error) => { draft.error = (error as Error).message; },
+      auditFailure: async (_draft, error) => { failureAudits.push((error as Error).message); },
     })).rejects.toThrow("rejected");
-    expect(db.state).toMatchObject({ error: "rejected", audited: true });
+    expect(db.state).toMatchObject({ error: "rejected" });
+    expect(failureAudits).toEqual(["rejected"]);
     await lifecycle.connect({
       exchange: async () => ({ token: "working" }),
-      persist: async (draft, result) => { draft.token = result.token; delete draft.error; delete draft.audited; },
+      persist: async (draft, result) => { draft.token = result.token; delete draft.error; },
       audit: async () => undefined,
-      onFailure: async () => undefined,
+      persistFailure: async () => undefined,
+      auditFailure: async () => undefined,
     });
     expect(db.state).toEqual({ token: "working" });
   });
@@ -115,8 +120,8 @@ describe("connector lifecycle", () => {
       exchange: async () => { throw new ConnectorError("authentication", "rejected"); },
       persist: async () => undefined,
       audit: async () => undefined,
-      onFailure: async (draft) => {
-        draft.credentials.mark("error");
+      persistFailure: async (draft) => { draft.credentials.mark("error"); },
+      auditFailure: async (draft) => {
         await recordConnectorAuditInTransaction(draft.transaction.integrationToolCallLog, {
           connectorId: "fixture", actor: { coworkerId: "worker", userId: null }, operation: "connect",
           redactedInput: {}, responseKind: "authentication", durationMs: 1,
@@ -126,13 +131,47 @@ describe("connector lifecycle", () => {
     expect(committed).toEqual([]);
   });
 
+  it("commits failed-connect error state with its actual durable audit row", async () => {
+    const committed: unknown[] = [];
+    const persistence = composeConnectorLifecyclePersistence({
+      async composeInTransaction<T>(callback: (context: { credentials: { mark(value: string): void }; transaction: { integrationToolCallLog: { create(args: unknown): Promise<void> } } }) => Promise<T>) {
+        const staged: unknown[] = [];
+        const result = await callback({
+          credentials: { mark: (value) => staged.push(value) },
+          transaction: { integrationToolCallLog: { create: async (args) => { staged.push(args); } } },
+        });
+        committed.push(...staged);
+        return result;
+      },
+    });
+    const lifecycle = createConnectorLifecycle({ persistence });
+    await expect(lifecycle.connect({
+      exchange: async () => { throw new ConnectorError("authentication", "rejected"); },
+      persist: async () => undefined,
+      audit: async () => undefined,
+      persistFailure: async (draft) => { draft.credentials.mark("error"); },
+      auditFailure: async (draft) => {
+        await recordConnectorAuditInTransaction(draft.transaction.integrationToolCallLog, {
+          connectorId: "fixture", actor: { coworkerId: "worker", userId: null }, operation: "connect",
+          redactedInput: {}, responseKind: "authentication", durationMs: 1,
+          error: { kind: "authentication", safeMessage: "Connector authentication failed." },
+        }, () => new Date(0));
+      },
+    })).rejects.toThrow("rejected");
+    expect(committed[0]).toBe("error");
+    expect(committed[1]).toMatchObject({ data: {
+      integration: "fixture", toolName: "connect", responseKind: "authentication",
+      errorCode: "authentication", errorMessage: "Connector authentication failed.",
+    } });
+  });
+
   it.each(["connect", "disconnect", "refresh"] as const)("rolls back %s when audit fails", async (operation) => {
     const db = persistence();
     db.state = { token: "valid" };
     const lifecycle = createConnectorLifecycle<typeof db.state, { token: string }>({ persistence: db });
     const audit = async () => { throw new Error("audit unavailable"); };
     await expect(operation === "connect"
-      ? lifecycle.connect({ exchange: async () => ({ token: "replacement" }), persist: async (d, s) => { d.token = s.token; }, audit, onFailure: async () => undefined })
+      ? lifecycle.connect({ exchange: async () => ({ token: "replacement" }), persist: async (d, s) => { d.token = s.token; }, audit, persistFailure: async () => undefined, auditFailure: async () => undefined })
       : operation === "disconnect"
         ? lifecycle.disconnect({ persist: async (d) => { delete d.token; }, audit })
         : lifecycle.refresh({ connectorId: "one", refresh: async () => ({ token: "rotated" }), persist: async (d, s) => { d.token = s.token; }, audit }))
@@ -161,7 +200,7 @@ describe("connector lifecycle", () => {
       });
     };
     const lifecycle = createConnectorLifecycle({ persistence });
-    if (operation === "connect") await lifecycle.connect({ exchange: async () => "connect", persist: async (d) => d.credentials.mark("connect"), audit, onFailure: async () => undefined });
+    if (operation === "connect") await lifecycle.connect({ exchange: async () => "connect", persist: async (d) => d.credentials.mark("connect"), audit, persistFailure: async () => undefined, auditFailure: async () => undefined });
     if (operation === "disconnect") await lifecycle.disconnect({ persist: async (d) => d.credentials.mark("disconnect"), audit });
     if (operation === "refresh") await lifecycle.refresh({ connectorId: "credential-row-id", refresh: async () => "refresh", persist: async (d) => d.credentials.mark("refresh"), audit });
     if (operation === "sync") await runConnectorSync({ request: { idempotencyKey: "sync-id" }, persistence, retry: { maxAttempts: 1, initialDelayMs: 0, maxDelayMs: 0 }, sync: async () => ({ resultCount: 1, checkpoint: "sync" }), persist: async (d) => d.credentials.mark("sync"), audit });
@@ -190,7 +229,7 @@ describe("connector lifecycle", () => {
     };
     const lifecycle = createConnectorLifecycle({ persistence });
     const execution = operation === "connect"
-      ? lifecycle.connect({ exchange: async () => "connect", persist: async (d) => d.credentials.mark("connect"), audit, onFailure: async () => undefined })
+      ? lifecycle.connect({ exchange: async () => "connect", persist: async (d) => d.credentials.mark("connect"), audit, persistFailure: async () => undefined, auditFailure: async () => undefined })
       : operation === "disconnect"
         ? lifecycle.disconnect({ persist: async (d) => d.credentials.mark("disconnect"), audit })
         : operation === "refresh"
@@ -221,6 +260,10 @@ describe("connector lifecycle", () => {
   it("re-exchanges expired client credentials without sharing refresh state", async () => {
     const db = persistence();
     const lifecycle = createConnectorLifecycle({ persistence: db });
+    if (false) {
+      // @ts-expect-error Failed connects must structurally provide both state persistence and audit.
+      void lifecycle.connect({ exchange: async () => ({ token: "x" }), persist: async () => undefined, audit: async () => undefined, persistFailure: async () => undefined });
+    }
     const exchange = vi.fn(async () => ({ token: "fresh" }));
     await lifecycle.ensureClientCredential({ expired: true, exchange, persist: async (d, s) => { d.token = s.token; }, audit: async () => undefined });
     expect(exchange).toHaveBeenCalledOnce();

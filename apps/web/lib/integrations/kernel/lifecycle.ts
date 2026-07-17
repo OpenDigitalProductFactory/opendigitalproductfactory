@@ -74,13 +74,17 @@ export function createConnectorLifecycle<TDraft, TRefreshResult = unknown>(depen
 
     async connect<TResult>(input: {
       exchange(): Promise<TResult>;
-      onFailure(draft: TDraft, error: unknown): Promise<void>;
+      persistFailure(draft: TDraft, error: unknown): Promise<void>;
+      auditFailure(draft: TDraft, error: unknown): Promise<void>;
     } & PersistedTransition<TDraft, TResult>) {
       let result: TResult;
       try {
         result = await input.exchange();
       } catch (error) {
-        await dependencies.persistence.transact((draft) => input.onFailure(draft, error));
+        await dependencies.persistence.transact(async (draft) => {
+          await input.persistFailure(draft, error);
+          await input.auditFailure(draft, error);
+        });
         throw error;
       }
       return commit(input, result);
