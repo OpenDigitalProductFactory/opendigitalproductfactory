@@ -91,6 +91,10 @@ export const postmarkCallbackDispatchRequested = inngest.createFunction(
 );
 
 export const postmarkCallbackDispatchSweep = inngest.createFunction(
-  { id: "integrations/postmark-callback-sweep", retries: 2, triggers: [cron("*/5 * * * *")] },
+  {
+    id: "integrations/postmark-callback-sweep",
+    retries: 2,
+    triggers: [cron("2,7,12,17,22,27,32,37,42,47,52,57 * * * *")],
+  },
   async ({ step }) => step.run("sweep-postmark-callbacks", () => drainPostmarkCallbacks()),
 );
