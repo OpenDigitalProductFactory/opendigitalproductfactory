@@ -88,13 +88,30 @@ and the post-solve gate: rejects a rogue option that double-books despite the
 solver self-reporting zero violations, and withholds publish when the
 jurisdiction is unresolved (6 tests, `solver/adapter.test.ts`).
 
-### Phase 4 — AI Staffing Coworker proposal flow + human-authority boundary
+### Phase 4 — AI Staffing Coworker proposal flow + human-authority boundary *(core built)*
 
-**Deliverable.** Phase-1 coworker authority (design §11): read governed facts, prepare demand, run validation/optimization, compare options, create `AgentActionProposal` with typed staffing links (reuse existing governance substrate). Cannot publish or message employees without approval. Publish/exception/leave/notify require a valid actor + delegation + evidence; publish authority bound to the owner/operator capability (decision 2), delegable by scope later.
+**Deliverable.** Phase-1 coworker authority (design §11). **Built in this slice**
+(`apps/web/lib/workforce/staffing/coworker/`): `authority.ts` — the pure
+authorization boundary (`authorizeStaffingAction`): prepare/refresh are the
+coworker's unattended Phase-1 authority; publish/notify need a human with the
+`staffing.publish` capability (decision 2) or a matching, unexpired, scoped
+`DelegationGrant`; leave/exception are **human-only and never delegable** (spec
+§2.2, §11). `prepare-proposal.ts` — composes the `AgentActionProposal` payload
+(`staffing.publish_schedule`) from DPF-validated solver options, offering only
+publishable ones and returning an honest `noFeasibleSchedule` proposal when none
+qualify (spec §8.3); `autoPublish` is always false — composing never publishes.
+
+**Pending (integration):** wiring the payload to the real `AgentActionProposal`
+row (thread/message context) + `DelegationGrant` reads + `DecisionInteraction`
+evidence — a thin governed wrapper over the coworker runtime.
 
 **Files.** `apps/web/lib/workforce/staffing/coworker/`; governance links reuse `AgentActionProposal`/`DelegationGrant`/`DecisionInteraction`.
 
-**Verification.** No publication/exception/notification without a valid actor + evidence record; a proposal never mutates assignments; delegation scope enforced.
+**Verification.** 9 tests (`coworker/coworker.test.ts`): coworker may prepare/
+refresh but not publish without a grant; valid/expired/revoked/exhausted/org-
+and location-scoped delegations; leave/exception non-delegable even with a grant;
+human publish gated on capability; proposal recommends fewest-unfilled publishable
+option and never auto-publishes; honest no-feasible-schedule path.
 
 ### Phase 5 — MCP staffing tool pack
 
