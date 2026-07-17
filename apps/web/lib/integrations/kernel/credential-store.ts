@@ -56,9 +56,14 @@ export interface ConnectorCredentialTransaction {
   delete(args: { integrationId: string }): Promise<void>;
 }
 
-export interface ConnectorCredentialRepository {
+export interface ConnectorCredentialRepository<TTransactionContext = ConnectorCredentialTransaction> {
   findUnique(args: { integrationId: string }): Promise<ConnectorCredentialRow | null>;
-  transaction<T>(operation: (transaction: ConnectorCredentialTransaction) => Promise<T>): Promise<T>;
+  transaction<T>(
+    operation: (
+      transaction: ConnectorCredentialTransaction,
+      context: TTransactionContext,
+    ) => Promise<T>,
+  ): Promise<T>;
 }
 
 export interface ConnectorCredentialCrypto {
@@ -95,8 +100,8 @@ export interface FailedConnectorCredential extends Omit<SuccessfulConnectorCrede
   error: ConnectorSafeError;
 }
 
-export interface ConnectorCredentialStoreDependencies {
-  repository: ConnectorCredentialRepository;
+export interface ConnectorCredentialStoreDependencies<TTransactionContext = ConnectorCredentialTransaction> {
+  repository: ConnectorCredentialRepository<TTransactionContext>;
   crypto?: ConnectorCredentialCrypto;
   now?: () => Date;
 }
@@ -212,13 +217,21 @@ export interface PrismaIntegrationCredentialDelegate {
   delete(args: { where: { integrationId: string } }): Promise<ConnectorCredentialRow>;
 }
 
-export interface PrismaConnectorCredentialClient {
+export interface PrismaConnectorCredentialClient<
+  TTransaction extends { integrationCredential: PrismaIntegrationCredentialDelegate } = {
+    integrationCredential: PrismaIntegrationCredentialDelegate;
+  },
+> {
   integrationCredential: PrismaIntegrationCredentialDelegate;
   $transaction<T>(
-    operation: (transaction: { integrationCredential: PrismaIntegrationCredentialDelegate }) => Promise<T>,
+    operation: (transaction: TTransaction) => Promise<T>,
     options: { isolationLevel: "Serializable" },
   ): Promise<T>;
 }
+
+export type PrismaConnectorExternalTransaction<
+  TTransaction extends { integrationCredential: PrismaIntegrationCredentialDelegate },
+> = Omit<TTransaction, "integrationCredential">;
 
 function mapPrismaTransaction(delegate: PrismaIntegrationCredentialDelegate): ConnectorCredentialTransaction {
   return {
@@ -232,21 +245,31 @@ function mapPrismaTransaction(delegate: PrismaIntegrationCredentialDelegate): Co
   };
 }
 
-export function createPrismaConnectorCredentialRepository(
-  prisma: PrismaConnectorCredentialClient,
-): ConnectorCredentialRepository {
+export function createPrismaConnectorCredentialRepository<
+  TTransaction extends { integrationCredential: PrismaIntegrationCredentialDelegate },
+>(
+  prisma: PrismaConnectorCredentialClient<TTransaction>,
+): ConnectorCredentialRepository<PrismaConnectorExternalTransaction<TTransaction>> {
   return {
     findUnique: ({ integrationId }) =>
       prisma.integrationCredential.findUnique({ where: { integrationId } }),
     transaction: (operation) =>
       prisma.$transaction(
-        (transaction) => operation(mapPrismaTransaction(transaction.integrationCredential)),
+        (transaction) => {
+          const { integrationCredential, ...externalTransaction } = transaction;
+          return operation(
+            mapPrismaTransaction(integrationCredential),
+            externalTransaction,
+          );
+        },
         { isolationLevel: "Serializable" },
       ),
   };
 }
 
-export function createConnectorCredentialStore(dependencies: ConnectorCredentialStoreDependencies) {
+export function createConnectorCredentialStore<TTransactionContext = ConnectorCredentialTransaction>(
+  dependencies: ConnectorCredentialStoreDependencies<TTransactionContext>,
+) {
   const credentialCrypto: ConnectorCredentialCrypto = dependencies.crypto ?? {
     assertReadyForWrite: assertEncryptionReadyForCredentialWrite,
     encryptJson,
@@ -255,7 +278,10 @@ export function createConnectorCredentialStore(dependencies: ConnectorCredential
   const currentTime = dependencies.now ?? (() => new Date());
 
   async function runTransactionWithRetry<T>(
-    operation: (transaction: ConnectorCredentialTransaction) => Promise<T>,
+    operation: (
+      transaction: ConnectorCredentialTransaction,
+      context: TTransactionContext,
+    ) => Promise<T>,
   ): Promise<T> {
     for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
       try {
@@ -362,6 +388,17 @@ export function createConnectorCredentialStore(dependencies: ConnectorCredential
     },
 
     withTransaction: boundStore,
+
+    async composeInTransaction<T>(
+      operation: (context: {
+        credentials: ReturnType<typeof boundStore>;
+        transaction: TTransactionContext;
+      }) => Promise<T>,
+    ): Promise<T> {
+      return runTransactionWithRetry((transaction, context) =>
+        operation({ credentials: boundStore(transaction), transaction: context }),
+      );
+    },
 
     async readSetupState(
       integrationId: string,

@@ -48,11 +48,14 @@ function repository(initial?: ConnectorCredentialRow) {
   return {
     repo: {
       findUnique: tx.findUnique,
-      transaction: async <T>(operation: (transaction: ConnectorCredentialTransaction) => Promise<T>) => {
+      transaction: async <T>(operation: (
+        transaction: ConnectorCredentialTransaction,
+        context: ConnectorCredentialTransaction,
+      ) => Promise<T>) => {
         const snapshot = stored ? { ...stored } : undefined;
         transactions.push("begin");
         try {
-          const result = await operation(tx);
+          const result = await operation(tx, tx);
           transactions.push("commit");
           return result;
         } catch (error) {
@@ -303,6 +306,81 @@ describe("connector credential store", () => {
     expect(database.tx.upsert).toHaveBeenCalledOnce();
   });
 
+  it("composes credential and audit writes on the same underlying transaction and rolls both back", async () => {
+    let persistedCredential: ConnectorCredentialRow | undefined;
+    const persistedAudit: Array<{ integrationId: string; operation: string }> = [];
+    const credentialDelegate = {
+      findUnique: vi.fn(async () => persistedCredential ?? null),
+      upsert: vi.fn(async ({ create }: { create: ConnectorCredentialRow }) => {
+        persistedCredential = create;
+        return create;
+      }),
+      update: vi.fn(async () => {
+        if (!persistedCredential) throw new Error("missing credential");
+        return persistedCredential;
+      }),
+      delete: vi.fn(async () => {
+        if (!persistedCredential) throw new Error("missing credential");
+        const deleted = persistedCredential;
+        persistedCredential = undefined;
+        return deleted;
+      }),
+    };
+    const auditDelegate = {
+      create: vi.fn(async ({ data }: { data: { integrationId: string; operation: string } }) => {
+        persistedAudit.push(data);
+        return data;
+      }),
+    };
+    const prisma = {
+      integrationCredential: credentialDelegate,
+      integrationToolCallLog: auditDelegate,
+      $transaction: async <T>(
+        operation: (transaction: {
+          integrationCredential: typeof credentialDelegate;
+          integrationToolCallLog: typeof auditDelegate;
+        }) => Promise<T>,
+        _options: { isolationLevel: "Serializable" },
+      ): Promise<T> => {
+        const credentialSnapshot = persistedCredential;
+        const auditSnapshot = [...persistedAudit];
+        try {
+          return await operation({
+            integrationCredential: credentialDelegate,
+            integrationToolCallLog: auditDelegate,
+          });
+        } catch (error) {
+          persistedCredential = credentialSnapshot;
+          persistedAudit.splice(0, persistedAudit.length, ...auditSnapshot);
+          throw error;
+        }
+      },
+    };
+    const repository = createPrismaConnectorCredentialRepository(prisma);
+    const store = createConnectorCredentialStore({ repository, crypto: crypto() });
+
+    await expect(store.composeInTransaction(async ({ credentials, transaction }) => {
+      expect(transaction).not.toHaveProperty("integrationCredential");
+      await credentials.recordSuccessfulConnect({
+        integrationId: "acme",
+        provider: "acme-provider",
+        reconnectFields: {},
+        secretFields: {},
+        tokenEnvelope: {},
+        safeProjection: {},
+      });
+      await transaction.integrationToolCallLog.create({
+        data: { integrationId: "acme", operation: "connect" },
+      });
+      throw new Error("audit composition rejected");
+    })).rejects.toThrow("audit composition rejected");
+
+    expect(credentialDelegate.upsert).toHaveBeenCalledOnce();
+    expect(auditDelegate.create).toHaveBeenCalledOnce();
+    expect(persistedCredential).toBeUndefined();
+    expect(persistedAudit).toEqual([]);
+  });
+
   it("maps the production repository to exact Prisma where and data arguments", async () => {
     const prismaRow = row();
     const delegate = {
@@ -344,17 +422,20 @@ describe("connector credential store", () => {
     const base = repository();
     const repo = {
       findUnique: base.repo.findUnique,
-      transaction: async <T>(operation: (tx: ConnectorCredentialTransaction) => Promise<T>) => {
+      transaction: async <T>(operation: (
+        tx: ConnectorCredentialTransaction,
+        context: ConnectorCredentialTransaction,
+      ) => Promise<T>) => {
         attempt += 1;
         if (attempt === 1) {
-          await operation(base.tx);
+          await operation(base.tx, base.tx);
           stored = row({ fieldsEnc: "encrypted:winning", tokenCacheEnc: "encrypted:winning-token" });
           const conflict = new Error("serialization conflict") as Error & { code: string };
           conflict.code = conflictCode;
           throw conflict;
         }
         const winnerRepo = repository(stored);
-        const result = await operation(winnerRepo.tx);
+        const result = await operation(winnerRepo.tx, winnerRepo.tx);
         stored = winnerRepo.current();
         return result;
       },
@@ -416,10 +497,13 @@ describe("connector credential store", () => {
     } satisfies ConnectorCredentialTransaction;
     const repo = {
       findUnique: async () => stored,
-      transaction: async <T>(operation: (transaction: ConnectorCredentialTransaction) => Promise<T>) => {
+      transaction: async <T>(operation: (
+        transaction: ConnectorCredentialTransaction,
+        context: ConnectorCredentialTransaction,
+      ) => Promise<T>) => {
         const snapshot = { ...stored };
         try {
-          const result = await operation(tx);
+          const result = await operation(tx, tx);
           throw new Error(`audit failed after ${String(result)}`);
         } catch (error) {
           stored = snapshot;
