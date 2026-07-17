@@ -56,6 +56,13 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Owner attention cards: impact words, never raw risk scores.
+  ownerDecisionImpact: {
+    money: "warning",
+    public: "danger",
+    reversible: "info",
+    deadline: "warning",
+  },
   // Decision governance ledger (DecisionInteraction.outcomeType / riskTier).
   decisionOutcome: {
     recommend: "success",

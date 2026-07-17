@@ -147,4 +147,26 @@ describe("proposal actions", () => {
       data: expect.objectContaining({ status: "rejected", decidedById: "user-1" }),
     });
   });
+
+  it("returns a narrow-boundary request to the coworker without routing the owner to a builder screen", async () => {
+    mocks.prisma.agentActionProposal.findUnique.mockResolvedValue({
+      proposalId: "AP-PROACTIVE",
+      status: "proposed",
+      actionType: "propose_proactivity_change",
+      parameters: proactivityParameters,
+      agentId: "dispatcher",
+      threadId: "thread-1",
+    });
+
+    await rejectProposal("AP-PROACTIVE", "Please narrow the operating boundary before asking again");
+
+    expect(mocks.prisma.agentMessage.create).toHaveBeenCalledWith({
+      data: {
+        threadId: "thread-1",
+        role: "system",
+        content: "Proactivity proposal declined: Please narrow the operating boundary before asking again.",
+        agentId: "dispatcher",
+      },
+    });
+  });
 });

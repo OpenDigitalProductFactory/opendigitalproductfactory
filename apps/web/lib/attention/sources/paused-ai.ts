@@ -5,6 +5,7 @@
 // lands. Spec §4.1; subsumes the unbuilt paused-work inbox.
 
 import type { prisma } from "@dpf/db";
+import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
 import type { AttentionItem, AttentionRiskClass } from "../types";
 
 type Db = typeof prisma;
@@ -38,6 +39,28 @@ function readSummary(payload: unknown): string | null {
   return null;
 }
 
+function readProactivity(meta: unknown): AttentionItem["proactivity"] {
+  if (!meta || typeof meta !== "object") return undefined;
+  const raw = (meta as Record<string, unknown>).proactivity;
+  if (!raw || typeof raw !== "object") return undefined;
+  const value = raw as Record<string, unknown>;
+  const level = value.resolvedLevel;
+  if (!isProactivityLevel(level)) return undefined;
+  const evidence = Array.isArray(value.evidenceRefs) ? value.evidenceRefs : [];
+  const agentRef = evidence.find(
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      (entry as Record<string, unknown>).kind === "agent" &&
+      typeof (entry as Record<string, unknown>).id === "string",
+  ) as Record<string, unknown> | undefined;
+  return {
+    level,
+    actorId: typeof agentRef?.id === "string" ? agentRef.id : undefined,
+    policyId: typeof value.policyId === "string" ? value.policyId : undefined,
+  };
+}
+
 /** Pure projection of one paused coworker run into an attention item. */
 export function pausedAiToAttentionItem(row: TaskRunRow): AttentionItem {
   const authRequired = row.status === "auth-required";
@@ -68,6 +91,7 @@ export function pausedAiToAttentionItem(row: TaskRunRow): AttentionItem {
     ],
     deepLink: "/platform/ai/operations-map",
     audience: { operator: true, assigneePrincipalId: row.userId },
+    proactivity: readProactivity(row.a2aMetadata),
   };
 }
 

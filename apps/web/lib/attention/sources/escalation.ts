@@ -39,6 +39,11 @@ export function escalationToAttentionItem(e: OpenEscalation): AttentionItem {
       : [{ kind: "open-in-context", label: "Evidence trail", href: "/admin/issue-reports" }],
     deepLink: e.buildId ? `/build?buildId=${encodeURIComponent(e.buildId)}` : "/admin/issue-reports",
     audience: { operator: true },
+    technical: {
+      backlogItemId: e.backlogItemId ?? undefined,
+      featureBuildId: e.buildId ?? undefined,
+      detectedBy: "Build Studio",
+    },
   };
 }
 

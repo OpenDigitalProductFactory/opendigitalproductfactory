@@ -50,6 +50,12 @@ export function scheduledTaskToAttentionItem(input: {
     ],
     deepLink: "/platform/schedule",
     audience: audienceForEscalation(input.proactivity.escalationTarget, input.row.ownerUserId),
+    proactivity: {
+      level: input.proactivity.resolvedLevel,
+      actorId: input.row.agentId,
+      policyId: input.proactivity.policyId,
+    },
+    technical: { detectedBy: input.row.agentId },
   };
 }
 

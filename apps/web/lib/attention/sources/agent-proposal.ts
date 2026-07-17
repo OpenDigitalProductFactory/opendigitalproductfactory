@@ -62,6 +62,14 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
       }],
       deepLink: "/platform/ai",
       audience: { operator: true },
+      proactivity: {
+        level: proactivityChange.currentLevel,
+        actorId: proactivityChange.agentId ?? undefined,
+        policyId: `proactivity:${
+          proactivityChange.activityFamily ?? proactivityChange.routeContext ?? proactivityChange.scope
+        }:${proactivityChange.currentLevel}`,
+      },
+      technical: { detectedBy: proactivityChange.agentId ?? "AI workforce" },
     };
   }
 

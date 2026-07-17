@@ -1,0 +1,172 @@
+import { describe, expect, it } from "vitest";
+
+import { translateAttentionToOwnerDecision } from "./owner-decision";
+import type { AttentionItem, AttentionSource } from "./types";
+
+function item(over: Partial<AttentionItem> = {}): AttentionItem {
+  return {
+    id: "escalation:PIR-VOICE",
+    source: "escalation",
+    title: "Voice Slice 1.6 — Upgrade-to-GPU button in SpeechToTextCard",
+    context: "The current voice typing path is slow.",
+    decisionClass: { scorability: "unscorable" },
+    riskClass: "bounded-write",
+    triage: {
+      timeToAct: "none",
+      residueReason: "self-fix-exhausted",
+      blastRadius: "BI-VOICE-16",
+      decideEffort: "judgment",
+      irreversible: false,
+    },
+    createdAtIso: "2026-07-17T12:00:00.000Z",
+    actions: [
+      { kind: "open-in-context", label: "View build", href: "/build?buildId=FB-VOICE-16" },
+    ],
+    deepLink: "/build?buildId=FB-VOICE-16",
+    audience: { operator: true },
+    ...over,
+  };
+}
+
+describe("translateAttentionToOwnerDecision", () => {
+  it("turns a raw engineering title into the approved owner question", () => {
+    const card = translateAttentionToOwnerDecision(item(), Date.parse("2026-07-17T18:00:00Z"));
+
+    expect(card.headline).toBe("Turn on faster voice typing?");
+    expect(card.headline.split(/\s+/)).toHaveLength(5);
+    expect(card.headline).not.toMatch(/\b(AI|API|DB|GPU|CI|CD)\b/);
+    expect(card.whyItMatters).toMatch(/business|customer|team|work/i);
+    expect(card.ifYouDoNothing.length).toBeGreaterThan(10);
+    expect(card.recommendation.lead).toBe("Your COO recommends");
+    expect(card.recommendation.specialistByline).toBe("Platform operations");
+  });
+
+  it("keeps the raw title and builder references in technical detail", () => {
+    const card = translateAttentionToOwnerDecision(item(), Date.parse("2026-07-17T18:00:00Z"));
+    const details = Object.fromEntries(card.technical.fields.map((field) => [field.label, field.value]));
+
+    expect(details["Original title"]).toBe(
+      "Voice Slice 1.6 — Upgrade-to-GPU button in SpeechToTextCard",
+    );
+    expect(details["Backlog item"]).toBe("BI-VOICE-16");
+    expect(details["Feature build"]).toBe("FB-VOICE-16");
+    expect(details["Detected"]).toBe("2026-07-17T12:00:00.000Z");
+    expect(card.technical.builderActions).toContainEqual(
+      expect.objectContaining({ label: "Resume build", href: "/build?buildId=FB-VOICE-16" }),
+    );
+    expect(card.technical.builderActions).toContainEqual(
+      expect.objectContaining({ label: "Open in Operations", href: "/ops" }),
+    );
+    expect(card.choices).not.toContainEqual(expect.objectContaining({ href: "/build?buildId=FB-VOICE-16" }));
+  });
+
+  it.each<{
+    source: AttentionSource;
+    headline: string;
+    tag: string;
+  }>([
+    { source: "approval-bill", headline: "Approve this bill?", tag: "Costs money" },
+    { source: "approval-expense", headline: "Approve this expense?", tag: "Costs money" },
+    { source: "approval-outbound", headline: "Send this message?", tag: "Goes public" },
+    { source: "compliance-submission", headline: "File this report?", tag: "Goes public" },
+    { source: "agent-proposal", headline: "Let this coworker do more?", tag: "Reversible" },
+  ])("uses plain owner copy and word-based tags for $source", ({ source, headline, tag }) => {
+    const card = translateAttentionToOwnerDecision(
+      item({
+        id: `${source}:1`,
+        source,
+        title: source === "agent-proposal" ? "Review proactivity: Balanced -> Assertive" : "RAW INTERNAL TITLE",
+        deepLink: "/finance",
+        actions: [{ kind: "open-in-context", label: "Review", href: "/finance" }],
+        triage: {
+          timeToAct: "due-soon",
+          deadlineIso: "2026-07-20T12:00:00.000Z",
+          residueReason: "policy-approval",
+          decideEffort: "review",
+          irreversible: false,
+        },
+      }),
+      Date.parse("2026-07-17T12:00:00Z"),
+    );
+
+    expect(card.headline).toBe(headline);
+    expect(card.tags.map((entry) => entry.label)).toContain(tag);
+    expect(card.tags.map((entry) => entry.label)).toContain("Due in 3 days");
+    expect(card.tags.map((entry) => entry.label)).not.toContain("High risk");
+    expect(card.choices.length).toBeGreaterThanOrEqual(1);
+    expect(card.choices.length).toBeLessThanOrEqual(3);
+  });
+
+  it("never exposes the raw title above technical detail", () => {
+    const raw = "qdrant is offline";
+    const card = translateAttentionToOwnerDecision(
+      item({ source: "platform-health", title: raw, deepLink: "/ops/health" }),
+      Date.now(),
+    );
+
+    expect([card.headline, card.whyItMatters, card.ifYouDoNothing, card.recommendation.text].join(" "))
+      .not.toContain(raw);
+    expect(card.technical.fields).toContainEqual({ label: "Original title", value: raw });
+  });
+
+  it("keeps builder, platform, and admin routes below technical detail", () => {
+    const card = translateAttentionToOwnerDecision(
+      item({
+        id: "research-proposal:1",
+        source: "research-proposal",
+        actions: [{ kind: "open-in-context", label: "Review proposal", href: "/admin/research" }],
+        deepLink: "/admin/research",
+      }),
+      Date.now(),
+    );
+
+    expect(card.choices.map((choice) => choice.href)).toEqual([
+      "/workspace/inbox?attentionId=research-proposal%3A1",
+    ]);
+    expect(card.technical.builderActions).toContainEqual(
+      expect.objectContaining({ label: "Review proposal", href: "/admin/research" }),
+    );
+  });
+
+  it.each<AttentionSource>([
+    "escalation",
+    "ai-decision",
+    "paused-ai",
+    "scheduled-task",
+    "agent-proposal",
+    "approval-outbound",
+    "approval-bill",
+    "approval-expense",
+    "compliance-submission",
+    "research-proposal",
+    "ai-readiness-blocker",
+    "platform-health",
+    "provider-credential",
+  ])("keeps every %s card short and free of bare technical acronyms", (source) => {
+    const card = translateAttentionToOwnerDecision(
+      item({
+        id: `${source}:plain-copy`,
+        source,
+        title: "RAW API GPU DB AI INTERNAL TITLE",
+        triage: {
+          timeToAct: "none",
+          residueReason: "policy-approval",
+          decideEffort: "review",
+          irreversible: false,
+        },
+      }),
+      Date.parse("2026-07-17T12:00:00Z"),
+    );
+    const ownerCopy = [
+      card.headline,
+      card.whyItMatters,
+      card.ifYouDoNothing,
+      card.recommendation.text,
+      card.recommendation.specialistByline,
+      ...card.choices.map((choice) => choice.label),
+    ].join(" ");
+
+    expect(card.headline.split(/\s+/).length).toBeLessThanOrEqual(8);
+    expect(ownerCopy).not.toMatch(/\b(?:AI|API|DB|GPU|CI|CD)\b/);
+  });
+});

@@ -84,4 +84,23 @@ describe("ExpandableCard", () => {
     expect(container.innerHTML).not.toMatch(/#[0-9a-f]{3,8}/i);
     expect(container.querySelector('[data-open="true"]')).toBeTruthy();
   });
+
+  it("renders always-visible actions outside the disclosure trigger", () => {
+    render(
+      <ExpandableCard
+        id="owner-decision"
+        open={false}
+        onOpenChange={() => undefined}
+        summary={<span>Approve this bill?</span>}
+        actions={<a href="/finance/bills">Review bill</a>}
+      >
+        <p>Technical detail</p>
+      </ExpandableCard>,
+    );
+
+    const disclosure = screen.getByRole("button", { name: /Approve this bill/ });
+    const action = screen.getByRole("link", { name: "Review bill" });
+    expect(disclosure.contains(action)).toBe(false);
+    expect(action.getAttribute("href")).toBe("/finance/bills");
+  });
 });
