@@ -755,8 +755,11 @@ services:
     image: prometheuscommunity/postgres-exporter:v0.19.1
     restart: unless-stopped
     logging: *default-logging
+    command: ["--config.file=/postgres_exporter.yml"]
     ports:
       - "9187:9187"
+    volumes:
+      - ./monitoring/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro
     environment:
       DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-dpf}:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/dpf?sslmode=disable"
     depends_on:
