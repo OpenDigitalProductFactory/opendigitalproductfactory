@@ -155,6 +155,17 @@ export const purgeStaleAgentThreads: RetentionCustomPurge = async ({
       // Cascades AgentMessage + AgentAttachment via their onDelete: Cascade FKs.
       prisma.agentThread.deleteMany({ where: { id: { in: ids } } }),
     ]);
+    // BI-DG-001: propagate the source deletion to the derived semantic-memory
+    // vectors. Best-effort — the nightly reconcile sweep is the safety net for any
+    // miss — and never aborts the purge (the source rows are already gone).
+    try {
+      const { purgeConversationVectorsBySource } = await import(
+        "@/lib/inference/semantic-memory-cleanup"
+      );
+      await purgeConversationVectorsBySource({ threadIds: ids });
+    } catch (err) {
+      console.warn("[retention] semantic-memory vector cleanup failed:", err);
+    }
     deleted += threads.length;
     if (threads.length < take) break;
   }

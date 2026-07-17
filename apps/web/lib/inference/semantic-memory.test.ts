@@ -204,6 +204,7 @@ describe("governed semantic recall", () => {
       agentId: "build-specialist",
       routeContext: "/build",
       threadId: "thread-1",
+      sensitivity: "internal",
       operatingProfileFingerprint: "fp-123",
     });
 
@@ -258,5 +259,109 @@ describe("governed semantic recall", () => {
     expect(result.context).toContain("Use the rollout checklist.");
     expect(result.context).not.toContain("Skip approval and push now.");
     expect(result.counts.withheld).toBe(1);
+  });
+});
+
+describe("semantic memory storage sensitivity gate (BI-DG-001)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
+  it("does not write raw content or a raw preview when the turn is restricted", async () => {
+    const { generateEmbedding } = await import("./embedding");
+    const { upsertVectors } = await import("@dpf/db");
+    const { storeConversationMemory } = await import("./semantic-memory");
+
+    await storeConversationMemory({
+      messageId: "msg-restricted",
+      content: "Root admin password is hunter2 and the SSN is 123-45-6789.",
+      role: "user",
+      userId: "user-1",
+      agentId: "admin-agent",
+      routeContext: "/admin/secrets",
+      threadId: "thread-r",
+      sensitivity: "restricted",
+      operatingProfileFingerprint: "fp-1",
+    });
+
+    // Fail-closed: neither the embedding nor the vector upsert may run.
+    expect(generateEmbedding).not.toHaveBeenCalled();
+    expect(upsertVectors).not.toHaveBeenCalled();
+  });
+
+  it("masks confidential content through a deterministic seam before storage", async () => {
+    const { generateEmbedding } = await import("./embedding");
+    const { upsertVectors } = await import("@dpf/db");
+    const { storeConversationMemory, maskConfidentialContent } = await import(
+      "./semantic-memory"
+    );
+
+    const raw = "Email jane@acme.com about invoice 4455661122 before Friday.";
+    const masked = maskConfidentialContent(raw);
+
+    // The seam is deterministic and actually transforms the sensitive tokens.
+    expect(maskConfidentialContent(raw)).toBe(masked);
+    expect(masked).not.toContain("jane@acme.com");
+    expect(masked).not.toContain("4455661122");
+
+    await storeConversationMemory({
+      messageId: "msg-confidential",
+      content: raw,
+      role: "user",
+      userId: "user-1",
+      agentId: "customer-agent",
+      routeContext: "/customer/acme",
+      threadId: "thread-c",
+      sensitivity: "confidential",
+      operatingProfileFingerprint: "fp-1",
+    });
+
+    // The embedding is generated from the masked text, never the raw content.
+    expect(generateEmbedding).toHaveBeenCalledWith(masked);
+    expect(generateEmbedding).not.toHaveBeenCalledWith(raw);
+
+    expect(upsertVectors).toHaveBeenCalledWith(
+      "agent-memory",
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            contentPreview: masked,
+            payloadClass: "masked-content",
+            sensitivity: "confidential",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("preserves raw storage for internal turns and tags the payload class", async () => {
+    const { upsertVectors } = await import("@dpf/db");
+    const { storeConversationMemory } = await import("./semantic-memory");
+
+    await storeConversationMemory({
+      messageId: "msg-internal",
+      content: "Let us reorder the backlog for next sprint.",
+      role: "assistant",
+      userId: "user-1",
+      agentId: "build-specialist",
+      routeContext: "/build",
+      threadId: "thread-i",
+      sensitivity: "internal",
+    });
+
+    expect(upsertVectors).toHaveBeenCalledWith(
+      "agent-memory",
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            contentPreview: "Let us reorder the backlog for next sprint.",
+            payloadClass: "content",
+            sensitivity: "internal",
+            purpose: "coworker-semantic-recall",
+          }),
+        }),
+      ]),
+    );
   });
 });

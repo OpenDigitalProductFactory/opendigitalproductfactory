@@ -2375,6 +2375,10 @@ export async function sendMessage(input: {
       agentId: agent.agentId,
       routeContext: input.routeContext,
       threadId: input.threadId,
+      // BI-DG-001: pass the resolved sensitivity + declared purpose into the
+      // derived-copy write (gate fails closed on restricted, masks confidential).
+      sensitivity: agent.sensitivity,
+      purpose: "coworker-semantic-recall",
       operatingProfileFingerprint: memoryOperatingProfileFingerprint,
     };
     // Skip trivial messages that add noise to semantic search
