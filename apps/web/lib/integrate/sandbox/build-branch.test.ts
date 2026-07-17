@@ -19,6 +19,7 @@ import {
   resolveBuildWorkdir,
   getClientIdentity,
   wrapSandboxGitCommand,
+  shouldPreserveBuildBranchWork,
 } from "./build-branch";
 
 describe("wrapSandboxGitCommand", () => {
@@ -123,6 +124,74 @@ describe("wrapSandboxGitCommand", () => {
     // Commits only when there are staged changes; best-effort so a no-op never blocks.
     expect(command).toContain("git diff --cached --quiet --exit-code");
     expect(command).toContain("wip: preserve in-flight build work before branch switch");
+  });
+
+  // BI-8C6AA60E — review-phase start_build must not hard-reset a build branch
+  // that already carries generated code (commitsAhead / source delta / dirty).
+  describe("shouldPreserveBuildBranchWork (BI-8C6AA60E)", () => {
+    it("preserves when the build branch is ahead of the client fork", () => {
+      expect(
+        shouldPreserveBuildBranchWork({
+          status: "ahead",
+          aheadBy: 2,
+          localSourceChangeCount: 3,
+          dirty: false,
+        }),
+      ).toBe(true);
+    });
+
+    it("preserves when source deltas exist even if status is classified as behind", () => {
+      // Defensive: misclassified currency must not wipe real source.
+      expect(
+        shouldPreserveBuildBranchWork({
+          status: "behind",
+          aheadBy: 0,
+          localSourceChangeCount: 5,
+          dirty: false,
+        }),
+      ).toBe(true);
+    });
+
+    it("preserves dirty working trees", () => {
+      expect(
+        shouldPreserveBuildBranchWork({
+          status: "dirty",
+          aheadBy: 0,
+          localSourceChangeCount: 0,
+          dirty: true,
+        }),
+      ).toBe(true);
+    });
+
+    it("preserves diverged branches (never hard-reset away real work)", () => {
+      expect(
+        shouldPreserveBuildBranchWork({
+          status: "diverged",
+          aheadBy: 1,
+          localSourceChangeCount: 2,
+          dirty: false,
+        }),
+      ).toBe(true);
+    });
+
+    it("allows hard-reset only when the branch has no local work", () => {
+      expect(
+        shouldPreserveBuildBranchWork({
+          status: "behind",
+          aheadBy: 0,
+          localSourceChangeCount: 0,
+          dirty: false,
+        }),
+      ).toBe(false);
+      expect(
+        shouldPreserveBuildBranchWork({
+          status: "current",
+          aheadBy: 0,
+          localSourceChangeCount: 0,
+          dirty: false,
+        }),
+      ).toBe(false);
+    });
   });
 
   it("commits branch hygiene when tracked generated artifacts are pruned", () => {
