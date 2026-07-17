@@ -16,6 +16,7 @@ type Recorded = {
   sbomUpserts: string[];
   bomLinks: Array<{ id: string; catalogIdentityId: string }>;
   postureUpdates: Array<{ catalogIdentityId: string; supportStatus: string; supportLifecycleSource: string }>;
+  firmwareUpdates: Array<{ catalogIdentityId: string; latestKnownVersion: string }>;
 };
 
 function buildDb(
@@ -56,13 +57,20 @@ function buildDb(
     inventoryEntity: {
       updateMany: async ({ where, data }: {
         where: { catalogIdentityId: string };
-        data: { supportStatus: string; supportLifecycleSource: string };
+        data: { supportStatus?: string; supportLifecycleSource?: string; latestKnownVersion?: string };
       }) => {
-        recorded.postureUpdates.push({
-          catalogIdentityId: where.catalogIdentityId,
-          supportStatus: data.supportStatus,
-          supportLifecycleSource: data.supportLifecycleSource,
-        });
+        if (data.latestKnownVersion !== undefined) {
+          recorded.firmwareUpdates.push({
+            catalogIdentityId: where.catalogIdentityId,
+            latestKnownVersion: data.latestKnownVersion,
+          });
+        } else {
+          recorded.postureUpdates.push({
+            catalogIdentityId: where.catalogIdentityId,
+            supportStatus: data.supportStatus!,
+            supportLifecycleSource: data.supportLifecycleSource!,
+          });
+        }
         return { count: 2 };
       },
     },
@@ -98,7 +106,7 @@ describe("runCatalogEnrichmentSweep", () => {
     const bomComponents: SweepBomRow[] = [
       { id: "bc-leftpad", name: "left-pad", version: "1.3.0", packageUrl: "pkg:npm/left-pad@1.3.0", supplierName: null, ecosystem: "npm" },
     ];
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [], firmwareUpdates: [] };
     const db = buildDb(identities, bomComponents, recorded);
 
     const result = await runCatalogEnrichmentSweep(db, {
@@ -128,7 +136,7 @@ describe("runCatalogEnrichmentSweep", () => {
       { id: "ci-a", part: "a", manufacturer: "A", product: "A", productVersion: null, edition: null },
       { id: "ci-b", part: "a", manufacturer: "B", product: "B", productVersion: null, edition: null },
     ];
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [], firmwareUpdates: [] };
     const db = buildDb(identities, [], recorded);
     // First CPE update throws; the sweep must count it and continue to ci-b.
     let calls = 0;
@@ -150,7 +158,7 @@ describe("runCatalogEnrichmentSweep", () => {
     const identities: SweepIdentityRow[] = Array.from({ length: 5 }, (_, i) => ({
       id: `ci-${i}`, part: "a", manufacturer: "M", product: "P", productVersion: null, edition: null,
     }));
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [], firmwareUpdates: [] };
     // findMany honors take in the real client; here we assert the option is passed through
     // by returning only the first `take` rows.
     const takeAware: CatalogSweepClient = {
@@ -179,7 +187,7 @@ describe("runCatalogEnrichmentSweep", () => {
     const identities: SweepIdentityRow[] = [
       { id: "ci-r750", part: "h", manufacturer: "Dell", product: "PowerEdge R750", productVersion: null, edition: null },
     ];
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [], firmwareUpdates: [] };
     const db = buildDb(identities, [], recorded);
 
     // endoflife hardware page (discontinued + eol) for the R750 slug.
@@ -219,7 +227,7 @@ describe("runCatalogEnrichmentSweep", () => {
     const identities: SweepIdentityRow[] = [
       { id: "ci-sensor", part: "h", manufacturer: "Acme", product: "Sensor", productVersion: null, edition: null },
     ];
-    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [] };
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [], firmwareUpdates: [] };
     const db = buildDb(identities, [], recorded);
     // endoflife page has only a release date (no eol) → posture cannot be derived.
     const hwEolFetch = (async (url: string) =>
@@ -235,5 +243,44 @@ describe("runCatalogEnrichmentSweep", () => {
     expect(result.hardwareMilestonesWritten).toBeGreaterThan(0); // release milestone written
     expect(recorded.postureUpdates).toEqual([]); // but no posture projected
     expect(result.entitiesPostureProjected).toBe(0);
+  });
+
+  it("resolves LVFS firmware once and projects latestKnownVersion onto hardware instances (BI-84710E60)", async () => {
+    const identities: SweepIdentityRow[] = [
+      { id: "ci-r750", part: "h", manufacturer: "Dell", product: "PowerEdge R750", productVersion: null, edition: null },
+    ];
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [], firmwareUpdates: [] };
+    const db = buildDb(identities, [], recorded);
+
+    const lvfsXml = `<components><component type="firmware"><name>Dell PowerEdge R750 BIOS</name><developer_name>Dell Inc.</developer_name><releases><release version="2.1.0" date="2026-05-14"/></releases></component></components>`;
+    let lvfsCalls = 0;
+    const lvfsFetch = async () => { lvfsCalls += 1; return lvfsXml; };
+
+    const result = await runCatalogEnrichmentSweep(db, {
+      fetchers: { lvfsFetch },
+      now: new Date("2026-07-17T00:00:00Z"),
+    });
+
+    // Catalog fetched exactly once for the batch.
+    expect(lvfsCalls).toBe(1);
+    expect(result.firmwareVersionsResolved).toBe(1);
+    expect(recorded.firmwareUpdates).toEqual([
+      { catalogIdentityId: "ci-r750", latestKnownVersion: "2.1.0" },
+    ]);
+  });
+
+  it("does not fetch the LVFS catalog when the batch has no hardware identity", async () => {
+    const identities: SweepIdentityRow[] = [
+      { id: "ci-pg", part: "a", manufacturer: "PostgreSQL", product: "PostgreSQL", productVersion: "16", edition: null },
+    ];
+    const recorded: Recorded = { cpeUpdates: [], lifecycleUpserts: [], sbomUpserts: [], bomLinks: [], postureUpdates: [], firmwareUpdates: [] };
+    const db = buildDb(identities, [], recorded);
+    let lvfsCalls = 0;
+    const lvfsFetch = async () => { lvfsCalls += 1; return "<components/>"; };
+
+    await runCatalogEnrichmentSweep(db, { fetchers: { eolFetch: eolFetchStub(), lvfsFetch } });
+
+    expect(lvfsCalls).toBe(0); // software-only batch never downloads the catalog
+    expect(recorded.firmwareUpdates).toEqual([]);
   });
 });

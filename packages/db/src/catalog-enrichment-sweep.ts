@@ -37,6 +37,7 @@ import {
 import { deriveEolSlug } from "./enrich-digital-product";
 import { enrichHardwareIdentity } from "./hardware-lifecycle";
 import { deriveSupportPostureFromMilestones } from "./support-posture";
+import { parseLvfsAppstream, resolveLatestFirmware, type LvfsFirmware } from "./lvfs-firmware";
 
 const DEFAULT_LIMIT = 100;
 
@@ -90,6 +91,13 @@ export type CatalogSweepFetchers = {
   nvdFetch?: typeof fetch;
   /** Wikidata fetcher (HAM Phase D hardware backfill); when omitted it is skipped. */
   wikidataFetch?: typeof fetch;
+  /**
+   * LVFS/fwupd catalog loader (HAM Phase D firmware hints, BI-84710E60). A thunk that
+   * returns the decompressed AppStream XML (or null) — the transport/gunzip lives in the
+   * caller so this module stays pure. Fetched once per sweep, only when the batch has a
+   * hardware identity. When omitted, firmware resolution is skipped.
+   */
+  lvfsFetch?: () => Promise<string | null>;
 };
 
 export type CatalogSweepOptions = {
@@ -112,6 +120,9 @@ export type CatalogSweepResult = {
   // HAM Phase D1 (BI-4731303B): InventoryEntity rows whose support posture was projected
   // from a resolved hardware identity's lifecycle milestones.
   entitiesPostureProjected: number;
+  // HAM Phase D1 (BI-84710E60 firmware slice): hardware identities whose latest firmware
+  // version was resolved from the LVFS catalog and projected onto their instances.
+  firmwareVersionsResolved: number;
   sbomComponentsIngested: number;
   bomComponentsTotal: number;
   failures: number;
@@ -141,6 +152,7 @@ export async function runCatalogEnrichmentSweep(
   const eolFetch = options.fetchers?.eolFetch;
   const nvdFetch = options.fetchers?.nvdFetch;
   const wikidataFetch = options.fetchers?.wikidataFetch;
+  const lvfsFetch = options.fetchers?.lvfsFetch;
   const now = options.now ?? new Date();
 
   const result: CatalogSweepResult = {
@@ -152,6 +164,7 @@ export async function runCatalogEnrichmentSweep(
     hardwareIdentitiesEnriched: 0,
     hardwareMilestonesWritten: 0,
     entitiesPostureProjected: 0,
+    firmwareVersionsResolved: 0,
     sbomComponentsIngested: 0,
     bomComponentsTotal: 0,
     failures: 0,
@@ -198,6 +211,19 @@ export async function runCatalogEnrichmentSweep(
       edition: true,
     },
   });
+
+  // Load the LVFS firmware catalog once (BI-84710E60 firmware slice) — only when the batch
+  // has a hardware identity, so a software-only sweep never downloads the catalog. The
+  // transport (fetch + gunzip) lives in the injected thunk; failures degrade to no firmware.
+  let lvfsComponents: LvfsFirmware[] | null = null;
+  if (lvfsFetch && identities.some((i) => i.part === "h")) {
+    try {
+      const xml = await lvfsFetch();
+      lvfsComponents = xml ? parseLvfsAppstream(xml) : null;
+    } catch {
+      lvfsComponents = null;
+    }
+  }
 
   for (const identity of identities) {
     result.identitiesScanned += 1;
@@ -247,6 +273,24 @@ export async function runCatalogEnrichmentSweep(
             },
           });
           result.entitiesPostureProjected += count;
+        }
+
+        // Firmware currency (BI-84710E60 firmware slice): resolve the model's latest known
+        // firmware from LVFS and project latestKnownVersion onto its instances. Matched by
+        // device GUID when discovery carries one, else by manufacturer/model name. Per-entity
+        // updatePosture (observed-vs-latest) is a follow-up once firmware GUIDs are collected.
+        if (lvfsComponents) {
+          const firmware = resolveLatestFirmware(lvfsComponents, {
+            manufacturer: identity.manufacturer,
+            product: identity.product,
+          });
+          if (firmware) {
+            const { count } = await db.inventoryEntity.updateMany({
+              where: { catalogIdentityId: identity.id },
+              data: { latestKnownVersion: firmware.version },
+            });
+            if (count > 0) result.firmwareVersionsResolved += 1;
+          }
         }
       } else {
         const slug = deriveEolSlug(identity);

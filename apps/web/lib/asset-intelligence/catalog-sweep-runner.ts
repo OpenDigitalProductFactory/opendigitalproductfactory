@@ -5,6 +5,7 @@
 // that the admin Scheduled Jobs surface renders. Honors the per-job enabled kill
 // switch (ScheduledJob.enabled=false) like the other governed sweeps.
 
+import { gunzipSync } from "node:zlib";
 import type { CatalogSweepResult } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
@@ -12,6 +13,27 @@ import {
   CATALOG_SWEEP_JOB_NAME,
   CATALOG_SWEEP_BATCH_LIMIT,
 } from "./catalog-sweep-constants";
+
+// LVFS/fwupd firmware catalog (HAM Phase D1, BI-84710E60). The @dpf/db sweep is pure and
+// takes decompressed AppStream XML, so the transport (fetch + gunzip) lives here. LVFS
+// serves a gzipped file (Content-Type application/gzip, not Content-Encoding), so we gunzip
+// explicitly. Air-gapped installs can point LVFS_CATALOG_URL at a mirror. Returns null on
+// any error — the sweep degrades to no firmware hints rather than failing.
+const LVFS_CATALOG_URL =
+  process.env.LVFS_CATALOG_URL ?? "https://cdn.fwupd.org/downloads/firmware.xml.gz";
+
+async function fetchLvfsCatalog(): Promise<string | null> {
+  try {
+    const res = await fetch(LVFS_CATALOG_URL);
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    // Gzip magic bytes 1f 8b — gunzip; otherwise assume already-plain XML (e.g. a mirror).
+    const xml = buf.length > 1 && buf[0] === 0x1f && buf[1] === 0x8b ? gunzipSync(buf).toString("utf8") : buf.toString("utf8");
+    return xml;
+  } catch {
+    return null;
+  }
+}
 
 export type CatalogSweepRunOutcome =
   | ({ skipped: false } & CatalogSweepResult)
@@ -63,7 +85,7 @@ export async function runCatalogEnrichmentSweepJob(
       prisma as unknown as Parameters<typeof runCatalogEnrichmentSweep>[0],
       {
         limit: options.limit ?? CATALOG_SWEEP_BATCH_LIMIT,
-        fetchers: { eolFetch: fetch, nvdFetch: fetch, wikidataFetch: fetch },
+        fetchers: { eolFetch: fetch, nvdFetch: fetch, wikidataFetch: fetch, lvfsFetch: fetchLvfsCatalog },
       },
     );
 

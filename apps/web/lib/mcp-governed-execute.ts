@@ -75,6 +75,15 @@ export type GovernedExecuteContext = {
    * current audit/receipt behavior.
    */
   workCase?: WorkCaseExecutionContext;
+  /**
+   * EP-31815F97 S2 (BI-F82F4E04): the active agent→agent DelegationChain grouping
+   * `chainId` for this call, when the executing coworker was delegated to (set by
+   * the delegation-creating paths — skill-discovery / coworker-collaboration —
+   * which hold the chain). Persisted to ToolExecution.delegationChainId so the
+   * action joins its chain-of-custody back to the human origin (TAK §7.1, GAID
+   * §10). Omitted for direct human→coworker calls (human still on userId).
+   */
+  delegationChainId?: string;
 };
 
 export type GovernedExecuteArgs = {
@@ -262,6 +271,9 @@ async function writeAudit(data: {
       : null,
     apiTokenId: data.context?.apiTokenId ?? null,
     skillId: data.context?.skillId ?? null,
+    // EP-31815F97 S2: join this execution to its chain-of-custody when the
+    // executing coworker was delegated to; the human origin stays on userId.
+    delegationChainId: data.context?.delegationChainId ?? null,
   };
   try {
     if (_toolExecutionCreateOverride) {

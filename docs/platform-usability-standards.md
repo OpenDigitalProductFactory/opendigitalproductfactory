@@ -55,6 +55,7 @@ These patterns are NOT allowed in component code:
 | `color: "#ffffff"` | `color: "var(--dpf-text)"` |
 | `background: "#000000"` | `background: "var(--dpf-bg)"` |
 | Any hardcoded hex for bg/text/border/accent/muted | Use the corresponding `var(--dpf-*)` |
+| Hand-rolled `animate-spin` / `animate-pulse` loading indicator | `ui/Spinner`, `ui/Skeleton`, `ui/ProgressBar`, or `ui/InlineBusy` (see *Async Activity & Loading States*) |
 
 ## Allowed Hex Usage
 
@@ -73,6 +74,30 @@ Before submitting a component, verify:
 - [ ] No `text-white`, `text-black`, `bg-white`, or `bg-black` Tailwind classes
 - [ ] No inline hex colors for token roles
 - [ ] Component renders correctly in both light and dark mode (toggle OS preference to verify)
+- [ ] Every asynchronous action shows a visible activity indicator from `ui/` — no hand-rolled `animate-spin`/`animate-pulse` (see *Async Activity & Loading States*)
+
+## Async Activity & Loading States
+
+Every asynchronous action MUST show a visible, consistent activity indicator. A state change with no motion — a button whose only feedback is swapped text, a panel that sits blank while data loads — reads as "nothing is happening" and is a defect. Use the shared primitives in `apps/web/components/ui/`; never hand-roll `animate-spin` / `animate-pulse`.
+
+**Which indicator, when** (converged from Nielsen Norman Group, Shopify Polaris, GitHub Primer, Vercel Geist, IBM Carbon):
+
+| Situation | Indicator | Primitive |
+|---|---|---|
+| < ~0.5s (or LCP < 800ms) | **Nothing** — a placeholder that flashes is perceptually worse than empty space | — |
+| A short/unknown-duration action you triggered (button submit, inline fetch, ~0.5–10s) | Spinner + status label | `Spinner`, or `InlineBusy` inside a button |
+| Async data filling a **known layout** (panels, cards, lists, tables) | Skeleton (shape-of-content + shimmer) — best perceived performance | `Skeleton`, `SkeletonText` |
+| Determinate work where the total is known (uploads, multi-step, builds) | Progress bar | `ProgressBar` |
+| Never | Skeleton **and** spinner together — pick one | — |
+
+**Refreshing existing content:** keep the current content visible and dimmed (`opacity`) with the region marked `aria-busy`, and show the spinner on the trigger. Don't blank out good content to show a placeholder.
+
+**Accessibility (required):**
+- Mark the region being updated with `aria-busy="true"`.
+- Announce status text with `role="status"` + `aria-live="polite"` (the primitives do this; a bare `role="status"` in the codebase usually wraps a *result/error* region, which is a different use).
+- Motion is honored against the OS **Reduce Motion** preference via a global `@media (prefers-reduced-motion: reduce)` block in `globals.css` — spinners and shimmer fall back to a static, legible resting state. Don't reintroduce unguarded keyframe animations.
+
+**Rollout:** the primitives are the canonical replacement for the ~38 hand-rolled indicators catalogued across the portal; migrate opportunistically and when touching a surface. Semantic **status dots** (e.g. a pulsing health indicator) are state, not loading, and are out of this pattern — but still inherit the reduced-motion guard.
 
 ## Progressive Disclosure
 

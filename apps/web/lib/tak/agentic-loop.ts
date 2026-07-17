@@ -1161,6 +1161,10 @@ export async function runAgenticLoop(params: {
    * PlatformIssueReport rows. Caller should look this up alongside buildPhase.
    */
   featureBuildId?: string | null;
+  /** EP-31815F97 S2 (BI-F82F4E04): active DelegationChain grouping id when this
+   *  loop runs a delegated coworker, so each ToolExecution joins its
+   *  chain-of-custody back to the human origin. Omitted for direct turns. */
+  delegationChainId?: string;
   /**
    * Parent TaskRun for this agentic loop. When set, each governed tool call
    * records the same TaskRun id in ToolExecution audit rows.
@@ -2529,6 +2533,10 @@ export async function runAgenticLoop(params: {
             // tools (start_ideate_research, start_scout_research) can
             // target the correct build instead of "latest in phase".
             featureBuildId: params.featureBuildId ?? undefined,
+            // EP-31815F97 S2 (BI-F82F4E04): when this loop runs a delegated
+            // coworker, carry the active DelegationChain grouping id so each
+            // ToolExecution joins its chain-of-custody back to the human origin.
+            delegationChainId: params.delegationChainId ?? undefined,
           },
           source: "agentic-loop",
         });

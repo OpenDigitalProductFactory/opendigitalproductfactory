@@ -123,3 +123,38 @@ body {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--dpf-accent) 50%, transparent); }
   55%       { opacity: 0.65; box-shadow: 0 0 0 3px color-mix(in srgb, var(--dpf-accent) 0%, transparent); }
 }
+
+/* ── Async activity & loading primitives ──────────────────────────────────
+   Canonical motion for the shared ui/Spinner + ui/Skeleton primitives. Every
+   asynchronous action gets a visible, consistent activity indicator; never
+   hand-roll animate-spin / animate-pulse. See docs/platform-usability-standards.md
+   ("Async Activity & Loading States"). Colors resolve through --dpf-* tokens. */
+@keyframes dpf-spin {
+  to { transform: rotate(360deg); }
+}
+.dpf-spin { animation: dpf-spin 0.7s linear infinite; }
+
+/* Skeleton shimmer — a sweep across a token-tinted gradient. The element sets
+   the gradient + background-size (see ui/Skeleton.tsx); this only animates the
+   sweep position. */
+@keyframes dpf-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.dpf-shimmer { animation: dpf-shimmer 1.6s ease-in-out infinite; }
+
+/* Reduced-motion: honor the OS "Reduce Motion" preference platform-wide. The
+   codebase previously had no global guard, so every keyframe animation ran
+   regardless (spinners, shimmer, slide-up, cell-pulse, per-component keyframes).
+   Neutralize all animation while leaving transitions/hovers intact; loading
+   primitives fall back to a static, still-legible resting state. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .dpf-shimmer {
+    /* Freeze as a flat muted fill rather than a half-swept gradient. */
+    background: var(--dpf-surface-3) !important;
+  }
+}
