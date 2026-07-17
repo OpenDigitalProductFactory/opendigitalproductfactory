@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 511,
+  "pageCount": 512,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3671,6 +3671,22 @@
       "publishedPortal": false,
       "anchors": [
         "documentation-staleness-report"
+      ]
+    },
+    "docs/operations/arcamanus-preinstall-readiness.md": {
+      "publicHref": "/operations/arcamanus-preinstall-readiness/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "arcamanus-pre-install-readiness",
+        "decision-snapshot",
+        "pre-install-inputs",
+        "archetype-readiness",
+        "reseller-bi-to-github-path",
+        "non-technical-operator-handoff",
+        "day-zero-checklist",
+        "related-docs"
       ]
     },
     "docs/operations/autonomous-build-completion.md": {
