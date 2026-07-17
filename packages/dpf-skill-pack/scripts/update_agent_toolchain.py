@@ -209,28 +209,52 @@ def canonical_toml_table_header(line: str) -> str | None:
     return ".".join(parts)
 
 
+def _is_table_boundary(line: str) -> bool:
+    stripped = line.strip()
+    return canonical_toml_table_header(stripped) is not None or (
+        stripped.startswith("[[") and stripped.endswith("]]")
+    )
+
+
 def upsert_toml_table(text: str, header: str, body_lines: list[str]) -> str:
     lines = text.splitlines()
-    start = None
     target_header = canonical_toml_table_header(header)
-    for index, line in enumerate(lines):
-        if target_header is not None and canonical_toml_table_header(line) == target_header:
-            start = index
-            break
-    block = [lines[start].strip() if start is not None else header, *body_lines]
-    if start is None:
+
+    # Collect the [start, end) span of EVERY table whose canonical key matches.
+    # Canonical matching (added in #2657) already stops us appending a fresh
+    # duplicate, but a config a pre-#2657 updater already corrupted still carries
+    # a stray second copy. Collapsing all matches into one block heals that in
+    # place -- a duplicate table is a TOML redefinition error, so leaving it
+    # forces the operator to hand-delete the block on every run.
+    ranges: list[tuple[int, int]] = []
+    index = 0
+    while index < len(lines):
+        if target_header is not None and canonical_toml_table_header(lines[index]) == target_header:
+            end = index + 1
+            while end < len(lines) and not _is_table_boundary(lines[end]):
+                end += 1
+            ranges.append((index, end))
+            index = end
+        else:
+            index += 1
+
+    if not ranges:
         prefix = "\n" if text.strip() else ""
-        return text.rstrip() + prefix + "\n".join(block) + "\n"
-    end = start + 1
-    while end < len(lines):
-        stripped = lines[end].strip()
-        if canonical_toml_table_header(stripped) is not None or (
-            stripped.startswith("[[") and stripped.endswith("]]")
-        ):
-            break
-        end += 1
-    next_lines = lines[:start] + block + lines[end:]
-    return "\n".join(next_lines).rstrip() + "\n"
+        return text.rstrip() + prefix + "\n".join([header, *body_lines]) + "\n"
+
+    # Preserve the first occurrence's existing header spelling so we never
+    # gratuitously reformat a table whose quoting another writer owns.
+    first_start = ranges[0][0]
+    block = [lines[first_start].strip(), *body_lines]
+    removal = {ln for start, end in ranges for ln in range(start, end)}
+    rebuilt: list[str] = []
+    for i, line in enumerate(lines):
+        if i == first_start:
+            rebuilt.extend(block)
+        if i in removal:
+            continue
+        rebuilt.append(line)
+    return "\n".join(rebuilt).rstrip() + "\n"
 
 
 def ensure_codex_config(home: Path, mcp_url: str, dry_run: bool) -> bool:
