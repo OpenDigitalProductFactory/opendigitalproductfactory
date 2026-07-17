@@ -98,6 +98,17 @@ export function ancestryFailureDetail(kind: AncestryFailureKind): string {
  * Candidate directories to run git ancestry in. Pure over env + cwd so tests
  * can inject without mutating process.env.
  */
+/**
+ * Well-known in-container / install mounts that often hold the DPF clone even
+ * when DPF_REPO_ROOT was never exported into the portal process (BI-1D55A2AD).
+ * Order is least→most specific so env still wins via push-first.
+ */
+export const WELL_KNOWN_PORTAL_REPO_ROOTS = Object.freeze([
+  "/host-dpf", // docker-compose host install bind (DPF_HOST_INSTALL_PATH)
+  "/host-source", // promoter / self-upgrade host source mount
+  "/workspace", // dpf-source-code volume used by some portal images
+]);
+
 export function gitRepoRootCandidates(
   env: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd(),
@@ -109,12 +120,19 @@ export function gitRepoRootCandidates(
   };
   push(env.DPF_REPO_ROOT);
   push(env.DPF_GIT_WORK_TREE);
+  push(env.PROJECT_ROOT);
   // GIT_DIR is a .git path — use its parent as work tree when it ends with .git
   const gitDir = (env.GIT_DIR ?? "").trim();
   if (gitDir.endsWith("/.git") || gitDir.endsWith("\\.git")) {
     push(gitDir.slice(0, -5));
   } else {
     push(gitDir || undefined);
+  }
+  // Portal containers often do not have process.cwd() === the Git work tree
+  // (Next runs under /app). Always try the compose-standard host mounts so a
+  // normal local install can compute ancestry without ad-hoc discovery.
+  for (const wellKnown of WELL_KNOWN_PORTAL_REPO_ROOTS) {
+    push(wellKnown);
   }
   push(cwd);
   return roots;
