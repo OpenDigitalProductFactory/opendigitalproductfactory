@@ -477,7 +477,10 @@ async function seedDiscoveryFingerprints(): Promise<void> {
         result.unresolvedTaxonomy.join(", "),
     );
   }
-  console.log(`Seeded ${result.loaded} discovery fingerprint rules (catalog ${result.catalogKey}@${result.version})`);
+  console.log(
+    `Seeded ${result.loaded} discovery fingerprint rules (catalog ${result.catalogKey}@${result.version}), ` +
+      `${result.catalogIdentitiesLinked} linked to canonical CatalogIdentity rows`,
+  );
 }
 
 async function seedDigitalProducts(): Promise<void> {
