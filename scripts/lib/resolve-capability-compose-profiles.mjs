@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { governCapabilityComposeEnvironment } from "./govern-capability-compose-args.mjs";
 
 const HOSTS = new Set(["windows", "macos", "linux"]);
 const OVERLAYS = new Set(["promote", "dev", "integration-test", "linux-monitoring"]);
@@ -29,12 +30,13 @@ const stateHash = (catalog, enabled) => {
   return createHash("sha256").update(`${catalog.catalogHash}\n${lines}`).digest("hex");
 };
 
-export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform, overlays = [], aliases = [], migrate = false }) {
+export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform, overlays = [], aliases = [], composeProfiles = "", migrate = false }) {
   if (!catalog || !Array.isArray(catalog.capabilities) || typeof catalog.catalogHash !== "string") throw new Error("invalid_capability_service_catalog");
   if (hostPlatform !== undefined && !HOSTS.has(hostPlatform)) throw new Error(`invalid_host_platform:${hostPlatform}`);
   const byId = new Map(catalog.capabilities.map((entry) => [entry.capabilityId, entry]));
-  const legacy = !Array.isArray(state?.enabledRuntimeCapabilities) || !state.capabilityCatalogHash || !state.capabilityStateVersion;
-  if (legacy && !migrate) throw new Error("capability_state_stale");
+  const legacy = !Array.isArray(state?.enabledRuntimeCapabilities);
+  const unversioned = legacy || !state.capabilityCatalogHash || !state.capabilityStateVersion;
+  if (unversioned && !migrate) throw new Error("capability_state_stale");
   const requested = legacy ? [...PRE_PROFILE_COMPATIBILITY_CAPABILITIES] : [...state.enabledRuntimeCapabilities];
   for (const alias of aliases) {
     const capability = ALIASES.get(alias);
@@ -53,7 +55,7 @@ export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform,
   for (const entry of catalog.capabilities) if (entry.activationPolicy === "always") visit(entry.capabilityId);
   const enabledRuntimeCapabilities = sortedUnique(enabled);
   const capabilityStateVersion = stateHash(catalog, enabledRuntimeCapabilities);
-  if (!legacy && (state.capabilityCatalogHash !== catalog.catalogHash || state.capabilityStateVersion !== capabilityStateVersion)) throw new Error("capability_state_stale");
+  if (!unversioned && (state.capabilityCatalogHash !== catalog.catalogHash || state.capabilityStateVersion !== capabilityStateVersion)) throw new Error("capability_state_stale");
   for (const overlay of overlays) if (!OVERLAYS.has(overlay)) throw new Error(`unknown_lifecycle_profile:${overlay}`);
 
   const entries = enabledRuntimeCapabilities.map((id) => byId.get(id));
@@ -67,13 +69,19 @@ export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform,
   )).map(({ service }) => service.service));
   const runtimeProfiles = sortedUnique(services.flatMap((service) => service.profiles ?? []).filter((profile) => profile.startsWith("runtime-")));
   const overlayProfiles = sortedUnique(overlays);
+  const governed = governCapabilityComposeEnvironment({
+    args: [],
+    projection: { runtimeProfiles },
+    composeProfiles: [...runtimeProfiles, ...overlayProfiles, composeProfiles].filter(Boolean).join(","),
+  });
+  const governedOverlayProfiles = governed.composeProfiles.filter((profile) => !runtimeProfiles.includes(profile));
   return {
     enabledRuntimeCapabilities,
     capabilityCatalogHash: catalog.catalogHash,
     capabilityStateVersion,
     runtimeProfiles,
-    overlayProfiles,
-    composeProfiles: [...runtimeProfiles, ...overlayProfiles],
+    overlayProfiles: governedOverlayProfiles,
+    composeProfiles: governed.composeProfiles,
     requiredServices,
   };
 }
@@ -87,6 +95,7 @@ function parseArgs(argv) {
     else if (arg === "--host") result.hostPlatform = argv[++index];
     else if (arg === "--overlay") result.overlays.push(argv[++index]);
     else if (arg === "--alias") result.aliases.push(argv[++index]);
+    else if (arg === "--compose-profiles") result.composeProfiles = argv[++index] ?? "";
     else if (arg === "--migrate") result.migrate = true;
     else if (arg === "--write") result.write = true;
     else throw new Error(`unknown_argument:${arg}`);

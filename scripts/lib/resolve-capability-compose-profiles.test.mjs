@@ -80,6 +80,18 @@ test("a previous-release state migrates to the documented default-start compatib
   );
 });
 
+test("a fresh initialized state migrates to the core-only capability closure", async () => {
+  const result = await run({ schemaVersion: 1, enabledRuntimeCapabilities: [] }, "--host", "linux", "--migrate", "--write");
+  assert.equal(result.status, 0, result.stderr);
+  const resolved = JSON.parse(result.stdout);
+  assert.deepEqual(resolved.enabledRuntimeCapabilities, ["runtime:core"]);
+  assert.deepEqual(resolved.runtimeProfiles, []);
+  const stored = JSON.parse(await readFile(result.statePath, "utf8"));
+  assert.deepEqual(stored.enabledRuntimeCapabilities, ["runtime:core"]);
+  assert.equal(stored.capabilityCatalogHash, catalog.catalogHash);
+  assert.equal(typeof stored.capabilityStateVersion, "string");
+});
+
 test("migration atomically persists the resolved snapshot for restart and autostart", async () => {
   const migrated = await run({ schemaVersion: 1, installerVersion: "previous" }, "--host", "windows", "--migrate", "--write");
   assert.equal(migrated.status, 0, migrated.stderr);
@@ -103,6 +115,16 @@ test("special lifecycle profiles remain overlays and compatibility aliases resol
   assert.deepEqual(resolved.composeProfiles, ["runtime-deep-observability", "runtime-local-speech", "linux-monitoring", "promote"]);
   assert.ok(resolved.requiredServices.includes("dpf-tts"));
   assert.ok(resolved.requiredServices.includes("grafana"));
+});
+
+test("governed COMPOSE_PROFILES preserves an allowlisted host overlay without granting runtime authority", async () => {
+  const preserved = await run(snapshot(["runtime:core"]), "--host", "linux", "--compose-profiles", "linux-host-network");
+  assert.equal(preserved.status, 0, preserved.stderr);
+  assert.deepEqual(JSON.parse(preserved.stdout).composeProfiles, ["linux-host-network"]);
+
+  const rejected = await run(snapshot(["runtime:core"]), "--host", "linux", "--compose-profiles", "runtime-build");
+  assert.equal(rejected.status, 2);
+  assert.match(rejected.stderr, /^capability_profile_not_enabled:runtime-build\s*$/);
 });
 
 test("host filtering preserves Linux and macOS service requirements without changing capability profiles", async () => {
@@ -144,4 +166,6 @@ test("lifecycle scripts consume the adapter instead of carrying runtime service 
   const promote = await readFile(new URL("../../scripts/promote.sh", import.meta.url), "utf8");
   assert.match(promote, /requiredServices\.includes\("sandbox"\)/);
   assert.match(promote, /sandbox-refresh-optional-inactive/);
+  const compose = await readFile(new URL("../../scripts/installer/lib/compose.sh", import.meta.url), "utf8");
+  assert.match(compose, /--compose-profiles/);
 });

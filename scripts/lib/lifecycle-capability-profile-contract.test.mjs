@@ -19,6 +19,7 @@ test("consumer release assets are integrity-bound and execute the canonical adap
       "docker-compose.yml",
       "docker-compose.release.yml",
       "scripts/lib/resolve-capability-compose-profiles.mjs",
+      "scripts/lib/govern-capability-compose-args.mjs",
       "scripts/capability-service-catalog.generated.json",
       "scripts/installer/install-state.schema.json",
       "scripts/installer/lib/state.ps1",
@@ -58,6 +59,7 @@ test("consumer release assets are integrity-bound and execute the canonical adap
     const compose = await readFile(join(install, "docker-compose.yml"), "utf8");
     assert.doesNotMatch(compose, /^  (neo4j|qdrant):/m);
     assert.equal(await readFile(join(install, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "utf8"), await readFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "utf8"));
+    assert.equal(await readFile(join(install, "scripts", "lib", "govern-capability-compose-args.mjs"), "utf8"), await readFile(join(root, "scripts", "lib", "govern-capability-compose-args.mjs"), "utf8"));
     assert.match(await readFile(trace, "utf8"), /compose -f docker-compose\.yml -f docker-compose\.release\.yml up -d/);
     const installedEnv = await readFile(join(install, ".env"), "utf8");
     assert.match(installedEnv, /^DPF_IMAGE_TAG=v-test-42$/m);
@@ -167,6 +169,18 @@ test("POSIX autostart resolves and executes the XDG state snapshot", async () =>
   }
 });
 
+test("POSIX lifecycle preserves a governed COMPOSE_PROFILES host overlay", async () => {
+  const dir = await mkdtemp(join(root, ".task5-compose-overlay-"));
+  try {
+    const command = `unset DPF_LIB_COMPOSE_LOADED DPF_LIB_PLATFORM_LOADED DPF_LIB_STATE_LOADED; export HOME='${bashPath(join(dir, "home"))}' XDG_STATE_HOME='${bashPath(join(dir, "xdg"))}' REPO_ROOT='${bashPath(root)}'; source scripts/installer/lib/state.sh; dpf_state_init test '${bashPath(root)}'; source scripts/installer/lib/compose.sh; DPF_PLATFORM=linux COMPOSE_PROFILES=linux-host-network; dpf_compose_profiles; printf '%s' "$COMPOSE_PROFILES"`;
+    const result = runBash(command);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "linux-host-network");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("dpf-compose uses XDG state and effective roots outside the working directory", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-compose-context-"));
   try {
@@ -177,6 +191,7 @@ test("dpf-compose uses XDG state and effective roots outside the working directo
     await mkdir(join(install, "scripts", "lib"), { recursive: true });
     await mkdir(elsewhere); await mkdir(stateDir, { recursive: true });
     await copyFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(install, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
+    await copyFile(join(root, "scripts", "lib", "govern-capability-compose-args.mjs"), join(install, "scripts", "lib", "govern-capability-compose-args.mjs"));
     await copyFile(join(root, "scripts", "capability-service-catalog.generated.json"), join(install, "scripts", "capability-service-catalog.generated.json"));
     await writeFile(join(install, "docker-compose.yml"), "name: dpf-context\nservices: {}\n");
     await writeFile(join(stateDir, "install-state.json"), `${JSON.stringify({ schemaVersion: 1, installPath: install, platform: "win32", enabledRuntimeCapabilities: [] })}\n`);

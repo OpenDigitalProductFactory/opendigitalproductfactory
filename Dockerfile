@@ -77,6 +77,7 @@ COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY docker-compose.yml docker-compose.release.yml ./
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/resolve-capability-compose-profiles.mjs ./scripts/lib/
+COPY scripts/lib/govern-capability-compose-args.mjs ./scripts/lib/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/install-state.schema.json ./scripts/installer/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
@@ -129,7 +130,7 @@ RUN node packages/db/scripts/generate-tools-snapshot.js
 RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/installer/lib \
       /dpf-release-assets/monitoring && \
     cp docker-compose.yml docker-compose.release.yml /dpf-release-assets/ && \
-    cp scripts/lib/resolve-capability-compose-profiles.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/install-state.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/lib/state.ps1 /dpf-release-assets/scripts/installer/lib/ && \

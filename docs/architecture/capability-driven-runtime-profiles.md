@@ -62,6 +62,13 @@ The persistent snapshot stores sorted `enabledRuntimeCapabilities`, `capabilityC
 
 A previous-release state without capability fields migrates once to the documented pre-profile compatibility set: core, build, browser automation, durable automation, local speech, deep observability, and external AI. This preserves services that previously started by default without silently enabling newer optional capabilities. The adapter expands dependencies, writes the sorted keys and hashes through a sibling temporary file and atomic rename, and subsequent resolution rejects stale catalog or state hashes. Existing optional volumes and data are not deleted by migration or deactivation; deletion requires the separate evidence-approved removal process.
 
+A fresh installer state carries an explicit empty capability selection, so its
+first projection activates only the always-on core dependency closure and
+writes the current hashes. Missing capability selection means legacy state;
+an explicit empty selection means a new core-only install. This distinction
+prevents compatibility migration from turning every clean install into the
+pre-profile full runtime.
+
 Consumer installs no longer embed a second Compose topology. The Windows installer exports canonical release assets from the selected portal image, rejects missing, duplicate, path-escaping, unlisted, or SHA-256-mismatched files, and records a verified-asset manifest and release-version marker. Resume revalidates the installed asset bytes and version before binding `.env`. `DPF_IMAGE_TAG` and `GHCR_OWNER` are replaced atomically while unrelated operator settings and comments are preserved, so every image in `docker-compose.release.yml` resolves to the verified release version. The resolved project root and Compose file chain are canonicalized for child processes so a wrapper cannot validate one installation and execute another.
 
 Governed self-upgrade carries the enabled capability snapshot forward and recomputes its projection against the release catalog before service replacement. The promotion recovery path copies the prior install state before mutation and restores that file atomically after a failed promotion; the governed rollback workflow owns restoration of the prior deployed release and PostgreSQL recovery point. Normal upgrades use `/ops/self-upgrade`; direct rebuilds of the live portal are not a supported upgrade path.

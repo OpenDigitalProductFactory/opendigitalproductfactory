@@ -124,8 +124,8 @@ dpf_compose_files() {
 # passed explicitly as additional adapter arguments (for example:
 # --overlay promote); runtime profiles always come from the generated catalog.
 dpf_compose_profiles() {
-  local root="${REPO_ROOT:-$(pwd)}" projection
-  projection="$(dpf_resolve_capability_compose_profiles "$root" "${DPF_PLATFORM:-}" "$@")" || return 1
+  local root="${REPO_ROOT:-$(pwd)}" projection operator_profiles="${COMPOSE_PROFILES:-}"
+  projection="$(dpf_resolve_capability_compose_profiles "$root" "${DPF_PLATFORM:-}" --compose-profiles "$operator_profiles" "$@")" || return 1
   DPF_CAPABILITY_PROJECTION="$projection"
   COMPOSE_PROFILES="$(printf '%s' "$projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
   export COMPOSE_PROFILES DPF_CAPABILITY_PROJECTION

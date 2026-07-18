@@ -26,6 +26,11 @@ service because provider configuration remains live state. Previously disabled
 ADP and development capabilities are not enabled by migration. This is the
 compatibility set, rather than every optional service.
 
+A newly initialized state is different from a previous-release state: its
+explicit empty capability selection migrates to the dependency-required core
+closure only. Optional runtime profiles remain inactive until enabled through
+the governed capability transition path.
+
 `promote`, `dev`, `integration-test`, and `linux-monitoring` remain explicit
 lifecycle/host overlays. For one compatibility release, `tts` resolves to local
 speech and `observability-ui` resolves to deep observability; both aliases select
@@ -45,7 +50,9 @@ Lifecycle commands must pass through the installer/start helpers or
 ordered Compose file chain, host, and resolved profiles before invoking Docker.
 It rejects caller attempts to enable a disabled capability profile. Explicit
 lifecycle overlays remain allowed; `COMPOSE_PROFILES` is not an authority for
-capability state.
+capability state. Allowlisted operator overlays such as `linux-host-network`
+are preserved and validated; runtime profile names in the environment are
+accepted only when the persisted capability projection already enables them.
 
 ### Consumer release assets
 
