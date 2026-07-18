@@ -73,6 +73,20 @@ export async function runCapabilityOwnedBackupSteps(
   return receipts;
 }
 
+export async function runScheduledCoreAndCapabilityBackups(deps: {
+  step: StepRunner;
+  runPostgres: () => Promise<unknown>;
+  loadOperationalState: () => Promise<OperationalCapabilityState>;
+}): Promise<{ pgResult: unknown; capabilityReceipts: CapabilityBackupReceipt[] }> {
+  const pgResult = await deps.step.run("run-postgres-backup-scheduled", deps.runPostgres);
+  try {
+    const state = await deps.step.run("load-operational-capability-state", deps.loadOperationalState) as OperationalCapabilityState;
+    return { pgResult, capabilityReceipts: await runCapabilityOwnedBackupSteps(deps.step, state) };
+  } catch (error) {
+    return { pgResult, capabilityReceipts: [{ target: "capability-planning", status: "optional_degraded", selection: "selected", result: { error: error instanceof Error ? error.message : "capability_planning_failed" } }] };
+  }
+}
+
 // ─── Daily cron (postgres backup + trial-restore) ────────────────────────────
 
 export const allBackupsDailyScheduled = inngest.createFunction(
@@ -86,19 +100,12 @@ export const allBackupsDailyScheduled = inngest.createFunction(
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    const pgResult = await step.run("run-postgres-backup-scheduled", async () => {
+    const planned = await runScheduledCoreAndCapabilityBackups({ step, runPostgres: async () => {
       const { runPostgresBackup } = await import(
         "@/lib/operate/backups/postgres-backup-runner"
       );
       return runPostgresBackup({ trigger: "scheduled" });
-    });
-    let capabilityReceipts: CapabilityBackupReceipt[];
-    try {
-      const operationalState = await step.run("load-operational-capability-state", () => loadOperationalCapabilityState({ observedProviders: {} }));
-      capabilityReceipts = await runCapabilityOwnedBackupSteps(step, operationalState as OperationalCapabilityState);
-    } catch (error) {
-      capabilityReceipts = [{ target: "capability-planning", status: "optional_degraded", selection: "selected", result: { error: error instanceof Error ? error.message : "capability_planning_failed" } }];
-    }
+    }, loadOperationalState: () => loadOperationalCapabilityState({ observedProviders: {} }) });
 
     // Postgres trial-restore verification (BI-31C9FBDF). Runs AFTER the
     // postgres backup completes — verifies the dump is functionally
@@ -116,7 +123,7 @@ export const allBackupsDailyScheduled = inngest.createFunction(
       },
     );
 
-    return { pgResult, capabilityReceipts, trialRestoreResult };
+    return { ...planned, trialRestoreResult };
   },
 );
 

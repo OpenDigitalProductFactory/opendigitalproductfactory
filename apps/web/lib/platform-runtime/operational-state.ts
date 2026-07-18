@@ -127,16 +127,19 @@ export async function observeDockerProjectServices(get: DockerGet = dockerSocket
 }
 
 function dockerSocketGet(path: string): Promise<unknown> {
+  return boundedDockerSocketGet(path, request, 5_000, 1024 * 1024);
+}
+export function boundedDockerSocketGet(path: string, requestFactory: typeof request, timeoutMs: number, maxBytes: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const req = request({ socketPath: "/var/run/docker.sock", path, method: "GET" }, (response) => {
+    const req = requestFactory({ socketPath: "/var/run/docker.sock", path, method: "GET" }, (response) => {
       const chunks: Buffer[] = []; let bytes = 0;
-      response.on("data", (chunk) => { const buffer = Buffer.from(chunk); bytes += buffer.length; if (bytes > 1024 * 1024) { req.destroy(new Error("docker_engine_response_too_large")); return; } chunks.push(buffer); });
+      response.on("data", (chunk) => { const buffer = Buffer.from(chunk); bytes += buffer.length; if (bytes > maxBytes) { req.destroy(new Error("docker_engine_response_too_large")); return; } chunks.push(buffer); });
       response.on("end", () => {
         if ((response.statusCode ?? 500) >= 400) return reject(new Error(`docker_engine_http_${response.statusCode}`));
         try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch (error) { reject(error); }
       });
     });
-    req.setTimeout(5_000, () => req.destroy(new Error("docker_engine_timeout")));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error("docker_engine_timeout")));
     req.on("error", reject); req.end();
   });
 }

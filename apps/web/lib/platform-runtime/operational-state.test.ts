@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { EventEmitter } from "node:events";
 
-import { createOperationalCapabilityState, loadOperationalCapabilityState, observeDockerProjectServices } from "./operational-state";
+import { boundedDockerSocketGet, createOperationalCapabilityState, loadOperationalCapabilityState, observeDockerProjectServices } from "./operational-state";
 import { projectCapabilityServices } from "./capability-service-projection";
 
 describe("createOperationalCapabilityState", () => {
@@ -97,6 +98,19 @@ describe("createOperationalCapabilityState", () => {
       ? { Config: { Labels: { "com.docker.compose.project": "dpf" } } }
       : [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "postgres" } }, { State: "running", Status: "Up (health: starting)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "starting" } }, { State: "running", Status: "Up (unhealthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "unhealthy" } }, { State: "exited", Status: "Exited", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "browser-use" } }, { State: "running", Labels: { "com.docker.compose.project": "other", "com.docker.compose.service": "postgres" } }]);
     expect(observed).toEqual({ postgres: { composePresent: true, healthy: true }, starting: { composePresent: true, healthy: false }, unhealthy: { composePresent: true, healthy: false }, "browser-use": { composePresent: true, healthy: false } });
+  });
+
+  it.each(["timeout", "oversize"])("bounds Docker socket %s failures and observer falls back without hanging", async (mode) => {
+    const factory = ((_options: unknown, callback: (response: EventEmitter & { statusCode: number }) => void) => {
+      const req = new EventEmitter() as EventEmitter & { setTimeout(ms: number, cb: () => void): void; destroy(error: Error): void; end(): void };
+      req.destroy = (error) => req.emit("error", error); req.end = () => {};
+      req.setTimeout = (_ms, cb) => { if (mode === "timeout") queueMicrotask(cb); };
+      if (mode === "oversize") queueMicrotask(() => { const response = Object.assign(new EventEmitter(), { statusCode: 200 }); callback(response); response.emit("data", Buffer.alloc(5)); });
+      return req;
+    }) as never;
+    const get = (path: string) => boundedDockerSocketGet(path, factory, 1, 4);
+    await expect(get("/test")).rejects.toThrow(mode === "timeout" ? /timeout/ : /too_large/);
+    await expect(observeDockerProjectServices(get)).resolves.toEqual({});
   });
 });
 

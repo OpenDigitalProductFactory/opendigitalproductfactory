@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { capabilityBackupReceipt, runCapabilityOwnedBackupSteps, selectCapabilityBackupServices } from "./postgres-daily-backup";
+import { capabilityBackupReceipt, runCapabilityOwnedBackupSteps, runScheduledCoreAndCapabilityBackups, selectCapabilityBackupServices } from "./postgres-daily-backup";
 
 describe("capability-owned backup selection", () => {
   it("keeps postgres scheduled and selects enabled targets from the projection", () => {
@@ -36,5 +36,13 @@ describe("capability-owned backup selection", () => {
       { target: "adp", status: "selected", selection: "selected", coverage: "core-included" },
       { target: "browser-use", status: "optional_degraded", selection: "selected" },
     ]);
+  });
+
+  it("retains successful core backup when operational planning rejects", async () => {
+    const core = vi.fn(async () => ({ ok: true }));
+    const result = await runScheduledCoreAndCapabilityBackups({ step: { run: async (_name, operation) => operation() }, runPostgres: core, loadOperationalState: async () => { throw new Error("state unavailable"); } });
+    expect(core).toHaveBeenCalledOnce();
+    expect(result.pgResult).toEqual({ ok: true });
+    expect(result.capabilityReceipts[0]).toMatchObject({ status: "optional_degraded", result: { error: "state unavailable" } });
   });
 });
