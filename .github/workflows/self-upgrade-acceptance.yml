@@ -63,9 +63,7 @@ jobs:
           echo "DPF_ACCEPTANCE_IMAGE=$image" >> "$GITHUB_ENV"
       - name: Candidate readiness succeeds without quiescence
         run: |
-          printf '%s\n' '{"schemaVersion":1,"installerVersion":"acceptance","platform":"linux","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":null,"capabilityStateVersion":null}' > "$RUNNER_TEMP/dpf-state/install-state.json"
-          node scripts/lib/resolve-capability-compose-profiles.mjs \
-            --state "$RUNNER_TEMP/dpf-state/install-state.json" --migrate --write
+          printf '\357\273\277%s\n' '{"schemaVersion":1,"installerVersion":"acceptance","platform":"linux","arch":"amd64","installPath":"/opt/dpf","stateDir":"/dpf-state","composeProjectName":"dpf"}' > "$RUNNER_TEMP/dpf-state/install-state.json"
           docker run --rm --read-only \
             -v "$PWD:/host-source:ro" \
             -v "$RUNNER_TEMP/dpf-state:/dpf-state:ro" \

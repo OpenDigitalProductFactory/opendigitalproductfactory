@@ -12,6 +12,7 @@ import {
   githubJson,
   installCleanupHandlers,
   runNMinusOneUpgrade,
+  classifyUpgradeProtocolFloor,
   verifyBaseRevision,
 } from "./test-n-minus-one-upgrade.mjs";
 
@@ -114,10 +115,17 @@ test("success proves immutable candidate bytes, state migration, recovery, healt
     prepare: async () => ({ candidateDigest: digest, mode: "post-floor" }),
     readiness: async () => ({ ok: true, owner: "portal", digest, quiescenceBegan: false }),
     requestUpgrade: async () => ({ requested: true }),
-    poll: async () => ({ healthy: true, version: sha, promoterDigest: digest, promoterSourceSha: sha, stateMigrated: true, recoveryEvidence: { id: "r" } }),
+    poll: async () => ({ healthy: true, version: sha, promoterDigest: digest, promoterSourceSha: sha, persistenceDigest: digest,
+      sourceV1Hash: "1".repeat(64), migratedV2Hash: "2".repeat(64), sourceSchemaVersion: 1, migratedSchemaVersion: 2,
+      recoveryArtifacts: [{ path: "recovery/install-state.json", sha256: "1".repeat(64) }] }),
     cleanup: async () => {}, writeEvidence: async (evidence) => evidence,
   });
   assert.equal(result.result, "passed");
+});
+
+test("protocol floor uses real PR 3276 ancestry rather than caller mode labels", async () => {
+  assert.equal(await classifyUpgradeProtocolFloor("a".repeat(40), async (floor, base) => floor === "21969d012" && base === "a".repeat(40)), "post-floor");
+  assert.equal(await classifyUpgradeProtocolFloor("b".repeat(40), async () => false), "legacy-bootstrap");
 });
 
 test("honest pre-floor legacy-bootstrap mode refuses automatic migration", async () => {

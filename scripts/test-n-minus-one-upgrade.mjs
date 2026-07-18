@@ -11,6 +11,12 @@ const execFile = promisify(execFileCallback);
 const SHA = /^[0-9a-f]{40}$/i;
 const DIGEST = /^sha256:[0-9a-f]{64}$/i;
 const PROJECT = /^dpf-n1-[a-z0-9][a-z0-9_-]*$/i;
+export const PROMOTER_READINESS_PROTOCOL_FLOOR_SHA = "21969d012";
+
+export async function classifyUpgradeProtocolFloor(baseSha, isAncestor) {
+  if (!SHA.test(baseSha)) throw new Error("protocol floor classification requires an exact base SHA");
+  return await isAncestor(PROMOTER_READINESS_PROTOCOL_FLOOR_SHA, baseSha) ? "post-floor" : "legacy-bootstrap";
+}
 
 export async function githubJson(url, { token = process.env.GITHUB_TOKEN, fetchImpl = fetch, paginate = false } = {}) {
   if (!token) throw new Error("GITHUB_TOKEN is required; acceptance must fail, never skip");
@@ -122,7 +128,10 @@ async function defaultComposeDown({ source, project }) {
 function assertSuccessEvidence(evidence, candidateSha, digest, mode) {
   if (!evidence.healthy || evidence.version !== candidateSha) throw new Error("candidate portal health/version evidence mismatch");
   if (evidence.promoterDigest !== digest || evidence.promoterSourceSha !== candidateSha) throw new Error("candidate promoter digest/source label mismatch");
-  if (!evidence.stateMigrated || !evidence.recoveryEvidence) throw new Error("state migration or recovery evidence missing");
+  if (evidence.readiness?.digest !== digest || evidence.persistenceDigest !== digest) throw new Error("candidate digest diverged across readiness and persistence");
+  if (!/^[a-f0-9]{64}$/.test(evidence.sourceV1Hash ?? "") || !/^[a-f0-9]{64}$/.test(evidence.migratedV2Hash ?? "") || evidence.sourceV1Hash === evidence.migratedV2Hash) throw new Error("independent v1/v2 byte evidence missing");
+  if (evidence.sourceSchemaVersion !== 1 || evidence.migratedSchemaVersion !== 2) throw new Error("install-state schema transition evidence missing");
+  if (!Array.isArray(evidence.recoveryArtifacts) || evidence.recoveryArtifacts.length !== 1 || evidence.recoveryArtifacts[0].sha256 !== evidence.sourceV1Hash) throw new Error("exactly one governed recovery artifact is required");
   if (mode === "post-floor" && evidence.readiness?.owner !== "portal") throw new Error("post-floor baseline must report portal-owned readiness");
 }
 
@@ -133,7 +142,7 @@ export async function runNMinusOneUpgrade(options, deps) {
     await d.verifyBase(options);
     const prepared = await d.prepare(options);
     evidence.candidateDigest = prepared.candidateDigest;
-    evidence.mode = prepared.mode;
+    evidence.mode = prepared.mode ?? await classifyUpgradeProtocolFloor(options.baseSha, d.isAncestor);
     if (!DIGEST.test(prepared.candidateDigest)) throw new Error("candidate image did not resolve to an immutable digest");
     const readiness = await d.readiness({ ...options, ...prepared });
     evidence.readiness = readiness;
@@ -164,6 +173,13 @@ function createRuntimeDependencies(options) {
   let cleanupOnce;
   const portalUrl = options.portalUrl ?? "http://127.0.0.1:3000";
   return {
+    isAncestor: async (floor, base) => {
+      const result = await execFile("git", ["merge-base", "--is-ancestor", floor, base], { cwd: process.cwd() }).then(() => true, (error) => {
+        if (error?.code === 1) return false;
+        throw error;
+      });
+      return result;
+    },
     verifyBase: (args) => verifyBaseRevision({ ...args, prNumber: options.prNumber, requiredChecks: options.requiredChecks }),
     prepare: async () => {
       workspace = await createHarnessWorkspace();
@@ -180,7 +196,7 @@ function createRuntimeDependencies(options) {
       const candidateDigest = inspected.Id;
       const labels = inspected.Config?.Labels ?? {};
       if (labels["org.opencontainers.image.revision"] !== options.candidateSha || labels["org.opendpf.promoter.contract-digest"] !== `sha256:${contractDigest}`) throw new Error("candidate image labels do not bind source SHA and contract digest");
-      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, mode: options.bridgeMode ? "introduction-bridge" : "post-floor", workspace };
+      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, workspace };
     },
     readiness: async ({ candidateDigest }) => {
       if (options.injectReadinessFailure) return { ok: false, owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest, quiescenceBegan: false };
