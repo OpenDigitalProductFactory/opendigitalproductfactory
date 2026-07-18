@@ -88,7 +88,7 @@ export async function runCandidatePreflight(params: {
     }
     return { ok: true, resolvedPromoterDigest: artifact.digest };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     await params.recordReadiness(params.runId, {
       stage: "preflight", owner: "portal", mode: "enforced", result: "failed",
       baselineSha: params.baselineSha ?? undefined, targetSha: params.targetSha,
@@ -100,3 +100,4 @@ export async function runCandidatePreflight(params: {
     return { ok: false, reason: "promoter-readiness-failed" };
   }
 }
+import { getErrorMessage } from "@/lib/shared/get-error-message";
