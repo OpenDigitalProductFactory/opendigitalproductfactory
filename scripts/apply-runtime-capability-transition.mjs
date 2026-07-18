@@ -21,6 +21,7 @@ const writeReceipt = async (status, failure, observedServices = []) => {
   await rename(`${target}.tmp`, target);
 };
 const fail = async (reason, status = "failed", code = 78) => { await writeReceipt(status, reason); process.stderr.write(JSON.stringify({ status, failure: reason }) + "\n"); process.exit(code); };
+const contend = (reason) => { process.stderr.write(JSON.stringify({ status: "contended", failure: reason }) + "\n"); process.exit(75); };
 
 const argvId = process.argv[2] === "--runtime-capability-transition" ? process.argv[3] : "";
 try { secret = (await readFile(process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE ?? "/run/secrets/dpf-runtime-transition", "utf8")).trim(); } catch { await fail("transition_secret_unreadable"); }
@@ -46,9 +47,9 @@ const claim = `${receiptPath}.claim`;
 try { await mkdir(claim); await writeFile(join(claim, "expires-at"), envelope.expiresAt, { flag: "wx", mode: 0o600 }); } catch {
   try {
     const claimedUntil = Date.parse((await readFile(join(claim, "expires-at"), "utf8")).trim());
-    if (!Number.isFinite(claimedUntil) || claimedUntil >= now) await fail("transition_already_claimed");
+    if (!Number.isFinite(claimedUntil) || claimedUntil >= now) contend("transition_already_claimed");
     await rm(claim, { recursive: true, force: true }); await mkdir(claim); await writeFile(join(claim, "expires-at"), envelope.expiresAt, { flag: "wx", mode: 0o600 });
-  } catch (error) { if (error?.code !== "ENOENT") await fail("transition_already_claimed"); await fail("invalid_transition_claim"); }
+  } catch (error) { if (error?.code !== "ENOENT") contend("transition_already_claimed"); contend("invalid_transition_claim"); }
 }
 
 const catalogPath = process.env.DPF_CAPABILITY_CATALOG_PATH ?? "/host-source/scripts/capability-service-catalog.generated.json";
@@ -81,7 +82,7 @@ const exact = (projection, observed) => projection.required.every((s) => observe
 const next = { ...before, enabledRuntimeCapabilities: desired.enabledKeys, capabilityCatalogHash: catalogHash, capabilityStateVersion: desired.stateHash };
 await writeFile(`${statePath}.${envelope.transitionId}.tmp`, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.${envelope.transitionId}.tmp`, statePath);
 const applied = reconcile(previous, desired);
-if (applied.status !== 0) { await writeFile(`${statePath}.restore.tmp`, JSON.stringify(before, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.restore.tmp`, statePath); const rolled = reconcile(desired, previous); const rollbackObserved = observe(); await rm(claim, { recursive: true, force: true }); await fail(rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "compose_reconcile_failed_rolled_back" : "compose_reconcile_failed_rollback_failed", rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "failed" : "rollback_failed"); }
+if (applied.status !== 0) { await writeFile(`${statePath}.restore.tmp`, JSON.stringify(before, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.restore.tmp`, statePath); const rolled = reconcile(desired, previous); const rollbackObserved = observe(); await rm(claim, { recursive: true, force: true }); await fail(rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "compose_reconcile_failed_rolled_back" : "compose_reconcile_failed_rollback_failed", rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "rolled_back" : "rollback_failed"); }
 const { ps, services: observed } = observe();
-if (ps.status !== 0 || !exact(desired, observed)) { await writeFile(`${statePath}.restore.tmp`, JSON.stringify(before, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.restore.tmp`, statePath); const rolled = reconcile(desired, previous); const rollbackObserved = observe(); await rm(claim, { recursive: true, force: true }); await fail(rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "required_health_failed_rolled_back" : "required_health_failed_rollback_failed", rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "failed" : "rollback_failed"); }
+if (ps.status !== 0 || !exact(desired, observed)) { await writeFile(`${statePath}.restore.tmp`, JSON.stringify(before, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.restore.tmp`, statePath); const rolled = reconcile(desired, previous); const rollbackObserved = observe(); await rm(claim, { recursive: true, force: true }); await fail(rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "required_health_failed_rolled_back" : "required_health_failed_rollback_failed", rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "rolled_back" : "rollback_failed"); }
 await writeReceipt("applied", undefined, observed); await rm(claim, { recursive: true, force: true }); process.stdout.write(await readFile(receiptPath, "utf8"));

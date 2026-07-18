@@ -1769,6 +1769,8 @@ model RuntimeCapabilityTransition {
   desiredKeys       String[]
   previousProfiles  String[]
   desiredProfiles   String[]
+  previousServices  String[]
+  desiredServices   String[]
   previousStates    Json
   desiredStates     Json
   previousStateHash String
@@ -1782,8 +1784,21 @@ model RuntimeCapabilityTransition {
   hostAppliedAt     DateTime?
   completedAt       DateTime?
   updatedAt         DateTime @updatedAt
+  events            RuntimeCapabilityTransitionEvent[]
 
   @@index([status, createdAt])
+}
+
+/// Append-only governance audit for every terminal runtime transition outcome.
+model RuntimeCapabilityTransitionEvent {
+  id           String   @id @default(cuid())
+  transitionId String
+  outcome      String
+  detail       Json
+  createdAt    DateTime @default(now())
+  transition   RuntimeCapabilityTransition @relation(fields: [transitionId], references: [transitionId], onDelete: Restrict)
+
+  @@index([transitionId, createdAt])
 }
 
 model McpServer {

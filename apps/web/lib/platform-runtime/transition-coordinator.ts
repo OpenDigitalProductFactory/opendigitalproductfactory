@@ -23,12 +23,14 @@ export type RuntimeCapabilityTransitionRequest = {
 
 export interface RuntimeCapabilityTransitionReceipts {
   /** Implementations serialize with an advisory lock + the DB partial unique index. */
-  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string; previousProfiles: string[]; desiredProfiles: string[] }): Promise<
+  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string; previousProfiles: string[]; desiredProfiles: string[]; previousServices?: string[]; desiredServices?: string[]; recheckAttributedWork?: () => Promise<Readonly<Record<string, number>>> }): Promise<
     | { created: true }
+    | { created: false; kind: "drain_required"; blockingCounts: Readonly<Record<string, number>> }
     | { created: false; kind: "replay"; status: string }
     | { created: false; kind: "active_conflict"; status: string; transitionId: string }
   >;
   markFailed(transitionId: string, failure: string): Promise<void>;
+  markHostOutcome?(transitionId: string, receipt: RuntimeTransitionReceipt): Promise<void>;
   markHostApplied(transitionId: string): Promise<void>;
   commitSuccess?(transitionId: string, receipt: RuntimeTransitionReceipt, desiredStates: Readonly<Record<string, string>>): Promise<void>;
   markCompensating?(transitionId: string, failure: string): Promise<void>;
@@ -44,6 +46,7 @@ export type RuntimeCapabilityCoordinatorDeps = {
   protocolSecret?: string;
   protocolSecretFileHostPath?: string;
   resolveProjection?(keys: readonly string[]): Promise<{ catalogHash: string; stateHash: string; enabledKeys: string[]; composeProfiles: string[]; requiredServices: string[] }>;
+  recheckAttributedWork?(): Promise<Readonly<Record<string, number>>>;
   readHostReceipt?(transitionId: string): Promise<RuntimeTransitionReceipt>;
   verifyRequiredHealth?(desiredKeys: readonly string[], observedServices: readonly string[]): Promise<boolean>;
   now?: () => number;
@@ -51,12 +54,13 @@ export type RuntimeCapabilityCoordinatorDeps = {
 
 type TransitionModel = {
   findFirst(args: unknown): Promise<{ transitionId: string; status: string } | null>;
-  findUnique(args: unknown): Promise<{ status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[] } | null>;
+  findUnique(args: unknown): Promise<{ status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[]; previousServices: string[]; desiredServices: string[] } | null>;
   create(args: unknown): Promise<unknown>;
   updateMany(args: unknown): Promise<{ count: number }>;
 };
 type CapabilityModel = { updateMany(args: unknown): Promise<{ count: number }> };
-type TransitionTx = { $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel; platformCapability: CapabilityModel };
+type EventModel = { create(args: unknown): Promise<unknown> };
+type TransitionTx = { $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel; platformCapability: CapabilityModel; runtimeCapabilityTransitionEvent: EventModel };
 type TransitionPrisma = {
   runtimeCapabilityTransition: TransitionModel;
   $transaction<T>(operation: (tx: TransitionTx) => Promise<T>, options: { isolationLevel: "Serializable" }): Promise<T>;
@@ -68,20 +72,25 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       // Fixed SQL with no interpolation: the transaction-scoped lock serializes
       // the read/create pair before the partial unique index supplies backstop.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
-      const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true } });
+      const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true } });
       if (replay) {
-        const same = replay.catalogHash === input.catalogHash && replay.previousStateHash === input.previousStateHash && replay.desiredStateHash === input.desiredStateHash && JSON.stringify(replay.previousKeys) === JSON.stringify([...input.previousKeys].sort()) && JSON.stringify(replay.desiredKeys) === JSON.stringify([...input.desiredKeys].sort());
+        const same = replay.catalogHash === input.catalogHash && replay.previousStateHash === input.previousStateHash && replay.desiredStateHash === input.desiredStateHash && JSON.stringify(replay.previousKeys) === JSON.stringify([...input.previousKeys].sort()) && JSON.stringify(replay.desiredKeys) === JSON.stringify([...input.desiredKeys].sort()) && JSON.stringify(replay.previousProfiles) === JSON.stringify(input.previousProfiles) && JSON.stringify(replay.desiredProfiles) === JSON.stringify(input.desiredProfiles) && JSON.stringify(replay.previousServices) === JSON.stringify(input.previousServices ?? []) && JSON.stringify(replay.desiredServices) === JSON.stringify(input.desiredServices ?? []);
         if (!same) throw new Error("transition_id_conflict");
         return { created: false, kind: "replay", status: replay.status };
       }
       const active = await tx.runtimeCapabilityTransition.findFirst({ where: { status: { in: [...ACTIVE_RUNTIME_TRANSITION_STATUSES] } }, select: { transitionId: true, status: true } });
       if (active) return { created: false, kind: "active_conflict", status: active.status, transitionId: active.transitionId };
+      const blockingCounts = input.recheckAttributedWork ? await input.recheckAttributedWork() : {};
+      const positive = Object.fromEntries(Object.entries(blockingCounts).filter(([, count]) => count > 0));
+      if (Object.keys(positive).length) return { created: false, kind: "drain_required", blockingCounts: positive };
       await tx.runtimeCapabilityTransition.create({ data: {
         transitionId: input.transitionId,
         previousKeys: [...input.previousKeys].sort(),
         desiredKeys: [...input.desiredKeys].sort(),
         previousProfiles: input.previousProfiles,
         desiredProfiles: input.desiredProfiles,
+        previousServices: input.previousServices ?? [],
+        desiredServices: input.desiredServices ?? [],
         previousStates: input.previousStates,
         desiredStates: input.desiredStates,
         previousStateHash: input.previousStateHash,
@@ -92,7 +101,8 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       } });
       return { created: true };
     }, { isolationLevel: "Serializable" }),
-    markFailed: async (transitionId, failure) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "failed", failure: { code: failure }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
+    markFailed: (transitionId, failure) => prisma.$transaction(async (tx) => { const r = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "failed", failure: { code: failure }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: "failed", detail: { failure } } }); }, { isolationLevel: "Serializable" }),
+    markHostOutcome: (transitionId, receipt) => prisma.$transaction(async (tx) => { const status = receipt.status === "rolled_back" ? "rolled_back" : receipt.status === "rollback_failed" ? "rollback_failed" : "failed"; const r = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status, hostReceipt: receipt, failure: { code: receipt.failure ?? status }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: status, detail: { receipt } } }); }, { isolationLevel: "Serializable" }),
     markHostApplied: async (transitionId) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "host_applied", hostAppliedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
     commitSuccess: (transitionId, receipt, desiredStates) => prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
@@ -102,6 +112,7 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       }
       const completed = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "host_applied" }, data: { status: "succeeded", hostReceipt: receipt, completedAt: new Date() } });
       if (completed.count !== 1) throw new Error("runtime_transition_cas_failed");
+      await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: "succeeded", detail: { receipt } } });
     }, { isolationLevel: "Serializable" }),
     markCompensating: async (transitionId, failure) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "host_applied" }, data: { status: "compensating", failure: { code: failure } } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
     markRolledBack: async (transitionId, receipt) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "compensating" }, data: { status: "rolled_back", hostReceipt: receipt, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
@@ -113,6 +124,7 @@ export type RuntimeTransitionReconcileRow = {
   transitionId: string; status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string;
   previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[];
   previousServices: string[]; desiredServices: string[];
+  previousStates: Readonly<Record<string, string>>; desiredStates: Readonly<Record<string, string>>; createdAt: Date;
 };
 
 /** Startup recovery runs before mutation is enabled and converges every nonterminal row. */
@@ -120,19 +132,27 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
   listActive(): Promise<RuntimeTransitionReconcileRow[]>;
   readHostReceipt(transitionId: string): Promise<RuntimeTransitionReceipt | null>;
   completeFromReceipt(row: RuntimeTransitionReconcileRow, receipt: RuntimeTransitionReceipt): Promise<void>;
+  classifyTerminalReceipt(row: RuntimeTransitionReconcileRow, receipt: RuntimeTransitionReceipt): Promise<void>;
+  relaunch(row: RuntimeTransitionReconcileRow): Promise<void>;
+  markRecoveryRequired(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
   compensate(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
   protocolSecret: string;
   now?: () => number;
 }): Promise<void> {
   for (const row of await deps.listActive()) {
     const receipt = await deps.readHostReceipt(row.transitionId);
-    if (!receipt) { await deps.compensate(row, "host_receipt_absent"); continue; }
+    if (!receipt) {
+      if ((deps.now?.() ?? Date.now()) - row.createdAt.getTime() <= 10 * 60 * 1000) await deps.relaunch(row);
+      else await deps.compensate(row, "host_receipt_absent_or_expired");
+      continue;
+    }
     const envelope: RuntimeTransitionEnvelope = { version: 1, transitionId: row.transitionId, issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt, catalogHash: row.catalogHash, previousStateHash: row.previousStateHash, desiredStateHash: row.desiredStateHash, previousKeys: row.previousKeys, desiredKeys: row.desiredKeys, previousProfiles: row.previousProfiles, desiredProfiles: row.desiredProfiles, previousServices: row.previousServices, desiredServices: row.desiredServices };
     try {
-      verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
-      await deps.completeFromReceipt(row, receipt);
+      const status = verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
+      if (status === "applied") await deps.completeFromReceipt(row, receipt);
+      else await deps.classifyTerminalReceipt(row, receipt);
     } catch (error) {
-      await deps.compensate(row, error instanceof Error ? error.message : "invalid_host_receipt");
+      await deps.markRecoveryRequired(row, error instanceof Error ? error.message : "invalid_host_receipt");
     }
   }
 }
@@ -184,10 +204,16 @@ export async function coordinateRuntimeCapabilityTransition(
       JSON.stringify(previousProjection.enabledKeys) !== JSON.stringify(normalized.previousKeys) || JSON.stringify(desiredProjection.enabledKeys) !== JSON.stringify(normalized.desiredKeys)) {
     return { status: "failed" as const, failure: "capability_projection_mismatch" as const };
   }
-  const pending = await deps.receipts.createPending({ ...normalized, previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles });
+  const pending = await deps.receipts.createPending({ ...normalized, previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles, previousServices: previousProjection.requiredServices, desiredServices: desiredProjection.requiredServices, recheckAttributedWork: deps.recheckAttributedWork });
   if (!pending.created) {
-    if (pending.kind === "active_conflict" || ACTIVE_RUNTIME_TRANSITION_STATUSES.includes(pending.status as never)) return { status: "transition_in_progress" as const };
-    return { status: "already_terminal" as const, transitionStatus: pending.status };
+    if (pending.kind === "drain_required") return { status: "drain_required" as const, blockingCounts: pending.blockingCounts };
+    if (pending.kind === "active_conflict") return { status: "transition_in_progress" as const };
+    // An identical pending/applying receipt is a crash-recovery replay, not a
+    // competing transition. The host claim/receipt protocol makes relaunch safe.
+    if (pending.status === "pending" || pending.status === "applying") {
+      // continue with the exact persisted immutable envelope
+    } else if (ACTIVE_RUNTIME_TRANSITION_STATUSES.includes(pending.status as never)) return { status: "transition_in_progress" as const };
+    else return { status: "already_terminal" as const, transitionStatus: pending.status };
   }
   let available = false;
   try { available = await deps.isPromoterAvailable(deps.promoterParams.promoterImage); } catch { available = false; }
@@ -214,8 +240,12 @@ export async function coordinateRuntimeCapabilityTransition(
   }); } catch { await deps.receipts.markFailed(request.transitionId, "promoter_spawn_failed"); return { status: "failed" as const, failure: "promoter_spawn_failed" as const }; }
   try {
     const receipt = await deps.readHostReceipt(request.transitionId);
-    verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
-    if (result.exitCode !== 0) throw new Error("host_apply_failed");
+    const receiptStatus = verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
+    if (result.exitCode !== 0 || receiptStatus !== "applied") {
+      if (!deps.receipts.markHostOutcome) throw new Error("host_apply_failed");
+      await deps.receipts.markHostOutcome(request.transitionId, receipt);
+      return { status: receiptStatus === "rollback_failed" ? "rollback_failed" as const : receiptStatus === "rolled_back" ? "rolled_back" as const : "failed" as const, failure: receipt.failure ?? "host_apply_failed" };
+    }
     await deps.receipts.markHostApplied(request.transitionId);
     if (!(await deps.verifyRequiredHealth(desiredProjection.requiredServices, receipt.observedServices))) throw new Error("required_health_failed");
     if (!deps.receipts.commitSuccess) return { status: "host_applied_pending_verification" as const };

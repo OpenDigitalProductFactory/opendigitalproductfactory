@@ -54,6 +54,16 @@ describe("runtime capability transition coordinator", () => {
     expect(d.runPromoter).not.toHaveBeenCalled();
   });
 
+  it("rechecks attributed work under the receipt lock and returns drain_required", async () => {
+    const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(), updateMany: vi.fn() };
+    const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
+    const d = deps({ receipts, recheckAttributedWork: vi.fn(async () => ({ "build-studio-active": 1 })) });
+    await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "drain_required", blockingCounts: { "build-studio-active": 1 } });
+    expect(model.create).not.toHaveBeenCalled();
+    expect(d.runPromoter).not.toHaveBeenCalled();
+  });
+
   it("creates sorted durable receipts under an advisory lock and serializable transaction", async () => {
     const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) };
     const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };

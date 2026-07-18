@@ -11,7 +11,7 @@ export type RuntimeTransitionEnvelope = {
 };
 
 export type RuntimeTransitionReceipt = RuntimeTransitionEnvelope & {
-  status: "applied" | "failed" | "rollback_failed"; observedServices: string[]; completedAt: string;
+  status: "applied" | "failed" | "rolled_back" | "rollback_failed"; observedServices: string[]; completedAt: string;
   beforeHash: string; afterHash: string; failure?: string; signature: string;
 };
 
@@ -24,7 +24,7 @@ export function signTransitionPayload(value: Omit<RuntimeTransitionReceipt, "sig
   return createHmac("sha256", secret).update(canonicalTransitionPayload(value)).digest("hex");
 }
 
-export function verifyTransitionReceipt(receipt: RuntimeTransitionReceipt, secret: string, envelope: RuntimeTransitionEnvelope, now = Date.now()): void {
+export function verifyTransitionReceipt(receipt: RuntimeTransitionReceipt, secret: string, envelope: RuntimeTransitionEnvelope, now = Date.now()): RuntimeTransitionReceipt["status"] {
   const { signature, ...unsigned } = receipt;
   const expected = signTransitionPayload(unsigned, secret);
   if (!/^[a-f0-9]{64}$/.test(signature) || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) throw new Error("runtime_transition_receipt_tampered");
@@ -32,5 +32,10 @@ export function verifyTransitionReceipt(receipt: RuntimeTransitionReceipt, secre
     if (JSON.stringify(receipt[key]) !== JSON.stringify(envelope[key])) throw new Error("runtime_transition_receipt_mismatch");
   }
   if (Date.parse(receipt.expiresAt) < now || Date.parse(receipt.issuedAt) > now + 30_000) throw new Error("runtime_transition_receipt_expired");
-  if (receipt.status !== "applied" || receipt.beforeHash !== envelope.previousStateHash || receipt.afterHash !== envelope.desiredStateHash) throw new Error("runtime_transition_host_apply_failed");
+  if (receipt.status === "applied") {
+    if (receipt.beforeHash !== envelope.previousStateHash || receipt.afterHash !== envelope.desiredStateHash) throw new Error("runtime_transition_host_apply_failed");
+  } else if (receipt.status === "failed" || receipt.status === "rolled_back" || receipt.status === "rollback_failed") {
+    if (receipt.beforeHash !== envelope.previousStateHash || receipt.afterHash !== envelope.previousStateHash) throw new Error("runtime_transition_failure_receipt_mismatch");
+  } else throw new Error("runtime_transition_receipt_status_invalid");
+  return receipt.status;
 }
