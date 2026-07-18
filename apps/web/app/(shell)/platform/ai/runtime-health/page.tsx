@@ -21,6 +21,11 @@ import { readQueueSnapshots } from "@/lib/queue/queue-snapshot-service";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
 import { PhaseRemediationActions } from "@/components/platform/PhaseRemediationActions";
 import Link from "next/link";
+import { CapabilityServiceHealth } from "@/components/monitoring/CapabilityServiceHealth";
+import {
+  type CapabilityServiceHealthProjection,
+} from "@/lib/platform-runtime/service-health";
+import { loadCapabilityServiceHealth } from "@/lib/platform-runtime/service-health-loader";
 
 export const dynamic = "force-dynamic";
 
@@ -106,10 +111,18 @@ export default async function RuntimeHealthPage() {
 
   let overview: ModelSelectionOverview | null = null;
   let loadError: string | null = null;
+  let capabilityHealth: CapabilityServiceHealthProjection | null = null;
+  let capabilityAuthorityError: string | null = null;
   try {
     overview = await resolveModelSelectionByPhase();
   } catch (err) {
     loadError = (err as Error).message;
+  }
+
+  try {
+    capabilityHealth = await loadCapabilityServiceHealth();
+  } catch (err) {
+    capabilityAuthorityError = (err as Error).message;
   }
 
   const errorCount = overview?.flags.filter((f) => f.severity === "error").length ?? 0;
@@ -140,6 +153,25 @@ export default async function RuntimeHealthPage() {
 
       <div style={{ marginBottom: 20 }}>
         <QueueHealthSection snapshots={queueSnapshots} />
+      </div>
+
+      <div className="mb-5">
+        {capabilityHealth ? (
+          <CapabilityServiceHealth projection={capabilityHealth} />
+        ) : (
+          <section
+            aria-labelledby="capability-service-health-title"
+            className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+          >
+            <h2 id="capability-service-health-title" className="text-sm font-semibold text-[var(--dpf-text)]">
+              Capability service requirements
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
+              Capability authority is unavailable. Service requirements cannot be classified safely
+              right now{capabilityAuthorityError ? `: ${capabilityAuthorityError}` : "."}
+            </p>
+          </section>
+        )}
       </div>
 
       <section

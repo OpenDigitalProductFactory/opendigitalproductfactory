@@ -14,6 +14,8 @@ import {
   type Tone,
 } from "@/components/monitoring/health-summary";
 import { loadReleaseHealthState } from "@/lib/release-health/state";
+import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
+import { loadCapabilityServiceHealth } from "@/lib/platform-runtime/service-health-loader";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -54,7 +56,9 @@ export default async function ProductHealthPage({ params }: Props) {
   // BI-3630773C — last-known release stamp state for the portal's Latest
   // Release card. Read from PlatformConfig (written by the release-health
   // cron); null when never polled or never stamped.
-  const releaseHealth = isPortal ? await loadReleaseHealthCard() : null;
+  const [releaseHealth, capabilityHealth] = isPortal
+    ? await Promise.all([loadReleaseHealthCard(), loadCapabilityHealth()])
+    : [null, null];
 
   return (
     <div>
@@ -63,6 +67,7 @@ export default async function ProductHealthPage({ params }: Props) {
           openBugs={product._count.backlogItems}
           productId={id}
           releaseHealth={releaseHealth}
+          capabilityHealth={capabilityHealth}
         />
       ) : (
         <ProductHealth
@@ -94,20 +99,33 @@ async function loadReleaseHealthCard(): Promise<ReleaseHealthCardData | null> {
   }
 }
 
+async function loadCapabilityHealth(): Promise<CapabilityServiceHealthProjection | null> {
+  try {
+    return await loadCapabilityServiceHealth();
+  } catch {
+    // Never infer requirements from monitoring targets when the capability
+    // authority cannot be loaded. The dashboard renders an explicit unknown state.
+    return null;
+  }
+}
+
 function PortalHealth({
   openBugs,
   productId,
   releaseHealth,
+  capabilityHealth,
 }: {
   openBugs: number;
   productId: string;
   releaseHealth: ReleaseHealthCardData | null;
+  capabilityHealth: CapabilityServiceHealthProjection | null;
 }) {
   return (
     <ServiceHealthDashboard
       openBacklogItems={openBugs}
       backlogHref={`/portfolio/product/${productId}/backlog`}
       releaseHealth={releaseHealth}
+      capabilityHealth={capabilityHealth}
     />
   );
 }

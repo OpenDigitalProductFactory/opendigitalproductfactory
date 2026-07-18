@@ -15,23 +15,26 @@ import { MetricTable } from "./MetricTable";
 import { AiCoworkerHealthPanel } from "./AiCoworkerHealthPanel";
 import { RecentAlertsPanel } from "./RecentAlertsPanel";
 import { PortalHealthSummary } from "./PortalHealthSummary";
+import { CapabilityServiceHealth } from "./CapabilityServiceHealth";
 import {
   HOST_RESOURCE_QUERIES,
-  deriveLegacyPlatformSummary,
+  derivePlatformSummary,
   isHostTelemetryConfigured,
 } from "./health-summary";
 import { useAlertQuery } from "./useAlertQuery";
 import { useMetricQuery } from "./useMetricQuery";
 
 import type { ReleaseHealthCardData } from "./health-summary";
+import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
 
 type ServiceHealthDashboardProps = {
+  capabilityHealth: CapabilityServiceHealthProjection | null;
   openBacklogItems?: number;
   backlogHref?: string;
   releaseHealth?: ReleaseHealthCardData | null;
 };
 
-export function ServiceHealthDashboard(props: ServiceHealthDashboardProps = {}) {
+export function ServiceHealthDashboard(props: ServiceHealthDashboardProps) {
   return (
     <MonitoringProvider>
       <ServiceHealthContent {...props} />
@@ -43,6 +46,7 @@ function ServiceHealthContent({
   openBacklogItems,
   backlogHref,
   releaseHealth,
+  capabilityHealth,
 }: ServiceHealthDashboardProps) {
   const { online, checked } = useMonitoringStatus();
   const { data: upTargets, loading: upTargetsLoading } = useMetricQuery("up");
@@ -50,20 +54,26 @@ function ServiceHealthContent({
 
   if (!checked) {
     return (
-      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center">
-        <p className="text-sm text-[var(--dpf-muted)]">Checking platform health...</p>
+      <div className="space-y-6">
+        <CapabilityAuthoritySection capabilityHealth={capabilityHealth} />
+        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center">
+          <p className="text-sm text-[var(--dpf-muted)]">Checking platform health...</p>
+        </div>
       </div>
     );
   }
 
   if (!online) {
     return (
-      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center space-y-2">
-        <p className="text-sm text-[var(--dpf-text)] font-medium">Health data is currently unavailable</p>
-        <p className="text-xs text-[var(--dpf-muted)]">
-          Platform monitoring services are starting up or temporarily unreachable.
-          This page will update automatically when data becomes available.
-        </p>
+      <div className="space-y-6">
+        <CapabilityAuthoritySection capabilityHealth={capabilityHealth} />
+        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center space-y-2">
+          <p className="text-sm text-[var(--dpf-text)] font-medium">Health data is currently unavailable</p>
+          <p className="text-xs text-[var(--dpf-muted)]">
+            Platform monitoring services are starting up or temporarily unreachable.
+            This page will update automatically when data becomes available.
+          </p>
+        </div>
       </div>
     );
   }
@@ -71,13 +81,13 @@ function ServiceHealthContent({
   // The Platform Status StatCard surfaces the worst critical alert summary;
   // suppress the matching AlertBanner row so the same line doesn't render
   // twice on the same screen.
-  const platform = deriveLegacyPlatformSummary({
-    checked,
-    online,
-    upTargets,
-    upTargetsLoading,
-    alerts,
-  });
+  const platform = capabilityHealth
+    ? derivePlatformSummary({ checked, online, capabilityHealth, loading: upTargetsLoading, alerts })
+    : {
+        value: "Unavailable",
+        tone: "critical" as const,
+        detail: "Capability authority could not be loaded",
+      };
   const suppressBannerSummaries =
     platform.tone === "critical" ? [platform.detail] : [];
 
@@ -87,11 +97,14 @@ function ServiceHealthContent({
     <div className="space-y-6">
       {openBacklogItems !== undefined && backlogHref && (
         <PortalHealthSummary
+          capabilityHealth={capabilityHealth}
           openBacklogItems={openBacklogItems}
           backlogHref={backlogHref}
           releaseHealth={releaseHealth}
         />
       )}
+
+      <CapabilityAuthoritySection capabilityHealth={capabilityHealth} />
 
       {/* Active alerts (deduped against the Platform Status StatCard above) */}
       <AlertBanner suppressSummaries={suppressBannerSummaries} />
@@ -186,5 +199,26 @@ function ServiceHealthContent({
       {/* Recent alerts */}
       <RecentAlertsPanel />
     </div>
+  );
+}
+
+function CapabilityAuthoritySection({
+  capabilityHealth,
+}: {
+  capabilityHealth: CapabilityServiceHealthProjection | null;
+}) {
+  if (capabilityHealth) return <CapabilityServiceHealth projection={capabilityHealth} />;
+  return (
+    <section
+      aria-labelledby="capability-service-health-title"
+      className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+    >
+      <h2 id="capability-service-health-title" className="text-sm font-semibold text-[var(--dpf-text)]">
+        Capability service requirements
+      </h2>
+      <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
+        Capability authority is unavailable, so service requirements cannot be classified safely.
+      </p>
+    </section>
   );
 }

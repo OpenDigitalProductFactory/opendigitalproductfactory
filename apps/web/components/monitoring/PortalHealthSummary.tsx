@@ -5,17 +5,19 @@ import Link from "next/link";
 import {
   TONE_COLOR,
   deriveMonitoringSummary,
-  deriveLegacyPlatformSummary,
+  derivePlatformSummary,
   deriveReleaseSummary,
   type HealthSummary,
   type ReleaseHealthCardData,
   type Tone,
 } from "./health-summary";
+import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
 import { useAlertQuery } from "./useAlertQuery";
 import { useMetricQuery } from "./useMetricQuery";
 import { useMonitoringStatus } from "./MonitoringContext";
 
 type Props = {
+  capabilityHealth: CapabilityServiceHealthProjection | null;
   openBacklogItems: number;
   backlogHref: string;
   // BI-3630773C — latest release stamp state; null when never stamped or
@@ -24,18 +26,18 @@ type Props = {
   releaseHealth?: ReleaseHealthCardData | null;
 };
 
-export function PortalHealthSummary({ openBacklogItems, backlogHref, releaseHealth }: Props) {
+export function PortalHealthSummary({ capabilityHealth, openBacklogItems, backlogHref, releaseHealth }: Props) {
   const { checked, online } = useMonitoringStatus();
   const { data: upTargets, loading: upTargetsLoading } = useMetricQuery("up");
   const { alerts } = useAlertQuery();
 
-  const platform = deriveLegacyPlatformSummary({
-    checked,
-    online,
-    upTargets,
-    upTargetsLoading,
-    alerts,
-  });
+  const platform = capabilityHealth
+    ? derivePlatformSummary({ checked, online, capabilityHealth, loading: upTargetsLoading, alerts })
+    : {
+        value: "Unavailable",
+        tone: "critical" as const,
+        detail: "Capability authority could not be loaded",
+      };
 
   const monitoring = deriveMonitoringSummary({
     checked,
