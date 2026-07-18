@@ -112,6 +112,12 @@ export interface TwinProfile {
   physical: boolean;
   /** Named regions of the operation. */
   zones: TwinZoneSpec[];
+  /** Which zone actually holds the countable resource units — a restaurant's
+   *  tables live in the dining room, not the kitchen/pass; a shop's work orders
+   *  sit on the bays, not at intake. Consumers that render capacity into a single
+   *  region use this instead of blindly taking `zones[0]`. Must be one of
+   *  `zones[].key`; defaults to the first zone when a template omits it. */
+  capacityZoneKey: string;
   /** The countable resource units (tables/vans/bays/chairs/rooms/accounts). */
   resourceNoun: TwinNoun;
   /** The units of demand processed through the twin (tickets/jobs/agreements/matters). */
@@ -137,6 +143,7 @@ export interface TwinProfileOverride {
   variant?: TwinVariant;
   physical?: boolean;
   zones?: TwinZoneSpec[];
+  capacityZoneKey?: string;
   resourceNoun?: Partial<TwinNoun>;
   workItemNoun?: Partial<TwinNoun>;
   queues?: TwinQueueSpec[];
@@ -170,6 +177,7 @@ const TEMPLATE_DEFAULTS: Record<
 > = {
   FLOOR: {
     zones: [z("kitchen", "Kitchen / the pass"), z("floor", "Dining room"), z("entrance", "Entrance / waitlist")],
+    capacityZoneKey: "floor", // tables live in the dining room, not the pass
     resourceNoun: n("table", "tables"),
     workItemNoun: n("ticket", "tickets"),
     queues: [q("waitlist", "Waitlist"), q("reservations", "Reservations")],
@@ -178,6 +186,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   TERRITORY: {
     zones: [z("map", "Territory map"), z("base", "Yard / depot")],
+    capacityZoneKey: "map",
     resourceNoun: n("technician", "technicians"),
     workItemNoun: n("job", "jobs"),
     queues: [q("dispatch", "Dispatch queue")],
@@ -186,6 +195,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   YARD: {
     zones: [z("ready", "Ready line"), z("returns", "Returns & inspection"), z("maintenance", "Maintenance bay"), z("out", "Out on rent")],
+    capacityZoneKey: "ready",
     resourceNoun: n("asset", "assets"),
     workItemNoun: n("agreement", "agreements"),
     queues: [q("reservations", "Reservations to fill")],
@@ -195,6 +205,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   BAYS: {
     zones: [z("intake", "Intake"), z("bays", "Bays / lifts"), z("waiting", "Awaiting parts"), z("ready", "Ready for pickup")],
+    capacityZoneKey: "bays", // the bays/lifts hold the countable capacity, not intake
     resourceNoun: n("bay", "bays"),
     workItemNoun: n("work order", "work orders"),
     queues: [q("intake", "Awaiting approval"), q("promised", "Promised-by")],
@@ -203,6 +214,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   BOOK: {
     zones: [z("grid", "Day grid")],
+    capacityZoneKey: "grid",
     resourceNoun: n("provider", "providers"),
     workItemNoun: n("appointment", "appointments"),
     queues: [q("requests", "Appointment requests"), q("walkins", "Walk-ins / waitlist")],
@@ -211,6 +223,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   ROOMS: {
     zones: [z("board", "Occupancy board")],
+    capacityZoneKey: "board",
     resourceNoun: n("room", "rooms"),
     workItemNoun: n("stay", "stays"),
     queues: [q("checkins", "Check-ins"), q("waitlist", "Waitlist")],
@@ -220,6 +233,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   STORE: {
     zones: [z("floor", "Store floor"), z("back", "Back room"), z("online", "Online channel")],
+    capacityZoneKey: "floor",
     resourceNoun: n("shelf", "shelves"),
     workItemNoun: n("order", "orders"),
     queues: [q("pickups", "Pickups / online orders"), q("restock", "Low-stock / restock")],
@@ -228,6 +242,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   VENUE: {
     zones: [z("calendar", "Space / date calendar"), z("runofshow", "Run of show")],
+    capacityZoneKey: "calendar",
     resourceNoun: n("space", "spaces"),
     workItemNoun: n("event", "events"),
     queues: [q("holds", "Holds awaiting contract"), q("tickets", "Ticket sales")],
@@ -237,6 +252,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   COUNTER: {
     zones: [z("queue", "Service queue"), z("review", "Case review"), z("inspections", "Inspections")],
+    capacityZoneKey: "review", // reviewers work cases in review, not the intake queue
     resourceNoun: n("reviewer", "reviewers"),
     workItemNoun: n("case", "cases"),
     queues: [q("intake", "Intake"), q("review", "Review by department"), q("inspections", "Inspections today")],
@@ -245,6 +261,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   TENANTS: {
     zones: [z("board", "Account health board")],
+    capacityZoneKey: "board",
     resourceNoun: n("account", "accounts"),
     workItemNoun: n("engagement", "engagements"),
     queues: [q("renewals", "Renewals at risk"), q("atrisk", "At-risk accounts"), q("ctas", "Open CTAs")],
@@ -253,6 +270,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   PIPELINE: {
     zones: [z("pipeline", "Engagement pipeline")],
+    capacityZoneKey: "pipeline",
     resourceNoun: n("professional", "professionals"),
     workItemNoun: n("matter", "matters"),
     queues: [q("deadlines", "Deadlines"), q("review", "Awaiting review"), q("wip", "Unbilled WIP")],
@@ -261,6 +279,7 @@ const TEMPLATE_DEFAULTS: Record<
   },
   PROGRAMS: {
     zones: [z("programs", "Programs"), z("moves", "Moves management")],
+    capacityZoneKey: "programs",
     resourceNoun: n("program", "programs"),
     workItemNoun: n("campaign", "campaigns"),
     queues: [q("lapsing", "Lapsing donors"), q("grants", "Grant deadlines"), q("shifts", "Volunteer shifts")],
@@ -407,6 +426,7 @@ function applyOverride(base: TwinProfile, override: TwinProfileOverride | undefi
     ...(override.variant ? { variant: override.variant } : {}),
     ...(override.physical !== undefined ? { physical: override.physical } : {}),
     ...(override.zones ? { zones: override.zones } : {}),
+    ...(override.capacityZoneKey ? { capacityZoneKey: override.capacityZoneKey } : {}),
     resourceNoun: { ...base.resourceNoun, ...override.resourceNoun },
     workItemNoun: { ...base.workItemNoun, ...override.workItemNoun },
     ...(override.queues ? { queues: override.queues } : {}),
@@ -469,6 +489,7 @@ export function deriveTwinProfile(archetype: ArchetypeDefinition): TwinProfile {
     ...(variant ? { variant } : {}),
     physical: PHYSICAL_TEMPLATES.has(template),
     zones: defaults.zones.map((zone) => ({ ...zone })),
+    capacityZoneKey: defaults.capacityZoneKey,
     resourceNoun:
       template === "TERRITORY" && fdResource ? fdResource : { ...defaults.resourceNoun },
     workItemNoun: { ...defaults.workItemNoun },

@@ -72,6 +72,7 @@ export interface TwinProfile {
   variant?: TwinVariant;                     // e.g. "timeline" | "portfolio"
   physical: boolean;                         // spatial twin vs board paradigm
   zones: TwinZoneSpec[];                     // named regions w/ vocabulary nouns
+  capacityZoneKey: string;                   // which zone holds the countable units (FLOOR → "floor"/dining room, not "kitchen"); a single-region consumer renders capacity here instead of blindly taking zones[0]
   resourceNoun: { singular: string; plural: string };   // "table" | "van" | "bay" | "chair" | "room" | "seat(license)"
   workItemNoun: { singular: string; plural: string };   // "ticket" | "job" | "agreement" | "matter"
   queues: TwinQueueSpec[];                   // waitlist / dispatch / reservations / intake / renewals…

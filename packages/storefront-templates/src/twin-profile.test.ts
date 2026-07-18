@@ -58,6 +58,12 @@ describe("deriveTwinProfile — totality", () => {
       expect(twin.cog.kind, `${a.archetypeId} needs a cog`).toBeTruthy();
       expect(twin.cog.signals.length, `${a.archetypeId} cog needs signals`).toBeGreaterThan(0);
       expect(typeof twin.physical).toBe("boolean");
+      // capacityZoneKey must name a real zone — consumers render resource units
+      // into that region, so a dangling key would drop the whole capacity view.
+      expect(
+        twin.zones.map((zn) => zn.key),
+        `${a.archetypeId} capacityZoneKey must be one of its zones`,
+      ).toContain(twin.capacityZoneKey);
     }
   });
 
