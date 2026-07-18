@@ -138,7 +138,7 @@ describe("recordRepeatedToolIssue", () => {
 
   it("writes a PlatformIssueReport with the expected fields and source coworker_runtime", async () => {
     const result = await recordRepeatedToolIssue({
-      repeated: { toolName: "create_backlog_item", count: 3, signature: "s", reasonHint: "" },
+      repeated: { toolName: "create_backlog_item", count: 3, signature: "s", reasonHint: "", noProgress: false },
       routeContext: "/customer",
       userId: "user-1",
       agentId: "AGT-1",
@@ -160,7 +160,7 @@ describe("recordRepeatedToolIssue", () => {
 
   it("skips writing on /build routes (Build Studio owns its own verification)", async () => {
     const result = await recordRepeatedToolIssue({
-      repeated: { toolName: "x", count: 3, signature: "s", reasonHint: "" },
+      repeated: { toolName: "x", count: 3, signature: "s", reasonHint: "", noProgress: false },
       routeContext: "/build/feature-123",
       userId: "u",
       agentId: "a",
@@ -174,7 +174,7 @@ describe("recordRepeatedToolIssue", () => {
   it("returns null on DB failure but does not throw", async () => {
     create.mockRejectedValue(new Error("db down"));
     const result = await recordRepeatedToolIssue({
-      repeated: { toolName: "x", count: 3, signature: "s", reasonHint: "" },
+      repeated: { toolName: "x", count: 3, signature: "s", reasonHint: "", noProgress: false },
       routeContext: "/customer",
       userId: "u",
       agentId: "a",
