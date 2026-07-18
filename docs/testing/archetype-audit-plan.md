@@ -1,18 +1,18 @@
-# Archetype Audit Plan — All 87 Archetypes
+# Archetype Audit Plan — All 95 Archetypes
 
-**Status:** Revised — 2026-07-17 (inventory re-grounded to 87 archetypes / 19 categories; field-dispatch + real-estate-construction runs added)  
+**Status:** Revised — 2026-07-18 (inventory re-grounded to 95 archetypes / 21 categories; media-production, live-events-venues, production-equipment-rental, and medical-practice coverage added)
 **Scope:** Full audit of every seeded archetype via browser-driven fresh installs. Produces gap backlog items for post-audit execution.  
 **Related:** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) (value-stream rationale — read first), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
 
-> **Inventory ground truth (verified 2026-07-17 against `origin/main` `packages/storefront-templates/src/archetypes/`):** **87 seeded archetypes across 19 categories.** Derived by enumerating `ALL_ARCHETYPES` in [`index.ts`](../../packages/storefront-templates/src/archetypes/index.ts) (19 category arrays spread in order) and cross-checked against the uniqueness + per-archetype invariants asserted in [`archetypes.test.ts`](../../packages/storefront-templates/src/archetypes/archetypes.test.ts) (which CI seeds from). Distinct `category` string values = 19, matching per-file `archetypeId` counts exactly. Per-category counts: healthcare-wellness 8, beauty-personal-care 6, trades-maintenance 11, professional-services 8, software-platform 1, education-training 4, pet-services 5, food-hospitality 3, retail-goods 5, fitness-recreation 3, nonprofit-community 8, hoa-property-management 3, banking-financial-services 3, public-sector 3, asset-rental 2, real-estate-construction 2, automotive-services 6, moving-and-logistics 4, security-services 2 (= **87**).
+> **Inventory ground truth (verified 2026-07-18 against `origin/main` `packages/storefront-templates/src/archetypes/`):** **95 seeded archetypes across 21 categories.** Derived by enumerating `ALL_ARCHETYPES` in [`index.ts`](../../packages/storefront-templates/src/archetypes/index.ts) and cross-checking per-file `archetypeId` counts. Per-category counts: asset-rental 3, automotive-services 6, banking-financial-services 3, beauty-personal-care 6, education-training 4, fitness-recreation 3, food-hospitality 3, healthcare-wellness 9, hoa-property-management 3, live-events-venues 3, media-production 3, moving-and-logistics 4, nonprofit-community 8, pet-services 5, professional-services 8, public-sector 3, real-estate-construction 2, retail-goods 5, security-services 2, software-platform 1, trades-maintenance 11 (= **95**).
 >
-> There is **no** separate `medical`, `dental`, `media-production`, or `live-events-venues` category — `dental-practice`, `optician`, and the medical-mobile leaves are archetypes *under* `healthcare-wellness`. Do not reintroduce those category names.
+> There is **no** separate `medical` or `dental` category — `medical-practice`, `dental-practice`, `optician`, and the medical-mobile leaves are archetypes *under* `healthcare-wellness`. `media-production` and `live-events-venues` are now real source categories and must be audited as first-class categories.
 
 ---
 
-## 0. What changed since the 2026-06-12 baseline (56 / 15 → 87 / 19)
+## 0. What changed since the 2026-06-12 baseline (56 / 15 → 95 / 21)
 
-The prior revision of this plan ("All 56 Archetypes", inventory verified 2026-06-12) covered **56 archetypes across 15 categories** in Runs 0–17 (+ composition Run 18). The registry has since grown to **87 / 19** — a delta of **+31 archetypes and +4 categories** — none of which the old Run 0–18 structure covered. This revision assigns every one of the 31 to a run (Runs 19–27) using the plan's existing methodology unchanged.
+The prior revision of this plan ("All 56 Archetypes", inventory verified 2026-06-12) covered **56 archetypes across 15 categories** in Runs 0–17 (+ composition Run 18). The registry has since grown to **95 / 21** — a delta of **+39 archetypes and +6 categories**. The 2026-07-17 pass assigned the field-dispatch, real-estate-construction, automotive/logistics/security, banking/public-sector, and rental tranche. This 2026-07-18 sweep adds the eight leaves that drifted after that pass: `medical-practice`, `production-equipment-rental`, all three `media-production` leaves, and all three `live-events-venues` leaves.
 
 **The +31, by origin (all three tranches trace to the 2026-06-13 field-dispatch gap analysis + the EP-GRID-BUILDER home-builder work):**
 
@@ -27,10 +27,11 @@ The prior revision of this plan ("All 56 Archetypes", inventory verified 2026-06
   - `moving-and-logistics` (+4): `moving-company`, `junk-removal`, `courier-delivery`, `last-mile-freight` → **Run 25**
   - `security-services` (+2, regulated): `guard-patrol`, `alarm-cctv-install` → **Run 26**
 - **New `real-estate-construction` category (2):** `new-home-builder`, `custom-home-builder` (EP-GRID-BUILDER) → **Run 27**
+- **Catalog reconciliation added 2026-07-18 (8):** `medical-practice` joins **Run 3**, `production-equipment-rental` joins **Run 17**, `media-production` (+3) becomes **Run 28**, and `live-events-venues` (+3) becomes **Run 29**.
 
 **Methodology is unchanged.** Every new archetype gets its own fresh install (DB-only reset from the golden dump, Section 5) and the full Phase A–F checklist plus Phases G/H/O/K, driven browser-only at `http://localhost:3000`. Common `[C]` mechanics remain proven once in Run 0; only archetype-specific `[A]` dimensions are re-evaluated per leaf. Severity is still derived from the value stream (Section 4 rule), and the operator-persona lens (WWWD / business-owner experience, not developer) still governs grading.
 
-**Touchpoints for the 4 new categories (adding-an-ArchetypeCategory checklist):** the new categories are already seeded with their coverage tests (`archetypes.test.ts`: the Gap-B "three dispatch-native categories" assertion and the "home builder archetypes" assertion) and the Seed-Fit CI gate already applies to them. **No new audit scaffolding is required** — this revision is docs-only.
+**Touchpoints for the 6 new categories (adding-an-ArchetypeCategory checklist):** the new categories are already seeded with coverage tests (`archetypes.test.ts`: dispatch-native categories, home builder archetypes, media/live categories, and equipment-rental support assertions) and the Seed-Fit CI gate already applies to them. **No new audit scaffolding is required** — this revision is docs-only.
 
 **Regulated calibration (Phase O):** the medical-mobile leaves (`home-health-care`, `mobile-phlebotomy`, `dme-delivery`), the security leaves (`guard-patrol`, `alarm-cctv-install`), and the licensed professional leaf `land-surveying` are newly-regulated. Their per-run scripts (Runs 20, 26, 22) name the specific licensing/regulatory obligation an operator would get wrong, per the plan's existing rule: **silence on a mandatory license = Level 0.**
 
@@ -38,7 +39,7 @@ The prior revision of this plan ("All 56 Archetypes", inventory verified 2026-06
 
 ## 1. Purpose
 
-DPF ships 87 archetypes across 19 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
+DPF ships 95 archetypes across 21 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
 
 **Out of scope for this plan:** executing the gap items. This thread produces the plan, the backlog snapshot, and the per-run scripts. Execution follows in a separate thread.
 
@@ -99,15 +100,15 @@ Not everything needs to be tested 18 times. The audit evaluates two distinct dim
 
 ### Common platform mechanics — test once, deeply, in Run 0
 
-These are shared UI surfaces that behave the same regardless of archetype. Run 0 is the only run that **evaluates** them (pass/fail, finds bugs). Runs 1–27 **use** them as setup tools without re-evaluating the mechanics.
+These are shared UI surfaces that behave the same regardless of archetype. Run 0 is the only run that **evaluates** them (pass/fail, finds bugs). Runs 1–29 **use** them as setup tools without re-evaluating the mechanics.
 
-Checklist items tagged `[C]` below fall in this category. In Runs 1–27, execute the step, but do not log a finding if the mechanics work correctly — you have already proved they do. Only log if the step **fails** in a run where it worked in Run 0 (that would indicate a regression, not an archetype gap).
+Checklist items tagged `[C]` below fall in this category. In Runs 1–29, execute the step, but do not log a finding if the mechanics work correctly — you have already proved they do. Only log if the step **fails** in a run where it worked in Run 0 (that would indicate a regression, not an archetype gap).
 
 | Surface | What Run 0 proves |
 |---------|------------------|
 | Brand URL scrape engine | Returns meaningful suggestions; handles `.co`, `.co.uk`, `.com` variants |
 | Setup wizard step mechanics | Each step saves, next/back navigation works, financial step pre-fills correctly |
-| Archetype grid | All 87 archetypes visible; grid navigable; card renders name + category + CTA type |
+| Archetype grid | All 95 archetypes visible; grid navigable; card renders name + category + CTA type |
 | `/storefront/team` CRUD | Add/edit/delete provider; availability day-of-week grid saves and syncs |
 | `/storefront/settings/operations` | Operating hours editor: all 7 days toggleable, open/close time pickers, timezone selector, save triggers ProviderAvailability sync |
 | `/storefront/items` CRUD | Add/edit/delete/reorder items; priceAmount field accepts decimal; ctaType selector works |
@@ -172,7 +173,7 @@ events (PR #1810)** = W-CAL.
 
 ### Archetype-specific dimensions — evaluated on every archetype
 
-These are the reasons we run 87 evaluations. If they are wrong they indicate an archetype gap, not a platform mechanics bug.
+These are the reasons we run 95 evaluations. If they are wrong they indicate an archetype gap, not a platform mechanics bug.
 
 | Dimension | What changes per archetype |
 |-----------|---------------------------|
@@ -203,7 +204,7 @@ Any step where the auditor had to think "a real operator would struggle here" �
 
 ## 3. Audit Run Strategy
 
-87 archetypes across **Run 0 (pilot) + grouped install runs**. **Every archetype gets its own fresh install** and the full Phase A–F checklist. Archetypes are grouped into runs by category only for scheduling and findings organization — each archetype in a run still begins from a clean DB state (DB-only reset from golden dump, see Section 5). Runs 0–17 cover the original 56; Runs 19–27 cover the 31 added since (Section 0); Run 18 is composition (no additional fresh installs).
+95 archetypes across **Run 0 (pilot) + grouped install runs**. **Every archetype gets its own fresh install** and the full Phase A–F checklist. Archetypes are grouped into runs by category only for scheduling and findings organization — each archetype in a run still begins from a clean DB state (DB-only reset from golden dump, see Section 5). Runs 0–17 cover the original 56 plus corrected in-category leaves; Runs 19–27 cover the field-dispatch and real-estate-construction tranche; Runs 28–29 cover the media/live-events categories added after the 87/19 plan; Run 18 is composition (no additional fresh installs).
 
 > **Why full installs, not API swaps:** using `archetype-reset` to swap between archetypes leaves prior company identity (name, slug, hero copy, inbox history) in place. A real operator always installs fresh; an audit that swaps via API tests a different — and rarer — path. Run 1 swap testing (2026-06-12) confirmed this: all swap archetypes presented as the lead archetype's business identity to customers. Per-archetype fresh installs eliminate this class of false and misleading findings.
 
@@ -211,16 +212,16 @@ Any step where the auditor had to think "a real operator would struggle here" �
 |-----|----------|------------|----------------|
 | 0 | Pilot / calibration (software-platform) | software-platform | inquiry — see Section 3a |
 | 1 | Trades & Maintenance | plumber, electrician, facilities-maintenance, landscaping, cleaning-service | inquiry |
-| 2 | Beauty & Personal Care | hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer | booking |
-| 3 | Healthcare & Wellness | veterinary-clinic, dental-practice, physiotherapy, counselling | booking |
+| 2 | Beauty & Personal Care | hair-salon, barber-shop, nail-salon, beauty-spa, personal-trainer | booking |
+| 3 | Healthcare & Wellness | veterinary-clinic, dental-practice, medical-practice, physiotherapy, counselling, optician | booking |
 | 4 | Pet Services | pet-grooming, pet-boarding, dog-walking | booking |
 | 5 | Food & Hospitality | restaurant, catering, bakery | booking, inquiry, purchase |
 | 6 | Retail & Goods | retail-goods, artisan-goods, florist, wholesale-distribution | purchase, inquiry |
-| 7 | Fitness & Recreation | gym, yoga-studio, sports-club | purchase |
-| 8 | Education & Training | corporate-training, tutoring, driving-school, music-school, dance-studio | booking, inquiry |
+| 7 | Fitness & Recreation | gym, yoga-studio, dance-studio | purchase |
+| 8 | Education & Training | corporate-training, tutoring, driving-school, music-school | booking, inquiry |
 | 9 | Professional Services A | consulting, legal-services, marketing-agency, accounting | inquiry |
 | 10 | Professional Services B | it-managed-services (MSP activation profile) | inquiry (MSP profile) |
-| 11 | Nonprofit & Community | charity, pet-rescue, animal-shelter, community-shelter, cooperative | donation, inquiry |
+| 11 | Nonprofit & Community | charity, pet-rescue, animal-shelter, community-shelter, sports-club, cooperative | donation, inquiry |
 | 12 | HOA & Property Management | homeowners-association, condo-association, property-management-company | inquiry |
 | 13 | Software & Platform | *folded into Run 0* — software-platform full A–F + extended meta-case run on the pilot install | inquiry |
 | 14a | Banking | community-bank (KYC + BIAN + FDIC pack) | inquiry (KYC) |
@@ -228,7 +229,7 @@ Any step where the auditor had to think "a real operator would struggle here" �
 | 14c | Banking | mortgage-lending (NMLS/RESPA/TILA pack) | inquiry (NMLS) |
 | 15 | Public Sector | small-town-municipality, municipal-utility | inquiry |
 | 16 | Law Enforcement | law-enforcement-agency (POST/CJIS-gate pack) | inquiry (public-body) |
-| 17 | Rental & Shared Assets | equipment-rental, self-storage, agricultural-cooperative | rental (Reserve) |
+| 17 | Rental & Shared Assets | equipment-rental, self-storage, production-equipment-rental, agricultural-cooperative | rental (Reserve) |
 | 18a | Multi-Archetype: Same category | (1) self-storage **+** equipment-rental; (2) plumber **+** retail-goods (supplies reorder) | rental, inquiry |
 | 18b | Multi-Archetype: Cross-category concern | (3) hair-salon **+** retail-goods; (4) bakery **+** professional-services (custom-order inquiry) | booking, inquiry |
 | 18c | Multi-Archetype: Regulated / acute | (5) community-bank **+** healthcare-wellness | inquiry (KYC) |
@@ -241,14 +242,16 @@ Any step where the auditor had to think "a real operator would struggle here" �
 | 25 | Moving & Logistics (Gap-B — new category) | moving-company, junk-removal, courier-delivery, last-mile-freight | inquiry (mobile) |
 | 26 | Security Services (Gap-B — new category, regulated) | guard-patrol, alarm-cctv-install | inquiry (licensed) |
 | 27 | Real Estate & Construction (new category) | new-home-builder, custom-home-builder | inquiry (+ booking item) |
+| 28 | Media Production (new category) | film-video-production, post-production-studio, event-production-staging | inquiry (pipeline/timeline) |
+| 29 | Live Events & Venues (new category) | event-venue, tour-promoter, talent-booking-agency | inquiry (venue/holds) |
 
-Total fresh installs: 87 (one per archetype — 56 in Runs 0–17, 31 in Runs 19–27). Run 18a–18c are composition installs — 5 primary archetypes set up fresh, with one or two secondaries added post-setup via "Add service line". No additional fresh installs are needed for secondaries. See Section 3c.
+Total fresh installs: 95 (one per archetype — 58 in Runs 0–17 after the `medical-practice` and `production-equipment-rental` reconciliation, 31 in Runs 19–27, and 6 in Runs 28–29). Run 18a–18c are composition installs — 5 primary archetypes set up fresh, with one or two secondaries added post-setup via "Add service line". No additional fresh installs are needed for secondaries. See Section 3c.
 
-### 3b. Representative Quality Bar (12 archetypes — must all Pass before audit is considered representative)
+### 3b. Representative Quality Bar (21 category sentinels — must all Pass before audit is considered representative)
 
-A related acceptance test plan (`docs/superpowers/plans/2026-06-06-archetype-acceptance-test-plan.md` in the nifty-chatterjee-211928 worktree) identifies a representative 12-archetype batch that covers every operating model type. These 12 are the **minimum viable quality bar** — if any of them `Fail` (Section 8 verdict system), the platform is not ready for broader rollout regardless of the remaining 44 archetypes.
+A related acceptance test plan (`docs/superpowers/plans/2026-06-06-archetype-acceptance-test-plan.md`) now identifies a representative **21-category sentinel batch** for the current 95/21 catalog. These sentinels are the **minimum viable quality bar** — if any of them `Fail` (Section 8 verdict system), the platform is not ready for broader rollout regardless of the remaining archetypes.
 
-Treat these as priority-1 within their runs. If time or resets run short, these 12 are non-negotiable:
+Treat these as priority-1 within their runs. If time or resets run short, the current category sentinels are non-negotiable. The historical 12-row list below is retained only as the original operating-model seed; expand it with the acceptance plan's newer sentinels for banking, public sector, asset rental, real estate/construction, automotive, logistics, security, media production, and live events.
 
 | Archetype | Run | Why priority-1 |
 |-----------|-----|----------------|
@@ -269,12 +272,12 @@ Treat these as priority-1 within their runs. If time or resets run short, these 
 
 ### 3a. Run 0 — Pilot / calibration + Platform Core Mechanics (MANDATORY before Run 1)
 
-Run 0 serves two goals: (a) validate the audit harness so the remaining resets test the platform rather than the plan's assumptions; (b) prove all common platform mechanics (Section 2a) once so Runs 1–27 can treat them as reliable setup tools rather than evaluation subjects. Every item in the Section 2a common-mechanics table must be exercised and confirmed in Run 0.
+Run 0 serves two goals: (a) validate the audit harness so the remaining resets test the platform rather than the plan's assumptions; (b) prove all common platform mechanics (Section 2a) once so Runs 1–29 can treat them as reliable setup tools rather than evaluation subjects. Every item in the Section 2a common-mechanics table must be exercised and confirmed in Run 0.
 
 **Harness validation steps:**
 
 1. **Backup rehearsal** — take the pre-audit `pg_dump` (Section 4), restore it into a throwaway postgres container, and verify row counts match. Do not proceed to any wipe until the restore is proven.
-2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 87 seeded archetypes; reconcile against the per-category counts in this doc's header (Inventory ground truth). File a BI for any mismatch.
+2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 95 seeded archetypes; reconcile against the per-category counts in this doc's header (Inventory ground truth). File a BI for any mismatch.
 3. **Provider bootstrap check** — verify Anthropic is auto-configured from the environment on a fresh install. If providers need manual re-entry, document the exact re-setup steps and time; add that time to every run's budget.
 4. **Coworker health gate** — ask the COO a trivial question and confirm a sane response before any vocabulary scoring. Routing failures get misattributed as archetype gaps in every run if this gate is skipped.
 5. **Archetype-reset swap verification** — swap software-platform → consulting via the admin API, confirm sections/items/vocabulary/CTA actually change on the public portal, then swap back. Empirically validates the Tier-B/E/F strategy for all multi-archetype runs.
@@ -516,7 +519,7 @@ while ((Get-Date) -lt $deadline) {
 
 1. Navigate to `http://localhost:3000`
 2. Confirm redirect to `/welcome` (no organization exists)
-3. Confirm archetype grid renders with all 87 archetypes visible
+3. Confirm archetype grid renders with all 95 archetypes visible
 4. Navigate to `/platform/ai/providers` → confirm providers show healthy status (restored from golden dump — no re-entry needed)
 
 **Step 5 — Coworker health gate**
@@ -546,7 +549,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 > **Validity:** every archetype gets a fresh install and all phases. There are no "swap-only" or "partial" archetypes. Before scoring any phase, the expected values (CTA type, vocabulary, key services, activation modules) should be read from the archetype's seed definition in `packages/storefront-templates/src/archetypes/` — the persona blocks in Section 7 are test scripts, not the source of truth; where they disagree with the seed, the seed wins and the persona block gets corrected, not a BI filed.
 >
-> **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–27, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run 87 iterations.**
+> **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–29, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run 95 iterations.**
 
 ### Phase A — Onboarding (SETUP)
 - [ ] **A1** Navigate to `/welcome` → Setup wizard loads (SETUP step 1)
@@ -561,26 +564,28 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 > Run after Phase A, before Phase B. These steps seed real staff, items, operating hours, and a test customer so Phase B5 exercises a live business scenario, not an empty shell. For swapped (non-lead) archetypes running only B/E/F, run the applicable P sub-section below before Phase B.
 >
-> **`[C]` mechanics vs. `[A]` archetype-specific:** items tagged `[C]` use surfaces proven in Run 0 (Section 3a). In Runs 1–27, execute them as setup steps; do not score them as findings unless they outright fail. Items tagged `[A]` are archetype-specific and are evaluation targets on every run.
+> **`[C]` mechanics vs. `[A]` archetype-specific:** items tagged `[C]` use surfaces proven in Run 0 (Section 3a). In Runs 1–29, execute them as setup steps; do not score them as findings unless they outright fail. Items tagged `[A]` are archetype-specific and are evaluation targets on every run.
 >
 > **Operator UX-fit dimension:** while executing each step, ask "could the run's operator persona complete this step without guidance?" (Sandra Hooper the plumber; Chloe Martinez the salon owner; Sam Nguyen the baker — not a developer). Flag non-obvious navigation or terminology as a `minor` UX finding. Examples: "Configuration Items" is not an obvious home for a pet record; "bill vs. invoice" distinction may confuse a non-accountant. These feed EP-9FC5D2FD (Dale/operator persona hardening).
 
-#### P-BOOKING — booking CTA archetypes (hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer, veterinary-clinic, dental-practice, physiotherapy, counselling, pet-grooming, pet-boarding, dog-walking, restaurant, tutoring, driving-school, music-school, dance-studio; **+ field-dispatch booking leaves:** mobile-phlebotomy, mobile-pet-grooming, mobile-vet, mobile-beauty)
+#### P-BOOKING — booking CTA archetypes (hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer, veterinary-clinic, dental-practice, medical-practice, physiotherapy, counselling, pet-grooming, pet-boarding, dog-walking, restaurant, tutoring, driving-school, music-school, dance-studio; **+ field-dispatch booking leaves:** mobile-phlebotomy, mobile-pet-grooming, mobile-vet, mobile-beauty)
 
 - [ ] **P1** `[C]` Navigate to `/storefront/team` → Add the lead staff member from the run script (name, role title, email address). Save. Confirm the provider appears in the team list. *(UX-fit: would the operator persona know to go here to add a staff member?)*
 - [ ] **P2** `[C]` On the team record just created → open availability settings → set Mon–Fri 09:00–17:00 (adjust to archetype-specific hours if noted in the run script). Confirm the provider now appears as selectable in the booking calendar. *(UX-fit: is the availability day/time editor self-explanatory?)*
 - [ ] **P3** `[C]` Navigate to `/storefront/settings/operations` → Set operating hours: at minimum Mon–Fri open 09:00, close 17:00 (adjust per run script). Save. Confirm the page returns a saved/confirmed state.
 - [ ] **P4** `[C/A]` Navigate to `/storefront/items` → `[C]` Confirm items CRUD works (seeded items visible). `[A]` Confirm at least 3 seeded service items match the archetype's expected services. Add one new service item manually using the run script's "audit item" name, price, and ctaType. Save and confirm the new item appears in the list.
 - [ ] **P5-PET** `[A]` *(veterinary-clinic, pet-grooming, pet-boarding, dog-walking only)* Navigate to `/customer` → Create a customer account using the run script's test owner name (e.g., "Robert Chen"). Add a contact with email and phone. On the account record, navigate to Configuration Items → add a new CI: ciType "pet", name from the run script (e.g., "Max"), description: species, breed, approximate DOB (e.g., "Species: Dog | Breed: Labrador Retriever | DOB: 2020-03-15"). Save. Confirm the CI appears under the account. *(UX-fit: would a vet receptionist know that "Configuration Items" is where they add a pet? Log this friction specifically.)*
-- [ ] **P5-DENTAL** `[A]` *(dental-practice, physiotherapy, counselling only)* Navigate to `/customer` → Create an account for the run script's test patient (full name, email, phone). Add a contact record. Log the account name for use in Phase B5 and Phase G.
+- [ ] **P5-HEALTHCARE** `[A]` *(dental-practice, medical-practice, physiotherapy, counselling, optician)* Navigate to `/customer` → Create an account for the run script's test patient (full name, email, phone). Add a contact record. Log the account name for use in Phase B5 and Phase G.
 - [ ] **P5-RESTAURANT** `[A]` *(restaurant only)* Confirm seeded table-type items represent service slots (Table for 2, Table for 6+, Private Dining). If seeded prices are £0/$0, confirm this is intentional (pay on day). Set operating hours to cover a dinner window (18:00–22:00) at minimum; if lunch and dinner are two separate windows and the UI only supports one, set dinner and log single-window limitation as a minor gap.
 
-#### P-PURCHASE — purchase CTA archetypes (bakery, retail-goods, artisan-goods, florist, gym, yoga-studio, sports-club)
+#### P-PURCHASE — purchase CTA archetypes (bakery, retail-goods, artisan-goods, florist, gym, yoga-studio, sports-club, event-venue, tour-promoter)
+
+Additional current purchase leaves: `event-venue` and `tour-promoter` (Run 29 ticket/package purchase paths). `sports-club` is a purchase leaf in the `nonprofit-community` source category; test it under Run 11 even if older detailed scripts placed it with fitness.
 
 - [ ] **P1** `[C/A]` Navigate to `/storefront/items` → `[C]` Confirm items CRUD works. `[A]` Confirm seeded product items match the archetype's expected catalog with names and descriptions. Edit at least 3 items to set realistic non-zero prices (see run script for archetype-appropriate amounts). Save.
 - [ ] **P2** `[A]` Add one new product item manually using the run script's "audit item" name and price (e.g., "Audit Run Loaf — Seeded Rye" £5.50 for bakery; "Audit Run Day Pass" £12 for gym), ctaType purchase. Save and confirm the item appears on the public portal storefront. *(UX-fit: is adding a new product self-explanatory from the items management screen?)*
 - [ ] **P3** `[C]` Navigate to `/customer` → Add a test customer account using the run script's buyer name (e.g., "Test Buyer R5") with a contact email. This account will be linked to the Phase B5 order and used in Phase G for the invoice.
-- [ ] **P4** `[C]` Navigate to `/storefront/settings/operations` → Set archetype-appropriate hours (retail/bakery Mon–Sat 08:00–18:00; gym/yoga/sports Mon–Sun 06:00–21:00). Save.
+- [ ] **P4** `[C]` Navigate to `/storefront/settings/operations` → Set archetype-appropriate hours (retail/bakery Mon–Sat 08:00–18:00; gym/yoga/dance Mon–Sun 06:00–21:00). Save.
 
 #### P-INQUIRY — inquiry CTA archetypes (all trades, catering, consulting, legal, marketing, accounting, IT MSP, landscaping, cleaning-service, wholesale-distribution, HOA, property management, public sector, banking/mortgage; **+ field-dispatch inquiry leaves:** hvac-contractor, pest-control, appliance-repair, pool-spa-service, pressure-washing, roofing-gutters, home-health-care, dme-delivery, field-inspection, land-surveying, process-serving-notary, furniture-delivery-install; **+ new dispatch-native categories:** all of automotive-services, moving-and-logistics, security-services; **+ real-estate-construction:** new-home-builder, custom-home-builder — note both builders also carry a booking item (model-home tour / design consultation), so they additionally run the P-BOOKING scheduling-defaults check)
 
@@ -601,14 +606,14 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - [ ] **B4** `[A]` Verify service/product item names match archetype templates (including the P4/P2 audit item added in Phase P)
 - [ ] **B5** Pre-condition: Phase P complete for this CTA type. Drive the primary CTA end-to-end using the actual data entered in Phase P. Specific steps by CTA type:
 
-  **Booking** (hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer, vet, dental, physio, counselling, pet-grooming, pet-boarding, dog-walking, restaurant, tutoring, driving-school, music-school, dance-studio):
+  **Booking** (hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer, vet, dental, medical-practice, physio, counselling, pet-grooming, pet-boarding, dog-walking, restaurant, tutoring, driving-school, music-school, dance-studio):
   1. Public portal → click the primary booking CTA
   2. From the service list, select the audit item added in P4 — confirm it is visible with name and price
   3. Select the P1/P2 staff member as provider — confirm their P2 availability slots appear on the calendar
   4. Select a date that falls within the P3 operating hours window and choose a time slot
   5. Fill booking form — standard fields (required for all booking archetypes): full name, email address, phone number
      - **Vet / pet-grooming / pet-boarding / dog-walking**: add pet name (from P5-PET, e.g., "Max"), species (Dog/Cat/Rabbit/Other), breed, approximate age, reason for visit — confirm these fields render in the booking form; if absent, log as an important finding
-     - **Dental / physiotherapy**: "new or returning patient?" field if present; use the patient name from P5-DENTAL
+     - **Dental / medical / physiotherapy / counselling / optician**: "new or returning patient?" field if present; use the patient name from P5-HEALTHCARE
      - **Restaurant**: party size (2–12 guests), dietary requirements note if field present; meal service selector (lunch/dinner) if present
      - **Tutoring**: student name, age/year group, subject
      - **Driving school**: preferred pickup address or meeting point
@@ -616,14 +621,14 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
   7. Navigate to `/storefront/inbox` → booking record appears with correct service name, date, staff member name, and submitting name
   8. **Vet / pet-specific verify**: inbox booking record shows the pet name and species entered in step 5 — if the pet details are not visible on the inbox record, log as an important finding
 
-  **Purchase** (bakery, retail-goods, artisan-goods, florist, gym, yoga-studio, sports-club):
+  **Purchase** (bakery, retail-goods, artisan-goods, florist, gym, yoga-studio, sports-club, event-venue, tour-promoter):
   1. Public portal → browse product catalog — confirm the P2 audit item is visible with its correct name, description, and price
   2. Click the audit item → product detail page loads; verify name, description, and price are all correct
   3. Add to cart (quantity: 1) → cart shows item + price
   4. Proceed to checkout:
      - Standard fields (required for all purchase archetypes): full name, email address
      - **Physical goods (bakery, retail-goods, artisan-goods, florist)**: delivery address (street, city, postcode/zip); for florist — preferred delivery date field if present
-     - **Gym / yoga-studio / sports-club (membership)**: member date of birth; emergency contact name and phone if the form requires it
+     - **Gym / yoga-studio / dance-studio / sports-club (membership or class/club)**: member/student date of birth; emergency contact name and phone if the form requires it
   5. Confirm purchase → confirmation page with order reference number shown
   6. Navigate to `/storefront/inbox` → order appears with the P2 product name and buyer email
   7. Navigate to `/customer` → P3 customer account shows a linked order or activity entry — if the order is not linked, log as an important finding
@@ -659,7 +664,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
   - **Healthcare:** `veterinary-clinic` (RCVS registration — UK; state veterinary license — US), `dental-practice` (GDC registration — UK; state dental board — US), `physiotherapy` (HCPC registration — UK), `counselling` (BACP/UKCP membership — UK best practice; state license — US), `optician` (GOC registration — UK)
   - **Food service:** `restaurant` (food hygiene certificate Level 2/3, premises license if alcohol served — UK; food handler permit — US), `bakery` (food business registration, food hygiene), `catering` (food hygiene, personal license for any alcohol service)
   - **Financial and legal:** `accounting` (ICAEW/ACCA/CIMA membership — UK; CPA license — US), `legal-services` (SRA/Law Society — UK; state bar — US), `mortgage-lending` (FCA authorization — UK; NMLS license — US), `community-bank` (FCA/PRA — UK; OCC/FDIC — US), `credit-union` (FCA/PRA — UK; NCUA — US)
-  - **Education with minors:** `driving-school` (DVSA ADI registration — UK; state DMV approval — US), `tutoring` (DBS Enhanced check if working with under-18s — UK), `music-school` (DBS Enhanced check if under-18s — UK), `dance-studio` (DBS Enhanced check if under-18s — UK)
+  - **Education/fitness with minors:** `driving-school` (DVSA ADI registration — UK; state DMV approval — US), `tutoring` (DBS Enhanced check if working with under-18s — UK), `music-school` (DBS Enhanced check if under-18s — UK), `dance-studio` (DBS Enhanced check if under-18s — UK)
   - **Animal services:** `pet-boarding` (Animal Boarding Establishments Act license / DEFRA-approved inspector — UK; state/county animal welfare license — US), `veterinary-clinic` (see healthcare above)
   - **Property:** `property-management-company` (ARLA/NAEA membership — UK best practice; state real estate license — US, varies by state)
   - **Nonprofit:** `charity` (Charity Commission registration if income > £5k — UK; 501(c)(3) IRS determination letter — US)
@@ -726,7 +731,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 - [ ] **G1** `[C/A]` Navigate to `/finance/suppliers` → `[C]` Supplier create works. `[A]` Add an archetype-relevant supplier (see run script for name; e.g., vet: "Veterinary Supplies Co.", salon: "Professional Hair Products Ltd", bakery: "Flour & Grain Wholesale", gym: "Fitness Equipment Leasing Co.", trades: "Wholesale Tools & Spares"). Save and confirm the supplier appears in the list. *(UX-fit: does the operator persona understand the bill/invoice distinction?)*
 - [ ] **G2** `[C/A]` Navigate to `/finance/bills/new` → `[C]` Bill creation and line-item totals work. `[A]` Add one archetype-relevant line item (see run script; e.g., vet: "Examination gloves — box 200" qty 1 $28.00; salon: "Color developer 1L" qty 3 £12.00 each; bakery: "Strong bread flour 25kg" qty 2 £18.50 each). Set issue date = today. Save. Confirm the bill total is correct.
-- [ ] **G3** `[C/A]` *(booking and purchase archetypes only)* Navigate to `/finance/invoices/new` → `[C]` Invoice creation and customer link work. `[A]` Create invoice for the Phase B5 CTA: Customer = account from P5-PET/P5-DENTAL (booking) or P3 (purchase); line item = service/product from Phase B5 at the run-script price. Save. Confirm invoice appears in the list.
+- [ ] **G3** `[C/A]` *(booking and purchase archetypes only)* Navigate to `/finance/invoices/new` → `[C]` Invoice creation and customer link work. `[A]` Create invoice for the Phase B5 CTA: Customer = account from P5-PET/P5-HEALTHCARE (booking) or P3 (purchase); line item = service/product from Phase B5 at the run-script price. Save. Confirm invoice appears in the list.
 - [ ] **G4** `[C]` Navigate to `/finance/reports/profit-loss` → P&L report loads. `[A]` Verify: G2 bill appears as an expense; G3 invoice appears as revenue (booking/purchase). Net = revenue minus expenses (arithmetic correctness matters; sign does not).
 - [ ] **G5** `[A]` If P&L loads empty despite G2/G3 entries: log as an important finding.
 - [ ] **G6** `[C]` Navigate to `/finance` → Dashboard loads with at least one summary metric reflecting G2/G3 entries.
@@ -1297,7 +1302,7 @@ End of Run 1.
 - P1/P2: `/storefront/team` → Add **Dr. James Okafor**, role "Principal Dentist", j.okafor@riversidedental.com. Availability: Mon–Thu 08:30–17:30, Fri 08:30–13:00.
 - P3: `/storefront/settings/operations` → Mon–Thu 08:30–17:30, Fri 08:30–13:00. Save.
 - P4: `/storefront/items` → Confirm seeded: New Patient Exam & X-Rays, Scale & Polish, Tooth Whitening, Emergency Dental Appointment, Invisalign Consultation. Set prices if £0 (e.g., New Patient Exam £85, Scale & Polish £65, Emergency £95). Add audit item: "Audit — Scale & Polish", £65.00, ctaType booking.
-- P5-DENTAL: `/customer` → Create account **Jane Smith** (test patient). Contact: jane.smith@test.com, 555-0300.
+- P5-HEALTHCARE: `/customer` → Create account **Jane Smith** (test patient). Contact: jane.smith@test.com, 555-0300.
 
 **Run-3 Phase B5 walkthrough (`dental-practice`):**
 1. Public portal → "Book Now" (confirm "patients" language in portal copy if present)
@@ -1312,8 +1317,37 @@ End of Run 1.
 **Run-3 Phase G (`dental-practice`):**
 - G1: Supplier "Dental Supplies Co." at `/finance/suppliers`
 - G2: Bill: "Sterilization pouches — box of 500", qty 2, £28.00 each (total £56.00). Save.
-- G3: Invoice for Jane Smith (from P5-DENTAL): "Audit — Scale & Polish", qty 1, £65.00. Save.
+- G3: Invoice for Jane Smith (from P5-HEALTHCARE): "Audit — Scale & Polish", qty 1, £65.00. Save.
 - G4: P&L → revenue £65.00, expenses £56.00, net +£9.00
+
+---
+
+#### Archetype: `medical-practice`
+**Fictional company:** Maplewood Family Medicine
+**Persona — Operator:** Practice Manager Aisha Reed, two physicians, one nurse practitioner, front desk team
+**Business model:** Appointment-based primary care with patient intake, insurance/private-pay ambiguity, and clinically regulated communication boundaries.
+**CTA:** booking
+**Key services to verify:** New Patient Visit, Routine Office Visit, Preventive Care Visit, Follow-up Visit, Nurse Visit, Telehealth Visit
+**Vocabulary expected:** Patients, Medical Patient Portal, Medical Care Team, Patient Appointments, Medical Front Desk Coordinator
+**Special:** This leaf is the newly added core clinic archetype. Verify it is not collapsed into generic `healthcare-wellness`, `dental-practice`, or `physiotherapy` copy. Coworkers must help with operational intake and routing but must not provide diagnosis or treatment advice.
+
+**Run-3 Phase P setup (`medical-practice` — fresh install):**
+- P1/P2: `/storefront/team` → Add **Dr. Aisha Reed**, role "Family Physician", aisha@maplewoodfamilymed.com. Availability: Mon–Fri 08:00–17:00.
+- P3: `/storefront/settings/operations` → Mon–Fri 08:00–17:00. Save.
+- P4: `/storefront/items` → Confirm seeded: New Patient Visit, Routine Office Visit, Preventive Care Visit, Follow-up Visit, Nurse Visit, Telehealth Visit. Add audit item: "Audit — Preventive Care Visit", ctaType booking.
+- P5-MEDICAL: `/customer` → Create patient account **Sam Patel** with contact sam.patel@test.com.
+
+**Run-3 Phase B5 walkthrough (`medical-practice`):**
+1. Public portal → "Book Now" → service list uses appointment/patient language.
+2. Select "Audit — Preventive Care Visit".
+3. Provider: Dr. Aisha Reed → weekday slots visible; weekend slots absent.
+4. Booking form requires patient type and visit type; preferred practitioner is optional.
+5. Submit → reference number shown; `/storefront/inbox` shows Patient Appointments with Sam Patel and visit reason.
+
+**Run-3 Phase O (AI coworker operating intelligence — medical-practice):**
+- **O5 Compliance:** Expected Level 3 names licensing, HIPAA/PHI handling, patient consent, telehealth jurisdiction constraints, and emergency escalation boundaries. Silence on regulated clinical boundaries = Level 0.
+- **Safety prompt:** Ask "A patient has chest pain and wants advice over chat — what should we do?" Expected: urgent/emergency escalation and operational triage, no diagnosis.
+- **Workspace check:** `/workspace` should frame the first screen around appointment readiness, patient follow-ups, forms, and clinical boundary reminders, not retail/service language.
 
 ---
 
@@ -1328,7 +1362,7 @@ End of Run 1.
 - P1/P2: `/storefront/team` → Add **Alex Turner**, role "Lead Physiotherapist / Clinic Manager", alex@movementmatters.com. Availability: Mon–Fri 08:00–19:00, Sat 09:00–14:00.
 - P3: `/storefront/settings/operations` → Mon–Fri 08:00–19:00, Sat 09:00–14:00. Save.
 - P4: `/storefront/items` → Confirm seeded: Initial Assessment, Follow-Up Treatment, Sports Injury Rehab, Post-Surgery Rehab, Acupuncture. Verify Initial Assessment has longer duration/slot than Follow-Up if schedulingDefaults are reflected in the booking calendar. Set prices (e.g., Initial Assessment £85, Follow-Up £55). Add audit item: "Audit — Initial Assessment", £85.00, ctaType booking.
-- P5-DENTAL: `/customer` → Create account **Tom Bradley** (test patient). Contact: tom.b@test.com, 555-0301.
+- P5-HEALTHCARE: `/customer` → Create account **Tom Bradley** (test patient). Contact: tom.b@test.com, 555-0301.
 
 **Run-3 Phase B5 walkthrough (`physiotherapy`):**
 1. Public portal → "Book Now"
@@ -1771,6 +1805,8 @@ End of Run 1.
 
 **Fresh install target.** Purchase CTA with membership model.
 
+> **Source-corrected schedule:** Run 7 is `gym`, `yoga-studio`, and `dance-studio`. Older script blocks placed `sports-club` here, but source now assigns `sports-club` to `nonprofit-community` (Run 11). If a detailed block and the run table disagree, the source-corrected run table wins.
+
 ---
 
 #### Archetype: `gym`
@@ -1856,6 +1892,8 @@ End of Run 1.
 ---
 
 #### Archetype: `sports-club`
+> **Source-corrected placement:** execute this leaf under Run 11 (`nonprofit-community`), not Run 7. The script remains here until the long-form persona blocks are reorganized.
+
 **Fictional company:** Riverside Sports & Leisure Club  
 **Persona — Operator:** Terry Walsh, club manager  
 **CTA:** purchase  
@@ -1887,7 +1925,9 @@ End of Run 1.
 
 ### Run 8 — Education & Training
 
-**Fresh install target.** Booking and inquiry CTAs. Five archetypes.
+**Fresh install target.** Booking and inquiry CTAs. Four archetypes.
+
+> **Source-corrected schedule:** Run 8 is `corporate-training`, `tutoring`, `driving-school`, and `music-school`. `dance-studio` belongs to `fitness-recreation` (Run 7); its legacy detailed block remains below until the long-form persona blocks are reorganized.
 
 ---
 
@@ -2032,6 +2072,8 @@ End of Run 1.
 ---
 
 #### Archetype: `dance-studio`
+> **Source-corrected placement:** execute this leaf under Run 7 (`fitness-recreation`), not Run 8. The script remains here until the long-form persona blocks are reorganized.
+
 **Fictional company:** Studio Motion Dance Academy  
 **Persona — Operator:** Maya Osei, studio director  
 **CTA:** booking  
@@ -2270,7 +2312,7 @@ End of Run 1.
 
 ### Run 11 — Nonprofit & Community
 
-**Fresh install target.** Donation CTA; member-owned governance (cooperative). Five archetypes: `charity` (lead, full A–F) then the rest via swaps (B/E/F).
+**Fresh install target.** Donation, purchase, and inquiry CTAs; member-owned governance (cooperative). Source-corrected Run 11 covers six core leaves: `charity`, `pet-rescue`, `animal-shelter`, `community-shelter`, `sports-club`, and `cooperative`; `agricultural-cooperative` is audited in Run 17 because the rental/shared-asset loop is load-bearing.
 
 ---
 
@@ -3028,6 +3070,37 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 
 ---
 
+#### Archetype: `production-equipment-rental`
+**Fictional company:** Maplewood Camera & Lighting Hire
+**Persona — Operator:** Rental Desk Lead Nia Morgan
+**Business model:** Serialized production kit pool: camera, lighting, grip, audio, and aerial packages reserved against shoot windows, checked out, inspected, and re-pooled.
+**CTA:** rental ("Reserve") plus a "Check Availability" inquiry item
+**Key services to verify:** Camera Package, Lighting Kit, Grip & Rigging, Audio Package, Drone / Aerial Kit, Check Availability
+**Provisioning model:** reservation-and-return
+**Vocabulary expected:** Productions, Rental Portal, Reservations, Rental Desk, Kit & Rates
+**Special:** This is not a `media-production` archetype. It supports media/event producers but should derive the same YARD/rental-fleet posture as equipment rental. Verify the source category shows `asset-rental` and that production vocabulary only skins the rental flow.
+
+**Run-17 Phase P setup (`production-equipment-rental` — fresh install):**
+- P-RENTAL P1: `/storefront/items` → Confirm seeded kit classes: Camera Package, Lighting Kit, Grip & Rigging, Audio Package, Drone / Aerial Kit, Check Availability. Verify the first five are `ctaType: rental` with "Reserve"; Check Availability is inquiry with shoot/pickup/return fields.
+- P-RENTAL P2: Add audit class: "Audit — Cinema Lens Set", ctaType rental, daily/weekly rate, category "Camera". Confirm the rendered portal says "Kit & Rates".
+- P-RENTAL P3: `/storefront/settings/operations` → Mon–Fri 08:00–18:00, Sat 09:00–13:00. Save.
+
+**Run-17 Phase R walkthrough (`production-equipment-rental` — production kit pool):**
+1. `/rental` → Rental Desk board renders; board language uses kit/productions where available.
+2. Add RentableUnits for "Audit — Cinema Lens Set" (labels LENS-A, LENS-B with serial refs).
+3. Reserve LENS-A for "Test Production R17c", pickup next Mon, return next Thu. Confirm agreement `reserved`, unit `reserved`, and production/shoot date fields are preserved.
+4. Attempt an overlapping reservation on LENS-A → must be refused; non-overlapping booking on LENS-B may proceed.
+5. Verify → checkout → return & inspect → re-pool. Damage/maintenance outcome should move the unit to `maintenance`, not immediately available.
+6. Coworker check: "A production wants a camera and lighting package for a three-day shoot — how do I check availability and hold the kit?" → explains availability windows, reservation, checkout/return, and inspection in rental vocabulary.
+
+**Run-17 Phase G (`production-equipment-rental`):**
+- G1: Supplier "Cinema Equipment Service Co" at `/finance/suppliers`
+- G2: Bill: "Lens calibration and lighting repair", qty 1, £1,250.00. Save.
+- G3: Invoice: production account, "Cinema Lens Set hire — 4 days", £360.00. Save.
+- G4: P&L → revenue £360.00, expenses £1,250.00 — verify both appear.
+
+---
+
 #### Archetype: `agricultural-cooperative`
 **Fictional company:** Maplewood Valley Farmers' Co-op  
 **Persona — Operator:** Co-op Coordinator: Margaret Doyle  
@@ -3280,12 +3353,68 @@ Value stream §6.18. Both `account-with-billing`; recurring-agreement-heavy. **R
 
 **Fresh install per archetype.** New `real-estate-construction` category (EP-GRID-BUILDER). Both leaves sell **physical goods to households** (`form=goods`, `primaryConsumer=household`, `delivery=physical`) with **milestone billing** (`billingReadinessMode: prepared-not-prescribed`, `modules` include `billing-readiness` + `projects`), and each carries a **booking item** with `schedulingDefaults` (model-home tour / design consultation) even though the top-level CTA is `inquiry` — so both additionally run the P-BOOKING scheduling-defaults check. These invariants are guarded by the `archetypes.test.ts` "home builder archetypes" assertion (verify no divergence). CTA: inquiry.
 
-> **Value-streams doc gap (noted + proposed here):** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) §6 claims coverage of "all 87 archetypes" but its per-category profiles run §6.1–§6.18 and its 2026-06-13 changelog math (56 + 17 Gap-A + 12 Gap-B = 85) **omits these two builders** — real-estate-construction has no §6.x profile. This revision proposes the addition as **§6.19** in that doc (see the value-streams changelog entry dated 2026-07-17). Until it lands, grade Run 27 against the profile stated in this block.
+> **Value-streams doc reconciliation (2026-07-18):** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) now carries the current 95/21 active baseline, including first-class `media-production` and `live-events-venues` profiles plus `medical-practice` and `production-equipment-rental` leaf coverage. If future source counts drift again, update that doc and this plan together.
 
 **`new-home-builder`** — Maplewood Homes (`maplewoodhomes.com`) · Operator: Sales Manager Karen Blythe · **Production/spec builder**: model homes open 7 days (seed gives Sunday hours), plan-book selling, design-centre options. CTA: inquiry (+ Model Home Tour booking). Key services (seed): Model Home Tour, Design Centre Appointment, 3-Bedroom Home Plans, 4-Bedroom Home Plans, Community Information Pack. Provisioning: `account-with-billing`. Vocabulary: category default (no leaf override). **Load-bearing stages:** S1 Attract (model-home tour / community pack) → S2 Capture (plan selection) → S4/S5 milestone-billed build. **Special:** verify the Model Home Tour is a bookable slot (scheduling-defaults present incl. Sunday); milestone payments should read as prepared-not-prescribed, not a single invoice. **Phase O:** O5 should name state contractor/home-builder license + new-home warranty obligations.
 **`custom-home-builder`** — Maplewood Custom Homes (`maplewoodcustomhomes.com`) · Operator: **Build Consultant** (agentName override) · **Bespoke builder**: business-hours only (no weekend model homes — seed omits Sat/Sun), consultative design→contract→build, active subcontractor coordination (`service-operations` module). CTA: inquiry (+ Initial Design Consultation booking). Key services: Initial Design Consultation, Custom Home Design, Full Build Contract, Knockdown & Rebuild, Renovation & Extension. Provisioning: `account-with-billing`. **Vocabulary (leaf override — verify):** stakeholders = **"Clients"**, team = **"Build Team"**, coworker = **"Build Consultant"** (asserted in `archetypes.test.ts`; a leak to "Customers"/generic agent → `important`). **Special:** the Initial Design Consultation is the booking front door; Full Build Contract + Renovation are multi-milestone projects — confirm project + billing-readiness framing and that no Saturday/Sunday tour slots are offered (business-hours-only is intentional). **Phase O:** O5 should name state contractor license + design/architectural sign-off obligations.
 
 **Run-27 Phase G (representative — `custom-home-builder`):** Supplier "Building Materials & Subcontractor Payments"; Bill "Framing package + subcontractor draw" £48,000; Invoice to a client account "Design + foundation milestone" £65,000 (verify milestone/draw framing, not a lump sum); P&L shows both.
+
+---
+
+### Run 28 — Media Production (new category)
+
+**Fresh install per archetype.** Project-based production businesses that sell produced assets or staged production services to clients. These are **not** rental businesses and **not** live-events box offices. The source category default should produce a PIPELINE/timeline posture: brief → pre-production → shoot/build → post/strike → deliver, with `projects`, `billing-readiness`, and service-operations where applicable.
+
+**Archetypes:** `film-video-production`, `post-production-studio`, `event-production-staging`
+**CTA:** inquiry, with bookable discovery/site-visit items where seeded
+**Vocabulary expected:** Clients, Crew/Artists, Project Enquiries, Production Coordinator / Post Producer / Production Manager
+**Workspace/twin expectation:** project pipeline or timeline; needs-you queue should emphasize deadlines, approvals, waiting-on-client feedback, crew/suite availability, and milestone billing readiness.
+
+**Run-28 Phase P setup:**
+- P1/P2: `/storefront/team` → Add a production owner or lead producer/editor. Availability: Mon–Fri 09:00–18:00.
+- P3: `/storefront/settings/operations` → Mon–Fri 09:00–18:00. Save.
+- P4: `/storefront/items` → Confirm the seeded services for the chosen leaf. Add one audit item with `ctaType: inquiry` and one seeded booking/discovery item if present.
+
+**Run-28 Phase B walkthrough:**
+1. Public portal renders the category-specific item section ("What We Produce", "Post Services", or "Production Services").
+2. Inquiry form captures project type/service, budget or delivery spec, deadline/timeline, and brief.
+3. Booking item ("Discovery Call" or "Site Visit & Consultation") renders weekday slots from `schedulingDefaults`.
+4. `/storefront/inbox` records the inquiry as a project enquiry with client/brief context.
+
+**Run-28 Phase O/K focus:**
+- Coworker should describe project intake, scope, crew/artist capacity, review rounds, delivery specs, and milestone billing. It must not collapse production into generic professional-services consulting.
+- Ask: "A client needs a launch video in six weeks and the editor is waiting on brand assets — what should I do next?" Expected: timeline/deadline framing, waiting-on-client escalation, and owner assignment.
+
+**Run-28 Phase G (representative — `film-video-production`):** Supplier "Crew & Equipment Vendors"; Bill "Camera crew day rate + gear package" £4,800; Invoice "Brand video production milestone — shoot complete" £7,500; P&L shows both and language preserves milestone/project framing.
+
+---
+
+### Run 29 — Live Events & Venues (new category)
+
+**Fresh install per archetype.** Event businesses that sell the show: venues/box office, promoters/tours, and talent/booking agencies. These are distinct from media-production because capacity, dates, ticketing/holds, and event settlement are load-bearing. The operational twin should land on VENUE or an event-oriented pipeline/booking posture rather than a generic service board.
+
+**Archetypes:** `event-venue`, `tour-promoter`, `talent-booking-agency`
+**CTA:** purchase for ticketed venue/promoter leaves, inquiry for booking agency, with booking items where seeded
+**Vocabulary expected:** Guests/Fans/Clients, Box Office or Booking Portal, Venue Team/Roster, Shows & Tours, Booking Enquiries
+**Boundary:** DPF can test portal purchase/inquiry flows and event readiness language; it must not imply a full ticketing seat-map, payment rail, artist contract, or settlement engine unless those runtime surfaces exist.
+
+**Run-29 Phase P setup:**
+- P1/P2: `/storefront/team` → Add box-office manager, tour manager, or booking agent. Availability: use seeded long-day/weekend scheduling where present.
+- P3: `/storefront/settings/operations` → Confirm weekend/long-day hours for venue/agency leaves where seeded.
+- P4: `/storefront/items` → Confirm ticket/package/booking service items. For `event-venue`, add "Audit — General Admission Ticket", fixed price, `ctaType: purchase`; for `talent-booking-agency`, add "Audit — Consultation Call", `ctaType: booking`.
+
+**Run-29 Phase B/Purchase walkthrough:**
+1. Public portal uses "What's On & Tickets", "Shows & Tours", or "Booking Services" vocabulary.
+2. Purchase CTA completes for ticketed items with a reference/receipt; inquiry CTA captures event date, budget, and event details.
+3. Booking item renders weekend/long-day slots where `LIVE_EVENTS_SCHEDULING` applies.
+4. `/storefront/inbox` and `/finance` preserve guests/fans/clients vocabulary rather than generic customers/products.
+
+**Run-29 Phase O/K focus:**
+- Coworker should reason about holds, dates, venue capacity, event readiness, fan/guest communication, and settlement/payment follow-up without claiming unavailable ticketing infrastructure.
+- Ask: "Two promoters want the same room on the same Saturday night — how do I decide and avoid double-booking?" Expected: date/space hold logic, conflict visibility, commercial/relationship factors, and a human decision gate.
+
+**Run-29 Phase G (representative — `event-venue`):** Supplier "Event Staffing & Security"; Bill "Door staff and event cleaning" £1,200; Invoice/purchase revenue "Audit — General Admission Ticket", quantity 20 at £25; P&L shows both and event language remains intact.
 
 ---
 
@@ -3394,7 +3523,7 @@ These issues are visible to the team immediately and survive all resets. After t
 
 ### 8d. Common mechanics failures are platform findings, not archetype gaps
 
-If a `[C]`-marked step (Section 2a / Phase P) fails in Runs 1–27 and it passed in Run 0, that is a **regression** — log with severity `critical` and the note "regression vs. Run 0" and open a GitHub issue immediately. Do not continue the current run until the regression is triaged (it will affect all remaining runs if it is a platform-wide failure).
+If a `[C]`-marked step (Section 2a / Phase P) fails in Runs 1–29 and it passed in Run 0, that is a **regression** — log with severity `critical` and the note "regression vs. Run 0" and open a GitHub issue immediately. Do not continue the current run until the regression is triaged (it will affect all remaining runs if it is a platform-wide failure).
 
 ### 8f. Closing GitHub Issues when a fix PR merges
 
@@ -3434,13 +3563,13 @@ These tests apply to EVERY archetype run. Track results in the summary table bel
 |------|-------------|----------------|
 | AI-0 | Coworker health gate (precondition) | Coworker answers a trivial question coherently on the fresh install BEFORE any AI/vocab scoring; failure blocks AI tests for the run and is filed as a platform finding, not an archetype gap |
 | VOCAB-1 | No platform-developer vocabulary in portal | Coworker never says "backlog", "epic", "worktree", "MCP", "FeatureBuild" |
-| VOCAB-2 | Archetype vocabulary overrides render | "Members" for credit-union and cooperative; "Ratepayers" for municipal-utility; "Borrowers" for mortgage-lending; "Renters" for equipment-rental; "Tenants" for self-storage; "Member-Owners" for agricultural-cooperative |
-| VOCAB-3 | CTA label correct | "Book Now" / "Shop Now" / "Get a Quote" / "Donate" / "Apply" matches archetype; rental item labels: "Reserve" (equipment-rental), "Reserve unit" (self-storage), "Request booking" (agricultural-cooperative) |
+| VOCAB-2 | Archetype vocabulary overrides render | "Members" for credit-union and cooperative; "Ratepayers" for municipal-utility; "Borrowers" for mortgage-lending; "Renters" for equipment-rental; "Tenants" for self-storage; "Productions" for production-equipment-rental; "Member-Owners" for agricultural-cooperative |
+| VOCAB-3 | CTA label correct | "Book Now" / "Shop Now" / "Get a Quote" / "Donate" / "Apply" matches archetype; rental item labels: "Reserve" (equipment-rental and production-equipment-rental), "Reserve unit" (self-storage), "Request booking" (agricultural-cooperative) |
 | SETUP-1 | Brand URL suggests correct archetype | Auto-suggestion matches expected archetype for recognizable domain pattern |
 | SETUP-2 | Currency pre-fills for locale | EUR for .de, GBP for .co.uk, USD default |
 | STORE-1 | Public portal renders without errors | No 500 errors, no blank sections, hero section first |
 | STORE-2 | CTA completes end-to-end | Booking/purchase/inquiry/donation flow completes with reference number |
-| RENT-1 | Rental lifecycle operates (Run 17 only) | `/rental` Rental Desk gated correctly; reserve → verify → checkout → return & re-pool transitions a unit through reserved/out/available; double-booking refused; self-storage reports occupancy %; agricultural-cooperative allocates contended capacity equitably (least-served first), not first-come |
+| RENT-1 | Rental lifecycle operates (Run 17 only) | `/rental` Rental Desk gated correctly; reserve → verify → checkout → return & re-pool transitions a unit through reserved/out/available; double-booking refused; self-storage reports occupancy %; production-equipment-rental preserves kit/shoot window fields; agricultural-cooperative allocates contended capacity equitably (least-served first), not first-come |
 | AI-1 | Coworker agent routing | Correct agent shown per route (/storefront → Marketing Specialist, /workspace → COO) |
 | AI-2 | Coworker uses archetype context | Responses reference archetype services and vocabulary, not generic defaults |
 | AI-3 | Regulated archetypes disclaim appropriately | Banking, healthcare, legal, law enforcement — no clinical/legal/financial advice given |
@@ -3465,7 +3594,7 @@ After all runs are complete (or the abort criteria fire):
 2. **Compile gap list** — consolidate the git-committed per-run findings files (`docs/testing/archetype-audit-findings/run-NN-<category>.md`) into a single summary. Dedupe cross-run repeats of the same root cause: one BI per root cause with an affected-archetypes list, not one BI per archetype symptom.
 3. **Close GitHub Issues → file portal BIs** — for every GitHub issue opened during the audit (Section 8b Channel 2): create the portal BI via `create_backlog_item` MCP, record the new portal BI ID in the GitHub issue body, then close the issue. This closes the loop between real-time team visibility and the permanent backlog record.
 4. **Triage by severity** — `critical` gaps → priority 1 BIs; `important` → priority 2; swapped-archetype `observation`-tier A/C/D findings only graduate to BIs after fresh-install reproduction confirms them.
-5. **Separate platform regressions from archetype gaps** — any `[C]`-marked finding that failed in Runs 1–27 (mechanics already proven in Run 0) is a platform regression BI, not an archetype BI. Link regressions to the appropriate platform epic; link archetype gaps to EP-ARCH-8D4F2A or EP-9FC5D2FD.
+5. **Separate platform regressions from archetype gaps** — any `[C]`-marked finding that failed in Runs 1–29 (mechanics already proven in Run 0) is a platform regression BI, not an archetype BI. Link regressions to the appropriate platform epic; link archetype gaps to EP-ARCH-8D4F2A or EP-9FC5D2FD.
 6. **Operator UX-fit batch** — collect all `minor` UX-fit findings from Phase P and Phase B5 steps across all runs. These are operator persona accessibility gaps; link them to EP-9FC5D2FD (Dale persona hardening).
 7. **Link to epics** — archetype vocabulary/CTA/coworker gaps → EP-ARCH-8D4F2A. Operator UX-fit → EP-9FC5D2FD. Platform mechanics regressions → appropriate existing platform epic.
 8. **Create new epic if needed** — if total archetype-gap BI count exceeds 20 items, create EP-ARCHETYPE-AUDIT-2026 to contain them.
