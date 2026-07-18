@@ -57,6 +57,12 @@ test("stale catalog or state hash fails closed", async () => {
   assert.match(staleState.stderr, /^capability_state_stale\s*$/);
 });
 
+test("a partial legacy capability snapshot fails closed instead of receiving defaults", async () => {
+  const result = await run({ schemaVersion: 1, enabledRuntimeCapabilities: ["runtime:core"] }, "--migrate");
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /^capability_state_stale\s*$/);
+});
+
 test("a previous-release state migrates to the documented default-start compatibility set", async () => {
   const result = await run({ schemaVersion: 1 }, "--migrate");
   assert.equal(result.status, 0, result.stderr);

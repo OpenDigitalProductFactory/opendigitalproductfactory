@@ -110,6 +110,12 @@ describe("runtime capability transition coordinator", () => {
       .toBe(computeCapabilityStateVersion("catalog", { a: "active", b: "disabled" }));
   });
 
+  it("uses the shared capability state hash implementation", async () => {
+    const shared = await import("../../../../scripts/lib/capability-state-hash.mjs");
+    expect(computeCapabilityStateVersion("catalog", { b: "disabled", a: "active" }))
+      .toBe(shared.computeCapabilityStateVersion("catalog", { a: "active", b: "disabled" }));
+  });
+
   it.each([
     [{ ...request, transitionId: "../bad" }, "invalid_transition_id"],
     [{ ...request, desiredKeys: ["runtime:core", "runtime:core"] }, "invalid_desired_keys"],
