@@ -106,8 +106,8 @@ import { executeScheduledAgentTask } from "./agent-task-scheduler";
 const FIXED_NOW = new Date(2026, 6, 12, 9, 0, 0, 0);
 
 beforeEach(() => {
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
   vi.resetAllMocks();
+  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
   // BI-D1CD3A11: the idempotent claim runs before execution; default to a WON
   // claim so these plan-behavior tests exercise the work.
   mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 1 });
