@@ -57,6 +57,8 @@
 
 **Integration checkpoint (2026-07-18):** The authenticated mutation action now gates on durable startup admission; production startup invokes the read-only recovery adapter as an awaited boot barrier. The one-shot promoter uses signed envelopes and receipts, the canonical install-state validator/schema, an HMAC-bound atomic phase journal, capability-aware Compose health evidence, and deterministic recovery across every state/Compose/receipt crash window. A durable host authority marker is acquired before DB `pending`, closing the signing-key rotation race. Missing expired receipts with no host mutation close against the clean previous state instead of escalating to `recovery_required`; journals that crossed the mutation boundary compensate. Focused Node protocol tests are green; the source-only worktree cannot execute the web Vitest/typecheck gate, so canonical leased verification remains required before PR.
 
+**Liveness checkpoint (2026-07-18):** Authority reconciliation now runs against live DB transition IDs immediately before every portal reserve and governed signing-key rotation, at startup before saga recovery, and again after startup terminalization. Pre-DB orphan leases remain fail-closed until expiry, then the next governed operation reaps them without a restart; DB-bound leases are renewed while active and removed immediately after their row becomes terminal. Rotation is exposed only through the authenticated `manage_platform` action and its DB-aware one-shot promoter wrapper. Injected-clock tests cover expiry without restart and active-to-terminal cleanup while preserving opaque-token ownership.
+
 **Files:**
 - Modify: `scripts/lib/capability-service-projection.mjs`
 - Modify: `scripts/lib/capability-service-projection.test.mjs`

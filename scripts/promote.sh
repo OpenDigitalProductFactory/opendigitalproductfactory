@@ -16,7 +16,9 @@ _self_upgrade=0
 _dry_run=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
-if [[ "${1:-}" == "--runtime-transition-authority" ]]; then
+if [[ "${1:-}" == "--runtime-transition-secret-rotation" ]]; then
+  exec node "$_promoter_dir/rotate-runtime-transition-secret.mjs" --state-dir "${DPF_STATE_DIR:-/dpf-state}" --rotate
+elif [[ "${1:-}" == "--runtime-transition-authority" ]]; then
   _operation="${2:-}"
   _transition_id="${3:-}"
   _ownership_token="${4:-}"

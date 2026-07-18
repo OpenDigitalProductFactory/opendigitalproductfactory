@@ -39,3 +39,19 @@ test("startup preserves an unexpired marker with no DB row", async () => {
   assert.equal(run(dir, ["reserve", "RCT-before-db"]).status, 0);
   assert.equal(run(dir, ["reconcile"], { DPF_ACTIVE_RUNTIME_TRANSITION_IDS: "" }).status, 75);
 });
+
+test("next governed reserve reaps an expired pre-DB orphan without restart", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-authority-"));
+  assert.equal(run(dir, ["reserve", "RCT-crashed"], { DPF_TEST_NOW_MS: "1000", DPF_RUNTIME_TRANSITION_AUTHORITY_LEASE_MS: "1000" }).status, 0);
+  assert.equal(run(dir, ["reconcile"], { DPF_TEST_NOW_MS: "1500", DPF_ACTIVE_RUNTIME_TRANSITION_IDS: "" }).status, 75);
+  assert.equal(run(dir, ["reconcile"], { DPF_TEST_NOW_MS: "2001", DPF_ACTIVE_RUNTIME_TRANSITION_IDS: "" }).status, 0);
+  assert.equal(run(dir, ["reserve", "RCT-next"], { DPF_TEST_NOW_MS: "2001" }).status, 0);
+});
+
+test("startup-bound lease is removed immediately after its DB row terminalizes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-authority-"));
+  assert.equal(run(dir, ["reserve", "RCT-active"], { DPF_TEST_NOW_MS: "1000" }).status, 0);
+  assert.equal(run(dir, ["reconcile"], { DPF_TEST_NOW_MS: "1100", DPF_ACTIVE_RUNTIME_TRANSITION_IDS: "RCT-active" }).status, 0);
+  const released = run(dir, ["reconcile"], { DPF_TEST_NOW_MS: "1200", DPF_ACTIVE_RUNTIME_TRANSITION_IDS: "" });
+  assert.equal(released.status, 0, released.stderr); assert.equal(JSON.parse(released.stdout).status, "recovered");
+});

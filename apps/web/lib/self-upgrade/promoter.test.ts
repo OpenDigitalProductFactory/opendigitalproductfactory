@@ -34,6 +34,11 @@ describe("buildPromoterCommand", () => {
     expect(args).toContain("DPF_ACTIVE_RUNTIME_TRANSITION_IDS=RCT-1");
     expect(args.slice(-2)).toEqual(["--runtime-transition-authority", "reconcile"]);
   });
+  it("builds governed runtime signing-key rotation", () => {
+    const { args } = buildPromoterCommand({ ...BASE, stateDirHostPath: "/state", runtimeTransitionAuthorityOperation: "rotate-secret" });
+    expect(args).toContain("/state:/dpf-state");
+    expect(args.at(-1)).toBe("--runtime-transition-secret-rotation");
+  });
   it("selects the dedicated runtime capability transition mode without self-upgrade argv", () => {
     const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeCapabilityEnvelope: "encoded", runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecretFileHostPath: "/state/transition-secret" });
     expect(args).toContain("--runtime-capability-transition");

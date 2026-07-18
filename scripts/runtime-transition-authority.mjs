@@ -19,11 +19,12 @@ const readMarker = async () => {
   catch (error) { if (error.code === "ENOENT") return null; throw error; }
 };
 const activeIds = new Set((process.env.DPF_ACTIVE_RUNTIME_TRANSITION_IDS ?? "").split(",").filter(Boolean));
-const now = Date.now();
+const now = process.env.DPF_TEST_NOW_MS ? Number(process.env.DPF_TEST_NOW_MS) : Date.now();
+if (!Number.isFinite(now)) { process.stderr.write("invalid_authority_clock\n"); process.exit(64); }
 
 if (operation === "reserve") {
   const token = randomBytes(32).toString("hex");
-  const lease = { version: 1, transitionId, ownershipToken: token, acquiredAt: new Date(now).toISOString(), expiresAt: new Date(now + leaseMs).toISOString() };
+  const lease = { version: 1, transitionId, ownershipToken: token, acquiredAt: new Date(now).toISOString(), expiresAt: new Date(now + leaseMs).toISOString(), boundToDb: false };
   try {
     const file = await open(marker, "wx", 0o600);
     try { await file.writeFile(`${JSON.stringify(lease)}\n`); } finally { await file.close(); }
@@ -45,10 +46,10 @@ if (operation === "reserve") {
   if (!lease) { process.stdout.write('{"status":"clear"}\n'); }
   else if (activeIds.has(lease.transitionId)) {
     // Bind the marker to durable DB truth and renew it for startup recovery.
-    const bound = { ...lease, expiresAt: new Date(now + leaseMs).toISOString() };
+    const bound = { ...lease, boundToDb: true, expiresAt: new Date(now + leaseMs).toISOString() };
     await import("node:fs/promises").then(({ writeFile }) => writeFile(marker, `${JSON.stringify(bound)}\n`, { mode: 0o600 }));
     process.stdout.write(`${JSON.stringify({ status: "bound", transitionId: lease.transitionId, expiresAt: bound.expiresAt })}\n`);
-  } else if (Number.isFinite(Date.parse(lease.expiresAt)) && Date.parse(lease.expiresAt) <= now) {
+  } else if (lease.boundToDb === true || (Number.isFinite(Date.parse(lease.expiresAt)) && Date.parse(lease.expiresAt) <= now)) {
     // Only startup reconciliation, after its DB cross-check, may reap an orphan.
     await rm(marker);
     process.stdout.write(`${JSON.stringify({ status: "recovered", transitionId: lease.transitionId })}\n`);

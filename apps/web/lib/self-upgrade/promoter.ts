@@ -83,7 +83,7 @@ export type PromoterParams = {
   stateDirHostPath?: string;
   runtimeCapabilityProfiles?: string[];
   /** Reserve/release the durable host authority marker without applying. */
-  runtimeTransitionAuthorityOperation?: "reserve" | "release" | "reconcile";
+  runtimeTransitionAuthorityOperation?: "reserve" | "release" | "reconcile" | "rotate-secret";
   /** Opaque lease token returned by reserve; mandatory for release. */
   runtimeTransitionAuthorityToken?: string;
   /** DB-active transition ids used only by startup reconciliation. */
@@ -178,7 +178,7 @@ export function buildPromoterCommand(
   }
 
   if (params.runtimeTransitionAuthorityOperation) {
-    if (!params.stateDirHostPath || (params.runtimeTransitionAuthorityOperation !== "reconcile" && !params.runtimeCapabilityTransitionId) ||
+    if (!params.stateDirHostPath || (!["reconcile", "rotate-secret"].includes(params.runtimeTransitionAuthorityOperation) && !params.runtimeCapabilityTransitionId) ||
       (params.runtimeTransitionAuthorityOperation === "release" && !params.runtimeTransitionAuthorityToken)) throw new Error("runtime_transition_authority_protocol_incomplete");
     args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_STATE_DIR=/dpf-state");
     if (params.runtimeTransitionAuthorityOperation === "reconcile") args.push("-e", `DPF_ACTIVE_RUNTIME_TRANSITION_IDS=${(params.runtimeTransitionActiveIds ?? []).join(",")}`);
@@ -193,7 +193,8 @@ export function buildPromoterCommand(
 
   args.push(image);
   if (params.runtimeTransitionAuthorityOperation) {
-    args.push("--runtime-transition-authority", params.runtimeTransitionAuthorityOperation);
+    if (params.runtimeTransitionAuthorityOperation === "rotate-secret") args.push("--runtime-transition-secret-rotation");
+    else args.push("--runtime-transition-authority", params.runtimeTransitionAuthorityOperation);
     if (params.runtimeCapabilityTransitionId) args.push(params.runtimeCapabilityTransitionId);
     if (params.runtimeTransitionAuthorityToken) args.push(params.runtimeTransitionAuthorityToken);
   } else if (params.runtimeCapabilityTransitionId) {

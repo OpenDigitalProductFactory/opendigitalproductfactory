@@ -140,5 +140,9 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
       });
     },
   });
+  // Reap a lease that startup bound to a row which reconciliation just made
+  // terminal; otherwise rotation/new transitions wait for an unnecessary TTL.
+  const remainingRows = await listActive();
+  await host.reconcileAuthority?.(remainingRows.map((row) => row.transitionId));
   admission = recoveryRequired ? "recovery_required" : "ready";
 }

@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireCapability, assertAdmission, execute } = vi.hoisted(() => ({
+const { requireCapability, assertAdmission, execute, rotate } = vi.hoisted(() => ({
   requireCapability: vi.fn(),
   assertAdmission: vi.fn(),
   execute: vi.fn(),
+  rotate: vi.fn(),
 }));
 vi.mock("@/lib/actions/shared/guards", () => ({ requireCapability }));
 vi.mock("@/lib/platform-runtime/transition-recovery", () => ({ assertRuntimeCapabilityTransitionAdmission: assertAdmission }));
-vi.mock("@/lib/platform-runtime/runtime-capability-executor", () => ({ executeProductionRuntimeCapabilityTransition: execute }));
+vi.mock("@/lib/platform-runtime/runtime-capability-executor", () => ({ executeProductionRuntimeCapabilityTransition: execute, rotateProductionRuntimeTransitionSecret: rotate }));
 
-import { requestRuntimeCapabilityTransition } from "./runtime-capabilities";
+import { requestRuntimeCapabilityTransition, rotateRuntimeTransitionSecret } from "./runtime-capabilities";
 
 describe("runtime capability mutation action", () => {
   beforeEach(() => { vi.clearAllMocks(); });
@@ -40,5 +41,11 @@ describe("runtime capability mutation action", () => {
 
     expect(assertAdmission).toHaveBeenCalledOnce();
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("rotates the signing key only through authenticated durable admission", async () => {
+    requireCapability.mockResolvedValue({ userId: "operator-1" }); assertAdmission.mockResolvedValue(undefined); rotate.mockResolvedValue({ status: "rotated" });
+    await expect(rotateRuntimeTransitionSecret()).resolves.toEqual({ status: "rotated" });
+    expect(requireCapability).toHaveBeenCalledWith("manage_platform"); expect(assertAdmission).toHaveBeenCalledOnce(); expect(rotate).toHaveBeenCalledOnce();
   });
 });

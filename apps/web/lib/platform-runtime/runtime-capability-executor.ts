@@ -37,6 +37,26 @@ async function readReceipt(id: string): Promise<RuntimeTransitionReceipt> {
   return JSON.parse(await readFile(receiptPath(id), "utf8")) as RuntimeTransitionReceipt;
 }
 
+async function activeRuntimeTransitionIds(): Promise<string[]> {
+  const active = await prisma.runtimeCapabilityTransition.findMany({ where: { status: { in: ["pending", "applying", "host_applied", "compensating"] } }, select: { transitionId: true } });
+  return active.map((row) => row.transitionId).sort();
+}
+
+async function reconcileAuthority(promoterParams: { hostInstallPath: string; stateDirHostPath: string; targetSha: string; backupPath: string; healthUrl: string }) {
+  const result = await runPromoter({ ...promoterParams, runtimeTransitionAuthorityOperation: "reconcile", runtimeTransitionActiveIds: await activeRuntimeTransitionIds(), containerName: "dpf-promoter-authority-reconcile", timeoutMs: 60_000 });
+  return result.exitCode === 0;
+}
+
+export async function rotateProductionRuntimeTransitionSecret() {
+  const hostInstallPath = process.env.DPF_HOST_INSTALL_PATH, stateDirHostPath = process.env.DPF_STATE_DIR_HOST;
+  if (!hostInstallPath || !stateDirHostPath) throw new Error("runtime_transition_host_configuration_missing");
+  const params = { hostInstallPath, stateDirHostPath, targetSha: process.env.DEPLOYED_SHA ?? "runtime-capability-transition", backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health` };
+  if (!(await reconcileAuthority(params))) return { status: "transition_in_progress" as const };
+  const result = await runPromoter({ ...params, runtimeTransitionAuthorityOperation: "rotate-secret", containerName: "dpf-promoter-runtime-secret-rotation", timeoutMs: 60_000 });
+  if (result.exitCode !== 0) return { status: "failed" as const };
+  return { status: "rotated" as const };
+}
+
 export async function executeProductionRuntimeCapabilityTransition(input: { transitionId: string; desiredKeys: string[]; requestedById: string }) {
   const rows = await prisma.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true, manifest: true } });
   const previousStates = Object.fromEntries(rows.map((row) => [row.capabilityId, row.state]));
@@ -55,6 +75,7 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
   const hostInstallPath = process.env.DPF_HOST_INSTALL_PATH, stateDirHostPath = process.env.DPF_STATE_DIR_HOST, protocolSecretFileHostPath = process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST;
   if (!hostInstallPath || !stateDirHostPath || !protocolSecretFileHostPath) throw new Error("runtime_transition_host_configuration_missing");
   const promoterParams = { hostInstallPath, stateDirHostPath, runtimeCapabilitySecretFileHostPath: protocolSecretFileHostPath, targetSha: process.env.DEPLOYED_SHA ?? "runtime-capability-transition", backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`, composeFiles: (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean), composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf" };
+  if (!(await reconcileAuthority(promoterParams))) return { status: "transition_in_progress" as const };
   const reserve = await runPromoter({ ...promoterParams, runtimeCapabilityTransitionId: input.transitionId, runtimeTransitionAuthorityOperation: "reserve", containerName: `dpf-promoter-authority-${input.transitionId}`, timeoutMs: 60_000 });
   if (reserve.exitCode !== 0) return { status: "transition_in_progress" as const };
   const authorityToken = (() => { try { const parsed = JSON.parse(reserve.stdout) as { ownershipToken?: unknown }; return typeof parsed.ownershipToken === "string" ? parsed.ownershipToken : null; } catch { return null; } })();
