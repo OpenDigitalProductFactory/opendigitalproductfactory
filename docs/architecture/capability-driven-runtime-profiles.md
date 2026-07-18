@@ -26,7 +26,7 @@ After bootstrap, [OperationalCapabilityState](../../apps/web/lib/platform-runtim
 
 ## Profiles and host filtering
 
-Runtime profile names are mechanically derived from stable capability keys:
+For locally capability-activated services, runtime profile names are mechanically derived from stable capability keys. Separately distributed and development-only boundaries retain their explicit profile contracts instead of being renamed to `runtime-*`:
 
 | Capability | Canonical Compose profile | Local services |
 | --- | --- | --- |
@@ -36,10 +36,12 @@ Runtime profile names are mechanically derived from stable capability keys:
 | `runtime:local-speech` | `runtime-local-speech` | `dpf-stt`, `dpf-tts` |
 | `runtime:deep-observability` | `runtime-deep-observability` | Prometheus, Grafana, Loki, Alloy, and PostgreSQL exporter |
 | `runtime:external-ai` | `runtime-external-ai` on Linux | Ollama from the Linux overlay; configured external providers remain provider-managed |
+| `runtime:adp-integration` | `integrations-adp` (separate-distribution exception) | `adp` |
+| `runtime:development` | `dev` and `integration-test` (lifecycle-only) | `dev-postgres`, `dev-init`, `dev-portal`, and `integration-test-harness` |
 
 PostgreSQL, `portal-init`, and the portal are `runtime:core` and have no profile. The resolver filters service bindings by `hostPlatforms` before returning profiles and required services. The Linux overlay therefore provides a deliberate hybrid: the same `runtime:external-ai` capability can select host-local Ollama on Linux while external provider configurations remain outside Compose on every host. Linux-only `cadvisor` and `node-exporter` remain under the explicit `linux-monitoring` overlay.
 
-Lifecycle overlays are not capability state. `promote`, `dev`, `integration-test`, `linux-monitoring`, and `linux-host-network` are explicit, allowlisted overlays. The one-release compatibility aliases are:
+Lifecycle overlays are not capability state. `promote`, `dev`, `integration-test`, `linux-monitoring`, and `linux-host-network` are explicit, allowlisted overlays. `runtime:development` has `activationPolicy: lifecycle-profile`; selecting `dev` or `integration-test` is therefore explicit lifecycle intent and does not convert development infrastructure into an install capability profile. The `runtime:adp-integration` binding is also intentionally exceptional: its `adp` service remains a `separate-distribution` boundary under the retained `integrations-adp` profile, rather than being folded into the local runtime-profile naming convention. The one-release compatibility aliases are:
 
 - `tts` → `runtime:local-speech` → `runtime-local-speech`
 - `observability-ui` → `runtime:deep-observability` → `runtime-deep-observability`
