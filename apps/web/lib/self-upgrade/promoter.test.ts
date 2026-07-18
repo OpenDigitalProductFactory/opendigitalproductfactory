@@ -275,9 +275,9 @@ describe("PROMOTER_JIT_BUILD_SCRIPT", () => {
   it("builds from the portal's baked-in /promoter/ layout and tags dpf-promoter", () => {
     // The recipe must consume the files the Dockerfile copies to /promoter/ and
     // produce the default local tag isPromoterAvailable() looks for.
-    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/portal.Dockerfile");
+    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/Dockerfile");
     expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/Dockerfile.promoter");
-    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/promote.sh");
+    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/scripts/promote.sh");
     expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("docker build -t dpf-promoter -f Dockerfile.promoter");
   });
 
