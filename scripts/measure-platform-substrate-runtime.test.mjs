@@ -83,6 +83,37 @@ test("production runner reads explicit serialized operational state path and fai
   assert.match((await runRuntimeMeasurement(base)).stderr, /catalog identity is stale/);
 });
 
+test("normal runner derives state from catalog, install snapshot, live DB rows, and Compose observations", async () => {
+  const { runRuntimeMeasurement } = await import(modulePath);
+  const { compileCapabilityServiceCatalog, resolveCapabilityServiceProjection } = await import("./lib/capability-service-projection.mjs");
+  const dir = await mkdtemp(join(tmpdir(), "dpf-runtime-authority-"));
+  const service = (name) => ({ service: name, capability: "runtime:core", class: "universal-core", defaultRequired: true, backupPolicy: "included", healthSemantics: "compose-healthcheck", boundaryReason: "fixture", canonicalDataOwner: "postgres", profiles: [], dependsOn: [], hostPlatforms: ["windows", "macos", "linux"], ports: [], volumes: [], targetClassification: "universal-core" });
+  const substrate = { version: 1, services: [service("postgres"), service("portal")], externalRuntimes: [] };
+  const capabilities = [{ capabilityId: "runtime:core", state: "active", manifest: { runtime: { dependencies: [], activation: { policy: "always" } } } }];
+  const catalog = compileCapabilityServiceCatalog({ substrate, capabilities });
+  const projection = resolveCapabilityServiceProjection({ substrate, capabilities, enabledRuntimeCapabilities: ["runtime:core"] });
+  const runtimeManifest = { version: 1, capabilityCatalogHash: catalog.catalogHash, services: manifest.services.slice(0, 2) };
+  const manifestPath = join(dir, "manifest.json"), catalogPath = join(dir, "catalog.json"), installStatePath = join(dir, "install-state.json"), baselinePath = join(dir, "baseline.json");
+  await writeFile(manifestPath, JSON.stringify(runtimeManifest)); await writeFile(catalogPath, JSON.stringify(catalog));
+  await writeFile(installStatePath, JSON.stringify({ enabledRuntimeCapabilities: ["runtime:core"], capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: projection.capabilityStateVersion }));
+  const corePs = ps.slice(0, 2), coreStats = stats.slice(0, 2); let execArgv;
+  const execute = (_command, args) => {
+    if (args[0] === "compose" && args[1] === "exec") { execArgv = args; return "runtime:core\tactive\n"; }
+    if (args[0] === "compose" && args[1] === "ps") return JSON.stringify(corePs);
+    if (args[0] === "stats") return coreStats.map(JSON.stringify).join("\n");
+    throw new Error(`unexpected argv: ${args.join(" ")}`);
+  };
+  const base = { manifestPath, catalogPath, installStatePath, baselinePath, update: true, lease: governedLease, verifyLease: verifyGovernedLease, execute, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal" };
+  assert.equal((await runRuntimeMeasurement(base)).exitCode, 0);
+  assert.deepEqual(execArgv.slice(0, 6), ["compose", "exec", "-T", "postgres", "sh", "-lc"]);
+  assert.match(execArgv[6], /\$\{POSTGRES_USER:-dpf\}/); assert.match(execArgv[6], /\$\{POSTGRES_DB:-dpf\}/);
+  assert.doesNotMatch(execArgv[6], /host-custom-user|host-custom-db/);
+  const conflict = await runRuntimeMeasurement({ ...base, execute: (c, args) => args[0] === "compose" && args[1] === "exec" ? "runtime:core\tdisabled\n" : execute(c, args) });
+  assert.match(conflict.stderr, /capability_state_stale/);
+  const malformed = await runRuntimeMeasurement({ ...base, execute: (c, args) => args[0] === "compose" && args[1] === "exec" ? "malformed\n" : execute(c, args) });
+  assert.match(malformed.stderr, /malformed rows/);
+});
+
 test("normalizes Node host platform names before applying hostPlatforms", async () => {
   const { normalizeHostPlatform, resolveDpfStateDir } = await import(modulePath);
   assert.equal(normalizeHostPlatform("win32"), "windows");
