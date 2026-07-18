@@ -137,6 +137,30 @@ test("enforces nested, format, uniqueness, and additional-property constraints",
   assert.match(result.errors.join("\n"), /enum/);
 });
 
+test("bounds validation errors and stops with a deterministic truncation sentinel", async () => {
+  const malformed = {
+    ...valid,
+    enabledRuntimeCapabilities: Array.from({ length: 100 }, (_, index) => `invalid-${index}`),
+    ...Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`unknown${index}`, true])),
+  };
+  const result = await validateInstallState(malformed);
+  assert.equal(result.valid, false);
+  assert.equal(result.errors.length, 21);
+  assert.equal(result.errors.at(-1), "$: validation_errors_truncated");
+  assert.equal(result.errors.filter((error) => error === "$: validation_errors_truncated").length, 1);
+});
+
+test("enforces strict RFC3339 calendar-valid date-time values", async () => {
+  for (const invalid of ["2026", "2026-07-18", "2026-02-30T12:00:00Z", "2025-02-29T12:00:00Z"]) {
+    const result = await validateInstallState({ ...valid, lastHealthCheck: invalid });
+    assert.equal(result.valid, false, invalid);
+    assert.match(result.errors.join("\n"), /date-time format/, invalid);
+  }
+  for (const accepted of ["2024-02-29T12:34:56Z", "2026-07-18T12:34:56.123456-05:30"]) {
+    assert.deepEqual(await validateInstallState({ ...valid, lastHealthCheck: accepted }), { valid: true, errors: [] }, accepted);
+  }
+});
+
 test("uses the repository schema rather than a duplicated field list", async () => {
   const schema = JSON.parse(await readFile(new URL("./install-state.schema.json", import.meta.url), "utf8"));
   const versioned = JSON.parse(await readFile(new URL("./install-state.v2.schema.json", import.meta.url), "utf8"));

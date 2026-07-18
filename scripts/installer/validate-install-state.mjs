@@ -2,6 +2,29 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { currentSchemaVersion, getInstallStateSchema } from "./install-state-schema-registry.mjs";
 
+const MAX_VALIDATION_ERRORS = 20;
+
+function errorCollector() {
+  return {
+    items: [],
+    truncated: false,
+    add(message) {
+      if (this.items.length < MAX_VALIDATION_ERRORS) this.items.push(message);
+      else this.truncated = true;
+    },
+    get full() { return this.items.length >= MAX_VALIDATION_ERRORS; },
+  };
+}
+
+function isRfc3339DateTime(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return false;
+  const [, year, month, day, hour, minute, second, offsetHour, offsetMinute] = match.map(Number);
+  if (hour > 23 || minute > 59 || second > 59 || (offsetHour !== undefined && (offsetHour > 23 || offsetMinute > 59))) return false;
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  return calendar.getUTCFullYear() === year && calendar.getUTCMonth() === month - 1 && calendar.getUTCDate() === day;
+}
+
 function isType(value, type) {
   if (type === "null") return value === null;
   if (type === "array") return Array.isArray(value);
@@ -11,33 +34,39 @@ function isType(value, type) {
 }
 
 function visit(schema, value, path, errors) {
-  if (schema.const !== undefined && !Object.is(value, schema.const)) errors.push(`${path}: const`);
-  if (schema.enum && !schema.enum.some((entry) => Object.is(entry, value))) errors.push(`${path}: enum`);
+  if (errors.full) { errors.truncated = true; return; }
+  if (schema.const !== undefined && !Object.is(value, schema.const)) errors.add(`${path}: const`);
+  if (schema.enum && !schema.enum.some((entry) => Object.is(entry, value))) errors.add(`${path}: enum`);
   if (schema.type) {
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
-    if (!types.some((type) => isType(value, type))) { errors.push(`${path}: type`); return; }
+    if (!types.some((type) => isType(value, type))) { errors.add(`${path}: type`); return; }
   }
-  if (typeof value === "number" && schema.minimum !== undefined && value < schema.minimum) errors.push(`${path}: minimum`);
+  if (typeof value === "number" && schema.minimum !== undefined && value < schema.minimum) errors.add(`${path}: minimum`);
   if (typeof value === "string") {
-    if (schema.pattern && !(new RegExp(schema.pattern)).test(value)) errors.push(`${path}: pattern`);
-    if (schema.format === "date-time" && !Number.isFinite(Date.parse(value))) errors.push(`${path}: date-time format`);
+    if (schema.pattern && !(new RegExp(schema.pattern)).test(value)) errors.add(`${path}: pattern`);
+    if (schema.format === "date-time" && !isRfc3339DateTime(value)) errors.add(`${path}: date-time format`);
   }
   if (Array.isArray(value)) {
-    if (schema.uniqueItems && new Set(value.map((entry) => JSON.stringify(entry))).size !== value.length) errors.push(`${path}: uniqueItems`);
-    if (schema.items) value.forEach((entry, index) => visit(schema.items, entry, `${path}[${index}]`, errors));
+    if (schema.uniqueItems && new Set(value.map((entry) => JSON.stringify(entry))).size !== value.length) errors.add(`${path}: uniqueItems`);
+    if (schema.items) {
+      let index = 0;
+      for (; index < value.length && !errors.full; index += 1) visit(schema.items, value[index], `${path}[${index}]`, errors);
+      if (index < value.length) errors.truncated = true;
+    }
   }
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-    for (const key of schema.required ?? []) if (!Object.hasOwn(value, key)) errors.push(`${path}.${key}: required`);
+    for (const key of schema.required ?? []) if (!Object.hasOwn(value, key)) errors.add(`${path}.${key}: required`);
     const properties = schema.properties ?? {};
     for (const [key, entry] of Object.entries(value)) {
+      if (errors.full) { errors.truncated = true; break; }
       if (properties[key]) visit(properties[key], entry, `${path}.${key}`, errors);
-      else if (schema.additionalProperties === false) errors.push(`${path}.${key}: additionalProperties`);
+      else if (schema.additionalProperties === false) errors.add(`${path}.${key}: additionalProperties`);
       else if (schema.additionalProperties && typeof schema.additionalProperties === "object") visit(schema.additionalProperties, entry, `${path}.${key}`, errors);
     }
   }
   if (schema.oneOf) {
-    const matches = schema.oneOf.filter((candidate) => { const nested = []; visit(candidate, value, path, nested); return nested.length === 0; }).length;
-    if (matches !== 1) errors.push(`${path}: oneOf`);
+    const matches = schema.oneOf.filter((candidate) => { const nested = errorCollector(); visit(candidate, value, path, nested); return nested.items.length === 0; }).length;
+    if (matches !== 1) errors.add(`${path}: oneOf`);
   }
 }
 
@@ -48,9 +77,10 @@ export async function validateInstallState(value, schemaPath) {
   if (!Number.isInteger(value?.schemaVersion)) return { valid: false, errors: ["$.schemaVersion: required integer"] };
   if (value.schemaVersion > currentSchemaVersion) return { valid: false, errors: ["$: install_state_newer_than_runtime"] };
   if (!schema) return { valid: false, errors: ["$.schemaVersion: unsupported"] };
-  const errors = [];
+  const errors = errorCollector();
   visit(schema, value, "$", errors);
-  return { valid: errors.length === 0, errors };
+  if (errors.truncated) errors.items.push("$: validation_errors_truncated");
+  return { valid: errors.items.length === 0, errors: errors.items };
 }
 
 export async function parseAndValidateInstallStateBytes(bytes) {

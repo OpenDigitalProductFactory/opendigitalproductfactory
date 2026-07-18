@@ -379,7 +379,10 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/runtime-transition-authority.mjs \"$BDIR/scripts/runtime-transition-authority.mjs\" && " +
   "cp /promoter/scripts/rotate-runtime-transition-secret.mjs \"$BDIR/scripts/rotate-runtime-transition-secret.mjs\" && " +
   "cp /promoter/scripts/installer/validate-install-state.mjs \"$BDIR/scripts/installer/validate-install-state.mjs\" && " +
+  "cp /promoter/scripts/installer/install-state-schema-registry.mjs \"$BDIR/scripts/installer/install-state-schema-registry.mjs\" && " +
   "cp /promoter/scripts/installer/install-state.schema.json \"$BDIR/scripts/installer/install-state.schema.json\" && " +
+  "cp /promoter/scripts/installer/install-state.v1.schema.json \"$BDIR/scripts/installer/install-state.v1.schema.json\" && " +
+  "cp /promoter/scripts/installer/install-state.v2.schema.json \"$BDIR/scripts/installer/install-state.v2.schema.json\" && " +
   "tar -C \"$BDIR\" -c . | docker build -t dpf-promoter -f Dockerfile.promoter -";
 
 /**

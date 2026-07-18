@@ -79,7 +79,11 @@ COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/resolve-capability-compose-profiles.mjs ./scripts/lib/
 COPY scripts/lib/govern-capability-compose-args.mjs ./scripts/lib/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
+COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
+COPY scripts/installer/install-state-schema-registry.mjs ./scripts/installer/
 COPY scripts/installer/install-state.schema.json ./scripts/installer/
+COPY scripts/installer/install-state.v1.schema.json ./scripts/installer/
+COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
@@ -128,7 +132,11 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp docker-compose.yml docker-compose.release.yml /dpf-release-assets/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
+    cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/install-state-schema-registry.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.schema.json /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/lib/state.ps1 /dpf-release-assets/scripts/installer/lib/ && \
     cp -R monitoring/. /dpf-release-assets/monitoring/ && \
     cd /dpf-release-assets && \
@@ -260,7 +268,10 @@ COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-run
 COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/scripts/rotate-runtime-transition-secret.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
+COPY scripts/installer/install-state-schema-registry.mjs /promoter/scripts/installer/install-state-schema-registry.mjs
 COPY scripts/installer/install-state.schema.json /promoter/scripts/installer/install-state.schema.json
+COPY scripts/installer/install-state.v1.schema.json /promoter/scripts/installer/install-state.v1.schema.json
+COPY scripts/installer/install-state.v2.schema.json /promoter/scripts/installer/install-state.v2.schema.json
 
 EXPOSE 3000
 # Self-upgrade image-identity guard (BI-5B6C1C35, spec §4.3): the running portal
