@@ -4,6 +4,8 @@ import type { PromoterParams, PromoterResult } from "@/lib/self-upgrade/promoter
 export const ACTIVE_RUNTIME_TRANSITION_STATUSES = ["pending", "applying", "host_applied", "compensating"] as const;
 
 export function computeCapabilityStateVersion(catalogHash: string, states: Readonly<Record<string, string>>): string {
+  // Capability IDs/states are closed below, making the plan's newline/equal
+  // serialization canonical and unambiguous.
   const stateLines = Object.entries(states).map(([id, state]) => `${id}=${state}`).sort().join("\n");
   return createHash("sha256").update(`${catalogHash}\n${stateLines}`).digest("hex");
 }
@@ -19,7 +21,7 @@ export type RuntimeCapabilityTransitionRequest = {
 
 export interface RuntimeCapabilityTransitionReceipts {
   /** Implementations serialize with an advisory lock + the DB partial unique index. */
-  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string }): Promise<{ created: boolean }>;
+  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string }): Promise<{ created: boolean; status?: string }>;
   markFailed(transitionId: string, failure: string): Promise<void>;
   markHostApplied(transitionId: string): Promise<void>;
 }
@@ -33,8 +35,9 @@ export type RuntimeCapabilityCoordinatorDeps = {
 
 type TransitionModel = {
   findFirst(args: unknown): Promise<unknown>;
+  findUnique(args: unknown): Promise<{ status: string } | null>;
   create(args: unknown): Promise<unknown>;
-  update(args: unknown): Promise<unknown>;
+  updateMany(args: unknown): Promise<{ count: number }>;
 };
 type TransitionTx = { $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel };
 type TransitionPrisma = {
@@ -48,6 +51,8 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       // Fixed SQL with no interpolation: the transaction-scoped lock serializes
       // the read/create pair before the partial unique index supplies backstop.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+      const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true } });
+      if (replay) return { created: false, status: replay.status };
       const active = await tx.runtimeCapabilityTransition.findFirst({ where: { status: { in: [...ACTIVE_RUNTIME_TRANSITION_STATUSES] } }, select: { id: true } });
       if (active) return { created: false };
       await tx.runtimeCapabilityTransition.create({ data: {
@@ -61,9 +66,20 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       } });
       return { created: true };
     }, { isolationLevel: "Serializable" }),
-    markFailed: async (transitionId, failure) => { await prisma.runtimeCapabilityTransition.update({ where: { transitionId }, data: { status: "failed", failure: { code: failure }, completedAt: new Date() } }); },
-    markHostApplied: async (transitionId) => { await prisma.runtimeCapabilityTransition.update({ where: { transitionId }, data: { status: "host_applied", hostAppliedAt: new Date() } }); },
+    markFailed: async (transitionId, failure) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "failed", failure: { code: failure }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
+    markHostApplied: async (transitionId) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "host_applied", hostAppliedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
   };
+}
+
+function validateRequest(request: RuntimeCapabilityTransitionRequest): void {
+  if (!/^RCT-[A-Za-z0-9-]{1,48}$/.test(request.transitionId)) throw new Error("invalid_transition_id");
+  if (!/^[a-f0-9]{64}$/.test(request.catalogHash)) throw new Error("invalid_catalog_hash");
+  for (const [label, keys, states] of [["previous", request.previousKeys, request.previousStates], ["desired", request.desiredKeys, request.desiredStates]] as const) {
+    if (new Set(keys).size !== keys.length || JSON.stringify(keys) !== JSON.stringify([...keys].sort())) throw new Error(`invalid_${label}_keys`);
+    if (keys.some((key) => !/^runtime:[a-z0-9-]+$/.test(key))) throw new Error(`invalid_${label}_keys`);
+    if (JSON.stringify(Object.keys(states).sort()) !== JSON.stringify(keys)) throw new Error(`invalid_${label}_state_map`);
+    if (Object.values(states).some((state) => state !== "active" && state !== "disabled")) throw new Error(`invalid_${label}_state`);
+  }
 }
 
 /**
@@ -75,6 +91,7 @@ export async function coordinateRuntimeCapabilityTransition(
   request: RuntimeCapabilityTransitionRequest,
   deps: RuntimeCapabilityCoordinatorDeps,
 ) {
+  validateRequest(request);
   const normalized = {
     ...request,
     previousKeys: [...request.previousKeys].sort(),
@@ -83,17 +100,20 @@ export async function coordinateRuntimeCapabilityTransition(
     desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates),
   };
   const pending = await deps.receipts.createPending(normalized);
-  if (!pending.created) return { status: "transition_in_progress" as const };
-  if (!await deps.isPromoterAvailable(deps.promoterParams.promoterImage)) {
+  if (!pending.created) return ACTIVE_RUNTIME_TRANSITION_STATUSES.includes(pending.status as never) ? { status: "transition_in_progress" as const } : { status: "already_terminal" as const, transitionStatus: pending.status };
+  let available = false;
+  try { available = await deps.isPromoterAvailable(deps.promoterParams.promoterImage); } catch { available = false; }
+  if (!available) {
     await deps.receipts.markFailed(request.transitionId, "promoter_unavailable");
     return { status: "failed" as const, failure: "promoter_unavailable" as const };
   }
-  const result = await deps.runPromoter({
+  let result: PromoterResult;
+  try { result = await deps.runPromoter({
     ...deps.promoterParams,
     runtimeCapabilityTransitionId: request.transitionId,
     containerName: `dpf-promoter-${request.transitionId}`,
     timeoutMs: 10 * 60 * 1000,
-  });
+  }); } catch { await deps.receipts.markFailed(request.transitionId, "promoter_spawn_failed"); return { status: "failed" as const, failure: "promoter_spawn_failed" as const }; }
   if (result.exitCode !== 0) {
     await deps.receipts.markFailed(request.transitionId, "host_apply_failed");
     return { status: "failed" as const, failure: "host_apply_failed" as const };

@@ -53,7 +53,7 @@
 
 ### Task 3: Protect capability deactivation with a drain decision
 
-**Execution checkpoint (2026-07-17):** Steps 1-3 are implemented as the closed guard vocabulary, exact live-work attribution adapter, and pure drain decision. The next slice adds the Step 4 schema/migration and the Step 6 portal-core coordinator/promoter mode, but intentionally parks at `host_applied` pending Step 7 signed receipt verification. Step 5's post-host/compensation scenarios and Steps 7-12 remain; the portal must not expose capability mutation until those remaining steps land together.
+**Execution checkpoint (2026-07-17):** Steps 1-3 are implemented as the closed guard vocabulary, exact live-work attribution adapter, and pure drain decision. The next slice adds the Step 4 schema/migration and the Step 6 portal-core coordinator/promoter mode. The promoter recognizes that mode but returns structured `signed_protocol_unavailable` without mutation until Step 7; the coordinator therefore cannot yet reach `host_applied`. Step 5's post-host/compensation scenarios and Steps 7-12 remain; the portal must not expose capability mutation until those remaining steps land together.
 
 **Files:**
 - Modify: `scripts/lib/capability-service-projection.mjs`

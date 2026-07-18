@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { resolve } from "node:path";
 import {
   buildPromoterCommand,
   decidePromoterEnsureAction,
@@ -118,6 +119,15 @@ describe("buildPromoterCommand", () => {
     const joined = buildPromoterCommand(BASE).args.join(" ");
     expect(joined).not.toContain("PROMOTE_COMPOSE_FILES=");
     expect(joined).not.toContain("PROMOTE_COMPOSE_PROJECT=");
+  });
+});
+
+describe("runtime transition promoter entrypoint", () => {
+  it("recognizes the mode but fails closed before Step 7 signed protocol exists", async () => {
+    const script = resolve(process.cwd(), "../../scripts/promote.sh");
+    const result = await runProcessWithBudget("sh", [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
+    expect(result.exitCode).toBe(78);
+    expect(result.stderr).toContain('"failure":"signed_protocol_unavailable"');
   });
 });
 
