@@ -52,4 +52,15 @@ describe("deriveSupportPostureFromMilestones", () => {
     const m: PostureMilestone[] = [{ milestone: "eol", date: new Date("2024-01-01"), source: "endoflife.date", confidence: 0.9 }];
     expect(deriveSupportPostureFromMilestones(m, NOW)?.supportStatus).toBe("expired");
   });
+
+  it("prefers human-confirmed milestone precedence (confidence 1.0) over other sources", () => {
+    const m: PostureMilestone[] = [
+      { milestone: "eol", date: "2024-01-01", source: "human_confirmed", confidence: 1.0 },
+      { milestone: "eol", date: "2030-01-01", source: "endoflife.date", confidence: 0.9 },
+    ];
+    const posture = deriveSupportPostureFromMilestones(m, NOW);
+    expect(posture?.supportStatus).toBe("expired");
+    expect(posture?.supportLifecycleSource).toBe("human_confirmed");
+    expect(posture?.supportLifecycleConfidence).toBe(1.0);
+  });
 });

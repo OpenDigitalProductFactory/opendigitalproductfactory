@@ -277,11 +277,15 @@ export async function persistBootstrapDiscoveryRun(
     // its view cannot mark dpf_bootstrap rows stale. Composes with the
     // scopeKey filter so cross-customer isolation still holds.
     const sourceFilter = { lastConfirmedRun: { sourceSlug: runMeta.sourceSlug } };
-    const existingEntityKeys = new Set(
-      (await tx.inventoryEntity.findMany({
-        where: { ...scopeWhere, ...sourceFilter },
-        select: { entityKey: true },
-      })).map((entity) => entity.entityKey),
+    const existingEntities = await tx.inventoryEntity.findMany({
+      where: { ...scopeWhere, ...sourceFilter },
+      select: { entityKey: true, identityStatus: true },
+    });
+    const existingEntityKeys = new Set(existingEntities.map((e) => e.entityKey));
+    const humanConfirmedKeys = new Set(
+      existingEntities
+        .filter((e) => e.identityStatus === "human_confirmed")
+        .map((e) => e.entityKey),
     );
     // BI-PIR-7d69a445 (part 2): key existing relationships by their canonical
     // tuple (fromEntityId, toEntityId, relationshipType) rather than by
@@ -427,7 +431,8 @@ export async function persistBootstrapDiscoveryRun(
           candidateTaxonomy: entity.candidateTaxonomy ?? undefined,
           // Enrichment linkage (BI-27EE2AF7) — only written on a fresh rule match
           // that resolved a CatalogIdentity; never clobber an existing link with null.
-          ...(entity.catalogIdentityId
+          // NEVER overwrite a human_confirmed identity (spec §4.1 / §6.3.1).
+          ...(entity.catalogIdentityId && !humanConfirmedKeys.has(entity.entityKey)
             ? {
                 catalogIdentity: { connect: { id: entity.catalogIdentityId } },
                 identityStatus: entity.identityStatus ?? null,

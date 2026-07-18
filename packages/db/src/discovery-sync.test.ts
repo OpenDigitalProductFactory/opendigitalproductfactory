@@ -732,5 +732,53 @@ describe("persistBootstrapDiscoveryRun", () => {
 
       expect(resolutionLogCreates).toHaveLength(0);
     });
+
+    it("never overwrites a human_confirmed identity with a rule match", async () => {
+      const upsertUpdates: Array<Record<string, any>> = [];
+      const existing = [
+        { entityKey: "database:instance:pg-primary", identityStatus: "human_confirmed" },
+      ];
+      const db = {
+        $transaction: async (fn: any) => fn({
+          discoveryRun: { create: async () => ({ id: "run-res" }) },
+          inventoryEntity: {
+            findMany: async () => existing,
+            upsert: async ({ where, update }: any) => {
+              upsertUpdates.push(update);
+              return { id: `entity:${where.entityKey}`, entityKey: where.entityKey };
+            },
+            updateMany: async () => ({ count: 0 }),
+          },
+          discoveredItem: {
+            create: async ({ data }: any) => ({ id: `discovered:${data.observedKey}` }),
+          },
+          discoveredSoftwareEvidence: { upsert: async () => ({}) },
+          inventoryRelationship: {
+            findMany: async () => [],
+            upsert: async () => ({ id: "rel", relationshipKey: "rel" }),
+            updateMany: async () => ({ count: 0 }),
+          },
+          discoveredRelationship: { create: async () => ({}) },
+          portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}) },
+          identityResolutionLog: {
+            findFirst: async () => null,
+            create: async () => ({}),
+          },
+        }),
+      } as any;
+
+      await persistBootstrapDiscoveryRun(db, ruleResolvedRun, {
+        runKey: "run-res",
+        sourceSlug: "dpf_bootstrap",
+      }, {
+        projectInventoryEntity: async () => undefined,
+        projectInventoryRelationship: async () => undefined,
+      });
+
+      expect(upsertUpdates).toHaveLength(1);
+      expect(upsertUpdates[0]?.catalogIdentity).toBeUndefined();
+      expect(upsertUpdates[0]?.identityStatus).toBeUndefined();
+      expect(upsertUpdates[0]?.identityConfidence).toBeUndefined();
+    });
   });
 });

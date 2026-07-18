@@ -139,7 +139,7 @@ describe("persistBootstrapDiscoveryRun source attribution", () => {
         scopeKey: "organization:internal",
         lastConfirmedRun: { sourceSlug: "unifi" },
       },
-      select: { entityKey: true },
+      select: { entityKey: true, identityStatus: true },
     });
 
     // Only unifi's own row was a candidate for staleness — and it WAS
@@ -196,7 +196,7 @@ describe("persistBootstrapDiscoveryRun source attribution", () => {
         scopeKey,
         lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
       },
-      select: { entityKey: true },
+      select: { entityKey: true, identityStatus: true },
     });
 
     // Only node-a's key is in the stale candidate set; node-b's row is

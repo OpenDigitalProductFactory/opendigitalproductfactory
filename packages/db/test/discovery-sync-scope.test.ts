@@ -111,7 +111,7 @@ describe("persistBootstrapDiscoveryRun customer-scope isolation", () => {
         scopeKey: "customer:cust_a:site:site_austin",
         lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
       },
-      select: { entityKey: true },
+      select: { entityKey: true, identityStatus: true },
     });
 
     expect(relationshipFindMany).toHaveBeenCalledWith({
