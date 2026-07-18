@@ -13,6 +13,7 @@ import {
   installCleanupHandlers,
   runNMinusOneUpgrade,
   buildPromoterReadinessDockerArgs,
+  prepareNMinusOneBaseline,
   classifyUpgradeProtocolFloor,
   PROMOTER_READINESS_PROTOCOL_FLOOR_SHA,
   verifyBaseRevision,
@@ -146,7 +147,42 @@ test("acceptance workflow executes the real baseline-to-candidate N-1 runner", a
   const workflow = await readFile(join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), ".github/workflows/self-upgrade-acceptance.yml"), "utf8");
   assert.match(workflow, /node scripts\/test-n-minus-one-upgrade\.mjs \\/);
   for (const flag of ["--base-sha", "--candidate-sha", "--repository", "--project", "--evidence-dir"]) assert.match(workflow, new RegExp(flag));
+  assert.match(workflow, /--pr-number "\$\{\{ steps\.baseline\.outputs\.pr_number \}\}"/);
+  assert.match(workflow, /gh api .*pulls\?state=open/);
+  assert.match(workflow, /should_run=false/);
   assert.match(workflow, /21969d012ad8ab382d47a2c59ffc955530796bd2/);
+});
+
+test("baseline preparation uses the unique harness project and proves health after build/up", async () => {
+  const workspace = await createHarnessWorkspace("dpf-n1-prepare-");
+  const events = [];
+  try {
+    await prepareNMinusOneBaseline({ workspace, project: "dpf-n1-isolated", portalUrl: "http://127.0.0.1:3000" }, {
+      run: async (command, args, options) => { events.push({ kind: "run", command, args, env: options.env }); return { stdout: "" }; },
+      fetchImpl: async () => { events.push({ kind: "health" }); return new Response("ok", { status: 200 }); }, sleep: async () => {},
+    });
+    assert.equal(events[0].kind, "run");
+    assert.equal(events[0].command, "node");
+    assert.ok(events[0].args.some((value) => value.replaceAll("\\", "/").endsWith("scripts/dpf-compose.mjs")));
+    assert.ok(events[0].args.includes("dpf-n1-isolated"));
+    assert.deepEqual(events[0].args.slice(-5), ["up", "-d", "--build", "postgres", "portal"]);
+    assert.equal(events[0].env.COMPOSE_PROJECT_NAME, "dpf-n1-isolated");
+    assert.equal(events[0].env.DPF_STATE_DIR_HOST, workspace.state);
+    assert.equal(events.at(-1).kind, "health");
+  } finally { await rm(workspace.root, { recursive: true, force: true }); }
+});
+
+test("upgrade request occurs only after baseline preparation reports healthy", async () => {
+  const events = [];
+  const sha = "b".repeat(40); const digest = "sha256:" + "c".repeat(64);
+  await runNMinusOneUpgrade({ baseSha: "a".repeat(40), candidateSha: sha, repository: "o/r", project: "dpf-n1-test" }, {
+    verifyBase: async () => ({}), prepare: async () => { events.push("baseline-health"); return { candidateDigest: digest, mode: "post-floor" }; },
+    readiness: async () => ({ ok: true, owner: "portal", digest }), requestUpgrade: async () => events.push("request"),
+    poll: async () => ({ healthy: true, version: sha, promoterDigest: digest, promoterSourceSha: sha, persistenceDigest: digest,
+      sourceV1Hash: "1".repeat(64), migratedV2Hash: "2".repeat(64), sourceSchemaVersion: 1, migratedSchemaVersion: 2,
+      recoveryArtifacts: [{ sha256: "1".repeat(64) }] }), cleanup: async () => {}, writeEvidence: async (value) => value,
+  });
+  assert.deepEqual(events, ["baseline-health", "request"]);
 });
 
 test("honest pre-floor legacy-bootstrap mode refuses automatic migration", async () => {

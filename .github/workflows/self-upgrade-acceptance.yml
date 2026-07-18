@@ -41,12 +41,15 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DPF_N1_PROJECT: dpf-n1-${{ github.run_id }}-${{ github.run_attempt }}
       DPF_N1_EVIDENCE: ${{ github.workspace }}/.dpf-n1-evidence
+      DPF_PROMOTER_READINESS_PROTOCOL_FLOOR_SHA: 21969d012ad8ab382d47a2c59ffc955530796bd2
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Fast harness invariants
-        run: node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs
+        run: |
+          test "$(node -p "require('./promoter-contract.json').readinessProtocolFloorSha")" = "$DPF_PROMOTER_READINESS_PROTOCOL_FLOOR_SHA"
+          node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs
       - name: Build candidate promoter with immutable contract identity
         run: |
           contract_digest="sha256:$(sha256sum promoter-contract.json | cut -d' ' -f1)"
@@ -65,16 +68,36 @@ jobs:
         run: |
           node --test scripts/promote-install-state-rollback.test.mjs \
             | tee "$DPF_N1_EVIDENCE/signed-promotion-rollback.tap"
-      - name: Execute real N-1 baseline-to-candidate gate
+      - name: Resolve N-1 baseline
+        id: baseline
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PROMOTER_PROTOCOL_FLOOR_SHA: 21969d012ad8ab382d47a2c59ffc955530796bd2
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          base_sha="${PR_BASE_SHA:-$PROMOTER_PROTOCOL_FLOOR_SHA}"
+          if [ -n "$PR_NUMBER" ] && [ -n "$PR_BASE_SHA" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&base=main&sort=updated&direction=desc&per_page=1" --jq '.[0] | [.number, .base.sha] | @tsv')"
+          if [ -z "$latest" ] || [ "$latest" = $'null\tnull' ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            printf '%s\n' '{"result":"skipped","reason":"no-open-main-pr"}' > "$DPF_N1_EVIDENCE/n-minus-one-evidence.json"
+            exit 0
+          fi
+          IFS=$'\t' read -r pr_number base_sha <<< "$latest"
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+      - name: Execute real N-1 baseline-to-candidate gate
+        if: steps.baseline.outputs.should_run == 'true'
+        run: |
           node scripts/test-n-minus-one-upgrade.mjs \
-            --base-sha "$base_sha" \
+            --base-sha "${{ steps.baseline.outputs.base_sha }}" \
             --candidate-sha "$GITHUB_SHA" \
             --repository "$GITHUB_REPOSITORY" \
+            --pr-number "${{ steps.baseline.outputs.pr_number }}" \
             --project "$DPF_N1_PROJECT" \
             --evidence-dir "$DPF_N1_EVIDENCE"
       - name: Candidate readiness succeeds without quiescence

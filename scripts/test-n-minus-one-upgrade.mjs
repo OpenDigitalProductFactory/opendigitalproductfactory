@@ -133,8 +133,33 @@ export function installCleanupHandlers(emitter, cleanup) {
   return runOnce;
 }
 
-async function defaultComposeDown({ source, project }) {
-  await execFile("node", [join(source, "scripts", "dpf-compose.mjs"), "--project-name", project, "down", "--volumes", "--remove-orphans"], { cwd: source });
+async function defaultComposeDown({ source, state, project }) {
+  await execFile("node", [join(source, "scripts", "dpf-compose.mjs"), "--project-name", project, "down", "--volumes", "--remove-orphans"], { cwd: source, env: { ...process.env, COMPOSE_PROJECT_NAME: project, DPF_STATE_DIR_HOST: state, DPF_STATE_DIR: "/dpf-state", DPF_ALLOW_DESTRUCTIVE_COMPOSE: "1" } });
+}
+
+export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }, deps = {}) {
+  assertSafeHarnessConfig({ ...workspace, project });
+  const run = deps.run ?? execFile;
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const sleep = deps.sleep ?? ((ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)));
+  const env = {
+    ...process.env,
+    COMPOSE_PROJECT_NAME: project,
+    DPF_STATE_DIR_HOST: workspace.state,
+    DPF_STATE_DIR: "/dpf-state",
+    DPF_HOST_INSTALL_PATH: workspace.source,
+  };
+  await run("node", [join(workspace.source, "scripts", "dpf-compose.mjs"), "--project-name", project, "up", "-d", "--build", "postgres", "portal"], { cwd: workspace.source, env });
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    try {
+      const response = await fetchImpl(`${portalUrl}/api/health`);
+      lastStatus = response.status;
+      if (response.ok) return { healthy: true, project, portalUrl };
+    } catch { lastStatus = 0; }
+    await sleep(2_000);
+  }
+  throw new Error(`N-1 baseline portal failed health check (last status ${lastStatus || "unreachable"})`);
 }
 
 function assertSuccessEvidence(evidence, candidateSha, digest, mode) {
@@ -201,6 +226,10 @@ function createRuntimeDependencies(options) {
       cleanupOnce = installCleanupHandlers(process, () => cleanupHarness(workspace));
       await execFile("git", ["clone", "--no-checkout", `https://github.com/${options.repository}.git`, workspace.source]);
       await execFile("git", ["checkout", "--detach", options.baseSha], { cwd: workspace.source });
+      const transitionSecret = join(workspace.root, "transition.secret");
+      await writeFile(transitionSecret, randomBytes(32).toString("hex"));
+      await writeFile(join(workspace.state, "install-state.json"), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(`${JSON.stringify({ schemaVersion: 1, installerVersion: "n-minus-one", platform: "linux", arch: "amd64", installPath: workspace.source, stateDir: workspace.state, composeProjectName: options.project })}\n`)]));
+      await prepareNMinusOneBaseline({ workspace, project: options.project, portalUrl });
       const contractDigest = createHash("sha256").update(await readFile(join(process.cwd(), "promoter-contract.json"))).digest("hex");
       const image = `${options.project}-promoter:${options.candidateSha}`;
       await execFile("docker", ["build", "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${options.candidateSha}`, "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=sha256:${contractDigest}`, "-f", "Dockerfile.promoter", "-t", image, "."], { cwd: process.cwd() });
@@ -209,9 +238,6 @@ function createRuntimeDependencies(options) {
       const candidateDigest = inspected.Id;
       const labels = inspected.Config?.Labels ?? {};
       if (labels["org.opencontainers.image.revision"] !== options.candidateSha || labels["org.opendpf.promoter.contract-digest"] !== `sha256:${contractDigest}`) throw new Error("candidate image labels do not bind source SHA and contract digest");
-      const transitionSecret = join(workspace.root, "transition.secret");
-      await writeFile(transitionSecret, randomBytes(32).toString("hex"));
-      await writeFile(join(workspace.state, "install-state.json"), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(`${JSON.stringify({ schemaVersion: 1, installerVersion: "n-minus-one", platform: "linux", arch: "amd64", installPath: workspace.source, stateDir: workspace.state, composeProjectName: options.project })}\n`)]));
       return { candidateDigest, contractDigest: `sha256:${contractDigest}`, workspace, transitionSecret, candidateSource: process.cwd() };
     },
     readiness: async ({ candidateDigest, candidateSource, transitionSecret }) => {
@@ -251,9 +277,11 @@ function parseArgs(argv) {
     if (key === "--inject-readiness-failure" || key === "--bridge-mode") values[key.slice(2).replaceAll("-", "_")] = true;
     else if (key.startsWith("--")) values[key.slice(2).replaceAll("-", "_")] = argv[++index];
   }
+  const rawPrNumber = values.pr_number ?? process.env.GITHUB_EVENT_PULL_REQUEST_NUMBER ?? "";
+  const parsedPrNumber = /^\d+$/.test(rawPrNumber) ? Number(rawPrNumber) : 0;
   return {
     baseSha: values.base_sha, candidateSha: values.candidate_sha, repository: values.repository,
-    project: values.project, evidenceDir: values.evidence_dir, prNumber: Number(values.pr_number ?? process.env.GITHUB_EVENT_PULL_REQUEST_NUMBER),
+    project: values.project, evidenceDir: values.evidence_dir, prNumber: parsedPrNumber,
     requiredChecks: (values.required_checks ?? "Production Build,Unit Tests").split(",").map((v) => v.trim()),
     injectReadinessFailure: Boolean(values.inject_readiness_failure), bridgeMode: Boolean(values.bridge_mode),
     timeoutMs: Number(values.timeout_ms ?? 1_200_000), portalUrl: values.portal_url,
