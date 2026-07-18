@@ -220,6 +220,58 @@ describe("projectCapabilityServiceHealth", () => {
     ]);
   });
 
+  it("does not present a configured provider with no recent signal as available", () => {
+    const result = projectCapabilityServiceHealth(
+      operationalState({
+        externalRuntimes: [
+          { runtimeKey: "openai", healthSemantics: "provider-health-reconciliation" },
+        ],
+        providerState: {
+          openai: {
+            configured: true,
+            healthy: null,
+            detail: "No recent activity. Health will update after the next request.",
+          },
+        },
+      }),
+    );
+
+    expect(result.items.at(-1)).toMatchObject({
+      key: "openai",
+      label: "External — provider managed",
+      availability: "unknown",
+      detail: "No recent activity. Health will update after the next request.",
+      action: "Run a request to establish current provider health.",
+    });
+  });
+
+  it("projects reconciled provider failure without treating lifecycle as health", () => {
+    const result = projectCapabilityServiceHealth(
+      operationalState({
+        externalRuntimes: [
+          { runtimeKey: "openai", healthSemantics: "provider-health-reconciliation" },
+        ],
+        providerState: {
+          openai: {
+            configured: true,
+            healthy: false,
+            detail: "Recent requests are failing. Check this provider's settings.",
+            actionHref: "/platform/ai/providers/openai",
+          },
+        },
+      }),
+    );
+
+    expect(result.items.at(-1)).toMatchObject({
+      key: "openai",
+      label: "External — provider managed",
+      availability: "unavailable",
+      detail: "Recent requests are failing. Check this provider's settings.",
+      action: "Open provider settings to restore availability.",
+      actionHref: "/platform/ai/providers/openai",
+    });
+  });
+
   it.each([
     {
       name: "service observation",

@@ -6,7 +6,7 @@ export type CapabilityHealthState =
   | "optional_degraded"
   | "external";
 
-export type CapabilityHealthAvailability = "available" | "unavailable" | "inactive";
+export type CapabilityHealthAvailability = "available" | "unavailable" | "inactive" | "unknown";
 export type CapabilityHealthTone = "success" | "warning" | "neutral";
 
 export interface CapabilityServiceHealthItem {
@@ -16,6 +16,8 @@ export interface CapabilityServiceHealthItem {
   availability: CapabilityHealthAvailability;
   label: string;
   action: string;
+  detail?: string;
+  actionHref?: string;
   tone: CapabilityHealthTone;
   healthSemantics: string;
 }
@@ -125,12 +127,22 @@ export function projectCapabilityServiceHealth(
       key,
       kind: "runtime",
       state: "external",
-      availability: observed.healthy === false ? "unavailable" : "available",
+      availability:
+        observed.healthy === true
+          ? "available"
+          : observed.healthy === false
+            ? "unavailable"
+            : "unknown",
       label: "External — provider managed",
-      action:
+      action: observed.action ?? (
         observed.healthy === false
-          ? "Check provider status and the configured connection."
-          : "Manage availability and credentials with the configured provider.",
+          ? "Open provider settings to restore availability."
+          : observed.healthy === null
+            ? "Run a request to establish current provider health."
+            : "Manage availability and credentials with the configured provider."
+      ),
+      ...(observed.detail ? { detail: observed.detail } : {}),
+      ...(observed.actionHref ? { actionHref: observed.actionHref } : {}),
       tone: observed.healthy === false ? "warning" : "neutral",
       healthSemantics: requirement.healthSemantics,
     });

@@ -81,4 +81,28 @@ describe("RuntimeHealthPage", () => {
     expect(html).toContain("install_catalog_stale");
     expect(html).not.toContain("Optional — inactive");
   });
+
+  it("renders a missing required service and degraded aggregate", async () => {
+    const { loadCapabilityServiceHealth } = await import("@/lib/platform-runtime/service-health-loader");
+    vi.mocked(loadCapabilityServiceHealth).mockResolvedValueOnce({
+      aggregate: { value: "Degraded", tone: "warning", detail: "portal requires attention" },
+      items: [{
+        key: "portal",
+        kind: "service",
+        state: "required",
+        availability: "unavailable",
+        label: "Required — unavailable",
+        action: "Restore the service and verify its configured health check.",
+        tone: "warning",
+        healthSemantics: "http",
+      }],
+    });
+    const { default: RuntimeHealthPage } = await import("./page");
+
+    const html = renderToStaticMarkup(await RuntimeHealthPage());
+
+    expect(html).toContain("Required — unavailable");
+    expect(html).toContain("Degraded");
+    expect(html).toContain("portal requires attention");
+  });
 });

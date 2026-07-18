@@ -43,12 +43,17 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
             optional services do not reduce platform health.
           </p>
         </div>
-        <p
-          className="shrink-0 text-xs font-semibold text-[var(--dpf-text)]"
-          aria-label={`Platform capability health: ${projection.aggregate.value}`}
-        >
-          {projection.aggregate.value}
-        </p>
+        <div className="shrink-0 sm:max-w-xs sm:text-right">
+          <p
+            className="text-xs font-semibold text-[var(--dpf-text)]"
+            aria-label={`Platform capability health: ${projection.aggregate.value}`}
+          >
+            {projection.aggregate.value}
+          </p>
+          <p className="mt-1 text-[11px] leading-4 text-[var(--dpf-muted)]">
+            {projection.aggregate.detail}
+          </p>
+        </div>
       </div>
 
       {projection.items.length === 0 ? (
@@ -76,9 +81,23 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
                     <p className="mt-1 text-xs font-medium text-[var(--dpf-text)]">
                       {item.label}
                     </p>
-                    <p className="mt-1 text-[11px] leading-4 text-[var(--dpf-muted)]">
-                      {item.action}
-                    </p>
+                    {item.detail && (
+                      <p className="mt-1 text-[11px] leading-4 text-[var(--dpf-muted)]">
+                        {item.detail}
+                      </p>
+                    )}
+                    {item.actionHref ? (
+                      <a
+                        href={item.actionHref}
+                        className="mt-2 inline-flex rounded-sm text-[11px] font-medium text-[var(--dpf-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dpf-surface-2)]"
+                      >
+                        {item.action}
+                      </a>
+                    ) : (
+                      <p className="mt-1 text-[11px] leading-4 text-[var(--dpf-muted)]">
+                        {item.action}
+                      </p>
+                    )}
                   </div>
                 </div>
               </li>

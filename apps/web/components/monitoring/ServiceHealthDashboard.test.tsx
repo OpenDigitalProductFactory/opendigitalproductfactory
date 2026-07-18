@@ -35,6 +35,20 @@ const projection: CapabilityServiceHealthProjection = {
   }],
 };
 
+const missingRequired: CapabilityServiceHealthProjection = {
+  aggregate: { value: "Degraded", tone: "warning", detail: "portal requires attention" },
+  items: [{
+    key: "portal",
+    kind: "service",
+    state: "required",
+    availability: "unavailable",
+    label: "Required — unavailable",
+    action: "Restore the service and verify its configured health check.",
+    tone: "warning",
+    healthSemantics: "http",
+  }],
+};
+
 describe("ServiceHealthDashboard", () => {
   it("renders the shared capability projection on the product health surface", () => {
     const html = renderToStaticMarkup(
@@ -43,5 +57,19 @@ describe("ServiceHealthDashboard", () => {
 
     expect(html).toContain("Capability service requirements");
     expect(html).toContain("Optional — inactive");
+  });
+
+  it("propagates a missing required service into the product health summary", () => {
+    const html = renderToStaticMarkup(
+      <ServiceHealthDashboard
+        capabilityHealth={missingRequired}
+        openBacklogItems={0}
+        backlogHref="/portfolio/backlog"
+      />,
+    );
+
+    expect(html).toContain("Required — unavailable");
+    expect(html).toContain("Degraded");
+    expect(html).toContain("portal requires attention");
   });
 });

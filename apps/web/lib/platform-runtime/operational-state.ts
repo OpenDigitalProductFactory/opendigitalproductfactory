@@ -10,7 +10,13 @@ import { request } from "node:http";
 
 export type OperationalServiceStatus = "required" | "optional_inactive" | "optional_degraded";
 export interface ObservedServiceState { composePresent: boolean; healthy: boolean | null }
-export interface ObservedProviderState { configured: boolean; healthy: boolean | null }
+export interface ObservedProviderState {
+  configured: boolean;
+  healthy: boolean | null;
+  detail?: string;
+  action?: string;
+  actionHref?: string;
+}
 export interface PersistedInstallSnapshot {
   enabledRuntimeCapabilities: string[];
   capabilityCatalogHash?: string;

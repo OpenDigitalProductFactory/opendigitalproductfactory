@@ -77,4 +77,45 @@ describe("CapabilityServiceHealth", () => {
     expect(html).toContain("sm:grid-cols-2");
     expect(html).not.toMatch(/#[0-9a-f]{3,8}/i);
   });
+
+  it("distinguishes unknown and unhealthy provider observations without claiming availability", () => {
+    const html = renderToStaticMarkup(
+      <CapabilityServiceHealth
+        projection={{
+          aggregate: { value: "Operational", tone: "success", detail: "Required services available" },
+          items: [
+            {
+              key: "openai",
+              kind: "runtime",
+              state: "external",
+              availability: "unknown",
+              label: "External — provider managed",
+              detail: "No recent activity. Health will update after the next request.",
+              action: "Run a request to establish current provider health.",
+              tone: "neutral",
+              healthSemantics: "provider-health-reconciliation",
+            },
+            {
+              key: "anthropic",
+              kind: "runtime",
+              state: "external",
+              availability: "unavailable",
+              label: "External — provider managed",
+              detail: "Recent requests are failing. Check this provider's settings.",
+              action: "Open provider settings to restore availability.",
+              actionHref: "/platform/ai/providers/anthropic",
+              tone: "warning",
+              healthSemantics: "provider-health-reconciliation",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain("No recent activity");
+    expect(html).toContain("Run a request to establish current provider health");
+    expect(html).toContain("Recent requests are failing");
+    expect(html).toContain('href="/platform/ai/providers/anthropic"');
+    expect(html).toContain("focus-visible:ring-2");
+  });
 });
