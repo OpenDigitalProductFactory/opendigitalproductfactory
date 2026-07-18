@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { ConnectorError } from "./error";
 import {
@@ -315,10 +315,9 @@ describe("connector lifecycle", () => {
   it("re-exchanges expired client credentials without sharing refresh state", async () => {
     const db = persistence();
     const lifecycle = createConnectorLifecycle({ persistence: db });
-    if (false) {
-      // @ts-expect-error Failed connects must structurally provide both state persistence and audit.
-      void lifecycle.connect({ exchange: async () => ({ token: "x" }), persist: async () => undefined, audit: async () => undefined, persistFailure: async () => undefined });
-    }
+    type ConnectInput = Parameters<typeof lifecycle.connect>[0];
+    type MissingAuditFailure = Omit<ConnectInput, "auditFailure">;
+    expectTypeOf<MissingAuditFailure>().not.toMatchTypeOf<ConnectInput>();
     const exchange = vi.fn(async () => ({ token: "fresh" }));
     await lifecycle.ensureClientCredential({ expired: true, exchange, persist: async (d, s) => { d.token = s.token; }, audit: async () => undefined, auditFailure: async () => undefined });
     expect(exchange).toHaveBeenCalledOnce();
@@ -516,8 +515,8 @@ describe("retry and sync", () => {
     expect(await Promise.all([flight.run("a", work), flight.run("a", work)])).toEqual([7, 7]);
     expect(work).toHaveBeenCalledOnce();
     // The key is the unique IntegrationCredential.integrationId, never a provider slug.
-    // @ts-expect-error One flight instance cannot mix result types for the same credential identity.
-    if (false) void flight.run("credential-row-id", async () => "wrong result type");
+    type FlightWork = Parameters<typeof flight.run>[1];
+    expectTypeOf<() => Promise<string>>().not.toMatchTypeOf<FlightWork>();
   });
 
   it("cleans the default sleep abort listener after resolve and abort", async () => {
