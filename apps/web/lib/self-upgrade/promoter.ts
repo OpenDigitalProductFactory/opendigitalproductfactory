@@ -99,12 +99,19 @@ export type PromoterResult = {
 const RUNTIME_TRANSITION_ID = /^RCT-[A-Za-z0-9-]{1,48}$/;
 const RUNTIME_TRANSITION_TOKEN = /^[a-f0-9]{64}$/;
 const RUNTIME_TRANSITION_ENVELOPE = /^[A-Za-z0-9_-]{16,65536}$/;
-const POSIX_HOST_PATH = /^\/(?:[A-Za-z0-9._ -]+\/?)+$/;
-const WINDOWS_HOST_PATH = /^[A-Za-z]:[\\/](?:[A-Za-z0-9._ -]+[\\/]?)+$/;
+const RUNTIME_HOST_PATH_SEGMENT = /^[A-Za-z0-9._ -]+$/;
 
 function isSafeRuntimeHostPath(value: string): boolean {
-  if (value.length > 1024 || (!POSIX_HOST_PATH.test(value) && !WINDOWS_HOST_PATH.test(value))) return false;
-  return value.split(/[\\/]+/).every((segment) => segment !== "..");
+  if (value.length < 2 || value.length > 1024 || /[\0\r\n]/.test(value)) return false;
+  const normalized = value.replaceAll("\\", "/");
+  const absoluteBody = normalized.startsWith("/")
+    ? normalized.slice(1)
+    : /^[A-Za-z]:\//.test(normalized)
+      ? normalized.slice(3)
+      : "";
+  if (!absoluteBody) return false;
+  const segments = absoluteBody.split("/");
+  return segments.every((segment) => segment !== ".." && RUNTIME_HOST_PATH_SEGMENT.test(segment));
 }
 
 function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
@@ -476,7 +483,7 @@ export async function runProcessWithBudget(
   opts: { timeoutMs: number; containerName?: string },
 ): Promise<PromoterResult> {
   return new Promise((done, reject) => {
-    const child = spawn(command, args, { env: { ...process.env } });
+    const child = spawn(command, args, { env: { ...process.env }, shell: false });
 
     let stdout = "";
     let stderr = "";
