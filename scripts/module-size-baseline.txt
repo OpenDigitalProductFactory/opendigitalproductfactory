@@ -8,8 +8,6 @@ apps/web/components/ea/EaCanvas.tsx	1047
 apps/web/components/inventory/TopologyGraph.tsx	1031
 apps/web/components/ops/SelfUpgradeClient.test.tsx	1223
 apps/web/components/ops/SelfUpgradeClient.tsx	1469
-apps/web/components/ops/SelfUpgradeClient.test.tsx	1133
-apps/web/components/ops/SelfUpgradeClient.tsx	1421
 apps/web/components/platform/AiOperationsMap.tsx	2881
 apps/web/components/platform/EffectivePermissionsPanel.tsx	851
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985

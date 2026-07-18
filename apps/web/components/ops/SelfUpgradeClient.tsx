@@ -1247,9 +1247,7 @@ export default function SelfUpgradeClient({
               </div>
             </details>
           )}
-
           <SelfUpgradeReadiness completionEvidence={latestRun.completionEvidence} />
-
           {/* A skipped run persists WHY on `reason`. Without surfacing it, the
               operator sees only a "skipped" badge with no words — the silent
               no-op an operator should never be left guessing about. */}

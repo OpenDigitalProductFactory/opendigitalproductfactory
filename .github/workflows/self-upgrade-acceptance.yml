@@ -56,8 +56,8 @@ jobs:
             --build-arg "DPF_PROMOTER_CONTRACT_DIGEST=${contract_digest}" \
             -f Dockerfile.promoter -t "$image" .
           image_digest="$(docker image inspect "$image" --format '{{.Id}}')"
-          test "$(docker image inspect "$image" --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}')" = "$GITHUB_SHA"
-          test "$(docker image inspect "$image" --format '{{index .Config.Labels \"org.opendpf.promoter.contract-digest\"}}')" = "$contract_digest"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$GITHUB_SHA"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opendpf.promoter.contract-digest"}}')" = "$contract_digest"
           mkdir -p "$DPF_N1_EVIDENCE" "$RUNNER_TEMP/dpf-state" "$RUNNER_TEMP/dpf-backups"
           printf '%s\n' "{\"candidateSha\":\"${GITHUB_SHA}\",\"candidateDigest\":\"${image_digest}\",\"contractDigest\":\"${contract_digest}\"}" > "$DPF_N1_EVIDENCE/artifact.json"
           echo "DPF_ACCEPTANCE_IMAGE=$image" >> "$GITHUB_ENV"
