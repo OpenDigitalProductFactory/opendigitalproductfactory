@@ -70,6 +70,14 @@ describe("classifyOperatorReason", () => {
     );
   });
 
+  it("flags an abandoned linked build as build-attention", () => {
+    expect(
+      classifyOperatorReason(
+        item({ activeBuildId: "b1", activeBuild: { buildId: "b1", phase: "abandoned" } }),
+      ),
+    ).toBe("build-attention");
+  });
+
   it("flags a blocked claim as blocked", () => {
     expect(classifyOperatorReason(item({ claimStatus: "blocked" }))).toBe("blocked");
   });
@@ -148,6 +156,46 @@ describe("selectOperatorQueue", () => {
     expect(queue[0]?.item.itemId).toBe("BI-BUG");
     expect(queue[0]?.blocksBusinessOutcome).toBe(true);
     expect(queue[1]?.blocksBusinessOutcome).toBe(false);
+  });
+
+  it("demotes a chronically-stranded abandoned build below fresh build-attention (BI-99D896CF age-out)", () => {
+    // A build abandoned 60 days ago that keeps re-abandoning should not lead the
+    // personal lens over a build that just failed — the operator needs the fresh
+    // failure first. Both are build-attention/mine with businessScore 0; age-out
+    // lowers the chronic strand's risk contribution so it sinks within the tier.
+    const freshFail = item({
+      itemId: "BI-FRESH",
+      activeBuildId: "b1",
+      activeBuild: { buildId: "b1", phase: "failed" },
+      updatedAt: daysAgo(1),
+    });
+    const chronic = item({
+      itemId: "BI-CHRONIC",
+      activeBuildId: "b2",
+      activeBuild: { buildId: "b2", phase: "abandoned" },
+      updatedAt: daysAgo(60),
+    });
+    const queue = selectOperatorQueue([chronic, freshFail], NOW);
+    expect(queue.map((e) => e.item.itemId)).toEqual(["BI-FRESH", "BI-CHRONIC"]);
+  });
+
+  it("keeps a recently-abandoned build at full build-attention urgency (not yet chronic)", () => {
+    // Under the chronic threshold (14d), an abandoned build is still urgent — it
+    // ties with a failed build on risk and the older one leads by staleness.
+    const recentAbandon = item({
+      itemId: "BI-RECENT",
+      activeBuildId: "b1",
+      activeBuild: { buildId: "b1", phase: "abandoned" },
+      updatedAt: daysAgo(2),
+    });
+    const olderFail = item({
+      itemId: "BI-OLDFAIL",
+      activeBuildId: "b2",
+      activeBuild: { buildId: "b2", phase: "failed" },
+      updatedAt: daysAgo(5),
+    });
+    const queue = selectOperatorQueue([recentAbandon, olderFail], NOW);
+    expect(queue.map((e) => e.item.itemId)).toEqual(["BI-OLDFAIL", "BI-RECENT"]);
   });
 
   it("uses staleness as the tiebreaker when business and risk tie", () => {
