@@ -51,7 +51,7 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--write") args.write = true;
-    else if (["--state", "--catalog", "--host-platform", "--host-arch"].includes(arg)) args[arg.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = argv[++index];
+    else if (["--state", "--catalog", "--host-platform", "--host-arch", "--recovery-path", "--expected-source-hash", "--expected-projection-hash"].includes(arg)) args[arg.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = argv[++index];
     else throw new Error(`unknown_argument:${arg}`);
   }
   if (!args.state || !args.catalog || !args.hostPlatform || !args.hostArch) throw new Error("migration_arguments_required");
@@ -64,9 +64,14 @@ async function main() {
   const platform = new Map([["windows", "win32"], ["macos", "darwin"]]).get(args.hostPlatform) ?? args.hostPlatform;
   const capabilityHostPlatform = platform === "win32" ? "windows" : platform === "darwin" ? "macos" : platform;
   const result = await projectInstallState({ bytes, catalog, hostIdentity: { platform, arch: args.hostArch, capabilityHostPlatform, provenance: "installer" } });
+  if (args.expectedSourceHash && args.expectedSourceHash !== result.sourceHash) throw new Error("install_state_envelope_state_changed");
+  if (args.expectedProjectionHash && args.expectedProjectionHash !== result.projectionHash) throw new Error("install_state_projection_mismatch");
   if (args.write && result.migrationRequired) {
     const { updateInstallState } = await import("./install-state-transaction.mjs");
-    await updateInstallState(args.state, () => result.projectedState, { expectedSourceSha256: result.sourceHash });
+    await updateInstallState(args.state, () => result.projectedState, {
+      expectedSourceSha256: result.sourceHash,
+      recoveryPath: args.recoveryPath,
+    });
   }
   process.stdout.write(`${JSON.stringify({ sourceHash: result.sourceHash, projectionHash: result.projectionHash, migrationRequired: result.migrationRequired })}\n`);
 }

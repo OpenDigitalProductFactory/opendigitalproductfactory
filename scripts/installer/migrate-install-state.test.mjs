@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -10,6 +10,8 @@ import { projectInstallState } from "./migrate-install-state.mjs";
 import { resolveHostIdentity } from "./resolve-host-identity.mjs";
 
 const catalog = JSON.parse(await readFile(new URL("../capability-service-catalog.generated.json", import.meta.url), "utf8"));
+const MIGRATOR = fileURLToPath(new URL("./migrate-install-state.mjs", import.meta.url));
+const CATALOG_PATH = fileURLToPath(new URL("../capability-service-catalog.generated.json", import.meta.url));
 const legacy = {
   schemaVersion: 1, installerVersion: "2026.06.26", platform: "unsupported", arch: "x86_64-pc-msys",
   installPath: "D:/DPF", stateDir: "C:/Users/operator/.dpf", composeProjectName: "dpf",
@@ -66,4 +68,29 @@ test("CLI persists the canonical projection through the shared transaction", asy
   assert.equal(migrated.platform, "win32");
   assert.equal(migrated.arch, "amd64");
   assert.equal(migrated.capabilityCatalogHash, catalog.catalogHash);
+});
+
+test("CLI binds persistence to signed hashes and the governed recovery path", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-install-migrate-bound-"));
+  try {
+    const statePath = join(dir, "install-state.json");
+    const recoveryPath = join(dir, "recovery", "install-state.json");
+    await mkdir(dirname(recoveryPath), { recursive: true });
+    const original = Buffer.from(`\uFEFF${JSON.stringify(legacy)}\n`);
+    await writeFile(statePath, original);
+    const projection = await projectInstallState({ bytes: original, hostIdentity: identity, catalog });
+    const run = spawnSync(process.execPath, [MIGRATOR, "--state", statePath, "--catalog", CATALOG_PATH,
+      "--host-platform", "win32", "--host-arch", "amd64", "--expected-source-hash", projection.sourceHash,
+      "--expected-projection-hash", projection.projectionHash, "--recovery-path", recoveryPath, "--write"], { encoding: "utf8" });
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(await readFile(recoveryPath), original);
+
+    await writeFile(statePath, original);
+    const refused = spawnSync(process.execPath, [MIGRATOR, "--state", statePath, "--catalog", CATALOG_PATH,
+      "--host-platform", "win32", "--host-arch", "amd64", "--expected-source-hash", "0".repeat(64),
+      "--expected-projection-hash", projection.projectionHash, "--recovery-path", recoveryPath, "--write"], { encoding: "utf8" });
+    assert.equal(refused.status, 2);
+    assert.match(refused.stderr, /install_state_envelope_state_changed/);
+    assert.deepEqual(await readFile(statePath), original);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

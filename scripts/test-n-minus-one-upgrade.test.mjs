@@ -119,3 +119,14 @@ test("success proves immutable candidate bytes, state migration, recovery, healt
   });
   assert.equal(result.result, "passed");
 });
+
+test("honest pre-floor legacy-bootstrap mode refuses automatic migration", async () => {
+  const digest = "sha256:" + "c".repeat(64);
+  let requested = false;
+  await assert.rejects(() => runNMinusOneUpgrade({ baseSha: "a".repeat(40), candidateSha: "b".repeat(40), repository: "o/r", project: "dpf-n1-test" }, {
+    verifyBase: async () => ({}), prepare: async () => ({ candidateDigest: digest, mode: "legacy-bootstrap" }),
+    readiness: async () => ({ ok: true, owner: "bridge", digest, quiescenceBegan: false }),
+    requestUpgrade: async () => { requested = true; }, cleanup: async () => {}, writeEvidence: async (value) => value,
+  }), /installer\/reinstall remediation/);
+  assert.equal(requested, false);
+});

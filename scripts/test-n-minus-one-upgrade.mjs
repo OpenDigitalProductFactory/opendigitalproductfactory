@@ -137,6 +137,9 @@ export async function runNMinusOneUpgrade(options, deps) {
     if (!DIGEST.test(prepared.candidateDigest)) throw new Error("candidate image did not resolve to an immutable digest");
     const readiness = await d.readiness({ ...options, ...prepared });
     evidence.readiness = readiness;
+    if (prepared.mode === "legacy-bootstrap" && readiness.ok) {
+      throw new Error("pre-floor legacy-bootstrap installs require installer/reinstall remediation");
+    }
     if (!readiness.ok) {
       if (!options.injectReadinessFailure || readiness.quiescenceBegan) throw new Error("candidate readiness failed before acceptance upgrade");
       evidence.baselineHealthy = await d.baselineHealth(options);

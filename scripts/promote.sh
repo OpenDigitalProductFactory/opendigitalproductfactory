@@ -235,6 +235,34 @@ if [[ $_dry_run -eq 0 ]]; then
   printf '%s\n' "${_prev_sha:-unknown}" > "$PROMOTE_BACKUP_PATH/previous-sha.txt" 2>/dev/null || true
 fi
 
+# Persist the exact projection approved during candidate readiness. The portal
+# has already quiesced before launching this promoter, and the byte-for-byte
+# recovery copy above is durable. Reverify the signed, run- and digest-bound
+# carrier against the current source bytes, then let the canonical migrator and
+# shared lock/CAS transaction perform the only write. Any later nonzero exit is
+# handled by the existing EXIT trap, which restores these exact legacy bytes
+# before the baseline is resumed.
+emit_step install-state-migrate
+if [[ $_dry_run -eq 0 ]]; then
+  _migration_envelope="$(node "$_promoter_dir/lib/transition-signing.mjs")" || exit $?
+  _migration_field() {
+    printf '%s' "$_migration_envelope" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);const p=process.argv[1].split(".");let x=v;for(const k of p)x=x?.[k];if(typeof x!=="string"&&typeof x!=="number")process.exit(2);process.stdout.write(String(x))})' "$1"
+  }
+  _migration_from="$(_migration_field fromSchemaVersion)"
+  _migration_to="$(_migration_field toSchemaVersion)"
+  if [[ "$_migration_from" != "$_migration_to" ]]; then
+    node "$_promoter_dir/installer/migrate-install-state.mjs" \
+      --state "$_install_state" \
+      --catalog "$_promoter_dir/capability-service-catalog.generated.json" \
+      --host-platform "$(_migration_field hostIdentity.platform)" \
+      --host-arch "$(_migration_field hostIdentity.arch)" \
+      --expected-source-hash "$(_migration_field sourceHash)" \
+      --expected-projection-hash "$(_migration_field projectionHash)" \
+      --recovery-path "$_capability_recovery" \
+      --write >/dev/null
+  fi
+fi
+
 # Real platform version from the source's git release tags, baked into the new
 # image so the portal keeps showing a real version (not version.json) after a
 # self-upgrade. safe.directory: the mounted source is owned by the host user,

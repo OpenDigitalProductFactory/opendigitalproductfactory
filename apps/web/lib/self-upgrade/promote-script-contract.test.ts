@@ -161,6 +161,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
     const STEPS = [
       "step=prepare",
       "step=backup",
+      "step=install-state-migrate",
       "step=docker-build",
       "step=migrate",
       "step=docker-up",
@@ -187,6 +188,20 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
 
     it("emits backup step", () => {
       expect(dryRunResult.stdout).toContain("step=backup");
+    });
+
+    it("migrates install state only after the governed recovery copy and before swap work", () => {
+      const scriptSource = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+      expect(dryRunResult.stdout).toContain("step=install-state-migrate");
+      expect(scriptSource.indexOf('cp "$_install_state" "$_capability_recovery"')).toBeLessThan(
+        scriptSource.indexOf('emit_step install-state-migrate'),
+      );
+      expect(scriptSource.indexOf('emit_step install-state-migrate')).toBeLessThan(
+        scriptSource.indexOf('emit_step docker-build'),
+      );
+      expect(scriptSource).toContain('--expected-source-hash "$(_migration_field sourceHash)"');
+      expect(scriptSource).toContain('--expected-projection-hash "$(_migration_field projectionHash)"');
+      expect(scriptSource).toContain('--recovery-path "$_capability_recovery"');
     });
 
     it("emits docker-build step", () => {
