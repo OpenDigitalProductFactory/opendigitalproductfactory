@@ -64,7 +64,8 @@
         "sandbox_workspace:/sandbox-workspace",
         "browser_evidence:/evidence:ro",
         "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
-        "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf"
+        "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
+        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro"
       ],
       "dependsOn": [
         "portal-init"
@@ -164,7 +165,8 @@
       "volumes": [
         "/var/run/docker.sock:/var/run/docker.sock",
         "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
-        "${DPF_HOST_INSTALL_PATH:-.}:/host-source:ro"
+        "${DPF_HOST_INSTALL_PATH:-.}:/host-source:ro",
+        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state"
       ],
       "dependsOn": [
         "postgres"

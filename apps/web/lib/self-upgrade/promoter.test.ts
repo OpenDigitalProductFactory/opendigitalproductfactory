@@ -19,7 +19,7 @@ const BASE = {
 
 describe("buildPromoterCommand", () => {
   it("selects the dedicated runtime capability transition mode without self-upgrade argv", () => {
-    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123" });
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeCapabilityEnvelope: "encoded", runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecret: "x".repeat(32) });
     expect(args).toContain("--runtime-capability-transition");
     expect(args).toContain("RCT-123");
     expect(args).not.toContain("--self-upgrade");
@@ -41,6 +41,15 @@ describe("buildPromoterCommand", () => {
     const { args } = buildPromoterCommand(BASE);
     expect(args).toContain("/var/run/docker.sock:/var/run/docker.sock");
     expect(args).toContain("/Users/me/dpf:/host-source:ro");
+  });
+
+  it("gives transition mode only the state mount as writable and signs fixed protocol env", () => {
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/host/.dpf", runtimeCapabilityEnvelope: "encoded", runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecret: "x".repeat(32), composeFiles: ["docker-compose.yml"], composeProject: "dpf" });
+    expect(args).toContain("/Users/me/dpf:/host-source:ro");
+    expect(args).toContain("/host/.dpf:/dpf-state");
+    expect(args).toContain("DPF_STATE_DIR=/dpf-state");
+    expect(args).toContain("DPF_RUNTIME_TRANSITION_ENVELOPE=encoded");
+    expect(args.filter((arg) => arg.includes(":/host-source") && !arg.endsWith(":ro"))).toEqual([]);
   });
 
   it("passes the promote contract via env and targets the promoter image", () => {
@@ -123,11 +132,11 @@ describe("buildPromoterCommand", () => {
 });
 
 describe("runtime transition promoter entrypoint", () => {
-  it("recognizes the mode but fails closed before Step 7 signed protocol exists", async () => {
+  it("recognizes the mode and fails closed without a signed envelope", async () => {
     const script = resolve(process.cwd(), "../../scripts/promote.sh");
     const result = await runProcessWithBudget("sh", [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
     expect(result.exitCode).toBe(78);
-    expect(result.stderr).toContain('"failure":"signed_protocol_unavailable"');
+    expect(result.stderr).toContain('"failure":"invalid_signed_envelope"');
   });
 });
 

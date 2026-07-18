@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PromoterParams, PromoterResult } from "@/lib/self-upgrade/promoter";
+import { signTransitionPayload, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt, verifyTransitionReceipt } from "./transition-protocol";
 
 export const ACTIVE_RUNTIME_TRANSITION_STATUSES = ["pending", "applying", "host_applied", "compensating"] as const;
 
@@ -28,6 +29,10 @@ export interface RuntimeCapabilityTransitionReceipts {
   >;
   markFailed(transitionId: string, failure: string): Promise<void>;
   markHostApplied(transitionId: string): Promise<void>;
+  commitSuccess?(transitionId: string, receipt: RuntimeTransitionReceipt, desiredStates: Readonly<Record<string, string>>): Promise<void>;
+  markCompensating?(transitionId: string, failure: string): Promise<void>;
+  markRolledBack?(transitionId: string, receipt: RuntimeTransitionReceipt): Promise<void>;
+  markRollbackFailed?(transitionId: string, failure: string): Promise<void>;
 }
 
 export type RuntimeCapabilityCoordinatorDeps = {
@@ -35,6 +40,10 @@ export type RuntimeCapabilityCoordinatorDeps = {
   isPromoterAvailable(image?: string): Promise<boolean>;
   runPromoter(params: PromoterParams): Promise<PromoterResult>;
   promoterParams: PromoterParams;
+  protocolSecret?: string;
+  readHostReceipt?(transitionId: string): Promise<RuntimeTransitionReceipt>;
+  verifyRequiredHealth?(desiredKeys: readonly string[], observedServices: readonly string[]): Promise<boolean>;
+  now?: () => number;
 };
 
 type TransitionModel = {
@@ -43,7 +52,8 @@ type TransitionModel = {
   create(args: unknown): Promise<unknown>;
   updateMany(args: unknown): Promise<{ count: number }>;
 };
-type TransitionTx = { $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel };
+type CapabilityModel = { updateMany(args: unknown): Promise<{ count: number }> };
+type TransitionTx = { $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel; platformCapability: CapabilityModel };
 type TransitionPrisma = {
   runtimeCapabilityTransition: TransitionModel;
   $transaction<T>(operation: (tx: TransitionTx) => Promise<T>, options: { isolationLevel: "Serializable" }): Promise<T>;
@@ -76,7 +86,46 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
     }, { isolationLevel: "Serializable" }),
     markFailed: async (transitionId, failure) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "failed", failure: { code: failure }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
     markHostApplied: async (transitionId) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "host_applied", hostAppliedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
+    commitSuccess: (transitionId, receipt, desiredStates) => prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+      for (const [capabilityId, state] of Object.entries(desiredStates)) {
+        const updated = await tx.platformCapability.updateMany({ where: { capabilityId }, data: { state } });
+        if (updated.count !== 1) throw new Error(`runtime_capability_missing:${capabilityId}`);
+      }
+      const completed = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "host_applied" }, data: { status: "succeeded", hostReceipt: receipt, completedAt: new Date() } });
+      if (completed.count !== 1) throw new Error("runtime_transition_cas_failed");
+    }, { isolationLevel: "Serializable" }),
+    markCompensating: async (transitionId, failure) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "host_applied" }, data: { status: "compensating", failure: { code: failure } } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
+    markRolledBack: async (transitionId, receipt) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "compensating" }, data: { status: "rolled_back", hostReceipt: receipt, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
+    markRollbackFailed: async (transitionId, failure) => { const r = await prisma.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: "compensating" }, data: { status: "rollback_failed", failure: { code: failure }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); },
   };
+}
+
+export type RuntimeTransitionReconcileRow = {
+  transitionId: string; status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string;
+  previousKeys: string[]; desiredKeys: string[];
+};
+
+/** Startup recovery runs before mutation is enabled and converges every nonterminal row. */
+export async function reconcileRuntimeCapabilityTransitions(deps: {
+  listActive(): Promise<RuntimeTransitionReconcileRow[]>;
+  readHostReceipt(transitionId: string): Promise<RuntimeTransitionReceipt | null>;
+  completeFromReceipt(row: RuntimeTransitionReconcileRow, receipt: RuntimeTransitionReceipt): Promise<void>;
+  compensate(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
+  protocolSecret: string;
+  now?: () => number;
+}): Promise<void> {
+  for (const row of await deps.listActive()) {
+    const receipt = await deps.readHostReceipt(row.transitionId);
+    if (!receipt) { await deps.compensate(row, "host_receipt_absent"); continue; }
+    const envelope: RuntimeTransitionEnvelope = { version: 1, transitionId: row.transitionId, issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt, catalogHash: row.catalogHash, previousStateHash: row.previousStateHash, desiredStateHash: row.desiredStateHash, previousKeys: row.previousKeys, desiredKeys: row.desiredKeys };
+    try {
+      verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
+      await deps.completeFromReceipt(row, receipt);
+    } catch (error) {
+      await deps.compensate(row, error instanceof Error ? error.message : "invalid_host_receipt");
+    }
+  }
 }
 
 function validateRequest(request: RuntimeCapabilityTransitionRequest): void {
@@ -85,8 +134,10 @@ function validateRequest(request: RuntimeCapabilityTransitionRequest): void {
   for (const [label, keys, states] of [["previous", request.previousKeys, request.previousStates], ["desired", request.desiredKeys, request.desiredStates]] as const) {
     if (new Set(keys).size !== keys.length || JSON.stringify(keys) !== JSON.stringify([...keys].sort())) throw new Error(`invalid_${label}_keys`);
     if (keys.some((key) => !/^runtime:[a-z0-9-]+$/.test(key))) throw new Error(`invalid_${label}_keys`);
-    if (JSON.stringify(Object.keys(states).sort()) !== JSON.stringify(keys)) throw new Error(`invalid_${label}_state_map`);
     if (Object.values(states).some((state) => state !== "active" && state !== "disabled")) throw new Error(`invalid_${label}_state`);
+    const activeKeys = Object.entries(states).filter(([, state]) => state === "active").map(([key]) => key).sort();
+    if (JSON.stringify(activeKeys) !== JSON.stringify(keys)) throw new Error(`invalid_${label}_state_map`);
+    if (Object.keys(states).some((key) => !/^runtime:[a-z0-9-]+$/.test(key))) throw new Error(`invalid_${label}_state_map`);
   }
 }
 
@@ -118,16 +169,55 @@ export async function coordinateRuntimeCapabilityTransition(
     return { status: "failed" as const, failure: "promoter_unavailable" as const };
   }
   let result: PromoterResult;
+  if (!deps.protocolSecret || deps.protocolSecret.length < 32 || !deps.promoterParams.stateDirHostPath || !deps.readHostReceipt || !deps.promoterParams.composeProject || !deps.promoterParams.composeFiles?.length) {
+    await deps.receipts.markFailed(request.transitionId, "signed_protocol_unavailable");
+    return { status: "failed" as const, failure: "signed_protocol_unavailable" as const };
+  }
+  const now = deps.now?.() ?? Date.now();
+  const envelope: RuntimeTransitionEnvelope = {
+    version: 1, transitionId: request.transitionId, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + 10 * 60 * 1000).toISOString(),
+    catalogHash: request.catalogHash, previousStateHash: normalized.previousStateHash, desiredStateHash: normalized.desiredStateHash,
+    previousKeys: normalized.previousKeys, desiredKeys: normalized.desiredKeys,
+  };
+  const encodedEnvelope = Buffer.from(JSON.stringify(envelope)).toString("base64url");
   try { result = await deps.runPromoter({
     ...deps.promoterParams,
     runtimeCapabilityTransitionId: request.transitionId,
     containerName: `dpf-promoter-${request.transitionId}`,
     timeoutMs: 10 * 60 * 1000,
+    runtimeCapabilityEnvelope: encodedEnvelope,
+    runtimeCapabilitySignature: signTransitionPayload(envelope, deps.protocolSecret),
+    runtimeCapabilitySecret: deps.protocolSecret,
   }); } catch { await deps.receipts.markFailed(request.transitionId, "promoter_spawn_failed"); return { status: "failed" as const, failure: "promoter_spawn_failed" as const }; }
   if (result.exitCode !== 0) {
     await deps.receipts.markFailed(request.transitionId, "host_apply_failed");
     return { status: "failed" as const, failure: "host_apply_failed" as const };
   }
   await deps.receipts.markHostApplied(request.transitionId);
-  return { status: "host_applied_pending_verification" as const };
+  try {
+    const receipt = await deps.readHostReceipt(request.transitionId);
+    verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
+    if (deps.verifyRequiredHealth && !(await deps.verifyRequiredHealth(normalized.desiredKeys, receipt.observedServices))) throw new Error("required_health_failed");
+    if (!deps.receipts.commitSuccess) return { status: "host_applied_pending_verification" as const };
+    await deps.receipts.commitSuccess(request.transitionId, receipt, request.desiredStates);
+    return { status: "succeeded" as const };
+  } catch (error) {
+    if (!deps.receipts.markCompensating || !deps.receipts.markRolledBack || !deps.receipts.markRollbackFailed) return { status: "host_applied_pending_verification" as const };
+    const failure = error instanceof Error ? error.message : "post_host_verification_failed";
+    await deps.receipts.markCompensating(request.transitionId, failure);
+    const rollbackNow = deps.now?.() ?? Date.now();
+    const rollbackTransitionId = `RCT-${createHash("sha256").update(request.transitionId).digest("hex").slice(0, 24)}-rb`;
+    const rollbackEnvelope: RuntimeTransitionEnvelope = { ...envelope, transitionId: rollbackTransitionId, issuedAt: new Date(rollbackNow).toISOString(), expiresAt: new Date(rollbackNow + 600_000).toISOString(), previousKeys: normalized.desiredKeys, desiredKeys: normalized.previousKeys, previousStateHash: normalized.desiredStateHash, desiredStateHash: normalized.previousStateHash };
+    try {
+      const rollback = await deps.runPromoter({ ...deps.promoterParams, runtimeCapabilityTransitionId: rollbackTransitionId, containerName: `dpf-promoter-${rollbackTransitionId}`, timeoutMs: 600_000, runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(rollbackEnvelope)).toString("base64url"), runtimeCapabilitySignature: signTransitionPayload(rollbackEnvelope, deps.protocolSecret), runtimeCapabilitySecret: deps.protocolSecret });
+      if (rollback.exitCode !== 0) throw new Error("rollback_host_apply_failed");
+      const receipt = await deps.readHostReceipt(rollbackTransitionId);
+      verifyTransitionReceipt(receipt, deps.protocolSecret, rollbackEnvelope, deps.now?.() ?? Date.now());
+      await deps.receipts.markRolledBack(request.transitionId, receipt);
+      return { status: "rolled_back" as const, failure };
+    } catch (rollbackError) {
+      await deps.receipts.markRollbackFailed(request.transitionId, rollbackError instanceof Error ? rollbackError.message : "rollback_failed");
+      return { status: "rollback_failed" as const, failure };
+    }
+  }
 }

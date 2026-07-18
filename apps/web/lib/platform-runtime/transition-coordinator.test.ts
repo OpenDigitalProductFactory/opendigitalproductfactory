@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { coordinateRuntimeCapabilityTransition, computeCapabilityStateVersion, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
+import { signTransitionPayload } from "./transition-protocol";
 
 const request = {
   transitionId: "RCT-1", catalogHash: "0".repeat(64), previousKeys: ["runtime:build", "runtime:core"], desiredKeys: ["runtime:core"],
@@ -7,6 +8,7 @@ const request = {
 };
 
 function deps(overrides = {}) {
+  const secret = "x".repeat(32);
   return {
     receipts: {
       createPending: vi.fn(async () => ({ created: true as const })),
@@ -15,7 +17,14 @@ function deps(overrides = {}) {
     },
     isPromoterAvailable: vi.fn(async () => true),
     runPromoter: vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" })),
-    promoterParams: { hostInstallPath: "/dpf", targetSha: "unused", backupPath: "/unused", healthUrl: "http://localhost:3000/api/health" },
+    promoterParams: { hostInstallPath: "/dpf", targetSha: "unused", backupPath: "/unused", healthUrl: "http://localhost:3000/api/health", stateDirHostPath: "/state", composeFiles: ["docker-compose.yml"], composeProject: "dpf" },
+    protocolSecret: secret,
+    now: () => 1_000_000,
+    readHostReceipt: vi.fn(async () => {
+      const envelope = { version: 1 as const, transitionId: request.transitionId, issuedAt: new Date(1_000_000).toISOString(), expiresAt: new Date(1_600_000).toISOString(), catalogHash: request.catalogHash, previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates), desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates), previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys] };
+      const unsigned = { ...envelope, status: "applied" as const, observedServices: ["portal", "postgres"], completedAt: new Date(1_000_001).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash };
+      return { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
+    }),
     ...overrides,
   };
 }
@@ -108,7 +117,7 @@ describe("runtime capability transition coordinator", () => {
     expect(d.receipts.markFailed).toHaveBeenCalledWith("RCT-1", "host_apply_failed");
   });
 
-  it("stops at host_applied until the signed receipt protocol can verify and commit", async () => {
+  it("stops at host_applied when persistence has not supplied the transactional commit boundary", async () => {
     const d = deps();
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "host_applied_pending_verification" });
     expect(d.receipts.markHostApplied).toHaveBeenCalledWith("RCT-1");

@@ -76,6 +76,11 @@ export type PromoterParams = {
   timeoutMs?: number;
   /** Selects the fail-closed runtime capability transition entrypoint. */
   runtimeCapabilityTransitionId?: string;
+  runtimeCapabilityEnvelope?: string;
+  runtimeCapabilitySignature?: string;
+  runtimeCapabilitySecret?: string;
+  stateDirHostPath?: string;
+  runtimeCapabilityProfiles?: string[];
 };
 
 export type PromoterResult = {
@@ -163,6 +168,16 @@ export function buildPromoterCommand(
 
   if (params.composeProject && params.composeProject.length > 0) {
     args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject}`);
+  }
+
+  if (params.runtimeCapabilityTransitionId) {
+    if (!params.stateDirHostPath || !params.runtimeCapabilityEnvelope || !params.runtimeCapabilitySignature || !params.runtimeCapabilitySecret) {
+      throw new Error("runtime_transition_protocol_incomplete");
+    }
+    args.push("-v", `${params.stateDirHostPath}:/dpf-state`);
+    args.push("-e", `DPF_STATE_DIR=/dpf-state`, "-e", `DPF_RUNTIME_TRANSITION_ENVELOPE=${params.runtimeCapabilityEnvelope}`,
+      "-e", `DPF_RUNTIME_TRANSITION_SIGNATURE=${params.runtimeCapabilitySignature}`, "-e", `DPF_RUNTIME_TRANSITION_SECRET=${params.runtimeCapabilitySecret}`);
+    if (params.runtimeCapabilityProfiles?.length) args.push("-e", `DPF_RUNTIME_TRANSITION_PROFILES=${[...params.runtimeCapabilityProfiles].sort().join(" ")}`);
   }
 
   args.push(image);

@@ -33,6 +33,22 @@
       "default": "dpf",
       "description": "Docker Compose project name. Defaults to 'dpf'."
     },
+    "enabledRuntimeCapabilities": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^runtime:[a-z0-9-]+$" },
+      "uniqueItems": true,
+      "description": "Sorted governed runtime capability closure used to resolve Compose profiles."
+    },
+    "capabilityCatalogHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Hash of the canonical capability-to-service catalog used for this snapshot."
+    },
+    "capabilityStateVersion": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Deterministic hash of the catalog and sorted runtime capability states."
+    },
     "platform": {
       "type": "string",
       "enum": ["darwin", "linux", "win32"],

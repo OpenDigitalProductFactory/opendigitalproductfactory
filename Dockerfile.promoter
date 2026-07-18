@@ -9,6 +9,7 @@ COPY Dockerfile /promoter/portal.Dockerfile
 
 # Copy promotion script
 COPY scripts/promote.sh /promoter/promote.sh
+COPY scripts/apply-runtime-capability-transition.mjs /promoter/apply-runtime-capability-transition.mjs
 RUN chmod +x /promoter/promote.sh
 
 ENTRYPOINT ["/promoter/promote.sh"]
