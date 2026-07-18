@@ -15,9 +15,11 @@ import { getEndpointRuntimeState } from "@/lib/routing/rate-tracker";
 
 type LoaderDependencies = {
   loadOperationalState?: () => Promise<OperationalCapabilityState>;
-  readConfiguredProviderIds?: () => Promise<string[]>;
+  readProviderConfigurations?: () => Promise<Array<{ providerId: string; status: string }>>;
   loadProviderHealth?: (providerId: string) => Promise<ProviderHealth>;
 };
+
+const CONFIGURED_PROVIDER_STATUSES = new Set(["active", "degraded", "disabled"]);
 
 /**
  * Server-side loader for the shared operator projection. Provider rows are
@@ -29,23 +31,26 @@ export async function loadCapabilityServiceHealth(
 ): Promise<CapabilityServiceHealthProjection> {
   const loadOperationalState = dependencies.loadOperationalState ?? (() =>
     loadOperationalCapabilityState({ observedProviders: {} }));
-  const readConfiguredProviderIds = dependencies.readConfiguredProviderIds ?? (async () =>
+  const readProviderConfigurations = dependencies.readProviderConfigurations ?? (() =>
     prisma.modelProvider.findMany({
-      where: { retiredAt: null, status: { in: ["active", "degraded"] } },
-      select: { providerId: true },
-    }).then((rows) => rows.map((row) => row.providerId)));
+      where: { retiredAt: null },
+      select: { providerId: true, status: true },
+    }));
   const readHealth = dependencies.loadProviderHealth ?? ((providerId: string) =>
     loadProviderHealth(providerId, { runtimeState: getEndpointRuntimeState }));
 
-  const [operational, configuredProviderIds] = await Promise.all([
+  const [operational, providerConfigurations] = await Promise.all([
     loadOperationalState(),
-    readConfiguredProviderIds(),
+    readProviderConfigurations(),
   ]);
   const allowedRuntimeKeys = new Set(
     operational.externalRuntimes.map((runtime) => runtime.runtimeKey),
   );
   const providerState: Record<string, ObservedProviderState> = {};
-  const providerIds = configuredProviderIds.filter((providerId) => allowedRuntimeKeys.has(providerId));
+  const providerIds = providerConfigurations
+    .filter((provider) => CONFIGURED_PROVIDER_STATUSES.has(provider.status))
+    .map((provider) => provider.providerId)
+    .filter((providerId) => allowedRuntimeKeys.has(providerId));
   const providerHealth = await Promise.all(
     providerIds.map(async (providerId) => ({ providerId, health: await readHealth(providerId) })),
   );
