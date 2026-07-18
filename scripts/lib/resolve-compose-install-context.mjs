@@ -1,4 +1,4 @@
-import { dirname, resolve } from "node:path";
+import { delimiter, dirname, resolve } from "node:path";
 
 export function resolveDpfStatePath({ env = process.env, home }) {
   if (env.DPF_INSTALL_STATE_PATH) return resolve(env.DPF_INSTALL_STATE_PATH);
@@ -22,12 +22,13 @@ function optionValues(args, shortName, longName) {
   return values;
 }
 
-export function resolveComposeInstallContext({ args, cwd }) {
+export function resolveComposeInstallContext({ args, cwd, env = process.env, pathDelimiter = delimiter }) {
   const projectDirectories = optionValues(args, "--project-directory", "--project-directory").map((value) => resolve(cwd, value));
   const uniqueProjectDirectories = [...new Set(projectDirectories)];
   if (uniqueProjectDirectories.length > 1) throw new Error("compose_project_root_ambiguous");
 
-  const composeRoots = optionValues(args, "-f", "--file").map((value) => dirname(resolve(cwd, value)));
+  const environmentFiles = env.COMPOSE_FILE ? String(env.COMPOSE_FILE).split(pathDelimiter).filter(Boolean) : [];
+  const composeRoots = [...optionValues(args, "-f", "--file"), ...environmentFiles].map((value) => dirname(resolve(cwd, value)));
   const uniqueComposeRoots = [...new Set(composeRoots)];
   if (uniqueComposeRoots.length > 1) throw new Error("compose_project_root_ambiguous");
 

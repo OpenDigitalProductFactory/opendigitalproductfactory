@@ -34,3 +34,15 @@ test("project-directory and compose file mismatch fails closed", () => {
     /compose_project_root_mismatch/,
   );
 });
+
+test("COMPOSE_FILE participates in root resolution with host delimiter semantics", () => {
+  const root = resolve("C:/install");
+  assert.equal(resolveComposeInstallContext({ cwd: resolve("C:/elsewhere"), args: ["ps"], env: { COMPOSE_FILE: `${join(root, "docker-compose.yml")};${join(root, "overlay.yml")}` }, pathDelimiter: ";" }).projectRoot, root);
+});
+
+test("CLI compose files cannot mask a different COMPOSE_FILE root", () => {
+  assert.throws(
+    () => resolveComposeInstallContext({ cwd: resolve("C:/elsewhere"), args: ["-f", "C:/one/docker-compose.yml", "ps"], env: { COMPOSE_FILE: "C:/two/docker-compose.yml" }, pathDelimiter: ";" }),
+    /compose_project_root_ambiguous/,
+  );
+});

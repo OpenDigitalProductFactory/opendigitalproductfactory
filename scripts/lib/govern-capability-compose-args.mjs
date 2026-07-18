@@ -33,3 +33,17 @@ export function governCapabilityComposeArgs({ args, projection }) {
   const remaining = args.filter((_, index) => !remove.has(index));
   return [...[...resolved].sort().flatMap((profile) => ["--profile", profile]), ...remaining];
 }
+
+export function governCapabilityComposeEnvironment({ args, projection, composeProfiles = "" }) {
+  const environmentRequests = String(composeProfiles)
+    .split(",")
+    .map((profile) => profile.trim())
+    .filter(Boolean)
+    .flatMap((profile) => ["--profile", profile]);
+  const governedArgs = governCapabilityComposeArgs({ args: [...environmentRequests, ...args], projection });
+  const normalizedProfiles = [];
+  for (const request of requestedProfiles(governedArgs)) {
+    if (!normalizedProfiles.includes(request.profile)) normalizedProfiles.push(request.profile);
+  }
+  return { args: governedArgs, composeProfiles: normalizedProfiles };
+}
