@@ -8,6 +8,7 @@ import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
 import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -107,7 +108,10 @@ export async function createAutonomousWorkRun(
     ...(input.delegatedPosture ? { delegatedPosture: input.delegatedPosture } : {}),
   } as Prisma.InputJsonValue;
 
-  return prisma.taskRun.create({
+  return prisma.$transaction(async (tx) => {
+    const source = taskRunSourceForTrigger(input.trigger);
+    await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
+    return tx.taskRun.create({
     data: {
       taskRunId: createPublicTaskRunId(input.trigger),
       userId: input.userId,
@@ -119,13 +123,14 @@ export async function createAutonomousWorkRun(
       routeContext: input.routeContext,
       title: input.title,
       objective: input.objective.slice(0, 1000),
-      source: taskRunSourceForTrigger(input.trigger),
+      source,
       status: initialStatusForTrigger(input.trigger),
       authorityScope: input.authorityScope ?? [],
       a2aMetadata,
     },
     select: { id: true, taskRunId: true, contextId: true },
-  });
+    });
+  }, { isolationLevel: "Serializable" });
 }
 
 export async function findCurrentAutonomousWorkRun(input: {

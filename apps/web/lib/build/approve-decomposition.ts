@@ -28,6 +28,7 @@
 // violation per the invariant module's discipline.
 
 import { prisma } from "@dpf/db";
+import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { generateBuildId, normalizeHappyPathState } from "@/lib/explore/feature-build-types";
 import type { BuildDesignDoc, ReviewResult } from "@/lib/explore/feature-build-types";
 import { isPlanReviewOscillating } from "@/lib/build/plan-oscillation-decomposition";
@@ -329,6 +330,9 @@ export async function approveDecomposition(
   };
 
   const txResult = await db.$transaction(async (tx) => {
+    if ("$queryRaw" in tx && "platformCapability" in tx && "runtimeCapabilityTransition" in tx) {
+      await admitRuntimeGuardedWork(tx as never, "build-studio-active");
+    }
     const createdEpic = await tx.epic.create({
       data: {
         epicId: epicIdLogical,

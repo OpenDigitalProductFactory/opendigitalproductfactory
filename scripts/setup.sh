@@ -101,6 +101,13 @@ ok "Dependencies installed"
 
 step "Generating environment files"
 
+# The portal only reads this key through its read-only /dpf-state mount. The
+# one-shot promoter receives the host path separately. Rotate only when there
+# are no live transition envelopes, because durable receipts are signed by it.
+DPF_STATE_DIR_VALUE="${DPF_STATE_DIR:-$HOME/.dpf}"
+node scripts/rotate-runtime-transition-secret.mjs --state-dir "$DPF_STATE_DIR_VALUE" --initialize >/dev/null || fail "Runtime transition signing key initialization failed"
+ok "Runtime transition signing key is present with owner-only permissions"
+
 if [ ! -f apps/web/.env.local ]; then
   cp .env.example apps/web/.env.local
   AUTH_SECRET_VAL="$(dpf_random_secret_hex 32)"

@@ -297,8 +297,8 @@ test("rejects duplicate service records", () => {
 });
 
 test("requires the single supported positive integer manifest version", () => {
-  assert.equal(SUPPORTED_MANIFEST_VERSION, 1);
-  for (const version of [undefined, 0, 1.5, 2]) {
+  assert.equal(SUPPORTED_MANIFEST_VERSION, 2);
+  for (const version of [undefined, 0, 1, 1.5, 3]) {
     const candidate = manifest();
     if (version === undefined) delete candidate.version;
     else candidate.version = version;

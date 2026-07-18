@@ -51,6 +51,7 @@ import {
   deriveResumeImplementationMode,
   formatResumeImplementationOutcomeMessage,
 } from "@/lib/build/build-actions-core";
+import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
@@ -97,6 +98,7 @@ export async function createFeatureBuild(input: {
   const buildId = generateBuildId();
 
   const result = await prisma.$transaction(async (tx) => {
+    await admitRuntimeGuardedWork(tx as never, "build-studio-active");
     const created = await tx.featureBuild.create({
       data: {
         buildId,

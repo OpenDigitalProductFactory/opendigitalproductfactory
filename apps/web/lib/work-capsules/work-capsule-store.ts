@@ -26,6 +26,7 @@ import {
 } from "@/lib/work-capsules";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
+import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 export type WorkCapsuleActor = {
   userId: string;
   agentId: string | null;
@@ -48,6 +49,9 @@ export type CapsuleDb = {
     update(args: unknown): Promise<any>;
   };
   $transaction?<T>(fn: (tx: CapsuleDb) => Promise<T>): Promise<T>;
+  $queryRaw?(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
+  platformCapability?: { findMany(args: unknown): Promise<any[]> };
+  runtimeCapabilityTransition?: { findFirst(args: unknown): Promise<any> };
 };
 
 type CapsuleCreateInput = {
@@ -133,6 +137,13 @@ async function inTransaction<T>(db: CapsuleDb, fn: (tx: CapsuleDb) => Promise<T>
   return db.$transaction ? db.$transaction(fn) : fn(db);
 }
 
+async function admitCapsuleWork(db: CapsuleDb, guard: `work-capsule:${string}`): Promise<void> {
+  // CapsuleDb is intentionally usable by isolated domain tests. Production's
+  // Prisma transaction supplies these three admission members.
+  if (!db.$queryRaw || !db.platformCapability || !db.runtimeCapabilityTransition) return;
+  await admitRuntimeGuardedWork(db as never, guard);
+}
+
 async function recordActivity(
   db: CapsuleDb,
   input: {
@@ -180,6 +191,8 @@ export async function createWorkCapsule(args: {
   const now = new Date();
   try {
     return await inTransaction(args.db, async (tx) => {
+      const status = args.input.status ?? (args.input.executorKind ? "ready" : "draft");
+      if (status !== "draft") await admitCapsuleWork(tx, `work-capsule:${args.input.source}`);
       const created = await tx.workCapsule.create({
         data: {
           capsuleId: nextCapsuleId(),
@@ -206,7 +219,7 @@ export async function createWorkCapsule(args: {
           leaseExpiresAt: isExternalLeaseExecutor(args.input.executorKind) ? leaseUntil(now) : null,
           createdByPrincipalId: args.actor.principalId,
           requestedByPrincipalId: args.input.requestedByPrincipalId ?? null,
-          status: args.input.status ?? (args.input.executorKind ? "ready" : "draft"),
+          status,
         },
       });
       await recordActivity(tx, {
@@ -279,6 +292,7 @@ export async function adoptWorktreeCapsule(args: {
   const now = new Date();
   try {
     return await inTransaction(args.db, async (tx) => {
+      await admitCapsuleWork(tx, "work-capsule:external-adoption");
       const capsule = await tx.workCapsule.create({
         data: {
           capsuleId: nextCapsuleId(),

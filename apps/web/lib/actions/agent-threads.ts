@@ -5,6 +5,7 @@ import { prisma } from "@dpf/db";
 import { THREAD_ERRORS, ThreadSpawnError } from "./agent-thread-errors";
 import { dispatchAgentThread } from "./agent-thread-dispatcher";
 import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
+import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 
 type SpawnWorkThreadOptions = {
   title?: string;
@@ -89,6 +90,7 @@ export async function spawnWorkThread(
       });
 
       const taskRunId = createId();
+      await admitRuntimeGuardedWork(tx as never, "task-run:coworker");
       const tr = await tx.taskRun.create({
         data: {
           taskRunId,

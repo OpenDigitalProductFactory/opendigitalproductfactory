@@ -827,6 +827,7 @@
       "anchors": [
         "platform-substrate-boundaries-and-budgets",
         "boundary-inventory",
+        "split-authority-and-transitions",
         "evidence-and-ratchets",
         "update-and-check-procedure",
         "scope-and-exclusions",

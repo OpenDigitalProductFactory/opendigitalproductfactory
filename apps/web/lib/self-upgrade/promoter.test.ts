@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   buildPromoterCommand,
   decidePromoterEnsureAction,
@@ -17,6 +20,33 @@ const BASE = {
 };
 
 describe("buildPromoterCommand", () => {
+  it("reserves host transition authority without requiring an apply envelope", () => {
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeTransitionAuthorityOperation: "reserve" });
+    expect(args.slice(-3)).toEqual(["--runtime-transition-authority", "reserve", "RCT-123"]);
+    expect(args).toContain("/state:/dpf-state");
+    expect(args).not.toContain("--runtime-capability-transition");
+  });
+  it("requires and forwards the opaque token when releasing authority", () => {
+    const token = "a".repeat(64);
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeTransitionAuthorityOperation: "release", runtimeTransitionAuthorityToken: token });
+    expect(args.slice(-4)).toEqual(["--runtime-transition-authority", "release", "RCT-123", token]);
+  });
+  it("passes DB-active ids to startup authority reconciliation", () => {
+    const { args } = buildPromoterCommand({ ...BASE, stateDirHostPath: "/state", runtimeTransitionAuthorityOperation: "reconcile", runtimeTransitionActiveIds: ["RCT-1"] });
+    expect(args).toContain("DPF_ACTIVE_RUNTIME_TRANSITION_IDS=RCT-1");
+    expect(args.slice(-2)).toEqual(["--runtime-transition-authority", "reconcile"]);
+  });
+  it("builds governed runtime signing-key rotation", () => {
+    const { args } = buildPromoterCommand({ ...BASE, stateDirHostPath: "/state", runtimeTransitionAuthorityOperation: "rotate-secret" });
+    expect(args).toContain("/state:/dpf-state");
+    expect(args.at(-1)).toBe("--runtime-transition-secret-rotation");
+  });
+  it("selects the dedicated runtime capability transition mode without self-upgrade argv", () => {
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeCapabilityEnvelope: "e".repeat(16), runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecretFileHostPath: "/state/transition-secret" });
+    expect(args).toContain("--runtime-capability-transition");
+    expect(args).toContain("RCT-123");
+    expect(args).not.toContain("--self-upgrade");
+  });
   it("launches the promoter as a sibling container, not bash in-portal", () => {
     const { command, args } = buildPromoterCommand(BASE);
     const joined = args.join(" ");
@@ -34,6 +64,32 @@ describe("buildPromoterCommand", () => {
     const { args } = buildPromoterCommand(BASE);
     expect(args).toContain("/var/run/docker.sock:/var/run/docker.sock");
     expect(args).toContain("/Users/me/dpf:/host-source:ro");
+  });
+
+  it("gives transition mode only the state mount as writable and signs fixed protocol env", () => {
+    const envelope = "e".repeat(16);
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/host/.dpf", runtimeCapabilityEnvelope: envelope, runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecretFileHostPath: "/host/.dpf/transition-secret", composeFiles: ["docker-compose.yml"], composeProject: "dpf" });
+    expect(args.join(" ")).not.toContain("x".repeat(32));
+    expect(args).toContain("/Users/me/dpf:/host-source:ro");
+    expect(args).toContain("/host/.dpf:/dpf-state");
+    expect(args).toContain("DPF_STATE_DIR=/dpf-state");
+    expect(args).toContain(`DPF_RUNTIME_TRANSITION_ENVELOPE=${envelope}`);
+    expect(args.filter((arg) => arg.includes(":/host-source") && !arg.endsWith(":ro"))).toEqual([]);
+  });
+
+  it("rejects transition protocol values that could alter the docker command", () => {
+    const valid = {
+      ...BASE,
+      runtimeCapabilityTransitionId: "RCT-123",
+      stateDirHostPath: "/state",
+      runtimeCapabilityEnvelope: "e".repeat(16),
+      runtimeCapabilitySignature: "a".repeat(64),
+      runtimeCapabilitySecretFileHostPath: "/state/transition-secret",
+    };
+    expect(() => buildPromoterCommand({ ...valid, runtimeCapabilityTransitionId: "RCT-123\n--privileged" })).toThrow("invalid_runtime_transition_id");
+    expect(() => buildPromoterCommand({ ...valid, stateDirHostPath: "/state:/host:rw" })).toThrow("invalid_runtime_transition_host_path");
+    expect(() => buildPromoterCommand({ ...valid, runtimeCapabilityEnvelope: "-e BAD=value" })).toThrow("invalid_runtime_transition_envelope");
+    expect(() => buildPromoterCommand({ ...valid, runtimeCapabilitySignature: "not-a-signature" })).toThrow("invalid_runtime_transition_signature");
   });
 
   it("passes the promote contract via env and targets the promoter image", () => {
@@ -112,6 +168,23 @@ describe("buildPromoterCommand", () => {
     const joined = buildPromoterCommand(BASE).args.join(" ");
     expect(joined).not.toContain("PROMOTE_COMPOSE_FILES=");
     expect(joined).not.toContain("PROMOTE_COMPOSE_PROJECT=");
+  });
+});
+
+describe("runtime transition promoter entrypoint", () => {
+  it("recognizes the mode and fails closed without protocol secret material", async () => {
+    const script = resolve(process.cwd(), "../../scripts/promote.sh");
+    const stateDir = await mkdtemp(join(tmpdir(), "dpf-promoter-test-"));
+    try {
+      vi.stubEnv("DPF_STATE_DIR", stateDir);
+      vi.stubEnv("DPF_RUNTIME_TRANSITION_SECRET_FILE", join(stateDir, "missing-secret"));
+      const result = await runProcessWithBudget("bash", [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
+      expect(result.exitCode).toBe(78);
+      expect(result.stderr).toContain('"failure":"transition_secret_unreadable"');
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(stateDir, { recursive: true, force: true });
+    }
   });
 });
 

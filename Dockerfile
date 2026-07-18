@@ -48,6 +48,7 @@ FROM deps AS build
 # Copy source EXCLUDING pnpm-lock.yaml (preserve the deps stage lockfile which has no expo entries)
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY scripts/set-hooks-path.mjs ./scripts/
+COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docs/professions/ ./docs/professions/

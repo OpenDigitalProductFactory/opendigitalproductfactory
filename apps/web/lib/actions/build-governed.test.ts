@@ -99,6 +99,7 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
 }));
+vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 
 vi.mock("@/lib/integrate/sandbox/build-branch", () => ({
   isSandboxAvailable: mockIsSandboxAvailable,

@@ -24,6 +24,21 @@ interface ToolSnapshot {
   buildPhases: BuildPhaseTag[] | null;
 }
 
+export interface RuntimeCapabilitySeed {
+  capabilityId: string;
+  name: string;
+  description: string;
+  state: string;
+  manifest: Record<string, unknown>;
+}
+
+export const RUNTIME_CAPABILITY_IDS = [
+  "runtime:core", "runtime:build", "runtime:browser-automation",
+  "runtime:durable-automation", "runtime:local-speech",
+  "runtime:deep-observability", "runtime:adp-integration",
+  "runtime:development", "runtime:external-ai",
+] as const;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function computeDefinitionHash(tool: ToolSnapshot): string {
@@ -57,14 +72,80 @@ function loadToolsSnapshot(): ToolSnapshot[] {
   return JSON.parse(raw) as ToolSnapshot[];
 }
 
+export function validateRuntimeCapabilitySeeds(parsed: unknown): RuntimeCapabilitySeed[] {
+  if (!parsed || typeof parsed !== "object") throw new Error("Invalid runtime capability seed");
+  const seed = parsed as { version?: unknown; capabilities?: unknown };
+  if (seed.version !== 1 || !Array.isArray(seed.capabilities)) throw new Error("Unsupported runtime capability seed");
+  const capabilities = seed.capabilities as RuntimeCapabilitySeed[];
+  const ids = capabilities.map((capability) => capability?.capabilityId);
+  if (JSON.stringify(ids) !== JSON.stringify(RUNTIME_CAPABILITY_IDS)) throw new Error("Runtime capability seed identifiers do not match the canonical inventory");
+  const idSet = new Set(ids);
+  const allowedStates = new Set(["active", "disabled"]);
+  const allowedActivationPolicies = new Set(["always", "operator-controlled", "lifecycle-profile", "provider-configuration"]);
+  for (const capability of capabilities) {
+    if (!capability.name?.trim() || !capability.description?.trim()) throw new Error(`invalid_runtime_capability:${capability.capabilityId}`);
+    if (!allowedStates.has(capability.state)) throw new Error(`invalid_runtime_state:${capability.capabilityId}`);
+    const runtime = capability.manifest?.runtime;
+    if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) throw new Error(`invalid_runtime_manifest:${capability.capabilityId}`);
+    const definition = runtime as { dependencies?: unknown; activation?: { policy?: unknown }; workGuards?: unknown };
+    if (!Array.isArray(definition.dependencies) || definition.dependencies.some((dependency) => typeof dependency !== "string") || new Set(definition.dependencies).size !== definition.dependencies.length) throw new Error(`invalid_runtime_dependencies:${capability.capabilityId}`);
+    if (!definition.activation || typeof definition.activation.policy !== "string" || !allowedActivationPolicies.has(definition.activation.policy)) throw new Error(`invalid_runtime_activation:${capability.capabilityId}`);
+    if (capability.capabilityId !== "runtime:core" && !Array.isArray(definition.workGuards)) throw new Error(`missing_runtime_work_guards:${capability.capabilityId}`);
+    if (definition.workGuards !== undefined) {
+      if (!Array.isArray(definition.workGuards) || new Set(definition.workGuards).size !== definition.workGuards.length || definition.workGuards.some((guard) => typeof guard !== "string" || !/^(build-studio-active|task-run:[a-z0-9-]+|work-capsule:[a-z0-9-]+)$/.test(guard))) {
+        throw new Error(`invalid_runtime_work_guard:${capability.capabilityId}`);
+      }
+    }
+    for (const dependency of definition.dependencies) if (!idSet.has(dependency)) throw new Error(`unknown_runtime_dependency:${dependency}`);
+  }
+  const byId = new Map(capabilities.map((capability) => [capability.capabilityId, capability]));
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const visit = (id: string, path: string[]) => {
+    if (visiting.has(id)) throw new Error(`runtime_dependency_cycle:${[...path, id].join(" -> ")}`);
+    if (visited.has(id)) return;
+    visiting.add(id);
+    const runtime = byId.get(id)!.manifest.runtime as { dependencies: string[] };
+    for (const dependency of runtime.dependencies) visit(dependency, [...path, id]);
+    visiting.delete(id);
+    visited.add(id);
+  };
+  for (const id of ids) visit(id, []);
+  return capabilities;
+}
+
+function loadRuntimeCapabilities(): RuntimeCapabilitySeed[] {
+  const seedPath = join(__dirname, "../data/platform-runtime-capabilities.json");
+  return validateRuntimeCapabilitySeeds(JSON.parse(readFileSync(seedPath, "utf8")));
+}
+
+async function syncRuntimeCapabilities(prisma: PrismaClient, runtimeCapabilities: RuntimeCapabilitySeed[]): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    for (const capability of runtimeCapabilities) {
+      await tx.$queryRaw(Prisma.sql`SELECT "capabilityId" FROM "PlatformCapability" WHERE "capabilityId" = ${capability.capabilityId} FOR UPDATE`);
+      const existing = await tx.platformCapability.findUnique({ where: { capabilityId: capability.capabilityId }, select: { manifest: true, state: true } });
+      const existingManifest = existing?.manifest && typeof existing.manifest === "object" && !Array.isArray(existing.manifest) ? existing.manifest as Record<string, unknown> : {};
+      const manifest = { ...existingManifest, ...capability.manifest };
+      await tx.platformCapability.upsert({
+        where: { capabilityId: capability.capabilityId },
+        update: { name: capability.name, description: capability.description, manifest: manifest as Prisma.InputJsonValue },
+        create: { capabilityId: capability.capabilityId, name: capability.name, description: capability.description, state: capability.state, manifest: manifest as Prisma.InputJsonValue },
+      });
+    }
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export async function syncCapabilities(prisma: PrismaClient): Promise<void> {
+export async function syncCapabilities(prisma: PrismaClient, loaders: { tools?: () => ToolSnapshot[]; runtime?: () => RuntimeCapabilitySeed[] } = {}): Promise<void> {
   console.log("[sync-capabilities] Starting capability sync...");
+
+  const runtimeCapabilities = (loaders.runtime ?? loadRuntimeCapabilities)();
+  await syncRuntimeCapabilities(prisma, runtimeCapabilities);
 
   let tools: ToolSnapshot[];
   try {
-    tools = loadToolsSnapshot();
+    tools = (loaders.tools ?? loadToolsSnapshot)();
     console.log(`[sync-capabilities] Loaded ${tools.length} tools from snapshot.`);
   } catch (err) {
     console.error(
@@ -164,6 +245,6 @@ export async function syncCapabilities(prisma: PrismaClient): Promise<void> {
   }
 
   console.log(
-    `[sync-capabilities] Done. Synced ${seenCapabilityIds.size} platform capabilities.`
+    `[sync-capabilities] Done. Synced ${seenCapabilityIds.size} platform and ${runtimeCapabilities.length} runtime capabilities.`
   );
 }

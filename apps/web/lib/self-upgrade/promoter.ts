@@ -74,6 +74,20 @@ export type PromoterParams = {
    * under the 30-min DB watchdog so the orchestrator fails cleanly first.
    */
   timeoutMs?: number;
+  /** Selects the fail-closed runtime capability transition entrypoint. */
+  runtimeCapabilityTransitionId?: string;
+  runtimeCapabilityEnvelope?: string;
+  runtimeCapabilitySignature?: string;
+  /** Host file containing only the transition HMAC secret; mounted read-only. */
+  runtimeCapabilitySecretFileHostPath?: string;
+  stateDirHostPath?: string;
+  runtimeCapabilityProfiles?: string[];
+  /** Reserve/release the durable host authority marker without applying. */
+  runtimeTransitionAuthorityOperation?: "reserve" | "release" | "reconcile" | "rotate-secret";
+  /** Opaque lease token returned by reserve; mandatory for release. */
+  runtimeTransitionAuthorityToken?: string;
+  /** DB-active transition ids used only by startup reconciliation. */
+  runtimeTransitionActiveIds?: string[];
 };
 
 export type PromoterResult = {
@@ -81,6 +95,45 @@ export type PromoterResult = {
   stdout: string;
   stderr: string;
 };
+
+const RUNTIME_TRANSITION_ID = /^RCT-[A-Za-z0-9-]{1,48}$/;
+const RUNTIME_TRANSITION_TOKEN = /^[a-f0-9]{64}$/;
+const RUNTIME_TRANSITION_ENVELOPE = /^[A-Za-z0-9_-]{16,65536}$/;
+const RUNTIME_HOST_PATH_SEGMENT = /^[A-Za-z0-9._ -]+$/;
+
+function isSafeRuntimeHostPath(value: string): boolean {
+  if (value.length < 2 || value.length > 1024 || /[\0\r\n]/.test(value)) return false;
+  const normalized = value.replaceAll("\\", "/");
+  const absoluteBody = normalized.startsWith("/")
+    ? normalized.slice(1)
+    : /^[A-Za-z]:\//.test(normalized)
+      ? normalized.slice(3)
+      : "";
+  if (!absoluteBody) return false;
+  const segments = absoluteBody.split("/");
+  return segments.every((segment) => segment !== ".." && RUNTIME_HOST_PATH_SEGMENT.test(segment));
+}
+
+function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
+  if (params.runtimeCapabilityTransitionId && !RUNTIME_TRANSITION_ID.test(params.runtimeCapabilityTransitionId)) {
+    throw new Error("invalid_runtime_transition_id");
+  }
+  for (const id of params.runtimeTransitionActiveIds ?? []) {
+    if (!RUNTIME_TRANSITION_ID.test(id)) throw new Error("invalid_runtime_transition_id");
+  }
+  if (params.runtimeTransitionAuthorityToken && !RUNTIME_TRANSITION_TOKEN.test(params.runtimeTransitionAuthorityToken)) {
+    throw new Error("invalid_runtime_transition_authority_token");
+  }
+  for (const path of [params.stateDirHostPath, params.runtimeCapabilitySecretFileHostPath]) {
+    if (path && !isSafeRuntimeHostPath(path)) throw new Error("invalid_runtime_transition_host_path");
+  }
+  if (params.runtimeCapabilityEnvelope && !RUNTIME_TRANSITION_ENVELOPE.test(params.runtimeCapabilityEnvelope)) {
+    throw new Error("invalid_runtime_transition_envelope");
+  }
+  if (params.runtimeCapabilitySignature && !RUNTIME_TRANSITION_TOKEN.test(params.runtimeCapabilitySignature)) {
+    throw new Error("invalid_runtime_transition_signature");
+  }
+}
 
 /**
  * Pure builder for the `docker run` invocation that launches the promoter
@@ -90,6 +143,7 @@ export type PromoterResult = {
 export function buildPromoterCommand(
   params: PromoterParams,
 ): { command: string; args: string[] } {
+  validateRuntimeTransitionCommandInputs(params);
   const image =
     params.promoterImage && params.promoterImage.length > 0
       ? params.promoterImage
@@ -163,10 +217,31 @@ export function buildPromoterCommand(
     args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject}`);
   }
 
-  args.push(
-    image,
-    "--self-upgrade",
-  );
+  if (params.runtimeTransitionAuthorityOperation) {
+    if (!params.stateDirHostPath || (!["reconcile", "rotate-secret"].includes(params.runtimeTransitionAuthorityOperation) && !params.runtimeCapabilityTransitionId) ||
+      (params.runtimeTransitionAuthorityOperation === "release" && !params.runtimeTransitionAuthorityToken)) throw new Error("runtime_transition_authority_protocol_incomplete");
+    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_STATE_DIR=/dpf-state");
+    if (params.runtimeTransitionAuthorityOperation === "reconcile") args.push("-e", `DPF_ACTIVE_RUNTIME_TRANSITION_IDS=${(params.runtimeTransitionActiveIds ?? []).join(",")}`);
+  } else if (params.runtimeCapabilityTransitionId) {
+    if (!params.stateDirHostPath || !params.runtimeCapabilityEnvelope || !params.runtimeCapabilitySignature || !params.runtimeCapabilitySecretFileHostPath) {
+      throw new Error("runtime_transition_protocol_incomplete");
+    }
+    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-v", `${params.runtimeCapabilitySecretFileHostPath}:/run/secrets/dpf-runtime-transition:ro`);
+    args.push("-e", `DPF_STATE_DIR=/dpf-state`, "-e", `DPF_RUNTIME_TRANSITION_ENVELOPE=${params.runtimeCapabilityEnvelope}`,
+      "-e", `DPF_RUNTIME_TRANSITION_SIGNATURE=${params.runtimeCapabilitySignature}`);
+  }
+
+  args.push(image);
+  if (params.runtimeTransitionAuthorityOperation) {
+    if (params.runtimeTransitionAuthorityOperation === "rotate-secret") args.push("--runtime-transition-secret-rotation");
+    else args.push("--runtime-transition-authority", params.runtimeTransitionAuthorityOperation);
+    if (params.runtimeCapabilityTransitionId) args.push(params.runtimeCapabilityTransitionId);
+    if (params.runtimeTransitionAuthorityToken) args.push(params.runtimeTransitionAuthorityToken);
+  } else if (params.runtimeCapabilityTransitionId) {
+    args.push("--runtime-capability-transition", params.runtimeCapabilityTransitionId);
+  } else {
+    args.push("--self-upgrade");
+  }
 
   if (params.dryRun) args.push("--dry-run");
 
@@ -408,7 +483,7 @@ export async function runProcessWithBudget(
   opts: { timeoutMs: number; containerName?: string },
 ): Promise<PromoterResult> {
   return new Promise((done, reject) => {
-    const child = spawn(command, args, { env: { ...process.env } });
+    const child = spawn(command, args, { env: { ...process.env }, shell: false });
 
     let stdout = "";
     let stderr = "";

@@ -56,6 +56,14 @@ Write-Ok "Dependencies installed"
 
 Write-Step "Setting up environment"
 
+# Host-owned transition key. The portal sees it through /dpf-state:ro and the
+# one-shot promoter gets a file-only read-only bind. ACL inheritance is disabled
+# so another local account cannot forge a host transition receipt.
+$dpfStateDir = if ($env:DPF_STATE_DIR) { $env:DPF_STATE_DIR } else { Join-Path $env:USERPROFILE ".dpf" }
+& node scripts/rotate-runtime-transition-secret.mjs --state-dir $dpfStateDir --initialize | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Runtime transition signing key initialization failed" }
+Write-Ok "Runtime transition signing key is present with owner-only permissions"
+
 if (-not (Test-Path "apps\web\.env.local")) {
     Copy-Item ".env.example" "apps\web\.env.local"
     # Generate AUTH_SECRET

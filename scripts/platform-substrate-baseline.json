@@ -1,10 +1,10 @@
 {
   "changeRationale": {
-    "prismaModelCount": "IntegrationCallbackReceipt is the single durable idempotency/outbox record required to consolidate provider-local callback recovery in the connector kernel."
+    "prismaModelCount": "RuntimeCapabilityTransition plus its append-only event ledger provide one recoverable saga receipt and immutable terminal audit trail."
   },
-  "generatedAt": "2026-07-17T21:49:34.178Z",
-  "gitSha": "9c2f4790b987957e7b9327daf117353ef6a13367",
-  "manifestVersion": 1,
+  "generatedAt": "2026-07-18T01:29:41.944Z",
+  "gitSha": "0f2dd72c1dc1e04e49696261866a77a24b8d0f80",
+  "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
       "direction": "non-increasing",
@@ -20,11 +20,11 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 510
+      "value": 512
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 13924
+      "value": 13987
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",

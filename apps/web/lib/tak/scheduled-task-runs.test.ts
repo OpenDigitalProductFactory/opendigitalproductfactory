@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => {
   const create = vi.fn();
+  const prisma = { taskRun: { create } };
   return {
-    prisma: {
-      taskRun: { create },
-    },
+    prisma: { ...prisma, $transaction: vi.fn(async (callback) => callback(prisma)) },
   };
 });
+
+vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 
 describe("createTaskRunForScheduledTask", () => {
   beforeEach(async () => {

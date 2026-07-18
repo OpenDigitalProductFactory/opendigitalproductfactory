@@ -75,6 +75,7 @@ export function shouldRunPipelineStep(
  */
 export async function ensureBuildTaskRun(buildId: string): Promise<string> {
   const { prisma } = await import("@dpf/db");
+  const { admitRuntimeGuardedWork } = await import("@/lib/platform-runtime/work-admission");
 
   const existing = await prisma.taskRun.findFirst({
     where: { buildId, source: "build", status: { notIn: ["archived", "canceled"] } },
@@ -93,8 +94,9 @@ export async function ensureBuildTaskRun(buildId: string): Promise<string> {
   // Created in the schema-default "submitted" state, then transitioned via
   // the canonical markTaskRunWorking helper so status + lastHeartbeatAt move
   // atomically (BI-4ab6be39 stall-detection write guard).
-  await prisma.taskRun.create({
-    data: {
+  await prisma.$transaction(async (tx) => {
+    await admitRuntimeGuardedWork(tx as never, "task-run:build");
+    await tx.taskRun.create({ data: {
       taskRunId,
       userId: build.createdById,
       threadId: build.threadId ?? null,
@@ -103,8 +105,8 @@ export async function ensureBuildTaskRun(buildId: string): Promise<string> {
       title: `Build: ${build.title}`,
       objective: `Durable build execution for ${buildId} (BI-89030C9B Phase 1)`,
       source: "build",
-    },
-  });
+    } });
+  }, { isolationLevel: "Serializable" });
   const { markTaskRunWorking } = await import("@/lib/observability/heartbeat");
   await markTaskRunWorking(taskRunId);
   return taskRunId;

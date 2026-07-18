@@ -142,6 +142,8 @@ services:
       # directory at token generation time. Requires DPF_HOST_INSTALL_PATH
       # to be set in .env (done by the installer at setup time).
       - ${DPF_HOST_INSTALL_PATH:-.}:/host-dpf
+      # Signed transition receipts are host-owned; portal verifies read-only.
+      - ${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
@@ -179,6 +181,8 @@ services:
       DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
+      DPF_STATE_DIR_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}
+      DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}/runtime-transition.secret
       # Portal-side live-readiness checks run inside the container, where
       # process.cwd() is /app and not the host Git clone. Point git ancestry
       # helpers at the mounted host source so verify_live_install_readiness can
@@ -275,10 +279,6 @@ services:
     depends_on:
       portal-init:
         condition: service_completed_successfully
-      inngest:
-        condition: service_healthy
-      browser-use:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 10s

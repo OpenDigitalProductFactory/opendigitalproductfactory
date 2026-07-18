@@ -14,13 +14,13 @@ apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
 apps/web/components/storefront/SlotBookingFlow.tsx	919
 apps/web/components/workbooks/Grid.tsx	1358
 apps/web/instrumentation.test.ts	897
-apps/web/instrumentation.ts	1430
+apps/web/instrumentation.ts	1442
 apps/web/lib/actions/agent-coworker-external.test.ts	867
 apps/web/lib/actions/agent-coworker.ts	2788
-apps/web/lib/actions/agent-task-scheduler.test.ts	1121
+apps/web/lib/actions/agent-task-scheduler.test.ts	1124
 apps/web/lib/actions/ai-providers.ts	915
-apps/web/lib/actions/build-governed.test.ts	1142
-apps/web/lib/actions/build.ts	1727
+apps/web/lib/actions/build-governed.test.ts	1143
+apps/web/lib/actions/build.ts	1729
 apps/web/lib/actions/compliance.ts	867
 apps/web/lib/actions/crm.ts	1256
 apps/web/lib/actions/ea.ts	918
@@ -38,7 +38,7 @@ apps/web/lib/finance/ai-provider-finance.ts	1309
 apps/web/lib/inference/ai-provider-internals.ts	1228
 apps/web/lib/integrate/build-agent-prompts.ts	1064
 apps/web/lib/integrate/build-orchestrator.ts	1779
-apps/web/lib/integrate/sandbox/build-branch.ts	854
+apps/web/lib/integrate/sandbox/build-branch.ts	852
 apps/web/lib/marketing.ts	1367
 apps/web/lib/mcp-tools-backlog.test.ts	920
 apps/web/lib/mcp-tools.ts	2007
@@ -62,7 +62,7 @@ apps/web/lib/tak/route-context-map.ts	1226
 apps/web/lib/tak/route-context.ts	1239
 apps/web/lib/work-capsules/mcp-handlers.ts	884
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1103
-apps/web/lib/work-capsules/work-capsule-store.ts	1042
+apps/web/lib/work-capsules/work-capsule-store.ts	1056
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace/command-center.ts	1118

@@ -14,6 +14,23 @@ set -euo pipefail
 
 _self_upgrade=0
 _dry_run=0
+_promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
+if [[ "${1:-}" == "--runtime-transition-secret-rotation" ]]; then
+  exec node "$_promoter_dir/rotate-runtime-transition-secret.mjs" --state-dir "${DPF_STATE_DIR:-/dpf-state}" --rotate
+elif [[ "${1:-}" == "--runtime-transition-authority" ]]; then
+  _operation="${2:-}"
+  _transition_id="${3:-}"
+  _ownership_token="${4:-}"
+  exec node "$_promoter_dir/runtime-transition-authority.mjs" "$_operation" "$_transition_id" "$_ownership_token"
+elif [[ "${1:-}" == "--runtime-capability-transition" ]]; then
+  _transition_id="${2:-}"
+  [[ "$_transition_id" =~ ^RCT-[A-Za-z0-9-]{1,48}$ ]] || {
+    printf '{"status":"failed","failure":"invalid_transition_id"}\n' >&2
+    exit 64
+  }
+  exec node "$_promoter_dir/apply-runtime-capability-transition.mjs" --runtime-capability-transition "$_transition_id"
+fi
 
 for arg in "$@"; do
   case "$arg" in

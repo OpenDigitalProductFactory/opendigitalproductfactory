@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@dpf/db", () => {
   const create = vi.fn();
   const findFirst = vi.fn();
+  const prisma = { taskRun: { create, findFirst } };
   return {
-    prisma: {
-      taskRun: { create, findFirst },
-    },
+    prisma: { ...prisma, $transaction: vi.fn(async (callback) => callback(prisma)) },
   };
 });
+
+vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 
 vi.mock("@/lib/tak/agentic-loop", () => ({ runAgenticLoop: vi.fn() }));
 vi.mock("@/lib/tak/pattern-observer-service", () => ({
