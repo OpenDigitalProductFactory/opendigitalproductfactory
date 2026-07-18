@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "changes": [
+    {
+      "kind": "destructive",
+      "executor": "purgeStaleWidgets",
+      "holdCheck": false,
+      "dispositionEvidence": true
+    }
+  ]
+}
