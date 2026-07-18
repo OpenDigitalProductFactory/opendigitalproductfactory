@@ -60,6 +60,7 @@ export async function loadCapabilityProfileFixture(url) {
   return {
     enabledRuntimeCapabilities: (values.DPF_ENABLED_RUNTIME_CAPABILITIES ?? "").split(",").filter(Boolean),
     composeProfiles: (values.COMPOSE_PROFILES ?? "").split(",").filter(Boolean),
+    hostPlatform: values.DPF_HOST_PLATFORM || undefined,
   };
 }
 
@@ -92,7 +93,8 @@ export function checkCapabilityComposeProfiles({ composeSource, substrate, capab
     if (!compose) { errors.push(`missing_compose_service:${record.service}`); continue; }
     const capabilityActivated = record.capability !== "runtime:core" && (record.class === "capability-activated" || record.capability === "runtime:build");
     if (capabilityActivated && (compose.profiles.length === 0 || record.defaultRequired)) errors.push(`default_started_optional_service:${record.service}`);
-    if (capabilityActivated && !compose.profiles.includes(capabilityProfile(record.capability))) errors.push(`missing_capability_profile:${record.service}:${capabilityProfile(record.capability)}`);
+    const portable = record.hostPlatforms.length === 3;
+    if (capabilityActivated && portable && !compose.profiles.includes(capabilityProfile(record.capability))) errors.push(`missing_capability_profile:${record.service}:${capabilityProfile(record.capability)}`);
     if (record.defaultRequired !== (compose.profiles.length === 0)) errors.push(`default_required_mismatch:${record.service}`);
     if (JSON.stringify(sorted(record.profiles)) !== JSON.stringify(sorted(compose.profiles))) errors.push(`compose_profile_mismatch:${record.service}`);
     if (JSON.stringify(sorted(record.dependsOn)) !== JSON.stringify(sorted(compose.dependsOn))) errors.push(`compose_dependency_mismatch:${record.service}`);
@@ -101,6 +103,7 @@ export function checkCapabilityComposeProfiles({ composeSource, substrate, capab
   for (const service of services.values()) for (const dependencyName of service.dependsOn) {
     const dependency = services.get(dependencyName);
     if (!dependency || dependency.profiles.length === 0) continue;
+    if (service.profiles.length === 0) errors.push(`core_dependency_on_optional_profile:${service.service}:${dependencyName}`);
     for (const profile of service.profiles) if (!dependency.profiles.includes(profile)) {
       errors.push(`profile_dependency_unreachable:${service.service}:${dependencyName}:${profile}`);
     }
@@ -109,7 +112,7 @@ export function checkCapabilityComposeProfiles({ composeSource, substrate, capab
   const resolveFixture = (fixture) => {
     if (!capabilities || !catalog) throw new Error("fixture_resolution_requires_catalog_authorities");
     const runtimeCapabilities = withFixtureStates(capabilities, fixture.enabledRuntimeCapabilities);
-    const projection = resolveCapabilityServiceProjection({ substrate, capabilities: runtimeCapabilities, enabledRuntimeCapabilities: fixture.enabledRuntimeCapabilities });
+    const projection = resolveCapabilityServiceProjection({ substrate, capabilities: runtimeCapabilities, enabledRuntimeCapabilities: fixture.enabledRuntimeCapabilities, hostPlatform: fixture.hostPlatform });
     if (projection.catalogHash !== catalog.catalogHash) throw new Error("stale_capability_service_catalog");
     if (JSON.stringify(projection.composeProfiles) !== JSON.stringify(sorted(fixture.composeProfiles))) throw new Error(`fixture_profile_mismatch:${projection.composeProfiles.join(",")}:${fixture.composeProfiles.join(",")}`);
     return { composeServices: selectedComposeServices(services, fixture.composeProfiles), projectedServices: sorted(projection.requiredServices) };
@@ -130,6 +133,9 @@ async function main() {
     const rendered = result.resolveFixture(fixture);
     if (JSON.stringify(rendered.composeServices) !== JSON.stringify(rendered.projectedServices)) result.errors.push(`fixture_service_closure_mismatch:${name}:${rendered.composeServices.join(",")}:${rendered.projectedServices.join(",")}`);
   }
+  const linuxFixture = await loadCapabilityProfileFixture(new URL("./fixtures/capability-profiles/deep-observability-linux.env", import.meta.url));
+  const linuxRendered = result.resolveFixture(linuxFixture);
+  if (JSON.stringify(linuxRendered.composeServices) !== JSON.stringify(linuxRendered.projectedServices)) result.errors.push(`fixture_service_closure_mismatch:deep-observability-linux:${linuxRendered.composeServices.join(",")}:${linuxRendered.projectedServices.join(",")}`);
   if (result.errors.length) throw new Error(result.errors.join("\n"));
   process.stdout.write("capability_compose_profiles_ok\n");
 }

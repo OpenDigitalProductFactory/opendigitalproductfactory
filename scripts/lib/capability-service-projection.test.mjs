@@ -162,3 +162,19 @@ test("work guard values are closed and preserved in the catalog", () => {
     : entry);
   assert.throws(() => compileCapabilityServiceCatalog({ substrate, capabilities: invalid }), /invalid_runtime_work_guard:runtime:build/);
 });
+
+test("host projection excludes services unsupported by the target host", () => {
+  const hostSpecific = {
+    ...substrate,
+    services: substrate.services.map((entry) => entry.service === "dpf-stt"
+      ? { ...entry, hostPlatforms: ["linux"] }
+      : entry),
+  };
+  const enabled = new Set(["runtime:core", "runtime:local-speech"]);
+  const fixtureCapabilities = capabilities.map((entry) => ({ ...entry, state: enabled.has(entry.capabilityId) ? "active" : "disabled" }));
+  const windows = resolveCapabilityServiceProjection({ substrate: hostSpecific, capabilities: fixtureCapabilities, enabledRuntimeCapabilities: [...enabled], hostPlatform: "windows" });
+  const linux = resolveCapabilityServiceProjection({ substrate: hostSpecific, capabilities: fixtureCapabilities, enabledRuntimeCapabilities: [...enabled], hostPlatform: "linux" });
+  assert.ok(!windows.requiredServices.includes("dpf-stt"));
+  assert.ok(linux.requiredServices.includes("dpf-stt"));
+  assert.throws(() => resolveCapabilityServiceProjection({ substrate, capabilities: fixtureCapabilities, enabledRuntimeCapabilities: [...enabled], hostPlatform: "plan9" }), /invalid_host_platform:plan9/);
+});

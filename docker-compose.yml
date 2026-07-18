@@ -695,7 +695,7 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.52.1
     restart: unless-stopped
     logging: *default-logging
-    profiles: ["runtime-deep-observability", "linux-monitoring"]
+    profiles: ["linux-monitoring"]
     ports:
       - "8080:8080"
     volumes:
@@ -708,7 +708,7 @@ services:
     image: prom/node-exporter:v1.9.1
     restart: unless-stopped
     logging: *default-logging
-    profiles: ["runtime-deep-observability", "linux-monitoring"]
+    profiles: ["linux-monitoring"]
     ports:
       - "9100:9100"
     pid: host

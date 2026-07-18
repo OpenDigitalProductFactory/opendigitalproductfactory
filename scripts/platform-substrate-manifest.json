@@ -495,7 +495,6 @@
       "boundaryReason": "Separate cadvisor runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
-        "runtime-deep-observability",
         "linux-monitoring"
       ],
       "ports": [
@@ -522,7 +521,6 @@
       "boundaryReason": "Separate node-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
-        "runtime-deep-observability",
         "linux-monitoring"
       ],
       "ports": [

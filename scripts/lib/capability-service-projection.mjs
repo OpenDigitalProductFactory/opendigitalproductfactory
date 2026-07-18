@@ -129,8 +129,9 @@ export function compileCapabilityServiceCatalog(input) {
   return { ...content, catalogHash: hash(content) };
 }
 
-export function resolveCapabilityServiceProjection({ substrate, capabilities, enabledRuntimeCapabilities }) {
+export function resolveCapabilityServiceProjection({ substrate, capabilities, enabledRuntimeCapabilities, hostPlatform }) {
   if (!Array.isArray(enabledRuntimeCapabilities)) throw new Error("invalid_enabled_runtime_capabilities");
+  if (hostPlatform !== undefined && !HOST_PLATFORMS.has(hostPlatform)) throw new Error(`invalid_host_platform:${hostPlatform}`);
   const { capabilityById } = normalizeInputs({ substrate, capabilities });
   const catalog = compileCapabilityServiceCatalog({ substrate, capabilities });
   const enabled = new Set();
@@ -146,7 +147,8 @@ export function resolveCapabilityServiceProjection({ substrate, capabilities, en
   const liveEnabledKeys = [...capabilityById].filter(([, record]) => record.state === "active").map(([id]) => id).sort(compare);
   if (JSON.stringify(liveEnabledKeys) !== JSON.stringify(enabledKeys)) throw new Error("capability_state_stale");
   const enabledEntries = catalog.capabilities.filter((entry) => enabled.has(entry.capabilityId));
-  const enabledServices = enabledEntries.flatMap((entry) => entry.services);
+  const enabledServices = enabledEntries.flatMap((entry) => entry.services)
+    .filter((entry) => hostPlatform === undefined || entry.hostPlatforms.includes(hostPlatform));
   const enabledServiceByName = new Map(enabledServices.map((entry) => [entry.service, entry]));
   const selected = new Set();
   const include = (serviceName) => {
@@ -172,7 +174,9 @@ export function resolveCapabilityServiceProjection({ substrate, capabilities, en
     enabledRuntimeCapabilities: enabledKeys,
     requiredServices,
     inactiveOptionalServices: substrate.services.map((entry) => entry.service).filter((name) => !requiredSet.has(name)).sort(compare),
-    externalRuntimes: enabledEntries.flatMap((entry) => entry.externalRuntimes).sort((a, b) => compare(a.runtimeKey, b.runtimeKey)),
+    externalRuntimes: enabledEntries.flatMap((entry) => entry.externalRuntimes)
+      .filter((entry) => hostPlatform === undefined || entry.hostPlatforms.includes(hostPlatform))
+      .sort((a, b) => compare(a.runtimeKey, b.runtimeKey)),
     composeProfiles: [...new Set(serviceRequirements.flatMap((entry) => entry.profiles))].sort(compare),
     backupServices: serviceRequirements.filter((entry) => entry.backupPolicy === "included" || entry.backupPolicy === "separate-required").map((entry) => entry.service).sort(compare),
     healthRequirements: serviceRequirements.filter((entry) => entry.healthSemantics !== "none").map((entry) => ({ service: entry.service, semantics: entry.healthSemantics })).sort((a, b) => compare(a.service, b.service)),

@@ -340,8 +340,7 @@
             "8080:8080"
           ],
           "profiles": [
-            "linux-monitoring",
-            "runtime-deep-observability"
+            "linux-monitoring"
           ],
           "service": "cadvisor",
           "targetClassification": "capability-activated",
@@ -426,8 +425,7 @@
             "9100:9100"
           ],
           "profiles": [
-            "linux-monitoring",
-            "runtime-deep-observability"
+            "linux-monitoring"
           ],
           "service": "node-exporter",
           "targetClassification": "capability-activated",
@@ -1142,7 +1140,7 @@
       ]
     }
   ],
-  "catalogHash": "ef95ce321e1a559b4fbfd390a74550e345a0dbb1bb6e31ce18ced975e9e69827",
+  "catalogHash": "9ccc0a3cf2ffdd9a9b2631481656eef8a88584e0a6d4fefd660916671d1e69b8",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }
