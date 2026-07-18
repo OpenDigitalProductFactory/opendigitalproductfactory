@@ -53,6 +53,10 @@ export function computeCoverage(
   baseline: LegacyCoverageBaseline,
 ): CoverageReport {
   const baselined = new Set(baseline.entries.map((e) => baselineKey(e.prismaModel, e.field)));
+  // Whole-model gaps: a `field: "*"` entry covers every field of that model.
+  const wholeModelBaselined = new Set(
+    baseline.entries.filter((e) => e.field === "*").map((e) => e.prismaModel),
+  );
 
   let totalFields = 0;
   let registeredFields = 0;
@@ -61,13 +65,14 @@ export function computeCoverage(
 
   for (const model of models) {
     const registered = registry.byPrismaModel.has(model.name);
+    const modelBaselined = wholeModelBaselined.has(model.name);
     for (const field of model.fields) {
       totalFields += 1;
       if (registered) {
         registeredFields += 1;
         continue;
       }
-      if (baselined.has(baselineKey(model.name, field.name))) {
+      if (modelBaselined || baselined.has(baselineKey(model.name, field.name))) {
         baselinedFields += 1;
         continue;
       }

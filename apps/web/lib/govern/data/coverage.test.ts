@@ -64,6 +64,25 @@ describe("computeCoverage", () => {
     expect(() => assertFullCoverage(report)).toThrow(/New#y/);
   });
 
+  it("treats a whole-model (*) baseline entry as covering every field of that model", () => {
+    const wholeModelBaseline: LegacyCoverageBaseline = {
+      entries: [
+        {
+          prismaModel: "New",
+          field: "*",
+          owner: "data-steward",
+          risk: "medium",
+          remediationBI: "BI-DG-015",
+          deadline: "2027-06-30",
+        },
+        ...baseline.entries,
+      ],
+    };
+    const report = computeCoverage(MODELS, registry, wholeModelBaseline);
+    expect(report.violations).toEqual([]);
+    expect(report.baselinedFields).toBe(2); // Legacy.x + New.y (whole-model)
+  });
+
   it("passes once the new model is registered", () => {
     const reg2 = buildAssetRegistry([
       registeredAsset,
