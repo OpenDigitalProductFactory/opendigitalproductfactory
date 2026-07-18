@@ -28,6 +28,7 @@ export type CapabilityBackupReceipt = {
   target: string;
   status: "selected" | "optional_inactive" | "optional_degraded";
   selection: "selected" | "not_selected";
+  coverage?: "core-included" | "dedicated-runner";
   result?: unknown;
 };
 
@@ -48,7 +49,7 @@ type StepRunner = { run(name: string, operation: () => Promise<unknown> | unknow
 /** Runs only capability-owned candidates declared by the catalog; BET-5 engines are deliberately absent. */
 export async function runCapabilityOwnedBackupSteps(
   step: StepRunner,
-  state: Pick<OperationalCapabilityState, "backupServices" | "capabilityBackupCandidates">,
+  state: Pick<OperationalCapabilityState, "backupServices" | "capabilityBackupCandidates" | "capabilityBackupPolicies">,
   runners: Readonly<Record<string, CapabilityBackupRunner>> = {},
 ): Promise<CapabilityBackupReceipt[]> {
   const receipts: CapabilityBackupReceipt[] = [];
@@ -57,13 +58,17 @@ export async function runCapabilityOwnedBackupSteps(
       receipts.push({ target, status: "optional_inactive", selection: "not_selected" });
       continue;
     }
+    if (state.capabilityBackupPolicies[target] === "included") {
+      receipts.push({ target, status: "selected", selection: "selected", coverage: "core-included" });
+      continue;
+    }
     const runner = runners[target];
     if (!runner) {
       receipts.push({ target, status: "optional_degraded", selection: "selected" });
       continue;
     }
     const result = await step.run(`run-${target}-backup-scheduled`, runner);
-    receipts.push({ target, status: "selected", selection: "selected", result });
+    receipts.push({ target, status: "selected", selection: "selected", coverage: "dedicated-runner", result });
   }
   return receipts;
 }

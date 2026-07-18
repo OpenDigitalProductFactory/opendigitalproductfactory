@@ -35,6 +35,7 @@ export interface CapabilityServiceProjection {
   inactiveOptionalServices: string[];
   backupServices: string[];
   capabilityBackupCandidates: string[];
+  capabilityBackupPolicies: Record<string, BackupPolicy>;
   serviceRequirements: CapabilityServiceRequirement[];
   externalRuntimes: ExternalRuntimeRequirement[];
 }
@@ -103,6 +104,11 @@ export function projectCapabilityServices(input: {
       .filter((service) => service.backupPolicy === "included" || service.backupPolicy === "separate-required")
       .map((service) => service.service)
       .sort(),
+    capabilityBackupPolicies: Object.fromEntries(generatedCatalog.capabilities
+      .filter((entry) => entry.capabilityId !== "runtime:core")
+      .flatMap((entry) => entry.services)
+      .filter((service) => service.backupPolicy === "included" || service.backupPolicy === "separate-required")
+      .map((service) => [service.service, service.backupPolicy])),
   };
 }
 

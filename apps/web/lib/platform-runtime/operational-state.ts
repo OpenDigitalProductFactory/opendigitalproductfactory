@@ -6,8 +6,6 @@ import {
 } from "./capability-service-projection";
 import { readFile } from "node:fs/promises";
 import { prisma } from "@dpf/db";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 
 export type OperationalServiceStatus = "required" | "optional_inactive" | "optional_degraded";
 export interface ObservedServiceState { composePresent: boolean; healthy: boolean | null }
@@ -29,6 +27,7 @@ export interface OperationalCapabilityState {
   observedServices: Record<string, ObservedServiceState>;
   backupServices: string[];
   capabilityBackupCandidates: string[];
+  capabilityBackupPolicies: Record<string, import("./capability-service-projection").BackupPolicy>;
   externalRuntimes: ExternalRuntimeRequirement[];
   providerState: Record<string, ObservedProviderState>;
   serviceStates: Record<string, OperationalServiceStatus>;
@@ -69,6 +68,7 @@ export function createOperationalCapabilityState(input: {
     observedServices: input.observedServices,
     backupServices: projection.backupServices,
     capabilityBackupCandidates: projection.capabilityBackupCandidates,
+    capabilityBackupPolicies: projection.capabilityBackupPolicies,
     externalRuntimes: projection.externalRuntimes,
     providerState: input.observedProviders,
     serviceStates,
@@ -80,6 +80,7 @@ export async function loadOperationalCapabilityState(input: {
   observedProviders: Record<string, ObservedProviderState>;
   readInstallSnapshot?: () => Promise<PersistedInstallSnapshot>;
   readCapabilityStates?: () => Promise<LiveCapabilityState[]>;
+  readObservedServices?: () => Promise<Record<string, ObservedServiceState>>;
 }): Promise<OperationalCapabilityState> {
   const readInstallSnapshot = input.readInstallSnapshot ?? (async () =>
     JSON.parse(await readFile("/dpf-state/install-state.json", "utf8")) as PersistedInstallSnapshot);
@@ -93,7 +94,7 @@ export async function loadOperationalCapabilityState(input: {
   const [installSnapshot, capabilityStates, observedServices] = await Promise.all([
     readInstallSnapshot(),
     readCapabilityStates(),
-    input.observedServices ? Promise.resolve(input.observedServices) : observeComposeServices(),
+    input.observedServices ? Promise.resolve(input.observedServices) : (input.readObservedServices ?? readHostOperationalObservations)(),
   ]);
   return createOperationalCapabilityState({
     installSnapshot,
@@ -103,23 +104,8 @@ export async function loadOperationalCapabilityState(input: {
   });
 }
 
-const execFileAsync = promisify(execFile);
-export async function observeComposeServices(): Promise<Record<string, ObservedServiceState>> {
-  const { stdout } = await execFileAsync("docker", ["compose", "ps", "--format", "json", "--all"], { timeout: 10_000, encoding: "utf8" });
-  const trimmed = stdout.trim();
-  if (!trimmed) return {};
-  let records: Array<Record<string, unknown>>;
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    records = Array.isArray(parsed) ? parsed as Array<Record<string, unknown>> : [parsed as Record<string, unknown>];
-  } catch {
-    records = trimmed.split(/\r?\n/).map((line) => JSON.parse(line) as Record<string, unknown>);
-  }
-  return Object.fromEntries(records.map((record) => {
-    const service = String(record.Service ?? record.service ?? "");
-    if (!service) throw new Error("compose_observation_missing_service");
-    const state = String(record.State ?? record.state ?? "").toLowerCase();
-    const health = String(record.Health ?? record.health ?? "").toLowerCase();
-    return [service, { composePresent: true, healthy: state === "running" && (!health || health === "healthy") }];
-  }));
+async function readHostOperationalObservations(): Promise<Record<string, ObservedServiceState>> {
+  const boundary = JSON.parse(await readFile("/dpf-state/operational-capability-state.json", "utf8")) as { observedServices?: unknown };
+  if (!boundary.observedServices || typeof boundary.observedServices !== "object") throw new Error("host_operational_observations_missing");
+  return boundary.observedServices as Record<string, ObservedServiceState>;
 }

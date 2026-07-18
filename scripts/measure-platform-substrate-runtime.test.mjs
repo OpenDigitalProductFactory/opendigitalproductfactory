@@ -8,7 +8,8 @@ const modulePath = "./measure-platform-substrate-runtime.mjs";
 
 const manifest = {
   version: 1,
-  operationalState: { serviceStates: { postgres: "required", portal: "required", optional: "optional_degraded", inactive: "optional_inactive", "linux-only": "optional_inactive" } },
+  capabilityCatalogHash: "catalog-fixture",
+  operationalState: { catalogVersion: 1, catalogHash: "catalog-fixture", capabilityStateVersion: "state-fixture", serviceStates: { postgres: "required", portal: "required", optional: "optional_degraded", inactive: "optional_inactive", "linux-only": "optional_inactive" } },
   services: [
     { service: "postgres", capability: "postgres", defaultRequired: true, healthSemantics: "compose-healthcheck", hostPlatforms: ["windows", "macos", "linux"] },
     { service: "portal", capability: "portal", defaultRequired: true, healthSemantics: "compose-healthcheck", hostPlatforms: ["windows", "macos", "linux"] },
@@ -70,6 +71,18 @@ test("runtime diagnostics consume serialized operational state for inactive and 
   await assert.rejects(collectRuntimeMeasurements({ manifest: { ...manifest, operationalState: undefined }, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal", lease: { id: "l", environmentKey: "local-integration-ci" }, hostProfile: "windows-x64" }), /OperationalCapabilityState/);
 });
 
+test("production runner reads explicit serialized operational state path and fails closed on stale identity", async () => {
+  const { runRuntimeMeasurement } = await import(modulePath);
+  const dir = await mkdtemp(join(tmpdir(), "dpf-runtime-state-"));
+  const manifestPath = join(dir, "manifest.json"), statePath = join(dir, "state.json"), baselinePath = join(dir, "baseline.json");
+  await writeFile(manifestPath, JSON.stringify({ ...manifest, operationalState: undefined }));
+  await writeFile(statePath, JSON.stringify(manifest.operationalState));
+  const base = { manifestPath, operationalStatePath: statePath, baselinePath, update: true, lease: governedLease, verifyLease: verifyGovernedLease, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal" };
+  assert.equal((await runRuntimeMeasurement(base)).exitCode, 0);
+  await writeFile(statePath, JSON.stringify({ ...manifest.operationalState, catalogHash: "stale" }));
+  assert.match((await runRuntimeMeasurement(base)).stderr, /catalog identity is stale/);
+});
+
 test("normalizes Node host platform names before applying hostPlatforms", async () => {
   const { normalizeHostPlatform } = await import(modulePath);
   assert.equal(normalizeHostPlatform("win32"), "windows");
@@ -82,7 +95,7 @@ test("stopped required services are unhealthy but successful lifecycle completio
   const lifecycleManifest = { version: 1, services: [
     ...manifest.services,
     { service: "portal-init", capability: "portal-init", defaultRequired: true, healthSemantics: "lifecycle-completion", hostPlatforms: ["windows", "macos", "linux"] },
-  ], operationalState: { serviceStates: { ...manifest.operationalState.serviceStates, "portal-init": "required" } } };
+  ], capabilityCatalogHash: manifest.capabilityCatalogHash, operationalState: { ...manifest.operationalState, serviceStates: { ...manifest.operationalState.serviceStates, "portal-init": "required" } } };
   const fetchJson = async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" };
   const basePs = [...ps, { Service: "portal-init", Name: "dpf-portal-init-1", State: "exited", Health: "", ExitCode: 0 }];
   const execute = (command, args) => args[0] === "compose" ? JSON.stringify(basePs) : stats.map(JSON.stringify).join("\n");

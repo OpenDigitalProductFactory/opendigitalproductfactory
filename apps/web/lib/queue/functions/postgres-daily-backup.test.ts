@@ -19,22 +19,22 @@ describe("capability-owned backup selection", () => {
     const browserRunner = vi.fn(async () => ({ ok: true }));
     const receipts = await runCapabilityOwnedBackupSteps({ run }, {
       backupServices: ["postgres", "browser-use"],
-      capabilityBackupCandidates: ["browser-use", "dpf-tts"],
+      capabilityBackupCandidates: ["browser-use", "dpf-tts"], capabilityBackupPolicies: { "browser-use": "separate-required", "dpf-tts": "separate-required" },
     } as never, { "browser-use": browserRunner });
     expect(browserRunner).toHaveBeenCalledOnce();
     expect(receipts).toEqual([
-      { target: "browser-use", status: "selected", selection: "selected", result: { ok: true } },
+      { target: "browser-use", status: "selected", selection: "selected", coverage: "dedicated-runner", result: { ok: true } },
       { target: "dpf-tts", status: "optional_inactive", selection: "not_selected" },
     ]);
   });
 
   it("receipts every enabled production target as selected when no concrete runner exists", async () => {
     const receipts = await runCapabilityOwnedBackupSteps({ run: vi.fn() }, {
-      backupServices: ["postgres", "adp"], capabilityBackupCandidates: ["adp", "browser-use"],
+      backupServices: ["postgres", "adp", "browser-use"], capabilityBackupCandidates: ["adp", "browser-use"], capabilityBackupPolicies: { adp: "included", "browser-use": "separate-required" },
     } as never);
     expect(receipts).toEqual([
-      { target: "adp", status: "optional_degraded", selection: "selected" },
-      { target: "browser-use", status: "optional_inactive", selection: "not_selected" },
+      { target: "adp", status: "selected", selection: "selected", coverage: "core-included" },
+      { target: "browser-use", status: "optional_degraded", selection: "selected" },
     ]);
   });
 });

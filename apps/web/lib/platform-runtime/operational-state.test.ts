@@ -69,6 +69,16 @@ describe("createOperationalCapabilityState", () => {
     });
     expect(state.enabledRuntimeCapabilities).toEqual(["runtime:core"]);
   });
+
+  it("loads observations from the host-authority callback when callers do not inject them", async () => {
+    const state = await loadOperationalCapabilityState({
+      observedProviders: {},
+      readInstallSnapshot: async () => ({ enabledRuntimeCapabilities: ["runtime:core"] }),
+      readCapabilityStates: async () => catalogStates(["runtime:core"]),
+      readObservedServices: async () => ({ postgres: { composePresent: true, healthy: true } }),
+    });
+    expect(state.observedServices.postgres.healthy).toBe(true);
+  });
 });
 
 const CAPABILITIES = ["runtime:adp-integration", "runtime:browser-automation", "runtime:build", "runtime:core", "runtime:deep-observability", "runtime:development", "runtime:durable-automation", "runtime:external-ai", "runtime:local-speech"];

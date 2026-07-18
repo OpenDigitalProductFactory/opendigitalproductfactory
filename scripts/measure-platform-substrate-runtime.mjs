@@ -140,6 +140,10 @@ export async function collectRuntimeMeasurements(options) {
   const eligible = options.manifest.services.filter((item) => !Array.isArray(item.hostPlatforms) || item.hostPlatforms.includes(hostPlatform));
   const operationalState = options.operationalState ?? options.manifest.operationalState;
   if (!operationalState?.serviceStates || typeof operationalState.serviceStates !== "object") throw new Error("Serialized OperationalCapabilityState is required for runtime diagnostics");
+  if (!Number.isInteger(operationalState.catalogVersion) || typeof operationalState.catalogHash !== "string" || typeof operationalState.capabilityStateVersion !== "string") throw new Error("OperationalCapabilityState catalog/state identity is missing");
+  if (options.manifest.capabilityCatalogHash && operationalState.catalogHash !== options.manifest.capabilityCatalogHash) throw new Error("OperationalCapabilityState catalog identity is stale");
+  const allowedStatuses = new Set(["required", "optional_inactive", "optional_degraded"]);
+  for (const [key, value] of Object.entries(operationalState.serviceStates)) if (!manifestByService.has(key) || !allowedStatuses.has(value)) throw new Error(`OperationalCapabilityState has invalid service status: ${key}=${value}`);
   const required = eligible.filter((item) => operationalState.serviceStates[item.service] === "required");
   const optionalInactive = eligible.filter((item) => operationalState.serviceStates[item.service] === "optional_inactive");
   const optionalDegraded = eligible.filter((item) => operationalState.serviceStates[item.service] === "optional_degraded");
@@ -265,10 +269,11 @@ export async function runRuntimeMeasurement(options = {}) {
   try {
     await verifyActiveLease(options.lease, options);
     const manifest = await loadJson(manifestPath, "substrate manifest");
-    const current = await collectRuntimeMeasurements({ ...options, manifest });
+    const operationalState = options.operationalState ?? (options.operationalStatePath ? await loadJson(options.operationalStatePath, "operational capability state") : manifest.operationalState);
+    const current = await collectRuntimeMeasurements({ ...options, manifest, operationalState });
     if (options.update) {
       await verifyActiveLease(options.lease, options);
-      const second = await collectRuntimeMeasurements({ ...options, manifest });
+      const second = await collectRuntimeMeasurements({ ...options, manifest, operationalState });
       const baseline = mergeStableSamples(current, second);
       await verifyActiveLease(options.lease, options);
       await atomicWriteFile(baselinePath, serializeRuntimeBaseline(baseline), options.io);
@@ -284,7 +289,7 @@ export async function runRuntimeMeasurement(options = {}) {
 
 function parseArgs(argv) {
   const options = { lease: { id: process.env.DPF_NONPROD_LEASE_ID, environmentKey: process.env.DPF_NONPROD_ENVIRONMENT_KEY, ownerSessionId: process.env.DPF_NONPROD_OWNER_SESSION_ID }, portalUrl: process.env.DPF_PORTAL_URL ?? "http://127.0.0.1:3000" };
-  const paths = { "--manifest": "manifestPath", "--baseline": "baselinePath", "--portal-url": "portalUrl", "--lease-id": "leaseId", "--environment-key": "environmentKey", "--owner-session-id": "ownerSessionId", "--mcp-url": "mcpUrl" };
+  const paths = { "--manifest": "manifestPath", "--baseline": "baselinePath", "--operational-state": "operationalStatePath", "--portal-url": "portalUrl", "--lease-id": "leaseId", "--environment-key": "environmentKey", "--owner-session-id": "ownerSessionId", "--mcp-url": "mcpUrl" };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--json") options.json = true;
     else if (argv[i] === "--update") options.update = true;
