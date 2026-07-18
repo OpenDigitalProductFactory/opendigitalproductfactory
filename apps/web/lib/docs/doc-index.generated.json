@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 516,
+  "pageCount": 517,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -996,6 +996,23 @@
         "ui-token-styling-the-style-drift-ratchet",
         "the-ratchet",
         "adopting-the-primitives-as-touched"
+      ]
+    },
+    "docs/architecture/unified-connector-kernel.md": {
+      "publicHref": "/architecture/unified-connector-kernel/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "unified-connector-kernel",
+        "ownership-boundary",
+        "connector-definition",
+        "credentials-state-and-health",
+        "durable-audit-and-callback-delivery",
+        "enforcement",
+        "adding-or-migrating-a-connector",
+        "why-this-is-not-a-mega-service",
+        "delivery-status"
       ]
     },
     "docs/architecture/unified-development-tracking.md": {

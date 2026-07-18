@@ -1,24 +1,24 @@
 import { prisma } from "@dpf/db";
-import { decryptJson, encryptJson } from "@/lib/govern/credential-crypto";
+
 import {
-  probeMicrosoft365Communications,
-  type Microsoft365CommunicationsProbeResult,
+  createMicrosoft365CommunicationsAdapter,
+  readStoredMicrosoft365CommunicationsCredentials,
+} from "@/lib/integrations/connectors/microsoft365-communications";
+import {
+  createConnectorCredentialStore,
+  createPrismaConnectorCredentialRepository,
+} from "@/lib/integrations/kernel/credential-store";
+import type { ConnectorAuditRepository } from "@/lib/integrations/kernel/audit";
+import { ConnectorError } from "@/lib/integrations/kernel/error";
+import { recordConnectorAuditInTransaction } from "@/lib/integrations/kernel/lifecycle";
+import type {
+  Microsoft365CommunicationsProbeResult,
 } from "./communications-client";
-import {
-  exchangeMicrosoftGraphClientCredentials,
-  type ExchangeMicrosoftGraphClientCredentialsResult,
+import type {
+  ExchangeMicrosoftGraphClientCredentialsResult,
 } from "./token-client";
 
 const INTEGRATION_ID = "microsoft365-communications";
-
-interface StoredMicrosoft365Fields {
-  tenantId?: string;
-  clientId?: string;
-  clientSecret?: string;
-  mailboxUserPrincipalName?: string;
-  tenantDisplayName?: string;
-  mailboxDisplayName?: string;
-}
 
 interface Microsoft365PreviewDeps {
   exchangeMicrosoftGraphClientCredentials?: (args: {
@@ -30,6 +30,7 @@ interface Microsoft365PreviewDeps {
     mailboxUserPrincipalName: string;
     accessToken: string;
   }) => Promise<Microsoft365CommunicationsProbeResult>;
+  now?: () => Date;
 }
 
 export type Microsoft365CommunicationsPreviewResult =
@@ -42,100 +43,96 @@ export type Microsoft365CommunicationsPreviewResult =
   | { state: "unavailable" }
   | { state: "error"; error: string };
 
+type MicrosoftTransaction = {
+  integrationCredential: Parameters<typeof createPrismaConnectorCredentialRepository>[0]["integrationCredential"];
+  integrationToolCallLog: ConnectorAuditRepository;
+};
+
 export async function loadMicrosoft365CommunicationsPreview(
   deps: Microsoft365PreviewDeps = {},
 ): Promise<Microsoft365CommunicationsPreviewResult> {
   const record = await prisma.integrationCredential.findUnique({
     where: { integrationId: INTEGRATION_ID },
   });
+  if (!record?.fieldsEnc) return { state: "unavailable" };
 
-  if (!record?.fieldsEnc) {
-    return { state: "unavailable" };
-  }
+  const stored = readStoredMicrosoft365CommunicationsCredentials(record);
+  if (!stored) return { state: "unavailable" };
 
-  const fields = decryptJson<StoredMicrosoft365Fields>(record.fieldsEnc);
-  if (!isConfigured(fields)) {
-    return { state: "unavailable" };
-  }
-
-  const exchange =
-    deps.exchangeMicrosoftGraphClientCredentials ?? exchangeMicrosoftGraphClientCredentials;
-  const probe = deps.probeMicrosoft365Communications ?? probeMicrosoft365Communications;
+  const now = deps.now ?? (() => new Date());
+  const startedAt = now();
+  let transitionAt: Date | null = null;
+  const adapter = createMicrosoft365CommunicationsAdapter({
+    exchange: deps.exchangeMicrosoftGraphClientCredentials,
+    probe: deps.probeMicrosoft365Communications,
+  });
+  const repository = createPrismaConnectorCredentialRepository(
+    prisma as unknown as Parameters<typeof createPrismaConnectorCredentialRepository<MicrosoftTransaction>>[0],
+  );
+  const store = createConnectorCredentialStore({
+    repository,
+    now: () => transitionAt ?? now(),
+  });
 
   try {
-    const token = await exchange({
-      tenantId: fields.tenantId,
-      clientId: fields.clientId,
-      clientSecret: fields.clientSecret,
-    });
-    const preview = await probe({
-      mailboxUserPrincipalName: fields.mailboxUserPrincipalName,
-      accessToken: token.accessToken,
-    });
-
-    const now = new Date();
-
-    await prisma.integrationCredential.update({
-      where: { integrationId: INTEGRATION_ID },
-      data: {
-        status: "connected",
-        fieldsEnc: encryptJson({
-          ...fields,
-          tenantDisplayName: preview.tenant.displayName,
-          mailboxDisplayName: preview.mailbox.displayName,
-        }),
-        tokenCacheEnc: encryptJson({
-          accessToken: token.accessToken,
-          tokenType: token.tokenType,
-          expiresAt: token.expiresAt.toISOString(),
-        }),
-        lastTestedAt: now,
-        lastErrorAt: null,
-        lastErrorMsg: null,
-      },
+    const connected = await adapter.preview(stored, startedAt);
+    transitionAt = now();
+    await store.composeInTransaction(async ({ credentials, transaction }) => {
+      await credentials.recordSuccessfulConnect(connected.credential);
+      await recordConnectorAuditInTransaction(transaction.integrationToolCallLog, {
+        connectorId: INTEGRATION_ID,
+        actor: { coworkerId: "microsoft365-communications-preview", userId: null },
+        operation: "health",
+        redactedInput: { mailboxUserPrincipalName: stored.mailboxUserPrincipalName },
+        responseKind: "connected",
+        resultCount: 1,
+        durationMs: Math.max(0, now().getTime() - startedAt.getTime()),
+      }, now);
     });
 
     return {
       state: "available",
-      preview: {
-        ...preview,
-        loadedAt: now.toISOString(),
-      },
+      preview: { ...connected.probe, loadedAt: transitionAt.toISOString() },
     };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Microsoft 365 communications preview failed";
-    const now = new Date();
-
-    await prisma.integrationCredential.update({
-      where: { integrationId: INTEGRATION_ID },
-      data: {
-        status: "error",
-        lastErrorAt: now,
-        lastErrorMsg: message,
-      },
+    transitionAt = now();
+    const message = error instanceof Error
+      ? error.message
+      : "Microsoft 365 communications preview failed";
+    await store.composeInTransaction(async ({ credentials, transaction }) => {
+      await credentials.recordFailedConnect({
+        integrationId: INTEGRATION_ID,
+        provider: "microsoft365",
+        reconnectFields: {
+          tenantId: stored.tenantId,
+          clientId: stored.clientId,
+          mailboxUserPrincipalName: stored.mailboxUserPrincipalName,
+        },
+        secretFields: { clientSecret: stored.clientSecret },
+        tokenEnvelope: {},
+        reconnectFieldsReusable: true,
+        lastTestedAtPolicy: "preserve",
+        error: {
+          kind: error instanceof ConnectorError && error.kind === "authentication"
+            ? "authentication"
+            : "provider",
+          safeMessage: message,
+        },
+      });
+      await recordConnectorAuditInTransaction(transaction.integrationToolCallLog, {
+        connectorId: INTEGRATION_ID,
+        actor: { coworkerId: "microsoft365-communications-preview", userId: null },
+        operation: "health",
+        redactedInput: { mailboxUserPrincipalName: stored.mailboxUserPrincipalName },
+        responseKind: "degraded",
+        durationMs: Math.max(0, now().getTime() - startedAt.getTime()),
+        error: {
+          kind: error instanceof ConnectorError ? error.kind : "internal",
+          safeMessage: message,
+          sensitiveValues: [stored.clientSecret],
+        },
+      }, now);
     });
-
-    return {
-      state: "error",
-      error: message,
-    };
+    return { state: "error", error: message };
   }
-}
-
-function isConfigured(fields: StoredMicrosoft365Fields | null): fields is {
-  tenantId: string;
-  clientId: string;
-  clientSecret: string;
-  mailboxUserPrincipalName: string;
-  tenantDisplayName?: string;
-  mailboxDisplayName?: string;
-} {
-  return Boolean(
-    fields &&
-      typeof fields.tenantId === "string" &&
-      typeof fields.clientId === "string" &&
-      typeof fields.clientSecret === "string" &&
-      typeof fields.mailboxUserPrincipalName === "string",
-  );
 }

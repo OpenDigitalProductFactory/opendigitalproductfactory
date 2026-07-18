@@ -533,6 +533,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "postmark-callback-sweep",
+    inngestId: "integrations/postmark-callback-sweep",
+    name: "Postmark callback recovery",
+    purpose:
+      "Drains durable inbound-email responder receipts and terminal callback audit outbox rows missed by the low-latency event path. If it stops, callback acknowledgments remain safe but responder and audit recovery are delayed.",
+    cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *",
+    cadence: "Every 5 minutes (at :02)",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "recurring-invoice-dispatch",
     inngestId: "finance/recurring-invoice-dispatch",
     name: "Recurring invoice generator",

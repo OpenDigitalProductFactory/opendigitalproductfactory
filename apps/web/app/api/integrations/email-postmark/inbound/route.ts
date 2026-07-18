@@ -1,90 +1,117 @@
-// Postmark inbound webhook receiver.
-//
-// Postmark POSTs a JSON envelope per inbound email. We:
-//   1. Verify HMAC signature against the operator's stored signing secret.
-//      On mismatch: 401, no DB write.
-//   2. Parse the payload, create one InboundChannelMessage(domain=marketing).
-//   3. Fire-and-forget the responder (classify + maybe draft a reply).
-//   4. Ack with 200 so Postmark doesn't retry.
-
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
-import { decryptJson } from "@/lib/govern/credential-crypto";
+import { randomUUID } from "node:crypto";
+
+import { readStoredEmailPostmarkCredential } from "@/lib/integrations/connectors/email-postmark";
+import {
+  createDurableConnectorAudit,
+  executeCallbackTransaction,
+  type ConnectorCallbackClient,
+  type ConnectorCallbackTransaction,
+  type ExecuteCallbackInput,
+} from "@/lib/integrations/kernel/audit";
 import { parseInboundPayload, verifyInboundSignature } from "@/lib/marketing/channels/email-postmark/client";
-import { runInboundResponder } from "@/lib/marketing/channels/email-postmark/responder";
+import { enqueuePostmarkCallback } from "@/lib/queue/connector-callback-events";
 
 export const dynamic = "force-dynamic";
-
 const INTEGRATION_ID = "email-postmark";
+type PostmarkCallbackTransaction = ConnectorCallbackTransaction & {
+  inboundChannelMessage: typeof prisma.inboundChannelMessage;
+};
+type PostmarkAcknowledgment = { ok: true; inboundId: string };
+
+function json(error: string, status: number) {
+  return NextResponse.json({ error }, { status });
+}
+
+async function auditTerminal(responseKind: string, errorCode: "authentication" | "invalid_payload" | "configuration" | "not_connected") {
+  const eventKey = `${INTEGRATION_ID}:${responseKind}:${randomUUID()}`;
+  try {
+    await createDurableConnectorAudit({ repository: prisma.integrationToolCallLog }).record({
+      connectorId: INTEGRATION_ID, actor: { coworkerId: "external-webhook", userId: null },
+      operation: "callback", redactedInput: { event: "inbound-email" }, responseKind,
+      resultCount: 0, durationMs: 0, error: { kind: errorCode, safeMessage: responseKind },
+    });
+  } catch {
+    // Independent durable queue fallback when the database outbox is briefly
+    // unavailable. The event contains only the safe terminal projection.
+    await Promise.race([
+      enqueuePostmarkCallback({
+        terminalAudit: { eventKey, responseKind, errorCode },
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("enqueue timeout")), 2_000)),
+    ]).catch(() => undefined);
+  }
+}
 
 export async function POST(req: NextRequest): Promise<Response> {
+  // The raw body is intentionally read exactly once and authenticated before parsing.
   const rawBody = await req.text();
-
-  const credential = await prisma.integrationCredential.findUnique({
-    where: { integrationId: INTEGRATION_ID },
-  });
+  const credential = await prisma.integrationCredential.findUnique({ where: { integrationId: INTEGRATION_ID } });
   if (!credential || credential.status !== "connected") {
-    return NextResponse.json({ error: "integration_not_connected" }, { status: 503 });
+    await auditTerminal("integration_not_connected", "not_connected");
+    return json("integration_not_connected", 503);
   }
 
-  const fields = decryptJson<{ signingSecret?: string }>(credential.fieldsEnc) ?? {};
-  const signingSecret = typeof fields.signingSecret === "string" ? fields.signingSecret : "";
-  if (!signingSecret) {
-    return NextResponse.json({ error: "signing_secret_missing" }, { status: 500 });
+  const stored = readStoredEmailPostmarkCredential(credential);
+  if (!stored?.signingSecret) {
+    await auditTerminal("signing_secret_missing", "configuration");
+    return json("signing_secret_missing", 500);
   }
-
-  const signatureHeader = req.headers.get("x-postmark-signature");
-  const verified = verifyInboundSignature({
-    rawBody,
-    signatureHeader,
-    signingSecret,
-  });
-  if (!verified) {
-    return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
+  if (!verifyInboundSignature({ rawBody, signatureHeader: req.headers.get("x-postmark-signature"), signingSecret: stored.signingSecret })) {
+    await auditTerminal("invalid_signature", "authentication");
+    return json("invalid_signature", 401);
   }
 
   let payload: unknown;
-  try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  try { payload = JSON.parse(rawBody); }
+  catch {
+    await auditTerminal("invalid_json", "invalid_payload");
+    return json("invalid_json", 400);
   }
-
   const parsed = parseInboundPayload(payload);
   if (!parsed) {
-    return NextResponse.json({ error: "malformed_payload" }, { status: 400 });
+    await auditTerminal("malformed_payload", "invalid_payload");
+    return json("malformed_payload", 400);
   }
-
-  const organization = await prisma.organization.findFirst({
-    select: { id: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const organization = await prisma.organization.findFirst({ select: { id: true }, orderBy: { createdAt: "asc" } });
   if (!organization) {
-    return NextResponse.json({ error: "no_organization" }, { status: 500 });
+    await auditTerminal("no_organization", "configuration");
+    return json("no_organization", 500);
   }
 
-  const inbound = await prisma.inboundChannelMessage.create({
-    data: {
-      organizationId: organization.id,
-      domain: "marketing",
-      channelId: INTEGRATION_ID,
-      externalThreadId: parsed.externalThreadId,
-      externalMessageId: parsed.externalMessageId,
-      fromAddress: parsed.fromAddress,
-      fromDisplayName: parsed.fromDisplayName,
-      subject: parsed.subject,
-      body: parsed.textBody,
-      receivedAt: parsed.receivedAt,
-      metadata: parsed.metadata as import("@dpf/db").Prisma.InputJsonValue,
+  const callbackInput: ExecuteCallbackInput<PostmarkCallbackTransaction, PostmarkAcknowledgment> = {
+    client: prisma as unknown as ConnectorCallbackClient<PostmarkCallbackTransaction>,
+    connectorId: INTEGRATION_ID,
+    deliveryKey: parsed.externalMessageId!,
+    redactedRequest: { externalMessageId: parsed.externalMessageId, externalThreadId: parsed.externalThreadId },
+    performDomainWrite: async (transaction) => {
+      const inbound = await transaction.inboundChannelMessage.create({
+        data: {
+          organizationId: organization.id,
+          domain: "marketing",
+          channelId: INTEGRATION_ID,
+          externalThreadId: parsed.externalThreadId,
+          externalMessageId: parsed.externalMessageId,
+          fromAddress: parsed.fromAddress,
+          fromDisplayName: parsed.fromDisplayName,
+          subject: parsed.subject,
+          body: parsed.textBody,
+          receivedAt: parsed.receivedAt,
+          metadata: parsed.metadata as import("@dpf/db").Prisma.InputJsonValue,
+        },
+        select: { inboundId: true },
+      });
+      const acknowledgment = { ok: true as const, inboundId: inbound.inboundId };
+      return { domainEntityId: inbound.inboundId, responseCode: 200, acknowledgment, dispatchPending: true };
     },
-    select: { inboundId: true },
-  });
-
-  // Fire-and-forget responder. Errors get logged but never block the ack
-  // back to Postmark — at-least-once delivery semantics.
-  runInboundResponder({ inboundId: inbound.inboundId }).catch((err) => {
-    console.error("[email-postmark-inbound] responder failed:", err);
-  });
-
-  return NextResponse.json({ ok: true, inboundId: inbound.inboundId }, { status: 200 });
+  };
+  const callback = await executeCallbackTransaction(callbackInput);
+  // The receipt + responder job are already durable. A bounded event enqueue
+  // lowers latency; the registered cron worker recovers any missed event.
+  await Promise.race([
+    enqueuePostmarkCallback({ deliveryKey: parsed.externalMessageId! }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("enqueue timeout")), 2_000)),
+  ]).catch(() => undefined);
+  return NextResponse.json(callback.acknowledgment, { status: callback.responseCode });
 }

@@ -10,7 +10,7 @@ const IV_LENGTH = 12;
 
 function getEncryptionKey(): Buffer | null {
   const hex = process.env.CREDENTIAL_ENCRYPTION_KEY;
-  if (!hex || hex.length !== 64) return null;
+  if (!hex || !/^[0-9a-f]{64}$/i.test(hex)) return null;
   return Buffer.from(hex, "hex");
 }
 
@@ -76,12 +76,23 @@ export async function assertCredentialEncryptionKeyIsSet(): Promise<void> {
   if (process.env.NODE_ENV !== "production") return;
   if (getEncryptionKey()) return;
   const { prisma } = await import("@dpf/db");
-  const count = await prisma.credentialEntry.count({ where: { secretRef: { not: null } } });
-  if (count === 0) return;
+  const [credentialEntryCount, integrationCredentialCount] = await Promise.all([
+    prisma.credentialEntry.count({ where: { secretRef: { not: null } } }),
+    prisma.integrationCredential.count(),
+  ]);
+  if (credentialEntryCount + integrationCredentialCount === 0) return;
   throw new Error(
     "FATAL: CREDENTIAL_ENCRYPTION_KEY is not set, but the credential store\n" +
     "contains secrets that would be read/written in plaintext. Set this variable\n" +
     "(64 hex chars = 32 bytes) before restarting. For dev, set NODE_ENV=development."
+  );
+}
+
+/** Refuse a production credential write before the plaintext dev fallback can run. */
+export async function assertEncryptionReadyForCredentialWrite(): Promise<void> {
+  if (process.env.NODE_ENV !== "production" || getEncryptionKey()) return;
+  throw new Error(
+    "CREDENTIAL_ENCRYPTION_KEY must be a valid 64-character hex key before writing credentials in production.",
   );
 }
 

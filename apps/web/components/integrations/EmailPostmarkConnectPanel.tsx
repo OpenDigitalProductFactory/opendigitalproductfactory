@@ -6,9 +6,10 @@ import {
   disconnectEmailPostmarkAction,
   saveEmailPostmarkAction,
 } from "@/app/(shell)/platform/tools/integrations/email-postmark/actions";
+import type { ConnectorPersistedSetupStatus } from "@/lib/integrations/kernel/setup-state";
 
 type ConnectionState = {
-  status: "unconfigured" | "connected" | "error";
+  status: ConnectorPersistedSetupStatus;
   fromAddress: string | null;
   replyToAddress: string | null;
   lastErrorMsg: string | null;

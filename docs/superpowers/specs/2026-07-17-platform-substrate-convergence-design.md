@@ -109,7 +109,9 @@ Deterministic definition of done:
 
 Introduce a narrow `ConnectorDefinition` and shared lifecycle for credential storage, authentication, refresh, callbacks, capability declaration, health, audit, retry, sync, and setup-state projection. Provider adapters own vendor semantics and source-to-canonical mapping only. Migrate two representative providers before wider rollout.
 
-Named proof providers are Microsoft 365 Communications (OAuth authorization code/refresh and communication capabilities) and Postmark email (API credential plus inbound webhook). Definition of done: both use the shared connection projection, health contract, audit envelope, and error taxonomy; their existing connect/callback/webhook happy and degraded paths pass; and a guard rejects new provider-local OAuth refresh or connection-state mapping outside adapters.
+Named proof providers are Microsoft 365 Communications (OAuth 2.0 client credentials with application permissions and communication capabilities) and Postmark email (API credential plus inbound webhook). The kernel supports refresh-capable OAuth providers through its shared lifecycle without changing Microsoft 365 Communications to delegated-user authorization-code semantics.
+
+Deterministic proof assertions require the Microsoft definition to declare `auth.kind = "oauth2-client-credentials"` and `callback.kind = "none"`, while the Postmark definition declares `auth.kind = "api-key"` and `callback.kind = "webhook"`. Despite those intentionally distinct provider semantics, both definitions must use the same connection projection, health, durable audit, retry, sync, and typed error contracts. Microsoft connect/probe happy and degraded paths and Postmark connect/webhook happy and degraded paths must pass, and a guard rejects new provider-local OAuth refresh or connection-state mapping outside adapters.
 
 ### 6.3 Capability-driven runtime profiles — BI-PSC-003
 
@@ -163,11 +165,16 @@ Apply removals only after parity. Update install and deployment doctrine, platfo
 ## 7. Connector contract
 
 ```ts
+export type ConnectorCallbackPolicy = {
+  kind: "none" | "oauth" | "webhook";
+};
+
 export type ConnectorDefinition = {
   key: string;
   displayName: string;
   capabilities: readonly string[];
   auth: ConnectorAuthStrategy;
+  callback: ConnectorCallbackPolicy;
   operations: readonly ConnectorOperation[];
   health: ConnectorHealthPolicy;
   sync?: ConnectorSyncPolicy;

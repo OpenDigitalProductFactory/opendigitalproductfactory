@@ -41,8 +41,16 @@ export type ResponderResult = {
   engagementId: string | null;
 };
 
-export async function runInboundResponder(input: {
+export function runInboundResponder(input: {
   inboundId: string;
+  classify?: (subject: string, body: string) => Promise<InboundClassification>;
+}): Promise<ResponderResult> {
+  return runInboundResponderOnce(input);
+}
+
+async function runInboundResponderOnce(input: {
+  inboundId: string;
+  classify?: (subject: string, body: string) => Promise<InboundClassification>;
 }): Promise<ResponderResult> {
   const inbound = await prisma.inboundChannelMessage.findUnique({
     where: { inboundId: input.inboundId },
@@ -53,68 +61,33 @@ export async function runInboundResponder(input: {
 
   // 1. Rule-based pre-filter.
   const classification = preFilter(inbound.fromAddress, inbound.subject ?? "", inbound.body)
-    ?? (await classifyWithLlm(inbound.subject ?? "", inbound.body));
-
-  await prisma.inboundChannelMessage.update({
-    where: { inboundId: inbound.inboundId },
-    data: { classification },
-  });
-
-  if (classification === "spam") {
-    return { classification, draftId: null, engagementId: null };
-  }
-
-  // 2. Engagement linkage for qualified inquiries.
-  let engagementId: string | null = null;
-  if (classification === "qualified-inquiry") {
-    engagementId = await linkOrCreateEngagement({
-      organizationId: inbound.organizationId,
-      fromAddress: inbound.fromAddress,
-      fromDisplayName: inbound.fromDisplayName,
-      subject: inbound.subject,
-      inboundId: inbound.inboundId,
-    });
-    if (engagementId) {
-      await prisma.inboundChannelMessage.update({
-        where: { inboundId: inbound.inboundId },
-        data: { routedEngagementId: engagementId },
-      });
+    ?? (await (input.classify ?? classifyWithLlm)(inbound.subject ?? "", inbound.body));
+  return prisma.$transaction(async (tx) => {
+    let engagementId: string | null = null;
+    if (classification === "qualified-inquiry" && inbound.fromAddress) {
+      const contact = await tx.customerContact.findUnique({ where: { email: inbound.fromAddress }, select: { id: true, accountId: true } });
+      if (contact) {
+        const engagement = await tx.engagement.upsert({
+          where: { engagementId: `ENG-${inbound.inboundId.slice(-8)}` },
+          create: { engagementId: `ENG-${inbound.inboundId.slice(-8)}`, title: inbound.subject ?? "Inbound marketing inquiry", contactId: contact.id, accountId: contact.accountId, source: "marketing-inbound", sourceRefId: inbound.inboundId, status: "new" },
+          update: {}, select: { id: true },
+        });
+        engagementId = engagement.id;
+      }
     }
-  }
-
-  // 3. Draft reply.
-  const replyBody = HOLDING_REPLY_BY_CLASSIFICATION[classification];
-  if (!replyBody) {
-    return { classification, draftId: null, engagementId };
-  }
-
-  const draft = await prisma.outboundDraft.create({
-    data: {
-      organizationId: inbound.organizationId,
-      domain: "marketing",
-      sourceType: "inbound-channel-message",
-      sourceId: inbound.inboundId,
-      status: "pending-review",
-      channelId: "email-postmark",
-      assetType: "email",
-      body: replyBody,
-      bodyFormat: "plain",
-      metadata: {
-        to: inbound.fromAddress,
-        subject: replyToSubject(inbound.subject),
-        inReplyTo: inbound.externalMessageId,
-      },
-      createdByAgentId: "marketing-specialist",
-    },
-    select: { draftId: true },
+    let draftId: string | null = null;
+    const replyBody = HOLDING_REPLY_BY_CLASSIFICATION[classification];
+    if (replyBody) {
+      const existing = await tx.outboundDraft.findFirst({ where: { sourceType: "inbound-channel-message", sourceId: inbound.inboundId }, select: { draftId: true } });
+      const draft = existing ?? await tx.outboundDraft.create({
+        data: { organizationId: inbound.organizationId, domain: "marketing", sourceType: "inbound-channel-message", sourceId: inbound.inboundId, status: "pending-review", channelId: "email-postmark", assetType: "email", body: replyBody, bodyFormat: "plain", metadata: { to: inbound.fromAddress, subject: replyToSubject(inbound.subject), inReplyTo: inbound.externalMessageId }, createdByAgentId: "marketing-specialist" },
+        select: { draftId: true },
+      });
+      draftId = draft.draftId;
+    }
+    await tx.inboundChannelMessage.update({ where: { inboundId: inbound.inboundId }, data: { classification, routedEngagementId: engagementId, draftedReplyId: draftId } });
+    return { classification, draftId, engagementId };
   });
-
-  await prisma.inboundChannelMessage.update({
-    where: { inboundId: inbound.inboundId },
-    data: { draftedReplyId: draft.draftId },
-  });
-
-  return { classification, draftId: draft.draftId, engagementId };
 }
 
 function preFilter(
@@ -135,7 +108,7 @@ function preFilter(
 
 async function classifyWithLlm(subject: string, body: string): Promise<InboundClassification> {
   try {
-    const { routeAndCall } = await import("../../../routed-inference");
+    const { routeAndCall } = await import("@/lib/routed-inference");
     const result = await routeAndCall(
       [
         {
@@ -172,44 +145,6 @@ Respond with ONLY the classification token, no preamble.`,
     // Classifier failure shouldn't break the inbound loop — default to
     // "other" which still drafts a holding reply for human review.
     return "other";
-  }
-}
-
-async function linkOrCreateEngagement(input: {
-  organizationId: string;
-  fromAddress: string | null;
-  fromDisplayName: string | null;
-  subject: string | null;
-  inboundId: string;
-}): Promise<string | null> {
-  // Engagement is contact-anchored: CustomerContact.id is REQUIRED. If we
-  // don't have a matching contact for the inbound sender, we skip the CRM
-  // linkage rather than fabricate a synthetic contact — the inbound message
-  // row alone is enough signal for human review.
-  if (!input.fromAddress) return null;
-  const contact = await prisma.customerContact.findUnique({
-    where: { email: input.fromAddress },
-    select: { id: true, accountId: true },
-  });
-  if (!contact) return null;
-
-  try {
-    const engagement = await prisma.engagement.create({
-      data: {
-        engagementId: `ENG-${input.inboundId.slice(-8)}`,
-        title: input.subject ?? "Inbound marketing inquiry",
-        contactId: contact.id,
-        accountId: contact.accountId,
-        source: "marketing-inbound",
-        sourceRefId: input.inboundId,
-        status: "new",
-      },
-      select: { id: true },
-    });
-    return engagement.id;
-  } catch {
-    // Best-effort — the inbound message is still useful without CRM linkage.
-    return null;
   }
 }
 
