@@ -73,6 +73,12 @@ describe("buildPromoterCommand", () => {
     expect(args).toContain("/Users/me/dpf:/host-source:ro");
   });
 
+  it("mounts lifecycle state for an ordinary self-upgrade", () => {
+    const { args } = buildPromoterCommand({ ...BASE, stateDirHostPath: "/host/.dpf" });
+    expect(args).toContain("/host/.dpf:/dpf-state");
+    expect(args).toContain("DPF_STATE_DIR=/dpf-state");
+  });
+
   it("gives transition mode only the state mount as writable and signs fixed protocol env", () => {
     const envelope = "e".repeat(16);
     const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/host/.dpf", runtimeCapabilityEnvelope: envelope, runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecretFileHostPath: "/host/.dpf/transition-secret", composeFiles: ["docker-compose.yml"], composeProject: "dpf" });

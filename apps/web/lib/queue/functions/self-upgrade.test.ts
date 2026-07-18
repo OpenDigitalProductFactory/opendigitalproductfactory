@@ -493,22 +493,22 @@ describe("success path", () => {
     expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
-
   it("runs the promoter with the host install path, backup, image, and health paths", async () => {
+    vi.stubEnv("DPF_STATE_DIR_HOST", "/Users/me/.dpf");
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.runPromoter).toHaveBeenCalledWith(
       expect.objectContaining({
-        // The promoter is launched as a sibling container against the HOST
-        // install path (daemon-resolved), not an in-portal source path.
+        // Promoter mounts daemon-resolved host paths, never portal paths.
         hostInstallPath: "/Users/me/dpf",
         targetSha: "abc1234deadbeef",
         backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
         healthUrl: "http://localhost:3000/api/health",
         promoterImage: "dpf-promoter",
+        stateDirHostPath: "/Users/me/.dpf",
       }),
     );
+    vi.unstubAllEnvs();
   });
-
   it("emits upgrade.succeeded notification on promoter success", async () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.emitUpgradeEvent).toHaveBeenCalledWith(

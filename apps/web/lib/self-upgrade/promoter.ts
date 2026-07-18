@@ -191,6 +191,13 @@ export function buildPromoterCommand(
     args.push("-v", `${params.composeEnvFileHostPath}:${PROMOTER_COMPOSE_ENV_FILE}:ro`);
   }
 
+  // promote.sh resolves the install's governed capability projection before
+  // every portal rebuild, including ordinary self-upgrades. Mount lifecycle
+  // state for every mode rather than only transition-authority calls.
+  if (params.stateDirHostPath) {
+    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_STATE_DIR=/dpf-state");
+  }
+
   args.push(
     "-e",
     `PROMOTE_SOURCE=${PROMOTER_CONTAINER_SOURCE}`,
@@ -220,13 +227,12 @@ export function buildPromoterCommand(
   if (params.runtimeTransitionAuthorityOperation) {
     if (!params.stateDirHostPath || (!["reconcile", "rotate-secret"].includes(params.runtimeTransitionAuthorityOperation) && !params.runtimeCapabilityTransitionId) ||
       (params.runtimeTransitionAuthorityOperation === "release" && !params.runtimeTransitionAuthorityToken)) throw new Error("runtime_transition_authority_protocol_incomplete");
-    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_STATE_DIR=/dpf-state");
     if (params.runtimeTransitionAuthorityOperation === "reconcile") args.push("-e", `DPF_ACTIVE_RUNTIME_TRANSITION_IDS=${(params.runtimeTransitionActiveIds ?? []).join(",")}`);
   } else if (params.runtimeCapabilityTransitionId) {
     if (!params.stateDirHostPath || !params.runtimeCapabilityEnvelope || !params.runtimeCapabilitySignature || !params.runtimeCapabilitySecretFileHostPath) {
       throw new Error("runtime_transition_protocol_incomplete");
     }
-    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-v", `${params.runtimeCapabilitySecretFileHostPath}:/run/secrets/dpf-runtime-transition:ro`);
+    args.push("-v", `${params.runtimeCapabilitySecretFileHostPath}:/run/secrets/dpf-runtime-transition:ro`);
     args.push("-e", `DPF_STATE_DIR=/dpf-state`, "-e", `DPF_RUNTIME_TRANSITION_ENVELOPE=${params.runtimeCapabilityEnvelope}`,
       "-e", `DPF_RUNTIME_TRANSITION_SIGNATURE=${params.runtimeCapabilitySignature}`);
   }
