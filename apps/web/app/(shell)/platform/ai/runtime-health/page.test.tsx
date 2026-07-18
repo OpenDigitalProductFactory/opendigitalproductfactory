@@ -68,6 +68,9 @@ describe("RuntimeHealthPage", () => {
     expect(html).toContain('href="/platform/ai/readiness"');
     expect(html).toContain("Capability service requirements");
     expect(html).toContain("Optional — inactive");
+    expect(html).toContain('data-testid="phase-routing-table-scroll"');
+    expect(html).toContain('min-width:0');
+    expect(html).toContain('max-width:100%');
   });
 
   it("does not infer service requirements when capability authority is unavailable", async () => {

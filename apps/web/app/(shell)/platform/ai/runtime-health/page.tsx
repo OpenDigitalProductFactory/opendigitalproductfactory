@@ -308,7 +308,10 @@ export default async function RuntimeHealthPage() {
           </div>
 
           {/* Per-phase table */}
-          <div style={{ overflowX: "auto", marginBottom: 22 }}>
+          <div
+            data-testid="phase-routing-table-scroll"
+            style={{ overflowX: "auto", minWidth: 0, maxWidth: "100%", marginBottom: 22 }}
+          >
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
