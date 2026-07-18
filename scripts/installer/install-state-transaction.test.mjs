@@ -15,7 +15,7 @@ const fixture = async () => {
 test("exclusive lock carries interoperable versioned owner metadata", async () => {
   const { statePath } = await fixture();
   const held = await acquireInstallStateLock(statePath, { timeoutMs: 50 });
-  const owner = JSON.parse(await readFile(join(`${statePath}.lock`, "owner.json"), "utf8"));
+  const owner = JSON.parse(await readFile(`${statePath}.lock`, "utf8"));
   assert.equal(owner.protocolVersion, 1);
   assert.equal(owner.pid, process.pid);
   assert.match(owner.runId, /^[a-f0-9-]+$/);
@@ -46,19 +46,17 @@ test("reconciliation restores recovery when an interrupted canonical file is inv
 test("expired dead ownership is recovered but an expired live owner is not", async () => {
   const { statePath } = await fixture();
   const lockPath = `${statePath}.lock`;
-  await mkdir(lockPath);
-  await writeFile(join(lockPath, "owner.json"), JSON.stringify({ protocolVersion: 1, ownerId: "dead", pid: 99999999, hostname: process.env.COMPUTERNAME ?? "", acquiredAt: "2000-01-01T00:00:00.000Z", expiresAt: "2000-01-01T00:00:01.000Z" }));
+  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "dead", pid: 99999999, hostname: process.env.COMPUTERNAME ?? "", acquiredAt: "2000-01-01T00:00:00.000Z", expiresAt: "2000-01-01T00:00:01.000Z", expiresAtEpoch: 946684801 }));
   const recovered = await acquireInstallStateLock(statePath, { timeoutMs: 100 });
   await recovered.release();
-  await mkdir(lockPath);
-  await writeFile(join(lockPath, "owner.json"), JSON.stringify({ protocolVersion: 1, ownerId: "live", pid: process.pid, hostname: process.env.COMPUTERNAME ?? "", acquiredAt: "2000-01-01T00:00:00.000Z", expiresAt: "2000-01-01T00:00:01.000Z" }));
+  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "live", pid: process.pid, hostname: process.env.COMPUTERNAME ?? "", acquiredAt: "2000-01-01T00:00:00.000Z", expiresAt: "2000-01-01T00:00:01.000Z", expiresAtEpoch: 946684801 }));
   await assert.rejects(acquireInstallStateLock(statePath, { timeoutMs: 25 }), /lock_timeout/);
 });
 
 test("release never removes a lock now owned by another live owner", async () => {
   const { statePath } = await fixture();
   const held = await acquireInstallStateLock(statePath);
-  const ownerPath = join(held.lockPath, "owner.json");
+  const ownerPath = held.lockPath;
   await writeFile(ownerPath, JSON.stringify({ ...held.owner, ownerId: "replacement-owner" }));
   await held.release();
   assert.equal(JSON.parse(await readFile(ownerPath, "utf8")).ownerId, "replacement-owner");
@@ -86,12 +84,14 @@ test("temp is adjacent, canonical path never disappears, replacement is validate
   }});
   assert.ok(observedTemp);
   assert.equal(JSON.parse(await readFile(statePath, "utf8")).installerVersion, "next");
+  await assert.rejects(readFile(`${statePath}.recovery`), /ENOENT/);
 });
 
 for (const crashStage of ["locked", "temp-created", "temp-flushed", "recovery-flushed", "replaced", "verified"]) {
   test(`recovery is deterministic after interruption at ${crashStage}`, async () => {
     const { dir, statePath } = await fixture();
-    await assert.rejects(updateInstallState(statePath, s => ({ ...s, installerVersion: "crash" }), { crashAfterStage: crashStage }), /injected_crash/);
+    const recoveryPath = join(dir, "governed-recovery.json");
+    await assert.rejects(updateInstallState(statePath, s => ({ ...s, installerVersion: "crash" }), { crashAfterStage: crashStage, recoveryPath }), /injected_crash/);
     await updateInstallState(statePath, s => ({ ...s, installerVersion: "recovered" }));
     assert.equal(JSON.parse(await readFile(statePath, "utf8")).installerVersion, "recovered");
     assert.deepEqual((await readdir(dir)).filter(n => n.includes(".tmp-") || n.endsWith(".lock")), []);

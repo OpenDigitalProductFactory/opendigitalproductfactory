@@ -1,11 +1,14 @@
 {
   "protocolVersion": 1,
   "lockSuffix": ".lock",
-  "ownerFile": "owner.json",
+  "ownerFile": null,
+  "exclusiveClaim": "adjacent lock file create-new",
   "defaultLeaseMs": 30000,
   "defaultTimeoutMs": 15000,
   "retryDelayMs": 20,
   "tempPrefix": ".install-state.json.tmp-",
   "recoverySuffix": ".recovery",
+  "timestampFormat": "RFC3339 UTC",
+  "expiryAuthority": "expiresAtEpoch",
   "ownerFields": ["protocolVersion", "ownerId", "runId", "pid", "hostname", "acquiredAt", "expiresAt", "expiresAtEpoch"]
 }

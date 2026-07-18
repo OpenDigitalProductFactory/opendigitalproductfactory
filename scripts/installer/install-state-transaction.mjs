@@ -29,9 +29,9 @@ async function assertSafeTarget(statePath) {
 
 async function staleOwner(lockPath, now) {
   let owner;
-  try { owner = JSON.parse(await readFile(join(lockPath, "owner.json"), "utf8")); } catch { return false; }
-  if (owner.protocolVersion !== PROTOCOL_VERSION || !owner.ownerId || !owner.expiresAt) return false;
-  if (Date.parse(owner.expiresAt) > now) return false;
+  try { owner = JSON.parse(await readFile(lockPath, "utf8")); } catch { return false; }
+  if (owner.protocolVersion !== PROTOCOL_VERSION || !owner.ownerId || !Number.isSafeInteger(owner.expiresAtEpoch)) return false;
+  if (owner.expiresAtEpoch * 1000 > now) return false;
   if (owner.hostname === localHostname && pidIsLive(owner.pid)) return false;
   return true;
 }
@@ -44,26 +44,26 @@ export async function acquireInstallStateLock(statePath, options = {}) {
   const deadline = Date.now() + timeoutMs;
   const ownerId = randomUUID();
   const runId = options.runId ?? process.env.DPF_RUN_ID ?? randomUUID();
+  const ownerPath = lockPath;
   for (;;) {
     try {
-      await mkdir(lockPath, { mode: 0o700 });
       const now = Date.now();
       const owner = { protocolVersion: PROTOCOL_VERSION, ownerId, runId, pid: process.pid, hostname: localHostname, acquiredAt: new Date(now).toISOString(), expiresAt: new Date(now + leaseMs).toISOString(), expiresAtEpoch: Math.ceil((now + leaseMs) / 1000) };
-      const handle = await open(join(lockPath, "owner.json"), "wx", 0o600);
+      const handle = await open(ownerPath, "wx", 0o600);
       try { await handle.writeFile(`${JSON.stringify(owner)}\n`, "utf8"); await handle.sync(); } finally { await handle.close(); }
       return { lockPath, owner, async release() {
         let current;
-        try { current = JSON.parse(await readFile(join(lockPath, "owner.json"), "utf8")); } catch { return; }
-        if (current.ownerId === ownerId) await rm(lockPath, { recursive: true, force: true });
+        try { current = JSON.parse(await readFile(ownerPath, "utf8")); } catch { return; }
+        if (current.ownerId === ownerId) await rm(ownerPath, { force: true });
       }};
     } catch (error) {
       if (error?.code !== "EEXIST") {
-        if (error?.code === "ENOENT") { await rm(lockPath, { recursive: true, force: true }); continue; }
+        if (error?.code === "ENOENT") continue;
         throw error;
       }
       if (await staleOwner(lockPath, Date.now())) {
         const quarantine = `${lockPath}.stale-${randomUUID()}`;
-        try { await rename(lockPath, quarantine); await rm(quarantine, { recursive: true, force: true }); continue; } catch (recoveryError) { if (!["ENOENT", "EEXIST"].includes(recoveryError?.code)) throw recoveryError; }
+        try { await rename(ownerPath, quarantine); await rm(quarantine, { force: true }); continue; } catch (recoveryError) { if (!["ENOENT", "EEXIST"].includes(recoveryError?.code)) throw recoveryError; }
       }
       if (Date.now() >= deadline) throw new Error("install_state_lock_timeout");
       await sleep(options.retryDelayMs ?? contract.retryDelayMs);
@@ -75,8 +75,8 @@ const stage = async (name, context, options) => {
   await options.onStage?.(name, context);
   if (options.crashAfterStage === name) {
     if (context.lockPath) {
-      const ownerPath = join(context.lockPath, "owner.json");
-      try { const owner = JSON.parse(await readFile(ownerPath, "utf8")); owner.pid = 99999999; owner.expiresAt = "2000-01-01T00:00:00.000Z"; const h = await open(ownerPath, "w"); try { await h.writeFile(JSON.stringify(owner)); await h.sync(); } finally { await h.close(); } } catch {}
+      const ownerPath = context.lockPath;
+      try { const owner = JSON.parse(await readFile(ownerPath, "utf8")); owner.pid = 99999999; owner.expiresAt = "2000-01-01T00:00:00.000Z"; owner.expiresAtEpoch = 946684800; const h = await open(ownerPath, "w"); try { await h.writeFile(JSON.stringify(owner)); await h.sync(); } finally { await h.close(); } } catch {}
     }
     throw new Error(`injected_crash:${name}`);
   }
@@ -127,10 +127,10 @@ export async function updateInstallState(statePath, transform, options = {}) {
   const lock = await acquireInstallStateLock(target, options);
   let release = true;
   const context = { statePath: target, lockPath: lock.lockPath };
-  const recoveryPath = options.recoveryPath ?? `${target}${contract.recoverySuffix}`;
+  const recoveryPath = options.recoveryPath ?? null;
   try {
     await stage("locked", context, options);
-    await reconcileCanonical(target, recoveryPath);
+    if (recoveryPath) await reconcileCanonical(target, recoveryPath);
     await removeOrphanTemps(target);
     let source = null;
     try { source = await readFile(target); } catch (error) { if (error?.code !== "ENOENT") throw error; }
@@ -147,7 +147,7 @@ export async function updateInstallState(statePath, transform, options = {}) {
     const handle = await open(tempPath, "wx", 0o600);
     try { await stage("temp-created", context, options); await handle.writeFile(serialized, "utf8"); await handle.sync(); } finally { await handle.close(); }
     await stage("temp-flushed", context, options);
-    if (source !== null) {
+    if (source !== null && recoveryPath) {
       context.recoveryPath = recoveryPath;
       await writeFlushed(recoveryPath, source);
       await stage("recovery-flushed", context, options);

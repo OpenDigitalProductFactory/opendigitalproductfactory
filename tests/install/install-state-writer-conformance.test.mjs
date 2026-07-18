@@ -21,11 +21,11 @@ test("Bash initialization refuses unsupported host identity", async () => {
 });
 const run = (command, args, env) => new Promise((resolveRun, reject) => {
   const child = spawn(command, args, { cwd: repo, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
-  let stderr = ""; child.stderr.on("data", c => { stderr += c; });
-  child.on("error", reject); child.on("exit", code => code === 0 ? resolveRun() : reject(new Error(`${command} exited ${code}: ${stderr}`)));
+  let stdout = "", stderr = ""; child.stdout.on("data", c => { stdout += c; }); child.stderr.on("data", c => { stderr += c; });
+  child.on("error", reject); child.on("exit", code => code === 0 ? resolveRun() : reject(new Error(`${command} exited ${code}: stdout=${stdout} stderr=${stderr}`)));
 });
 
-test("Node Bash and PowerShell writers preserve every owned property without BOM", async (t) => {
+async function runMixedRace() {
   const dir = await mkdtemp(join(tmpdir(), "dpf-writer-conformance-"));
   const statePath = join(dir, "install-state.json");
   await writeFile(statePath, '{"schemaVersion":2,"installerVersion":"seed","platform":"win32","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","capabilityStateVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n');
@@ -39,13 +39,30 @@ test("Node Bash and PowerShell writers preserve every owned property without BOM
     jobs.push(run(bash, ["-lc", `. scripts/installer/lib/state.sh; dpf_state_write lastHealthCheck 2026-07-18T15:00:0${i}Z`], env));
     jobs.push(run(pwsh, ["-NoProfile", "-Command", `. ./scripts/installer/lib/state.ps1; Set-DpfStateValue -Key lastDoctorBundlePath -Value 'ps${i}'`], env));
   }
-  try { await Promise.all(jobs); } catch (error) { t.assert.fail(error); }
+  await Promise.all(jobs);
   const bytes = await readFile(statePath);
   assert.notDeepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
   const state = JSON.parse(bytes.toString("utf8"));
   assert.match(state.installerVersion, /^node[0-7]$/);
   assert.match(state.lastHealthCheck, /^2026-07-18T15:00:0[0-7]Z$/);
   assert.match(state.lastDoctorBundlePath, /^ps[0-7]$/);
+  await assert.rejects(readFile(`${statePath}.recovery`), /ENOENT/);
+}
+
+test("Node Bash and PowerShell repeatedly preserve every owned property without BOM", { timeout: 120000 }, async () => {
+  for (let round = 0; round < 4; round++) await runMixedRace();
+});
+
+test("Node recovers an abandoned Bash-format lock and Bash recovers a Node-format lock", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-lock-interop-")); const statePath = join(dir, "install-state.json"); const lockPath = `${statePath}.lock`;
+  await writeFile(statePath, '{"schemaVersion":2,"installerVersion":"seed","platform":"linux","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","capabilityStateVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n');
+  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "bash-dead", runId: "bash-run", pid: 99999999, hostname: "foreign", acquiredAt: "2000-01-01T00:00:00Z", expiresAt: "2000-01-01T00:00:01Z", expiresAtEpoch: 946684801 }));
+  const node = join(repo, "scripts/installer/install-state-transaction.mjs");
+  await run(process.execPath, [node, "set", "--state", statePath, "--key", "installerVersion", "--value", '"node-recovered"'], {});
+  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "node-dead", runId: "node-run", pid: 99999999, hostname: "foreign", acquiredAt: "2000-01-01T00:00:00.000Z", expiresAt: "2000-01-01T00:00:01.000Z", expiresAtEpoch: 946684801 }));
+  const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash";
+  await run(bash, ["-lc", `. scripts/installer/lib/state.sh; dpf_state_write installerVersion bash-recovered`], { DPF_STATE_DIR: dir, HOME: dir });
+  assert.equal(JSON.parse(await readFile(statePath, "utf8")).installerVersion, "bash-recovered");
 });
 
 test("concurrent PowerShell initializers converge on one complete BOM-free state", async () => {

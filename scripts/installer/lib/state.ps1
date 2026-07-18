@@ -74,10 +74,11 @@ function Enter-DpfStateLock {
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
     while ($true) {
         try {
-            New-Item -ItemType Directory -Path $lockPath -ErrorAction Stop | Out-Null
             $now = [DateTimeOffset]::UtcNow
             $owner = [ordered]@{ protocolVersion = 1; ownerId = $ownerId; runId = $runId; pid = $PID; hostname = [Environment]::MachineName; acquiredAt = $now.ToString("o"); expiresAt = $now.AddSeconds(30).ToString("o"); expiresAtEpoch = $now.AddSeconds(30).ToUnixTimeSeconds() }
-            [IO.File]::WriteAllText((Join-Path $lockPath "owner.json"), ($owner | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($false)))
+            $ownerPath = $lockPath; $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($owner | ConvertTo-Json -Compress))
+            $claim = New-Object IO.FileStream($ownerPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            try { $claim.Write($bytes, 0, $bytes.Length); $claim.Flush($true) } finally { $claim.Dispose() }
             $script:DPF_STATE_LOCK_OWNER_ID = $ownerId
             return
         } catch {
@@ -90,7 +91,7 @@ function Enter-DpfStateLock {
                     $stale = ([long]$owner.expiresAtEpoch -le $nowEpoch -and -not $live)
                 } catch {}
             }
-            if ($stale) { try { Move-Item -LiteralPath $lockPath -Destination "$lockPath.stale-$ownerId" -ErrorAction Stop; Remove-Item -LiteralPath "$lockPath.stale-$ownerId" -Recurse -Force; continue } catch {} }
+            if ($stale) { try { Move-Item -LiteralPath $ownerPath -Destination "$lockPath.stale-$ownerId" -ErrorAction Stop; Remove-Item -LiteralPath "$lockPath.stale-$ownerId" -Force -ErrorAction Stop; continue } catch {} }
             if ([DateTimeOffset]::UtcNow -ge $deadline) { throw "install_state_lock_timeout" }
             Start-Sleep -Milliseconds 20
         }
@@ -99,17 +100,8 @@ function Enter-DpfStateLock {
 
 function Exit-DpfStateLock {
     param([Parameter(Mandatory)][string]$Path)
-    $lockPath = "$Path.lock"; $ownerPath = Join-Path $lockPath "owner.json"
-    try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ownerPath)); if ($owner.ownerId -eq $script:DPF_STATE_LOCK_OWNER_ID) { Remove-Item -LiteralPath $lockPath -Recurse -Force } } catch {}
-}
-
-function Repair-DpfStateFromRecovery {
-    param([Parameter(Mandatory)][string]$Path)
-    if ((Test-Path -LiteralPath $Path) -and (Test-DpfStateFileValid $Path)) { return }
-    $recovery = "$Path.recovery"
-    if (-not (Test-Path -LiteralPath $recovery) -or -not (Test-DpfStateFileValid $recovery)) { throw "install_state_recovery_missing_or_invalid" }
-    $restore = "$Path.restore-$script:DPF_STATE_LOCK_OWNER_ID"; [IO.File]::Copy($recovery, $restore, $true); Flush-DpfStateFile $restore
-    if (Test-Path -LiteralPath $Path) { Replace-DpfStateFileAtomic $restore $Path } else { [IO.File]::Move($restore, $Path) }
+    $lockPath = "$Path.lock"; $ownerPath = $lockPath
+    try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ownerPath)); if ($owner.ownerId -eq $script:DPF_STATE_LOCK_OWNER_ID) { Remove-Item -LiteralPath $ownerPath -Force } } catch {}
 }
 
 function Write-DpfStateCandidate {
@@ -117,8 +109,13 @@ function Write-DpfStateCandidate {
     $temp = "$Path.tmp-$script:DPF_STATE_LOCK_OWNER_ID"; $encoding = New-Object Text.UTF8Encoding($false)
     [IO.File]::WriteAllText($temp, $Json, $encoding); Flush-DpfStateFile $temp
     if (-not (Test-DpfStateFileValid $temp)) { Remove-Item -LiteralPath $temp -Force; throw "install_state_schema_validation_failed" }
-    if ($SourceSha256 -and (Get-DpfStateSha256 $Path) -ne $SourceSha256) { Remove-Item -LiteralPath $temp -Force; throw "install_state_cas_mismatch" }
-    if (Test-Path -LiteralPath $Path) { $recovery = "$Path.recovery"; [IO.File]::Copy($Path, $recovery, $true); Flush-DpfStateFile $recovery; Replace-DpfStateFileAtomic $temp $Path } else { [IO.File]::Move($temp, $Path) }
+    if ($SourceSha256) {
+        $owner = ConvertFrom-Json ([IO.File]::ReadAllText("$Path.lock"))
+        if ($owner.ownerId -ne $script:DPF_STATE_LOCK_OWNER_ID) { Remove-Item -LiteralPath $temp -Force; throw "install_state_lock_ownership_lost expected=$script:DPF_STATE_LOCK_OWNER_ID observed=$($owner.ownerId) pid=$($owner.pid) expires=$($owner.expiresAtEpoch)" }
+        $observedSha256 = Get-DpfStateSha256 $Path
+        if ($observedSha256 -ne $SourceSha256) { Remove-Item -LiteralPath $temp -Force; throw "install_state_cas_mismatch expected=$SourceSha256 observed=$observedSha256 owner=$($owner.ownerId)" }
+    }
+    if (Test-Path -LiteralPath $Path) { Replace-DpfStateFileAtomic $temp $Path } else { [IO.File]::Move($temp, $Path) }
     if (-not (Test-DpfStateFileValid $Path)) { throw "install_state_post_write_schema_validation_failed" }
 }
 
@@ -206,7 +203,6 @@ function Set-DpfStateValue {
     if (-not (Test-Path -LiteralPath $path)) { Initialize-DpfState }
     Enter-DpfStateLock $path
     try {
-        Repair-DpfStateFromRecovery $path
         $sourceSha256 = Get-DpfStateSha256 $path
         $state = Read-DpfState; $hashtable = @{}; foreach ($prop in $state.PSObject.Properties) { $hashtable[$prop.Name] = $prop.Value }; $hashtable[$Key] = $Value
         Write-DpfStateCandidate -Path $path -Json ($hashtable | ConvertTo-Json -Depth 20) -SourceSha256 $sourceSha256
