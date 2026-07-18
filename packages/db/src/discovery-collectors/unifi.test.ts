@@ -15,6 +15,7 @@ function makeDevices() {
         name: "UDM Pro",
         type: "udm",
         version: "4.0.6",
+        serial: "UDMPRO-SN-001",
         adopted: true,
         state: 1,
         num_sta: 15,
@@ -154,11 +155,15 @@ describe("collectUnifiDiscovery", () => {
     expect(router!.externalRef).toBe("unifi-device:aa:bb:cc:dd:ee:01");
     expect(router!.attributes?.model).toBe("UDM-Pro");
     expect(router!.attributes?.osiLayer).toBe(3);
+    // Serial captured under the canonical key the estate bridges read (BI-828998DC).
+    expect(router!.attributes?.serialNumber).toBe("UDMPRO-SN-001");
 
     const sw = result.items.find((i) => i.itemType === "switch");
     expect(sw).toBeDefined();
     expect(sw!.name).toBe("Main Switch");
     expect(sw!.attributes?.osiLayer).toBe(2);
+    // A device with no serial in the API carries no serialNumber key (not an empty string).
+    expect(sw!.attributes && "serialNumber" in sw!.attributes).toBe(false);
 
     const ap = result.items.find((i) => i.itemType === "access_point");
     expect(ap).toBeDefined();
