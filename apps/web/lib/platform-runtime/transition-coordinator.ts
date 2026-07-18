@@ -130,7 +130,7 @@ export type RuntimeTransitionReconcileRow = {
   previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[];
   previousServices: string[]; desiredServices: string[];
   previousStates: Readonly<Record<string, string>>; desiredStates: Readonly<Record<string, string>>; createdAt: Date;
-  envelope: RuntimeTransitionEnvelope; envelopeSignature: string;
+  envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null;
 };
 
 /** Startup recovery runs before mutation is enabled and converges every nonterminal row. */
@@ -146,14 +146,35 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
   now?: () => number;
 }): Promise<void> {
   for (const row of await deps.listActive()) {
-    const receipt = await deps.readHostReceipt(row.transitionId);
-    if (!receipt) {
-      if ((deps.now?.() ?? Date.now()) - row.createdAt.getTime() <= 10 * 60 * 1000) await deps.relaunch(row);
-      else await deps.compensate(row, "host_receipt_absent_or_expired");
+    if (!row.envelope || !row.envelopeSignature) {
+      await deps.markRecoveryRequired(row, "transition_envelope_identity_missing");
       continue;
     }
     try {
-      if (signTransitionPayload(row.envelope, deps.protocolSecret) !== row.envelopeSignature) throw new Error("runtime_transition_envelope_tampered");
+      if (signTransitionPayload(row.envelope, deps.protocolSecret) !== row.envelopeSignature) {
+        throw new Error("runtime_transition_envelope_tampered");
+      }
+    } catch (error) {
+      await deps.markRecoveryRequired(row, error instanceof Error ? error.message : "invalid_transition_envelope");
+      continue;
+    }
+    const receipt = await deps.readHostReceipt(row.transitionId);
+    if (!receipt) {
+      const now = deps.now?.() ?? Date.now();
+      // Never mint a new host side effect from an expired authority envelope.
+      // createdAt is deliberately not used: only the signed expiry is authority.
+      if (Date.parse(row.envelope.expiresAt) >= now && Date.parse(row.envelope.issuedAt) <= now + 30_000) {
+        await deps.relaunch(row);
+      } else {
+        try {
+          await deps.compensate(row, "host_receipt_absent_or_expired");
+        } catch (error) {
+          await deps.markRecoveryRequired(row, error instanceof Error ? error.message : "runtime_transition_compensation_failed");
+        }
+      }
+      continue;
+    }
+    try {
       const status = verifyHistoricalTransitionReceipt(receipt, deps.protocolSecret, row.envelope);
       if (status === "applied") await deps.completeFromReceipt(row, receipt);
       else await deps.classifyTerminalReceipt(row, receipt);

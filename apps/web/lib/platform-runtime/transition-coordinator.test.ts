@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { coordinateRuntimeCapabilityTransition, computeCapabilityStateVersion, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
+import { coordinateRuntimeCapabilityTransition, computeCapabilityStateVersion, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions } from "./transition-coordinator";
 import { signTransitionPayload } from "./transition-protocol";
 
 const request = {
@@ -39,6 +39,24 @@ function deps(overrides = {}) {
 }
 
 describe("runtime capability transition coordinator", () => {
+  it("never relaunches an expired missing-receipt transition and compensates instead", async () => {
+    const secret = "x".repeat(32);
+    const envelope = { ...persistedEnvelope, issuedAt: new Date(1_000).toISOString(), expiresAt: new Date(2_000).toISOString() };
+    const row = { ...request, ...envelope, previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(1_000), status: "pending", envelope, envelopeSignature: signTransitionPayload(envelope, secret) };
+    const relaunch = vi.fn(); const compensate = vi.fn();
+    await reconcileRuntimeCapabilityTransitions({ listActive: async () => [row], readHostReceipt: async () => null, completeFromReceipt: vi.fn(), classifyTerminalReceipt: vi.fn(), relaunch, compensate, markRecoveryRequired: vi.fn(), protocolSecret: secret, now: () => 3_000 });
+    expect(relaunch).not.toHaveBeenCalled();
+    expect(compensate).toHaveBeenCalledWith(row, "host_receipt_absent_or_expired");
+  });
+
+  it("marks legacy nullable-envelope rows recovery_required without relaunch", async () => {
+    const row = { ...request, ...persistedEnvelope, previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(1_000), status: "pending", envelope: null, envelopeSignature: null };
+    const relaunch = vi.fn(); const recovery = vi.fn();
+    await reconcileRuntimeCapabilityTransitions({ listActive: async () => [row], readHostReceipt: vi.fn(), completeFromReceipt: vi.fn(), classifyTerminalReceipt: vi.fn(), relaunch, compensate: vi.fn(), markRecoveryRequired: recovery, protocolSecret: "x".repeat(32), now: () => 1_500 });
+    expect(relaunch).not.toHaveBeenCalled();
+    expect(recovery).toHaveBeenCalledWith(row, "transition_envelope_identity_missing");
+  });
+
   it("derives stable state versions from catalog and sorted state lines", () => {
     expect(computeCapabilityStateVersion("catalog", { b: "disabled", a: "active" }))
       .toBe(computeCapabilityStateVersion("catalog", { a: "active", b: "disabled" }));

@@ -955,6 +955,18 @@ export async function register() {
       await assertDbContinuityOnBoot();
     }
 
+    // Runtime capability recovery is a boot barrier, not background cleanup:
+    // no authenticated mutation may be admitted until durable host/DB state is
+    // reconciled or explicitly marked recovery_required.
+    {
+      const { createProductionRuntimeTransitionHost, reconcileRuntimeCapabilityTransitionsOnStartup } = await import("@/lib/platform-runtime/transition-recovery");
+      try {
+        await reconcileRuntimeCapabilityTransitionsOnStartup(await createProductionRuntimeTransitionHost());
+      } catch (error) {
+        console.error("[runtime-capabilities] Startup reconciliation requires recovery:", error);
+      }
+    }
+
     // Voice-service desired-state fail-loud (BI-264565A4): if narration is
     // enabled but the TTS sidecar is down, log CRITICAL at boot — Prometheus
     // can't scrape a /health-only sidecar, and this beats the VoiceServiceDown

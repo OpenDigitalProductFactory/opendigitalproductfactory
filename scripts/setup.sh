@@ -101,6 +101,22 @@ ok "Dependencies installed"
 
 step "Generating environment files"
 
+# The portal only reads this key through its read-only /dpf-state mount. The
+# one-shot promoter receives the host path separately. Rotate only when there
+# are no live transition envelopes, because durable receipts are signed by it.
+DPF_STATE_DIR_VALUE="${DPF_STATE_DIR:-$HOME/.dpf}"
+RUNTIME_TRANSITION_SECRET="$DPF_STATE_DIR_VALUE/runtime-transition.secret"
+mkdir -p "$DPF_STATE_DIR_VALUE"
+chmod 700 "$DPF_STATE_DIR_VALUE"
+if [ ! -s "$RUNTIME_TRANSITION_SECRET" ]; then
+  umask 077
+  TRANSITION_SECRET_VALUE="$(dpf_random_secret_hex 32)"
+  case "$TRANSITION_SECRET_VALUE" in dpf-dev-secret-*) fail "A cryptographically secure runtime transition key could not be generated" ;; esac
+  printf '%s\n' "$TRANSITION_SECRET_VALUE" > "$RUNTIME_TRANSITION_SECRET"
+fi
+chmod 600 "$RUNTIME_TRANSITION_SECRET"
+ok "Runtime transition signing key is present with owner-only permissions"
+
 if [ ! -f apps/web/.env.local ]; then
   cp .env.example apps/web/.env.local
   AUTH_SECRET_VAL="$(dpf_random_secret_hex 32)"

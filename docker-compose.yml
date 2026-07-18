@@ -181,6 +181,8 @@ services:
       DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
+      DPF_STATE_DIR_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}
+      DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}/runtime-transition.secret
       # Portal-side live-readiness checks run inside the container, where
       # process.cwd() is /app and not the host Git clone. Point git ancestry
       # helpers at the mounted host source so verify_live_install_readiness can
@@ -383,7 +385,6 @@ services:
       # by default; see portal service comment above for rationale).
       - ${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups
       - ${DPF_HOST_INSTALL_PATH:-.}:/host-source:ro  # Host project source for building new portal images
-      - ${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state
     environment:
       DPF_PRODUCTION_DB_CONTAINER: dpf-postgres-1
       DPF_PORTAL_CONTAINER: dpf-portal-1
