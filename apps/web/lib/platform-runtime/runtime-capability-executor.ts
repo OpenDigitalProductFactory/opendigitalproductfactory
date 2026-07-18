@@ -6,8 +6,20 @@ import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-at
 import { computeCapabilityStateVersion, coordinateRuntimeCapabilityTransition, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
 import type { RuntimeTransitionReceipt } from "./transition-protocol";
 
-type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string }> };
+type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string }> };
 const catalog = catalogSeed as { catalogHash: string; capabilities: CatalogEntry[] };
+
+export function requiredRuntimeServicesAreHealthy(
+  requiredServices: readonly string[],
+  observedServices: readonly string[],
+  observedHealth?: Readonly<Record<string, string>>,
+): boolean {
+  const requirements = new Map(catalog.capabilities.flatMap((entry) => entry.services).map((service) => [service.service, service.healthSemantics]));
+  return requiredServices.every((service) => {
+    if (!observedServices.includes(service)) return false;
+    return requirements.get(service) !== "compose-healthcheck" || observedHealth?.[service] === "healthy";
+  });
+}
 
 function resolveProjection(keys: readonly string[], states: Readonly<Record<string, string>>) {
   const byId = new Map(catalog.capabilities.map((entry) => [entry.capabilityId, entry]));
@@ -45,7 +57,10 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
   return coordinateRuntimeCapabilityTransition({ transitionId: input.transitionId, catalogHash: catalog.catalogHash, previousKeys, desiredKeys: desiredProjection.enabledKeys, previousStates, desiredStates, requestedById: input.requestedById }, {
     receipts: createPrismaRuntimeTransitionReceipts(prisma as never), isPromoterAvailable, runPromoter, protocolSecret, protocolSecretFileHostPath, recheckAttributedWork, readHostReceipt: readReceipt,
     resolveProjection: async (keys) => keys.join("\0") === previousKeys.join("\0") ? previousProjection : desiredProjection,
-    verifyRequiredHealth: async (desired, observed) => { const required = (desired.join("\0") === previousKeys.join("\0") ? previousProjection : desiredProjection).requiredServices; return required.every((service) => observed.includes(service)); },
+    verifyRequiredHealth: async (desired, observed, observedHealth) => {
+      const projection = desired.join("\0") === previousKeys.join("\0") ? previousProjection : desiredProjection;
+      return requiredRuntimeServicesAreHealthy(projection.requiredServices, observed, observedHealth);
+    },
     promoterParams: { hostInstallPath, stateDirHostPath, runtimeCapabilitySecretFileHostPath: protocolSecretFileHostPath, targetSha: process.env.DEPLOYED_SHA ?? "runtime-capability-transition", backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`, composeFiles: (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean), composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf" },
   });
 }

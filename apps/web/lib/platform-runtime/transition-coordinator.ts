@@ -48,7 +48,7 @@ export type RuntimeCapabilityCoordinatorDeps = {
   resolveProjection?(keys: readonly string[]): Promise<{ catalogHash: string; stateHash: string; enabledKeys: string[]; composeProfiles: string[]; requiredServices: string[] }>;
   recheckAttributedWork?(): Promise<Readonly<Record<string, number>>>;
   readHostReceipt?(transitionId: string): Promise<RuntimeTransitionReceipt>;
-  verifyRequiredHealth?(desiredKeys: readonly string[], observedServices: readonly string[]): Promise<boolean>;
+  verifyRequiredHealth?(desiredKeys: readonly string[], observedServices: readonly string[], observedHealth?: Readonly<Record<string, string>>): Promise<boolean>;
   now?: () => number;
 };
 
@@ -281,7 +281,7 @@ export async function coordinateRuntimeCapabilityTransition(
       return { status: receiptStatus === "rollback_failed" ? "rollback_failed" as const : receiptStatus === "rolled_back" ? "rolled_back" as const : "failed" as const, failure: receipt.failure ?? "host_apply_failed" };
     }
     await deps.receipts.markHostApplied(request.transitionId);
-    if (!(await deps.verifyRequiredHealth(desiredProjection.requiredServices, receipt.observedServices))) throw new Error("required_health_failed");
+    if (!(await deps.verifyRequiredHealth(desiredProjection.requiredServices, receipt.observedServices, receipt.observedHealth))) throw new Error("required_health_failed");
     if (!deps.receipts.commitSuccess) return { status: "host_applied_pending_verification" as const };
     await deps.receipts.commitSuccess(request.transitionId, receipt, request.desiredStates);
     return { status: "succeeded" as const };

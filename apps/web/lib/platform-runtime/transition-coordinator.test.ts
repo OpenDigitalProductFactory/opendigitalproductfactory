@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { coordinateRuntimeCapabilityTransition, computeCapabilityStateVersion, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions } from "./transition-coordinator";
 import type { RuntimeCapabilityCoordinatorDeps, RuntimeCapabilityTransitionReceipts } from "./transition-coordinator";
 import { signTransitionPayload } from "./transition-protocol";
+import { requiredRuntimeServicesAreHealthy } from "./runtime-capability-executor";
 
 const request = {
   transitionId: "RCT-1", catalogHash: "0".repeat(64), previousKeys: ["runtime:build", "runtime:core"], desiredKeys: ["runtime:core"],
@@ -42,6 +43,11 @@ function deps(overrides: Partial<RuntimeCapabilityCoordinatorDeps> = {}): Runtim
 }
 
 describe("runtime capability transition coordinator", () => {
+  it("requires Compose healthchecks to report healthy, not merely running", () => {
+    expect(requiredRuntimeServicesAreHealthy(["portal", "postgres"], ["portal", "postgres"], { portal: "healthy", postgres: "healthy" })).toBe(true);
+    expect(requiredRuntimeServicesAreHealthy(["portal", "postgres"], ["portal", "postgres"], { portal: "starting", postgres: "healthy" })).toBe(false);
+    expect(requiredRuntimeServicesAreHealthy(["portal"], ["portal"])).toBe(false);
+  });
   it("never relaunches an expired missing-receipt transition and compensates instead", async () => {
     const secret = "x".repeat(32);
     const envelope = { ...persistedEnvelope, issuedAt: new Date(1_000).toISOString(), expiresAt: new Date(2_000).toISOString() };

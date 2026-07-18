@@ -12,6 +12,9 @@ export type RuntimeTransitionEnvelope = {
 
 export type RuntimeTransitionReceipt = RuntimeTransitionEnvelope & {
   status: "applied" | "failed" | "rolled_back" | "rollback_failed"; observedServices: string[]; completedAt: string;
+  /** Compose health captured by the host boundary. `none` means the service
+   * has no container healthcheck; it is not a synonym for healthy. */
+  observedHealth?: Record<string, "healthy" | "unhealthy" | "starting" | "none">;
   beforeHash: string; afterHash: string; failure?: string; signature: string;
 };
 
