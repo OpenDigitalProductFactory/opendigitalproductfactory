@@ -1776,6 +1776,10 @@ model RuntimeCapabilityTransition {
   previousStateHash String
   desiredStateHash  String
   catalogHash       String
+  issuedAt          DateTime?
+  expiresAt         DateTime?
+  envelope          Json?
+  envelopeSignature String?
   status            String   @default("pending")
   hostReceipt       Json?
   failure           Json?

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { signTransitionPayload, verifyTransitionReceipt, type RuntimeTransitionEnvelope } from "./transition-protocol";
+import { signTransitionPayload, verifyHistoricalTransitionReceipt, verifyTransitionReceipt, type RuntimeTransitionEnvelope } from "./transition-protocol";
 
 const secret = "s".repeat(32);
 const envelope: RuntimeTransitionEnvelope = {
@@ -17,5 +17,17 @@ describe("runtime transition receipt verification", () => {
   it("rejects a failure receipt that claims the desired state was applied", () => {
     const unsigned = { ...envelope, status: "failed" as const, observedServices: [], completedAt: new Date(2_000).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash };
     expect(() => verifyTransitionReceipt({ ...unsigned, signature: signTransitionPayload(unsigned, secret) }, secret, envelope, 2_000)).toThrow("runtime_transition_failure_receipt_mismatch");
+  });
+
+  it("accepts an expired but historically timely signed receipt during recovery", () => {
+    const unsigned = { ...envelope, status: "applied" as const, observedServices: ["portal"], completedAt: new Date(600_000).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash };
+    const receipt = { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
+    expect(() => verifyTransitionReceipt(receipt, secret, envelope, 700_000)).toThrow("runtime_transition_receipt_expired");
+    expect(verifyHistoricalTransitionReceipt(receipt, secret, envelope)).toBe("applied");
+  });
+
+  it("rejects a receipt completed outside its signed validity interval", () => {
+    const unsigned = { ...envelope, status: "applied" as const, observedServices: ["portal"], completedAt: new Date(602_000).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash };
+    expect(() => verifyHistoricalTransitionReceipt({ ...unsigned, signature: signTransitionPayload(unsigned, secret) }, secret, envelope)).toThrow("runtime_transition_receipt_time_invalid");
   });
 });

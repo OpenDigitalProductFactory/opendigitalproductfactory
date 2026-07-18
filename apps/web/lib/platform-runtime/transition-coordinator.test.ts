@@ -7,12 +7,17 @@ const request = {
   previousStates: { "runtime:core": "active", "runtime:build": "active" }, desiredStates: { "runtime:core": "active", "runtime:build": "disabled" },
   requestedById: "user-1",
 };
+const persistedEnvelope = {
+  version: 1 as const, transitionId: "RCT-1", issuedAt: new Date(1_000).toISOString(), expiresAt: new Date(601_000).toISOString(),
+  catalogHash: request.catalogHash, previousStateHash: "before", desiredStateHash: "after", previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys],
+  previousProfiles: ["build"], desiredProfiles: [], previousServices: [], desiredServices: [],
+};
 
 function deps(overrides = {}) {
   const secret = "x".repeat(32);
   return {
     receipts: {
-      createPending: vi.fn(async () => ({ created: true as const })),
+      createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
       markFailed: vi.fn(async () => undefined),
       markHostApplied: vi.fn(async () => undefined),
     },
@@ -69,19 +74,20 @@ describe("runtime capability transition coordinator", () => {
     const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
-    await expect(receipts.createPending({ ...request, previousKeys: ["z", "a"], desiredKeys: ["z", "b"], previousProfiles: [], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after" })).resolves.toEqual({ created: true });
+    const envelope = { ...persistedEnvelope, previousKeys: ["z", "a"], desiredKeys: ["z", "b"], previousProfiles: [], desiredProfiles: [] };
+    await expect(receipts.createPending({ ...request, previousKeys: ["z", "a"], desiredKeys: ["z", "b"], previousProfiles: [], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope, envelopeSignature: "a".repeat(64) })).resolves.toEqual({ created: true, envelope, envelopeSignature: "a".repeat(64) });
     expect(tx.$queryRaw).toHaveBeenCalledOnce();
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
     expect(model.create).toHaveBeenCalledWith({ data: expect.objectContaining({ previousKeys: ["a", "z"], desiredKeys: ["b", "z"], status: "pending" }) });
   });
 
   it("reconciles an idempotent transition-id retry without creating another row", async () => {
-    const envelope = { catalogHash: request.catalogHash, previousStateHash: "before", desiredStateHash: "after", previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys] };
-    const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "host_applied", ...envelope })), create: vi.fn(), updateMany: vi.fn() };
+    const identity = persistedEnvelope;
+    const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "host_applied", ...identity, envelope: identity, envelopeSignature: "a".repeat(64) })), create: vi.fn(), updateMany: vi.fn() };
     const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
-    await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after" })).resolves.toEqual({ created: false, kind: "replay", status: "host_applied" });
+    await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: identity, envelopeSignature: "a".repeat(64) })).resolves.toEqual({ created: false, kind: "replay", status: "host_applied", envelope: identity, envelopeSignature: "a".repeat(64) });
     expect(model.create).not.toHaveBeenCalled();
   });
 
@@ -89,7 +95,7 @@ describe("runtime capability transition coordinator", () => {
     const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "pending", catalogHash: request.catalogHash, previousStateHash: "different", desiredStateHash: "after", previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys] })), create: vi.fn(), updateMany: vi.fn() };
     const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
-    await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after" })).rejects.toThrow("transition_id_conflict");
+    await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: {} as never, envelopeSignature: "a".repeat(64) })).rejects.toThrow("transition_id_conflict");
   });
 
   it("surfaces a different active receipt as transition_in_progress through the Prisma repository", async () => {
@@ -129,6 +135,14 @@ describe("runtime capability transition coordinator", () => {
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "failed", failure: "host_apply_failed" });
     expect(d.runPromoter).toHaveBeenCalledWith(expect.objectContaining({ runtimeCapabilityTransitionId: "RCT-1", containerName: "dpf-promoter-RCT-1", timeoutMs: 600_000 }));
     expect(d.receipts.markFailed).toHaveBeenCalledWith("RCT-1", "host_apply_failed");
+  });
+
+  it("maps host claim contention to in progress without recording an outcome", async () => {
+    const d = deps({ runPromoter: vi.fn(async () => ({ exitCode: 75, stdout: "", stderr: "contended" })) });
+    await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "transition_in_progress" });
+    expect(d.receipts.markFailed).not.toHaveBeenCalled();
+    expect(d.receipts.markHostApplied).not.toHaveBeenCalled();
+    expect(d.readHostReceipt).not.toHaveBeenCalled();
   });
 
   it("stops at host_applied when persistence has not supplied the transactional commit boundary", async () => {

@@ -1,6 +1,6 @@
 {
   "changeRationale": {
-    "prismaModelCount": "RuntimeCapabilityTransition is the single durable receipt required to serialize and recover portal-to-host capability activation changes."
+    "prismaModelCount": "RuntimeCapabilityTransition plus its append-only event ledger provide one recoverable saga receipt and immutable terminal audit trail."
   },
   "generatedAt": "2026-07-18T01:29:41.944Z",
   "gitSha": "0f2dd72c1dc1e04e49696261866a77a24b8d0f80",
@@ -20,7 +20,7 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 511
+      "value": 512
     },
     "prismaSchemaLines": {
       "direction": "informational",

@@ -21,7 +21,7 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
   const listActive = async () => prisma.runtimeCapabilityTransition.findMany({
     where: { status: { in: ["pending", "applying", "host_applied", "compensating"] } },
     orderBy: { createdAt: "asc" },
-    select: { transitionId: true, status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true, previousStates: true, desiredStates: true, createdAt: true },
+    select: { transitionId: true, status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true, previousStates: true, desiredStates: true, envelope: true, envelopeSignature: true, createdAt: true },
   }) as unknown as Promise<RuntimeTransitionReconcileRow[]>;
   await reconcileRuntimeCapabilityTransitions({
     listActive,

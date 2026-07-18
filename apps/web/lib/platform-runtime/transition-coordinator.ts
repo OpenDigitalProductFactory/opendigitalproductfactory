@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PromoterParams, PromoterResult } from "@/lib/self-upgrade/promoter";
-import { signTransitionPayload, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt, verifyTransitionReceipt } from "./transition-protocol";
+import { signTransitionPayload, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt, verifyHistoricalTransitionReceipt, verifyTransitionReceipt } from "./transition-protocol";
 
 export const ACTIVE_RUNTIME_TRANSITION_STATUSES = ["pending", "applying", "host_applied", "compensating"] as const;
 
@@ -23,10 +23,10 @@ export type RuntimeCapabilityTransitionRequest = {
 
 export interface RuntimeCapabilityTransitionReceipts {
   /** Implementations serialize with an advisory lock + the DB partial unique index. */
-  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string; previousProfiles: string[]; desiredProfiles: string[]; previousServices?: string[]; desiredServices?: string[]; recheckAttributedWork?: () => Promise<Readonly<Record<string, number>>> }): Promise<
-    | { created: true }
+  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string; previousProfiles: string[]; desiredProfiles: string[]; previousServices?: string[]; desiredServices?: string[]; envelope: RuntimeTransitionEnvelope; envelopeSignature: string; recheckAttributedWork?: () => Promise<Readonly<Record<string, number>>> }): Promise<
+    | { created: true; envelope: RuntimeTransitionEnvelope; envelopeSignature: string }
     | { created: false; kind: "drain_required"; blockingCounts: Readonly<Record<string, number>> }
-    | { created: false; kind: "replay"; status: string }
+    | { created: false; kind: "replay"; status: string; envelope: RuntimeTransitionEnvelope; envelopeSignature: string }
     | { created: false; kind: "active_conflict"; status: string; transitionId: string }
   >;
   markFailed(transitionId: string, failure: string): Promise<void>;
@@ -54,7 +54,7 @@ export type RuntimeCapabilityCoordinatorDeps = {
 
 type TransitionModel = {
   findFirst(args: unknown): Promise<{ transitionId: string; status: string } | null>;
-  findUnique(args: unknown): Promise<{ status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[]; previousServices: string[]; desiredServices: string[] } | null>;
+  findUnique(args: unknown): Promise<{ status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[]; previousServices: string[]; desiredServices: string[]; envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null } | null>;
   create(args: unknown): Promise<unknown>;
   updateMany(args: unknown): Promise<{ count: number }>;
 };
@@ -72,11 +72,12 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       // Fixed SQL with no interpolation: the transaction-scoped lock serializes
       // the read/create pair before the partial unique index supplies backstop.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
-      const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true } });
+      const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true, envelope: true, envelopeSignature: true } });
       if (replay) {
         const same = replay.catalogHash === input.catalogHash && replay.previousStateHash === input.previousStateHash && replay.desiredStateHash === input.desiredStateHash && JSON.stringify(replay.previousKeys) === JSON.stringify([...input.previousKeys].sort()) && JSON.stringify(replay.desiredKeys) === JSON.stringify([...input.desiredKeys].sort()) && JSON.stringify(replay.previousProfiles) === JSON.stringify(input.previousProfiles) && JSON.stringify(replay.desiredProfiles) === JSON.stringify(input.desiredProfiles) && JSON.stringify(replay.previousServices) === JSON.stringify(input.previousServices ?? []) && JSON.stringify(replay.desiredServices) === JSON.stringify(input.desiredServices ?? []);
         if (!same) throw new Error("transition_id_conflict");
-        return { created: false, kind: "replay", status: replay.status };
+        if (!replay.envelope || !replay.envelopeSignature) throw new Error("transition_envelope_identity_missing");
+        return { created: false, kind: "replay", status: replay.status, envelope: replay.envelope, envelopeSignature: replay.envelopeSignature };
       }
       const active = await tx.runtimeCapabilityTransition.findFirst({ where: { status: { in: [...ACTIVE_RUNTIME_TRANSITION_STATUSES] } }, select: { transitionId: true, status: true } });
       if (active) return { created: false, kind: "active_conflict", status: active.status, transitionId: active.transitionId };
@@ -96,10 +97,14 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
         previousStateHash: input.previousStateHash,
         desiredStateHash: input.desiredStateHash,
         catalogHash: input.catalogHash,
+        issuedAt: new Date(input.envelope.issuedAt),
+        expiresAt: new Date(input.envelope.expiresAt),
+        envelope: input.envelope,
+        envelopeSignature: input.envelopeSignature,
         status: "pending",
         requestedById: input.requestedById,
       } });
-      return { created: true };
+      return { created: true, envelope: input.envelope, envelopeSignature: input.envelopeSignature };
     }, { isolationLevel: "Serializable" }),
     markFailed: (transitionId, failure) => prisma.$transaction(async (tx) => { const r = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status: "failed", failure: { code: failure }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: "failed", detail: { failure } } }); }, { isolationLevel: "Serializable" }),
     markHostOutcome: (transitionId, receipt) => prisma.$transaction(async (tx) => { const status = receipt.status === "rolled_back" ? "rolled_back" : receipt.status === "rollback_failed" ? "rollback_failed" : "failed"; const r = await tx.runtimeCapabilityTransition.updateMany({ where: { transitionId, status: { in: ["pending", "applying"] } }, data: { status, hostReceipt: receipt, failure: { code: receipt.failure ?? status }, completedAt: new Date() } }); if (r.count !== 1) throw new Error("runtime_transition_cas_failed"); await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId, outcome: status, detail: { receipt } } }); }, { isolationLevel: "Serializable" }),
@@ -125,6 +130,7 @@ export type RuntimeTransitionReconcileRow = {
   previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[];
   previousServices: string[]; desiredServices: string[];
   previousStates: Readonly<Record<string, string>>; desiredStates: Readonly<Record<string, string>>; createdAt: Date;
+  envelope: RuntimeTransitionEnvelope; envelopeSignature: string;
 };
 
 /** Startup recovery runs before mutation is enabled and converges every nonterminal row. */
@@ -146,9 +152,9 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
       else await deps.compensate(row, "host_receipt_absent_or_expired");
       continue;
     }
-    const envelope: RuntimeTransitionEnvelope = { version: 1, transitionId: row.transitionId, issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt, catalogHash: row.catalogHash, previousStateHash: row.previousStateHash, desiredStateHash: row.desiredStateHash, previousKeys: row.previousKeys, desiredKeys: row.desiredKeys, previousProfiles: row.previousProfiles, desiredProfiles: row.desiredProfiles, previousServices: row.previousServices, desiredServices: row.desiredServices };
     try {
-      const status = verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
+      if (signTransitionPayload(row.envelope, deps.protocolSecret) !== row.envelopeSignature) throw new Error("runtime_transition_envelope_tampered");
+      const status = verifyHistoricalTransitionReceipt(receipt, deps.protocolSecret, row.envelope);
       if (status === "applied") await deps.completeFromReceipt(row, receipt);
       else await deps.classifyTerminalReceipt(row, receipt);
     } catch (error) {
@@ -204,7 +210,15 @@ export async function coordinateRuntimeCapabilityTransition(
       JSON.stringify(previousProjection.enabledKeys) !== JSON.stringify(normalized.previousKeys) || JSON.stringify(desiredProjection.enabledKeys) !== JSON.stringify(normalized.desiredKeys)) {
     return { status: "failed" as const, failure: "capability_projection_mismatch" as const };
   }
-  const pending = await deps.receipts.createPending({ ...normalized, previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles, previousServices: previousProjection.requiredServices, desiredServices: desiredProjection.requiredServices, recheckAttributedWork: deps.recheckAttributedWork });
+  const proposedEnvelope: RuntimeTransitionEnvelope = {
+    version: 1, transitionId: request.transitionId, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + 10 * 60 * 1000).toISOString(),
+    catalogHash: request.catalogHash, previousStateHash: normalized.previousStateHash, desiredStateHash: normalized.desiredStateHash,
+    previousKeys: normalized.previousKeys, desiredKeys: normalized.desiredKeys,
+    previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles,
+    previousServices: previousProjection.requiredServices, desiredServices: desiredProjection.requiredServices,
+  };
+  const proposedSignature = signTransitionPayload(proposedEnvelope, deps.protocolSecret);
+  const pending = await deps.receipts.createPending({ ...normalized, previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles, previousServices: previousProjection.requiredServices, desiredServices: desiredProjection.requiredServices, envelope: proposedEnvelope, envelopeSignature: proposedSignature, recheckAttributedWork: deps.recheckAttributedWork });
   if (!pending.created) {
     if (pending.kind === "drain_required") return { status: "drain_required" as const, blockingCounts: pending.blockingCounts };
     if (pending.kind === "active_conflict") return { status: "transition_in_progress" as const };
@@ -221,13 +235,8 @@ export async function coordinateRuntimeCapabilityTransition(
     await deps.receipts.markFailed(request.transitionId, "promoter_unavailable");
     return { status: "failed" as const, failure: "promoter_unavailable" as const };
   }
-  const envelope: RuntimeTransitionEnvelope = {
-    version: 1, transitionId: request.transitionId, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + 10 * 60 * 1000).toISOString(),
-    catalogHash: request.catalogHash, previousStateHash: normalized.previousStateHash, desiredStateHash: normalized.desiredStateHash,
-    previousKeys: normalized.previousKeys, desiredKeys: normalized.desiredKeys,
-    previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles,
-    previousServices: previousProjection.requiredServices, desiredServices: desiredProjection.requiredServices,
-  };
+  const envelope = pending.envelope;
+  const envelopeSignature = pending.envelopeSignature;
   const encodedEnvelope = Buffer.from(JSON.stringify(envelope)).toString("base64url");
   try { result = await deps.runPromoter({
     ...deps.promoterParams,
@@ -235,9 +244,13 @@ export async function coordinateRuntimeCapabilityTransition(
     containerName: `dpf-promoter-${request.transitionId}`,
     timeoutMs: 10 * 60 * 1000,
     runtimeCapabilityEnvelope: encodedEnvelope,
-    runtimeCapabilitySignature: signTransitionPayload(envelope, deps.protocolSecret),
+    runtimeCapabilitySignature: envelopeSignature,
     runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath,
   }); } catch { await deps.receipts.markFailed(request.transitionId, "promoter_spawn_failed"); return { status: "failed" as const, failure: "promoter_spawn_failed" as const }; }
+  // EX_TEMPFAIL means another host process owns the immutable same-ID claim.
+  // It is not a saga outcome: leave the durable row untouched for that owner or
+  // startup reconciliation to complete.
+  if (result.exitCode === 75) return { status: "transition_in_progress" as const };
   try {
     const receipt = await deps.readHostReceipt(request.transitionId);
     const receiptStatus = verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
