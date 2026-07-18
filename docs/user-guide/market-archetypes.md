@@ -15,6 +15,19 @@ The practical model is:
 3. Work with purposed AI coworkers for the daily jobs that business actually has.
 4. Grow the install through governed improvements when the business needs something new.
 
+## Owner-First Promise
+
+Most DPF customers should hear the archetype story through the owner first. In many archetypes, the owner is still a key practitioner: the plumber doing call-outs, the salon owner cutting hair, the clinician reviewing forms, the venue owner managing holds, or the nonprofit director writing donor updates. DPF is most compelling when it protects that core work and gives the surrounding necessary-evil jobs to governed AI coworkers.
+
+For marketing and testing, each archetype should answer four plain questions:
+
+1. What core job does the owner want more time to do?
+2. Which surrounding jobs steal time after hours?
+3. Which AI coworker can draft, chase, prepare, summarize, or route that work?
+4. Which platform behavior proves the promise is real?
+
+The category-level owner positioning, visual-story guidance, and test-priority matrix live in [Archetype Owner Positioning](../architecture/archetype-owner-positioning.md). Use that document when writing marketing copy, choosing images, drafting diagrams, or deciding which archetype-specific use cases deserve the strictest audit attention.
+
 ## What An Archetype Controls
 
 An archetype is more than a storefront template. It is the business shape selected for the install.

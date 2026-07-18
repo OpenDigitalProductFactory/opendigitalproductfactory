@@ -249,6 +249,17 @@ The specialist should proactively suggest:
 - locality-specific opportunities
 - market shifts worth revisiting
 
+### 6.2a Archetype Positioning Seed
+
+The marketing workspace should consume the category-level owner positioning from [Archetype Owner Positioning](../../architecture/archetype-owner-positioning.md) when drafting the initial strategy and campaign prompts. That document is the durable interpretation layer for:
+
+- the owner-practitioner reality in each archetype category
+- the "work around the work" DPF claims to relieve
+- image, diagram, and use-case angles that should resonate with owners
+- the test emphasis needed before a claim is safe for customer-facing collateral
+
+The workspace can enrich this with live `BusinessContext`, `StorefrontConfig.archetypeId`, locality, customer records, funnel data, and proof assets, but it should not invent a generic positioning thesis when an archetype-specific one exists.
+
 ### 6.3 Campaigns
 
 `/customer/marketing/campaigns` is the execution-planning layer.

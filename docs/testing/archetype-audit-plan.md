@@ -2,7 +2,7 @@
 
 **Status:** Revised — 2026-07-18 (inventory re-grounded to 95 archetypes / 21 categories; media-production, live-events-venues, production-equipment-rental, and medical-practice coverage added)
 **Scope:** Full audit of every seeded archetype via browser-driven fresh installs. Produces gap backlog items for post-audit execution.  
-**Related:** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) (value-stream rationale — read first), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
+**Related:** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) (value-stream rationale — read first), [archetype-owner-positioning.md](../architecture/archetype-owner-positioning.md) (owner-facing marketing promise and test emphasis), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
 
 > **Inventory ground truth (verified 2026-07-18 against `origin/main` `packages/storefront-templates/src/archetypes/`):** **95 seeded archetypes across 21 categories.** Derived by enumerating `ALL_ARCHETYPES` in [`index.ts`](../../packages/storefront-templates/src/archetypes/index.ts) and cross-checking per-file `archetypeId` counts. Per-category counts: asset-rental 3, automotive-services 6, banking-financial-services 3, beauty-personal-care 6, education-training 4, fitness-recreation 3, food-hospitality 3, healthcare-wellness 9, hoa-property-management 3, live-events-venues 3, media-production 3, moving-and-logistics 4, nonprofit-community 8, pet-services 5, professional-services 8, public-sector 3, real-estate-construction 2, retail-goods 5, security-services 2, software-platform 1, trades-maintenance 11 (= **95**).
 >
@@ -44,6 +44,8 @@ DPF ships 95 archetypes across 21 categories. The platform must behave correctly
 **Out of scope for this plan:** executing the gap items. This thread produces the plan, the backlog snapshot, and the per-run scripts. Execution follows in a separate thread.
 
 > **Test against the value stream, not the checklist.** Every phase defends a named stage of the business's real-world operational value stream. Before driving a run, read the archetype's profile in [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) to know its **load-bearing stage(s)**, **demand–capacity inflection**, and **trust gate** — these set where to scrutinise hardest and how to grade severity (that doc's Section 4 gives the stage→phase mapping and the severity-derivation rule). When logging a finding, name the value-stream stage it breaks and let load-bearing status drive severity rather than asserting it.
+
+> **Test the owner promise, not just the template.** The companion [Archetype Owner Positioning](../architecture/archetype-owner-positioning.md) document names the owner-practitioner reality, the surrounding "necessary evil" jobs DPF claims to relieve, and the highest-value proof point for each category. Before each run, identify the promised burden reduction for that archetype: intake, follow-up, dispatch, readiness, marketing draft, compliance prompt, asset return, date conflict, donor thank-you, or similar. If the UI technically works but does not relieve the named owner burden, log an operator-value finding even when the lower-level mechanics pass.
 
 ---
 
@@ -188,6 +190,8 @@ These are the reasons we run 95 evaluations. If they are wrong they indicate an 
 | Setup wizard suggestion accuracy | Brand URL scrape suggests the correct archetype |
 | AI coworker operating intelligence | Finance coworker tax/expense guidance, marketing coworker TAM/channel strategy, compliance/licensing guidance, setup intelligence proactivity — scored 0–4 per Phase O maturity scale |
 | Operator day-to-day experience | Customer communication flows, schedule/calendar usability, payment processing surface, business health KPIs, staff management, digital presence guidance, onboarding completeness — per Phase K |
+| Owner burden relief | The archetype-specific "work around the work" from owner positioning: quote readiness, booking gaps, missing forms, donor follow-up, route/load planning, asset return inspection, date holds, approval chasing, or other necessary-evil work |
+| Marketing proof | Whether the platform produces safe evidence for the customer-facing story: visual vocabulary fit, credible use-case detail, campaign/proof prompts, and current-state vs planned-state boundaries |
 
 ### Operator persona accessibility — a UX fit dimension, not a pass/fail gate
 
