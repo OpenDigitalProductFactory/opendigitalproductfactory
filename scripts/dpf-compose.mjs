@@ -2,21 +2,22 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { delimiter, resolve } from "node:path";
 
 import { validateComposeSafety } from "./lib/compose-safety.mjs";
 import { governCapabilityComposeEnvironment } from "./lib/govern-capability-compose-args.mjs";
-import { resolveComposeInstallContext, resolveDpfStatePath } from "./lib/resolve-compose-install-context.mjs";
+import { canonicalizeComposeFileArgs, resolveComposeInstallContext, resolveDpfStatePath } from "./lib/resolve-compose-install-context.mjs";
 
 let args = process.argv.slice(2);
 let capabilityProjection = { runtimeProfiles: [] };
-let projectRoot;
+let composeContext;
 try {
-  projectRoot = resolveComposeInstallContext({ args, cwd: process.cwd(), env: process.env }).projectRoot;
+  composeContext = resolveComposeInstallContext({ args, cwd: process.cwd(), env: process.env });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(2);
 }
+const { projectRoot, composeFiles } = composeContext;
 const statePath = resolveDpfStatePath({ env: process.env, home: homedir() });
 if (existsSync(statePath)) {
   let state;
@@ -44,8 +45,10 @@ if (existsSync(statePath)) {
 const childEnv = { ...process.env };
 try {
   const governed = governCapabilityComposeEnvironment({ args, projection: capabilityProjection, composeProfiles: process.env.COMPOSE_PROFILES });
-  args = governed.args;
+  args = canonicalizeComposeFileArgs({ args: governed.args, composeFiles });
   childEnv.COMPOSE_PROFILES = governed.composeProfiles.join(",");
+  childEnv.COMPOSE_FILE = composeFiles.join(delimiter);
+  childEnv.COMPOSE_PATH_SEPARATOR = delimiter;
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(2);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
@@ -110,7 +110,10 @@ test("dpf-compose governs profile and topology environment before fake Docker", 
   const alternate = join(dir, "alternate");
   await mkdir(alternate);
   await writeFile(join(alternate, "docker-compose.yml"), "name: alternate\nservices: {}\n");
-  await writeFile(fakeDocker, `require("node:fs").writeFileSync(process.env.DPF_TEST_TRACE, JSON.stringify({ argv: process.argv.slice(2), profiles: process.env.COMPOSE_PROFILES, file: process.env.COMPOSE_FILE }));\n`);
+  await writeFile(join(dir, ".env"), `COMPOSE_FILE=${join(alternate, "docker-compose.yml")}\n`);
+  const maliciousEnvFile = join(dir, "malicious.env");
+  await writeFile(maliciousEnvFile, `COMPOSE_FILE=${join(alternate, "docker-compose.yml")}\nCOMPOSE_PATH_SEPARATOR=|\n`);
+  await writeFile(fakeDocker, `require("node:fs").writeFileSync(process.env.DPF_TEST_TRACE, JSON.stringify({ argv: process.argv.slice(2), profiles: process.env.COMPOSE_PROFILES, file: process.env.COMPOSE_FILE, separator: process.env.COMPOSE_PATH_SEPARATOR }));\n`);
   const writeState = async (enabledValues) => {
     const enabled = new Set(enabledValues);
     const lines = catalog.capabilities.map(({ capabilityId }) => `${capabilityId}=${enabled.has(capabilityId) ? "active" : "disabled"}`).sort().join("\n");
@@ -143,16 +146,21 @@ test("dpf-compose governs profile and topology environment before fake Docker", 
 
     const mismatchedFile = invoke({ COMPOSE_FILE: join(alternate, "docker-compose.yml"), COMPOSE_PROJECT_NAME: "dpf-env-test" });
     assert.equal(mismatchedFile.status, 2);
-    assert.match(mismatchedFile.stderr, /compose_project_root_ambiguous/);
+    assert.match(mismatchedFile.stderr, /compose_file_sources_mismatch/);
     await assert.rejects(readFile(trace), { code: "ENOENT" });
 
     await writeState(["runtime:core", "runtime:local-speech"]);
-    const valid = invoke({ COMPOSE_PROFILES: "tts,integration-test", COMPOSE_FILE: join(root, "docker-compose.yml"), COMPOSE_PROJECT_NAME: "dpf-env-test" });
+    const validFiles = [join(root, "docker-compose.yml"), join(root, "docker-compose.release.yml")];
+    const valid = invoke(
+      { COMPOSE_PROFILES: "tts,integration-test", COMPOSE_FILE: validFiles.join(delimiter), COMPOSE_PATH_SEPARATOR: "|", COMPOSE_PROJECT_NAME: "dpf-env-test" },
+      ["--env-file", maliciousEnvFile, "-f", validFiles[0], "-f", validFiles[1], "config"],
+    );
     assert.equal(valid.status, 0, valid.stderr);
     const forwarded = JSON.parse(await readFile(trace, "utf8"));
     assert.equal(forwarded.profiles, "runtime-local-speech,integration-test");
-    assert.deepEqual(forwarded.argv.slice(0, 5), ["--profile", "runtime-local-speech", "--profile", "integration-test", "-f"]);
-    assert.equal(forwarded.file, join(root, "docker-compose.yml"));
+    assert.deepEqual(forwarded.argv.slice(0, 4), ["-f", validFiles[0], "-f", validFiles[1]]);
+    assert.equal(forwarded.file, validFiles.join(delimiter));
+    assert.equal(forwarded.separator, delimiter);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
