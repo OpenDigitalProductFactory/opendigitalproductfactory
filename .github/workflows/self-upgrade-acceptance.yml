@@ -64,6 +64,8 @@ jobs:
       - name: Candidate readiness succeeds without quiescence
         run: |
           printf '%s\n' '{"schemaVersion":1,"installerVersion":"acceptance","platform":"linux","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":null,"capabilityStateVersion":null}' > "$RUNNER_TEMP/dpf-state/install-state.json"
+          node scripts/lib/resolve-capability-compose-profiles.mjs \
+            --state "$RUNNER_TEMP/dpf-state/install-state.json" --migrate --write
           docker run --rm --read-only \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD:/host-source:ro" \
