@@ -77,5 +77,17 @@ describe("runtime capability synchronization", () => {
     expect(mutate((seed) => { delete seed.capabilities[0].manifest.runtime.activation; })).toThrow("invalid_runtime_activation:runtime:core");
     expect(mutate((seed) => { seed.capabilities[0].manifest.runtime.dependencies = ["runtime:missing"]; })).toThrow("unknown_runtime_dependency:runtime:missing");
     expect(mutate((seed) => { seed.capabilities[0].manifest.runtime.dependencies = ["runtime:build"]; })).toThrow(/runtime_dependency_cycle:runtime:core -> runtime:build -> runtime:core/);
+    expect(mutate((seed) => { seed.capabilities[1].manifest.runtime.workGuards = ["prisma:{ anything: true }"]; })).toThrow("invalid_runtime_work_guard:runtime:build");
+    expect(mutate((seed) => { delete seed.capabilities[1].manifest.runtime.workGuards; })).toThrow("missing_runtime_work_guards:runtime:build");
+  });
+
+  it("declares closed work guards for every non-core executable runtime", () => {
+    for (const capability of canonicalSeed.capabilities) {
+      if (capability.capabilityId === "runtime:core") continue;
+      expect(capability.manifest.runtime.workGuards).toEqual(expect.any(Array));
+      for (const guard of capability.manifest.runtime.workGuards) {
+        expect(guard).toMatch(/^(build-studio-active|task-run:[a-z0-9-]+|work-capsule:[a-z0-9-]+)$/);
+      }
+    }
   });
 });

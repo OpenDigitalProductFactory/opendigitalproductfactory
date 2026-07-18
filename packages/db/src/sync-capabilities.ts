@@ -87,9 +87,15 @@ export function validateRuntimeCapabilitySeeds(parsed: unknown): RuntimeCapabili
     if (!allowedStates.has(capability.state)) throw new Error(`invalid_runtime_state:${capability.capabilityId}`);
     const runtime = capability.manifest?.runtime;
     if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) throw new Error(`invalid_runtime_manifest:${capability.capabilityId}`);
-    const definition = runtime as { dependencies?: unknown; activation?: { policy?: unknown } };
+    const definition = runtime as { dependencies?: unknown; activation?: { policy?: unknown }; workGuards?: unknown };
     if (!Array.isArray(definition.dependencies) || definition.dependencies.some((dependency) => typeof dependency !== "string") || new Set(definition.dependencies).size !== definition.dependencies.length) throw new Error(`invalid_runtime_dependencies:${capability.capabilityId}`);
     if (!definition.activation || typeof definition.activation.policy !== "string" || !allowedActivationPolicies.has(definition.activation.policy)) throw new Error(`invalid_runtime_activation:${capability.capabilityId}`);
+    if (capability.capabilityId !== "runtime:core" && !Array.isArray(definition.workGuards)) throw new Error(`missing_runtime_work_guards:${capability.capabilityId}`);
+    if (definition.workGuards !== undefined) {
+      if (!Array.isArray(definition.workGuards) || new Set(definition.workGuards).size !== definition.workGuards.length || definition.workGuards.some((guard) => typeof guard !== "string" || !/^(build-studio-active|task-run:[a-z0-9-]+|work-capsule:[a-z0-9-]+)$/.test(guard))) {
+        throw new Error(`invalid_runtime_work_guard:${capability.capabilityId}`);
+      }
+    }
     for (const dependency of definition.dependencies) if (!idSet.has(dependency)) throw new Error(`unknown_runtime_dependency:${dependency}`);
   }
   const byId = new Map(capabilities.map((capability) => [capability.capabilityId, capability]));

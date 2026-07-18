@@ -7,7 +7,7 @@ import { compileCapabilityServiceCatalog, resolveCapabilityServiceProjection } f
 const capability = (capabilityId, dependencies = [], state = "active") => ({
   capabilityId,
   state,
-  manifest: { runtime: { dependencies, activation: { policy: capabilityId === "runtime:core" ? "always" : "operator-controlled" } } },
+  manifest: { runtime: { dependencies, activation: { policy: capabilityId === "runtime:core" ? "always" : "operator-controlled" }, ...(capabilityId === "runtime:core" ? {} : { workGuards: [] }) } },
 });
 
 const capabilities = [
@@ -148,4 +148,17 @@ test("closed substrate fields and array values are validated", () => {
 test("activation policy values are closed", () => {
   const typo = capabilities.map((entry) => entry.capabilityId === "runtime:build" ? { ...entry, manifest: { runtime: { ...entry.manifest.runtime, activation: { policy: "operator_controlled" } } } } : entry);
   assert.throws(() => compileCapabilityServiceCatalog({ substrate, capabilities: typo }), /invalid_runtime_manifest:runtime:build/);
+});
+
+test("work guard values are closed and preserved in the catalog", () => {
+  const guarded = capabilities.map((entry) => entry.capabilityId === "runtime:build"
+    ? { ...entry, manifest: { runtime: { ...entry.manifest.runtime, workGuards: ["work-capsule:build-studio", "build-studio-active", "task-run:build"] } } }
+    : entry);
+  const catalog = compileCapabilityServiceCatalog({ substrate, capabilities: guarded });
+  assert.deepEqual(catalog.capabilities.find((entry) => entry.capabilityId === "runtime:build").workGuards,
+    ["build-studio-active", "task-run:build", "work-capsule:build-studio"]);
+  const invalid = guarded.map((entry) => entry.capabilityId === "runtime:build"
+    ? { ...entry, manifest: { runtime: { ...entry.manifest.runtime, workGuards: ["where:{status:not:ship}"] } } }
+    : entry);
+  assert.throws(() => compileCapabilityServiceCatalog({ substrate, capabilities: invalid }), /invalid_runtime_work_guard:runtime:build/);
 });

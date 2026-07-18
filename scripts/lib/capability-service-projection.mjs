@@ -9,6 +9,7 @@ const EXTERNAL_KINDS = new Set(["ai-runtime"]);
 const EXTERNAL_ACTIVATIONS = new Set(["provider-configuration"]);
 const EXTERNAL_HEALTH_SEMANTICS = new Set(["provider-health-reconciliation"]);
 const ACTIVATION_POLICIES = new Set(["always", "operator-controlled", "lifecycle-profile", "provider-configuration"]);
+const WORK_GUARD_PATTERN = /^(build-studio-active|task-run:[a-z0-9-]+|work-capsule:[a-z0-9-]+)$/;
 const stable = (value) => {
   if (Array.isArray(value)) return value.map(stable);
   if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort(compare).map((key) => [key, stable(value[key])]));
@@ -53,6 +54,8 @@ function normalizeInputs({ substrate, capabilities }) {
     const runtime = record.manifest?.runtime;
     if (!runtime || !Array.isArray(runtime.dependencies) || !ACTIVATION_POLICIES.has(runtime.activation?.policy)) throw new Error(`invalid_runtime_manifest:${id}`);
     if (!runtime.dependencies.every((item) => typeof item === "string") || new Set(runtime.dependencies).size !== runtime.dependencies.length) throw new Error(`invalid_runtime_dependencies:${id}`);
+    if (id !== "runtime:core" && !Array.isArray(runtime.workGuards)) throw new Error(`missing_runtime_work_guards:${id}`);
+    if (runtime.workGuards !== undefined && (!Array.isArray(runtime.workGuards) || new Set(runtime.workGuards).size !== runtime.workGuards.length || runtime.workGuards.some((guard) => typeof guard !== "string" || !WORK_GUARD_PATTERN.test(guard)))) throw new Error(`invalid_runtime_work_guard:${id}`);
     capabilityById.set(id, record);
   }
   for (const [id, record] of capabilityById) for (const dependency of record.manifest.runtime.dependencies) {
@@ -117,6 +120,7 @@ export function compileCapabilityServiceCatalog(input) {
       capabilityId,
       dependencies: [...record.manifest.runtime.dependencies].sort(compare),
       activationPolicy: record.manifest.runtime.activation.policy,
+      workGuards: sortedStrings(record.manifest.runtime.workGuards ?? []),
       services: substrate.services.filter((item) => item.capability === capabilityId).sort((a, b) => compare(a.service, b.service)).map(canonicalService),
       externalRuntimes: capabilityId === "runtime:external-ai" ? [...substrate.externalRuntimes].sort((a, b) => compare(a.runtimeKey, b.runtimeKey)).map(canonicalRuntime) : [],
     };

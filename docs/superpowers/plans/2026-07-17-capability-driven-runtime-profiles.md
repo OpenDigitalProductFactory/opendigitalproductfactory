@@ -53,6 +53,8 @@
 
 ### Task 3: Protect capability deactivation with a drain decision
 
+**Execution checkpoint (2026-07-17):** Steps 1-3 are implemented as the closed guard vocabulary, exact live-work attribution adapter, and pure drain decision. Steps 4-12 remain the durable receipt, coordinator/promoter protocol, atomic host apply/recovery, focused verification, and final Task 3 commit; the portal must not expose capability mutation until those remaining steps land together.
+
 **Files:**
 - Modify: `scripts/lib/capability-service-projection.mjs`
 - Modify: `scripts/lib/capability-service-projection.test.mjs`
@@ -72,9 +74,9 @@
 - Create: `scripts/apply-runtime-capability-transition.mjs`
 - Create: `scripts/apply-runtime-capability-transition.test.mjs`
 
-- [ ] **Step 1: Extend canonical runtime capability manifests with closed `workGuards` keys.** Supported keys are `build-studio-active`, `task-run:<source>`, and `work-capsule:<source>`; arbitrary Prisma filters are forbidden. Add red tests proving unknown guards fail sync and every non-core executable capability declares its guards.
-- [ ] **Step 2: Write failing attribution tests** for exact live states: TaskRun `submitted|working|input-required|auth-required|quiescing`, non-abandoned FeatureBuild phases before `ship`, and WorkCapsule `claimed|working|review|blocked`. Assert unrelated sources/terminal states do not block and every declared guard is queried.
-- [ ] **Step 3: Write failing pure transition tests** showing that disabling a capability with attributed queued/running work returns `{ status: "drain_required" }`, names blocking counts, and leaves the current projection active.
+- [x] **Step 1: Extend canonical runtime capability manifests with closed `workGuards` keys.** Supported keys are `build-studio-active`, `task-run:<source>`, and `work-capsule:<source>`; arbitrary Prisma filters are forbidden. Add red tests proving unknown guards fail sync and every non-core executable capability declares its guards.
+- [x] **Step 2: Write failing attribution tests** for exact live states: TaskRun `submitted|working|input-required|auth-required|quiescing`, non-abandoned FeatureBuild phases before `ship`, and WorkCapsule `claimed|working|review|blocked`. Assert unrelated sources/terminal states do not block and every declared guard is queried.
+- [x] **Step 3: Write failing pure transition tests** showing that disabling a capability with attributed queued/running work returns `{ status: "drain_required" }`, names blocking counts, and leaves the current projection active.
 - [ ] **Step 4: Add `RuntimeCapabilityTransition` as the durable saga receipt** with previous/desired sorted key sets, previous/desired deterministic state hashes, catalog hash, status, host receipt, failure, timestamps, and one-active-transition partial unique index. `capabilityStateVersion` is precisely `sha256(catalogHash + "\n" + sorted(capabilityId + "=" + state).join("\n"))`; it is derived, never separately incremented.
 - [ ] **Step 5: Write saga tests** for serialization, `drain_required`, promoter unavailable, host apply failure, portal restart after host receipt, DB commit failure, and compensation failure. A second transition must return `transition_in_progress`; a blocked transition must not launch a promoter.
 - [ ] **Step 6: Extend the existing universal-core promoter boundary, not the optional queue.** `transition-coordinator.ts` runs in the portal core and launches the sibling promoter directly through the already-governed Docker socket using a new `--runtime-capability-transition` mode in `buildPromoterCommand`. Optional queues may request the action but never execute it. The promoter remains alive when Redis/Inngest/browser/speech/telemetry services stop.
