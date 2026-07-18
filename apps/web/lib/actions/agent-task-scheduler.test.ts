@@ -98,8 +98,8 @@ import {
 } from "./agent-task-scheduler-summary";
 
 beforeEach(() => {
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
   vi.resetAllMocks();
+  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
   // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
   // default to a WON claim so existing tests exercise the work. Per-test
   // overrides simulate losing the claim.
