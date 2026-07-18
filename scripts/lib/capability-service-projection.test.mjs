@@ -39,9 +39,11 @@ const substrate = {
   version: 2,
   services: [
     service("postgres", "runtime:core", { class: "universal-core", defaultRequired: true, profiles: [], backupPolicy: "included" }),
-    service("portal", "runtime:core", { class: "universal-core", defaultRequired: true, profiles: [], dependsOn: ["postgres"], backupPolicy: "included" }),
+    service("portal-init", "runtime:core", { class: "ephemeral-lifecycle", defaultRequired: true, profiles: [], dependsOn: ["postgres"], backupPolicy: "included", healthSemantics: "lifecycle-completion" }),
+    service("portal", "runtime:core", { class: "universal-core", defaultRequired: true, profiles: [], dependsOn: ["portal-init"], backupPolicy: "included" }),
     service("promoter", "runtime:core", { class: "ephemeral-lifecycle", profiles: ["promote"], dependsOn: ["postgres"], backupPolicy: "included", healthSemantics: "consumer-observed" }),
-    service("sandbox", "runtime:build", { defaultRequired: true, profiles: [], backupPolicy: "excluded-ephemeral" }),
+    service("sandbox-init", "runtime:build", { class: "ephemeral-lifecycle", defaultRequired: true, profiles: [], dependsOn: ["postgres"], backupPolicy: "excluded-ephemeral", healthSemantics: "lifecycle-completion" }),
+    service("sandbox", "runtime:build", { defaultRequired: true, profiles: [], dependsOn: ["sandbox-init"], backupPolicy: "excluded-ephemeral" }),
     service("dpf-stt", "runtime:local-speech", { defaultRequired: true, profiles: [] }),
     service("dpf-tts", "runtime:local-speech", { profiles: ["local-speech"], backupPolicy: "separate-required" }),
     service("prometheus", "runtime:deep-observability", { defaultRequired: true, profiles: [], backupPolicy: "separate-required" }),
@@ -51,11 +53,11 @@ const substrate = {
 };
 
 const fixtures = {
-  core: { keys: ["runtime:core"], required: ["portal", "postgres"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox"], profiles: [], backup: ["portal", "postgres"], external: [] },
-  build: { keys: ["runtime:build"], required: ["portal", "postgres", "sandbox"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter"], profiles: [], backup: ["portal", "postgres"], external: [] },
-  "local-speech": { keys: ["runtime:local-speech"], required: ["dpf-stt", "dpf-tts", "portal", "postgres"], inactive: ["grafana", "prometheus", "promoter", "sandbox"], profiles: ["local-speech"], backup: ["dpf-tts", "portal", "postgres"], external: [] },
-  "deep-observability": { keys: ["runtime:deep-observability"], required: ["grafana", "portal", "postgres", "prometheus"], inactive: ["dpf-stt", "dpf-tts", "promoter", "sandbox"], profiles: ["observability-ui"], backup: ["grafana", "portal", "postgres", "prometheus"], external: [] },
-  "external-ai": { keys: ["runtime:external-ai"], required: ["portal", "postgres"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox"], profiles: [], backup: ["portal", "postgres"], external: ["openai"] },
+  core: { keys: ["runtime:core"], required: ["portal", "portal-init", "postgres"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox", "sandbox-init"], profiles: [], backup: ["portal", "portal-init", "postgres"], external: [] },
+  build: { keys: ["runtime:build"], required: ["portal", "portal-init", "postgres", "sandbox", "sandbox-init"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter"], profiles: [], backup: ["portal", "portal-init", "postgres"], external: [] },
+  "local-speech": { keys: ["runtime:local-speech"], required: ["dpf-stt", "dpf-tts", "portal", "portal-init", "postgres"], inactive: ["grafana", "prometheus", "promoter", "sandbox", "sandbox-init"], profiles: ["local-speech"], backup: ["dpf-tts", "portal", "portal-init", "postgres"], external: [] },
+  "deep-observability": { keys: ["runtime:deep-observability"], required: ["grafana", "portal", "portal-init", "postgres", "prometheus"], inactive: ["dpf-stt", "dpf-tts", "promoter", "sandbox", "sandbox-init"], profiles: ["observability-ui"], backup: ["grafana", "portal", "portal-init", "postgres", "prometheus"], external: [] },
+  "external-ai": { keys: ["runtime:external-ai"], required: ["portal", "portal-init", "postgres"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox", "sandbox-init"], profiles: [], backup: ["portal", "portal-init", "postgres"], external: ["openai"] },
 };
 
 for (const [name, expected] of Object.entries(fixtures)) {
@@ -76,7 +78,7 @@ for (const [name, expected] of Object.entries(fixtures)) {
     assert.deepEqual(first.inactiveOptionalServices, expected.inactive);
     assert.deepEqual(first.composeProfiles, expected.profiles);
     assert.deepEqual(first.backupServices, expected.backup);
-    assert.deepEqual(first.healthRequirements, expected.required.map((serviceName) => ({ service: serviceName, semantics: "compose-healthcheck" })));
+    assert.deepEqual(first.healthRequirements, expected.required.map((serviceName) => ({ service: serviceName, semantics: substrate.services.find((entry) => entry.service === serviceName).healthSemantics })));
     assert.deepEqual(first.externalRuntimes.map((item) => item.runtimeKey), expected.external);
     assert.deepEqual(first.serviceRequirements, expected.required.map((serviceName) => {
       const record = substrate.services.find((entry) => entry.service === serviceName);
@@ -90,6 +92,13 @@ test("catalog contains every valid binding rather than install state", () => {
   assert.deepEqual(catalog.capabilities.map((entry) => entry.capabilityId), capabilities.map((entry) => entry.capabilityId).sort());
   assert.equal(catalog.capabilities.find((entry) => entry.capabilityId === "runtime:external-ai").externalRuntimes[0].runtimeKey, "openai");
   assert.match(catalog.catalogHash, /^[a-f0-9]{64}$/);
+});
+
+test("every required service includes its declared prerequisite closure", () => {
+  const fixtureCapabilities = capabilities.map((entry) => ({ ...entry, state: ["runtime:core", "runtime:build"].includes(entry.capabilityId) ? "active" : "disabled" }));
+  const projection = resolveCapabilityServiceProjection({ substrate, capabilities: fixtureCapabilities, enabledRuntimeCapabilities: ["runtime:build"] });
+  const required = new Set(projection.requiredServices);
+  for (const requirement of projection.serviceRequirements) for (const dependency of requirement.dependsOn) assert.ok(required.has(dependency), `${requirement.service} prerequisite ${dependency} must be required`);
 });
 
 test("dependency cycles fail closed with their path", () => {

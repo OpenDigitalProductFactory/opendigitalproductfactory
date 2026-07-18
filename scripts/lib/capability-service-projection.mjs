@@ -142,8 +142,19 @@ export function resolveCapabilityServiceProjection({ substrate, capabilities, en
   const liveEnabledKeys = [...capabilityById].filter(([, record]) => record.state === "active").map(([id]) => id).sort(compare);
   if (JSON.stringify(liveEnabledKeys) !== JSON.stringify(enabledKeys)) throw new Error("capability_state_stale");
   const enabledEntries = catalog.capabilities.filter((entry) => enabled.has(entry.capabilityId));
-  const isPersistent = (entry) => !(entry.targetClassification === "ephemeral-lifecycle" && entry.healthSemantics !== "compose-healthcheck");
-  const serviceRequirements = enabledEntries.flatMap((entry) => entry.services).filter(isPersistent).sort((a, b) => compare(a.service, b.service));
+  const enabledServices = enabledEntries.flatMap((entry) => entry.services);
+  const enabledServiceByName = new Map(enabledServices.map((entry) => [entry.service, entry]));
+  const selected = new Set();
+  const include = (serviceName) => {
+    if (selected.has(serviceName)) return;
+    const entry = enabledServiceByName.get(serviceName);
+    if (!entry) throw new Error(`required_service_outside_enabled_capability_closure:${serviceName}`);
+    selected.add(serviceName);
+    for (const dependency of entry.dependsOn) include(dependency);
+  };
+  const isOnDemandLifecycle = (entry) => entry.targetClassification === "ephemeral-lifecycle" && entry.profiles.length > 0;
+  for (const entry of enabledServices) if (!isOnDemandLifecycle(entry)) include(entry.service);
+  const serviceRequirements = [...selected].sort(compare).map((serviceName) => enabledServiceByName.get(serviceName));
   const requiredServices = serviceRequirements.map((entry) => entry.service);
   const requiredSet = new Set(requiredServices);
   const stateLines = [...capabilityById].map(([id, record]) => `${id}=${record.state}`).sort(compare).join("\n");
