@@ -1,6 +1,6 @@
 # Capability-Driven Runtime Profiles Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Use `dpf-tdd` while implementing, `dpf-local-merge-ci-before-push` for the completion gate, and `dpf-pr-with-dco` for delivery. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make install, upgrade, health, backup, and diagnostics derive service requirements from one capability-aware substrate projection so disabled optional services never make an installation unhealthy.
 

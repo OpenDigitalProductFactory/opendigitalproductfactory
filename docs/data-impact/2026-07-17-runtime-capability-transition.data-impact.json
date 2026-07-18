@@ -1,0 +1,68 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20260718012000_add_runtime_capability_transition through 20260718043000_persist_runtime_transition_envelope",
+    "backfill": "none - new operational receipt and append-only event models"
+  },
+  "tests": [
+    "apps/web/lib/runtime-capability-transition.test.ts",
+    "apps/web/lib/runtime-transition-store.test.ts",
+    "apps/web/lib/runtime-transition-recovery.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "platform:runtime-capability-transition",
+      "prismaModel": "RuntimeCapabilityTransition",
+      "lifecycleDisposition": "operational receipt retained with platform governance history",
+      "fields": [
+        {
+          "fieldId": "platform:runtime-capability-transition#transitionId",
+          "resolution": "governed",
+          "reason": "stable idempotency and host-protocol correlation key",
+          "provenance": "runtime capability transition saga"
+        },
+        {
+          "fieldId": "platform:runtime-capability-transition#desiredState",
+          "resolution": "governed",
+          "reason": "canonical requested capability, profile, service, and state projection",
+          "provenance": "capability and substrate catalog compiler"
+        },
+        {
+          "fieldId": "platform:runtime-capability-transition#signedEnvelope",
+          "resolution": "governed",
+          "reason": "authenticated least-privilege portal-to-host transition request",
+          "provenance": "runtime transition authority service"
+        },
+        {
+          "fieldId": "platform:runtime-capability-transition#hostReceipt",
+          "resolution": "governed",
+          "reason": "durable evidence of the host-side transition outcome",
+          "provenance": "runtime transition promoter"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "platform:runtime-capability-transition-event",
+      "prismaModel": "RuntimeCapabilityTransitionEvent",
+      "lifecycleDisposition": "append-only governance audit retained with its parent transition",
+      "fields": [
+        {
+          "fieldId": "platform:runtime-capability-transition-event#outcome",
+          "resolution": "governed",
+          "reason": "terminal transition outcome for governance and recovery audit",
+          "provenance": "runtime capability transition saga"
+        },
+        {
+          "fieldId": "platform:runtime-capability-transition-event#detail",
+          "resolution": "governed",
+          "reason": "structured transition, compensation, and reconciliation evidence",
+          "provenance": "runtime capability transition saga"
+        }
+      ]
+    }
+  ]
+}
