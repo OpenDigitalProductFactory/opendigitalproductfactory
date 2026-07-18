@@ -58,6 +58,17 @@ describe("runtime capability transition coordinator", () => {
     expect(compensate).toHaveBeenCalledWith(row, "host_receipt_absent_or_expired");
   });
 
+  it("closes an expired request that never mutated the host without compensation or recovery", async () => {
+    const secret = "x".repeat(32);
+    const envelope = { ...persistedEnvelope, issuedAt: new Date(1_000).toISOString(), expiresAt: new Date(2_000).toISOString() };
+    const row = { ...request, ...envelope, previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(1_000), status: "pending", envelope, envelopeSignature: signTransitionPayload(envelope, secret) };
+    const clean = vi.fn(); const compensate = vi.fn(); const recovery = vi.fn();
+    await reconcileRuntimeCapabilityTransitions({ listActive: async () => [row], readHostReceipt: async () => null, completeFromReceipt: vi.fn(), classifyTerminalReceipt: vi.fn(), relaunch: vi.fn(), compensate, markRecoveryRequired: recovery, protocolSecret: secret, now: () => 3_000, isHostMutationStarted: async () => false, markCleanPrevious: clean });
+    expect(clean).toHaveBeenCalledWith(row, "host_receipt_absent_or_expired_before_mutation");
+    expect(compensate).not.toHaveBeenCalled();
+    expect(recovery).not.toHaveBeenCalled();
+  });
+
   it("marks legacy nullable-envelope rows recovery_required without relaunch", async () => {
     const row = { ...request, ...persistedEnvelope, previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(1_000), status: "pending", envelope: null, envelopeSignature: null };
     const relaunch = vi.fn(); const recovery = vi.fn();

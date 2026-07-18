@@ -55,6 +55,7 @@ for (const [crashPoint, durablePhase] of [["prepared", "prepared"], ["state-muta
     const receipt = JSON.parse(await readFile(join(dir, "runtime-capability-transitions", "RCT-test.json"), "utf8"));
     assert.equal(receipt.status, "applied");
     assert.deepEqual(Object.keys(receipt.observedHealth), fixture.desired.required);
+    assert.ok(Object.values(receipt.observedHealth).every((status) => status === "healthy"));
   });
 
 test("fails and restores install state when a required compose healthcheck is unhealthy", async () => {

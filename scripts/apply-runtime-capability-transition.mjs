@@ -119,13 +119,13 @@ const observe = () => {
   try {
     const raw = String(ps.stdout ?? "").trim();
     const rows = !raw ? [] : raw.startsWith("[") ? JSON.parse(raw) : raw.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
-    const health = Object.fromEntries(rows.map((row) => [row.Service, { state: String(row.State ?? "").toLowerCase(), health: String(row.Health ?? "").toLowerCase() || null }]));
+    const health = Object.fromEntries(rows.map((row) => [row.Service, String(row.Health ?? "").toLowerCase() || "none"]));
     return { ps, services: rows.filter((row) => String(row.State ?? "").toLowerCase() === "running").map((row) => row.Service).sort(), health };
   } catch { return { ps: { ...ps, status: 1 }, services: [], health: {} }; }
 };
 const transitionServices = [...new Set([...envelope.previousServices, ...envelope.desiredServices])];
 const healthSemantics = new Map(catalog.capabilities.flatMap((capability) => capability.services).map((service) => [service.service, service.healthSemantics]));
-const exact = (projection, observed, health) => projection.required.every((service) => observed.includes(service) && (healthSemantics.get(service) !== "compose-healthcheck" || health[service]?.health === "healthy")) && transitionServices.filter((service) => !projection.required.includes(service)).every((service) => !observed.includes(service));
+const exact = (projection, observed, health) => projection.required.every((service) => observed.includes(service) && (healthSemantics.get(service) !== "compose-healthcheck" || health[service] === "healthy")) && transitionServices.filter((service) => !projection.required.includes(service)).every((service) => !observed.includes(service));
 const next = { ...before, enabledRuntimeCapabilities: desired.enabledKeys, capabilityCatalogHash: catalogHash, capabilityStateVersion: desired.stateHash };
 const nextValidation = await validateInstallState(next, schemaPath);
 if (!nextValidation.valid) await fail("install_state_schema_invalid");

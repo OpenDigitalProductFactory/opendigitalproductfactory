@@ -18,6 +18,7 @@ export async function assertRuntimeCapabilityTransitionAdmission(): Promise<void
 }
 
 const receiptPath = (id: string) => `/dpf-state/runtime-capability-transitions/${id}.json`;
+const journalPath = (id: string) => `/dpf-state/runtime-capability-transitions/${id}.journal.json`;
 async function readReceipt(id: string): Promise<RuntimeTransitionReceipt | null> {
   try { return JSON.parse(await readFile(receiptPath(id), "utf8")) as RuntimeTransitionReceipt; }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
@@ -91,6 +92,19 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
     protocolSecret: host.protocolSecret,
     relaunch: host.relaunch,
     compensate: host.compensate,
+    isHostMutationStarted: async (row) => {
+      try {
+        const journal = JSON.parse(await readFile(journalPath(row.transitionId), "utf8")) as { phase?: string };
+        return journal.phase === "state-written" || journal.phase === "runtime-reconciled";
+      }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+    },
+    markCleanPrevious: async (row, reason) => {
+      await prisma.$transaction(async (tx) => {
+        await tx.runtimeCapabilityTransition.update({ where: { transitionId: row.transitionId }, data: { status: "failed", failure: { code: reason }, completedAt: new Date() } });
+        await tx.runtimeCapabilityTransitionEvent.create({ data: { transitionId: row.transitionId, outcome: "failed", detail: { reason, source: "startup-reconciler" } } });
+      });
+    },
     completeFromReceipt: async (row, receipt) => {
       await prisma.$transaction(async (tx) => {
         for (const [capabilityId, state] of Object.entries(row.desiredStates)) await tx.platformCapability.update({ where: { capabilityId }, data: { state } });

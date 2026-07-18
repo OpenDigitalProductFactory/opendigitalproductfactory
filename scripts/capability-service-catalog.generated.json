@@ -34,6 +34,9 @@
           "targetClassification": "separate-distribution",
           "volumes": []
         }
+      ],
+      "workGuards": [
+        "task-run:coworker"
       ]
     },
     {
@@ -69,6 +72,9 @@
             "browser_profiles:/profiles"
           ]
         }
+      ],
+      "workGuards": [
+        "task-run:coworker"
       ]
     },
     {
@@ -151,6 +157,11 @@
             "sandbox_pgdata:/var/lib/postgresql/data"
           ]
         }
+      ],
+      "workGuards": [
+        "build-studio-active",
+        "task-run:build",
+        "work-capsule:build-studio"
       ]
     },
     {
@@ -185,6 +196,7 @@
           "volumes": [
             "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
             "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
+            "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro",
             "/var/run/docker.sock:/var/run/docker.sock",
             "browser_evidence:/evidence:ro",
             "dpf-source-code:/workspace",
@@ -265,7 +277,8 @@
             "/var/run/docker.sock:/var/run/docker.sock"
           ]
         }
-      ]
+      ],
+      "workGuards": []
     },
     {
       "activationPolicy": "operator-controlled",
@@ -461,7 +474,8 @@
             "prometheus_data:/prometheus"
           ]
         }
-      ]
+      ],
+      "workGuards": []
     },
     {
       "activationPolicy": "lifecycle-profile",
@@ -604,6 +618,9 @@
           "targetClassification": "test-development-only",
           "volumes": []
         }
+      ],
+      "workGuards": [
+        "task-run:build"
       ]
     },
     {
@@ -686,6 +703,9 @@
           "targetClassification": "capability-activated",
           "volumes": []
         }
+      ],
+      "workGuards": [
+        "task-run:proactive"
       ]
     },
     {
@@ -1021,7 +1041,13 @@
           "runtimeKey": "zai-coding"
         }
       ],
-      "services": []
+      "services": [],
+      "workGuards": [
+        "task-run:build",
+        "task-run:coworker",
+        "task-run:proactive",
+        "task-run:skill"
+      ]
     },
     {
       "activationPolicy": "operator-controlled",
@@ -1081,10 +1107,13 @@
             "dpf_tts_voices:/app/voices"
           ]
         }
+      ],
+      "workGuards": [
+        "task-run:coworker"
       ]
     }
   ],
-  "catalogHash": "84e8c8c295149a31f570e90a494bbf1f941d1a1b6d6537fd5814002785fae0c8",
+  "catalogHash": "7116a6f7e65e20391df9f3187ceb9d31480dd95fc14ce81fba1a09a8cc83e33b",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

@@ -142,6 +142,10 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
   relaunch(row: RuntimeTransitionReconcileRow): Promise<void>;
   markRecoveryRequired(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
   compensate(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
+  /** Durable host journal distinguishes a clean previous state from an apply
+   * that may have crossed the filesystem/Compose boundary before receipt. */
+  isHostMutationStarted?(row: RuntimeTransitionReconcileRow): Promise<boolean>;
+  markCleanPrevious?(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
   protocolSecret: string;
   now?: () => number;
 }): Promise<void> {
@@ -166,6 +170,10 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
       if (Date.parse(row.envelope.expiresAt) >= now && Date.parse(row.envelope.issuedAt) <= now + 30_000) {
         await deps.relaunch(row);
       } else {
+        if (deps.isHostMutationStarted && deps.markCleanPrevious && !(await deps.isHostMutationStarted(row))) {
+          await deps.markCleanPrevious(row, "host_receipt_absent_or_expired_before_mutation");
+          continue;
+        }
         try {
           await deps.compensate(row, "host_receipt_absent_or_expired");
         } catch (error) {
