@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   rollbackSelfUpgrade,
@@ -169,6 +169,29 @@ function formatDuration(start: Date | string, end: Date | string): string {
   if (minutes === 0) return `${seconds}s`;
   if (seconds === 0) return `${minutes}m`;
   return `${minutes}m ${seconds}s`;
+}
+
+// A one-line "why it failed" for the Run History, drawn from the persisted
+// failureLog. The orchestrator stores a classified excerpt that LEADS with
+// `[build-failure-class] <summary>` lines, so prefer the human summary line;
+// otherwise fall back to the last non-empty line (usually the raw daemon/build
+// error). The full log stays available on hover. Without this the history table
+// showed a bare "failed" badge with no words — the gap this closes.
+export function conciseFailureReason(log: string | null | undefined): string | null {
+  if (!log) return null;
+  const lines = log
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+  const classLines = lines
+    .filter((l) => l.startsWith("[build-failure-class]"))
+    .map((l) => l.replace(/^\[build-failure-class\]\s*/, "").trim())
+    .filter((l) => l && !l.startsWith("playbook:"));
+  // classLines[0] is the class id (e.g. "docker-mount-denied"); [1] is the
+  // human summary. Prefer the summary, else the id, else the last raw line.
+  const chosen = classLines[1] ?? classLines[0] ?? lines[lines.length - 1];
+  return chosen.length > 200 ? `${chosen.slice(0, 200)}…` : chosen;
 }
 
 /**
@@ -1349,44 +1372,71 @@ export default function SelfUpgradeClient({
               </tr>
             </thead>
             <tbody>
-              {history.map((run) => (
-                <tr
-                  key={run.runId}
-                  className="border-t border-[var(--dpf-border)]"
-                  data-run-id={run.runId}
-                >
-                  <td className="px-3 py-2 w-24 shrink-0">
-                    <StatusBadge
-                      domain="selfUpgradeRun"
-                      status={run.status}
-                      label={statusLabel(run.status)}
-                      variant="soft"
-                    />
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[var(--dpf-muted)]">{run.runId}</td>
-                  <td className="px-3 py-2 text-[var(--dpf-muted)]">
-                    {run.currentSha && run.targetSha ? (
-                      <>
-                        <span className="font-mono" title={run.currentSha}>
-                          {shortSha(run.currentSha)}
-                        </span>
-                        {" → "}
-                        <span className="font-mono" title={run.targetSha}>
-                          {shortSha(run.targetSha)}
-                        </span>
-                      </>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2 text-right text-[var(--dpf-muted)] whitespace-nowrap align-top">
-                    <LocalTime value={run.startedAt ?? run.createdAt} />
-                    {run.startedAt && run.completedAt && (
-                      <span className="ml-1 opacity-70">
-                        · {formatDuration(run.startedAt, run.completedAt)}
-                      </span>
+              {history.map((run) => {
+                // Surface WHY a run didn't install — the reason is persisted but
+                // was never shown per row (skipped/failed rows were a bare badge).
+                // Skips carry a structured reason; failures carry a classified log.
+                const skip =
+                  run.status === "skipped" ? describeSkipReason(run.reason) : null;
+                const failReason =
+                  run.status === "failed" ? conciseFailureReason(run.failureLog) : null;
+                const reasonText = skip ? `${skip.title} — ${skip.detail}` : failReason;
+                return (
+                  <Fragment key={run.runId}>
+                    <tr
+                      className="border-t border-[var(--dpf-border)]"
+                      data-run-id={run.runId}
+                    >
+                      <td className="px-3 py-2 w-24 shrink-0">
+                        <StatusBadge
+                          domain="selfUpgradeRun"
+                          status={run.status}
+                          label={statusLabel(run.status)}
+                          variant="soft"
+                        />
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[var(--dpf-muted)]">{run.runId}</td>
+                      <td className="px-3 py-2 text-[var(--dpf-muted)]">
+                        {run.currentSha && run.targetSha ? (
+                          <>
+                            <span className="font-mono" title={run.currentSha}>
+                              {shortSha(run.currentSha)}
+                            </span>
+                            {" → "}
+                            <span className="font-mono" title={run.targetSha}>
+                              {shortSha(run.targetSha)}
+                            </span>
+                          </>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-right text-[var(--dpf-muted)] whitespace-nowrap align-top">
+                        <LocalTime value={run.startedAt ?? run.createdAt} />
+                        {run.startedAt && run.completedAt && (
+                          <span className="ml-1 opacity-70">
+                            · {formatDuration(run.startedAt, run.completedAt)}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    {reasonText && (
+                      <tr data-run-reason-for={run.runId}>
+                        <td />
+                        <td
+                          colSpan={3}
+                          className="px-3 pb-2 pt-0 text-[11px] text-[var(--dpf-muted)] align-top"
+                        >
+                          <span
+                            className="opacity-80"
+                            title={run.failureLog ?? run.reason ?? undefined}
+                          >
+                            {reasonText}
+                          </span>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                </tr>
-              ))}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
           {historyNextCursor != null && (

@@ -42,7 +42,7 @@ vi.mock("@/components/ops/UpgradeImpactPanel", () => ({
   default: () => null,
 }));
 
-import SelfUpgradeClient from "./SelfUpgradeClient";
+import SelfUpgradeClient, { conciseFailureReason } from "./SelfUpgradeClient";
 
 const baseStatus = {
   enabled: true,
@@ -1128,5 +1128,95 @@ describe("Update-available banner — at-a-glance scope", () => {
     expect(html).not.toContain('data-update-glance="true"');
     // The plain "Update available" line still renders.
     expect(html).toContain("Update available");
+  });
+});
+
+// ─── Run History reasons ────────────────────────────────────────────────────
+// The reason a run didn't install is persisted (SelfUpgradeRun.reason for skips,
+// .failureLog for failures) but was never rendered per row — skipped/failed rows
+// showed only a badge. These assert the "why" now surfaces.
+
+describe("SelfUpgradeClient – run history reasons", () => {
+  it("surfaces the skip reason for a skipped run", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        history={[
+          makeRun("skipped", {
+            runId: "SUR-SKIP1",
+            reason: "activity-in-flight: coworker.reasoning-loop",
+            currentSha: null,
+            targetSha: null,
+          }),
+        ]}
+      />,
+    );
+    expect(html).toContain('data-run-reason-for="SUR-SKIP1"');
+    // describeSkipReason("activity-in-flight: …") → title "Work in progress".
+    expect(html).toContain("Work in progress");
+  });
+
+  it("surfaces a concise classified failure reason for a failed run", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        history={[
+          makeRun("failed", {
+            runId: "SUR-FAIL1",
+            failureLog:
+              "[build-failure-class] docker-mount-denied\n" +
+              "[build-failure-class] Docker Desktop refused to share /root/.dpf — set DPF_STATE_DIR in the install .env.\n" +
+              "[build-failure-class] playbook: docs/runbooks/x.md\n---\nError response from daemon: mounts denied",
+          }),
+        ]}
+      />,
+    );
+    expect(html).toContain('data-run-reason-for="SUR-FAIL1"');
+    // The human summary line surfaces as the visible reason (selection logic is
+    // unit-tested separately in conciseFailureReason).
+    expect(html).toContain("Docker Desktop refused to share");
+  });
+
+  it("shows no reason row for a succeeded run", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        history={[makeRun("succeeded", { runId: "SUR-OK1" })]}
+      />,
+    );
+    expect(html).not.toContain('data-run-reason-for="SUR-OK1"');
+  });
+});
+
+describe("conciseFailureReason", () => {
+  it("prefers the classified human summary over the class id and playbook line", () => {
+    const log =
+      "[build-failure-class] docker-mount-denied\n" +
+      "[build-failure-class] Docker Desktop refused to share /root/.dpf.\n" +
+      "[build-failure-class] playbook: docs/runbooks/x.md\n---\nraw error";
+    expect(conciseFailureReason(log)).toBe("Docker Desktop refused to share /root/.dpf.");
+  });
+
+  it("falls back to the class id when there is no summary line", () => {
+    expect(conciseFailureReason("[build-failure-class] promoter-timeout")).toBe("promoter-timeout");
+  });
+
+  it("falls back to the last non-empty raw line when unclassified", () => {
+    expect(conciseFailureReason("building...\n\nError response from daemon: boom\n")).toBe(
+      "Error response from daemon: boom",
+    );
+  });
+
+  it("truncates very long reasons", () => {
+    const long = "[build-failure-class] x\n[build-failure-class] " + "z".repeat(400);
+    const out = conciseFailureReason(long)!;
+    expect(out.length).toBe(201); // 200 chars + ellipsis
+    expect(out.endsWith("…")).toBe(true);
+  });
+
+  it("returns null for empty/absent logs", () => {
+    expect(conciseFailureReason(null)).toBeNull();
+    expect(conciseFailureReason("")).toBeNull();
+    expect(conciseFailureReason("   \n  ")).toBeNull();
   });
 });

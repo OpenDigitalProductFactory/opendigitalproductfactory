@@ -32,8 +32,16 @@ Docker has no file-sharing gate and is unaffected.)
 
 ## Fix — per install (unblocks now)
 
-Pin `DPF_STATE_DIR` to an absolute, Docker-Desktop-shared host path in the install
-`.env`, then re-trigger the upgrade:
+Run the repair script from the install directory — it pins `DPF_STATE_DIR` to an
+absolute, Docker-Desktop-shared path, verifies Docker can share it, and is
+idempotent:
+
+```sh
+scripts/repair-self-upgrade-state-dir.sh          # or: … /path/to/install
+```
+
+Then re-trigger the upgrade (Self-Upgrade page → Emergency override). To do it by
+hand instead, add to `.env`:
 
 - macOS: `DPF_STATE_DIR=/Users/<user>/.dpf`
 - Windows: `DPF_STATE_DIR=C:\Users\<user>\.dpf`
