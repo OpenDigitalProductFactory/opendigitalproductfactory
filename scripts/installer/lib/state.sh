@@ -25,7 +25,9 @@ DPF_STATE_SCHEMA_VERSION=1
 
 # Resolve state directory honoring XDG_STATE_HOME on Linux.
 dpf_state_dir() {
-  if [ -n "${XDG_STATE_HOME:-}" ]; then
+  if [ -n "${DPF_STATE_DIR:-}" ]; then
+    echo "${DPF_STATE_DIR}"
+  elif [ -n "${XDG_STATE_HOME:-}" ]; then
     echo "${XDG_STATE_HOME}/dpf"
   else
     echo "${HOME}/.dpf"
@@ -34,6 +36,12 @@ dpf_state_dir() {
 
 dpf_state_path() {
   echo "$(dpf_state_dir)/install-state.json"
+}
+
+dpf_state_transaction_path() {
+  local lib_dir
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  echo "$(dirname "$lib_dir")/install-state-transaction.mjs"
 }
 
 # Initialize a fresh state file at the canonical path. Idempotent —
@@ -45,10 +53,6 @@ dpf_state_init() {
   local state_dir; state_dir="$(dpf_state_dir)"
   local path; path="$(dpf_state_path)"
 
-  if [ -f "$path" ]; then
-    return 0
-  fi
-
   mkdir -p "$state_dir"
   dpf_platform
   dpf_arch
@@ -56,7 +60,8 @@ dpf_state_init() {
   # Build the initial JSON. Keep it shell-only for bash 3.2 portability;
   # don't reach for jq here so the install can bootstrap on hosts that
   # haven't installed jq yet.
-  cat > "$path" <<EOF
+  local initial_json
+  initial_json=$(cat <<EOF
 {
   "schemaVersion": ${DPF_STATE_SCHEMA_VERSION},
   "installerVersion": "${installer_version}",
@@ -84,7 +89,11 @@ dpf_state_init() {
   "lastDoctorBundlePath": null
 }
 EOF
-  chmod 600 "$path"
+)
+  local encoded
+  encoded="$(printf '%s' "$initial_json" | base64 | tr -d '\r\n')"
+  node "$(dpf_state_transaction_path)" init --state "$path" --value "$encoded" || return 1
+  chmod 600 "$path" 2>/dev/null || true
 }
 
 # Read a top-level key from the state file. Uses jq if available,
@@ -126,39 +135,25 @@ dpf_state_write() {
     return 1
   fi
   if command -v jq >/dev/null 2>&1; then
-    local tmp; tmp="$(mktemp)"
+    local json_value
     if [ "$value" = "true" ] || [ "$value" = "false" ] || [ "$value" = "null" ]; then
-      jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$tmp"
+      json_value="$value"
     elif echo "$value" | grep -qE '^-?[0-9]+(\.[0-9]+)?$'; then
-      jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$tmp"
+      json_value="$value"
     else
-      jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$path" > "$tmp"
+      json_value="$(printf '%s' "$value" | jq -Rs .)"
     fi
-    mv "$tmp" "$path"
-    chmod 600 "$path"
+    node "$(dpf_state_transaction_path)" set --state "$path" --key "$key" --value "$json_value" || return 1
+    chmod 600 "$path" 2>/dev/null || true
   elif command -v python3 >/dev/null 2>&1; then
-    python3 - "$path" "$key" "$value" <<'PY'
-import json, sys
-path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path) as f:
-    d = json.load(f)
-# Try to coerce numerics; fall back to string.
-if value in ("true", "false"):
-    d[key] = (value == "true")
-elif value == "null":
-    d[key] = None
-else:
-    try:
-        d[key] = int(value)
-    except ValueError:
-        try:
-            d[key] = float(value)
-        except ValueError:
-            d[key] = value
-with open(path, "w") as f:
-    json.dump(d, f, indent=2)
-PY
-    chmod 600 "$path"
+    local json_value
+    if [ "$value" = "true" ] || [ "$value" = "false" ] || [ "$value" = "null" ] || echo "$value" | grep -qE '^-?[0-9]+(\.[0-9]+)?$'; then
+      json_value="$value"
+    else
+      json_value="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$value")"
+    fi
+    node "$(dpf_state_transaction_path)" set --state "$path" --key "$key" --value "$json_value" || return 1
+    chmod 600 "$path" 2>/dev/null || true
   else
     echo "dpf_state_write: needs jq or python3 to update JSON" >&2
     return 1
@@ -218,23 +213,15 @@ dpf_state_write_json() {
     return 1
   fi
   if command -v jq >/dev/null 2>&1; then
-    local tmp; tmp="$(mktemp)"
-    jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$tmp"
-    mv "$tmp" "$path"
-    chmod 600 "$path"
+    printf '%s' "$value" | jq -e . >/dev/null
+    node "$(dpf_state_transaction_path)" set --state "$path" --key "$key" --value "$value" || return 1
+    chmod 600 "$path" 2>/dev/null || true
     return 0
   fi
   if command -v python3 >/dev/null 2>&1; then
-    python3 - "$path" "$key" "$value" <<'PY'
-import json, sys
-path, key, value_text = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path) as f:
-    state = json.load(f)
-state[key] = json.loads(value_text)
-with open(path, "w") as f:
-    json.dump(state, f, indent=2)
-PY
-    chmod 600 "$path"
+    python3 -c 'import json,sys; json.loads(sys.argv[1])' "$value"
+    node "$(dpf_state_transaction_path)" set --state "$path" --key "$key" --value "$value" || return 1
+    chmod 600 "$path" 2>/dev/null || true
     return 0
   fi
   echo "dpf_state_write_json: needs jq or python3 to update JSON object/array values" >&2

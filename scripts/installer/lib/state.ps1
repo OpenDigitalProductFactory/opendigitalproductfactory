@@ -27,6 +27,16 @@ function Get-DpfStatePath {
     return (Join-Path (Get-DpfStateDir) "install-state.json")
 }
 
+function Get-DpfStateTransactionPath {
+    return (Join-Path (Split-Path -Parent $PSScriptRoot) "install-state-transaction.mjs")
+}
+
+function Invoke-DpfStateTransaction {
+    param([Parameter(Mandatory)][string[]]$Arguments)
+    & node (Get-DpfStateTransactionPath) @Arguments
+    if ($LASTEXITCODE -ne 0) { throw "install_state_transaction_failed" }
+}
+
 # Initialize a fresh state file at the canonical path. Idempotent.
 # Args: $InstallerVersion, $InstallPath
 function Initialize-DpfState {
@@ -37,10 +47,6 @@ function Initialize-DpfState {
 
     $stateDir = Get-DpfStateDir
     $path = Get-DpfStatePath
-
-    if (Test-Path -LiteralPath $path) {
-        return
-    }
 
     if (-not (Test-Path -LiteralPath $stateDir)) {
         New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
@@ -75,7 +81,9 @@ function Initialize-DpfState {
     }
 
     $json = $initial | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $encoded = [Convert]::ToBase64String($utf8NoBom.GetBytes($json)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    Invoke-DpfStateTransaction -Arguments @("init", "--state", $path, "--value", $encoded)
 }
 
 # Read the full state object. Returns $null if the file is absent.
@@ -112,20 +120,8 @@ function Set-DpfStateValue {
         Initialize-DpfState
     }
 
-    $state = Read-DpfState
-    if ($null -eq $state) {
-        throw "Set-DpfStateValue: state file missing after init at $path"
-    }
-
-    # Re-emit the entire state with the new key value to keep round-trip clean.
-    $hashtable = @{}
-    foreach ($prop in $state.PSObject.Properties) {
-        $hashtable[$prop.Name] = $prop.Value
-    }
-    $hashtable[$Key] = $Value
-
-    $json = $hashtable | ConvertTo-Json -Depth 20
-    [System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))
+    $json = ConvertTo-Json -InputObject $Value -Depth 20 -Compress
+    Invoke-DpfStateTransaction -Arguments @("set", "--state", $path, "--key", $Key, "--value", $json)
 }
 
 # Resolve and, for a previous-release state, atomically persist the canonical

@@ -1,0 +1,152 @@
+#!/usr/bin/env node
+import { createHash, randomUUID } from "node:crypto";
+import { hostname } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { mkdir, open, readFile, readdir, rename, rm, lstat, realpath } from "node:fs/promises";
+import contract from "./install-state-lock-contract.json" with { type: "json" };
+
+const PROTOCOL_VERSION = contract.protocolVersion;
+const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
+export const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+const localHostname = hostname();
+
+const pidIsLive = pid => {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch (error) { return error?.code === "EPERM"; }
+};
+
+async function assertSafeTarget(statePath) {
+  const absolute = resolve(statePath);
+  const parent = dirname(absolute);
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  const canonicalParent = await realpath(parent);
+  if (dirname(absolute) !== canonicalParent && process.platform !== "win32") throw new Error("state_path_escape");
+  try { if ((await lstat(absolute)).isSymbolicLink()) throw new Error("state_path_symlink"); } catch (error) { if (error?.code !== "ENOENT") throw error; }
+  return absolute;
+}
+
+async function staleOwner(lockPath, now) {
+  let owner;
+  try { owner = JSON.parse(await readFile(join(lockPath, "owner.json"), "utf8")); } catch { return false; }
+  if (owner.protocolVersion !== PROTOCOL_VERSION || !owner.ownerId || !owner.expiresAt) return false;
+  if (Date.parse(owner.expiresAt) > now) return false;
+  if (owner.hostname === localHostname && pidIsLive(owner.pid)) return false;
+  return true;
+}
+
+export async function acquireInstallStateLock(statePath, options = {}) {
+  const target = await assertSafeTarget(statePath);
+  const lockPath = `${target}.lock`;
+  const timeoutMs = options.timeoutMs ?? contract.defaultTimeoutMs;
+  const leaseMs = options.leaseMs ?? contract.defaultLeaseMs;
+  const deadline = Date.now() + timeoutMs;
+  const ownerId = randomUUID();
+  for (;;) {
+    try {
+      await mkdir(lockPath, { mode: 0o700 });
+      const now = Date.now();
+      const owner = { protocolVersion: PROTOCOL_VERSION, ownerId, pid: process.pid, hostname: localHostname, acquiredAt: new Date(now).toISOString(), expiresAt: new Date(now + leaseMs).toISOString() };
+      const handle = await open(join(lockPath, "owner.json"), "wx", 0o600);
+      try { await handle.writeFile(`${JSON.stringify(owner)}\n`, "utf8"); await handle.sync(); } finally { await handle.close(); }
+      return { lockPath, owner, async release() {
+        let current;
+        try { current = JSON.parse(await readFile(join(lockPath, "owner.json"), "utf8")); } catch { return; }
+        if (current.ownerId === ownerId) await rm(lockPath, { recursive: true, force: true });
+      }};
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        if (error?.code === "ENOENT") { await rm(lockPath, { recursive: true, force: true }); continue; }
+        throw error;
+      }
+      if (await staleOwner(lockPath, Date.now())) {
+        const quarantine = `${lockPath}.stale-${randomUUID()}`;
+        try { await rename(lockPath, quarantine); await rm(quarantine, { recursive: true, force: true }); continue; } catch (recoveryError) { if (!["ENOENT", "EEXIST"].includes(recoveryError?.code)) throw recoveryError; }
+      }
+      if (Date.now() >= deadline) throw new Error("install_state_lock_timeout");
+      await sleep(options.retryDelayMs ?? contract.retryDelayMs);
+    }
+  }
+}
+
+const stage = async (name, context, options) => {
+  await options.onStage?.(name, context);
+  if (options.crashAfterStage === name) {
+    if (context.lockPath) {
+      const ownerPath = join(context.lockPath, "owner.json");
+      try { const owner = JSON.parse(await readFile(ownerPath, "utf8")); owner.pid = 99999999; owner.expiresAt = "2000-01-01T00:00:00.000Z"; const h = await open(ownerPath, "w"); try { await h.writeFile(JSON.stringify(owner)); await h.sync(); } finally { await h.close(); } } catch {}
+    }
+    throw new Error(`injected_crash:${name}`);
+  }
+};
+
+async function removeOrphanTemps(target) {
+  const prefix = `.${basename(target)}.tmp-`;
+  for (const name of await readdir(dirname(target))) if (name.startsWith(prefix)) await rm(join(dirname(target), name), { force: true });
+}
+
+async function atomicReplace(tempPath, target) {
+  const deadline = Date.now() + 2000;
+  for (;;) {
+    try { await rename(tempPath, target); return; }
+    catch (error) {
+      if (!["EACCES", "EPERM", "EBUSY"].includes(error?.code) || Date.now() >= deadline) throw error;
+      await sleep(10);
+    }
+  }
+}
+
+async function flushParentDirectory(target) {
+  if (process.platform === "win32") return;
+  const directory = await open(dirname(target), "r");
+  try { await directory.sync(); } finally { await directory.close(); }
+}
+
+export async function updateInstallState(statePath, transform, options = {}) {
+  const target = await assertSafeTarget(statePath);
+  const lock = await acquireInstallStateLock(target, options);
+  let release = true;
+  const context = { statePath: target, lockPath: lock.lockPath };
+  try {
+    await stage("locked", context, options);
+    await removeOrphanTemps(target);
+    let source = null;
+    try { source = await readFile(target); } catch (error) { if (error?.code !== "ENOENT") throw error; }
+    const sourceSha = source === null ? null : sha256(source);
+    if (Object.hasOwn(options, "expectedSourceSha256") && options.expectedSourceSha256 !== sourceSha) throw new Error("install_state_cas_mismatch");
+    const current = source === null ? null : JSON.parse(source.toString("utf8").replace(/^\uFEFF/, ""));
+    const next = await transform(current);
+    const serialized = `${JSON.stringify(next, null, 2)}\n`;
+    JSON.parse(serialized);
+    if (options.validate && !(await options.validate(next))) throw new Error("install_state_pre_write_validation_failed");
+    const tempPath = join(dirname(target), `.${basename(target)}.tmp-${lock.owner.ownerId}`);
+    context.tempPath = tempPath;
+    const handle = await open(tempPath, "wx", 0o600);
+    try { await stage("temp-created", context, options); await handle.writeFile(serialized, "utf8"); await handle.sync(); } finally { await handle.close(); }
+    await stage("temp-flushed", context, options);
+    await atomicReplace(tempPath, target);
+    await flushParentDirectory(target);
+    await stage("replaced", context, options);
+    const durable = await readFile(target);
+    const parsed = JSON.parse(durable.toString("utf8"));
+    if (sha256(durable) !== sha256(Buffer.from(serialized))) throw new Error("install_state_post_write_mismatch");
+    if (options.validate && !(await options.validate(parsed))) throw new Error("install_state_post_write_validation_failed");
+    await stage("verified", context, options);
+    return { state: parsed, sourceSha256: sourceSha, writtenSha256: sha256(durable) };
+  } catch (error) {
+    if (String(error?.message).startsWith("injected_crash:")) release = false;
+    throw error;
+  } finally {
+    if (release) { if (context.tempPath) await rm(context.tempPath, { force: true }); await lock.release(); }
+  }
+}
+
+function parseArgs(argv) { const result = { _: [] }; for (let i = 0; i < argv.length; i++) { if (argv[i].startsWith("--")) result[argv[i].slice(2)] = argv[++i]; else result._.push(argv[i]); } return result; }
+async function main() {
+  const args = parseArgs(process.argv.slice(2)); const command = args._[0];
+  if (!args.state) throw new Error("--state is required");
+  if (command === "set") await updateInstallState(args.state, current => ({ ...(current ?? {}), [args.key]: JSON.parse(args.value) }));
+  else if (command === "init") await updateInstallState(args.state, current => current ?? JSON.parse(Buffer.from(args.value, "base64url").toString("utf8")));
+  else throw new Error("command must be set or init");
+}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(error.message); process.exitCode = 1; });

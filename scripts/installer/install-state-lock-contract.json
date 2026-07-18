@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "lockSuffix": ".lock",
+  "ownerFile": "owner.json",
+  "defaultLeaseMs": 30000,
+  "defaultTimeoutMs": 15000,
+  "retryDelayMs": 20,
+  "tempPrefix": ".install-state.json.tmp-",
+  "ownerFields": ["protocolVersion", "ownerId", "pid", "hostname", "acquiredAt", "expiresAt"]
+}
