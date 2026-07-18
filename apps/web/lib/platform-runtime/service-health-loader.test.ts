@@ -4,14 +4,23 @@ import type { OperationalCapabilityState } from "./operational-state";
 import { loadCapabilityServiceHealth } from "./service-health-loader";
 
 const operational = {
+  catalogVersion: 1,
+  catalogHash: "0".repeat(64),
+  capabilityStateVersion: "0".repeat(64),
+  persistedCatalogHash: null,
+  persistedStateVersion: null,
+  enabledRuntimeCapabilities: [],
   serviceRequirements: [],
   serviceStates: {},
   observedServices: {},
+  backupServices: [],
+  capabilityBackupCandidates: [],
+  capabilityBackupPolicies: {},
   externalRuntimes: [
     { capability: "runtime:external-ai", runtimeKey: "openai", healthSemantics: "provider-api" },
   ],
   providerState: {},
-} as OperationalCapabilityState;
+} satisfies OperationalCapabilityState;
 
 describe("loadCapabilityServiceHealth", () => {
   it("joins catalog-owned providers to reconciled provider health", async () => {

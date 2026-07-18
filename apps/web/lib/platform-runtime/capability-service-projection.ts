@@ -95,7 +95,8 @@ export function projectCapabilityServices(input: {
     substrate,
     capabilities,
     enabledRuntimeCapabilities: input.enabledRuntimeCapabilities,
-  }) as CapabilityServiceProjection;
+    hostPlatform: undefined,
+  });
   return {
     ...projection,
     capabilityBackupCandidates: generatedCatalog.capabilities
