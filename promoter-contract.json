@@ -8,6 +8,8 @@
     "/promoter/installer/validate-install-state.mjs",
     "/promoter/installer/migrate-install-state.mjs",
     "/promoter/installer/resolve-host-identity.mjs",
+    "/promoter/installer/install-state-transaction.mjs",
+    "/promoter/installer/install-state-lock-contract.json",
     "/promoter/installer/install-state.schema.json",
     "/promoter/installer/install-state.v1.schema.json",
     "/promoter/installer/install-state.v2.schema.json",

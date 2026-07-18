@@ -138,3 +138,27 @@ test("honest pre-floor legacy-bootstrap mode refuses automatic migration", async
   }), /installer\/reinstall remediation/);
   assert.equal(requested, false);
 });
+
+test("derived pre-floor mode refuses automatic migration before request when prepare omits mode", async () => {
+  const digest = "sha256:" + "c".repeat(64);
+  let requested = false;
+  await assert.rejects(() => runNMinusOneUpgrade({ baseSha: "a".repeat(40), candidateSha: "b".repeat(40), repository: "o/r", project: "dpf-n1-test" }, {
+    verifyBase: async () => ({}), prepare: async () => ({ candidateDigest: digest }), isAncestor: async () => false,
+    readiness: async () => ({ ok: true, owner: "bridge", digest, quiescenceBegan: false }),
+    requestUpgrade: async () => { requested = true; }, cleanup: async () => {}, writeEvidence: async (value) => value,
+  }), /installer\/reinstall remediation/);
+  assert.equal(requested, false);
+});
+
+test("derived post-floor mode enforces portal readiness ownership when prepare omits mode", async () => {
+  const sha = "b".repeat(40);
+  const digest = "sha256:" + "c".repeat(64);
+  await assert.rejects(() => runNMinusOneUpgrade({ baseSha: "a".repeat(40), candidateSha: sha, repository: "o/r", project: "dpf-n1-test" }, {
+    verifyBase: async () => ({}), prepare: async () => ({ candidateDigest: digest }), isAncestor: async () => true,
+    readiness: async () => ({ ok: true, owner: "bridge", digest, quiescenceBegan: false }), requestUpgrade: async () => ({}),
+    poll: async () => ({ healthy: true, version: sha, promoterDigest: digest, promoterSourceSha: sha, persistenceDigest: digest,
+      sourceV1Hash: "1".repeat(64), migratedV2Hash: "2".repeat(64), sourceSchemaVersion: 1, migratedSchemaVersion: 2,
+      recoveryArtifacts: [{ path: "recovery/install-state.json", sha256: "1".repeat(64) }] }),
+    cleanup: async () => {}, writeEvidence: async (value) => value,
+  }), /portal-owned readiness/);
+});

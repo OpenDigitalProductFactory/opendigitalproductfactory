@@ -142,11 +142,12 @@ export async function runNMinusOneUpgrade(options, deps) {
     await d.verifyBase(options);
     const prepared = await d.prepare(options);
     evidence.candidateDigest = prepared.candidateDigest;
-    evidence.mode = prepared.mode ?? await classifyUpgradeProtocolFloor(options.baseSha, d.isAncestor);
+    const mode = prepared.mode ?? await classifyUpgradeProtocolFloor(options.baseSha, d.isAncestor);
+    evidence.mode = mode;
     if (!DIGEST.test(prepared.candidateDigest)) throw new Error("candidate image did not resolve to an immutable digest");
     const readiness = await d.readiness({ ...options, ...prepared });
     evidence.readiness = readiness;
-    if (prepared.mode === "legacy-bootstrap" && readiness.ok) {
+    if (mode === "legacy-bootstrap" && readiness.ok) {
       throw new Error("pre-floor legacy-bootstrap installs require installer/reinstall remediation");
     }
     if (!readiness.ok) {
@@ -160,7 +161,7 @@ export async function runNMinusOneUpgrade(options, deps) {
     evidence.upgradeRequested = true;
     const completed = await d.poll({ ...options, ...prepared });
     evidence.readiness = readiness;
-    assertSuccessEvidence({ ...completed, readiness }, options.candidateSha, prepared.candidateDigest, prepared.mode);
+    assertSuccessEvidence({ ...completed, readiness }, options.candidateSha, prepared.candidateDigest, mode);
     Object.assign(evidence, completed, { result: "passed", completedAt: new Date().toISOString() });
     return await d.writeEvidence(evidence);
   } finally {

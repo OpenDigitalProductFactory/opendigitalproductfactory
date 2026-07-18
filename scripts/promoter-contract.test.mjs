@@ -19,6 +19,8 @@ test("schema-v1 manifest declares the complete pre-drain contract", async () => 
     { path: "/dpf-state", mode: "rw" },
   ]);
   assert.ok(manifest.requiredFiles.includes("/app/promoter-contract.json"));
+  assert.ok(manifest.requiredFiles.includes("/promoter/installer/install-state-transaction.mjs"));
+  assert.ok(manifest.requiredFiles.includes("/promoter/installer/install-state-lock-contract.json"));
 });
 
 test("promoter image embeds and labels the exact contract", async () => {
