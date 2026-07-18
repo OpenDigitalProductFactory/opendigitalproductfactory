@@ -106,13 +106,14 @@ describe("allow-with-obligations", () => {
 
 describe("no matching policy", () => {
   it("routes a low-risk read with no policy to review", () => {
-    const d = evaluateDataPolicy(ctx({ action: "read" }, []));
+    const d = evaluateDataPolicy(ctx({ action: "read" }), []);
     expect(d.effect).toBe("review");
   });
 
   it("denies a high-risk MDM read with no matching policy", () => {
     const d = evaluateDataPolicy(
-      ctx({ classification: { known: true, masterDataDomain: "customer-account" } }, []),
+      ctx({ classification: { known: true, masterDataDomain: "customer-account" } }),
+      [],
     );
     expect(d.effect).toBe("deny");
   });
