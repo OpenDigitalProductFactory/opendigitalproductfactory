@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 568,
+  "routeCount": 569,
   "routes": [
     {
       "routePath": "/",
@@ -3850,6 +3850,16 @@
         "profileId"
       ],
       "file": "apps/web/app/(shell)/coworker-decisions/perspectives/[profileId]/voice/page.tsx"
+    },
+    {
+      "routePath": "/coworker-decisions/proactivity",
+      "kind": "page",
+      "segments": [
+        "coworker-decisions",
+        "proactivity"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx"
     },
     {
       "routePath": "/coworker-decisions/review",

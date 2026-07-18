@@ -28,6 +28,8 @@ Coworkers can retrieve wiki context, propose edits, and use principles as govern
 
 WWMD uses the same wiki substrate for decision support. It retrieves relevant principles, compares candidate options against multiple dimensions, and returns a recommendation, arbitration, escalation, or deferral with confidence and sources attached. See [Autonomy, WWMD, and trusted coworker decisions](../../architecture/autonomy-and-wwmd.md).
 
+How much each coworker acts on its own — its proactivity — is set from your industry's risk posture and can be confirmed or adjusted per coworker. See [Coworker Proactivity](../ai-workforce/coworker-proactivity.md).
+
 ## What To Watch
 
 - pages marked draft being cited as established policy
