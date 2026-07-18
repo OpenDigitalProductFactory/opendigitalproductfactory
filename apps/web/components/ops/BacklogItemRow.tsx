@@ -3,7 +3,8 @@
 import { memo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, ExternalLink, LoaderCircle, Play } from "lucide-react";
+import { AlertTriangle, ExternalLink, Play } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { deleteBacklogItem, escalateBacklogItemUpstream } from "@/lib/actions/backlog";
 import { startBacklogBuild } from "@/lib/actions/backlog-build";
 import { type BacklogItemWithRelations } from "@/lib/backlog";
@@ -224,7 +225,7 @@ function BacklogBuildActionButton({
         className="inline-flex items-center gap-1 rounded border border-[var(--dpf-accent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-accent)] transition-colors hover:bg-[var(--dpf-accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Start Build Studio draft"
       >
-        {isPending ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+        {isPending ? <Spinner size="xs" tone="current" presentational /> : <Play className="h-3 w-3" />}
         <span>{isPending ? "Starting" : action.label}</span>
       </button>
     );

@@ -2,7 +2,8 @@
 
 import type { FormEvent } from "react";
 import { useMemo, useState, useTransition } from "react";
-import { CreditCard, Loader2 } from "lucide-react";
+import { CreditCard } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { useRouter } from "next/navigation";
 
 import { recordAiProviderSubscriptionPaymentAction } from "@/lib/actions/ai-provider-finance";
@@ -319,7 +320,7 @@ export function AiSubscriptionPaymentForm({
             className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <Spinner size="sm" tone="current" presentational />
             ) : (
               <CreditCard className="h-4 w-4" aria-hidden="true" />
             )}
