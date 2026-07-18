@@ -1,6 +1,6 @@
 # Self-Upgrade Promoter JIT Context Fix Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` for the completion gate, and `dpf-pr-with-dco` for delivery. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Restore automatic self-upgrade by keeping the portal-baked JIT promoter build context complete when `Dockerfile.promoter` gains required inputs.
 
