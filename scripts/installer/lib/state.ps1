@@ -17,7 +17,10 @@ $script:DPF_LIB_STATE_PS1_LOADED = $true
 $script:DPF_STATE_SCHEMA_VERSION = 1
 
 function Get-DpfStateDir {
-    return (Join-Path $HOME ".dpf")
+    if ($env:DPF_STATE_DIR) { return $env:DPF_STATE_DIR }
+    if ($env:XDG_STATE_HOME) { return (Join-Path $env:XDG_STATE_HOME "dpf") }
+    $profileRoot = if ($HOME) { $HOME } else { $env:USERPROFILE }
+    return (Join-Path $profileRoot ".dpf")
 }
 
 function Get-DpfStatePath {
@@ -72,7 +75,7 @@ function Initialize-DpfState {
     }
 
     $json = $initial | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText($path, $json, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 # Read the full state object. Returns $null if the file is absent.
@@ -122,7 +125,34 @@ function Set-DpfStateValue {
     $hashtable[$Key] = $Value
 
     $json = $hashtable | ConvertTo-Json -Depth 20
-    [System.IO.File]::WriteAllText($path, $json, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# Resolve and, for a previous-release state, atomically persist the canonical
+# capability snapshot. The Node adapter is the sole owner of capability-to-
+# profile/service resolution; PowerShell only transports its JSON result.
+function Resolve-DpfCapabilityComposeProfiles {
+    param(
+        [string]$InstallDir = (Get-Location).Path,
+        [string[]]$Overlay = @(),
+        [string[]]$Alias = @()
+    )
+    $adapter = Join-Path $InstallDir "scripts\lib\resolve-capability-compose-profiles.mjs"
+    if (-not (Test-Path -LiteralPath $adapter)) { throw "capability_profile_adapter_missing" }
+    Initialize-DpfState -InstallPath $InstallDir
+    $arguments = @($adapter, "--state", (Get-DpfStatePath), "--host", "windows", "--migrate", "--write")
+    foreach ($item in $Overlay) { $arguments += @("--overlay", $item) }
+    foreach ($item in $Alias) { $arguments += @("--alias", $item) }
+    $json = & node @arguments
+    if ($LASTEXITCODE -ne 0) { throw "capability_profile_resolution_failed" }
+    return ($json | ConvertFrom-Json)
+}
+
+function Get-DpfCapabilityProfileArgs {
+    param([Parameter(Mandatory)]$Projection)
+    $result = @()
+    foreach ($profile in $Projection.composeProfiles) { $result += @("--profile", [string]$profile) }
+    return $result
 }
 
 # Validate the state file's schema version.
@@ -152,13 +182,13 @@ function Test-DpfStateSchema {
 }
 
 # Resolve whether the bundled local Edge Node overlay should be active for THIS
-# install (the deploy gate, BI-72CFF89D / edge-topology design §5). Edge
+# install (the deploy gate, BI-72CFF89D / edge-topology design section 5). Edge
 # deployment is OPT-IN: default OFF unless explicitly chosen or grandfathered.
 # PowerShell sibling of dpf_resolve_edge_enabled in state.sh. Precedence:
 #   1. explicit $env:DPF_INCLUDE_EDGE=0|1 (callers/flags set this)
 #   2. recorded choice in install-state.json (.edge.enabled)
 #   3. grandfather: no recorded choice but .env carries a bundled-node
-#      bootstrap token (a pre-flip install) -> keep it ON (design §5.3)
+#      bootstrap token (a pre-flip install) -> keep it ON (design section 5.3)
 #   4. default OFF
 # Returns [bool]. $InstallDir is the install root (for .env grandfather check).
 function Resolve-DpfEdgeEnabled {

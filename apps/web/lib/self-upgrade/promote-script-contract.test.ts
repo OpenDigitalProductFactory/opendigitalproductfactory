@@ -1,9 +1,15 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { spawnSync as _probe } from "node:child_process";
-// Skip entire suite on environments where bash is unavailable (e.g. Alpine sandbox)
-const BASH_AVAILABLE = _probe("bash", ["--version"], { encoding: "utf8" }).status === 0;
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
+
+const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
+const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
+// Skip entire suite on environments where bash is unavailable (e.g. Alpine sandbox)
+const BASH_AVAILABLE = _probe(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
 
 function quoteForBash(value: string) {
   return `'${value.replace(/'/g, "'\\''")}'`;
@@ -24,7 +30,7 @@ function resolveBashPath(path: string) {
   const candidates = [`/mnt/${drive.toLowerCase()}/${rest}`, `/${drive.toLowerCase()}/${rest}`, normalized];
   return (
     candidates.find((candidate) => {
-      const probe = _probe("bash", ["-lc", `test -f ${quoteForBash(candidate)}`], {
+      const probe = _probe(BASH_COMMAND, ["-lc", `test -f ${quoteForBash(candidate)}`], {
         encoding: "utf8",
       });
       return probe.status === 0;
@@ -33,6 +39,7 @@ function resolveBashPath(path: string) {
 }
 
 const SCRIPT = resolveBashPath(resolve(__dirname, "../../../../scripts/promote.sh"));
+const REPO_ROOT = resolve(__dirname, "../../../..");
 
 const BASE_ENV: Record<string, string> = {
   PROMOTE_SOURCE: "/opt/app/release",
@@ -42,24 +49,32 @@ const BASE_ENV: Record<string, string> = {
 };
 
 function runScript(env: Record<string, string | undefined>, extraArgs: string[] = []) {
-  const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", ...env };
-  const envAssignments = Object.entries(envSource).flatMap(([key, value]) =>
-    value === undefined ? [] : [`${key}=${quoteForBash(value)}`],
-  );
-  const command = [
-    "env",
-    "-i",
-    'PATH="$PATH"',
-    ...envAssignments,
-    "bash",
-    quoteForBash(SCRIPT),
-    "--self-upgrade",
-    ...extraArgs.map(quoteForBash),
-  ].join(" ");
+  const marker = basename(env.PROMOTE_SOURCE ?? "source").replace(/[^A-Za-z0-9-]/g, "-");
+  const root = mkdtempSync(join(tmpdir(), `dpf-promote-contract-${marker}-`));
+  try {
+    const source = join(root, marker);
+    const stateDir = join(root, "state");
+    mkdirSync(join(source, "scripts", "lib"), { recursive: true });
+    mkdirSync(stateDir, { recursive: true });
+    copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
+    copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(source, "scripts", "lib", "govern-capability-compose-args.mjs"));
+    copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(source, "scripts", "capability-service-catalog.generated.json"));
+    const catalog = JSON.parse(readFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), "utf8")) as { catalogHash: string; capabilities: Array<{ capabilityId: string }> };
+    const enabledRuntimeCapabilities = ["runtime:core"];
+    const stateLines = catalog.capabilities.map(({ capabilityId }) => `${capabilityId}=${enabledRuntimeCapabilities.includes(capabilityId) ? "active" : "disabled"}`).sort().join("\n");
+    const capabilityStateVersion = createHash("sha256").update(`${catalog.catalogHash}\n${stateLines}`).digest("hex");
+    writeFileSync(join(stateDir, "install-state.json"), JSON.stringify({ platform: "linux", enabledRuntimeCapabilities, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion }));
 
-  return spawnSync("bash", ["-lc", command], {
-    encoding: "utf8",
-  });
+    const mapped = { ...env };
+    if (mapped.PROMOTE_SOURCE !== undefined) mapped.PROMOTE_SOURCE = resolveBashPath(source);
+    if (mapped.PROMOTE_BACKUP_PATH !== undefined) mapped.PROMOTE_BACKUP_PATH = resolveBashPath(join(root, basename(mapped.PROMOTE_BACKUP_PATH)));
+    const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", DPF_STATE_DIR: resolveBashPath(stateDir), ...mapped };
+    const envAssignments = Object.entries(envSource).flatMap(([key, value]) => value === undefined ? [] : [`${key}=${quoteForBash(value)}`]);
+    const command = ["env", "-i", 'PATH="$PATH"', ...envAssignments, "bash", quoteForBash(SCRIPT), "--self-upgrade", ...extraArgs.map(quoteForBash)].join(" ");
+    return spawnSync(BASH_COMMAND, ["-lc", command], { encoding: "utf8" });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {

@@ -53,7 +53,7 @@
           "canonicalDataOwner": "browser-profiles",
           "capability": "runtime:browser-automation",
           "class": "capability-activated",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [],
           "healthSemantics": "compose-healthcheck",
           "hostPlatforms": [
@@ -64,7 +64,9 @@
           "ports": [
             "8500:8500"
           ],
-          "profiles": [],
+          "profiles": [
+            "runtime-browser-automation"
+          ],
           "service": "browser-use",
           "targetClassification": "capability-activated",
           "volumes": [
@@ -91,7 +93,7 @@
           "canonicalDataOwner": "sandbox-postgres",
           "capability": "runtime:build",
           "class": "ephemeral-lifecycle",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [
             "sandbox-init"
           ],
@@ -104,7 +106,9 @@
           "ports": [
             "3035:3000"
           ],
-          "profiles": [],
+          "profiles": [
+            "runtime-build"
+          ],
           "service": "sandbox",
           "targetClassification": "ephemeral-lifecycle",
           "volumes": [
@@ -117,7 +121,7 @@
           "canonicalDataOwner": "sandbox-postgres",
           "capability": "runtime:build",
           "class": "ephemeral-lifecycle",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [
             "sandbox-postgres"
           ],
@@ -128,7 +132,9 @@
             "windows"
           ],
           "ports": [],
-          "profiles": [],
+          "profiles": [
+            "runtime-build"
+          ],
           "service": "sandbox-init",
           "targetClassification": "ephemeral-lifecycle",
           "volumes": [
@@ -141,7 +147,7 @@
           "canonicalDataOwner": "sandbox-postgres",
           "capability": "runtime:build",
           "class": "ephemeral-lifecycle",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [],
           "healthSemantics": "compose-healthcheck",
           "hostPlatforms": [
@@ -150,7 +156,9 @@
             "windows"
           ],
           "ports": [],
-          "profiles": [],
+          "profiles": [
+            "runtime-build"
+          ],
           "service": "sandbox-postgres",
           "targetClassification": "ephemeral-lifecycle",
           "volumes": [
@@ -294,7 +302,7 @@
           "canonicalDataOwner": "none",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [
             "loki"
           ],
@@ -305,7 +313,10 @@
             "windows"
           ],
           "ports": [],
-          "profiles": [],
+          "profiles": [
+            "observability-ui",
+            "runtime-deep-observability"
+          ],
           "service": "alloy",
           "targetClassification": "capability-activated",
           "volumes": [
@@ -360,7 +371,8 @@
             "3002:3000"
           ],
           "profiles": [
-            "observability-ui"
+            "observability-ui",
+            "runtime-deep-observability"
           ],
           "service": "grafana",
           "targetClassification": "capability-activated",
@@ -376,7 +388,7 @@
           "canonicalDataOwner": "loki",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [],
           "healthSemantics": "consumer-observed",
           "hostPlatforms": [
@@ -387,7 +399,10 @@
           "ports": [
             "127.0.0.1:3100:3100"
           ],
-          "profiles": [],
+          "profiles": [
+            "observability-ui",
+            "runtime-deep-observability"
+          ],
           "service": "loki",
           "targetClassification": "capability-activated",
           "volumes": [
@@ -428,7 +443,7 @@
           "canonicalDataOwner": "none",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [
             "postgres"
           ],
@@ -441,7 +456,10 @@
           "ports": [
             "9187:9187"
           ],
-          "profiles": [],
+          "profiles": [
+            "observability-ui",
+            "runtime-deep-observability"
+          ],
           "service": "postgres-exporter",
           "targetClassification": "capability-activated",
           "volumes": [
@@ -454,7 +472,7 @@
           "canonicalDataOwner": "prometheus",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [],
           "healthSemantics": "compose-healthcheck",
           "hostPlatforms": [
@@ -465,7 +483,10 @@
           "ports": [
             "9090:9090"
           ],
-          "profiles": [],
+          "profiles": [
+            "observability-ui",
+            "runtime-deep-observability"
+          ],
           "service": "prometheus",
           "targetClassification": "capability-activated",
           "volumes": [
@@ -637,7 +658,7 @@
           "canonicalDataOwner": "postgres-and-redis",
           "capability": "runtime:durable-automation",
           "class": "capability-activated",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [
             "postgres",
             "redis"
@@ -652,7 +673,9 @@
             "8288:8288",
             "8289:8289"
           ],
-          "profiles": [],
+          "profiles": [
+            "runtime-durable-automation"
+          ],
           "service": "inngest",
           "targetClassification": "capability-activated",
           "volumes": []
@@ -663,7 +686,7 @@
           "canonicalDataOwner": "redis",
           "capability": "runtime:durable-automation",
           "class": "capability-activated",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [],
           "healthSemantics": "compose-healthcheck",
           "hostPlatforms": [
@@ -674,7 +697,9 @@
           "ports": [
             "6379:6379"
           ],
-          "profiles": [],
+          "profiles": [
+            "runtime-durable-automation"
+          ],
           "service": "redis",
           "targetClassification": "capability-activated",
           "volumes": [
@@ -687,7 +712,7 @@
           "canonicalDataOwner": "none",
           "capability": "runtime:durable-automation",
           "class": "capability-activated",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [
             "redis"
           ],
@@ -698,7 +723,9 @@
             "windows"
           ],
           "ports": [],
-          "profiles": [],
+          "profiles": [
+            "runtime-durable-automation"
+          ],
           "service": "redis-exporter",
           "targetClassification": "capability-activated",
           "volumes": []
@@ -1041,7 +1068,32 @@
           "runtimeKey": "zai-coding"
         }
       ],
-      "services": [],
+      "services": [
+        {
+          "backupPolicy": "excluded-rebuildable",
+          "boundaryReason": "Linux-native in-cluster inference endpoint; provider identity and health remain reconciled through the external AI runtime authority.",
+          "canonicalDataOwner": "none",
+          "capability": "runtime:external-ai",
+          "class": "capability-activated",
+          "defaultRequired": false,
+          "dependsOn": [],
+          "healthSemantics": "compose-healthcheck",
+          "hostPlatforms": [
+            "linux"
+          ],
+          "ports": [
+            "11434:11434"
+          ],
+          "profiles": [
+            "runtime-external-ai"
+          ],
+          "service": "ollama",
+          "targetClassification": "capability-activated",
+          "volumes": [
+            "ollama_data:/root/.ollama"
+          ]
+        }
+      ],
       "workGuards": [
         "task-run:build",
         "task-run:coworker",
@@ -1063,7 +1115,7 @@
           "canonicalDataOwner": "none",
           "capability": "runtime:local-speech",
           "class": "capability-activated",
-          "defaultRequired": true,
+          "defaultRequired": false,
           "dependsOn": [],
           "healthSemantics": "compose-healthcheck",
           "hostPlatforms": [
@@ -1074,7 +1126,10 @@
           "ports": [
             "127.0.0.1:8765:9000"
           ],
-          "profiles": [],
+          "profiles": [
+            "runtime-local-speech",
+            "tts"
+          ],
           "service": "dpf-stt",
           "targetClassification": "capability-activated",
           "volumes": [
@@ -1099,6 +1154,7 @@
             "127.0.0.1:8766:8000"
           ],
           "profiles": [
+            "runtime-local-speech",
             "tts"
           ],
           "service": "dpf-tts",
@@ -1113,7 +1169,7 @@
       ]
     }
   ],
-  "catalogHash": "7116a6f7e65e20391df9f3187ceb9d31480dd95fc14ce81fba1a09a8cc83e33b",
+  "catalogHash": "0d23205cbadd063e14d63ab45835f19f212d6b9cb76808abd75665259f52229c",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

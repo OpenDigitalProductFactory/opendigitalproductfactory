@@ -46,6 +46,7 @@ _dpf_autostart_write_launch_script() {
   local install_path="$1"
   local compose_chain="$2"
   local state_dir; state_dir="$(dpf_state_dir)"
+  local state_path; state_path="$(dpf_state_path)"
   local launch="$state_dir/dpf-autostart.sh"
 
   mkdir -p "$state_dir/logs"
@@ -57,6 +58,9 @@ _dpf_autostart_write_launch_script() {
 # re-run install-dpf.sh to regenerate.
 set -euo pipefail
 cd "$install_path"
+_dpf_projection="\$(node scripts/lib/resolve-capability-compose-profiles.mjs --state "$state_path" --host "\$(case "\$(uname -s)" in Darwin) echo macos ;; Linux) echo linux ;; *) echo windows ;; esac)" --migrate --write)"
+COMPOSE_PROFILES="\$(printf '%s' "\$_dpf_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
+export COMPOSE_PROFILES
 exec docker compose $compose_chain up -d
 EOF
   chmod 0755 "$launch"

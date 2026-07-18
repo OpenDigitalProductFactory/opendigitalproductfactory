@@ -14,6 +14,32 @@ import {
   type PrometheusInstantResult,
   type ServiceDefinition,
 } from "./health-summary";
+import type {
+  CapabilityHealthAggregate,
+  CapabilityHealthState,
+  CapabilityServiceHealthProjection,
+} from "@/lib/platform-runtime/service-health";
+
+function capabilityHealth(
+  state: CapabilityHealthState,
+  aggregate: CapabilityHealthAggregate,
+): CapabilityServiceHealthProjection {
+  return {
+    items: [
+      {
+        key: "example",
+        kind: "service",
+        state,
+        availability: state === "optional_inactive" ? "inactive" : "unavailable",
+        label: state,
+        action: "Inspect the service.",
+        tone: state === "optional_inactive" ? "neutral" : "warning",
+        healthSemantics: "compose-healthcheck",
+      },
+    ],
+    aggregate,
+  };
+}
 
 function target(
   job: string,
@@ -53,7 +79,11 @@ describe("derivePlatformSummary", () => {
     const summary = derivePlatformSummary({
       checked: true,
       online: true,
-      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("qdrant")],
+      capabilityHealth: capabilityHealth("required", {
+        value: "Operational",
+        tone: "success",
+        detail: "Required platform services are available",
+      }),
       alerts: [alert("critical", "firing", "portal")],
     });
 
@@ -62,46 +92,56 @@ describe("derivePlatformSummary", () => {
     expect(summary.detail).toContain("Service portal is down");
   });
 
-  it("does not report platform critical when only telemetry exporter alerts are firing", () => {
+  it("does not degrade aggregate health for an intentionally inactive optional service", () => {
     const summary = derivePlatformSummary({
       checked: true,
       online: true,
-      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("qdrant"), up("sandbox"), up("windows-host")],
+      capabilityHealth: capabilityHealth("optional_inactive", {
+        value: "Operational",
+        tone: "success",
+        detail: "Required platform services are available",
+      }),
       alerts: [alert("critical", "firing", "node-exporter"), alert("critical", "firing", "cadvisor")],
     });
 
     expect(summary.value).toBe("Operational");
     expect(summary.tone).toBe("success");
-    expect(summary.detail).toContain("Required platform services are up");
+    expect(summary.detail).toContain("Required platform services are available");
   });
 
-  it("names down required services in plain language, not raw scrape-job ids", () => {
-    // postgres + sandbox down, no alert firing (so this hits the up-targets
-    // branch, the one that used to emit `postgres, sandbox down`).
+  it("reports a missing required service from the capability projection", () => {
     const summary = derivePlatformSummary({
       checked: true,
       online: true,
-      upTargets: [up("prometheus"), up("portal"), up("postgres", "0"), up("qdrant"), up("sandbox", "0")],
+      capabilityHealth: capabilityHealth("required", {
+        value: "Degraded",
+        tone: "warning",
+        detail: "portal requires attention",
+      }),
       alerts: [],
     });
 
-    expect(summary.value).toBe("Critical");
-    expect(summary.detail).toBe("Database and Build workspace are down");
-    expect(summary.detail).not.toContain("postgres");
-    expect(summary.detail).not.toContain("sandbox");
+    expect(summary).toEqual({
+      value: "Degraded",
+      tone: "warning",
+      detail: "portal requires attention",
+    });
   });
 
-  it("uses singular grammar and 'not reporting' for a single missing required service", () => {
+  it("reports an enabled optional-degraded service from the capability projection", () => {
     const summary = derivePlatformSummary({
       checked: true,
       online: true,
-      // sandbox absent entirely (not in upTargets) => missing/unknown, not down.
-      upTargets: [up("prometheus"), up("portal"), up("postgres")],
+      capabilityHealth: capabilityHealth("optional_degraded", {
+        value: "Degraded",
+        tone: "warning",
+        detail: "browser-use requires attention",
+      }),
       alerts: [],
     });
 
     expect(summary.value).toBe("Degraded");
-    expect(summary.detail).toBe("Build workspace is not reporting");
+    expect(summary.detail).toBe("browser-use requires attention");
   });
 });
 

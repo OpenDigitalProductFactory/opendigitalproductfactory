@@ -5,13 +5,15 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { runSubstrateMeasurement } from "./measure-platform-substrate.mjs";
-import { validateCapabilityServiceBindings } from "./lib/platform-substrate-measurements.mjs";
+import { validateCapabilityServiceBindings, validateSubstrateManifest } from "./lib/platform-substrate-measurements.mjs";
 
 async function fixture(run) {
   const root = await mkdtemp(join(tmpdir(), "substrate-cli-"));
   try {
     const files = {
       "docker-compose.yml": "services:\n  portal:\n    image: portal\n",
+      "docker-compose.macos.yml": "services:\n",
+      "docker-compose.linux.yml": "services:\n",
       "packages/db/data/providers-registry.json": "[]\n",
       "packages/db/data/platform-runtime-capabilities.json": `${JSON.stringify({version:1,capabilities:[capability("runtime:core")]})}\n`,
       "packages/db/prisma/schema.prisma": "model User { id String @id }\n",
@@ -56,6 +58,21 @@ test("capability service joins fail closed", () => {
   assert.deepEqual(validateCapabilityServiceBindings({
     services: [service("portal", "core")], capabilities: [capability("runtime:core")],
   }), ["missing_capability:core"]);
+});
+
+test("host overlay services participate in exhaustive manifest validation", () => {
+  const portal = { service:"portal", class:"universal-core", capability:"runtime:core", boundaryReason:"Portal.", defaultRequired:true, profiles:[], ports:[], volumes:[], dependsOn:[], canonicalDataOwner:"none", backupPolicy:"excluded-stateless", healthSemantics:"consumer-observed", hostPlatforms:["windows","macos","linux"], targetClassification:"universal-core" };
+  const ollama = { service:"ollama", class:"capability-activated", capability:"runtime:external-ai", boundaryReason:"Linux inference.", defaultRequired:false, profiles:["runtime-external-ai"], ports:["11434:11434"], volumes:["ollama_data:/root/.ollama"], dependsOn:[], canonicalDataOwner:"none", backupPolicy:"excluded-rebuildable", healthSemantics:"compose-healthcheck", hostPlatforms:["linux"], targetClassification:"capability-activated" };
+  const errors = validateSubstrateManifest(
+    { version:2, services:[portal, ollama], externalRuntimes:[] },
+    {
+      composeText:"services:\n  portal:\n    image: portal\n",
+      overlayComposeTexts:["services:\n  ollama:\n    profiles: [\"runtime-external-ai\"]\n    ports: [\"11434:11434\"]\n    volumes: [\"ollama_data:/root/.ollama\"]\n"],
+      providers:[],
+      capabilities:[capability("runtime:core"), capability("runtime:external-ai")],
+    },
+  );
+  assert.deepEqual(errors, []);
 });
 
 test("defaultRequired must match current Compose profile activation", async () => fixture(async (repoRoot) => {

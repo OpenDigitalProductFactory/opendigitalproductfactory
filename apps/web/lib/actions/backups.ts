@@ -33,6 +33,7 @@ export async function getBackupReadinessAction(): Promise<ReadinessSummary> {
 /** Returns backup readiness (postgres-only after BET-5). */
 export async function getAllBackupReadinessAction(): Promise<{
   postgres: ReadinessSummary;
+  capabilityOwned: Array<{ target: string; status: "required" | "optional_inactive" | "optional_degraded" }>;
 }> {
   await requireBackupAdmin();
   return getAllBackupReadiness();

@@ -8,6 +8,8 @@ const modulePath = "./measure-platform-substrate-runtime.mjs";
 
 const manifest = {
   version: 1,
+  capabilityCatalogHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  operationalState: { catalogVersion: 1, catalogHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", capabilityStateVersion: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", serviceStates: { postgres: "required", portal: "required", optional: "optional_degraded", inactive: "optional_inactive", "linux-only": "optional_inactive" } },
   services: [
     { service: "postgres", capability: "postgres", defaultRequired: true, healthSemantics: "compose-healthcheck", hostPlatforms: ["windows", "macos", "linux"] },
     { service: "portal", capability: "portal", defaultRequired: true, healthSemantics: "compose-healthcheck", hostPlatforms: ["windows", "macos", "linux"] },
@@ -61,11 +63,66 @@ test("collects required, memory, health, optional-state, and served identity met
   });
 });
 
+test("runtime diagnostics consume serialized operational state for inactive and degraded optional services", async () => {
+  const { collectRuntimeMeasurements } = await import(modulePath);
+  const result = await collectRuntimeMeasurements({ manifest, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal", lease: { id: "l", environmentKey: "local-integration-ci" }, hostProfile: "windows-x64" });
+  assert.equal(result.metrics.optionalInactiveServices.value, 1);
+  assert.equal(result.metrics.optionalDegradedServices.value, 1);
+  await assert.rejects(collectRuntimeMeasurements({ manifest: { ...manifest, operationalState: undefined }, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal", lease: { id: "l", environmentKey: "local-integration-ci" }, hostProfile: "windows-x64" }), /capability catalog identity/);
+});
+
+test("production runner reads explicit serialized operational state path and fails closed on stale identity", async () => {
+  const { runRuntimeMeasurement } = await import(modulePath);
+  const dir = await mkdtemp(join(tmpdir(), "dpf-runtime-state-"));
+  const manifestPath = join(dir, "manifest.json"), statePath = join(dir, "state.json"), baselinePath = join(dir, "baseline.json");
+  await writeFile(manifestPath, JSON.stringify({ ...manifest, operationalState: undefined }));
+  await writeFile(statePath, JSON.stringify(manifest.operationalState));
+  const base = { manifestPath, operationalStatePath: statePath, baselinePath, update: true, lease: governedLease, verifyLease: verifyGovernedLease, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal" };
+  assert.equal((await runRuntimeMeasurement(base)).exitCode, 0);
+  await writeFile(statePath, JSON.stringify({ ...manifest.operationalState, catalogHash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }));
+  assert.match((await runRuntimeMeasurement(base)).stderr, /catalog identity is stale/);
+});
+
+test("normal runner derives state from catalog, install snapshot, live DB rows, and Compose observations", async () => {
+  const { runRuntimeMeasurement } = await import(modulePath);
+  const { compileCapabilityServiceCatalog, resolveCapabilityServiceProjection } = await import("./lib/capability-service-projection.mjs");
+  const dir = await mkdtemp(join(tmpdir(), "dpf-runtime-authority-"));
+  const service = (name) => ({ service: name, capability: "runtime:core", class: "universal-core", defaultRequired: true, backupPolicy: "included", healthSemantics: "compose-healthcheck", boundaryReason: "fixture", canonicalDataOwner: "postgres", profiles: [], dependsOn: [], hostPlatforms: ["windows", "macos", "linux"], ports: [], volumes: [], targetClassification: "universal-core" });
+  const substrate = { version: 1, services: [service("postgres"), service("portal")], externalRuntimes: [] };
+  const capabilities = [{ capabilityId: "runtime:core", state: "active", manifest: { runtime: { dependencies: [], activation: { policy: "always" } } } }];
+  const catalog = compileCapabilityServiceCatalog({ substrate, capabilities });
+  const projection = resolveCapabilityServiceProjection({ substrate, capabilities, enabledRuntimeCapabilities: ["runtime:core"] });
+  const runtimeManifest = { version: 1, capabilityCatalogHash: catalog.catalogHash, services: manifest.services.slice(0, 2) };
+  const manifestPath = join(dir, "manifest.json"), catalogPath = join(dir, "catalog.json"), installStatePath = join(dir, "install-state.json"), baselinePath = join(dir, "baseline.json");
+  await writeFile(manifestPath, JSON.stringify(runtimeManifest)); await writeFile(catalogPath, JSON.stringify(catalog));
+  await writeFile(installStatePath, JSON.stringify({ enabledRuntimeCapabilities: ["runtime:core"], capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: projection.capabilityStateVersion }));
+  const corePs = ps.slice(0, 2), coreStats = stats.slice(0, 2); let execArgv;
+  const execute = (_command, args) => {
+    if (args[0] === "compose" && args[1] === "exec") { execArgv = args; return "runtime:core\tactive\n"; }
+    if (args[0] === "compose" && args[1] === "ps") return JSON.stringify(corePs);
+    if (args[0] === "stats") return coreStats.map(JSON.stringify).join("\n");
+    throw new Error(`unexpected argv: ${args.join(" ")}`);
+  };
+  const base = { manifestPath, catalogPath, installStatePath, baselinePath, update: true, lease: governedLease, verifyLease: verifyGovernedLease, execute, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal" };
+  assert.equal((await runRuntimeMeasurement(base)).exitCode, 0);
+  assert.deepEqual(execArgv.slice(0, 6), ["compose", "exec", "-T", "postgres", "sh", "-lc"]);
+  assert.match(execArgv[6], /\$\{POSTGRES_USER:-dpf\}/); assert.match(execArgv[6], /\$\{POSTGRES_DB:-dpf\}/);
+  assert.doesNotMatch(execArgv[6], /host-custom-user|host-custom-db/);
+  const conflict = await runRuntimeMeasurement({ ...base, execute: (c, args) => args[0] === "compose" && args[1] === "exec" ? "runtime:core\tdisabled\n" : execute(c, args) });
+  assert.match(conflict.stderr, /capability_state_stale/);
+  const malformed = await runRuntimeMeasurement({ ...base, execute: (c, args) => args[0] === "compose" && args[1] === "exec" ? "malformed\n" : execute(c, args) });
+  assert.match(malformed.stderr, /malformed rows/);
+});
+
 test("normalizes Node host platform names before applying hostPlatforms", async () => {
-  const { normalizeHostPlatform } = await import(modulePath);
+  const { normalizeHostPlatform, resolveDpfStateDir } = await import(modulePath);
   assert.equal(normalizeHostPlatform("win32"), "windows");
   assert.equal(normalizeHostPlatform("darwin"), "macos");
   assert.equal(normalizeHostPlatform("linux"), "linux");
+  assert.equal(resolveDpfStateDir({ DPF_STATE_DIR: "/explicit" }, "linux", "/home/u"), "/explicit");
+  assert.equal(resolveDpfStateDir({ XDG_STATE_HOME: "/state", HOME: "/home/u" }, "linux", "/fallback"), join("/state", "dpf"));
+  assert.equal(resolveDpfStateDir({ HOME: "/home/u" }, "linux", "/fallback"), join("/home/u", ".dpf"));
+  assert.equal(resolveDpfStateDir({ USERPROFILE: "C:/Users/u" }, "win32", "C:/fallback"), join("C:/Users/u", ".dpf"));
 });
 
 test("stopped required services are unhealthy but successful lifecycle completion is not", async () => {
@@ -73,7 +130,7 @@ test("stopped required services are unhealthy but successful lifecycle completio
   const lifecycleManifest = { version: 1, services: [
     ...manifest.services,
     { service: "portal-init", capability: "portal-init", defaultRequired: true, healthSemantics: "lifecycle-completion", hostPlatforms: ["windows", "macos", "linux"] },
-  ] };
+  ], capabilityCatalogHash: manifest.capabilityCatalogHash, operationalState: { ...manifest.operationalState, serviceStates: { ...manifest.operationalState.serviceStates, "portal-init": "required" } } };
   const fetchJson = async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" };
   const basePs = [...ps, { Service: "portal-init", Name: "dpf-portal-init-1", State: "exited", Health: "", ExitCode: 0 }];
   const execute = (command, args) => args[0] === "compose" ? JSON.stringify(basePs) : stats.map(JSON.stringify).join("\n");

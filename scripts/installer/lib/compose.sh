@@ -26,6 +26,10 @@ if [ -z "${DPF_LIB_PLATFORM_LOADED:-}" ]; then
   # shellcheck source=platform.sh
   . "$(dirname "${BASH_SOURCE[0]}")/platform.sh"
 fi
+if [ -z "${DPF_LIB_STATE_LOADED:-}" ]; then
+  # shellcheck source=state.sh
+  . "$(dirname "${BASH_SOURCE[0]}")/state.sh"
+fi
 
 # Populate the global DPF_COMPOSE_FILES array with the right -f flags
 # for the requested mode + the detected host platform.
@@ -105,7 +109,32 @@ dpf_compose_files() {
     shift
   done
 
+  # Every installer/start caller already passes through this assembler. Resolve
+  # the runtime profiles here so POSIX lifecycle paths cannot forget the adapter.
+  # A dry-run resolves but state.sh deliberately suppresses the snapshot write.
+  if [ -f "$(dpf_state_path)" ]; then
+    dpf_compose_profiles
+  fi
+
   export DPF_COMPOSE_FILES
+}
+
+# Resolve COMPOSE_PROFILES through resolve-capability-compose-profiles.mjs via
+# the state library. Lifecycle-only overlays are
+# passed explicitly as additional adapter arguments (for example:
+# --overlay promote); runtime profiles always come from the generated catalog.
+dpf_compose_profiles() {
+  local root="${REPO_ROOT:-$(pwd)}" projection operator_profiles="${COMPOSE_PROFILES:-}"
+  projection="$(dpf_resolve_capability_compose_profiles "$root" "${DPF_PLATFORM:-}" --compose-profiles "$operator_profiles" "$@")" || return 1
+  DPF_CAPABILITY_PROJECTION="$projection"
+  COMPOSE_PROFILES="$(printf '%s' "$projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
+  export COMPOSE_PROFILES DPF_CAPABILITY_PROJECTION
+}
+
+dpf_capability_service_required() {
+  local service="$1"
+  [ -n "${DPF_CAPABILITY_PROJECTION:-}" ] || dpf_compose_profiles || return 1
+  printf '%s' "$DPF_CAPABILITY_PROJECTION" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);process.exit(p.requiredServices.includes(process.argv[1])?0:1)})' "$service"
 }
 
 # Convenience: print the assembled chain as a space-separated string,

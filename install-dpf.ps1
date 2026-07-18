@@ -301,10 +301,15 @@ function Get-DPFComposeArgs {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
         [bool]$IncludeEdge = $false,   # Edge is opt-in (BI-72CFF89D); both call sites pass this explicitly.
-        [bool]$IncludeOverride = $true
+        [bool]$IncludeOverride = $true,
+        [bool]$IncludeRelease = $false
     )
 
     $composeArgs = @("-f", "docker-compose.yml")
+
+    if ($IncludeRelease -and (Test-Path (Join-Path $InstallDir "docker-compose.release.yml"))) {
+        $composeArgs += @("-f", "docker-compose.release.yml")
+    }
 
     if ($IncludeOverride -and (Test-Path (Join-Path $InstallDir "docker-compose.override.yml"))) {
         $composeArgs += @("-f", "docker-compose.override.yml")
@@ -315,6 +320,134 @@ function Get-DPFComposeArgs {
     }
 
     return $composeArgs
+}
+
+function Test-DPFReleaseAssetManifest {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$ManifestPath,
+        [switch]$RejectUnlisted
+    )
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { throw "consumer_release_asset_manifest_missing" }
+    $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $manifestFullPath = [IO.Path]::GetFullPath($ManifestPath)
+    $verifiedFiles = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($line in Get-Content -LiteralPath $manifestFullPath) {
+        if ($line -notmatch '^([0-9a-fA-F]{64})\s+\*?(.+)$') { throw "consumer_release_asset_manifest_invalid" }
+        $expected = $Matches[1].ToLowerInvariant()
+        $relative = $Matches[2].Replace('/', [IO.Path]::DirectorySeparatorChar)
+        $candidate = [IO.Path]::GetFullPath((Join-Path $Root $relative))
+        if (-not $candidate.StartsWith($rootPath, [StringComparison]::OrdinalIgnoreCase)) { throw "consumer_release_asset_path_invalid" }
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "consumer_release_asset_missing:$relative" }
+        $actual = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $expected) { throw "consumer_release_asset_integrity_failed:$relative" }
+        if (-not $verifiedFiles.Add($candidate)) { throw "consumer_release_asset_manifest_duplicate:$relative" }
+    }
+    if ($RejectUnlisted) {
+        foreach ($file in Get-ChildItem -LiteralPath $Root -File -Recurse) {
+            if ($file.FullName -ne $manifestFullPath -and -not $verifiedFiles.Contains($file.FullName)) {
+                throw "consumer_release_asset_unverified:$($file.FullName.Substring($rootPath.Length))"
+            }
+        }
+    }
+}
+
+function Export-DPFConsumerReleaseAssets {
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [Parameter(Mandatory)][string]$Version,
+        [string]$Image = "ghcr.io/opendigitalproductfactory/dpf-portal:latest",
+        [string]$AssetSource
+    )
+
+    if ($Version -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$') { throw "consumer_release_version_invalid" }
+
+    $staging = Join-Path ([IO.Path]::GetTempPath()) ("dpf-release-assets-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $staging -Force | Out-Null
+    $containerId = $null
+    try {
+        if ($AssetSource) {
+            Copy-Item -Path (Join-Path $AssetSource "*") -Destination $staging -Recurse -Force
+        } else {
+            docker pull $Image 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "consumer_release_asset_image_pull_failed" }
+            $containerId = (docker create $Image).Trim()
+            if ($LASTEXITCODE -ne 0 -or -not $containerId) { throw "consumer_release_asset_container_failed" }
+            docker cp "${containerId}:/dpf-release-assets/." $staging | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "consumer_release_asset_export_failed" }
+        }
+
+        $manifestPath = Join-Path $staging "SHA256SUMS"
+        Test-DPFReleaseAssetManifest -Root $staging -ManifestPath $manifestPath -RejectUnlisted
+
+        New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+        Get-ChildItem -LiteralPath $staging -Force | Where-Object Name -ne "SHA256SUMS" |
+            Copy-Item -Destination $InstallDir -Recurse -Force
+        Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $InstallDir ".verified-release-assets.sha256") -Force
+        [IO.File]::WriteAllText((Join-Path $InstallDir ".verified-release-assets-version"), $Version, [Text.Encoding]::ASCII)
+    } finally {
+        if ($containerId) { docker rm $containerId 2>&1 | Out-Null }
+        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Set-DPFReleaseEnvIdentityAtomic {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string]$Owner,
+        [scriptblock]$BeforeReplace
+    )
+    $content = if (Test-Path -LiteralPath $Path) { [IO.File]::ReadAllText($Path) } else { "" }
+    $newLine = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
+    foreach ($entry in @(@("DPF_IMAGE_TAG", $Version), @("GHCR_OWNER", $Owner))) {
+        $key = $entry[0]
+        $value = $entry[1]
+        $pattern = "(?m)^$([Text.RegularExpressions.Regex]::Escape($key))=.*$"
+        if ([Text.RegularExpressions.Regex]::IsMatch($content, $pattern)) {
+            $content = [Text.RegularExpressions.Regex]::Replace($content, $pattern, "$key=$value")
+        } else {
+            if ($content.Length -gt 0 -and -not $content.EndsWith("`n")) { $content += $newLine }
+            $content += "$key=$value$newLine"
+        }
+    }
+
+    $directory = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $directory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
+    $temporary = Join-Path $directory ("." + [IO.Path]::GetFileName($Path) + "." + [guid]::NewGuid().ToString("N") + ".tmp")
+    $backup = Join-Path $directory ("." + [IO.Path]::GetFileName($Path) + "." + [guid]::NewGuid().ToString("N") + ".bak")
+    try {
+        $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
+        try {
+            $writer = [IO.StreamWriter]::new($stream, (New-Object Text.UTF8Encoding($false)), 1024, $true)
+            try { $writer.Write($content); $writer.Flush(); $stream.Flush($true) } finally { $writer.Dispose() }
+        } finally { $stream.Dispose() }
+        if ($BeforeReplace) { & $BeforeReplace }
+        if (Test-Path -LiteralPath $Path) {
+            [IO.File]::Replace($temporary, $Path, $backup, $true)
+            Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+        } else {
+            [IO.File]::Move($temporary, $Path)
+        }
+    } finally {
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Set-DPFConsumerReleaseIdentity {
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [Parameter(Mandatory)][string]$Version,
+        [scriptblock]$BeforeReplace
+    )
+    if ($Version -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$') { throw "consumer_release_version_invalid" }
+    $marker = Join-Path $InstallDir ".verified-release-assets-version"
+    if (-not (Test-Path -LiteralPath $marker)) { throw "consumer_release_assets_unverified" }
+    if ((Get-Content -LiteralPath $marker -Raw).Trim() -cne $Version) { throw "consumer_release_assets_version_mismatch" }
+    Test-DPFReleaseAssetManifest -Root $InstallDir -ManifestPath (Join-Path $InstallDir ".verified-release-assets.sha256")
+    $envPath = Join-Path $InstallDir ".env"
+    Set-DPFReleaseEnvIdentityAtomic -Path $envPath -Version $Version -Owner "opendigitalproductfactory" -BeforeReplace $BeforeReplace
 }
 
 function Get-DPFEdgeComposeContent {
@@ -372,29 +505,22 @@ param(
 
 Set-Location $DPF_DIR
 
-# Edge Node deploy gate (opt-in). Include the local Edge Node overlay only when
-# this install enabled it: -WithEdge/-NoEdge override; else the recorded
-# install-state.json choice (.edge.enabled); else grandfather a pre-flip install
-# whose .env carries the bootstrap token; else OFF.
-$includeEdge = $false
-if ($WithEdge) { $includeEdge = $true }
-elseif (-not $NoEdge) {
-    $statePath = Join-Path $HOME ".dpf\install-state.json"
-    $recorded = $null
-    if (Test-Path -LiteralPath $statePath) {
-        try { $recorded = (Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json).edge.enabled } catch {}
-    }
-    if ($null -ne $recorded) {
-        $includeEdge = [bool]$recorded
-    } else {
-        $envPath = Join-Path $DPF_DIR ".env"
-        if ((Test-Path -LiteralPath $envPath) -and (Select-String -Path $envPath -Pattern '^DPF_BOOTSTRAP_TOKEN=dpf' -Quiet)) {
-            $includeEdge = $true
-        }
-    }
-}
+# The generated entrypoint consumes the same checked-in adapter and state
+# helper as install/setup; it never snapshots service/profile logic.
+if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
+elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
+$stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
+if (-not (Test-Path -LiteralPath $stateLib)) { $stateLib = Join-Path $DPF_DIR "installer\lib\state.ps1" }
+if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
+. $stateLib
+$includeEdge = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+$capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
+$env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
 
 $composeArgs = @("-f", "docker-compose.yml")
+if (Test-Path (Join-Path $DPF_DIR "docker-compose.release.yml")) {
+    $composeArgs += @("-f", "docker-compose.release.yml")
+}
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
     $composeArgs += @("-f", "docker-compose.override.yml")
 }
@@ -445,6 +571,9 @@ param(
 Set-Location $DPF_DIR
 
 $composeArgs = @("-f", "docker-compose.yml")
+if (Test-Path (Join-Path $DPF_DIR "docker-compose.release.yml")) {
+    $composeArgs += @("-f", "docker-compose.release.yml")
+}
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
     $composeArgs += @("-f", "docker-compose.override.yml")
 }
@@ -965,445 +1094,13 @@ if (-not (Test-StepDone "download")) {
                 New-Item -ItemType Directory -Path $DPF_DIR -Force | Out-Null
             }
 
-            # Write embedded docker-compose.yml
-            @"
-# Generated by DPF installer (consumer mode) -- do not edit manually
-name: dpf
-
-services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: `${POSTGRES_USER:-dpf}
-      POSTGRES_PASSWORD: `${POSTGRES_PASSWORD}
-      POSTGRES_DB: dpf
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U `${POSTGRES_USER:-dpf}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  neo4j:
-    image: neo4j:5-community
-    restart: unless-stopped
-    environment:
-      NEO4J_AUTH: `${NEO4J_AUTH}
-      NEO4J_PLUGINS: '["apoc"]'
-    volumes:
-      - neo4jdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:7474 || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    restart: unless-stopped
-    volumes:
-      - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333 || exit 1'"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  portal-init:
-    image: $($GHCR_PORTAL):$Version
-    command: ["/docker-entrypoint.sh"]
-    volumes:
-      - dpf-source-code:/workspace
-    environment:
-      DATABASE_URL: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf
-      DPF_HOST_PROFILE: `${DPF_HOST_PROFILE:-}
-      ADMIN_PASSWORD: `${ADMIN_PASSWORD}
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  portal:
-    image: $($GHCR_PORTAL):$Version
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-      - "1455:3000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - dpf-source-code:/workspace
-      - sandbox_workspace:/sandbox-workspace
-      - `${DPF_HOST_INSTALL_PATH:-.}:/host-dpf
-    environment:
-      DATABASE_URL: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf
-      AUTH_SECRET: `${AUTH_SECRET}
-      AUTH_TRUST_HOST: "true"
-      APP_URL: http://localhost:3000
-      CREDENTIAL_ENCRYPTION_KEY: `${CREDENTIAL_ENCRYPTION_KEY}
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: `${NEO4J_PASSWORD}
-      QDRANT_INTERNAL_URL: http://qdrant:6333
-      LLM_BASE_URL: `${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
-      DPF_ENVIRONMENT: production
-      DPF_HOST_INSTALL_PATH: `${DPF_HOST_INSTALL_PATH:-}
-      PROJECT_ROOT: /workspace
-      SANDBOX_PREVIEW_URL: http://sandbox:3000
-    depends_on:
-      portal-init:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
-  # Sandbox Database (isolated from production)
-  sandbox-postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: dpf
-      POSTGRES_PASSWORD: dpf_sandbox
-      POSTGRES_DB: dpf
-    volumes:
-      - sandbox_pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dpf"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  # Sandbox Init (migrations on sandbox DB)
-  sandbox-init:
-    image: $($GHCR_PORTAL):$Version
-    command: ["/docker-entrypoint.sh"]
-    environment:
-      DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
-      ADMIN_PASSWORD: `${ADMIN_PASSWORD}
-    volumes:
-      - sandbox_workspace:/workspace
-    depends_on:
-      sandbox-postgres:
-        condition: service_healthy
-
-  # Sandbox (isolated build environment for Build Studio)
-  sandbox:
-    image: $($GHCR_SANDBOX):$Version
-    restart: unless-stopped
-    ports:
-      - "3035:3000"
-    volumes:
-      - sandbox_workspace:/workspace
-    environment:
-      DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
-      AUTH_SECRET: `${AUTH_SECRET}
-      AUTH_TRUST_HOST: "true"
-      APP_URL: http://localhost:3035
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: `${NEO4J_PASSWORD}
-      QDRANT_INTERNAL_URL: http://qdrant:6333
-      NODE_ENV: development
-    depends_on:
-      sandbox-init:
-        condition: service_completed_successfully
-
-  # Promoter (autonomous deployment pipeline)
-  # One-shot container -- triggered by Build Studio ship phase or ops UI.
-  promoter:
-    image: dpf-promoter:latest
-    entrypoint: ["/promoter/promote.sh"]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - backups:/backups
-      - ./docker-compose.yml:/host-source/docker-compose.yml:ro
-      - ./.env:/host-source/.env:ro
-    environment:
-      DPF_PRODUCTION_DB_CONTAINER: dpf-postgres-1
-      DPF_PORTAL_CONTAINER: dpf-portal-1
-      DPF_COMPOSE_PROJECT: dpf
-      POSTGRES_USER: `${POSTGRES_USER:-dpf}
-      POSTGRES_DB: dpf
-    depends_on:
-      postgres:
-        condition: service_healthy
-    profiles: ["promote"]
-    restart: "no"
-
-  # --- Monitoring Stack ---------------------------------------------------
-  # Prometheus + Grafana + exporters for infrastructure discovery and health.
-  # node-exporter runs on the HOST network so it sees real interfaces.
-
-  prometheus:
-    image: prom/prometheus:latest
-    restart: unless-stopped
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=15d"
-      - "--web.enable-lifecycle"
-    healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:9090/-/healthy"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  grafana:
-    image: grafana/grafana-oss:latest
-    restart: unless-stopped
-    ports:
-      - "3002:3000"
-    volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana_data:/var/lib/grafana
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: dpf_monitor
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/dpf-overview.json
-    depends_on:
-      prometheus:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-    privileged: true
-
-  node-exporter:
-    image: prom/node-exporter:latest
-    restart: unless-stopped
-    ports:
-      - "9100:9100"
-    pid: host
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - "--path.procfs=/host/proc"
-      - "--path.sysfs=/host/sys"
-      - "--path.rootfs=/rootfs"
-      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
-
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
-    restart: unless-stopped
-    command: ["--config.file=/postgres_exporter.yml"]
-    ports:
-      - "9187:9187"
-    volumes:
-      - ./monitoring/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro
-    environment:
-      DATA_SOURCE_NAME: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf?sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-volumes:
-  dpf-source-code:
-  pgdata:
-  neo4jdata:
-  qdrant_data:
-  sandbox_pgdata:
-  sandbox_workspace:
-  backups:
-  prometheus_data:
-  grafana_data:
-"@ | Set-Content "$DPF_DIR\docker-compose.yml" -Encoding UTF8
+            # Materialize the exact release topology and lifecycle adapter carried by
+            # the pulled portal image, then verify every byte before installation.
+            Export-DPFConsumerReleaseAssets -InstallDir $DPF_DIR -Version $Version -Image "ghcr.io/opendigitalproductfactory/dpf-portal:$Version"
             Get-DPFEdgeComposeContent -Version $Version | Set-Content "$DPF_DIR\docker-compose.edge.yml" -Encoding UTF8
-
-            # Write monitoring configuration files (Prometheus + Grafana)
-            $monDir = "$DPF_DIR\monitoring"
-            New-Item -ItemType Directory -Path "$monDir\prometheus" -Force | Out-Null
-            New-Item -ItemType Directory -Path "$monDir\postgres-exporter" -Force | Out-Null
-            New-Item -ItemType Directory -Path "$monDir\grafana\provisioning\datasources" -Force | Out-Null
-            New-Item -ItemType Directory -Path "$monDir\grafana\provisioning\dashboards" -Force | Out-Null
-            New-Item -ItemType Directory -Path "$monDir\grafana\dashboards" -Force | Out-Null
-
-            @"
-auth_modules: {}
-"@ | Set-Content "$monDir\postgres-exporter\postgres_exporter.yml" -Encoding UTF8
-
-            # Prometheus config
-            @"
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
-rule_files:
-  - "alerts.yml"
-
-scrape_configs:
-  - job_name: "cadvisor"
-    scrape_interval: 10s
-    static_configs:
-      - targets: ["cadvisor:8080"]
-
-  - job_name: "node-exporter"
-    scrape_interval: 10s
-    static_configs:
-      - targets: ["node-exporter:9100"]
-
-  - job_name: "postgres"
-    static_configs:
-      - targets: ["postgres-exporter:9187"]
-
-  - job_name: "qdrant"
-    scrape_interval: 30s
-    static_configs:
-      - targets: ["qdrant:6333"]
-    metrics_path: /metrics
-
-  - job_name: "portal"
-    static_configs:
-      - targets: ["portal:3000"]
-    metrics_path: /api/metrics
-
-  - job_name: "sandbox"
-    static_configs:
-      - targets: ["sandbox:3000"]
-    metrics_path: /api/metrics
-
-  - job_name: "model-runner"
-    scrape_interval: 30s
-    static_configs:
-      - targets: ["model-runner.docker.internal:80"]
-    metrics_path: /metrics
-
-  - job_name: "windows-host"
-    scrape_interval: 15s
-    static_configs:
-      - targets: ["host.docker.internal:9182"]
-        labels:
-          instance: "windows-host"
-
-  - job_name: "prometheus"
-    scrape_interval: 30s
-    static_configs:
-      - targets: ["localhost:9090"]
-"@ | Set-Content "$monDir\prometheus\prometheus.yml" -Encoding UTF8
-
-            # Prometheus alerts
-            @"
-groups:
-  - name: dpf_infrastructure
-    rules:
-      - alert: ContainerDown
-        expr: up == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Service {{ `$labels.job }} is down"
-
-      - alert: HostHighCPU
-        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Host CPU usage above 85% for 10 minutes"
-
-      - alert: HostHighMemory
-        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 85
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Host memory usage above 85%"
-
-      - alert: HostNetworkInterfaceDown
-        expr: node_network_up{device!~"lo|veth.*|br-.*|docker.*"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Network interface {{ `$labels.device }} is down"
-
-  - name: dpf_databases
-    rules:
-      - alert: PostgresDown
-        expr: pg_up == 0
-        for: 30s
-        labels:
-          severity: critical
-        annotations:
-          summary: "PostgreSQL is unreachable"
-
-      - alert: QdrantDown
-        expr: up{job="qdrant"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Qdrant vector DB is unreachable"
-"@ | Set-Content "$monDir\prometheus\alerts.yml" -Encoding UTF8
-
-            # Grafana datasource
-            @"
-apiVersion: 1
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    isDefault: true
-    editable: false
-"@ | Set-Content "$monDir\grafana\provisioning\datasources\prometheus.yml" -Encoding UTF8
-
-            # Grafana dashboard provisioner
-            @"
-apiVersion: 1
-providers:
-  - name: DPF
-    orgId: 1
-    folder: DPF Platform
-    type: file
-    disableDeletion: true
-    editable: false
-    options:
-      path: /var/lib/grafana/dashboards
-      foldersFromFilesStructure: false
-"@ | Set-Content "$monDir\grafana\provisioning\dashboards\dashboards.yml" -Encoding UTF8
-
-            # Grafana overview dashboard (minimal)
-            @"
-{"editable":false,"panels":[{"title":"Platform Services","type":"stat","gridPos":{"h":4,"w":24,"x":0,"y":0},"targets":[{"expr":"up","legendFormat":"{{ job }}","refId":"A"}],"fieldConfig":{"defaults":{"mappings":[{"type":"value","options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}}}],"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}},"overrides":[]},"options":{"colorMode":"background","graphMode":"none","justifyMode":"auto","textMode":"auto","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false}}}],"schemaVersion":39,"tags":["dpf","overview"],"templating":{"list":[]},"time":{"from":"now-1h","to":"now"},"timepicker":{},"timezone":"browser","title":"DPF Platform Overview","uid":"dpf-overview","version":1}
-"@ | Set-Content "$monDir\grafana\dashboards\dpf-overview.json" -Encoding UTF8
-
-            Write-OK "Created monitoring configuration (Prometheus + Grafana)"
-
-            # Write dpf lifecycle scripts for consumer installs (no .git dependency).
-            Get-DPFStartScriptContent | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding UTF8
-            Get-DPFStopScriptContent | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding UTF8
-
-            Write-OK "Platform files written to $DPF_DIR"
+            Get-DPFStartScriptContent | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding ASCII
+            Get-DPFStopScriptContent | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding ASCII
+            Write-OK "Canonical release assets installed to $DPF_DIR"
         }
 
         Write-Host ""
@@ -1512,13 +1209,6 @@ services:
   postgres:
     ports:
       - "5432:5432"
-  neo4j:
-    ports:
-      - "7687:7687"
-      - "7474:7474"
-  qdrant:
-    ports:
-      - "6333:6333"
   portal-init:
     volumes:
       - .:/workspace
@@ -1567,13 +1257,13 @@ if (-not (Test-StepDone "hardware")) {
 
     # Select the largest model that fits the GPU's VRAM WITH HEADROOM for the
     # context window + embedder. Mirrors the canonical headroom-aware logic in
-    # apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS) — PowerShell
+    # apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS) -- PowerShell
     # cannot import TS, so keep this in sync. The Providers UX over-commit guard
     # (same module) catches any drift.
     #
     # Thresholds = model weights + ~5 GB headroom (measured: a 30B at a 24k build
     # context uses ~20.7 GB on a 24 GB card). So a 24 GB 4090 lands on the 30B
-    # coder, NOT the 35B — which would fill the card and over-commit the moment a
+    # coder, NOT the 35B -- which would fill the card and over-commit the moment a
     # build runs. Pinned quant tags (never bare :latest) for reproducible sizes.
     if ($gpuVRAM_GB -ge 53) {
         $selectedModel = "ai/qwen3-coder-next"
@@ -1637,7 +1327,6 @@ if (-not (Test-StepDone "hardware")) {
 
 if (-not (Test-Path "$DPF_DIR\.env")) {
     $pgPass = New-RandomPassword 16
-    $neoPass = New-RandomPassword 16
     $authSecret = New-RandomPassword 32
     $encKey = New-RandomPassword 32
     $adminPass = New-RandomAlphanumeric 16
@@ -1653,11 +1342,8 @@ if (-not (Test-Path "$DPF_DIR\.env")) {
 POSTGRES_USER=dpf
 POSTGRES_PASSWORD=$pgPass
 DATABASE_URL=postgresql://dpf:$pgPass@postgres:5432/dpf
-NEO4J_AUTH=neo4j/$neoPass
-NEO4J_PASSWORD=$neoPass
 AUTH_SECRET=$authSecret
 CREDENTIAL_ENCRYPTION_KEY=$encKey
-NEO4J_URI=bolt://neo4j:7687
 ADMIN_PASSWORD=$adminPass
 DPF_HOST_PROFILE=$hostProfileJson
 DPF_HOST_INSTALL_PATH=$DPF_DIR
@@ -1666,6 +1352,10 @@ LLM_BASE_URL=http://model-runner.docker.internal/v1
 GF_ADMIN_USER=admin
 GF_ADMIN_PASSWORD=$adminPass
 "@ | Set-Content "$DPF_DIR\.env"
+}
+
+if ($InstallMode -eq "consumer") {
+    Set-DPFConsumerReleaseIdentity -InstallDir $DPF_DIR -Version $Version
 }
 
 # --- Ensure backups directory exists OUTSIDE the install root ----------------
@@ -1788,7 +1478,12 @@ Write-Action "Open a new terminal for the PATH change to take effect in other wi
 Write-Step 7 10 "Starting the platform..."
 if (-not (Test-StepDone "started")) {
     Set-Location $DPF_DIR
-    $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false
+    $stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
+    if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
+    . $stateLib
+    $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
+    $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
+    $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
 
     if ($InstallMode -eq "consumer") {
         Write-Action "Pulling pre-built images (this may take a few minutes, be patient)..."
@@ -1883,7 +1578,8 @@ if (-not (Test-StepDone "started")) {
     # 0 so the core platform still comes up -- voice degrades, the install does
     # not. Nothing depends_on these sidecars, so scaling to 0 is safe.
     $scaleArgs = @()
-    foreach ($svc in @("dpf-stt")) {
+    if (@($capabilityProjection.requiredServices) -contains "dpf-stt") {
+        $svc = "dpf-stt"
         docker compose @coreComposeArgs pull $svc 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "Optional sidecar '$svc' image is unavailable upstream; bringing up the platform without it."
@@ -1906,11 +1602,11 @@ if (-not (Test-StepDone "started")) {
     if (Test-Path "$DPF_DIR\.host-profile.json") {
         try { $ttsVram = [double]((Get-Content "$DPF_DIR\.host-profile.json" -Raw | ConvertFrom-Json).gpuVramGB) } catch { $ttsVram = 0.0 }
     }
-    if ($ttsVram -ge 6) {
+    if ((@($capabilityProjection.requiredServices) -contains "dpf-tts") -and $ttsVram -ge 6) {
         Write-Action "Starting voice TTS sidecar (dpf-tts -- NVIDIA GPU detected)..."
         $oldEAP = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        docker compose @coreComposeArgs --profile tts up -d dpf-tts 2>&1 | Out-Null
+        docker compose @coreComposeArgs up -d dpf-tts 2>&1 | Out-Null
         $ttsExit = $LASTEXITCODE
         $ErrorActionPreference = $oldEAP
         if ($ttsExit -eq 0) {
@@ -1918,8 +1614,10 @@ if (-not (Test-StepDone "started")) {
         } else {
             Write-Warn "dpf-tts failed to start (NVIDIA container runtime / GPU issue?); voice output will stay silent."
         }
-    } else {
+    } elseif (@($capabilityProjection.requiredServices) -contains "dpf-tts") {
         Write-Action "Voice TTS sidecar skipped (no NVIDIA GPU >=6 GB VRAM detected); STT still works. See docs/install/windows.md -> Voice to enable."
+    } else {
+        Write-Action "Voice TTS sidecar is inactive by capability selection."
     }
 
     # Sync postgres password -- if the volume was reused from a prior install,
@@ -2012,7 +1710,7 @@ if (-not (Test-StepDone "mcp_seed")) {
     Write-OK "Already running"
 }
 
-# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
+# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design section 5).
 # A local Edge Node is bundled + auto-enrolled ONLY when -WithEdge is passed
 # (or a prior install already enabled it -- .env carries the bootstrap token);
 # -NoEdge forces it off. Default OFF. Map a network from a different machine
@@ -2224,7 +1922,7 @@ if ($InstallMode -eq "customizer") {
     Write-Host "  |                                                      |" -ForegroundColor Green
     Write-Host "  |  Local dev: cd $($DPF_DIR.PadRight(38))|" -ForegroundColor Cyan
     Write-Host "  |             pnpm dev                                 |" -ForegroundColor Cyan
-    Write-Host "  |  Databases exposed: postgres :5432, neo4j :7687      |" -ForegroundColor Cyan
+    Write-Host "  |  Database exposed: postgres :5432                    |" -ForegroundColor Cyan
 }
 Write-Host "  ========================================================" -ForegroundColor Green
 

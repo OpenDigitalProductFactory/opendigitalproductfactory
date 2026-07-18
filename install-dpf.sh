@@ -846,7 +846,7 @@ fi
 _noncritical_sidecars="dpf-stt"
 _scale_args=()
 for _svc in $_noncritical_sidecars; do
-  if ! docker compose "${DPF_COMPOSE_FILES[@]}" pull "$_svc" >/dev/null 2>&1; then
+  if dpf_capability_service_required "$_svc" && ! docker compose "${DPF_COMPOSE_FILES[@]}" pull "$_svc" >/dev/null 2>&1; then
     warn "Optional sidecar '$_svc' image is unavailable upstream; bringing up the platform without it."
     info "  Voice features needing '$_svc' stay inactive until its image returns; re-run install-dpf.sh to retry."
     _scale_args+=(--scale "$_svc=0")
@@ -872,17 +872,19 @@ ok "docker compose up returned"
 #      Skipped on macOS, which uses the native-host sidecar above.
 if [ "$DPF_PLATFORM" != "darwin" ]; then
   _tts_vram="$(printf '%s' "${DPF_HOST_PROFILE:-}" | sed -nE 's/.*"vramGB"[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/p')"
-  if [ -n "$_tts_vram" ] && awk 'BEGIN{exit !('"$_tts_vram"' >= 6)}' 2>/dev/null; then
+  if dpf_capability_service_required dpf-tts && [ -n "$_tts_vram" ] && awk 'BEGIN{exit !('"$_tts_vram"' >= 6)}' 2>/dev/null; then
     step "Voice / TTS sidecar (NVIDIA GPU)"
-    if docker compose "${DPF_COMPOSE_FILES[@]}" --profile tts up -d dpf-tts; then
+    if docker compose "${DPF_COMPOSE_FILES[@]}" up -d dpf-tts; then
       ok "Voice TTS container started (dpf-tts) — spoken output works out of the box"
     else
       warn "dpf-tts failed to start (NVIDIA container runtime / GPU issue?); voice output will stay silent."
-      info "  Inspect: docker compose ${DPF_COMPOSE_FILES[*]} --profile tts logs dpf-tts"
+      info "  Inspect: docker compose ${DPF_COMPOSE_FILES[*]} logs dpf-tts"
     fi
-  else
+  elif dpf_capability_service_required dpf-tts; then
     info "Voice TTS sidecar skipped (no NVIDIA GPU >=6 GB VRAM detected); STT still works."
     info "  Enable later (CPU tier or managed API): see docs/install/linux.md → Voice."
+  else
+    info "Voice TTS is inactive by capability selection."
   fi
 fi
 

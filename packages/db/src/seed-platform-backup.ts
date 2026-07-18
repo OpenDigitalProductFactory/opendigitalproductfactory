@@ -17,12 +17,7 @@ export const POSTGRES_BACKUP_JOB_NAME =
 export const POSTGRES_BACKUP_SCHEDULE = "daily";
 
 export const NEO4J_BACKUP_JOB_ID = "neo4j-daily-backup";
-export const NEO4J_BACKUP_JOB_NAME = "Neo4j daily backup (platform-managed)";
-export const NEO4J_BACKUP_SCHEDULE = "daily";
-
 export const QDRANT_BACKUP_JOB_ID = "qdrant-daily-backup";
-export const QDRANT_BACKUP_JOB_NAME = "Qdrant daily backup (platform-managed)";
-export const QDRANT_BACKUP_SCHEDULE = "daily";
 
 // BI-31C9FBDF: trial-restore verification (postgres only in slice 1).
 export const POSTGRES_TRIAL_RESTORE_JOB_ID = "postgres-trial-restore-daily";
@@ -71,7 +66,7 @@ async function ensureBackupScheduledJob(
   }
 
   await prisma.scheduledJob.create({
-    data: { jobId, name, schedule, nextRunAt },
+    data: { jobId, name, schedule, enabled: true, nextRunAt },
   });
   return { created: true };
 }
@@ -90,32 +85,6 @@ export async function ensurePostgresBackupScheduledJob(
     POSTGRES_BACKUP_JOB_ID,
     POSTGRES_BACKUP_JOB_NAME,
     POSTGRES_BACKUP_SCHEDULE,
-    now,
-  );
-}
-
-export async function ensureNeo4jBackupScheduledJob(
-  prisma: ScheduledJobSeedClient,
-  now: Date = new Date(),
-): Promise<{ created: boolean }> {
-  return ensureBackupScheduledJob(
-    prisma,
-    NEO4J_BACKUP_JOB_ID,
-    NEO4J_BACKUP_JOB_NAME,
-    NEO4J_BACKUP_SCHEDULE,
-    now,
-  );
-}
-
-export async function ensureQdrantBackupScheduledJob(
-  prisma: ScheduledJobSeedClient,
-  now: Date = new Date(),
-): Promise<{ created: boolean }> {
-  return ensureBackupScheduledJob(
-    prisma,
-    QDRANT_BACKUP_JOB_ID,
-    QDRANT_BACKUP_JOB_NAME,
-    QDRANT_BACKUP_SCHEDULE,
     now,
   );
 }
@@ -140,15 +109,16 @@ export async function ensureAllBackupScheduledJobs(
   now: Date = new Date(),
 ): Promise<{
   postgres: { created: boolean };
-  neo4j: { created: boolean };
-  qdrant: { created: boolean };
   postgresTrialRestore: { created: boolean };
+  supersededDeactivated: number;
 }> {
-  const [postgres, neo4j, qdrant, postgresTrialRestore] = await Promise.all([
+  const [postgres, postgresTrialRestore, superseded] = await Promise.all([
     ensureBackupScheduledJob(prisma, POSTGRES_BACKUP_JOB_ID, POSTGRES_BACKUP_JOB_NAME, POSTGRES_BACKUP_SCHEDULE, now),
-    ensureBackupScheduledJob(prisma, NEO4J_BACKUP_JOB_ID, NEO4J_BACKUP_JOB_NAME, NEO4J_BACKUP_SCHEDULE, now),
-    ensureBackupScheduledJob(prisma, QDRANT_BACKUP_JOB_ID, QDRANT_BACKUP_JOB_NAME, QDRANT_BACKUP_SCHEDULE, now),
     ensureBackupScheduledJob(prisma, POSTGRES_TRIAL_RESTORE_JOB_ID, POSTGRES_TRIAL_RESTORE_JOB_NAME, POSTGRES_TRIAL_RESTORE_SCHEDULE, now),
+    prisma.scheduledJob.updateMany({
+      where: { jobId: { in: [NEO4J_BACKUP_JOB_ID, QDRANT_BACKUP_JOB_ID] } },
+      data: { enabled: false, nextRunAt: null },
+    }),
   ]);
-  return { postgres, neo4j, qdrant, postgresTrialRestore };
+  return { postgres, postgresTrialRestore, supersededDeactivated: superseded.count };
 }

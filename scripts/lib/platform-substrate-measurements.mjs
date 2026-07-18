@@ -393,12 +393,16 @@ function validateHostPlatforms(errors, service, platforms) {
   }
 }
 
-export function validateSubstrateManifest(manifest, { composeText, providers = [], capabilities }) {
+export function validateSubstrateManifest(manifest, { composeText, overlayComposeTexts = [], providers = [], capabilities }) {
   const errors = [];
   if (!Number.isInteger(manifest?.version) || manifest.version !== SUPPORTED_MANIFEST_VERSION) {
     errors.push(`Manifest version must be the supported positive integer ${SUPPORTED_MANIFEST_VERSION}`);
   }
   const composeServices = parseComposeServices(composeText);
+  const composeServiceNames = new Set(composeServices.map(({ service }) => service));
+  for (const overlayText of overlayComposeTexts) for (const service of parseComposeServices(overlayText)) {
+    if (!composeServiceNames.has(service.service)) { composeServices.push(service); composeServiceNames.add(service.service); }
+  }
   const records = Array.isArray(manifest?.services) ? manifest.services : [];
   const seen = new Set();
 
@@ -453,7 +457,10 @@ export function validateSubstrateManifest(manifest, { composeText, providers = [
     validateEnum(errors, runtime.runtimeKey, "healthSemantics", runtime.healthSemantics, HEALTH_SEMANTICS);
     validateHostPlatforms(errors, runtime.runtimeKey, runtime.hostPlatforms);
   }
-  const expectedRuntimeKeys = enumerateExternalRuntimes({ providers, composeText });
+  const expectedRuntimeKeys = [...new Set([
+    ...(providers ?? []).map((provider) => provider.providerId),
+    ...[composeText, ...overlayComposeTexts].flatMap((source) => enumerateExternalRuntimes({ providers: [], composeText: source })),
+  ])].sort();
   for (const runtimeKey of expectedRuntimeKeys) {
     if (!runtimeKeys.has(runtimeKey)) errors.push(`External runtime ${runtimeKey} is absent from the manifest`);
   }

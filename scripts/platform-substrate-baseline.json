@@ -1,14 +1,16 @@
 {
   "changeRationale": {
-    "prismaModelCount": "RuntimeCapabilityTransition plus its append-only event ledger provide one recoverable saga receipt and immutable terminal audit trail."
+    "defaultRequiredServiceCount": "Capability-owned services moved behind deterministic Compose profiles; only PostgreSQL, portal initialization, and portal remain universal core.",
+    "prismaModelCount": "RuntimeCapabilityTransition plus its append-only event ledger provide one recoverable saga receipt and immutable terminal audit trail.",
+    "serviceCount": "Linux Ollama is now explicitly catalogued as a host-specific runtime:external-ai service instead of remaining an ungoverned overlay-only container."
   },
-  "generatedAt": "2026-07-18T01:29:41.944Z",
-  "gitSha": "0f2dd72c1dc1e04e49696261866a77a24b8d0f80",
+  "generatedAt": "2026-07-18T07:35:12.563Z",
+  "gitSha": "f8bf2816625e141badff37c0cf7a9372db31b186",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
       "direction": "non-increasing",
-      "value": 15
+      "value": 3
     },
     "directInngestImportCount": {
       "direction": "non-increasing",
@@ -24,7 +26,7 @@
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 13987
+      "value": 14010
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
@@ -40,7 +42,7 @@
     },
     "serviceCount": {
       "direction": "non-increasing",
-      "value": 25
+      "value": 26
     }
   },
   "version": 1

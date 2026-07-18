@@ -85,8 +85,10 @@
       "class": "ephemeral-lifecycle",
       "capability": "runtime:build",
       "boundaryReason": "Separate sandbox-postgres runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-build"
+      ],
       "ports": [],
       "volumes": [
         "sandbox_pgdata:/var/lib/postgresql/data"
@@ -107,8 +109,10 @@
       "class": "ephemeral-lifecycle",
       "capability": "runtime:build",
       "boundaryReason": "Separate sandbox-init runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-build"
+      ],
       "ports": [],
       "volumes": [
         "sandbox_workspace:/workspace"
@@ -131,8 +135,10 @@
       "class": "ephemeral-lifecycle",
       "capability": "runtime:build",
       "boundaryReason": "Separate sandbox runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-build"
+      ],
       "ports": [
         "3035:3000"
       ],
@@ -185,8 +191,10 @@
       "class": "capability-activated",
       "capability": "runtime:browser-automation",
       "boundaryReason": "Separate browser-use runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-browser-automation"
+      ],
       "ports": [
         "8500:8500"
       ],
@@ -369,8 +377,11 @@
       "class": "capability-activated",
       "capability": "runtime:deep-observability",
       "boundaryReason": "Separate prometheus runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-deep-observability",
+        "observability-ui"
+      ],
       "ports": [
         "9090:9090"
       ],
@@ -397,6 +408,7 @@
       "boundaryReason": "Separate grafana runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
+        "runtime-deep-observability",
         "observability-ui"
       ],
       "ports": [
@@ -425,8 +437,11 @@
       "class": "capability-activated",
       "capability": "runtime:deep-observability",
       "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-deep-observability",
+        "observability-ui"
+      ],
       "ports": [
         "127.0.0.1:3100:3100"
       ],
@@ -451,8 +466,11 @@
       "class": "capability-activated",
       "capability": "runtime:deep-observability",
       "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-deep-observability",
+        "observability-ui"
+      ],
       "ports": [],
       "volumes": [
         "./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro",
@@ -529,8 +547,11 @@
       "class": "capability-activated",
       "capability": "runtime:deep-observability",
       "boundaryReason": "Separate postgres-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-deep-observability",
+        "observability-ui"
+      ],
       "ports": [
         "9187:9187"
       ],
@@ -555,8 +576,10 @@
       "class": "capability-activated",
       "capability": "runtime:durable-automation",
       "boundaryReason": "Separate redis runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-durable-automation"
+      ],
       "ports": [
         "6379:6379"
       ],
@@ -579,8 +602,10 @@
       "class": "capability-activated",
       "capability": "runtime:durable-automation",
       "boundaryReason": "Separate redis-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-durable-automation"
+      ],
       "ports": [],
       "volumes": [],
       "dependsOn": [
@@ -601,8 +626,10 @@
       "class": "capability-activated",
       "capability": "runtime:durable-automation",
       "boundaryReason": "Separate inngest runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-durable-automation"
+      ],
       "ports": [
         "8288:8288",
         "8289:8289"
@@ -627,8 +654,11 @@
       "class": "capability-activated",
       "capability": "runtime:local-speech",
       "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
-      "profiles": [],
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-local-speech",
+        "tts"
+      ],
       "ports": [
         "127.0.0.1:8765:9000"
       ],
@@ -653,6 +683,7 @@
       "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
+        "runtime-local-speech",
         "tts"
       ],
       "ports": [
@@ -668,6 +699,30 @@
       "hostPlatforms": [
         "windows",
         "macos",
+        "linux"
+      ],
+      "targetClassification": "capability-activated"
+    },
+    {
+      "service": "ollama",
+      "class": "capability-activated",
+      "capability": "runtime:external-ai",
+      "boundaryReason": "Linux-native in-cluster inference endpoint; provider identity and health remain reconciled through the external AI runtime authority.",
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-external-ai"
+      ],
+      "ports": [
+        "11434:11434"
+      ],
+      "volumes": [
+        "ollama_data:/root/.ollama"
+      ],
+      "dependsOn": [],
+      "canonicalDataOwner": "none",
+      "backupPolicy": "excluded-rebuildable",
+      "healthSemantics": "compose-healthcheck",
+      "hostPlatforms": [
         "linux"
       ],
       "targetClassification": "capability-activated"

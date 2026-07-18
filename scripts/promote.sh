@@ -53,6 +53,27 @@ if [[ ${#_missing[@]} -gt 0 ]]; then
   exit 1
 fi
 
+# Resolve the exact runtime profile closure from the governed install snapshot.
+# A stale catalog/state pair fails before Docker mutation. Copy the snapshot to
+# the recovery point and restore it atomically if any later promotion step fails.
+_install_state="${DPF_STATE_DIR:-/dpf-state}/install-state.json"
+_profile_adapter="$PROMOTE_SOURCE/scripts/lib/resolve-capability-compose-profiles.mjs"
+[[ -f "$_install_state" && -f "$_profile_adapter" ]] || { printf 'error: capability_state_stale\n' >&2; exit 1; }
+_capability_projection="$(node "$_profile_adapter" --state "$_install_state" --overlay promote)" || exit $?
+export COMPOSE_PROFILES="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
+_capability_recovery="$PROMOTE_BACKUP_PATH/install-state.json"
+_restore_capability_snapshot() {
+  if [[ -f "$_capability_recovery" ]]; then
+    _tmp="${_install_state}.rollback.$$"
+    cp "$_capability_recovery" "$_tmp" && mv "$_tmp" "$_install_state"
+  fi
+}
+if [[ $_dry_run -eq 0 ]]; then
+  mkdir -p "$PROMOTE_BACKUP_PATH"
+  cp "$_install_state" "$_capability_recovery"
+  trap '_rc=$?; if [[ $_rc -ne 0 ]]; then _restore_capability_snapshot; fi' EXIT
+fi
+
 # Compose chain used to rebuild/recreate the portal. The orchestrator passes
 # PROMOTE_COMPOSE_FILES (space-separated, relative to PROMOTE_SOURCE) carrying
 # the platform-correct chain the install was created with — base + the host
@@ -430,6 +451,10 @@ fi
 # original silent bug: the rebuild always runs, and its failure is never hidden.
 emit_step sandbox-refresh
 if [[ $_dry_run -eq 0 ]]; then
+  _sandbox_required="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requiredServices.includes("sandbox")?"yes":"no"))')"
+  if [[ "$_sandbox_required" != "yes" ]]; then
+    printf 'step=sandbox-refresh-optional-inactive target=%s\n' "$_built_sha"
+  else
   _sandbox_ok=1
   # BET-5 (BI-A1E864A5): the sandbox runs the same schema, so its Postgres also needs pgvector
   # for `CREATE EXTENSION vector`. Recreate sandbox-postgres onto the pgvector image first — same
@@ -454,6 +479,7 @@ if [[ $_dry_run -eq 0 ]]; then
   if [[ $_sandbox_ok -eq 0 ]]; then
     printf 'step=sandbox-refresh-failed target=%s\n' "$_built_sha"
     printf 'warning: dpf-sandbox rebuild/recreate failed after a successful portal promotion — the portal upgrade stands, but the sandbox may be stale (Build Studio builds can fail at the coding phase until it is refreshed via recover_sandbox or a manual `docker compose build sandbox && docker compose up -d --force-recreate sandbox`) (BI-A8686CFC)\n' >&2
+  fi
   fi
 fi
 
@@ -526,3 +552,4 @@ fi
 if [[ $_dry_run -eq 0 ]]; then
   printf 'step=done target=%s\n' "$_built_sha"
 fi
+trap - EXIT

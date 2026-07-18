@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { platform, arch } from "node:os";
-import { resolve } from "node:path";
+import { platform, arch, homedir } from "node:os";
+import { resolve, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { atomicWriteFile } from "./measure-platform-substrate.mjs";
 import { stableSerialize } from "./lib/platform-substrate-measurements.mjs";
+import { resolveCapabilityServiceProjection } from "./lib/capability-service-projection.mjs";
 
 const scriptRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REQUIRED_ENVIRONMENT = "local-integration-ci";
@@ -31,6 +32,10 @@ function parseJsonRecords(text, label) {
     try { return text.trim().split(/\r?\n/).map((line) => JSON.parse(line)); }
     catch (error) { throw new Error(`${label} returned malformed JSON: ${error.message}`); }
   }
+}
+function parseLiveCapabilityRows(text) {
+  if (typeof text !== "string" || !text.trim()) throw new Error("Live PlatformCapability runtime query returned no rows");
+  return text.trim().split(/\r?\n/).map((line) => { const [capabilityId, state, extra] = line.split("\t"); if (!capabilityId || !state || extra !== undefined) throw new Error("Live PlatformCapability runtime query returned malformed rows"); return { capabilityId, state }; });
 }
 
 function bytes(value) {
@@ -112,11 +117,34 @@ function isRunning(record) { return state(record) === "running"; }
 function isDegraded(record) { return !isRunning(record) || ["unhealthy", "starting"].includes(health(record)); }
 function isUnhealthy(record) { return ["unhealthy", "starting"].includes(health(record)); }
 
+export function resolveDpfStateDir(env = process.env, hostPlatform = platform(), home = homedir()) {
+  if (env.DPF_STATE_DIR) return env.DPF_STATE_DIR;
+  if (hostPlatform === "win32") return join(env.USERPROFILE || home, ".dpf");
+  return env.XDG_STATE_HOME ? join(env.XDG_STATE_HOME, "dpf") : join(env.HOME || home, ".dpf");
+}
+
+export function buildOperationalStateFromAuthorities(catalog, installSnapshot, composeRecords, liveCapabilityStates) {
+  if (!catalog || !Array.isArray(catalog.capabilities) || !/^[a-f0-9]{64}$/.test(catalog.catalogHash ?? "")) throw new Error("Generated capability catalog identity is invalid");
+  if (!Array.isArray(installSnapshot?.enabledRuntimeCapabilities) || installSnapshot.capabilityCatalogHash !== catalog.catalogHash || !/^[a-f0-9]{64}$/.test(installSnapshot.capabilityStateVersion ?? "")) throw new Error("Install capability identity is missing or stale");
+  if (!Array.isArray(liveCapabilityStates)) throw new Error("Live PlatformCapability runtime state is missing");
+  const live = new Map();
+  for (const row of liveCapabilityStates) { if (!catalog.capabilities.some((entry) => entry.capabilityId === row.capabilityId) || !["active", "disabled"].includes(row.state) || live.has(row.capabilityId)) throw new Error(`Invalid live runtime capability: ${row.capabilityId}`); live.set(row.capabilityId, row.state); }
+  if (live.size !== catalog.capabilities.length) throw new Error("Live PlatformCapability runtime state is incomplete");
+  const capabilities = catalog.capabilities.map((entry) => ({ capabilityId: entry.capabilityId, state: live.get(entry.capabilityId), manifest: { runtime: { dependencies: entry.dependencies, activation: { policy: entry.activationPolicy }, workGuards: entry.workGuards } } }));
+  const substrate = { version: catalog.substrateManifestVersion, services: catalog.capabilities.flatMap((entry) => entry.services), externalRuntimes: catalog.capabilities.flatMap((entry) => entry.externalRuntimes) };
+  const projection = resolveCapabilityServiceProjection({ substrate, capabilities, enabledRuntimeCapabilities: installSnapshot.enabledRuntimeCapabilities });
+  if (projection.catalogHash !== catalog.catalogHash || projection.capabilityStateVersion !== installSnapshot.capabilityStateVersion) throw new Error("Install capability state identity is stale");
+  const observed = new Map(composeRecords.map((record) => [service(record), record]));
+  const serviceStates = Object.fromEntries(projection.inactiveOptionalServices.map((name) => [name, "optional_inactive"]));
+  for (const requirement of projection.serviceRequirements) serviceStates[requirement.service] = requirement.capability === "runtime:core" ? "required" : (!observed.has(requirement.service) || isDegraded(observed.get(requirement.service)) ? "optional_degraded" : "required");
+  return { catalogVersion: projection.catalogVersion, catalogHash: projection.catalogHash, capabilityStateVersion: projection.capabilityStateVersion, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, serviceRequirements: projection.serviceRequirements, observedServices: {}, backupServices: projection.backupServices, externalRuntimes: projection.externalRuntimes, providerState: {}, serviceStates };
+}
+
 export async function collectRuntimeMeasurements(options) {
   requireLease(options.lease);
   if (!Array.isArray(options.manifest?.services) || !Number.isInteger(options.manifest.version)) throw new Error("Runtime measurement requires a valid capability/service manifest");
   const manifestNames = options.manifest.services.map((item) => item.service);
-  if (manifestNames.some((item) => typeof item !== "string") || new Set(manifestNames).size !== manifestNames.length || options.manifest.services.some((item) => typeof item.defaultRequired !== "boolean")) throw new Error("Runtime capability/service projection is malformed or duplicated");
+  if (manifestNames.some((item) => typeof item !== "string") || new Set(manifestNames).size !== manifestNames.length) throw new Error("Runtime capability/service projection is malformed or duplicated");
   const execute = options.execute ?? defaultExecute;
   const fetchJson = options.fetchJson ?? defaultFetchJson;
   const ps = parseJsonRecords(await execute("docker", ["compose", "ps", "--format", "json", "--all"]), "docker compose ps");
@@ -138,8 +166,16 @@ export async function collectRuntimeMeasurements(options) {
   const byService = new Map(ps.map((record) => [service(record), record]));
   const hostPlatform = normalizeHostPlatform(String(options.hostProfile ?? platform()).split("-")[0]);
   const eligible = options.manifest.services.filter((item) => !Array.isArray(item.hostPlatforms) || item.hostPlatforms.includes(hostPlatform));
-  const required = eligible.filter((item) => item.defaultRequired);
-  const optional = eligible.filter((item) => !item.defaultRequired);
+  const operationalState = options.operationalState ?? options.manifest.operationalState ?? buildOperationalStateFromAuthorities(options.catalog, options.installSnapshot, ps, options.liveCapabilityStates);
+  if (!operationalState?.serviceStates || typeof operationalState.serviceStates !== "object") throw new Error("Serialized OperationalCapabilityState is required for runtime diagnostics");
+  if (!Number.isInteger(operationalState.catalogVersion) || !/^[a-f0-9]{64}$/.test(operationalState.catalogHash ?? "") || !/^[a-f0-9]{64}$/.test(operationalState.capabilityStateVersion ?? "")) throw new Error("OperationalCapabilityState catalog/state identity is missing or invalid");
+  if (options.manifest.capabilityCatalogHash && operationalState.catalogHash !== options.manifest.capabilityCatalogHash) throw new Error("OperationalCapabilityState catalog identity is stale");
+  const allowedStatuses = new Set(["required", "optional_inactive", "optional_degraded"]);
+  for (const [key, value] of Object.entries(operationalState.serviceStates)) if (!manifestByService.has(key) || !allowedStatuses.has(value)) throw new Error(`OperationalCapabilityState has invalid service status: ${key}=${value}`);
+  const required = eligible.filter((item) => operationalState.serviceStates[item.service] === "required");
+  const optionalInactive = eligible.filter((item) => operationalState.serviceStates[item.service] === "optional_inactive");
+  const optionalDegraded = eligible.filter((item) => operationalState.serviceStates[item.service] === "optional_degraded");
+  for (const item of eligible) if (!operationalState.serviceStates[item.service]) throw new Error(`OperationalCapabilityState is missing service ${item.service}`);
   const missingRequired = required.filter((item) => !byService.has(item.service));
   if (missingRequired.length) throw new Error(`docker compose ps is missing required services: ${missingRequired.map((item) => item.service).join(", ")}`);
   const running = ps.filter(isRunning);
@@ -167,8 +203,8 @@ export async function collectRuntimeMeasurements(options) {
         const exitCode = Number(record?.ExitCode ?? record?.exitCode);
         return !(item.healthSemantics === "lifecycle-completion" && state(record) === "exited" && exitCode === 0);
       }).length),
-      optionalInactiveServices: metric("informational", optional.filter((item) => !isRunning(byService.get(item.service) ?? {})).length),
-      optionalDegradedServices: metric("informational", optional.filter((item) => byService.has(item.service) && isDegraded(byService.get(item.service))).length),
+      optionalInactiveServices: metric("informational", optionalInactive.length),
+      optionalDegradedServices: metric("informational", optionalDegraded.filter((item) => !byService.has(item.service) || isDegraded(byService.get(item.service))).length),
       servedIdentity: metric("informational", { gitSha: identity.gitSha, imageVersion: identity.imageVersion ?? null, version: identity.version ?? null }),
     },
   };
@@ -261,10 +297,15 @@ export async function runRuntimeMeasurement(options = {}) {
   try {
     await verifyActiveLease(options.lease, options);
     const manifest = await loadJson(manifestPath, "substrate manifest");
-    const current = await collectRuntimeMeasurements({ ...options, manifest });
+    const operationalState = options.operationalState ?? (options.operationalStatePath ? await loadJson(options.operationalStatePath, "operational capability state") : manifest.operationalState);
+    const catalog = operationalState ? undefined : await loadJson(resolve(options.catalogPath ?? join(scriptRoot, "scripts/capability-service-catalog.generated.json")), "generated capability catalog");
+    const installStatePath = options.installStatePath ?? join(resolveDpfStateDir(), "install-state.json");
+    const installSnapshot = operationalState ? undefined : await loadJson(resolve(installStatePath), "install state");
+    const liveCapabilityStates = operationalState ? undefined : parseLiveCapabilityRows((options.execute ?? defaultExecute)("docker", ["compose", "exec", "-T", "postgres", "sh", "-lc", "psql -U \"${POSTGRES_USER:-dpf}\" -d \"${POSTGRES_DB:-dpf}\" -At -F '\\t' -c 'SELECT \"capabilityId\", state FROM \"PlatformCapability\" WHERE \"capabilityId\" LIKE '\"'\"'runtime:%'\"'\"' ORDER BY \"capabilityId\"'"]));
+    const current = await collectRuntimeMeasurements({ ...options, manifest, operationalState, catalog, installSnapshot, liveCapabilityStates });
     if (options.update) {
       await verifyActiveLease(options.lease, options);
-      const second = await collectRuntimeMeasurements({ ...options, manifest });
+      const second = await collectRuntimeMeasurements({ ...options, manifest, operationalState, catalog, installSnapshot, liveCapabilityStates });
       const baseline = mergeStableSamples(current, second);
       await verifyActiveLease(options.lease, options);
       await atomicWriteFile(baselinePath, serializeRuntimeBaseline(baseline), options.io);
@@ -280,7 +321,7 @@ export async function runRuntimeMeasurement(options = {}) {
 
 function parseArgs(argv) {
   const options = { lease: { id: process.env.DPF_NONPROD_LEASE_ID, environmentKey: process.env.DPF_NONPROD_ENVIRONMENT_KEY, ownerSessionId: process.env.DPF_NONPROD_OWNER_SESSION_ID }, portalUrl: process.env.DPF_PORTAL_URL ?? "http://127.0.0.1:3000" };
-  const paths = { "--manifest": "manifestPath", "--baseline": "baselinePath", "--portal-url": "portalUrl", "--lease-id": "leaseId", "--environment-key": "environmentKey", "--owner-session-id": "ownerSessionId", "--mcp-url": "mcpUrl" };
+  const paths = { "--manifest": "manifestPath", "--baseline": "baselinePath", "--operational-state": "operationalStatePath", "--catalog": "catalogPath", "--install-state": "installStatePath", "--portal-url": "portalUrl", "--lease-id": "leaseId", "--environment-key": "environmentKey", "--owner-session-id": "ownerSessionId", "--mcp-url": "mcpUrl" };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--json") options.json = true;
     else if (argv[i] === "--update") options.update = true;

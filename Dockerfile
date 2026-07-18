@@ -49,6 +49,7 @@ FROM deps AS build
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
+COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docs/professions/ ./docs/professions/
@@ -73,7 +74,14 @@ RUN NODE_OPTIONS="--max-old-space-size=8192" NEXT_TELEMETRY_DISABLED=1 pnpm --fi
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
+COPY docker-compose.yml docker-compose.release.yml ./
 COPY scripts/set-hooks-path.mjs ./scripts/
+COPY scripts/lib/resolve-capability-compose-profiles.mjs ./scripts/lib/
+COPY scripts/lib/govern-capability-compose-args.mjs ./scripts/lib/
+COPY scripts/capability-service-catalog.generated.json ./scripts/
+COPY scripts/installer/install-state.schema.json ./scripts/installer/
+COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
+COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
 COPY scripts/backup-neo4j.sh ./scripts/
 COPY scripts/backup-qdrant.sh ./scripts/
@@ -119,6 +127,16 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
 # Generate capability snapshot from mcp-tools.ts (runs at build time; output bundled into runner)
 RUN node packages/db/scripts/generate-tools-snapshot.js
+RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/installer/lib \
+      /dpf-release-assets/monitoring && \
+    cp docker-compose.yml docker-compose.release.yml /dpf-release-assets/ && \
+    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
+    cp scripts/installer/install-state.schema.json /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/lib/state.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    cp -R monitoring/. /dpf-release-assets/monitoring/ && \
+    cd /dpf-release-assets && \
+    find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
 
 # ─── Stage 5: runner (unified — serves app AND runs init) ─────────────────────
 FROM base AS runner
@@ -149,6 +167,7 @@ COPY --from=init /app/packages ./packages
 COPY --from=init /app/node_modules ./node_modules
 COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore ./
 COPY --from=init /app/scripts ./scripts
+COPY --from=init /dpf-release-assets /dpf-release-assets
 # Managed operational scripts (backup/restore/trial-restore) are invoked at
 # runtime by the backup runners. They are committed from a Windows checkout,
 # where git cannot store the Unix executable bit, so they land here as 0644.

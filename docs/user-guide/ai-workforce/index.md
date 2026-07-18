@@ -33,11 +33,17 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 - Inspect the **Tool Execution Log** to audit every tool call made by any agent (who, what, when, result)
 - Evaluate external tools via the **Tool Evaluation Pipeline** before adding them to the platform
 - Connect external coding surfaces such as Claude, Codex, and Grok while keeping the same MCP, evidence, documentation, and PR gates as Build Studio
+- Open **Runtime Health** to see which local services are required by enabled capabilities and which AI runtimes are managed by configured providers
 
 ## Related Routes
 
 - `/platform/ai/providers/[providerId]` — provider setup and the Finance Bridge panel
+- `/platform/ai/runtime-health` — capability-aware local service and external-provider health
 - `/finance/spend/ai` — finance-owned view of AI supplier commitments and work items
+
+## Reading Runtime Health
+
+Runtime Health explains infrastructure in terms of enabled capabilities. **Required — unavailable** needs attention because an enabled capability depends on that local service. **Optional — inactive** is expected when its capability is disabled and does not make the platform unhealthy. **Optional — degraded** means the capability is enabled but its local service is unavailable. **External — provider managed** reports reconciled provider evidence rather than pretending the provider is a local container. Each state includes text and an action; color is supplementary.
 
 ## Authority & Governance
 

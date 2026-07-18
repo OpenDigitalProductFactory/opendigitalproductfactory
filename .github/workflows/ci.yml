@@ -112,6 +112,12 @@ jobs:
           pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime
       - name: Run guard loop
         run: node scripts/check-guards.mjs
+      - name: Capability Compose profile topology tests
+        # Source-only and dependency-free: validates only the canonical Compose,
+        # substrate catalog, and controlled profile fixtures (no daemon startup).
+        run: node --test scripts/check-capability-compose-profiles.test.mjs
+      - name: Capability Compose profile topology guard
+        run: node scripts/check-capability-compose-profiles.mjs
 
   docs-link-integrity:
     name: Docs Link Integrity
