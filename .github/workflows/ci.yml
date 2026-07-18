@@ -101,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Install guard AST dependency
@@ -130,7 +130,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Doc index is fresh
@@ -154,7 +154,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Test pr-health verdict logic
@@ -170,7 +170,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -184,7 +184,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -201,7 +201,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -219,7 +219,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -238,7 +238,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -255,7 +255,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -273,7 +273,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Drift-guard — guard self-test mirrors the frozen substrate
@@ -290,7 +290,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Test the detector
@@ -307,7 +307,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -325,7 +325,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -343,7 +343,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -365,7 +365,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -388,7 +388,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -409,7 +409,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run guard
@@ -433,7 +433,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Merge latest main (score merge-state, not the stale branch)
@@ -465,7 +465,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Test UX-fit pre-edit hook
@@ -496,7 +496,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Test docs-impact gate + graph logic
@@ -524,7 +524,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Test seed-fit decision contract
@@ -558,7 +558,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Test spec/plan/doc pre-edit hook
@@ -602,7 +602,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Test the Data-Impact Gate (red/green fixtures)
@@ -626,7 +626,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Test design-grounding pre-edit hook
@@ -651,7 +651,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Test the gate
@@ -673,7 +673,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
       - name: Run janitor decision + CLI tests
