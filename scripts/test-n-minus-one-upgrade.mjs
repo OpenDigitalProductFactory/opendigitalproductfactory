@@ -48,6 +48,26 @@ export function assertRecreatedPortalProvenance(container, image, { project }) {
   }
 }
 
+export async function fetchAndCheckoutCandidate({ repositoryDir, candidateSha, prNumber, run = execFile }) {
+  if (!SHA.test(candidateSha)) throw new Error("candidate checkout requires an exact 40-character SHA");
+  const candidateRef = "refs/dpf/candidate";
+  const sourceRef = Number(prNumber) > 0 ? `refs/pull/${Number(prNumber)}/merge` : candidateSha;
+  await run("git", ["fetch", "--no-tags", "origin", `+${sourceRef}:${candidateRef}`], { cwd: repositoryDir });
+  const { stdout } = await run("git", ["rev-parse", candidateRef], { cwd: repositoryDir });
+  const resolvedSha = stdout.trim();
+  if (resolvedSha !== candidateSha) throw new Error("fetched candidate ref does not match the event candidate SHA");
+  await run("git", ["checkout", "--detach", candidateRef], { cwd: repositoryDir });
+  const { stdout: checkedOut } = await run("git", ["rev-parse", "HEAD"], { cwd: repositoryDir });
+  if (checkedOut.trim() !== candidateSha) throw new Error("detached candidate checkout does not match the event candidate SHA");
+  return { candidateRef, sourceRef, resolvedSha };
+}
+
+export async function cloneAndCheckoutBaseline({ remote, repositoryDir, baseSha, run = execFile }) {
+  if (!SHA.test(baseSha)) throw new Error("baseline checkout requires an exact 40-character SHA");
+  await run("git", ["clone", "--no-checkout", remote, repositoryDir]);
+  await run("git", ["checkout", "--detach", baseSha], { cwd: repositoryDir });
+}
+
 export function buildPromoterPromotionDockerArgs({ candidateDigest, source, state, backups, secret, composeEnvFile, targetSha, project, envelope, signature }) {
   const composeEnvContainerPath = "/run/dpf/n-minus-one.env";
   return ["run", "--rm", "--add-host", "host.docker.internal:host-gateway",
@@ -309,12 +329,11 @@ function createRuntimeDependencies(options) {
       workspace.project = options.project;
       assertSafeHarnessConfig(workspace);
       cleanupOnce = installCleanupHandlers(process, () => cleanupHarness(workspace));
-      await execFile("git", ["clone", "--no-checkout", `https://github.com/${options.repository}.git`, workspace.source]);
-      await execFile("git", ["checkout", "--detach", options.baseSha], { cwd: workspace.source });
+      await cloneAndCheckoutBaseline({ remote: `https://github.com/${options.repository}.git`, repositoryDir: workspace.source, baseSha: options.baseSha });
       const transitionSecret = join(workspace.root, "transition.secret");
       await writeFile(transitionSecret, randomBytes(32).toString("hex"));
       const baseline = await prepareNMinusOneBaseline({ workspace, project: options.project, portalUrl });
-      await execFile("git", ["checkout", "--detach", options.candidateSha], { cwd: workspace.source });
+      await fetchAndCheckoutCandidate({ repositoryDir: workspace.source, candidateSha: options.candidateSha, prNumber: options.prNumber });
       const contractDigest = createHash("sha256").update(await readFile(join(process.cwd(), "promoter-contract.json"))).digest("hex");
       const image = `${options.project}-promoter:${options.candidateSha}`;
       await execFile("docker", ["build", "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${options.candidateSha}`, "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=sha256:${contractDigest}`, "-f", "Dockerfile.promoter", "-t", image, "."], { cwd: process.cwd() });

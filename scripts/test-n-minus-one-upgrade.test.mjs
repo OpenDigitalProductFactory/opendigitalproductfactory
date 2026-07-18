@@ -12,7 +12,9 @@ import {
   cleanupHarness,
   cleanupNMinusOneBaseline,
   cleanupProject,
+  cloneAndCheckoutBaseline,
   createHarnessWorkspace,
+  fetchAndCheckoutCandidate,
   githubJson,
   installCleanupHandlers,
   runNMinusOneUpgrade,
@@ -84,6 +86,60 @@ test("base verification requires exact PR base, main membership, and named succe
   assert.equal(result.baseSha, baseSha);
   await assert.rejects(() => verifyBaseRevision({ repository: "o/r", prNumber: 7, baseSha: "d".repeat(40), requiredChecks: ["Build"], api }), /exact PR base/);
   await assert.rejects(() => verifyBaseRevision({ repository: "o/r", prNumber: 7, baseSha, requiredChecks: ["Missing"], api }), /Missing/);
+});
+
+test("candidate checkout fetches the event ref, proves its SHA, then detaches", async () => {
+  const sha = "b".repeat(40);
+  for (const scenario of [
+    { prNumber: 3262, expectedSource: "refs/pull/3262/merge" },
+    { prNumber: undefined, expectedSource: sha },
+  ]) {
+    const calls = [];
+    const run = async (_command, args, options) => {
+      calls.push({ args, options });
+      if (args[0] === "rev-parse") return { stdout: `${sha}\n` };
+      return { stdout: "" };
+    };
+    const result = await fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, prNumber: scenario.prNumber, run });
+    assert.equal(result.sourceRef, scenario.expectedSource);
+    assert.deepEqual(calls.map(({ args }) => args), [
+      ["fetch", "--no-tags", "origin", `+${scenario.expectedSource}:refs/dpf/candidate`],
+      ["rev-parse", "refs/dpf/candidate"],
+      ["checkout", "--detach", "refs/dpf/candidate"],
+      ["rev-parse", "HEAD"],
+    ]);
+    assert.ok(calls.every(({ options }) => options.cwd === "/isolated"));
+  }
+});
+
+test("runtime repository provenance orders clone and baseline before event candidate fetch", async () => {
+  const baseSha = "a".repeat(40); const candidateSha = "b".repeat(40); const calls = [];
+  const run = async (_command, args, options = {}) => {
+    calls.push({ args, options });
+    if (args[0] === "rev-parse") return { stdout: `${candidateSha}\n` };
+    return { stdout: "" };
+  };
+  await cloneAndCheckoutBaseline({ remote: "https://github.test/o/r.git", repositoryDir: "/isolated", baseSha, run });
+  await fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha, prNumber: 9, run });
+  assert.deepEqual(calls.map(({ args }) => args), [
+    ["clone", "--no-checkout", "https://github.test/o/r.git", "/isolated"],
+    ["checkout", "--detach", baseSha],
+    ["fetch", "--no-tags", "origin", "+refs/pull/9/merge:refs/dpf/candidate"],
+    ["rev-parse", "refs/dpf/candidate"],
+    ["checkout", "--detach", "refs/dpf/candidate"],
+    ["rev-parse", "HEAD"],
+  ]);
+});
+
+test("candidate checkout fails closed before checkout on a missing or mismatched event ref", async () => {
+  const sha = "b".repeat(40); const calls = [];
+  await assert.rejects(() => fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, prNumber: 7, run: async (_command, args) => {
+    calls.push(args);
+    if (args[0] === "fetch") return { stdout: "" };
+    return { stdout: `${"c".repeat(40)}\n` };
+  } }), /does not match the event candidate SHA/);
+  assert.equal(calls.some((args) => args[0] === "checkout"), false);
+  await assert.rejects(() => fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, run: async () => { throw new Error("missing ref"); } }), /missing ref/);
 });
 
 test("workspace is mktemp-owned and cleanup refuses root, home, unresolved, and dpf project", async () => {
