@@ -63,8 +63,8 @@ type DiscoverySyncTx = {
         scopeKey?: string;
         lastConfirmedRun?: { sourceSlug?: string };
       };
-      select: { entityKey: true };
-    }): Promise<Array<{ entityKey: string }>>;
+      select: { entityKey: true; identityStatus?: boolean };
+    }): Promise<Array<{ entityKey: string; identityStatus?: string | null }>>;
     upsert(args: {
       where: { entityKey: string };
       create: Record<string, unknown>;
