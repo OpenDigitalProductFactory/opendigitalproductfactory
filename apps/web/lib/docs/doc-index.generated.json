@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 518,
+  "pageCount": 519,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3739,6 +3739,45 @@
       "publishedPortal": false,
       "anchors": [
         "documentation-staleness-report"
+      ]
+    },
+    "docs/marketing/archetype-persona-creative-narratives.md": {
+      "publicHref": "/marketing/archetype-persona-creative-narratives/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-persona-creative-narratives",
+        "1-creative-backbone",
+        "2-shared-visual-style",
+        "3-pilot-persona-narratives",
+        "dale-hvac-owner",
+        "linda-dental-scheduler",
+        "marisol-retail-merchandiser",
+        "4-category-expansion-narratives",
+        "trades-and-maintenance",
+        "beauty-and-personal-care",
+        "healthcare-and-wellness",
+        "pet-services",
+        "food-and-hospitality",
+        "retail-and-goods",
+        "fitness-and-recreation",
+        "education-and-training",
+        "professional-services",
+        "it-managed-services-required-msp-spotlight",
+        "nonprofit-and-community",
+        "hoa-and-property-management",
+        "software-platform",
+        "banking-and-financial-services",
+        "public-sector-and-civic",
+        "automotive-services",
+        "moving-and-logistics",
+        "security-services",
+        "real-estate-and-construction",
+        "media-production",
+        "live-events-and-venues",
+        "rental-and-shared-assets",
+        "5-claim-ux-anchor-source-and-permission-register"
       ]
     },
     "docs/operations/antigravity-cli-onboarding.md": {
