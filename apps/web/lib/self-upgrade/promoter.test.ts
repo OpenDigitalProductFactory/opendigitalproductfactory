@@ -68,13 +68,19 @@ describe("buildPromoterReadinessCommand", () => {
       labels: { "org.opencontainers.image.revision": "abc1234", "org.opendpf.promoter.contract-schema": "1", "org.opendpf.promoter.contract-digest": "sha256:" + "b".repeat(64) },
       computedContractDigest: "sha256:" + "b".repeat(64),
     });
-    const { args } = buildPromoterReadinessCommand({ ...BASE, artifact });
+    const readinessParams = {
+      ...BASE,
+      stateDirHostPath: "/Users/me/.dpf",
+      backupHostPath: "/Users/me/dpf-backups",
+      artifact,
+    };
+    const { args } = buildPromoterReadinessCommand(readinessParams);
     expect(args).toContain(artifact.digest);
     expect(args).toContain("--readiness");
     expect(args).not.toContain("--self-upgrade");
     expect(args).not.toContain("/var/run/docker.sock:/var/run/docker.sock");
-    expect(args).toContain(`${BASE.stateDirHostPath}:/dpf-state:ro`);
-    expect(args).toContain(`${BASE.backupHostPath}:/backups:ro`);
+    expect(args).toContain(`${readinessParams.stateDirHostPath}:/dpf-state:ro`);
+    expect(args).toContain(`${readinessParams.backupHostPath}:/backups:ro`);
     expect(args).toContain("DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
   });
 });

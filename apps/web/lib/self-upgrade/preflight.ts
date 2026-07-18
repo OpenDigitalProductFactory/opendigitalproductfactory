@@ -1,3 +1,6 @@
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+import type { ReadinessOwner } from "./promoter";
+
 type PromoterRuntime = Pick<
   typeof import("./promoter"),
   "buildCandidatePromoterImage" | "resolvePromoterArtifact" | "runPromoterReadiness"
@@ -13,7 +16,7 @@ export type CandidatePreflightResult =
 export async function runCandidatePreflight(params: {
   dryRun?: boolean;
   readinessMode?: string;
-  readinessOwner?: string;
+  readinessOwner?: ReadinessOwner;
   promoterImage?: string;
   callerProtocolVersion?: number;
   sourcePath: string;
@@ -100,4 +103,3 @@ export async function runCandidatePreflight(params: {
     return { ok: false, reason: "promoter-readiness-failed" };
   }
 }
-import { getErrorMessage } from "@/lib/shared/get-error-message";

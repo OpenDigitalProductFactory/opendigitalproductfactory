@@ -492,7 +492,7 @@ export async function runSelfUpgrade(
     sourcePath: upgradeWorkspaceMountPath ?? hostSourcePath,
     hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
     canonicalInstallPath: hostInstallPathResolved, targetSha: builtStamp, baselineSha: deployedSha,
-    runId: run.runId, composeFiles, composeProject,
+    runId: run.runId, composeFiles: composeFiles ?? [], composeProject,
     healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
     runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun,
     emitFailure: async (runId) => emitUpgradeEvent({ type: "upgrade.failed", runId }),
