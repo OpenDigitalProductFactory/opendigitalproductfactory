@@ -49,6 +49,20 @@ It does not implement any UI. It makes the target screens concrete enough that B
 
 This prototype spec (the per-archetype mockups) and the default-home redesign together cover both halves of the main portal: the configured-vertical homes *and* the default home every business sees first.
 
+## 1b. Current Substrate Review (2026-07-18)
+
+**Catalog growth:** the source catalog now contains 95 archetypes across 21 category files in `packages/storefront-templates/src/archetypes`. The original prototype set still gives the right review method, but the all-archetype coverage table in §8 is now a historical baseline for the first 46 archetypes, not a complete roster.
+
+**Workspace-home growth:** `defaultWorkspaceHomeRegistry` now registers seeded contributions from `apps/web/lib/workspace-home/profiles.ts`. The current route (`apps/web/app/(shell)/workspace/page.tsx`) resolves the storefront archetype, loads the operational twin, renders `OperatorCockpit` as the single attention surface, and then chooses among `WorkspaceTwinHero`, `VerticalWorkspaceHome`, or `PlatformWorkspaceHome`. `VerticalWorkspaceHome` is now an identity/context banner over the shared workspace body rather than a separate static queue.
+
+**Review implication:** prototype critique must now cover three layers:
+
+1. Does the catalog map every current archetype to a category, CTA, activation profile, and vocabulary?
+2. Does the workspace resolve to the right live mode: exact/category contribution, twin hero, or honest fallback?
+3. Do regulated or integration-led archetypes preserve boundaries instead of implying DPF owns core banking, clinical, public-safety/CJIS, payment-rail, payroll, POS, or other vertical execution?
+
+The acceptance vehicle for this current-state review is the updated [Archetype Acceptance Test Plan](../plans/2026-06-06-archetype-acceptance-test-plan.md), which now requires category-sentinel coverage for all 21 current category files.
+
 ## 2. Direct Answer: Is Main Portal Screen Configuration Mapped To This Work?
 
 Yes. The main portal and worker-home configuration ability is already architecturally mapped to this work, but the target screens are not fully specified or implemented yet.
@@ -74,11 +88,18 @@ The current source already carries these archetype-controlled inputs:
 
 ### Current Gap
 
-The main `/workspace` route currently resolves the contribution state but still renders `PlatformWorkspaceHome`. The `defaultWorkspaceHomeRegistry` is empty, so worker homes fall back to the standard platform view unless a future contribution is registered.
+The main `/workspace` route now resolves the contribution state and can render a live operational twin, exact/category workspace contribution identity, or shared platform workspace body. The old gap was a missing contribution registry; the current gap is different: not every one of the 21 current categories has a full first-viewport prototype, and the acceptance plan must verify that the composed runtime surface does not hide generic fallbacks behind tailored language.
 
-The gap is not a lack of architectural hooks. The gap is a missing set of reviewable contribution prototypes and implementation-ready manifests for each category and high-value exact archetype.
+The gap is not a lack of architectural hooks. The gap is maintaining an up-to-date, reviewable mapping from category/exact archetype to:
 
-This spec fills the prototype gap.
+- customer CTA and resulting record;
+- activation profile and capability posture;
+- workspace-home contribution or honest fallback;
+- operational twin semantics;
+- finance and integration boundary;
+- employee role/coworker handoff expectations.
+
+This spec fills the prototype gap for the original categories and defines the review method for later category expansions. The acceptance plan owns the current 95/21 verification matrix.
 
 ### Target Configuration Model
 
@@ -318,6 +339,7 @@ Every archetype has a public customer/storefront shape through `/s/[slug]` and a
 | `purchase` | `/s/[slug]/order/[itemId]` then checkout/confirmation | `StorefrontOrder`, visible in `/storefront/inbox` | Must show item, quantity, price/payment state, pickup/shipping if relevant. |
 | `inquiry` | `/s/[slug]/inquire` or `/s/[slug]/inquire/[itemId]` | `StorefrontInquiry`, visible in `/storefront/inbox` | Must show request, customer, desired outcome, owner, next response. |
 | `donation` | `/s/[slug]/donate` | `StorefrontDonation`, visible in `/storefront/inbox` | Must show donor/supporter, amount/campaign, acknowledgement status. |
+| `rental` | currently `/s/[slug]/inquire/[itemId]` with reserve/rental labels | `StorefrontInquiry`, plus rental/unit admin surfaces where implemented | Must make reservation dates, asset/unit, deposit/rate posture, pickup/return or move-in expectations clear. Do not imply direct rental checkout until the rental transaction substrate exists. |
 
 Review rule: if the prototype's customer action does not match the archetype's `ctaType`, mark the prototype `Fail` unless the exact archetype intentionally overrides the item CTA in its item template.
 
@@ -1134,6 +1156,41 @@ animal-shelter
 pet-rescue
 ```
 
+### 8.1 Current Catalog Expansion Ledger (2026-07-18)
+
+The §8 table above is retained as the historical exact-screen decision record for the original prototype set. Current source has expanded to 95 archetypes across 21 category files, so reviewers must also cover the categories below. These rows are category-level verification requirements, not full text mockups; when a sentinel fails, create or update the exact prototype/backlog item instead of silently broadening the old category fallback.
+
+| Category | Source count | Sentinel archetype(s) | Workspace profile to verify | Extra review focus |
+| --- | ---: | --- | --- | --- |
+| `asset-rental` | 3 | `equipment-rental`, `self-storage` | `home-property-governance` | Reservation-and-return, fleet/unit occupancy, rental agreements, deposit/recurring billing, and return/inspection lifecycle. |
+| `automotive-services` | 6 | `mobile-mechanic`, `roadside-assistance` | `home-field-mobility` | Route/vehicle/customer-site urgency, technician capacity, mobile customer communication, and field dispatch. |
+| `banking-financial-services` | 3 | `community-bank`, `credit-union` | `home-banking-financial-services` | Engagement layer only: applications, member/customer follow-up, disclosures, loan calculator, BIAN vocabulary, and no implied core banking/KYC/payment-rail execution. |
+| `live-events-venues` | 3 | `event-venue`, `tour-promoter` | `home-live-events-venues` | Show-day schedule, on-sale moments, guest communication, ticketing/capacity posture, and staff/production handoffs. |
+| `media-production` | 3 | `film-video-production`, `post-production-studio` | `home-media-production` | Shoots, sessions, deliverables, client approvals, crew/vendor handoffs, and production-equipment rental adjacency. |
+| `moving-and-logistics` | 4 | `moving-company`, `courier-delivery` | `home-field-mobility` | Routes, crew/vehicle capacity, pickup/drop-off commitments, customer ETA updates, and logistics exceptions. |
+| `public-sector` | 3 | `small-town-municipality`, `municipal-utility`, `law-enforcement-agency` | `home-civic-public-sector` | Resident/ratepayer language, statutory fees, public records/permits, no-CJI law-enforcement boundary, and public-body governance. |
+| `real-estate-construction` | 2 | `new-home-builder`, `custom-home-builder` | `home-property-governance` | Project/property pipeline, site/vendor work, buyer/client communication, draws/change orders, and construction-stage visibility. |
+| `security-services` | 2 | `guard-patrol`, `alarm-cctv-install` | `home-field-mobility` | Patrol/install scheduling, incident-sensitive wording, customer site coverage, and compliance/security posture without overclaiming surveillance operations. |
+
+The current catalog also added leaves inside original categories, including `medical-practice`, `mobile-beauty`, `mobile-pet-grooming`, `mobile-vet`, `cooperative`, `agricultural-cooperative`, `waste-management`, `fractional-cxo`, and HVAC/roofing/painting/pest/waste/solar trades. These should be tested as exact deltas when their category sentinel finds a material mismatch in vocabulary, CTA, scheduling pattern, finance posture, or workspace-home contribution.
+
+### 8.2 Current Runtime Feature Verification Targets
+
+Every category sentinel in the acceptance plan must explicitly verify these now-shipped archetype-oriented features:
+
+| Feature | Source surface | What review must prove |
+| --- | --- | --- |
+| Source catalog integrity | `packages/storefront-templates/src/archetypes/*` | Archetype id, category, CTA, items, sections, vocabulary, scheduling defaults, and activation profile are coherent and seedable. |
+| Setup activation summary | `ArchetypeActivationSummary` and `/storefront/setup` | Required/recommended capability counts, billing/payment pattern, isolation posture, worker-home label, operating question, top concerns, and primitive widgets are understandable before save. |
+| Workspace resolution | `resolveWorkspaceHomeContribution()` and `/workspace` | Exact beats category; category beats unconfigured; fallback is honest. |
+| Operational twin | `WorkspaceTwinHero` | The twin is archetype-relevant, visually dominant only when meaningful, and does not hide the real workspace body or cockpit. |
+| Single attention surface | `OperatorCockpit` | One "what needs you now" count/ranking; no contradictory static queues from vertical banners or command-center posture. |
+| Vertical identity banner | `VerticalWorkspaceHome` | Names the archetype workspace, explains what it watches, and defers live decisions to the cockpit. |
+| Customer CTA routing | public `/s/[slug]/*` and `/storefront/inbox` | Booking, inquiry, purchase/order, donation, rental/reservation, application, report/request, and contact flows create or surface the correct management record. |
+| Finance posture | `/finance` and `/finance/settings/setup` | Native, integration-led, hybrid, prepared-not-prescribed, or not-applicable posture is explicit for the category. |
+| Integration posture | `/platform/tools/integrations` and capability views | QuickBooks, Stripe, HubSpot/CRM, ADP/payroll, Microsoft 365, Mailchimp, Google Business Profile, social/communications, and vertical systems appear only where relevant. |
+| Capability and backlog capture | capability views, `/admin/backlog`, product backlog routes | Missing archetype work can be captured with archetype, category, employee role, capability, surface, integration anchor, and posture. |
+
 ## 9. Backlog Mapping
 
 This spec should not create a new replacement epic. It maps to existing work:
@@ -1164,13 +1221,18 @@ Known category or exact workspace-home backlog anchors:
 | Nonprofit And Community | `BI-EF03E915` |
 | Pet Services | `BI-43A682A2` |
 | HOA And Property Management | `BI-96A3C7A9` |
+| Asset Rental | reuse property-governance and rental-fleet backlog anchors; create exact items when rental lifecycle UX is missing |
+| Automotive / Logistics / Security field mobility | reuse field-mobility workspace anchors; create exact items when routing, vehicle, patrol, or dispatch semantics are wrong |
+| Banking / Financial Services | banking archetype and regulated-boundary backlog anchors; create exact items for BIAN/disclosure/core-banking boundary gaps |
+| Public Sector | civic/public-sector backlog anchors; create exact items for resident/ratepayer/no-CJI/statutory-fee gaps |
+| Media Production / Live Events | production/show-day workspace anchors; create exact items for shoot, approval, ticketing, capacity, or venue gaps |
 
 Likely backlog items to create or update after review:
 
 1. Archetype prototype review: critique category-level worker-home mockups for critical content, form, layout, and function.
 2. Main portal setup preview: show worker home, customer portal, finance, integrations, team/coworker impact before archetype commit.
-3. Workspace-home contribution manifests: category-level contributions for the 11 non-platform categories.
-4. Exact archetype prototypes: MSP, wholesale distribution, counselling, veterinary clinic, catering, dog walking, property management, and software platform operator.
+3. Workspace-home contribution manifests: category-level contributions for every current category that lacks a trustworthy runtime contribution or honest fallback.
+4. Exact archetype prototypes: MSP, wholesale distribution, counselling, veterinary clinic, catering, dog walking, property management, software platform operator, banking/credit-union, municipal utility, equipment rental/self-storage, field-mobility, media production, and live-events sentinels.
 5. Business capability UX: expose commercial market/product references inside capability review and setup preview.
 
 ## 10. Review Prompt For Another Agent
@@ -1187,8 +1249,9 @@ Critique the prototype set for:
 2. Form and tone: does the language fit the archetype and avoid platform jargon?
 3. Layout: does the hierarchy make sense across critical strip, primary zone, secondary zone, briefing zone, and setup/integration rail?
 4. Function: are the actions tied to current DPF surfaces, canonical records, or clearly named integration anchors?
-5. Coverage: do all 46 archetypes have enough prototype coverage, and which need exact screens rather than category fallback?
-6. Architecture: does the proposal fit StorefrontConfig -> StorefrontArchetype, workspace-home contributions, capability taxonomy, and integration posture?
+5. Coverage: do all 95 current source archetypes across 21 category files have enough category-sentinel or exact-prototype coverage, and which need exact screens rather than category fallback?
+6. Architecture: does the proposal fit StorefrontConfig -> StorefrontArchetype, workspace-home contributions, operational twin, capability taxonomy, and integration posture?
+7. Boundary posture: do regulated or integration-led archetypes avoid implying DPF owns core banking, clinical, public-safety/CJIS, payment-rail, payroll, POS, or other vertical execution before the platform has that governed substrate?
 
 Return findings ordered by severity with file/section references. Prefer concrete changes to vague opinions.
 ```
@@ -1198,7 +1261,9 @@ Return findings ordered by severity with file/section references. Prefer concret
 The prototype spec is acceptable when:
 
 - Every current archetype is mapped to a category prototype and exact delta.
+- The current 95/21 source catalog is reconciled against this spec and the acceptance plan before a reviewer signs off coverage.
 - The main portal screen configuration path is explicitly mapped to setup, public portal, finance, capabilities, integrations, and worker-home contribution mechanics.
+- The current `/workspace` composition is explicitly covered: `WorkspaceTwinHero`, `OperatorCockpit`, `VerticalWorkspaceHome`, `PlatformWorkspaceHome`, exact/category contribution resolution, and honest fallback behavior.
 - Reviewers can evaluate critical content, form, layout, and function without running the portal.
 - The spec does not imply that DPF owns regulated finance, payroll, clinical, banking, or payment execution before integration-led maturity gates are met.
 - Category prototypes are small enough to become backlog slices rather than a giant replacement project.

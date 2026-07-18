@@ -15,6 +15,19 @@ The practical model is:
 3. Work with purposed AI coworkers for the daily jobs that business actually has.
 4. Grow the install through governed improvements when the business needs something new.
 
+## Owner-First Promise
+
+Most DPF customers should hear the archetype story through the owner first. In many archetypes, the owner is still a key practitioner: the plumber doing call-outs, the salon owner cutting hair, the clinician reviewing forms, the venue owner managing holds, or the nonprofit director writing donor updates. DPF is most compelling when it protects that core work and gives the surrounding necessary-evil jobs to governed AI coworkers.
+
+For marketing and testing, each archetype should answer four plain questions:
+
+1. What core job does the owner want more time to do?
+2. Which surrounding jobs steal time after hours?
+3. Which AI coworker can draft, chase, prepare, summarize, or route that work?
+4. Which platform behavior proves the promise is real?
+
+The category-level owner positioning, visual-story guidance, and test-priority matrix live in [Archetype Owner Positioning](../architecture/archetype-owner-positioning.md). Use that document when writing marketing copy, choosing images, drafting diagrams, or deciding which archetype-specific use cases deserve the strictest audit attention.
+
 ## What An Archetype Controls
 
 An archetype is more than a storefront template. It is the business shape selected for the install.
@@ -30,25 +43,33 @@ Implementation source of truth: `StorefrontConfig.archetypeId` selects the insta
 
 ## Current Market Coverage
 
-The source catalog currently contains 15 market categories and 56 leaf archetype templates. The public docs should usually describe the categories first, then use leaf archetypes when a concrete example helps.
+The source catalog currently contains 21 market categories and 95 leaf archetype templates. The public docs should usually describe the categories first, then use leaf archetypes when a concrete example helps.
+
+For a fast owner-facing summary of every category and leaf, use the [Archetype Owner Quick Guide](../marketing/archetype-owner-quick-guide.md). It is the skimmable layer for sales, marketing, and test planning before reading the deeper positioning or audit documents.
 
 | Category | Example shape |
 | --- | --- |
-| Healthcare and wellness | dental practice, physiotherapy, optician, therapy |
-| Beauty and personal care | salon, spa, personal care services |
-| Trades and maintenance | facilities maintenance, plumber, electrician, cleaning, landscaping; HVAC is the next targeted leaf |
-| Professional services | consultants, agencies, advisors |
+| Healthcare and wellness | medical practice, dental practice, physiotherapy, optician, therapy, mobile clinical services |
+| Beauty and personal care | salon, barber, nail salon, spa, personal training, mobile beauty |
+| Trades and maintenance | facilities maintenance, plumber, electrician, cleaning, landscaping, HVAC, pest control, roofing, appliance repair |
+| Professional services | consultants, agencies, advisors, legal, accounting, inspection, surveying, notary/process serving |
 | Software platform | software products and SaaS-style businesses |
 | Education and training | tutoring, training providers, schools, instructors |
 | Pet services | veterinary, grooming, walking, boarding |
 | Food and hospitality | restaurants, catering, reservations, events |
 | Retail and goods | retail shops, artisan goods, florist-style selling |
-| Fitness and recreation | gyms, studios, classes, leagues |
+| Fitness and recreation | gyms, yoga studios, dance studios, classes |
 | Nonprofit and community | donations, programs, volunteers, membership; agricultural shared-machinery co-op |
 | HOA and property management | residents, dues, violations, service requests |
 | Banking and financial services | community bank, credit union, mortgage lending — BIAN-grounded, jurisdiction-specific regulatory governance |
 | Public sector and civic | small-town municipality, municipal utility (water/electric), law enforcement — resident/ratepayer skins, open-meetings governance, records requests, 311 |
-| Rental and shared assets | equipment/tool rental, self-storage — the reserve → use → return & inspect → re-pool value stream over a pooled asset |
+| Rental and shared assets | equipment/tool rental, self-storage, production equipment rental — the reserve → use → return & inspect → re-pool value stream over a pooled asset |
+| Real estate and construction | production builders, custom home builders, model-home tours, design consultations, milestone projects |
+| Automotive services | auto glass, mobile mechanics, detailing, tire service, roadside assistance, locksmith |
+| Moving and logistics | moving, junk removal, courier delivery, last-mile freight |
+| Security services | guard patrol, alarm/CCTV install, licensed monitoring-adjacent service |
+| Media production | film/video production, post-production, event production and staging |
+| Live events and venues | event venues, tour promoters, talent booking agencies |
 
 The first three persona anchors are:
 

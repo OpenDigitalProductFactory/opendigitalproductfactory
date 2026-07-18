@@ -3,7 +3,7 @@
 **Status:** draft · 2026-07-12
 **Epic:** EP-LIVING-BUSINESS-VIZ (proposed in the parent spec)
 **Author:** platform (via Claude Code, operator Mark)
-**Parent:** [The Living Business — value-stream workforce visualization](2026-07-11-living-business-workforce-visualization-design.md) — §3.1–3.3 established the two-lens model (value stream ⇄ operational twin), the physical/non-physical taxonomy, and the operating-twin doctrine (shared human + AI awareness surface). This spec answers the follow-on question: **how does DPF accommodate ALL archetypes** — 21 categories, 53 seeded archetypes — **without building 53 bespoke twins?**
+**Parent:** [The Living Business — value-stream workforce visualization](2026-07-11-living-business-workforce-visualization-design.md) — §3.1–3.3 established the two-lens model (value stream ⇄ operational twin), the physical/non-physical taxonomy, and the operating-twin doctrine (shared human + AI awareness surface). This spec answers the follow-on question: **how does DPF accommodate ALL archetypes** — 21 categories, 95 seeded archetypes as of the 2026-07-18 source catalog sweep — **without building 95 bespoke twins?**
 
 ---
 
@@ -21,7 +21,7 @@ A **Twin Framework** with three parts:
 2. **A template registry** — ~12 twin templates (8 physical, 4 board-family) that arrange the grammar for a class of business.
 3. **A derived `TwinProfile`** — `deriveTwinProfile(archetype)` picks the template and binds its nouns from the axes, `schedulingDefaults`, `fieldDispatch`, and vocabulary already on the archetype; a `twinProfile` leaf override mirrors the ADR-4 escape hatch. **Derive, never author** (OVSM rule), with authoring reserved for the exception.
 
-So: 53 archetypes ÷ 12 templates ÷ 1 grammar — and a new archetype gets a working twin *by derivation* on day one.
+So: 95 current archetypes ÷ 12 templates ÷ 1 grammar — and a new archetype gets a working twin *by derivation* on day one.
 
 ## 3. The twin grammar (shared primitives)
 
@@ -171,7 +171,7 @@ Compiled 2026-07-12 from four parallel research sweeps (web-verified; anchor pro
 
 ## 7. Plan
 
-- **P1 — the derivation (pure).** `twin-profile.ts` + `deriveTwinProfile` + tests asserting every one of the 53 seeded archetypes derives a template with bound nouns (the OVSM test pattern). No UI. Leaf override type wired into `ArchetypeDefinition`.
+- **P1 — the derivation (pure).** `twin-profile.ts` + `deriveTwinProfile` + tests asserting every seeded archetype in the current source catalog derives a template with bound nouns (the OVSM test pattern). No UI. Leaf override type wired into `ArchetypeDefinition`.
 - **P2 — the grammar kit.** The ten primitives as React components on the existing token/report-kit substrate (`apps/web/components/twin/`), each one lifted from the prototypes (capacity chips, zone, resource unit, queue, cog banner, utility band, presence, feed, quests). Storybook-style fixture page per primitive.
 - **P3 — first templates live.** FLOOR, TERRITORY, YARD land as template compositions bound via `TwinProfile` — replacing the three hand-built prototypes with framework-rendered equivalents, wired to `LivingBusinessSnapshot` + `agent-event-bus` (parent spec P1–P2).
 - **P4 — coverage by demand.** Remaining templates (BOOK, BAYS, ROOMS, STORE, VENUE, COUNTER, boards) in install-demand order; each is a template + bindings, not a bespoke build. Certification: a golden-journey per template exercising queue→cog→confirm.

@@ -1,18 +1,18 @@
 # Archetype Business Value Streams
 
-**Status:** Draft — 2026-06-12 (enterprise architecture / usability / business-analysis review applied)
+**Status:** Draft — 2026-07-18 (catalog sweep applied; 95/21 source catalog reflected)
 **Kind:** Planning artefact (architecture + testing + archetype documentation)
 **Owner surface:** Architecture feature (`/ea`), archetype documentation, and the archetype audit.
 **Consumed by:** [archetype-audit-plan.md](../testing/archetype-audit-plan.md) · the EA / architecture feature · per-archetype documentation.
 **Implemented by:** [2026-06-12-value-stream-architecture-platform-design.md](../superpowers/specs/2026-06-12-value-stream-architecture-platform-design.md) — platform design that captures these value streams as architecture, measures/optimizes each archetype's business model, and drives coworker facilitation + proactivity (the *how*).
-**Grounded in:** `packages/storefront-templates/src/archetypes/` (53 seeded archetypes) and `packages/storefront-templates/src/types.ts` (operating-model axes, commercial models, activation profiles).
+**Grounded in:** `packages/storefront-templates/src/archetypes/` (95 seeded archetypes across 21 categories as of 2026-07-18) and `packages/storefront-templates/src/types.ts` (operating-model axes, commercial models, activation profiles).
 **Decision authority:** Defines value-stream interpretation, audit severity rationale, EA rendering semantics, and archetype documentation language. It does **not** override seed data, create new runtime tables, or authorize WWMD/WWWD perspective blending.
 
 ---
 
 ## 0. Why this document exists
 
-The archetype audit drives 53 seeded archetypes through a browser-realistic experience and records gaps. The risk it names in its own Section 1 — *"The platform must behave correctly for each organizational model"* — is that **testing becomes arbitrary**: we click through phases A–H because the checklist says so, not because each click defends something the business actually depends on.
+The archetype audit drives 95 seeded archetypes through a browser-realistic experience and records gaps. The risk it names in its own Section 1 — *"The platform must behave correctly for each organizational model"* — is that **testing becomes arbitrary**: we click through phases A–H because the checklist says so, not because each click defends something the business actually depends on.
 
 This artefact removes the arbitrariness. It states, for every archetype, **the operational value stream the business runs in the real world** — the end-to-end sequence of value-adding stages that turns a stranger into a served, paid, retained customer. Every test phase then exists to validate a *named stage of a real value stream*, and every finding can be tied to *the stage of the business it threatens*. A vet booking form that drops the pet fields is not "an important finding because the checklist says pet fields" — it is a **break in the Capture-Demand → Deliver-Care handoff** that makes the clinic's core value stream non-functional.
 
@@ -44,13 +44,13 @@ This document is about the other sense: the **operational value stream of the cu
 
 This distinction matters. A value stream is not a click path, process map, or implementation workflow. A value-stream stage may be realized by multiple UI flows and processes, and one UI flow may touch multiple stages. The stage names therefore stay stable even when the portal design changes.
 
-The bridge: the customer's operational value stream lives almost entirely in IT4IT's **Consume** stream (request → fulfilment → customer-facing experience). DPF's job is to make a non-technical operator run their whole operational value stream *through* the platform's Consume surface. So this document is the detailed expansion of "Consume" for each of the 53 businesses we ship.
+The bridge: the customer's operational value stream lives almost entirely in IT4IT's **Consume** stream (request → fulfilment → customer-facing experience). DPF's job is to make a non-technical operator run their whole operational value stream *through* the platform's Consume surface. So this document is the detailed expansion of "Consume" for each of the 95 businesses we ship.
 
 ---
 
 ## 2. The universal small-business value stream
 
-Across all 53 archetypes, the same backbone recurs. Differences are not *which* stages exist — every business attracts, captures, delivers, settles, and retains — but **which stage is load-bearing, what "value delivered" means, and which trust gate governs it.** The backbone:
+Across all 95 archetypes, the same backbone recurs. Differences are not *which* stages exist — every business attracts, captures, delivers, settles, and retains — but **which stage is load-bearing, what "value delivered" means, and which trust gate governs it.** The backbone:
 
 ```
                  ┌─────────────────── TRUST & COMPLIANCE (cross-cutting) ───────────────────┐
@@ -154,9 +154,9 @@ These invariants keep this artefact useful to architecture, UX, testing, and bus
 
 ---
 
-## 6. Per-category value-stream profiles (all 87 archetypes across 19 categories)
+## 6. Per-category value-stream profiles (all 95 archetypes across 21 categories)
 
-> The field-dispatch leaves folded into existing categories on 2026-06-13 (e.g. `hvac-contractor`, `home-health-care`, `mobile-pet-grooming`) share their category's value-stream profile below and are catalogued — with their cross-category pattern — in §10.2. The three new dispatch-native categories are §6.16–6.18.
+> The field-dispatch leaves folded into existing categories on 2026-06-13 (e.g. `hvac-contractor`, `home-health-care`, `mobile-pet-grooming`) share their category's value-stream profile below and are catalogued — with their cross-category pattern — in §10.2. The three dispatch-native categories are §6.16–6.18; `media-production` and `live-events-venues` are now first-class profiles in §6.20–§6.21.
 
 Each profile gives: the **value the end customer receives** (job-to-be-done), the **commercial model** (Section 3 shape), the **load-bearing stage(s)**, the **distinctive stage** that the audit must scrutinise, and the **trust gate**. Per-archetype rows name only what diverges from the category. Service names and CTA labels are *expected from seed* — where prose and seed disagree, seed wins.
 
@@ -181,13 +181,13 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 
 ---
 
-### 6.2 Beauty & Personal Care (Run 2) — `hair-salon`, `barber-shop`, `nail-salon`, `beauty-spa`, `optician`, `personal-trainer`
+### 6.2 Beauty & Personal Care (Run 2) — `hair-salon`, `barber-shop`, `nail-salon`, `beauty-spa`, `personal-trainer`, `mobile-beauty`
 
 - **Value delivered:** a personal-care service performed by a *specific practitioner* in a *specific slot*.
 - **Commercial model:** **appointment-checkout** — book and pay at service; **no running account/estate**.
 - **Load-bearing stage:** **S3 Schedule** — the calendar *is* the product. Practitioner availability, operating hours, slot length, and no-show buffers are the business. A booking that ignores the stylist's real hours is a broken business.
 - **Distinctive stage:** S2 → S3 handoff: provider selection must show *that provider's* slots, not generic ones.
-- **Trust gate:** `optician` is clinical-adjacent — coworker frames "see a registered optometrist," does not advise on prescriptions.
+- **Trust gate:** low for the salon/spa/training leaves; `mobile-beauty` inherits the field-dispatch pattern in §10.2.
 - **Value-stream-critical assertions:** `customer-estate` module is **NOT** active (appointment-checkout); coworker confirms "no account balance — pay at time of service"; duration variants render (spa 60/90 min); vocabulary "clients/appointments/stylists," not "patients/members."
 
 | Archetype | Diverges from category by |
@@ -196,12 +196,12 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 | `barber-shop` | "clients" vocabulary; walk-in culture means S3 must tolerate same-day. |
 | `nail-salon` | Fixed/per-session pricing — no "quote" path; high-frequency rebooking loads S6 lightly. |
 | `beauty-spa` | Duration options (60/90) are first-class in S3; couples package = multi-resource slot. |
-| `optician` | Clinical Trust gate; the "fitting/screening" services straddle care and retail. |
 | `personal-trainer` | Session-pack pricing pulls a little S6 (pack depletion) into an otherwise appointment-checkout stream; category fit must not produce salon-flavoured coworker framing. |
+| `mobile-beauty` | Mobile practitioner travels to the customer; use the beauty appointment vocabulary plus the field-dispatch assignment/ETA loop. |
 
 ---
 
-### 6.3 Healthcare & Wellness (Run 3) — `veterinary-clinic`, `dental-practice`, `physiotherapy`, `counselling`
+### 6.3 Healthcare & Wellness (Run 3) — `veterinary-clinic`, `dental-practice`, `medical-practice`, `physiotherapy`, `counselling`, `optician`, plus medical-mobile leaves in §10.2
 
 - **Value delivered:** an *episode of care* for a patient (or pet) whose history must inform the encounter.
 - **Commercial model:** **encounter-based**; provisioning `episode-of-care`.
@@ -214,12 +214,14 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 |-----------|---------------------------|
 | `veterinary-clinic` | Pet `ConfigurationItem` is mandatory S4 substrate; emergency appointment is the urgent S2 path. |
 | `dental-practice` | "new or returning patient?" qualifier; regulated vocabulary, no clinical recommendations. |
+| `medical-practice` | Core clinical-practice leaf; patient intake, telehealth boundary, PHI/HIPAA posture, and urgent-symptom escalation are the trust-gate tests. |
 | `physiotherapy` | Differential slot lengths (assessment vs follow-up) are load-bearing in S3; rehab packages touch S6. |
 | `counselling` | Most sensitive vocabulary ("clients," jurisdiction-dependent); crisis-routing refusal is a hard Trust-gate test. |
+| `optician` | Clinical-adjacent eye-care Trust gate; the "fitting/screening" services straddle care and retail, but source category is healthcare-wellness. |
 
 ---
 
-### 6.4 Pet Services (Run 4) — `pet-grooming`, `pet-boarding`, `dog-walking`
+### 6.4 Pet Services (Run 4) — `pet-grooming`, `pet-boarding`, `dog-walking`, plus mobile pet leaves in §10.2
 
 - **Value delivered:** care for a *named pet* whose details (size, breed, temperament) shape the service.
 - **Commercial model:** appointment-checkout with an encounter-like estate (the pet record).
@@ -252,21 +254,21 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 
 ---
 
-### 6.7 Fitness & Recreation (Run 7) — `gym`, `yoga-studio`, `sports-club`
+### 6.7 Fitness & Recreation (Run 7) — `gym`, `yoga-studio`, `dance-studio`
 
 - **Value delivered:** ongoing access to facilities/classes via *membership*.
 - **Commercial model:** **subscription** — recurring, not one-off.
 - **Load-bearing stage:** **S6 Retain** — the renewal and the membership lifecycle are the business, not the first join. Day passes are the transactional on-ramp.
 - **Distinctive stage:** S5 must express *recurring* billing language, not a single purchase; class schedules (yoga) are a class-pattern S3 sub-surface.
 - **Trust gate:** age/DOB and emergency-contact capture for membership; low regulatory.
-- **Value-stream-critical assertions:** coworker frames subscription/auto-renew, never "appointment-checkout"; "members/students" vocabulary (sports-club/yoga); membership tiers render with recurring price language.
+- **Value-stream-critical assertions:** coworker frames subscription/auto-renew, never "appointment-checkout"; "members/students" vocabulary (gym/yoga/dance); membership tiers render with recurring price language.
 
 ---
 
-### 6.8 Education & Training (Run 8) — `corporate-training`, `tutoring`, `driving-school`, `music-school`, `dance-studio`
+### 6.8 Education & Training (Run 8) — `corporate-training`, `tutoring`, `driving-school`, `music-school`
 
 - **Value delivered:** a learner gains a skill — delivered 1:1, in cohorts, or as a B2B programme.
-- **Commercial model:** booking (tutoring/driving/music/dance), inquiry (corporate-training, B2B).
+- **Commercial model:** booking (tutoring/driving/music), inquiry (corporate-training, B2B).
 - **Load-bearing stage:** **S3 Schedule** for the 1:1/cohort bookings (instructor assignment, term enrolment); **S2** for B2B programme inquiries.
 - **Distinctive stage:** the *subject is a third party* — parent books, **student** is delivered to (age/year-group/instrument/level fields). Term-based enrolment vs drop-in is an S3/S6 distinction.
 - **Trust gate:** safeguarding tone for minors; B2B (corporate) frames to L&D/HR with "delegates/participants," not "customers."
@@ -296,10 +298,10 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 
 ---
 
-### 6.11 Nonprofit & Community (Run 11) — `charity`, `pet-rescue`, `animal-shelter`, `community-shelter`, `cooperative`
+### 6.11 Nonprofit & Community (Run 11) — `charity`, `pet-rescue`, `animal-shelter`, `community-shelter`, `sports-club`, `cooperative`, `agricultural-cooperative`, plus `meal-delivery-program` in §10.2
 
 - **Value delivered:** a cause is *advanced* by a supporter's gift — or, for `cooperative`, member-owners govern a shared enterprise.
-- **Commercial model:** **donation** (the four nonprofits) / inquiry-membership with **member-owned governance** (cooperative).
+- **Commercial model:** **donation** (charity/rescue/shelter/community leaves) / inquiry-membership with **member-owned governance** (cooperative and agricultural-cooperative) / membership/community participation (`sports-club`).
 - **Load-bearing stage:** **S2 Capture** *plus the deliberate absence of S5-as-purchase* — a donation issues a **receipt, never an invoice/billing account**. An auto-created invoice is a stream defect (`important`).
 - **Distinctive stage:** the value stream intentionally *omits* commerce artefacts; cooperative adds a governance value stream (member meetings, surplus distribution, share purchase).
 - **Trust gate:** sensitive vocabulary — "supporters/donors/beneficiaries/guests," never "customers"; gift-aid/tax-relief language (UK); cooperative uses member-democratic framing.
@@ -420,6 +422,44 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 |-----------|-------------|
 | `new-home-builder` | Production/spec builder: plan-book selling + design-centre options; model home open 7 days is the S1 funnel; category-default vocabulary. |
 | `custom-home-builder` | Bespoke design→contract→build; leaf vocabulary override (**Clients**, **Build Team**, **Build Consultant**); adds `service-operations` for subcontractor coordination; business-hours only. |
+
+---
+
+### 6.20 Media Production — `film-video-production`, `post-production-studio`, `event-production-staging`
+
+> Added 2026-07-18. This category is project/timeline work that produces a media asset or staged production for a client. It is distinct from `asset-rental` because the business sells a produced outcome, not the temporary use of equipment, and distinct from `live-events-venues` because it produces the show rather than selling the ticketed event.
+
+- **Value delivered:** a produced creative/technical asset or staged production — commercial video, post/VFX delivery, or AV/staging execution.
+- **Commercial model:** inquiry-to-project with milestone/delivery billing; `projects` and `billing-readiness` are load-bearing.
+- **Load-bearing stage:** **S3 Qualify / S4 Deliver** — scope, schedule, crew/artist/suite capacity, dependencies, review rounds, and deadline management determine whether the project succeeds.
+- **Distinctive stage:** waiting-on-client/asset/approval states are not generic notes; they are the project bottleneck and should surface as needs-you quests in the workspace/twin.
+- **Trust gate:** rights/usage, client approval, safety/logistics for event staging, and honest capability promises. Coworker should not blur this into general consulting.
+- **Value-stream-critical assertions:** inquiry forms capture project type, budget/spec, deadline, and brief; seeded booking/discovery items render from `schedulingDefaults`; workspace/twin derives PIPELINE/timeline posture; milestone/project language survives finance handoff.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `film-video-production` | Full-service production: pre-production, crewed shoot, post, delivery; "Crew" vocabulary. |
+| `post-production-studio` | Digital delivery; review/version/deadline queues and "Artists" vocabulary are load-bearing. |
+| `event-production-staging` | Physical event build/strike with site visit; staging/AV crew and logistics constraints dominate S3/S4. |
+
+---
+
+### 6.21 Live Events & Venues — `event-venue`, `tour-promoter`, `talent-booking-agency`
+
+> Added 2026-07-18. This category sells or books the show: tickets, venue space, tours, acts, and event dates. It is distinct from media production because physical capacity, dates, holds, guest/fan communication, and settlement are the value-stream spine.
+
+- **Value delivered:** a guest/fan/client gets access to a live event or talent booking; the operator safely manages capacity, date conflicts, and event readiness.
+- **Commercial model:** ticket/package purchase for `event-venue` and `tour-promoter`; inquiry-to-booking for `talent-booking-agency`; booking sub-flows exist for venue hire and consultations.
+- **Load-bearing stage:** **S2 Capture / S3 Qualify & Schedule** — the sale or inquiry only works if it respects event date, capacity, space/artist availability, holds, and conflict avoidance.
+- **Distinctive stage:** venue/date/talent conflicts are the core operational risk; the platform must not imply a full ticketing seat-map, payment rail, artist contract, or settlement engine unless those surfaces exist.
+- **Trust gate:** truthful ticket/availability language, accessibility/access needs capture, event safety/staffing posture, and contract/booking boundary clarity.
+- **Value-stream-critical assertions:** "What's On & Tickets", "Shows & Tours", or "Booking Services" vocabulary renders; purchase/inquiry flows issue references; weekend/long-day scheduling appears where seeded; coworker handles double-booking as a decision gate rather than a generic task.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `event-venue` | Box-office posture; ticket/package purchases and private venue hire booking. |
+| `tour-promoter` | Tour/package sales and venue/buyer inquiries; carries box-office risk across dates. |
+| `talent-booking-agency` | Client inquiry and roster/talent availability; consultation booking is the front door. |
 
 ---
 
@@ -585,9 +625,9 @@ This section records value-stream *patterns* beyond the original six-stage backb
 
 ### 10.1 The rental / shared-asset utilization loop (now modelled upstream — `asset-rental` + `agricultural-cooperative`)
 
-**Businesses:** equipment & tool rental, vehicle/trailer rental, party & event rental (tents, chairs, AV), **self-storage**, and the **agricultural co-op that shares machinery among member-farmers**.
+**Businesses:** equipment & tool rental, vehicle/trailer rental, party & event rental (tents, chairs, AV), **film/production equipment rental**, **self-storage**, and the **agricultural co-op that shares machinery among member-farmers**.
 
-**Substrate check (re-verified 2026-06-12 against `origin/main`):** these are **now seeded** (per design spec `2026-05-29-vehicle-equipment-rental-archetype-design.md`). A new `asset-rental` category carries `equipment-rental` and `self-storage`; the `cooperative`'s `agricultural`/`shared-machinery` sub-type was promoted to a dedicated `agricultural-cooperative` leaf (category `nonprofit-community`, `member-owned`) whose items reserve a shared combine "allocated equitably among members." A new `rental` value is in the `CtaType` enum, and `rental-fleet` / `rental-agreements` / `asset-pool` capability types plus a rental/shared-asset entitlement model are in `types.ts`. Seed count is now **56**. (This is a worked example of *sweep-main-before-trusting-worktree-specs*: the gap recorded here on 2026-06-11 was already in flight and merged by 2026-06-12.)
+**Substrate check (re-verified 2026-07-18 against `origin/main`):** these are **now seeded**. The `asset-rental` category carries `equipment-rental`, `self-storage`, and `production-equipment-rental`; the `cooperative`'s `agricultural`/`shared-machinery` sub-type was promoted to a dedicated `agricultural-cooperative` leaf (category `nonprofit-community`, `member-owned`) whose items reserve shared machinery equitably among members. A `rental` value exists in the `CtaType` enum, and `rental-fleet` / `rental-agreements` / `asset-pool` capability types plus a rental/shared-asset entitlement model are in `types.ts`.
 
 **Why it's a genuinely new pattern — not just a missing name.** Every commercial model in Section 3 assumes the offered thing either *leaves* (sale, donation) or is *consumed in a slot* (appointment, encounter). A rental asset does neither: it is **reserved → handed out → used for a period → returned → inspected → re-pooled.** That utilization loop is a value-stream shape the current six-stage backbone only partially fits:
 
@@ -608,7 +648,7 @@ The new element is **S4b Return & Inspect** and the re-pool — there is no "ret
 
 **What is built vs. what remains.** Built (2026-06-12): the three archetype leaves, the `rental` CTA, the reservation-with-return form fields (pickup/return dates, unit size, waitlist), and the `rental-fleet`/`rental-agreements`/`asset-pool` capability *types*. **Remaining** is the cross-archetype **asset-pool capacity *engine*** — the running surfaces that make the **S4b Return & Inspect** loop and the reusable-pooled-asset KPIs real: reservation-conflict/overbooking checks, turnaround/utilization tracking, deposit & damage exposure, overdue-return handling, and (for the co-op) the equitable-allocation rationing layer over conflicting member reservations. That engine is the rental-family instance of this design's deferred **capacity-management requirement set** (Section 7.3 / the implementation design §7.3, §10) — not a per-archetype template but a first-class platform capability.
 
-**Disposition:** archetypes — **done** (`equipment-rental`, `self-storage`, `agricultural-cooperative`). The **rental/shared-asset value-stream pattern** and its **reusable-pooled-asset** capacity unit are now a recognized part of the model (this section is their canonical description). The asset-pool capacity engine is tracked as capacity-management work, not new-archetype work.
+**Disposition:** archetypes — **done** (`equipment-rental`, `self-storage`, `production-equipment-rental`, `agricultural-cooperative`). The **rental/shared-asset value-stream pattern** and its **reusable-pooled-asset** capacity unit are now a recognized part of the model (this section is their canonical description). The asset-pool capacity engine is tracked as capacity-management work, not new-archetype work.
 
 ### 10.2 The field-dispatch (mobile-resource-to-customer) loop (now modelled — Gap A leaves + Gap B categories, 2026-06-13)
 
@@ -642,6 +682,7 @@ read from `consumptionChannel: onsite-plus-portal` (and `episode-of-care` provis
 
 ## 11. Changelog
 
+- **2026-07-18** — Re-grounded the active text against the current source catalog: **95 archetypes / 21 categories**. Added §6.20 `media-production` and §6.21 `live-events-venues`, moved `medical-practice`/`optician` under healthcare-wellness, corrected fitness/education/nonprofit category headings, and added `production-equipment-rental` to the rental/shared-asset loop.
 - **2026-07-17** — Closed the **`real-estate-construction`** coverage gap: added **§6.19** (`new-home-builder`, `custom-home-builder`) and a §7.2 demand–capacity row for the builders + a field-dispatch capacity row. These two builders (EP-GRID-BUILDER) were seeded but never given a value-stream profile — the 2026-06-13 "87 archetypes" count folded in the 17 Gap-A + 12 Gap-B leaves (= 85) and silently omitted them. Inventory re-grounded against `origin/main` `packages/storefront-templates/src/archetypes/` (enumerated `ALL_ARCHETYPES`, cross-checked `archetypes.test.ts`): **87 archetypes / 19 categories** confirmed (real-estate-construction is the 19th category, 2 leaves). Surfaced by the [archetype audit plan](../testing/archetype-audit-plan.md) 87/19 re-grounding (BI-186FFCA7, EP-ARCH-8D4F2A).
 - **2026-06-13** — Folded the **field-dispatch archetypes** from the 2026-06-13 gap analysis into the catalog: 17 Gap-A leaves across 7 existing categories (trades, healthcare, pet, professional, beauty, nonprofit, retail) and 3 new dispatch-native categories — `automotive-services` (§6.16), `moving-and-logistics` (§6.17), `security-services` (§6.18). Added §10.2 recognizing the **field-dispatch (mobile-resource-to-customer) loop** as a value-stream pattern that spans categories and is derived from the operating-model axes (`onsite-plus-portal`). Seed count is now **87 archetypes across 19 categories**. Each leaf carries the axes that let the forthcoming horizontal Field Dispatch capability derive dispatch via `needsFieldDispatch()`; the capability itself is a parallel effort.
 - **2026-06-12** — Added **Implemented by** link to the platform implementation design (`2026-06-12-value-stream-architecture-platform-design.md`) and the WWWD consumer/§8.8 reference. Corrected §10.1: the rental / shared-asset gap was **built upstream** (asset-rental category + `equipment-rental`/`self-storage`/`agricultural-cooperative`, `rental` CTA, asset-pool capability types; seed now 56) — flipped from "not modelled" to "now modelled," retaining the pattern as canonical and narrowing the remaining work to the asset-pool capacity engine. (Sweep-main caught a worktree-stale gap claim.)

@@ -34,7 +34,7 @@ This is a review artifact, not a build-gate artifact. No production build, brows
 
 ### Archetype-First Foundation
 
-The source now contains **87 archetypes across 19 categories** in `packages/storefront-templates/src/archetypes`. That is materially broader than older user-facing docs that still describe 56 leaf archetypes across 15 categories. The newer architecture doc also states "all 87 archetypes across 19 categories" in [archetype-business-value-streams.md](archetype-business-value-streams.md).
+The source now contains **95 archetypes across 21 categories** in `packages/storefront-templates/src/archetypes` as of the 2026-07-18 documentation sweep. This supersedes the older 87/19 review baseline and the still older 56/15 user-facing coverage copy. Treat any raw count in dated evidence as a point-in-time observation, not as the current acceptance target.
 
 The root doctrine is architecturally correct: `StorefrontConfig.archetypeId` is the single source of truth for portal industry, while `Organization.industry` and `BusinessContext.industry` are derived. That is the right pattern for a platform that must change vocabulary, workflow emphasis, capability activation, and coworker behavior by archetype without creating forked products.
 
@@ -98,13 +98,13 @@ Current main has made real progress on field dispatch:
 
 That is a good sign. However, the backlog records themselves distinguish these from the runtime/mobile/live-integration tiers. Field dispatch is becoming a horizontal capability, but it should still be treated as readiness-in-progress until archetype-specific runtime flows, mobile signals, human-in-the-loop governance, and UX verification are proven.
 
-The workspace-home architecture also remains substrate-heavy. `defaultWorkspaceHomeRegistry` is still created with no default contributions in `apps/web/lib/workspace-home/registry.ts`, and `/workspace` resolves a contribution but always renders `PlatformWorkspaceHome`. Existing docs and evidence explicitly describe the empty registry/platform fallback as a known boundary where vertical contributions land later.
+The workspace-home architecture has moved past the empty-registry boundary this review originally found. As of the 2026-07-18 sweep, `defaultWorkspaceHomeRegistry` is populated through `DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS`, and `/workspace` can render the operational twin hero, operator cockpit, vertical workspace home, or platform fallback. The remaining adequacy risk is no longer "no substrate"; it is whether every archetype's derived workspace contribution, twin profile, cockpit language, setup activation summary, and first-screen operator task are UX-verified against the live catalog.
 
 **Adequacy implication:** DPF has the vocabulary and activation substrate for many archetypes, but the first screen a worker sees is not yet consistently the operational cockpit for that archetype.
 
 ### 3. The Platform Needs A Readiness Matrix, Not A Binary Coverage Claim
 
-"87 archetypes" is a coverage count, not an adequacy claim. A small professional-services business and a regulated bank branch have very different thresholds for "one platform."
+"95 archetypes" is a coverage count, not an adequacy claim. A small professional-services business and a regulated bank branch have very different thresholds for "one platform."
 
 DPF should publish and maintain an archetype readiness matrix with at least these states:
 
@@ -208,7 +208,7 @@ Gaps:
 - Some UI surfaces still implement local metric/status/card patterns instead of converging on report-kit.
 - Finding/assurance/risk/issue-shaped models need unification before additional parallel models appear.
 - Workspace contribution substrate exists, but concrete category/default contributions are not yet broadly registered.
-- Docs can drift from source counts, as shown by 56/15 vs 87/19 archetype coverage.
+- Docs can drift from source counts, as shown by the 56/15 → 87/19 → 95/21 archetype coverage progression.
 
 Recommendation:
 
@@ -289,14 +289,14 @@ To keep breadth from becoming debt, reserve about 20 percent of related work for
 
 ### Phase 2: Archetype Readiness Matrix
 
-- Publish readiness states for all 87 archetypes.
+- Publish readiness states for all 95 current archetypes.
 - Mark each archetype as template-ready, ops-ready, connector-ready, regulated-ready, or sole-platform-ready.
 - Tie each readiness level to evidence, not judgment.
 - Stop using raw archetype count as a proxy for market readiness.
 
 ### Phase 3: Vertical Workspace Activation
 
-- Register category-level workspace-home contributions for all 19 categories.
+- Verify category-level workspace-home contributions for all 21 current categories.
 - Add exact overrides for the highest-value archetypes first.
 - Make missing data obvious and actionable.
 - Route role-specific views through the same contribution substrate rather than parallel dashboards.
@@ -320,6 +320,6 @@ To keep breadth from becoming debt, reserve about 20 percent of related work for
 
 DPF has the architecture of a real SMB operating platform, not just a collection of pages. The combination of archetypes, governance, AI coworkers, MDM, finance/compliance/customer surfaces, and local-first deployment is strategically coherent.
 
-The main risk is overclaiming readiness. The platform should not say "we cover 87 archetypes" as though every archetype is equally ready to run a business end to end. It should say "we have an archetype-governed platform, and each archetype progresses through explicit readiness gates."
+The main risk is overclaiming readiness. The platform should not say "we cover 95 archetypes" as though every archetype is equally ready to run a business end to end. It should say "we have an archetype-governed platform, and each archetype progresses through explicit readiness gates."
 
 With resilience hardening, concrete vertical workspace homes, connector readiness, MDM completion, and disciplined UI/refactoring, DPF can become the single platform for many small-to-mid-size businesses. Until those gates are passed, it is a strong foundation and pilot platform, not yet a universal sole-system replacement.
