@@ -96,6 +96,38 @@ export type PromoterResult = {
   stderr: string;
 };
 
+const RUNTIME_TRANSITION_ID = /^RCT-[A-Za-z0-9-]{1,48}$/;
+const RUNTIME_TRANSITION_TOKEN = /^[a-f0-9]{64}$/;
+const RUNTIME_TRANSITION_ENVELOPE = /^[A-Za-z0-9_-]{16,65536}$/;
+const POSIX_HOST_PATH = /^\/(?:[A-Za-z0-9._ -]+\/?)+$/;
+const WINDOWS_HOST_PATH = /^[A-Za-z]:[\\/](?:[A-Za-z0-9._ -]+[\\/]?)+$/;
+
+function isSafeRuntimeHostPath(value: string): boolean {
+  if (value.length > 1024 || (!POSIX_HOST_PATH.test(value) && !WINDOWS_HOST_PATH.test(value))) return false;
+  return value.split(/[\\/]+/).every((segment) => segment !== "..");
+}
+
+function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
+  if (params.runtimeCapabilityTransitionId && !RUNTIME_TRANSITION_ID.test(params.runtimeCapabilityTransitionId)) {
+    throw new Error("invalid_runtime_transition_id");
+  }
+  for (const id of params.runtimeTransitionActiveIds ?? []) {
+    if (!RUNTIME_TRANSITION_ID.test(id)) throw new Error("invalid_runtime_transition_id");
+  }
+  if (params.runtimeTransitionAuthorityToken && !RUNTIME_TRANSITION_TOKEN.test(params.runtimeTransitionAuthorityToken)) {
+    throw new Error("invalid_runtime_transition_authority_token");
+  }
+  for (const path of [params.stateDirHostPath, params.runtimeCapabilitySecretFileHostPath]) {
+    if (path && !isSafeRuntimeHostPath(path)) throw new Error("invalid_runtime_transition_host_path");
+  }
+  if (params.runtimeCapabilityEnvelope && !RUNTIME_TRANSITION_ENVELOPE.test(params.runtimeCapabilityEnvelope)) {
+    throw new Error("invalid_runtime_transition_envelope");
+  }
+  if (params.runtimeCapabilitySignature && !RUNTIME_TRANSITION_TOKEN.test(params.runtimeCapabilitySignature)) {
+    throw new Error("invalid_runtime_transition_signature");
+  }
+}
+
 /**
  * Pure builder for the `docker run` invocation that launches the promoter
  * container. Separated from runPromoter so it can be unit-tested without
@@ -104,6 +136,7 @@ export type PromoterResult = {
 export function buildPromoterCommand(
   params: PromoterParams,
 ): { command: string; args: string[] } {
+  validateRuntimeTransitionCommandInputs(params);
   const image =
     params.promoterImage && params.promoterImage.length > 0
       ? params.promoterImage
