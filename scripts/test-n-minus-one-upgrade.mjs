@@ -104,7 +104,7 @@ function resolveReal(path) {
   return process.getBuiltinModule("node:fs").realpathSync(path);
 }
 
-export async function cleanupHarness(workspace, composeDown = defaultComposeDown) {
+export async function cleanupHarness(workspace, composeDown = cleanupNMinusOneBaseline) {
   assertSafeHarnessConfig(workspace);
   await composeDown(workspace);
   await rm(workspace.root, { recursive: true, force: true });
@@ -133,8 +133,40 @@ export function installCleanupHandlers(emitter, cleanup) {
   return runOnce;
 }
 
-async function defaultComposeDown({ source, state, project }) {
-  await execFile("node", [join(source, "scripts", "dpf-compose.mjs"), "--project-name", project, "down", "--volumes", "--remove-orphans"], { cwd: source, env: { ...process.env, COMPOSE_PROJECT_NAME: project, DPF_STATE_DIR_HOST: state, DPF_STATE_DIR: "/dpf-state", DPF_ALLOW_DESTRUCTIVE_COMPOSE: "1" } });
+export async function cleanupNMinusOneBaseline(workspace, run = execFile) {
+  const { source, state, project } = workspace;
+  const env = workspace.harnessEnvironment ?? { ...process.env, COMPOSE_PROJECT_NAME: project, DPF_STATE_DIR_HOST: state, DPF_STATE_DIR: state };
+  await run("node", [join(source, "scripts", "dpf-compose.mjs"), ...(workspace.harnessEnvFile ? ["--env-file", workspace.harnessEnvFile] : []), "--project-name", project, "down", "--volumes", "--remove-orphans"], { cwd: source, env: { ...env, DPF_ALLOW_DESTRUCTIVE_COMPOSE: "1" } });
+}
+
+async function ensureNMinusOneHostEnvironment(workspace, project) {
+  if (workspace.harnessEnvironment && workspace.harnessEnvFile) return workspace.harnessEnvironment;
+  const authSecret = `dpf_n1_${randomBytes(32).toString("base64url")}`;
+  const credentialKey = randomBytes(32).toString("hex");
+  const env = {
+    ...process.env,
+    COMPOSE_PROJECT_NAME: project,
+    DPF_STATE_DIR_HOST: workspace.state,
+    DPF_STATE_DIR: workspace.state,
+    DPF_HOST_INSTALL_PATH: workspace.source,
+    DPF_N1_HARNESS: "1",
+    AUTH_SECRET: authSecret,
+    CREDENTIAL_ENCRYPTION_KEY: credentialKey,
+  };
+  const envFile = join(workspace.root, "n-minus-one.env");
+  await writeFile(envFile, [
+    `COMPOSE_PROJECT_NAME=${project}`,
+    `DPF_STATE_DIR_HOST=${workspace.state}`,
+    `DPF_STATE_DIR=${workspace.state}`,
+    `DPF_HOST_INSTALL_PATH=${workspace.source}`,
+    "DPF_N1_HARNESS=1",
+    `AUTH_SECRET=${authSecret}`,
+    `CREDENTIAL_ENCRYPTION_KEY=${credentialKey}`,
+    "",
+  ].join("\n"), { mode: 0o600 });
+  workspace.harnessEnvironment = env;
+  workspace.harnessEnvFile = envFile;
+  return env;
 }
 
 export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }, deps = {}) {
@@ -142,14 +174,13 @@ export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }
   const run = deps.run ?? execFile;
   const fetchImpl = deps.fetchImpl ?? fetch;
   const sleep = deps.sleep ?? ((ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)));
-  const env = {
-    ...process.env,
-    COMPOSE_PROJECT_NAME: project,
-    DPF_STATE_DIR_HOST: workspace.state,
-    DPF_STATE_DIR: "/dpf-state",
-    DPF_HOST_INSTALL_PATH: workspace.source,
-  };
-  await run("node", [join(workspace.source, "scripts", "dpf-compose.mjs"), "--project-name", project, "up", "-d", "--build", "postgres", "portal"], { cwd: workspace.source, env });
+  const statePath = join(workspace.state, "install-state.json");
+  await access(statePath).catch(() => writeFile(statePath, Buffer.concat([
+    Buffer.from([0xef, 0xbb, 0xbf]),
+    Buffer.from(`${JSON.stringify({ schemaVersion: 1, installerVersion: "n-minus-one", platform: "linux", arch: "amd64", installPath: workspace.source, stateDir: workspace.state, composeProjectName: project })}\n`),
+  ])));
+  const env = await ensureNMinusOneHostEnvironment(workspace, project);
+  await run("node", [join(workspace.source, "scripts", "dpf-compose.mjs"), "--env-file", workspace.harnessEnvFile, "--project-name", project, "up", "-d", "--build", "postgres", "portal"], { cwd: workspace.source, env });
   let lastStatus = 0;
   for (let attempt = 0; attempt < 90; attempt += 1) {
     try {
@@ -228,7 +259,6 @@ function createRuntimeDependencies(options) {
       await execFile("git", ["checkout", "--detach", options.baseSha], { cwd: workspace.source });
       const transitionSecret = join(workspace.root, "transition.secret");
       await writeFile(transitionSecret, randomBytes(32).toString("hex"));
-      await writeFile(join(workspace.state, "install-state.json"), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(`${JSON.stringify({ schemaVersion: 1, installerVersion: "n-minus-one", platform: "linux", arch: "amd64", installPath: workspace.source, stateDir: workspace.state, composeProjectName: options.project })}\n`)]));
       await prepareNMinusOneBaseline({ workspace, project: options.project, portalUrl });
       const contractDigest = createHash("sha256").update(await readFile(join(process.cwd(), "promoter-contract.json"))).digest("hex");
       const image = `${options.project}-promoter:${options.candidateSha}`;

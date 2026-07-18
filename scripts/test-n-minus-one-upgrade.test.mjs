@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   assertSafeHarnessConfig,
   cleanupHarness,
+  cleanupNMinusOneBaseline,
   cleanupProject,
   createHarnessWorkspace,
   githubJson,
@@ -168,7 +169,27 @@ test("baseline preparation uses the unique harness project and proves health aft
     assert.deepEqual(events[0].args.slice(-5), ["up", "-d", "--build", "postgres", "portal"]);
     assert.equal(events[0].env.COMPOSE_PROJECT_NAME, "dpf-n1-isolated");
     assert.equal(events[0].env.DPF_STATE_DIR_HOST, workspace.state);
+    assert.equal(events[0].env.DPF_STATE_DIR, workspace.state);
+    assert.match(events[0].env.AUTH_SECRET, /^dpf_n1_[A-Za-z0-9_-]{43}$/);
+    assert.match(events[0].env.CREDENTIAL_ENCRYPTION_KEY, /^[a-f0-9]{64}$/);
+    assert.equal(events[0].env.DPF_N1_HARNESS, "1");
+    assert.ok(events[0].args.includes("--env-file"));
+    const envFile = events[0].args[events[0].args.indexOf("--env-file") + 1];
+    const seeded = await readFile(envFile, "utf8");
+    assert.ok(seeded.includes(`DPF_STATE_DIR=${workspace.state}\n`));
+    assert.match(seeded, /^DPF_N1_HARNESS=1$/m);
+    assert.deepEqual(workspace.harnessEnvironment, events[0].env);
+    const stateBytes = await readFile(join(workspace.state, "install-state.json"));
+    assert.deepEqual([...stateBytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+    assert.equal(JSON.parse(stateBytes.subarray(3).toString("utf8")).schemaVersion, 1);
     assert.equal(events.at(-1).kind, "health");
+    let cleanupCall;
+    await cleanupNMinusOneBaseline(workspace, async (command, args, options) => { cleanupCall = { command, args, options }; return { stdout: "" }; });
+    assert.equal(cleanupCall.options.env.DPF_STATE_DIR, workspace.state);
+    assert.equal(cleanupCall.options.env.AUTH_SECRET, events[0].env.AUTH_SECRET);
+    assert.equal(cleanupCall.options.env.CREDENTIAL_ENCRYPTION_KEY, events[0].env.CREDENTIAL_ENCRYPTION_KEY);
+    assert.equal(cleanupCall.args[cleanupCall.args.indexOf("--env-file") + 1], envFile);
+    assert.deepEqual(cleanupCall.args.slice(-3), ["down", "--volumes", "--remove-orphans"]);
   } finally { await rm(workspace.root, { recursive: true, force: true }); }
 });
 
