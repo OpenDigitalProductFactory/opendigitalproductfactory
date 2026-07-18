@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { coordinateRuntimeCapabilityTransition, computeCapabilityStateVersion, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions } from "./transition-coordinator";
+import type { RuntimeCapabilityCoordinatorDeps, RuntimeCapabilityTransitionReceipts } from "./transition-coordinator";
 import { signTransitionPayload } from "./transition-protocol";
 
 const request = {
@@ -13,11 +14,13 @@ const persistedEnvelope = {
   previousProfiles: ["build"], desiredProfiles: [], previousServices: [], desiredServices: [],
 };
 
-function deps(overrides = {}) {
+type CreatePendingInput = Parameters<RuntimeCapabilityTransitionReceipts["createPending"]>[0];
+
+function deps(overrides: Partial<RuntimeCapabilityCoordinatorDeps> = {}): RuntimeCapabilityCoordinatorDeps {
   const secret = "x".repeat(32);
   return {
     receipts: {
-      createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
+      createPending: vi.fn(async (input: CreatePendingInput) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
       markFailed: vi.fn(async () => undefined),
       markHostApplied: vi.fn(async () => undefined),
     },
@@ -29,7 +32,7 @@ function deps(overrides = {}) {
     resolveProjection: vi.fn(async (keys: readonly string[]) => ({ catalogHash: request.catalogHash, stateHash: computeCapabilityStateVersion(request.catalogHash, keys.includes("runtime:build") ? request.previousStates : request.desiredStates), enabledKeys: [...keys], composeProfiles: keys.includes("runtime:build") ? ["build"] : [], requiredServices: ["portal", "postgres"] })),
     verifyRequiredHealth: vi.fn(async () => true),
     now: () => 1_000_000,
-    readHostReceipt: vi.fn(async () => {
+    readHostReceipt: vi.fn(async (_transitionId: string) => {
       const envelope = { version: 1 as const, transitionId: request.transitionId, issuedAt: new Date(1_000_000).toISOString(), expiresAt: new Date(1_600_000).toISOString(), catalogHash: request.catalogHash, previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates), desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates), previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys], previousProfiles: ["build"], desiredProfiles: [], previousServices: ["portal", "postgres"], desiredServices: ["portal", "postgres"] };
       const unsigned = { ...envelope, status: "applied" as const, observedServices: ["portal", "postgres"], completedAt: new Date(1_000_001).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash };
       return { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
@@ -154,7 +157,7 @@ describe("runtime capability transition coordinator", () => {
     const envelope = { version: 1 as const, transitionId: request.transitionId, issuedAt: new Date(1_000_000).toISOString(), expiresAt: new Date(1_600_000).toISOString(), catalogHash: request.catalogHash, previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates), desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates), previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys], previousProfiles: ["build"], desiredProfiles: [], previousServices: ["portal", "postgres"], desiredServices: ["portal", "postgres"] };
     const unsigned = { ...envelope, status: "rolled_back" as const, observedServices: ["portal", "postgres"], completedAt: new Date(1_000_001).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.previousStateHash, failure: "compose_reconcile_failed_rolled_back" };
     const markHostOutcome = vi.fn();
-    const d = deps({ runPromoter: vi.fn(async () => ({ exitCode: 9, stdout: "", stderr: "apply failed" })), readHostReceipt: vi.fn(async () => ({ ...unsigned, signature: signTransitionPayload(unsigned, secret) })), receipts: { createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })), markFailed: vi.fn(), markHostApplied: vi.fn(), markHostOutcome } });
+    const d = deps({ runPromoter: vi.fn(async () => ({ exitCode: 9, stdout: "", stderr: "apply failed" })), readHostReceipt: vi.fn(async (_transitionId: string) => ({ ...unsigned, signature: signTransitionPayload(unsigned, secret) })), receipts: { createPending: vi.fn(async (input: CreatePendingInput) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })), markFailed: vi.fn(), markHostApplied: vi.fn(), markHostOutcome } });
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "rolled_back", failure: "compose_reconcile_failed_rolled_back" });
     expect(d.runPromoter).toHaveBeenCalledWith(expect.objectContaining({ runtimeCapabilityTransitionId: "RCT-1", containerName: "dpf-promoter-RCT-1", timeoutMs: 600_000 }));
     expect(markHostOutcome).toHaveBeenCalledWith("RCT-1", expect.objectContaining({ status: "rolled_back" }));
@@ -176,7 +179,7 @@ describe("runtime capability transition coordinator", () => {
 
   it("commits desired capability state and audit receipt after host apply and health verification", async () => {
     const d = deps({ receipts: {
-      createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
+      createPending: vi.fn(async (input: CreatePendingInput) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
       markFailed: vi.fn(), markHostApplied: vi.fn(), commitSuccess: vi.fn(),
     } });
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "succeeded" });
@@ -187,7 +190,7 @@ describe("runtime capability transition coordinator", () => {
   it("compensates a host apply when the transactional DB commit fails", async () => {
     const secret = "x".repeat(32);
     const d = deps({ receipts: {
-      createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
+      createPending: vi.fn(async (input: CreatePendingInput) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
       markFailed: vi.fn(), markHostApplied: vi.fn(),
       commitSuccess: vi.fn(async () => { throw new Error("db_commit_failed"); }),
       markCompensating: vi.fn(), markRolledBack: vi.fn(), markRollbackFailed: vi.fn(),
@@ -209,7 +212,7 @@ describe("runtime capability transition coordinator", () => {
 
   it("records rollback_failed when compensation cannot restore the previous projection", async () => {
     const d = deps({ receipts: {
-      createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
+      createPending: vi.fn(async (input: CreatePendingInput) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
       markFailed: vi.fn(), markHostApplied: vi.fn(),
       commitSuccess: vi.fn(async () => { throw new Error("db_commit_failed"); }),
       markCompensating: vi.fn(), markRolledBack: vi.fn(), markRollbackFailed: vi.fn(),

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { prisma } from "@dpf/db";
-import catalogSeed from "../../../../../scripts/capability-service-catalog.generated.json";
+import catalogSeed from "../../../../scripts/capability-service-catalog.generated.json";
 import { isPromoterAvailable, runPromoter } from "@/lib/self-upgrade/promoter";
 import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-attribution";
 import { computeCapabilityStateVersion, coordinateRuntimeCapabilityTransition, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";

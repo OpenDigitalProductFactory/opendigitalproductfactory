@@ -29,7 +29,10 @@ describe("runtime guarded work admission", () => {
   });
 });
 
-function fakeTx(input: { capabilities?: unknown[]; transition?: unknown }) {
+type CapabilityRow = { capabilityId: string; state: string; manifest: unknown };
+type ActiveTransition = { previousKeys: string[]; desiredKeys: string[] };
+
+function fakeTx(input: { capabilities?: CapabilityRow[]; transition?: ActiveTransition }) {
   return {
     $queryRaw: vi.fn(async () => []),
     platformCapability: { findMany: vi.fn(async () => input.capabilities ?? []) },
