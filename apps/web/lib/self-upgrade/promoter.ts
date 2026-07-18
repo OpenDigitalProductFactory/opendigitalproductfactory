@@ -440,7 +440,7 @@ export async function forceRemovePromoterContainer(name: string): Promise<void> 
 export async function runProcessWithBudget(
   command: string,
   args: string[],
-  opts: { timeoutMs: number; containerName?: string; env?: NodeJS.ProcessEnv },
+  opts: { timeoutMs: number; containerName?: string; env?: Partial<NodeJS.ProcessEnv> },
 ): Promise<PromoterResult> {
   return new Promise((done, reject) => {
     const child = spawn(command, args, { env: { ...process.env, ...opts.env } });
