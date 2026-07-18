@@ -61,15 +61,9 @@ export type DataExecutablePolicy = {
 // policy; they cannot widen these without an approved, expiring exception (§6.1).
 
 const POLICIES: readonly DataExecutablePolicy[] = [
-  {
-    id: "prohibited-storage-collection",
-    version: "1",
-    precedenceLevel: "hard-constraint",
-    match: {}, // collectionRule=prohibited is enforced per-field; this backstops it
-    effect: "deny",
-    explanationCode: "prohibited-storage",
-    effectiveFrom: "2026-07-17",
-  },
+  // NOTE: prohibited-storage is NOT a bundle policy — `PolicyMatch` has no
+  // collectionRule axis, so an empty match would be a catch-all deny. It is enforced
+  // as a hard backstop inside evaluateDataPolicy (collectionRule === "prohibited").
   {
     id: "restricted-external-destination",
     version: "1",

@@ -39,13 +39,13 @@ const TEMPLATES: readonly PurposeCapabilityTemplate[] = [
   {
     purpose: "customer-support",
     description: "Resolve customer issues and answer questions.",
-    appliesToCategories: ["contact", "operational", "content", "identity"],
+    appliesToCategories: ["contact", "operational", "content", "identity", "financial"],
     mustMinimize: ["financial"],
   },
   {
     purpose: "product-analytics",
     description: "Understand aggregate product usage and performance.",
-    appliesToCategories: ["telemetry", "derived-analytic"],
+    appliesToCategories: ["telemetry", "derived-analytic", "identity", "contact"],
     mustMinimize: ["identity", "contact"],
   },
   {
@@ -67,7 +67,7 @@ const TEMPLATES: readonly PurposeCapabilityTemplate[] = [
   {
     purpose: "coworker-assistance",
     description: "Let AI coworkers assist the operator over their own workspace data.",
-    appliesToCategories: ["content", "operational", "derived-analytic"],
+    appliesToCategories: ["content", "operational", "derived-analytic", "financial", "credential-secret"],
     mustMinimize: ["financial", "credential-secret"],
   },
 ];
