@@ -73,6 +73,23 @@ Role title *"your COO"* is the primary label and the attribution voice everywher
 
 This doc + a recorded deliberation outcome → the platform-wide persona/attribution contract that the Attention Surface, coworker chat, proposals, and decision cards all adopt. Follow-on implementation BIs to reconcile the three identity sources and add the attention-author field.
 
+## 6. Deliberation outcome (2026-07-18)
+
+Grounded 3-branch debate panel (the governed `start_deliberation` run returned insufficient-evidence standalone — it can't ingest this artifact outside a task context, so a doc-seeded panel was run instead).
+
+- **Advocate A (role-only):** adopt. *"The only contract that makes the founder's stated stance structurally true instead of accidental."* Confidence 0.72.
+- **Advocate B (named Jiminy):** for B, but conceded it *"canonicalizes the exact failure the founder guards against"* and self-rated only **0.55** — the weakest own-advocate confidence.
+- **Skeptic (founder-kernel guardian):** B ages worst (a *conscience*-named AI implies sentience — direct `never-fabricate` collision + reverses a recorded founder stance); C rots via drift (two identities alive = the very divergence this doc exists to fix). Verdict: **A, reframed**. Confidence 0.62.
+
+**The reframe all three advocates glossed** (surfaced by the skeptic): the options debate *which persona mask*, but the honest byline for "____ recommends: pay this bill" is not a persona at all — it is the accountable **`(human × client × session)`** triple from the attribution spine, at a stated trust level. Even "your COO recommends" manufactures implied C-suite authority the system can't hold.
+
+### Recommendation (pending founder ratification)
+**Option A — role-only — reframed:** retire "Jiminy"; the overseer's *presentation label* is its role ("your COO" / "your bookkeeper"), but the **byline attributes to the authenticated triple, not the persona** — e.g. *"AI-drafted for [owner] · pending your approval"* rather than *"your COO decided."* Persona is a thin label over the triple, never a substitute for it.
+
+**Unanimous hard guardrail (any option):** no attribution string may imply an accountable actor the system cannot produce on demand from the attribution spine; every recommendation stays AI-labeled; the engine/model badge stays separate; no fabricated confidence; no self-granted authority (rides the L0→L3 trust ladder + proactivity dial).
+
+Synthesis confidence ≈ 0.7 (branches converge A > C > B; the reframe strengthens A). This reverses the accidental status quo and sets a product stance, so it is recorded as a **recommendation for founder ratification**, not an executed decision.
+
 ## Design grounding
 
 - Existing specs/plans reviewed: `docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md`, `2026-05-19-persona-voice-layer-wwtd-design.md`, `2026-06-22-build-studio-overseer-ux-design.md`, `2026-06-23-human-attention-surface-design.md`, `2026-06-20-authenticated-work-attribution-and-cross-install-coordination-design.md`, `2026-06-29-ai-coworker-proactivity-policy-design.md`.
