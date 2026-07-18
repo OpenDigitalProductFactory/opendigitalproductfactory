@@ -312,7 +312,7 @@ NEVER run prisma migrate without calling validate_schema first.
    hold-check + disposition evidence on destructive paths, and policy test vectors. Only a
    structured *.data-impact-exception.json (scope, approver, rationale, compensating control,
    expiry, remediation BI) may cover a temporary gap — never a new-model asset/lifecycle gap
-   or prohibited storage. CI runs `node scripts/check-data-impact.mjs`.
+   or prohibited storage. CI runs "node scripts/check-data-impact.mjs".
 
 ENUM CASING — MANDATORY:
 - Prisma enums in this project use LOWERCASE values: open, assigned, resolved, closed — NOT Open, OPEN, etc.
