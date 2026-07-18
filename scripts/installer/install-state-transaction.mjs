@@ -216,12 +216,29 @@ export async function updateInstallState(statePath, transform, options = {}) {
   }
 }
 
+export async function restoreInstallState(statePath, recoveryPath, options = {}) {
+  const target = await assertSafeTarget(statePath);
+  const recovery = await readFile(recoveryPath);
+  if (!(await parseAndValidateInstallStateBytes(recovery)).valid) throw new Error("install_state_recovery_missing_or_invalid");
+  const lock = await acquireInstallStateLock(target, options);
+  const tempPath = join(dirname(target), `.${basename(target)}.tmp-${lock.owner.ownerId}`);
+  try {
+    await writeFlushed(tempPath, recovery);
+    await atomicReplace(tempPath, target);
+    await flushParentDirectory(target);
+    const restored = await readFile(target);
+    if (sha256(restored) !== sha256(recovery)) throw new Error("install_state_restore_mismatch");
+    return { restoredSha256: sha256(restored) };
+  } finally { await rm(tempPath, { force: true }); await lock.release(); }
+}
+
 function parseArgs(argv) { const result = { _: [] }; for (let i = 0; i < argv.length; i++) { if (argv[i].startsWith("--")) result[argv[i].slice(2)] = argv[++i]; else result._.push(argv[i]); } return result; }
 async function main() {
   const args = parseArgs(process.argv.slice(2)); const command = args._[0];
   if (!args.state) throw new Error("--state is required");
   if (command === "set") await updateInstallState(args.state, current => ({ ...(current ?? {}), [args.key]: JSON.parse(args.value) }));
   else if (command === "init") await updateInstallState(args.state, current => current ?? JSON.parse(Buffer.from(args.value, "base64url").toString("utf8")));
-  else throw new Error("command must be set or init");
+  else if (command === "restore") { if (!args["recovery-path"]) throw new Error("--recovery-path is required"); await restoreInstallState(args.state, args["recovery-path"]); }
+  else throw new Error("command must be set, init, or restore");
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(error.message); process.exitCode = 1; });

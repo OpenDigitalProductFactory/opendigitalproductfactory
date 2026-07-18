@@ -126,8 +126,8 @@ export COMPOSE_PROFILES="$(printf '%s' "$_capability_projection" | node -e 'let 
 _capability_recovery="$PROMOTE_BACKUP_PATH/install-state.json"
 _restore_capability_snapshot() {
   if [[ -f "$_capability_recovery" ]]; then
-    _tmp="${_install_state}.rollback.$$"
-    cp "$_capability_recovery" "$_tmp" && mv "$_tmp" "$_install_state"
+    node "$_promoter_dir/installer/install-state-transaction.mjs" restore \
+      --state "$_install_state" --recovery-path "$_capability_recovery"
   fi
 }
 if [[ $_dry_run -eq 0 ]]; then

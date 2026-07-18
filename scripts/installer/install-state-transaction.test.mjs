@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, readdir, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
-import { acquireInstallStateLock, sha256, updateInstallState } from "./install-state-transaction.mjs";
+import { acquireInstallStateLock, restoreInstallState, sha256, updateInstallState } from "./install-state-transaction.mjs";
 
 const fixture = async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-state-transaction-"));
@@ -159,3 +159,14 @@ for (const crashStage of ["locked", "temp-created", "temp-flushed", "recovery-fl
     assert.deepEqual((await readdir(dir)).filter(n => n.includes(".tmp-") || n.endsWith(".lock")), []);
   });
 }
+
+test("governed rollback restores exact recovery bytes under the shared lock", async () => {
+  const { dir, statePath } = await fixture();
+  const recoveryPath = join(dir, "governed-recovery.json");
+  const original = await readFile(statePath);
+  await writeFile(recoveryPath, original);
+  await updateInstallState(statePath, state => ({ ...state, installerVersion: "migrated" }));
+  await restoreInstallState(statePath, recoveryPath);
+  assert.deepEqual(await readFile(statePath), original);
+  assert.deepEqual((await readdir(dir)).filter(name => name.includes(".tmp-") || name.endsWith(".lock")), []);
+});
