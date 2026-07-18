@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 519,
+  "pageCount": 520,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3739,6 +3739,18 @@
       "publishedPortal": false,
       "anchors": [
         "documentation-staleness-report"
+      ]
+    },
+    "docs/marketing/archetype-owner-quick-guide.md": {
+      "publicHref": "/marketing/archetype-owner-quick-guide/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-owner-quick-guide",
+        "how-to-read-this",
+        "quick-category-map",
+        "how-this-feeds-assets"
       ]
     },
     "docs/marketing/archetype-persona-creative-narratives.md": {

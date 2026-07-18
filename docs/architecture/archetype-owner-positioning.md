@@ -2,7 +2,7 @@
 
 **Status:** Draft - 2026-07-18  
 **Scope:** Owner-facing marketing opportunity, visual direction, and test-priority translation for the current 95 archetypes across 21 categories.  
-**Related:** [Market Archetypes And Coworkers](../user-guide/market-archetypes.md), [Archetype Business Value Streams](archetype-business-value-streams.md), [Archetype Audit Plan](../testing/archetype-audit-plan.md), [Customer Marketing Workspace Design](../superpowers/specs/2026-04-24-customer-marketing-workspace-design.md)
+**Related:** [Market Archetypes And Coworkers](../user-guide/market-archetypes.md), [Archetype Owner Quick Guide](../marketing/archetype-owner-quick-guide.md), [Archetype Business Value Streams](archetype-business-value-streams.md), [Archetype Audit Plan](../testing/archetype-audit-plan.md), [Customer Marketing Workspace Design](../superpowers/specs/2026-04-24-customer-marketing-workspace-design.md)
 
 ## 1. Positioning Thesis
 

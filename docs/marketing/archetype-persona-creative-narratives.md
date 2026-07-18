@@ -2,7 +2,7 @@
 
 **Status:** Draft - 2026-07-18  
 **Scope:** Narrative-first creative briefs for DPF owner-facing archetype marketing: 3 high-fidelity pilot personas, 21 source-category cards, and 1 required MSP spotlight card. Use these before generating still images, graphics, or short videos.  
-**Related:** [Archetype Owner Positioning](../architecture/archetype-owner-positioning.md), [Archetype Audit Plan](../testing/archetype-audit-plan.md), [Archetype Persona Creative Assets Design](../superpowers/specs/2026-07-18-archetype-persona-creative-assets-design.md)
+**Related:** [Archetype Owner Quick Guide](archetype-owner-quick-guide.md), [Archetype Owner Positioning](../architecture/archetype-owner-positioning.md), [Archetype Audit Plan](../testing/archetype-audit-plan.md), [Archetype Persona Creative Assets Design](../superpowers/specs/2026-07-18-archetype-persona-creative-assets-design.md)
 
 ## 1. Creative Backbone
 
