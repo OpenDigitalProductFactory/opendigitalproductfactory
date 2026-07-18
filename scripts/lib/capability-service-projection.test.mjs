@@ -120,12 +120,14 @@ test("undeclared cross-capability service dependencies fail closed", () => {
   assert.throws(() => compileCapabilityServiceCatalog({ substrate: { version: 2, services, externalRuntimes: [] }, capabilities: records }), /undeclared_cross_capability_dependency:reports:queue:runtime:reports->runtime:queue/);
 });
 
-test("current portal cross-capability dependencies remain a stable failure until profile migration", async () => {
+test("portal has no hard dependency on optional capability services", async () => {
   const [realSubstrate, realCapabilities] = await Promise.all([
     readFile(new URL("../platform-substrate-manifest.json", import.meta.url), "utf8").then(JSON.parse),
     readFile(new URL("../../packages/db/data/platform-runtime-capabilities.json", import.meta.url), "utf8").then(JSON.parse),
   ]);
-  assert.throws(() => compileCapabilityServiceCatalog({ substrate: realSubstrate, capabilities: realCapabilities.capabilities }), /undeclared_cross_capability_dependency:portal:browser-use:runtime:core->runtime:browser-automation/);
+  const portal = realSubstrate.services.find((entry) => entry.service === "portal");
+  assert.deepEqual(portal.dependsOn, ["portal-init"]);
+  assert.doesNotThrow(() => compileCapabilityServiceCatalog({ substrate: realSubstrate, capabilities: realCapabilities.capabilities }));
 });
 
 test("closed substrate fields and array values are validated", () => {

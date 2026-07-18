@@ -34,6 +34,8 @@
 
 ### Task 2: Build the deterministic projection compiler
 
+**Sequencing decision:** Task 2's fail-closed cross-capability dependency validation exposed that `portal` still hard-required the optional browser-automation and durable-automation services. The narrow Task 4 prerequisite that removes those two `depends_on` edges from Compose and the substrate manifest is therefore completed with Task 2. No capability profiles or other Task 4 activation behavior are pulled forward.
+
 **Files:**
 - Create: `scripts/lib/capability-service-projection.mjs`
 - Create: `scripts/lib/capability-service-projection.test.mjs`
@@ -102,6 +104,7 @@
 - [ ] **Step 1: Write failing topology tests** named `rejects_default_started_optional_service`, `resolves_each_fixture_dependency_closure`, and `preserves_special_profile_semantics`; compare every substrate binding with its Compose profile and reject default-start optional services.
 - [ ] **Step 2: Add capability profiles** to build sandbox, browser automation, durable automation, local speech, and deep-observability services. Preserve existing test/development/separate-distribution profiles and dependency conditions.
 - [ ] **Step 3: Keep `portal` dependencies core-only.** Optional services must not be `depends_on` requirements for the portal; their clients must tolerate inactive capability state.
+- [x] **Narrow prerequisite (completed during Task 2):** remove the portal's hard `browser-use` and `inngest` edges from Compose and the synchronized substrate manifest. Full profile activation remains pending in this task.
 - [ ] **Step 4: Add a CI guard** using a filtered, source-only Node command.
 - [ ] **Step 5: Add any newly discovered cross-platform profile caveat** to the watchlist, with Windows/macOS/Linux behavior explicit.
 - [ ] **Step 6: Run `pnpm exec node --test scripts/check-capability-compose-profiles.test.mjs`** and expect all fixture/compatibility cases green.

@@ -67,9 +67,7 @@
         "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf"
       ],
       "dependsOn": [
-        "portal-init",
-        "inngest",
-        "browser-use"
+        "portal-init"
       ],
       "canonicalDataOwner": "postgres",
       "backupPolicy": "included",

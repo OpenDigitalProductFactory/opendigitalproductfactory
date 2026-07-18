@@ -275,10 +275,6 @@ services:
     depends_on:
       portal-init:
         condition: service_completed_successfully
-      inngest:
-        condition: service_healthy
-      browser-use:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 10s
