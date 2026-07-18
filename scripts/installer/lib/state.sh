@@ -38,10 +38,69 @@ dpf_state_path() {
   echo "$(dpf_state_dir)/install-state.json"
 }
 
-dpf_state_transaction_path() {
+dpf_state_validator_path() {
   local lib_dir
   lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-  echo "$(dirname "$lib_dir")/install-state-transaction.mjs"
+  echo "$(dirname "$lib_dir")/validate-install-state.mjs"
+}
+
+dpf_state_owner_id() {
+  if command -v uuidgen >/dev/null 2>&1; then uuidgen | tr 'A-Z' 'a-z'; else echo "$$-$(date +%s)-${RANDOM:-0}"; fi
+}
+
+dpf_state_lock_acquire() {
+  local path="$1" lock="${1}.lock" owner_id run_id host now expires deadline
+  owner_id="$(dpf_state_owner_id)"; run_id="${DPF_RUN_ID:-$(dpf_state_owner_id)}"; host="$(hostname)"; deadline=$(( $(date +%s) + 15 ))
+  while ! mkdir "$lock" 2>/dev/null; do
+    now="$(date +%s)"
+    local lock_expires lock_pid lock_host
+    lock_expires="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$lock/owner.json" 2>/dev/null)"
+    lock_pid="$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$lock/owner.json" 2>/dev/null)"
+    lock_host="$(sed -n 's/.*"hostname":"\([^"]*\)".*/\1/p' "$lock/owner.json" 2>/dev/null)"
+    if [ -n "$lock_expires" ] && [ "$lock_expires" -le "$now" ] && { [ "$lock_host" != "$host" ] || ! kill -0 "$lock_pid" 2>/dev/null; }; then
+      mv "$lock" "${lock}.stale-${owner_id}" 2>/dev/null && rm -rf "${lock}.stale-${owner_id}" && continue
+    fi
+    [ "$now" -ge "$deadline" ] && { echo "install_state_lock_timeout" >&2; return 1; }
+    sleep 1
+  done
+  now="$(date +%s)"; expires=$((now + 30))
+  printf '{"protocolVersion":1,"ownerId":"%s","runId":"%s","pid":%s,"hostname":"%s","acquiredAt":"%s","expiresAt":"%s","expiresAtEpoch":%s}\n' "$owner_id" "$run_id" "$$" "$host" "$now" "$expires" "$expires" > "$lock/owner.json"
+  DPF_STATE_LOCK_OWNER_ID="$owner_id"; export DPF_STATE_LOCK_OWNER_ID
+}
+
+dpf_state_lock_release() {
+  local lock="${1}.lock" current
+  current="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock/owner.json" 2>/dev/null)"
+  [ -n "$current" ] && [ "$current" = "${DPF_STATE_LOCK_OWNER_ID:-}" ] && rm -rf "$lock"
+}
+
+dpf_state_validate_file() {
+  node "$(dpf_state_validator_path)" "$1" >/dev/null
+}
+
+dpf_state_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi
+}
+
+dpf_state_flush_file() {
+  if command -v python3 >/dev/null 2>&1; then python3 -c 'import os,sys; f=open(sys.argv[1],"r+b"); os.fsync(f.fileno()); f.close()' "$1"; else sync; fi
+}
+
+dpf_state_reconcile() {
+  local path="$1" recovery="${1}.recovery" restore="${1}.restore-${DPF_STATE_LOCK_OWNER_ID}"
+  if [ -f "$path" ] && dpf_state_validate_file "$path"; then return 0; fi
+  [ -f "$recovery" ] && dpf_state_validate_file "$recovery" || return 1
+  cp "$recovery" "$restore" && dpf_state_flush_file "$restore" && mv -f "$restore" "$path"
+}
+
+dpf_state_commit_candidate() {
+  local path="$1" temp="$2" recovery="${1}.recovery"
+  dpf_state_validate_file "$temp" || return 1
+  if [ -n "${DPF_STATE_SOURCE_SHA:-}" ] && [ "$(dpf_state_sha256 "$path")" != "$DPF_STATE_SOURCE_SHA" ]; then echo "install_state_cas_mismatch" >&2; return 1; fi
+  if [ -f "$path" ]; then cp "$path" "$recovery" || return 1; dpf_state_flush_file "$recovery" || return 1; fi
+  dpf_state_flush_file "$temp" || return 1
+  mv -f "$temp" "$path" || return 1
+  dpf_state_validate_file "$path"
 }
 
 # Initialize a fresh state file at the canonical path. Idempotent —
@@ -56,6 +115,11 @@ dpf_state_init() {
   mkdir -p "$state_dir"
   dpf_platform
   dpf_arch
+  case "$DPF_PLATFORM" in darwin|linux) ;; *) echo "dpf_state_init: unsupported platform" >&2; return 1 ;; esac
+  case "$DPF_ARCH" in arm64|amd64) ;; *) echo "dpf_state_init: unsupported architecture" >&2; return 1 ;; esac
+  dpf_state_lock_acquire "$path" || return 1
+  if [ -f "$path" ]; then dpf_state_lock_release "$path"; return 0; fi
+  DPF_STATE_SOURCE_SHA=""
 
   # Build the initial JSON. Keep it shell-only for bash 3.2 portability;
   # don't reach for jq here so the install can bootstrap on hosts that
@@ -90,9 +154,10 @@ dpf_state_init() {
 }
 EOF
 )
-  local encoded
-  encoded="$(printf '%s' "$initial_json" | base64 | tr -d '\r\n')"
-  node "$(dpf_state_transaction_path)" init --state "$path" --value "$encoded" || return 1
+  local temp="${path}.tmp-${DPF_STATE_LOCK_OWNER_ID}"
+  printf '%s\n' "$initial_json" > "$temp"
+  dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+  dpf_state_lock_release "$path"
   chmod 600 "$path" 2>/dev/null || true
 }
 
@@ -134,6 +199,10 @@ dpf_state_write() {
     echo "dpf_state_write: state file missing; call dpf_state_init first" >&2
     return 1
   fi
+  dpf_state_lock_acquire "$path" || return 1
+  dpf_state_reconcile "$path" || { dpf_state_lock_release "$path"; return 1; }
+  DPF_STATE_SOURCE_SHA="$(dpf_state_sha256 "$path")"
+  local temp="${path}.tmp-${DPF_STATE_LOCK_OWNER_ID}"
   if command -v jq >/dev/null 2>&1; then
     local json_value
     if [ "$value" = "true" ] || [ "$value" = "false" ] || [ "$value" = "null" ]; then
@@ -143,7 +212,9 @@ dpf_state_write() {
     else
       json_value="$(printf '%s' "$value" | jq -Rs .)"
     fi
-    node "$(dpf_state_transaction_path)" set --state "$path" --key "$key" --value "$json_value" || return 1
+    jq --arg k "$key" --argjson v "$json_value" '.[$k] = $v' "$path" > "$temp" || { dpf_state_lock_release "$path"; return 1; }
+    dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+    dpf_state_lock_release "$path"
     chmod 600 "$path" 2>/dev/null || true
   elif command -v python3 >/dev/null 2>&1; then
     local json_value
@@ -152,9 +223,17 @@ dpf_state_write() {
     else
       json_value="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$value")"
     fi
-    node "$(dpf_state_transaction_path)" set --state "$path" --key "$key" --value "$json_value" || return 1
+    python3 - "$path" "$temp" "$key" "$json_value" <<'PY'
+import json,sys
+with open(sys.argv[1]) as f: state=json.load(f)
+state[sys.argv[3]]=json.loads(sys.argv[4])
+with open(sys.argv[2],"w",encoding="utf-8") as f: json.dump(state,f,indent=2)
+PY
+    dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+    dpf_state_lock_release "$path"
     chmod 600 "$path" 2>/dev/null || true
   else
+    dpf_state_lock_release "$path"
     echo "dpf_state_write: needs jq or python3 to update JSON" >&2
     return 1
   fi
@@ -212,19 +291,33 @@ dpf_state_write_json() {
     echo "dpf_state_write_json: state file missing; call dpf_state_init first" >&2
     return 1
   fi
+  dpf_state_lock_acquire "$path" || return 1
+  dpf_state_reconcile "$path" || { dpf_state_lock_release "$path"; return 1; }
+  DPF_STATE_SOURCE_SHA="$(dpf_state_sha256 "$path")"
+  local temp="${path}.tmp-${DPF_STATE_LOCK_OWNER_ID}"
   if command -v jq >/dev/null 2>&1; then
     printf '%s' "$value" | jq -e . >/dev/null
-    node "$(dpf_state_transaction_path)" set --state "$path" --key "$key" --value "$value" || return 1
+    jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$temp" || { dpf_state_lock_release "$path"; return 1; }
+    dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+    dpf_state_lock_release "$path"
     chmod 600 "$path" 2>/dev/null || true
     return 0
   fi
   if command -v python3 >/dev/null 2>&1; then
     python3 -c 'import json,sys; json.loads(sys.argv[1])' "$value"
-    node "$(dpf_state_transaction_path)" set --state "$path" --key "$key" --value "$value" || return 1
+    python3 - "$path" "$temp" "$key" "$value" <<'PY'
+import json,sys
+with open(sys.argv[1]) as f: state=json.load(f)
+state[sys.argv[3]]=json.loads(sys.argv[4])
+with open(sys.argv[2],"w",encoding="utf-8") as f: json.dump(state,f,indent=2)
+PY
+    dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+    dpf_state_lock_release "$path"
     chmod 600 "$path" 2>/dev/null || true
     return 0
   fi
   echo "dpf_state_write_json: needs jq or python3 to update JSON object/array values" >&2
+  dpf_state_lock_release "$path"
   return 1
 }
 

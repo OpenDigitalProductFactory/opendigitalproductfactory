@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdir, open, readFile, readdir, rename, rm, lstat, realpath } from "node:fs/promises";
 import contract from "./install-state-lock-contract.json" with { type: "json" };
+import { parseAndValidateInstallStateBytes, validateInstallState } from "./validate-install-state.mjs";
 
 const PROTOCOL_VERSION = contract.protocolVersion;
 const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
@@ -42,11 +43,12 @@ export async function acquireInstallStateLock(statePath, options = {}) {
   const leaseMs = options.leaseMs ?? contract.defaultLeaseMs;
   const deadline = Date.now() + timeoutMs;
   const ownerId = randomUUID();
+  const runId = options.runId ?? process.env.DPF_RUN_ID ?? randomUUID();
   for (;;) {
     try {
       await mkdir(lockPath, { mode: 0o700 });
       const now = Date.now();
-      const owner = { protocolVersion: PROTOCOL_VERSION, ownerId, pid: process.pid, hostname: localHostname, acquiredAt: new Date(now).toISOString(), expiresAt: new Date(now + leaseMs).toISOString() };
+      const owner = { protocolVersion: PROTOCOL_VERSION, ownerId, runId, pid: process.pid, hostname: localHostname, acquiredAt: new Date(now).toISOString(), expiresAt: new Date(now + leaseMs).toISOString(), expiresAtEpoch: Math.ceil((now + leaseMs) / 1000) };
       const handle = await open(join(lockPath, "owner.json"), "wx", 0o600);
       try { await handle.writeFile(`${JSON.stringify(owner)}\n`, "utf8"); await handle.sync(); } finally { await handle.close(); }
       return { lockPath, owner, async release() {
@@ -102,13 +104,33 @@ async function flushParentDirectory(target) {
   try { await directory.sync(); } finally { await directory.close(); }
 }
 
+async function writeFlushed(path, bytes) {
+  const handle = await open(path, "w", 0o600);
+  try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+}
+
+async function reconcileCanonical(target, recoveryPath) {
+  let canonical;
+  try { canonical = await readFile(target); } catch (error) { if (error?.code !== "ENOENT") throw error; }
+  if (canonical && (await parseAndValidateInstallStateBytes(canonical)).valid) return;
+  let recovery;
+  try { recovery = await readFile(recoveryPath); } catch (error) { if (error?.code === "ENOENT" && !canonical) return; throw new Error("install_state_recovery_missing_or_invalid"); }
+  if (!(await parseAndValidateInstallStateBytes(recovery)).valid) throw new Error("install_state_recovery_missing_or_invalid");
+  const restoreTemp = `${target}.restore-${randomUUID()}`;
+  await writeFlushed(restoreTemp, recovery);
+  await atomicReplace(restoreTemp, target);
+  await flushParentDirectory(target);
+}
+
 export async function updateInstallState(statePath, transform, options = {}) {
   const target = await assertSafeTarget(statePath);
   const lock = await acquireInstallStateLock(target, options);
   let release = true;
   const context = { statePath: target, lockPath: lock.lockPath };
+  const recoveryPath = options.recoveryPath ?? `${target}${contract.recoverySuffix}`;
   try {
     await stage("locked", context, options);
+    await reconcileCanonical(target, recoveryPath);
     await removeOrphanTemps(target);
     let source = null;
     try { source = await readFile(target); } catch (error) { if (error?.code !== "ENOENT") throw error; }
@@ -118,19 +140,26 @@ export async function updateInstallState(statePath, transform, options = {}) {
     const next = await transform(current);
     const serialized = `${JSON.stringify(next, null, 2)}\n`;
     JSON.parse(serialized);
-    if (options.validate && !(await options.validate(next))) throw new Error("install_state_pre_write_validation_failed");
+    const validation = await validateInstallState(next, options.schemaPath);
+    if (!validation.valid) throw new Error(`install_state_schema_validation_failed:${validation.errors.join(",")}`);
     const tempPath = join(dirname(target), `.${basename(target)}.tmp-${lock.owner.ownerId}`);
     context.tempPath = tempPath;
     const handle = await open(tempPath, "wx", 0o600);
     try { await stage("temp-created", context, options); await handle.writeFile(serialized, "utf8"); await handle.sync(); } finally { await handle.close(); }
     await stage("temp-flushed", context, options);
+    if (source !== null) {
+      context.recoveryPath = recoveryPath;
+      await writeFlushed(recoveryPath, source);
+      await stage("recovery-flushed", context, options);
+    }
     await atomicReplace(tempPath, target);
     await flushParentDirectory(target);
     await stage("replaced", context, options);
     const durable = await readFile(target);
     const parsed = JSON.parse(durable.toString("utf8"));
     if (sha256(durable) !== sha256(Buffer.from(serialized))) throw new Error("install_state_post_write_mismatch");
-    if (options.validate && !(await options.validate(parsed))) throw new Error("install_state_post_write_validation_failed");
+    const postValidation = await parseAndValidateInstallStateBytes(durable);
+    if (!postValidation.valid) throw new Error("install_state_post_write_schema_validation_failed");
     await stage("verified", context, options);
     return { state: parsed, sourceSha256: sourceSha, writtenSha256: sha256(durable) };
   } catch (error) {

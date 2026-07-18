@@ -27,14 +27,99 @@ function Get-DpfStatePath {
     return (Join-Path (Get-DpfStateDir) "install-state.json")
 }
 
-function Get-DpfStateTransactionPath {
-    return (Join-Path (Split-Path -Parent $PSScriptRoot) "install-state-transaction.mjs")
+function Get-DpfStateValidatorPath {
+    return (Join-Path (Split-Path -Parent $PSScriptRoot) "validate-install-state.mjs")
 }
 
-function Invoke-DpfStateTransaction {
-    param([Parameter(Mandatory)][string[]]$Arguments)
-    & node (Get-DpfStateTransactionPath) @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "install_state_transaction_failed" }
+function Test-DpfStateFileValid {
+    param([Parameter(Mandatory)][string]$Path)
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(2)
+    do {
+        & node (Get-DpfStateValidatorPath) $Path *> $null
+        if ($LASTEXITCODE -eq 0) { return $true }
+        Start-Sleep -Milliseconds 20
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    return $false
+}
+
+function Flush-DpfStateFile {
+    param([Parameter(Mandatory)][string]$Path)
+    $stream = New-Object System.IO.FileStream($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+    try { $stream.Flush($true) } finally { $stream.Dispose() }
+}
+
+function Get-DpfStateSha256 {
+    param([Parameter(Mandatory)][string]$Path)
+    $sha = [Security.Cryptography.SHA256]::Create(); $stream = [IO.File]::OpenRead($Path)
+    try { return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant() } finally { $stream.Dispose(); $sha.Dispose() }
+}
+
+function Replace-DpfStateFileAtomic {
+    param([Parameter(Mandatory)][string]$Source, [Parameter(Mandatory)][string]$Destination)
+    $method = [IO.File].GetMethod("Replace", [type[]]@([string], [string], [string]))
+    [object[]]$arguments = @($Source, $Destination, $null)
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(2)
+    while ($true) {
+        try { $method.Invoke($null, $arguments) | Out-Null; return }
+        catch {
+            if ([DateTimeOffset]::UtcNow -ge $deadline) { throw "install_state_atomic_replace_failed: $($_.Exception.InnerException.Message)" }
+            Start-Sleep -Milliseconds 20
+        }
+    }
+}
+
+function Enter-DpfStateLock {
+    param([Parameter(Mandatory)][string]$Path)
+    $lockPath = "$Path.lock"; $ownerId = [guid]::NewGuid().ToString(); $runId = if ($env:DPF_RUN_ID) { $env:DPF_RUN_ID } else { [guid]::NewGuid().ToString() }
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
+    while ($true) {
+        try {
+            New-Item -ItemType Directory -Path $lockPath -ErrorAction Stop | Out-Null
+            $now = [DateTimeOffset]::UtcNow
+            $owner = [ordered]@{ protocolVersion = 1; ownerId = $ownerId; runId = $runId; pid = $PID; hostname = [Environment]::MachineName; acquiredAt = $now.ToString("o"); expiresAt = $now.AddSeconds(30).ToString("o"); expiresAtEpoch = $now.AddSeconds(30).ToUnixTimeSeconds() }
+            [IO.File]::WriteAllText((Join-Path $lockPath "owner.json"), ($owner | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($false)))
+            $script:DPF_STATE_LOCK_OWNER_ID = $ownerId
+            return
+        } catch {
+            $ownerPath = Join-Path $lockPath "owner.json"; $stale = $false
+            if (Test-Path -LiteralPath $ownerPath) {
+                try {
+                    $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ownerPath)); $nowEpoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+                    $live = $false
+                    if ($owner.hostname -eq [Environment]::MachineName) { try { Get-Process -Id ([int]$owner.pid) -ErrorAction Stop | Out-Null; $live = $true } catch {} }
+                    $stale = ([long]$owner.expiresAtEpoch -le $nowEpoch -and -not $live)
+                } catch {}
+            }
+            if ($stale) { try { Move-Item -LiteralPath $lockPath -Destination "$lockPath.stale-$ownerId" -ErrorAction Stop; Remove-Item -LiteralPath "$lockPath.stale-$ownerId" -Recurse -Force; continue } catch {} }
+            if ([DateTimeOffset]::UtcNow -ge $deadline) { throw "install_state_lock_timeout" }
+            Start-Sleep -Milliseconds 20
+        }
+    }
+}
+
+function Exit-DpfStateLock {
+    param([Parameter(Mandatory)][string]$Path)
+    $lockPath = "$Path.lock"; $ownerPath = Join-Path $lockPath "owner.json"
+    try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ownerPath)); if ($owner.ownerId -eq $script:DPF_STATE_LOCK_OWNER_ID) { Remove-Item -LiteralPath $lockPath -Recurse -Force } } catch {}
+}
+
+function Repair-DpfStateFromRecovery {
+    param([Parameter(Mandatory)][string]$Path)
+    if ((Test-Path -LiteralPath $Path) -and (Test-DpfStateFileValid $Path)) { return }
+    $recovery = "$Path.recovery"
+    if (-not (Test-Path -LiteralPath $recovery) -or -not (Test-DpfStateFileValid $recovery)) { throw "install_state_recovery_missing_or_invalid" }
+    $restore = "$Path.restore-$script:DPF_STATE_LOCK_OWNER_ID"; [IO.File]::Copy($recovery, $restore, $true); Flush-DpfStateFile $restore
+    if (Test-Path -LiteralPath $Path) { Replace-DpfStateFileAtomic $restore $Path } else { [IO.File]::Move($restore, $Path) }
+}
+
+function Write-DpfStateCandidate {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Json, [string]$SourceSha256)
+    $temp = "$Path.tmp-$script:DPF_STATE_LOCK_OWNER_ID"; $encoding = New-Object Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($temp, $Json, $encoding); Flush-DpfStateFile $temp
+    if (-not (Test-DpfStateFileValid $temp)) { Remove-Item -LiteralPath $temp -Force; throw "install_state_schema_validation_failed" }
+    if ($SourceSha256 -and (Get-DpfStateSha256 $Path) -ne $SourceSha256) { Remove-Item -LiteralPath $temp -Force; throw "install_state_cas_mismatch" }
+    if (Test-Path -LiteralPath $Path) { $recovery = "$Path.recovery"; [IO.File]::Copy($Path, $recovery, $true); Flush-DpfStateFile $recovery; Replace-DpfStateFileAtomic $temp $Path } else { [IO.File]::Move($temp, $Path) }
+    if (-not (Test-DpfStateFileValid $Path)) { throw "install_state_post_write_schema_validation_failed" }
 }
 
 # Initialize a fresh state file at the canonical path. Idempotent.
@@ -52,6 +137,9 @@ function Initialize-DpfState {
         New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
     }
 
+    Enter-DpfStateLock $path
+    try {
+    if (Test-Path -LiteralPath $path) { return }
     $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
 
     $initial = [ordered]@{
@@ -81,9 +169,8 @@ function Initialize-DpfState {
     }
 
     $json = $initial | ConvertTo-Json -Depth 10
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    $encoded = [Convert]::ToBase64String($utf8NoBom.GetBytes($json)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
-    Invoke-DpfStateTransaction -Arguments @("init", "--state", $path, "--value", $encoded)
+    Write-DpfStateCandidate -Path $path -Json $json
+    } finally { Exit-DpfStateLock $path }
 }
 
 # Read the full state object. Returns $null if the file is absent.
@@ -116,12 +203,14 @@ function Set-DpfStateValue {
     )
 
     $path = Get-DpfStatePath
-    if (-not (Test-Path -LiteralPath $path)) {
-        Initialize-DpfState
-    }
-
-    $json = ConvertTo-Json -InputObject $Value -Depth 20 -Compress
-    Invoke-DpfStateTransaction -Arguments @("set", "--state", $path, "--key", $Key, "--value", $json)
+    if (-not (Test-Path -LiteralPath $path)) { Initialize-DpfState }
+    Enter-DpfStateLock $path
+    try {
+        Repair-DpfStateFromRecovery $path
+        $sourceSha256 = Get-DpfStateSha256 $path
+        $state = Read-DpfState; $hashtable = @{}; foreach ($prop in $state.PSObject.Properties) { $hashtable[$prop.Name] = $prop.Value }; $hashtable[$Key] = $Value
+        Write-DpfStateCandidate -Path $path -Json ($hashtable | ConvertTo-Json -Depth 20) -SourceSha256 $sourceSha256
+    } finally { Exit-DpfStateLock $path }
 }
 
 # Resolve and, for a previous-release state, atomically persist the canonical
