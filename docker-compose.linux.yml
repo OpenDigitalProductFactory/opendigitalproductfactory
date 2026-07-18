@@ -18,10 +18,10 @@
 #     LLM consumer (portal, sandbox, browser-use) to point at it.
 #
 #   - The Linux-only host telemetry exporters (cadvisor + node-exporter)
-#     are enabled here because their bind mounts (/proc, /sys,
-#     /var/lib/docker, /) work natively on Linux. The base compose file
-#     keeps them behind a profile so Windows/macOS installs do not scrape
-#     targets that cannot exist there.
+#     remain behind the base linux-monitoring capability profile. Their bind
+#     mounts (/proc, /sys, /var/lib/docker, /) work only on Linux, and the
+#     capability adapter enables the profile only when deep observability is
+#     active for a Linux install.
 
 services:
   prometheus:
@@ -29,16 +29,6 @@ services:
       - ./monitoring/prometheus/prometheus.linux.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
-
-  cadvisor:
-    # Base compose gates this service behind linux-monitoring. The Linux
-    # overlay removes that profile so the Prometheus scrape config mounted
-    # above always has a matching exporter container.
-    profiles: !reset []
-
-  node-exporter:
-    # Keep Linux host metrics aligned with monitoring/prometheus/prometheus.linux.yml.
-    profiles: !reset []
 
   # Local LLM provider for non-Docker-Desktop substrates. Lightweight
   # CPU-only by default; customers with GPU passthrough can add

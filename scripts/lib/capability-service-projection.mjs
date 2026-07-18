@@ -156,7 +156,9 @@ export function resolveCapabilityServiceProjection({ substrate, capabilities, en
     selected.add(serviceName);
     for (const dependency of entry.dependsOn) include(dependency);
   };
-  const isOnDemandLifecycle = (entry) => entry.targetClassification === "ephemeral-lifecycle" && entry.profiles.length > 0;
+  const isOnDemandLifecycle = (entry) => entry.targetClassification === "ephemeral-lifecycle"
+    && entry.profiles.length > 0
+    && capabilityById.get(entry.capability).manifest.runtime.activation.policy !== "operator-controlled";
   for (const entry of enabledServices) if (!isOnDemandLifecycle(entry)) include(entry.service);
   const serviceRequirements = [...selected].sort(compare).map((serviceName) => enabledServiceByName.get(serviceName));
   const requiredServices = serviceRequirements.map((entry) => entry.service);
