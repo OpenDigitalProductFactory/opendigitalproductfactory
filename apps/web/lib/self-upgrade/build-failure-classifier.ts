@@ -146,7 +146,11 @@ const PNPM_OUTDATED_LOCKFILE = /ERR_PNPM_(OUTDATED_)?LOCKFILE|specifiers in the 
 const PNPM_FETCH_ERROR = /ERR_PNPM_FETCH|ERR_PNPM_META_FETCH_FAIL|GET https:\/\/registry\.npmjs\.org\/[^\s]+: (?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|socket hang up)/i;
 // runPromoter's marker when it kills a promoter that blew its wall-clock budget.
 const PROMOTER_TIMEOUT = /\[promoter-timeout\]/i;
-const PROMOTER_READINESS_FAILED = /promoter-readiness-failed:([a-z0-9_-]+)/i;
+// Production wraps the terminal machine code in a human-readable diagnostic:
+// `promoter-readiness-failed: Promoter readiness check failed: <code>`.
+// The short form is retained for older promoters. Keep this line-bounded so a
+// later diagnostic cannot be mistaken for the readiness result.
+const PROMOTER_READINESS_FAILED = /promoter-readiness-failed:\s*(?:Promoter readiness check failed:\s*)?([a-z0-9_-]+)(?=\s*(?:\r?$|\n))/im;
 // BET-5 migrate-step failures. Both recovery procedures live in the runbook.
 const BET5_PLAYBOOK = "docs/runbooks/bet5-windows-self-upgrade.md";
 // Docker Desktop mounts-denied on the /dpf-state mount (#3262).

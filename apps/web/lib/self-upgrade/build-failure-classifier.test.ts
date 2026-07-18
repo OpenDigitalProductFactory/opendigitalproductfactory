@@ -131,6 +131,16 @@ describe("classifyBuildFailure", () => {
     expect(c.failingTrace).toContain("promoter-readiness-failed:install_state_invalid");
   });
 
+  it.each([
+    "promoter-readiness-failed: Promoter readiness check failed: install_state_invalid",
+    "promoter-readiness-failed: install_state_invalid",
+    "prefix promoter-readiness-failed: Promoter readiness check failed: state_mount_unreadable\ntrailing diagnostics",
+  ])("extracts the terminal promoter readiness machine code from production output: %s", (log) => {
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("promoter-readiness-failed");
+    expect(c.summary).toContain(log.includes("state_mount") ? "state_mount_unreadable" : "install_state_invalid");
+  });
+
   it("classifies the real @opentelemetry host-vs-Docker hoist divergence", () => {
     const c = classifyBuildFailure({ log: HOIST_LOG, hostBuildPassed: true });
     expect(c.class).toBe("host-docker-hoist-divergence");

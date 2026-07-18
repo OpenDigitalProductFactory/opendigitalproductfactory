@@ -23,3 +23,13 @@ test("promoter internal state path cannot override install env host interpolatio
   assert.ok(contract.requiredEnvironment.includes("DPF_PROMOTER_STATE_DIR"));
   assert.ok(!contract.requiredEnvironment.includes("DPF_STATE_DIR"));
 });
+
+test("the complete promoter JavaScript closure never reads host DPF_STATE_DIR", () => {
+  const dockerfile = readFileSync(resolve(root, "Dockerfile.promoter"), "utf8");
+  const copiedScripts = [...dockerfile.matchAll(/^COPY (scripts\/[^ ]+\.mjs) /gm)].map((match) => match[1]);
+  assert.ok(copiedScripts.length > 0, "promoter closure must be discovered from Dockerfile.promoter");
+  for (const relative of copiedScripts) {
+    const source = readFileSync(resolve(root, relative), "utf8");
+    assert.doesNotMatch(source, /process\.env\.DPF_STATE_DIR\b/, `${relative} must use only the promoter state namespace`);
+  }
+});

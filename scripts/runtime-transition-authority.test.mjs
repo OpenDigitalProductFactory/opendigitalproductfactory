@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const script = new URL("./runtime-transition-authority.mjs", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1");
-const run = (dir, args, env = {}) => spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env: { ...process.env, DPF_STATE_DIR: dir, ...env } });
+const run = (dir, args, env = {}) => spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, ...env } });
 
 test("same transition id cannot acquire concurrent authority", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-authority-"));

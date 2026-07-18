@@ -105,7 +105,7 @@ function runPromote(opts: {
     `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
     `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
     `export PROMOTE_BACKUP_PATH=${shellQuote(toBashPath(opts.backup))}`,
-    `export DPF_STATE_DIR=${shellQuote(toBashPath(join(opts.backup, "state")))}`,
+    `export DPF_PROMOTER_STATE_DIR=${shellQuote(toBashPath(join(opts.backup, "state")))}`,
     "export PROMOTE_HEALTH_URL='http://127.0.0.1:9/api/health'",
     "export PROMOTE_COMPOSE_PROJECT='dpf-functest'",
     ...(opts.composeEnvFile
@@ -264,7 +264,8 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     try {
       const envFile = join(root, "install.env");
       const dockerLog = join(root, "docker.log");
-      writeFileSync(envFile, "AUTH_SECRET=test-secret\n");
+      const hostStateDir = "C:/Users/operator/.dpf";
+      writeFileSync(envFile, `AUTH_SECRET=test-secret\nDPF_STATE_DIR=${hostStateDir}\n`);
 
       const r = runPromote({ source, backup, targetSha: head, fakeBin, composeEnvFile: envFile, dockerLog });
 
@@ -285,6 +286,12 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       // installed sandboxes instead of the promote chain only touching the portal.
       expect(log).toContain("build sandbox");
       expect(log).toContain("up -d --no-deps --force-recreate sandbox");
+      const recreates = log.split(/\r?\n/).filter((line) => /force-recreate (portal|sandbox)$/.test(line));
+      expect(recreates).toHaveLength(2);
+      for (const recreate of recreates) {
+        expect(recreate).toContain(`compose --env-file ${toBashPath(envFile)}`);
+        expect(recreate).not.toContain("DPF_STATE_DIR=/dpf-state");
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

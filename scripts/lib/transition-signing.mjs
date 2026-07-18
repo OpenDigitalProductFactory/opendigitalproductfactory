@@ -51,7 +51,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
     const envelope = JSON.parse(Buffer.from(process.env.DPF_INSTALL_STATE_MIGRATION_ENVELOPE ?? "", "base64url").toString("utf8"));
     const secret = (await readFile(process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE ?? "/run/secrets/dpf-runtime-transition", "utf8")).trim();
-    const stateBytes = await readFile(`${process.env.DPF_STATE_DIR ?? "/dpf-state"}/install-state.json`);
+    const stateBytes = await readFile(`${process.env.DPF_PROMOTER_STATE_DIR ?? "/dpf-state"}/install-state.json`);
     verifyInstallStateMigrationEnvelope(envelope, process.env.DPF_INSTALL_STATE_MIGRATION_SIGNATURE ?? "", secret, {
       runId: process.env.DPF_SELF_UPGRADE_RUN_ID, promoterDigest: process.env.DPF_PROMOTER_DIGEST,
       sourceHash: createHash("sha256").update(stateBytes).digest("hex"), now: Date.now(),
