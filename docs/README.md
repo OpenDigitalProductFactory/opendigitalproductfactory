@@ -46,6 +46,8 @@ Domain-specific operating guides (admin, AI workforce, build studio, compliance,
 ## Architecture
 
 - [Platform Overview](architecture/platform-overview.md) — runtime core, deployment models, hardware tiers, and Docker Compose breakdown.
+- [Platform Substrate Boundaries and Budgets](architecture/platform-substrate-boundaries.md) — the physical-boundary inventory, evidence sources, and complexity ratchets.
+- [Capability-Driven Runtime Profiles](architecture/capability-driven-runtime-profiles.md) — how capabilities resolve host-aware services for install, transitions, backup, diagnostics, and four-state health.
 - [Unified Connector Kernel](architecture/unified-connector-kernel.md) — the provider-neutral definition, credential, lifecycle, audit, callback, registry, and extension contract for external integrations.
 - [Unified Development Activity Tracking](architecture/unified-development-tracking.md) — how all development work (Build Studio plus external Claude / Codex / Grok agents) is tracked as one WorkCapsule unit and shown in one cross-surface activity view. Includes an at-a-glance diagram.
 - [Autonomy, WWMD, and trusted coworker decisions](architecture/autonomy-and-wwmd.md) — how the founder-kernel wiki, principle vectors, decision profiles, and audit ledgers let coworkers answer ambiguity without silently overreaching.

@@ -24,3 +24,7 @@ The Product Inventory is a structured catalogue of all digital products in your 
 - Check stage-gate readiness and see which criteria are outstanding before the next stage
 - Advance a product through lifecycle stages once gate criteria are satisfied
 - Register a new product and assign it to a portfolio and taxonomy category
+
+## Reading Product Health
+
+The product health view includes the same capability-aware service summary used by platform monitoring. A disabled optional capability is shown as **Optional — inactive**, not as a false outage. An enabled optional service that cannot be observed is **Optional — degraded**; an unavailable required service is **Required — unavailable**. External AI runtimes are labeled **External — provider managed** and use reconciled provider evidence. These labels and their actions, rather than color alone, explain whether operator attention is required.

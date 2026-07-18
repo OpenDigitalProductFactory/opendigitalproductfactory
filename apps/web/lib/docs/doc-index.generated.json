@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 522,
+  "pageCount": 523,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -623,6 +623,22 @@
         "enforcement",
         "legacy-plan-path-aliases-intentionally-retained",
         "recommended-follow-up-operator-decision"
+      ]
+    },
+    "docs/architecture/capability-driven-runtime-profiles.md": {
+      "publicHref": "/architecture/capability-driven-runtime-profiles/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "capability-driven-runtime-profiles",
+        "authority-flow",
+        "profiles-and-host-filtering",
+        "capability-transitions",
+        "install-upgrade-consumer-assets-and-rollback",
+        "backup-and-health-semantics",
+        "observation-and-diagnostics-boundary",
+        "safe-operating-rules"
       ]
     },
     "docs/architecture/context-engineering-standards.md": {
@@ -3917,6 +3933,9 @@
       "anchors": [
         "dpf-install-operations",
         "quick-start",
+        "capability-resolved-runtime-profiles",
+        "consumer-release-assets",
+        "optional-services-backup-and-health",
         "agent-toolchain-readiness",
         "why-each-state-appears",
         "idempotence-guarantee",
@@ -8061,6 +8080,7 @@
         "key-concepts",
         "what-you-can-do",
         "related-routes",
+        "reading-runtime-health",
         "authority-governance",
         "agent-authority-overview",
         "tool-execution-log",
@@ -8819,7 +8839,8 @@
       "anchors": [
         "overview",
         "key-concepts",
-        "what-you-can-do"
+        "what-you-can-do",
+        "reading-product-health"
       ]
     },
     "docs/user-guide/security/index.md": {
