@@ -286,7 +286,7 @@ export async function isPromoterAvailable(promoterImage?: string): Promise<boole
 /**
  * The just-in-time promoter build recipe. The build inputs are baked into the
  * portal image at `/promoter/` (see Dockerfile `COPY … /promoter/*`), laid out
- * to mirror the repo root — `portal.Dockerfile` (the portal build),
+ * to mirror the repo root — `Dockerfile` (the portal build),
  * `Dockerfile.promoter`, and `scripts/promote.sh`. Building from a temp dir with
  * that layout lets the same `Dockerfile.promoter` build the promoter image from
  * inside the portal container, with no host clone. This is the exact recipe the
@@ -297,13 +297,17 @@ export async function isPromoterAvailable(promoterImage?: string): Promise<boole
  * `sh -c` without shell-injection risk.
  */
 export const PROMOTER_JIT_BUILD_SCRIPT =
-  "BDIR=$(mktemp -d) && " +
-  "cp /promoter/portal.Dockerfile $BDIR/Dockerfile && " +
-  "cp /promoter/Dockerfile.promoter $BDIR/Dockerfile.promoter && " +
-  "mkdir -p $BDIR/scripts && " +
-  "cp /promoter/promote.sh $BDIR/scripts/promote.sh && " +
-  "tar -C $BDIR -c . | docker build -t dpf-promoter -f Dockerfile.promoter - && " +
-  "rm -rf $BDIR";
+  "BDIR=$(mktemp -d) && trap 'rm -rf \"$BDIR\"' EXIT && " +
+  "cp /promoter/Dockerfile \"$BDIR/Dockerfile\" && " +
+  "cp /promoter/Dockerfile.promoter \"$BDIR/Dockerfile.promoter\" && " +
+  "mkdir -p \"$BDIR/scripts\" && mkdir -p \"$BDIR/scripts/installer\" && " +
+  "cp /promoter/scripts/promote.sh \"$BDIR/scripts/promote.sh\" && " +
+  "cp /promoter/scripts/apply-runtime-capability-transition.mjs \"$BDIR/scripts/apply-runtime-capability-transition.mjs\" && " +
+  "cp /promoter/scripts/runtime-transition-authority.mjs \"$BDIR/scripts/runtime-transition-authority.mjs\" && " +
+  "cp /promoter/scripts/rotate-runtime-transition-secret.mjs \"$BDIR/scripts/rotate-runtime-transition-secret.mjs\" && " +
+  "cp /promoter/scripts/installer/validate-install-state.mjs \"$BDIR/scripts/installer/validate-install-state.mjs\" && " +
+  "cp /promoter/scripts/installer/install-state.schema.json \"$BDIR/scripts/installer/install-state.schema.json\" && " +
+  "tar -C \"$BDIR\" -c . | docker build -t dpf-promoter -f Dockerfile.promoter -";
 
 /**
  * Whether the configured promoter image can be built here from the portal's

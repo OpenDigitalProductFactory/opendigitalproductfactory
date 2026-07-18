@@ -257,9 +257,13 @@ RUN if [ -n "$DPF_PLATFORM_VERSION" ]; then \
 # Promoter build context (autonomous deployment pipeline)
 # These files let the portal build the dpf-promoter image on first use.
 COPY Dockerfile.promoter /promoter/Dockerfile.promoter
-COPY scripts/promote.sh /promoter/promote.sh
-COPY Dockerfile /promoter/portal.Dockerfile
-RUN chmod +x /promoter/promote.sh
+COPY scripts/promote.sh /promoter/scripts/promote.sh
+COPY Dockerfile /promoter/Dockerfile
+COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs
+COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs
+COPY scripts/rotate-runtime-transition-secret.mjs /promoter/scripts/rotate-runtime-transition-secret.mjs
+COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
+COPY scripts/installer/install-state.schema.json /promoter/scripts/installer/install-state.schema.json
 
 EXPOSE 3000
 # Self-upgrade image-identity guard (BI-5B6C1C35, spec §4.3): the running portal
