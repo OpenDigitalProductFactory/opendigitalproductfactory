@@ -529,7 +529,12 @@ export async function dispatchOpencodeTask(params: {
   });
   if (!fitted.fit) {
     const blocked = fitted.reason ?? "Task prompt exceeds local model context window.";
-    console.error(sanitizeForLog(`[opencode-dispatch] Task "${task.title}" blocked: ${blocked}`));
+    // task.title is operator/BI-authored (CWE-117); sanitize each arg before log.
+    console.error(
+      "[opencode-dispatch] Task %s blocked: %s",
+      sanitizeForLog(task.title),
+      sanitizeForLog(blocked),
+    );
     await recordBuildDispatchAttempt({
       buildId: params.buildId, taskTitle: task.title, specialist: role, providerId, model,
       startedAt, completedAt: new Date(), durationMs: Date.now() - startMs,
@@ -539,7 +544,11 @@ export async function dispatchOpencodeTask(params: {
   }
   if (fitted.trimmed) {
     const msg = formatTrimProgressMessage(fitted, target.servedContextTokens);
-    console.log(sanitizeForLog(`[opencode-dispatch] ${msg} task=${JSON.stringify(task.title)}`));
+    console.log(
+      "[opencode-dispatch] %s task=%s",
+      sanitizeForLog(msg),
+      sanitizeForLog(task.title),
+    );
     params.onProgress?.(msg);
   }
   const taskPrompt = fitted.prompt;
