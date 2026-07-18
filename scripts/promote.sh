@@ -21,7 +21,8 @@ if [[ "${1:-}" == "--runtime-capability-transition" ]]; then
     printf '{"status":"failed","failure":"invalid_transition_id"}\n' >&2
     exit 64
   }
-  exec node /promoter/apply-runtime-capability-transition.mjs --runtime-capability-transition "$_transition_id"
+  _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+  exec node "$_promoter_dir/apply-runtime-capability-transition.mjs" --runtime-capability-transition "$_transition_id"
 fi
 
 for arg in "$@"; do

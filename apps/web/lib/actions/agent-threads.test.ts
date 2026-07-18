@@ -37,6 +37,7 @@ vi.mock("@dpf/db", () => ({
 vi.mock("./agent-thread-dispatcher", () => ({
   dispatchAgentThread: mockDispatchAgentThread,
 }));
+vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 
 // BI-QUIESCE-005 gate: spawnWorkThread now calls getQuiescenceLevel.
 // Default to "normal" for all existing tests; tests that want to

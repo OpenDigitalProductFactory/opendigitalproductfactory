@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   prisma: {
+    $transaction: vi.fn(),
     scheduledAgentTask: {
       create: vi.fn(),
       findMany: vi.fn(),
@@ -57,6 +58,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
+vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: mocks.prisma,
   DATA_MODEL_MIRROR_TASK_ID: "data-model-mirror-nightly",
@@ -104,6 +106,7 @@ import { executeScheduledAgentTask } from "./agent-task-scheduler";
 const FIXED_NOW = new Date(2026, 6, 12, 9, 0, 0, 0);
 
 beforeEach(() => {
+  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
   vi.resetAllMocks();
   // BI-D1CD3A11: the idempotent claim runs before execution; default to a WON
   // claim so these plan-behavior tests exercise the work.

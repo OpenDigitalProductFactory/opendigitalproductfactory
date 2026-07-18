@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   prisma: {
+    $transaction: vi.fn(),
     scheduledAgentTask: {
       create: vi.fn(),
       findMany: vi.fn(),
@@ -52,6 +53,7 @@ const mocks = vi.hoisted(() => ({
   runConsolidationParitySteward: vi.fn(),
   runSelfOptimizationSweep: vi.fn(),
 }));
+vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@dpf/db", () => ({
@@ -96,6 +98,7 @@ import {
 } from "./agent-task-scheduler-summary";
 
 beforeEach(() => {
+  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
   vi.resetAllMocks();
   // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
   // default to a WON claim so existing tests exercise the work. Per-test

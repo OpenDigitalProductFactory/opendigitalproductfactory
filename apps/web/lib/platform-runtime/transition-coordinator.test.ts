@@ -127,7 +127,8 @@ describe("runtime capability transition coordinator", () => {
 
   it("uses compare-and-set updates and rejects terminal regression", async () => {
     const model = { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn(async () => ({ count: 0 })) };
-    const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn() };
+    const tx = { runtimeCapabilityTransition: model, runtimeCapabilityTransitionEvent: { create: vi.fn() } };
+    const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
     await expect(receipts.markFailed("RCT-1", "late_failure")).rejects.toThrow("runtime_transition_cas_failed");
     expect(model.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { transitionId: "RCT-1", status: { in: ["pending", "applying"] } } }));
@@ -149,10 +150,14 @@ describe("runtime capability transition coordinator", () => {
   });
 
   it("uses the sibling promoter runtime mode and records host apply failure", async () => {
-    const d = deps({ runPromoter: vi.fn(async () => ({ exitCode: 9, stdout: "", stderr: "apply failed" })) });
-    await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "failed", failure: "host_apply_failed" });
+    const secret = "x".repeat(32);
+    const envelope = { version: 1 as const, transitionId: request.transitionId, issuedAt: new Date(1_000_000).toISOString(), expiresAt: new Date(1_600_000).toISOString(), catalogHash: request.catalogHash, previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates), desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates), previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys], previousProfiles: ["build"], desiredProfiles: [], previousServices: ["portal", "postgres"], desiredServices: ["portal", "postgres"] };
+    const unsigned = { ...envelope, status: "rolled_back" as const, observedServices: ["portal", "postgres"], completedAt: new Date(1_000_001).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.previousStateHash, failure: "compose_reconcile_failed_rolled_back" };
+    const markHostOutcome = vi.fn();
+    const d = deps({ runPromoter: vi.fn(async () => ({ exitCode: 9, stdout: "", stderr: "apply failed" })), readHostReceipt: vi.fn(async () => ({ ...unsigned, signature: signTransitionPayload(unsigned, secret) })), receipts: { createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })), markFailed: vi.fn(), markHostApplied: vi.fn(), markHostOutcome } });
+    await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "rolled_back", failure: "compose_reconcile_failed_rolled_back" });
     expect(d.runPromoter).toHaveBeenCalledWith(expect.objectContaining({ runtimeCapabilityTransitionId: "RCT-1", containerName: "dpf-promoter-RCT-1", timeoutMs: 600_000 }));
-    expect(d.receipts.markFailed).toHaveBeenCalledWith("RCT-1", "host_apply_failed");
+    expect(markHostOutcome).toHaveBeenCalledWith("RCT-1", expect.objectContaining({ status: "rolled_back" }));
   });
 
   it("maps host claim contention to in progress without recording an outcome", async () => {
