@@ -384,7 +384,6 @@ services:
       # by default; see portal service comment above for rationale).
       - ${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups
       - ${DPF_HOST_INSTALL_PATH:-.}:/host-source:ro  # Host project source for building new portal images
-      - ${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state
     environment:
       DPF_PRODUCTION_DB_CONTAINER: dpf-postgres-1
       DPF_PORTAL_CONTAINER: dpf-portal-1

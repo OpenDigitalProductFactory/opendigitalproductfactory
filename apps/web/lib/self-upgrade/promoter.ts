@@ -78,7 +78,8 @@ export type PromoterParams = {
   runtimeCapabilityTransitionId?: string;
   runtimeCapabilityEnvelope?: string;
   runtimeCapabilitySignature?: string;
-  runtimeCapabilitySecret?: string;
+  /** Host file containing only the transition HMAC secret; mounted read-only. */
+  runtimeCapabilitySecretFileHostPath?: string;
   stateDirHostPath?: string;
   runtimeCapabilityProfiles?: string[];
 };
@@ -171,13 +172,12 @@ export function buildPromoterCommand(
   }
 
   if (params.runtimeCapabilityTransitionId) {
-    if (!params.stateDirHostPath || !params.runtimeCapabilityEnvelope || !params.runtimeCapabilitySignature || !params.runtimeCapabilitySecret) {
+    if (!params.stateDirHostPath || !params.runtimeCapabilityEnvelope || !params.runtimeCapabilitySignature || !params.runtimeCapabilitySecretFileHostPath) {
       throw new Error("runtime_transition_protocol_incomplete");
     }
-    args.push("-v", `${params.stateDirHostPath}:/dpf-state`);
+    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-v", `${params.runtimeCapabilitySecretFileHostPath}:/run/secrets/dpf-runtime-transition:ro`);
     args.push("-e", `DPF_STATE_DIR=/dpf-state`, "-e", `DPF_RUNTIME_TRANSITION_ENVELOPE=${params.runtimeCapabilityEnvelope}`,
-      "-e", `DPF_RUNTIME_TRANSITION_SIGNATURE=${params.runtimeCapabilitySignature}`, "-e", `DPF_RUNTIME_TRANSITION_SECRET=${params.runtimeCapabilitySecret}`);
-    if (params.runtimeCapabilityProfiles?.length) args.push("-e", `DPF_RUNTIME_TRANSITION_PROFILES=${[...params.runtimeCapabilityProfiles].sort().join(" ")}`);
+      "-e", `DPF_RUNTIME_TRANSITION_SIGNATURE=${params.runtimeCapabilitySignature}`);
   }
 
   args.push(image);

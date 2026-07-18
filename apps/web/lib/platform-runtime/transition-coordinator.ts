@@ -18,11 +18,12 @@ export type RuntimeCapabilityTransitionRequest = {
   desiredKeys: readonly string[];
   previousStates: Readonly<Record<string, string>>;
   desiredStates: Readonly<Record<string, string>>;
+  requestedById: string;
 };
 
 export interface RuntimeCapabilityTransitionReceipts {
   /** Implementations serialize with an advisory lock + the DB partial unique index. */
-  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string }): Promise<
+  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string; previousProfiles: string[]; desiredProfiles: string[] }): Promise<
     | { created: true }
     | { created: false; kind: "replay"; status: string }
     | { created: false; kind: "active_conflict"; status: string; transitionId: string }
@@ -41,6 +42,8 @@ export type RuntimeCapabilityCoordinatorDeps = {
   runPromoter(params: PromoterParams): Promise<PromoterResult>;
   promoterParams: PromoterParams;
   protocolSecret?: string;
+  protocolSecretFileHostPath?: string;
+  resolveProjection?(keys: readonly string[]): Promise<{ catalogHash: string; stateHash: string; enabledKeys: string[]; composeProfiles: string[]; requiredServices: string[] }>;
   readHostReceipt?(transitionId: string): Promise<RuntimeTransitionReceipt>;
   verifyRequiredHealth?(desiredKeys: readonly string[], observedServices: readonly string[]): Promise<boolean>;
   now?: () => number;
@@ -77,10 +80,15 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
         transitionId: input.transitionId,
         previousKeys: [...input.previousKeys].sort(),
         desiredKeys: [...input.desiredKeys].sort(),
+        previousProfiles: input.previousProfiles,
+        desiredProfiles: input.desiredProfiles,
+        previousStates: input.previousStates,
+        desiredStates: input.desiredStates,
         previousStateHash: input.previousStateHash,
         desiredStateHash: input.desiredStateHash,
         catalogHash: input.catalogHash,
         status: "pending",
+        requestedById: input.requestedById,
       } });
       return { created: true };
     }, { isolationLevel: "Serializable" }),
@@ -103,7 +111,7 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
 
 export type RuntimeTransitionReconcileRow = {
   transitionId: string; status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string;
-  previousKeys: string[]; desiredKeys: string[];
+  previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[];
 };
 
 /** Startup recovery runs before mutation is enabled and converges every nonterminal row. */
@@ -118,7 +126,7 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
   for (const row of await deps.listActive()) {
     const receipt = await deps.readHostReceipt(row.transitionId);
     if (!receipt) { await deps.compensate(row, "host_receipt_absent"); continue; }
-    const envelope: RuntimeTransitionEnvelope = { version: 1, transitionId: row.transitionId, issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt, catalogHash: row.catalogHash, previousStateHash: row.previousStateHash, desiredStateHash: row.desiredStateHash, previousKeys: row.previousKeys, desiredKeys: row.desiredKeys };
+    const envelope: RuntimeTransitionEnvelope = { version: 1, transitionId: row.transitionId, issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt, catalogHash: row.catalogHash, previousStateHash: row.previousStateHash, desiredStateHash: row.desiredStateHash, previousKeys: row.previousKeys, desiredKeys: row.desiredKeys, previousProfiles: row.previousProfiles, desiredProfiles: row.desiredProfiles };
     try {
       verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
       await deps.completeFromReceipt(row, receipt);
@@ -157,27 +165,39 @@ export async function coordinateRuntimeCapabilityTransition(
     previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates),
     desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates),
   };
-  const pending = await deps.receipts.createPending(normalized);
+  if (!request.requestedById) throw new Error("requested_by_required");
+  let available = false;
+  try { available = await deps.isPromoterAvailable(deps.promoterParams.promoterImage); } catch { available = false; }
+  if (!available) {
+    return { status: "failed" as const, failure: "promoter_unavailable" as const };
+  }
+  let result: PromoterResult;
+  if (!deps.protocolSecret || deps.protocolSecret.length < 32 || !deps.protocolSecretFileHostPath || !deps.resolveProjection || !deps.promoterParams.stateDirHostPath || !deps.readHostReceipt || !deps.verifyRequiredHealth || !deps.promoterParams.composeProject || !deps.promoterParams.composeFiles?.length) {
+    return { status: "failed" as const, failure: "signed_protocol_unavailable" as const };
+  }
+  const now = deps.now?.() ?? Date.now();
+  let previousProjection, desiredProjection;
+  try {
+    previousProjection = await deps.resolveProjection(normalized.previousKeys);
+    desiredProjection = await deps.resolveProjection(normalized.desiredKeys);
+  } catch {
+    return { status: "failed" as const, failure: "capability_projection_unavailable" as const };
+  }
+  if (previousProjection.catalogHash !== request.catalogHash || desiredProjection.catalogHash !== request.catalogHash ||
+      previousProjection.stateHash !== normalized.previousStateHash || desiredProjection.stateHash !== normalized.desiredStateHash ||
+      JSON.stringify(previousProjection.enabledKeys) !== JSON.stringify(normalized.previousKeys) || JSON.stringify(desiredProjection.enabledKeys) !== JSON.stringify(normalized.desiredKeys)) {
+    return { status: "failed" as const, failure: "capability_projection_mismatch" as const };
+  }
+  const pending = await deps.receipts.createPending({ ...normalized, previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles });
   if (!pending.created) {
     if (pending.kind === "active_conflict" || ACTIVE_RUNTIME_TRANSITION_STATUSES.includes(pending.status as never)) return { status: "transition_in_progress" as const };
     return { status: "already_terminal" as const, transitionStatus: pending.status };
   }
-  let available = false;
-  try { available = await deps.isPromoterAvailable(deps.promoterParams.promoterImage); } catch { available = false; }
-  if (!available) {
-    await deps.receipts.markFailed(request.transitionId, "promoter_unavailable");
-    return { status: "failed" as const, failure: "promoter_unavailable" as const };
-  }
-  let result: PromoterResult;
-  if (!deps.protocolSecret || deps.protocolSecret.length < 32 || !deps.promoterParams.stateDirHostPath || !deps.readHostReceipt || !deps.promoterParams.composeProject || !deps.promoterParams.composeFiles?.length) {
-    await deps.receipts.markFailed(request.transitionId, "signed_protocol_unavailable");
-    return { status: "failed" as const, failure: "signed_protocol_unavailable" as const };
-  }
-  const now = deps.now?.() ?? Date.now();
   const envelope: RuntimeTransitionEnvelope = {
     version: 1, transitionId: request.transitionId, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + 10 * 60 * 1000).toISOString(),
     catalogHash: request.catalogHash, previousStateHash: normalized.previousStateHash, desiredStateHash: normalized.desiredStateHash,
     previousKeys: normalized.previousKeys, desiredKeys: normalized.desiredKeys,
+    previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles,
   };
   const encodedEnvelope = Buffer.from(JSON.stringify(envelope)).toString("base64url");
   try { result = await deps.runPromoter({
@@ -187,7 +207,7 @@ export async function coordinateRuntimeCapabilityTransition(
     timeoutMs: 10 * 60 * 1000,
     runtimeCapabilityEnvelope: encodedEnvelope,
     runtimeCapabilitySignature: signTransitionPayload(envelope, deps.protocolSecret),
-    runtimeCapabilitySecret: deps.protocolSecret,
+    runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath,
   }); } catch { await deps.receipts.markFailed(request.transitionId, "promoter_spawn_failed"); return { status: "failed" as const, failure: "promoter_spawn_failed" as const }; }
   if (result.exitCode !== 0) {
     await deps.receipts.markFailed(request.transitionId, "host_apply_failed");
@@ -197,7 +217,7 @@ export async function coordinateRuntimeCapabilityTransition(
   try {
     const receipt = await deps.readHostReceipt(request.transitionId);
     verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
-    if (deps.verifyRequiredHealth && !(await deps.verifyRequiredHealth(normalized.desiredKeys, receipt.observedServices))) throw new Error("required_health_failed");
+    if (!(await deps.verifyRequiredHealth(desiredProjection.requiredServices, receipt.observedServices))) throw new Error("required_health_failed");
     if (!deps.receipts.commitSuccess) return { status: "host_applied_pending_verification" as const };
     await deps.receipts.commitSuccess(request.transitionId, receipt, request.desiredStates);
     return { status: "succeeded" as const };
@@ -207,9 +227,9 @@ export async function coordinateRuntimeCapabilityTransition(
     await deps.receipts.markCompensating(request.transitionId, failure);
     const rollbackNow = deps.now?.() ?? Date.now();
     const rollbackTransitionId = `RCT-${createHash("sha256").update(request.transitionId).digest("hex").slice(0, 24)}-rb`;
-    const rollbackEnvelope: RuntimeTransitionEnvelope = { ...envelope, transitionId: rollbackTransitionId, issuedAt: new Date(rollbackNow).toISOString(), expiresAt: new Date(rollbackNow + 600_000).toISOString(), previousKeys: normalized.desiredKeys, desiredKeys: normalized.previousKeys, previousStateHash: normalized.desiredStateHash, desiredStateHash: normalized.previousStateHash };
+    const rollbackEnvelope: RuntimeTransitionEnvelope = { ...envelope, transitionId: rollbackTransitionId, issuedAt: new Date(rollbackNow).toISOString(), expiresAt: new Date(rollbackNow + 600_000).toISOString(), previousKeys: normalized.desiredKeys, desiredKeys: normalized.previousKeys, previousProfiles: desiredProjection.composeProfiles, desiredProfiles: previousProjection.composeProfiles, previousStateHash: normalized.desiredStateHash, desiredStateHash: normalized.previousStateHash };
     try {
-      const rollback = await deps.runPromoter({ ...deps.promoterParams, runtimeCapabilityTransitionId: rollbackTransitionId, containerName: `dpf-promoter-${rollbackTransitionId}`, timeoutMs: 600_000, runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(rollbackEnvelope)).toString("base64url"), runtimeCapabilitySignature: signTransitionPayload(rollbackEnvelope, deps.protocolSecret), runtimeCapabilitySecret: deps.protocolSecret });
+      const rollback = await deps.runPromoter({ ...deps.promoterParams, runtimeCapabilityTransitionId: rollbackTransitionId, containerName: `dpf-promoter-${rollbackTransitionId}`, timeoutMs: 600_000, runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(rollbackEnvelope)).toString("base64url"), runtimeCapabilitySignature: signTransitionPayload(rollbackEnvelope, deps.protocolSecret), runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath });
       if (rollback.exitCode !== 0) throw new Error("rollback_host_apply_failed");
       const receipt = await deps.readHostReceipt(rollbackTransitionId);
       verifyTransitionReceipt(receipt, deps.protocolSecret, rollbackEnvelope, deps.now?.() ?? Date.now());

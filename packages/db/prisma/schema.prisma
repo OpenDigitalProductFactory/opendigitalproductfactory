@@ -1767,6 +1767,10 @@ model RuntimeCapabilityTransition {
   transitionId      String   @unique
   previousKeys      String[]
   desiredKeys       String[]
+  previousProfiles  String[]
+  desiredProfiles   String[]
+  previousStates    Json
+  desiredStates     Json
   previousStateHash String
   desiredStateHash  String
   catalogHash       String

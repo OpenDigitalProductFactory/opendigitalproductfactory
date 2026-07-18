@@ -5,6 +5,7 @@ import { signTransitionPayload } from "./transition-protocol";
 const request = {
   transitionId: "RCT-1", catalogHash: "0".repeat(64), previousKeys: ["runtime:build", "runtime:core"], desiredKeys: ["runtime:core"],
   previousStates: { "runtime:core": "active", "runtime:build": "active" }, desiredStates: { "runtime:core": "active", "runtime:build": "disabled" },
+  requestedById: "user-1",
 };
 
 function deps(overrides = {}) {
@@ -19,9 +20,12 @@ function deps(overrides = {}) {
     runPromoter: vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" })),
     promoterParams: { hostInstallPath: "/dpf", targetSha: "unused", backupPath: "/unused", healthUrl: "http://localhost:3000/api/health", stateDirHostPath: "/state", composeFiles: ["docker-compose.yml"], composeProject: "dpf" },
     protocolSecret: secret,
+    protocolSecretFileHostPath: "/state/transition-secret",
+    resolveProjection: vi.fn(async (keys: readonly string[]) => ({ catalogHash: request.catalogHash, stateHash: computeCapabilityStateVersion(request.catalogHash, keys.includes("runtime:build") ? request.previousStates : request.desiredStates), enabledKeys: [...keys], composeProfiles: keys.includes("runtime:build") ? ["build"] : [], requiredServices: ["portal", "postgres"] })),
+    verifyRequiredHealth: vi.fn(async () => true),
     now: () => 1_000_000,
     readHostReceipt: vi.fn(async () => {
-      const envelope = { version: 1 as const, transitionId: request.transitionId, issuedAt: new Date(1_000_000).toISOString(), expiresAt: new Date(1_600_000).toISOString(), catalogHash: request.catalogHash, previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates), desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates), previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys] };
+      const envelope = { version: 1 as const, transitionId: request.transitionId, issuedAt: new Date(1_000_000).toISOString(), expiresAt: new Date(1_600_000).toISOString(), catalogHash: request.catalogHash, previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates), desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates), previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys], previousProfiles: ["build"], desiredProfiles: [] };
       const unsigned = { ...envelope, status: "applied" as const, observedServices: ["portal", "postgres"], completedAt: new Date(1_000_001).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash };
       return { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
     }),
@@ -55,7 +59,7 @@ describe("runtime capability transition coordinator", () => {
     const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
-    await expect(receipts.createPending({ ...request, previousKeys: ["z", "a"], desiredKeys: ["z", "b"], previousStateHash: "before", desiredStateHash: "after" })).resolves.toEqual({ created: true });
+    await expect(receipts.createPending({ ...request, previousKeys: ["z", "a"], desiredKeys: ["z", "b"], previousProfiles: [], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after" })).resolves.toEqual({ created: true });
     expect(tx.$queryRaw).toHaveBeenCalledOnce();
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
     expect(model.create).toHaveBeenCalledWith({ data: expect.objectContaining({ previousKeys: ["a", "z"], desiredKeys: ["b", "z"], status: "pending" }) });
@@ -67,7 +71,7 @@ describe("runtime capability transition coordinator", () => {
     const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
-    await expect(receipts.createPending({ ...request, previousStateHash: "before", desiredStateHash: "after" })).resolves.toEqual({ created: false, kind: "replay", status: "host_applied" });
+    await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after" })).resolves.toEqual({ created: false, kind: "replay", status: "host_applied" });
     expect(model.create).not.toHaveBeenCalled();
   });
 
@@ -75,7 +79,7 @@ describe("runtime capability transition coordinator", () => {
     const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "pending", catalogHash: request.catalogHash, previousStateHash: "different", desiredStateHash: "after", previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys] })), create: vi.fn(), updateMany: vi.fn() };
     const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
-    await expect(receipts.createPending({ ...request, previousStateHash: "before", desiredStateHash: "after" })).rejects.toThrow("transition_id_conflict");
+    await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after" })).rejects.toThrow("transition_id_conflict");
   });
 
   it("surfaces a different active receipt as transition_in_progress through the Prisma repository", async () => {
@@ -98,7 +102,7 @@ describe("runtime capability transition coordinator", () => {
   it("records promoter unavailability before attempting host apply", async () => {
     const d = deps({ isPromoterAvailable: vi.fn(async () => false) });
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "failed", failure: "promoter_unavailable" });
-    expect(d.receipts.markFailed).toHaveBeenCalledWith("RCT-1", "promoter_unavailable");
+    expect(d.receipts.markFailed).not.toHaveBeenCalled();
     expect(d.runPromoter).not.toHaveBeenCalled();
   });
 

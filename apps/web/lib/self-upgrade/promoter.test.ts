@@ -19,7 +19,7 @@ const BASE = {
 
 describe("buildPromoterCommand", () => {
   it("selects the dedicated runtime capability transition mode without self-upgrade argv", () => {
-    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeCapabilityEnvelope: "encoded", runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecret: "x".repeat(32) });
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeCapabilityEnvelope: "encoded", runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecretFileHostPath: "/state/transition-secret" });
     expect(args).toContain("--runtime-capability-transition");
     expect(args).toContain("RCT-123");
     expect(args).not.toContain("--self-upgrade");
@@ -44,7 +44,8 @@ describe("buildPromoterCommand", () => {
   });
 
   it("gives transition mode only the state mount as writable and signs fixed protocol env", () => {
-    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/host/.dpf", runtimeCapabilityEnvelope: "encoded", runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecret: "x".repeat(32), composeFiles: ["docker-compose.yml"], composeProject: "dpf" });
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/host/.dpf", runtimeCapabilityEnvelope: "encoded", runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecretFileHostPath: "/host/.dpf/transition-secret", composeFiles: ["docker-compose.yml"], composeProject: "dpf" });
+    expect(args.join(" ")).not.toContain("x".repeat(32));
     expect(args).toContain("/Users/me/dpf:/host-source:ro");
     expect(args).toContain("/host/.dpf:/dpf-state");
     expect(args).toContain("DPF_STATE_DIR=/dpf-state");

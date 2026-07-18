@@ -6,10 +6,11 @@ export type RuntimeTransitionEnvelope = {
   version: 1; transitionId: string; issuedAt: string; expiresAt: string;
   catalogHash: string; previousStateHash: string; desiredStateHash: string;
   previousKeys: string[]; desiredKeys: string[];
+  previousProfiles: string[]; desiredProfiles: string[];
 };
 
 export type RuntimeTransitionReceipt = RuntimeTransitionEnvelope & {
-  status: "applied" | "failed"; observedServices: string[]; completedAt: string;
+  status: "applied" | "failed" | "rollback_failed"; observedServices: string[]; completedAt: string;
   beforeHash: string; afterHash: string; failure?: string; signature: string;
 };
 
@@ -26,7 +27,7 @@ export function verifyTransitionReceipt(receipt: RuntimeTransitionReceipt, secre
   const { signature, ...unsigned } = receipt;
   const expected = signTransitionPayload(unsigned, secret);
   if (!/^[a-f0-9]{64}$/.test(signature) || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) throw new Error("runtime_transition_receipt_tampered");
-  for (const key of ["version", "transitionId", "issuedAt", "expiresAt", "catalogHash", "previousStateHash", "desiredStateHash", "previousKeys", "desiredKeys"] as const) {
+  for (const key of ["version", "transitionId", "issuedAt", "expiresAt", "catalogHash", "previousStateHash", "desiredStateHash", "previousKeys", "desiredKeys", "previousProfiles", "desiredProfiles"] as const) {
     if (JSON.stringify(receipt[key]) !== JSON.stringify(envelope[key])) throw new Error("runtime_transition_receipt_mismatch");
   }
   if (Date.parse(receipt.expiresAt) < now || Date.parse(receipt.issuedAt) > now + 30_000) throw new Error("runtime_transition_receipt_expired");

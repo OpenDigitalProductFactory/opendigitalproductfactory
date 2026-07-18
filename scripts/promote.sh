@@ -21,7 +21,7 @@ if [[ "${1:-}" == "--runtime-capability-transition" ]]; then
     printf '{"status":"failed","failure":"invalid_transition_id"}\n' >&2
     exit 64
   }
-  exec node /promoter/apply-runtime-capability-transition.mjs
+  exec node /promoter/apply-runtime-capability-transition.mjs --runtime-capability-transition "$_transition_id"
 fi
 
 for arg in "$@"; do
