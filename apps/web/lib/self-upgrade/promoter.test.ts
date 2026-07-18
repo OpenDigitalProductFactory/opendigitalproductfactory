@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { resolve } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   buildPromoterCommand,
   decidePromoterEnsureAction,
@@ -156,9 +158,20 @@ describe("buildPromoterCommand", () => {
 describe("runtime transition promoter entrypoint", () => {
   it("recognizes the mode and fails closed without protocol secret material", async () => {
     const script = resolve(process.cwd(), "../../scripts/promote.sh");
-    const result = await runProcessWithBudget("bash", [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
-    expect(result.exitCode).toBe(78);
-    expect(result.stderr).toContain('"failure":"transition_secret_unreadable"');
+    const stateDir = await mkdtemp(join(tmpdir(), "dpf-promoter-test-"));
+    try {
+      const result = await runProcessWithBudget("bash", [script, "--runtime-capability-transition", "RCT-123"], {
+        timeoutMs: 10_000,
+        env: {
+          DPF_STATE_DIR: stateDir,
+          DPF_RUNTIME_TRANSITION_SECRET_FILE: join(stateDir, "missing-secret"),
+        },
+      });
+      expect(result.exitCode).toBe(78);
+      expect(result.stderr).toContain('"failure":"transition_secret_unreadable"');
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
   });
 });
 
