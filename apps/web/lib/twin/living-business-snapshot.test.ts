@@ -96,8 +96,8 @@ describe("living-business-snapshot — pure helpers", () => {
     const bookings = [
       {
         id: "b1",
-        scheduledAt: new Date("2026-07-18T09:00:00Z"),
-        createdAt: new Date("2026-07-15T06:00:00Z"), // 3h before NOW
+        scheduledAt: new Date("2026-07-18T09:00:00Z"), // 3 days AFTER NOW → upcoming
+        createdAt: new Date("2026-07-15T06:00:00Z"),
         status: "pending",
         provider: null,
       },
@@ -112,13 +112,48 @@ describe("living-business-snapshot — pure helpers", () => {
     const queue = bookingsToQueueItems(bookings, NOW);
     expect(queue).toHaveLength(1);
     expect(queue[0]).toMatchObject({ key: "b1", label: "Unassigned" });
-    // real wait time, measured from createdAt (3h before NOW)
-    expect(queue[0].waiting).toBe("3h");
+    // An upcoming reservation reads as time-until its slot, not an age-based wait.
+    expect(queue[0].meta).toBe("booked for 07-18");
+    expect(queue[0].waiting).toBe("in 3d");
 
     const work = bookingsToWorkItems(bookings, "appointment");
     expect(work).toHaveLength(1);
     expect(work[0]).toMatchObject({ owner: { name: "Dr Lee", kind: "human" } });
     expect(work[0].label).toContain("Appointment");
+  });
+
+  it("a passed-but-unfulfilled reservation reads as overdue, not a multi-day wait", () => {
+    const bookings = [
+      {
+        id: "stale",
+        scheduledAt: new Date("2026-07-13T18:00:00Z"), // 2 days BEFORE NOW
+        createdAt: new Date("2026-07-10T09:00:00Z"), // created 5 days ago
+        status: "pending",
+        provider: null,
+      },
+    ];
+    const queue = bookingsToQueueItems(bookings, NOW);
+    expect(queue[0].meta).toBe("overdue · was 07-13");
+    // Crucially: NO "5d" wait chip — it is not waiting, it is overdue.
+    expect(queue[0].waiting).toBeUndefined();
+  });
+
+  it("walk-in (no scheduled slot) is a genuine live queue wait", () => {
+    const bookings = [
+      { id: "w", scheduledAt: null, createdAt: new Date("2026-07-15T06:00:00Z"), status: "pending", provider: null },
+    ];
+    const queue = bookingsToQueueItems(bookings, NOW);
+    expect(queue[0].meta).toBe("awaiting schedule");
+    expect(queue[0].waiting).toBe("3h");
+  });
+
+  it("longestWaitMs ignores scheduled reservations — only walk-ins wait", () => {
+    const reservations = [
+      { id: "r1", scheduledAt: new Date("2026-07-18T09:00:00Z"), createdAt: new Date("2026-07-12T09:00:00Z"), status: "pending", provider: null },
+      { id: "r2", scheduledAt: new Date("2026-07-13T09:00:00Z"), createdAt: new Date("2026-07-11T09:00:00Z"), status: "pending", provider: null },
+    ];
+    // All scheduled (upcoming or overdue) → no headline wait, so the chip drops.
+    expect(longestWaitMs(reservations, NOW)).toBe(0);
   });
 
   it("humanizeWait + longestWaitMs surface the queue's flow metric", () => {

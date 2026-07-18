@@ -122,9 +122,42 @@ export function humanizeWait(ms: number): string {
   if (hrs < 48) return `${hrs}h`;
   return `${Math.round(hrs / 24)}d`;
 }
-const CURRENCY_SYMBOL: Record<string, string> = { GBP: "£", USD: "$", EUR: "€" };
-function currencySymbol(code: string | null): string {
-  return (code && CURRENCY_SYMBOL[code]) ?? "";
+/** "07-16" — a compact month-day from an ISO date. */
+function monthDay(d: Date): string {
+  return d.toISOString().slice(5, 10);
+}
+/**
+ * A pending item is only genuinely *waiting* — a live queue wait measured from
+ * when it landed — when it has NO scheduled slot (a walk-in / unrouted request).
+ * A reservation with a scheduled time is *upcoming* (or, once that slot passes
+ * unfulfilled, *overdue*), never a multi-day "wait". This is what stops a
+ * restaurant from reporting a nonsensical "3-day wait" on a booking row that was
+ * simply created three days ago for a since-passed sitting.
+ */
+function isWalkInWait(b: { scheduledAt: Date | null }): boolean {
+  return b.scheduledAt == null;
+}
+// Money is formatted from its OWN currency's locale so a USD amount never renders
+// with en-GB grouping/symbol (and vice-versa). This removes the previous
+// hardcoded `en-GB`; the org-level currency/locale source (so the whole platform
+// stops defaulting to GBP for a non-UK operator) is the follow-on remediation
+// tracked in EP-ORG-LOCALE-CURRENCY. When the currency is unknown we format a
+// bare, locale-neutral grouped number rather than guessing a symbol.
+const CURRENCY_LOCALE: Record<string, string> = { GBP: "en-GB", USD: "en-US", EUR: "en-IE" };
+export function formatMoney(amount: number, code: string | null): string {
+  const value = Math.round(amount);
+  if (code) {
+    try {
+      return new Intl.NumberFormat(CURRENCY_LOCALE[code] ?? "en-US", {
+        style: "currency",
+        currency: code,
+        maximumFractionDigits: 0,
+      }).format(value);
+    } catch {
+      // Unknown ISO code — fall through to a bare number.
+    }
+  }
+  return value.toLocaleString("en-US");
 }
 
 // ─────────────────────────── pure mapping helpers ───────────────────────────
@@ -191,19 +224,41 @@ export function bookingsToQueueItems(bookings: BookingRow[], now: Date, limit = 
     .filter((b) => b.status.toLowerCase() === "pending" || b.provider == null)
     .sort((a, b) => (a.createdAt?.getTime() ?? Infinity) - (b.createdAt?.getTime() ?? Infinity))
     .slice(0, limit)
-    .map((b) => ({
-      key: b.id,
-      label: b.provider?.name ? `With ${b.provider.name}` : "Unassigned",
-      meta: b.scheduledAt ? `booked for ${b.scheduledAt.toISOString().slice(5, 10)}` : "awaiting schedule",
-      waiting: b.createdAt ? humanizeWait(now.getTime() - b.createdAt.getTime()) : undefined,
-    }));
+    .map((b) => {
+      const label = b.provider?.name ? `With ${b.provider.name}` : "Unassigned";
+      // Upcoming reservation — the meaningful metric is time-until, not age.
+      if (b.scheduledAt && b.scheduledAt.getTime() > now.getTime()) {
+        return {
+          key: b.id,
+          label,
+          meta: `booked for ${monthDay(b.scheduledAt)}`,
+          waiting: `in ${humanizeWait(b.scheduledAt.getTime() - now.getTime())}`,
+        };
+      }
+      // Scheduled slot has passed and it is still unfulfilled — overdue, not waiting.
+      if (b.scheduledAt) {
+        return { key: b.id, label, meta: `overdue · was ${monthDay(b.scheduledAt)}` };
+      }
+      // Walk-in / unrouted request — a genuine live queue wait from when it landed.
+      return {
+        key: b.id,
+        label,
+        meta: "awaiting schedule",
+        waiting: b.createdAt ? humanizeWait(now.getTime() - b.createdAt.getTime()) : undefined,
+      };
+    });
 }
 
 /** The longest a pending item has waited — the queue's headline flow metric. */
 export function longestWaitMs(bookings: BookingRow[], now: Date): number {
-  const pending = bookings.filter((b) => b.status.toLowerCase() === "pending" || b.provider == null);
+  // Only genuine walk-in waits count — scheduled reservations (upcoming or
+  // overdue) are not "waiting", so an all-reservations business (a restaurant)
+  // reports no headline wait instead of a spurious multi-day figure.
+  const waiting = bookings.filter(
+    (b) => (b.status.toLowerCase() === "pending" || b.provider == null) && isWalkInWait(b),
+  );
   let max = 0;
-  for (const b of pending) {
+  for (const b of waiting) {
     if (b.createdAt) max = Math.max(max, now.getTime() - b.createdAt.getTime());
   }
   return max;
@@ -231,7 +286,6 @@ export function financeToUtility(input: {
   complianceOpenCount: number;
   coworkerGaps: number;
 }): UtilityMeterData[] {
-  const sym = currencySymbol(input.currency);
   const taxIntent: Intent =
     input.nextTaxDueDays == null
       ? "success"
@@ -246,7 +300,7 @@ export function financeToUtility(input: {
       label: "Bills due",
       value:
         input.billsDueCount > 0
-          ? `${input.billsDueCount} · ${sym}${Math.round(input.billsDueAmount).toLocaleString("en-GB")}`
+          ? `${input.billsDueCount} · ${formatMoney(input.billsDueAmount, input.currency)}`
           : "None due",
       intent: input.billsDueCount > 0 ? "warning" : "success",
       hint: "Next 7 days",
@@ -374,7 +428,11 @@ export function proposeCogAllocation(
     resource = (active.find((m) => m.kind === "agent") ?? active[0])?.displayName;
   }
 
-  const waited = next.createdAt ? humanizeWait(now.getTime() - next.createdAt.getTime()) : null;
+  // Only prefix a "waiting" descriptor for a genuine walk-in wait — a scheduled
+  // reservation's age is not a wait, so the cog says "the next ticket", not "the
+  // 3d-waiting ticket".
+  const waited =
+    isWalkInWait(next) && next.createdAt ? humanizeWait(now.getTime() - next.createdAt.getTime()) : null;
   return {
     proposal: resource
       ? `Assign the ${waited ? `${waited}-waiting ` : "next "}${workNoun} to ${resource} (lowest load)`
@@ -484,9 +542,13 @@ export async function loadLivingBusinessSnapshot(opts?: {
   ).length;
   const unassigned = bookings.filter((b) => b.provider == null || b.status.toLowerCase() === "pending");
 
+  // Render the resource units under the zone that actually holds them
+  // (`capacityZoneKey`) — a restaurant's tables belong in the dining room, not
+  // "Kitchen / the pass"; a shop's work orders on the bays, not at intake. Its
+  // label resolves from the profile at render time (TwinView).
   const zones: TwinZoneSnapshot[] = [
     {
-      key: profile.zones[0]?.key ?? "board",
+      key: profile.capacityZoneKey ?? profile.zones[0]?.key ?? "board",
       units: resourceUnits(providers, members),
     },
   ];
@@ -519,7 +581,11 @@ export async function loadLivingBusinessSnapshot(opts?: {
   for (const b of bookings) {
     const waiting = b.status.toLowerCase() === "pending" || b.provider == null;
     const stage = waiting ? binding.primaryStageKey : deliverStage;
-    const waitMs = waiting && b.createdAt ? Math.max(0, now.getTime() - b.createdAt.getTime()) : 0;
+    // Same rule as the headline chip: only an unscheduled walk-in's age is a real
+    // wait, so a stage of scheduled reservations shows a count without a bogus
+    // multi-day "longest wait" badge.
+    const waitMs =
+      waiting && isWalkInWait(b) && b.createdAt ? Math.max(0, now.getTime() - b.createdAt.getTime()) : 0;
     const cur = stageDemand[stage] ?? { count: 0, longestWaitMs: 0 };
     cur.count += 1;
     cur.longestWaitMs = Math.max(cur.longestWaitMs ?? 0, waitMs);
@@ -535,7 +601,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
     {
       key: "revenue",
       label: "Revenue in",
-      value: `${currencySymbol(revenueCurrency)}${Math.round(paidRevenue).toLocaleString("en-GB")}`,
+      value: formatMoney(paidRevenue, revenueCurrency),
       intent: "success",
       hint: "Paid · 90 days",
     },
