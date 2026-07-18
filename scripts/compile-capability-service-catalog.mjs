@@ -21,4 +21,3 @@ if (process.argv.includes("--check")) {
   await writeFile(outputPath, generated, "utf8");
   console.log("capability_service_catalog_compiled");
 }
-
