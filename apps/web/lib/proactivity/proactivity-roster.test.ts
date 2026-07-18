@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveProactivityRoster } from "./proactivity-roster";
+import {
+  areaForPortfolio,
+  deriveProactivityRoster,
+  groupRosterByArea,
+} from "./proactivity-roster";
 import { PROACTIVITY_LEVELS } from "./proactivity-types";
 
 const agents = [
@@ -32,5 +36,31 @@ describe("deriveProactivityRoster", () => {
       "Bookkeeper",
     ]);
     expect(rows.map((row) => row.role)).toEqual(["orchestrator", "analyst"]);
+  });
+
+  it("maps a portfolio slug to a plain owner-facing area, else Other", () => {
+    expect(areaForPortfolio("products_and_services_sold").label).toBe("Customers and sales");
+    expect(areaForPortfolio("for_employees").label).toBe("Your team");
+    expect(areaForPortfolio("foundational").label).toBe("Platform and back office");
+    expect(areaForPortfolio(null).key).toBe("other");
+    expect(areaForPortfolio("nope").key).toBe("other");
+  });
+
+  it("groups rows into areas ordered from the customer inward", () => {
+    const rows = deriveProactivityRoster(
+      [
+        { agentId: "eng", displayName: "Platform Engineer", role: "operator", portfolioSlug: "foundational" },
+        { agentId: "sales", displayName: "Customer Advisor", role: "specialist", portfolioSlug: "products_and_services_sold" },
+        { agentId: "hr", displayName: "HR", role: "specialist", portfolioSlug: "for_employees" },
+      ],
+      {},
+    );
+    const groups = groupRosterByArea(rows);
+    expect(groups.map((group) => group.area.label)).toEqual([
+      "Customers and sales",
+      "Your team",
+      "Platform and back office",
+    ]);
+    expect(groups[0]?.rows[0]?.displayName).toBe("Customer Advisor");
   });
 });

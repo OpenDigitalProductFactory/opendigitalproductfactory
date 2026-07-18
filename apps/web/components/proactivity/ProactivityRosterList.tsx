@@ -9,7 +9,10 @@ import { useState } from "react";
 import { ProactivityLevelControl } from "@/components/proactivity/ProactivityLevelControl";
 import { saveCoworkerProactivityPreference } from "@/lib/actions/proactivity";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
-import type { ProactivityRosterRow } from "@/lib/proactivity/proactivity-roster";
+import {
+  groupRosterByArea,
+  type ProactivityRosterRow,
+} from "@/lib/proactivity/proactivity-roster";
 
 type RowState = { level: ProactivityLevel; isOverride: boolean };
 
@@ -33,32 +36,44 @@ export function ProactivityRosterList({ rows }: { rows: ProactivityRosterRow[] }
     );
   }
 
+  const groups = groupRosterByArea(rows);
+
   return (
-    <ul className="divide-y divide-[var(--dpf-border)] rounded-lg border border-[var(--dpf-border)]">
-      {rows.map((row) => {
-        const current = state[row.agentId] ?? { level: row.level, isOverride: row.isOverride };
-        return (
-          <li
-            key={row.agentId}
-            className="flex items-center justify-between gap-4 px-4 py-3"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-[var(--dpf-text)]">
-                {row.displayName}
-              </p>
-              <p className="truncate text-xs text-[var(--dpf-muted)]">
-                {row.role}
-                {" · "}
-                {current.isOverride ? "You set this" : "From your industry"}
-              </p>
-            </div>
-            <ProactivityLevelControl
-              value={current.level}
-              onChange={(next) => change(row.agentId, next)}
-            />
-          </li>
-        );
-      })}
-    </ul>
+    <div className="space-y-6">
+      {groups.map((group) => (
+        <section key={group.area.key}>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">
+            {group.area.label}
+            <span className="ml-1.5 font-normal normal-case">({group.rows.length})</span>
+          </h2>
+          <ul className="divide-y divide-[var(--dpf-border)] rounded-lg border border-[var(--dpf-border)]">
+            {group.rows.map((row) => {
+              const current = state[row.agentId] ?? { level: row.level, isOverride: row.isOverride };
+              return (
+                <li
+                  key={row.agentId}
+                  className="flex items-center justify-between gap-4 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[var(--dpf-text)]">
+                      {row.displayName}
+                    </p>
+                    <p className="truncate text-xs text-[var(--dpf-muted)]">
+                      {row.role}
+                      {" · "}
+                      {current.isOverride ? "You set this" : "From your industry"}
+                    </p>
+                  </div>
+                  <ProactivityLevelControl
+                    value={current.level}
+                    onChange={(next) => change(row.agentId, next)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+    </div>
   );
 }

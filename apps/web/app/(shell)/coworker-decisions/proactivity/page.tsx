@@ -30,12 +30,20 @@ export default async function CoworkerProactivityPage() {
   const agents = await prisma.agent.findMany({
     where: { archived: false },
     orderBy: [{ tier: "asc" }, { name: "asc" }],
-    select: { agentId: true, name: true, displayName: true, role: true, kind: true },
+    select: {
+      agentId: true,
+      name: true,
+      displayName: true,
+      role: true,
+      kind: true,
+      portfolio: { select: { slug: true } },
+    },
   });
   const roster: ProactivityRosterAgent[] = agents.map((agent) => ({
     agentId: agent.agentId,
     displayName: agent.displayName || agent.name,
     role: agent.role ?? agent.kind,
+    portfolioSlug: agent.portfolio?.slug ?? null,
   }));
   const overrides = await getCoworkerProactivityPreferences(roster.map((r) => r.agentId));
   const rows = deriveProactivityRoster(roster, overrides);
