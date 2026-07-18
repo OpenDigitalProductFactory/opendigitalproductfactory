@@ -540,7 +540,7 @@ describe("success path", () => {
         targetSha: "abc1234deadbeef",
         backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
         healthUrl: "http://localhost:3000/api/health",
-        promoterImage: "dpf-promoter",
+        promoterImage: `sha256:${"d".repeat(64)}`,
         stateDirHostPath: "/Users/me/.dpf",
       }),
     );

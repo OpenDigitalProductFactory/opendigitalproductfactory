@@ -16,6 +16,7 @@ import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepa
 // NOT be statically imported into this server bundle entrypoint (BI-98AF1066);
 // that is what the dynamic loadPromoterRuntime() below is for.
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
+import { runCandidatePreflight } from "@/lib/self-upgrade/preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import {
   classifyBuildFailure,
@@ -485,78 +486,21 @@ export async function runSelfUpgrade(
   // Candidate-owned preflight. Resolve once, validate the embedded contract,
   // run readiness against that digest, persist evidence, and only then drain.
   // Undefined mode is the post-floor default; legacy-bootstrap is explicit.
-  let resolvedPromoterDigest: string | undefined;
-  if (!params.dryRun && config.readinessMode !== "legacy-bootstrap") {
-    const runtime = await loadPromoterRuntime();
-    const startedAt = new Date().toISOString();
-    try {
-      const candidatePromoterImage = await runtime.buildCandidatePromoterImage({
-        sourcePath: upgradeWorkspaceMountPath ?? hostSourcePath,
-        targetSha: builtStamp,
-        promoterImage: config.promoterImage,
-      });
-      const artifact = await runtime.resolvePromoterArtifact({
-        promoterImage: candidatePromoterImage,
-        targetSha: builtStamp,
-        callerProtocol: config.callerProtocolVersion,
-      });
-      const readiness = await runtime.runPromoterReadiness({
-        hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
-        targetSha: builtStamp,
-        backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
-        backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
-        composeEnvFileHostPath: hostInstallPathResolved ? `${hostInstallPathResolved.replace(/\/$/, "")}/.env` : undefined,
-        composeFiles,
-        composeProject,
-        healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
-        promoterImage: artifact.digest,
-        stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
-        containerName: `dpf-promoter-readiness-${run.runId}`,
-        artifact,
-      });
-      let reportedFailures: Array<{ code: string; message: string; remediation?: string }> = [];
-      try {
-        const parsed = JSON.parse(readiness.stdout) as { failures?: Array<{ code: string; message: string; remediation?: string }> };
-        if (Array.isArray(parsed.failures)) reportedFailures = parsed.failures;
-      } catch {
-        if (readiness.exitCode !== 0) reportedFailures = [{ code: "readiness_report_invalid", message: "Promoter readiness returned an invalid report." }];
-      }
-      const ready = readiness.exitCode === 0;
-      await recordPromoterReadiness(run.runId, {
-        stage: "preflight", owner: "portal", mode: "enforced", result: ready ? "ready" : "failed",
-        baselineSha: deployedSha ?? undefined, targetSha: builtStamp, imageDigest: artifact.digest,
-        contractVersion: artifact.contractSchema, contractDigest: artifact.contractDigest,
-        startedAt, completedAt: new Date().toISOString(), quiescenceBegan: false,
-        failures: reportedFailures,
-      });
-      if (!ready) {
-        const reason = reportedFailures[0]?.message ?? "Promoter readiness failed.";
-        await failRun(run.runId, `promoter-readiness-failed: ${reason}`);
-        await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
-        return { ok: false, status: "failed", runId: run.runId, reason: "promoter-readiness-failed" };
-      }
-      resolvedPromoterDigest = artifact.digest;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await recordPromoterReadiness(run.runId, {
-        stage: "preflight", owner: "portal", mode: "enforced", result: "failed",
-        baselineSha: deployedSha ?? undefined, targetSha: builtStamp,
-        startedAt, completedAt: new Date().toISOString(), quiescenceBegan: false,
-        failures: [{ code: "artifact_resolution_failed", message }],
-      });
-      await failRun(run.runId, `promoter-readiness-failed: ${message}`);
-      await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
-      return { ok: false, status: "failed", runId: run.runId, reason: "promoter-readiness-failed" };
-    }
-  } else if (!params.dryRun) {
-    await recordPromoterReadiness(run.runId, {
-      stage: "preflight", owner: config.readinessOwner ?? "unavailable", mode: "legacy-bootstrap",
-      result: config.readinessOwner === "bridge" ? "ready" : "unavailable",
-      baselineSha: deployedSha ?? undefined, targetSha: builtStamp,
-      startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
-      quiescenceBegan: false, failures: [],
-    });
+  const preflight = await runCandidatePreflight({
+    dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,
+    promoterImage: config.promoterImage, callerProtocolVersion: config.callerProtocolVersion,
+    sourcePath: upgradeWorkspaceMountPath ?? hostSourcePath,
+    hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
+    canonicalInstallPath: hostInstallPathResolved, targetSha: builtStamp, baselineSha: deployedSha,
+    runId: run.runId, composeFiles, composeProject,
+    healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
+    runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun,
+    emitFailure: async (runId) => emitUpgradeEvent({ type: "upgrade.failed", runId }),
+  });
+  if (!preflight.ok) {
+    return { ok: false, status: "failed", runId: run.runId, reason: preflight.reason };
   }
+  const resolvedPromoterDigest = preflight.resolvedPromoterDigest;
 
   // BI-QUIESCE-010 keystone integration: replaces the single-signal
   // getPortalActivity check with the full Activity Quiescence Protocol

@@ -74,7 +74,7 @@
 - [ ] Capture UX evidence for both ready and legacy-bootstrap states.
 - [ ] Commit: `feat: disclose self-upgrade readiness ownership`.
 
-## Task 7: Safe N-1 acceptance harness
+## Task 7: Safe compatibility acceptance harness
 
 **Files:** create `scripts/self-upgrade-sensitive-paths.mjs`, `scripts/self-upgrade-sensitive-paths.test.mjs`, `scripts/test-n-minus-one-upgrade.mjs`, `scripts/test-n-minus-one-upgrade.test.mjs`, `.github/workflows/self-upgrade-acceptance.yml`; update lifecycle policy cross-checks.
 
@@ -86,8 +86,8 @@
 - [ ] Support introduction bridge mode only when base is pre-floor; post-floor mode requires portal-owned readiness.
 - [ ] Workflow: path-sensitive PR job plus nightly schedule, least-privilege `contents: read`, `checks: read`, `packages: read`, 30-day evidence/log retention, explicit timeouts, and always-run safe cleanup.
 - [ ] Run `node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs`; expect green.
-- [ ] In the isolated CI environment run `node scripts/test-n-minus-one-upgrade.mjs --base-sha "$DPF_N_MINUS_ONE_BASE_SHA" --candidate-sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --project "dpf-n1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --evidence-dir "$RUNNER_TEMP/dpf-n1-evidence"`; require `GITHUB_TOKEN`, a verified base SHA, non-`dpf` project, candidate health/version/state/recovery evidence, and exit 0. Run again with `--inject-readiness-failure`; require exit 0 only when evidence proves no upgrade API request occurred and the baseline stayed healthy.
-- [ ] Commit: `ci: require previous-version self-upgrade acceptance`.
+- [ ] In isolated CI, build the candidate promoter with source-SHA and contract-digest labels, run its real readiness entrypoint with production-shaped source/state/socket mounts, and retain immutable artifact evidence. Run again with malformed canonical state; require exit 78, `quiescenceBegan=false`, and no root `dpf` resources. Do not claim portal-to-portal N-1 evidence because the repository has no supported harness control/evidence API.
+- [ ] Commit: `ci: require promoter compatibility acceptance`.
 
 ## Task 8: Full verification, review, and PR
 

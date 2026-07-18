@@ -16,6 +16,7 @@ import { UpgradeScopeRibbon } from "@/components/ops/UpgradeScopeRibbon";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
 
 type LatestRun = {
   runId: string;
@@ -72,7 +73,6 @@ type QuiescenceActivity = {
   blockers: QuiescenceBlockerLine[];
 };
 
-// §4.5 admission observability projection (apps/web/lib/queue/admission-observability.ts).
 type AdmissionSnapshot = {
   lane: { enabled: boolean; limit: number | null; key: string };
   buildHolders: number;
@@ -270,22 +270,6 @@ function recoveryPointSummary(run: LatestRun | null): RecoveryPointSummary | nul
   };
 }
 
-function readinessSummary(run: LatestRun | null) {
-  const evidence = record(run?.completionEvidence);
-  const readiness = record(evidence?.readiness);
-  if (!readiness || readiness.stage !== "preflight") return null;
-  return {
-    owner: String(readiness.owner ?? "unavailable"),
-    mode: String(readiness.mode ?? "legacy-bootstrap"),
-    result: String(readiness.result ?? "unavailable"),
-    contractVersion: typeof readiness.contractVersion === "number" ? readiness.contractVersion : null,
-    contractDigest: typeof readiness.contractDigest === "string" ? readiness.contractDigest : null,
-    failures: Array.isArray(readiness.failures)
-      ? readiness.failures.map(record).filter((failure): failure is Record<string, unknown> => failure !== null)
-      : [],
-  };
-}
-
 // Operator-facing label for a recovery-point member. The derived stores
 // (neo4j, qdrant) are INTENTIONALLY not backed up — they re-derive from
 // postgres + source — so a "skipped" member must read as a deliberate choice,
@@ -384,7 +368,6 @@ export default function SelfUpgradeClient({
     message: string;
   }>({ status: "idle", message: "" });
   const latestRecoveryPoint = recoveryPointSummary(latestRun);
-  const latestReadiness = readinessSummary(latestRun);
   const canRollbackLatest =
     latestRun &&
     latestRun.status !== "running" &&
@@ -1265,30 +1248,7 @@ export default function SelfUpgradeClient({
             </details>
           )}
 
-          {latestReadiness && (
-            <div
-              className="mt-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs"
-              data-readiness-result={latestReadiness.result}
-              data-readiness-owner={latestReadiness.owner}
-            >
-              <div className="font-medium text-[var(--dpf-text)]">
-                {latestReadiness.mode === "legacy-bootstrap"
-                  ? "Legacy bootstrap — pre-drain readiness was unavailable"
-                  : `Pre-drain readiness: ${latestReadiness.result}`}
-              </div>
-              <div className="mt-1 text-[var(--dpf-muted)]">
-                Validation owner: {latestReadiness.owner}
-                {latestReadiness.contractVersion != null ? ` · contract v${latestReadiness.contractVersion}` : ""}
-                {latestReadiness.contractDigest ? ` · ${latestReadiness.contractDigest.slice(0, 15)}…` : ""}
-              </div>
-              {latestReadiness.failures.map((failure, index) => (
-                <div key={index} className="mt-1 text-[var(--dpf-destructive)]">
-                  {String(failure?.message ?? failure?.code ?? "Readiness check failed")}
-                  {failure?.remediation ? ` — ${String(failure.remediation)}` : ""}
-                </div>
-              ))}
-            </div>
-          )}
+          <SelfUpgradeReadiness completionEvidence={latestRun.completionEvidence} />
 
           {/* A skipped run persists WHY on `reason`. Without surfacing it, the
               operator sees only a "skipped" badge with no words — the silent

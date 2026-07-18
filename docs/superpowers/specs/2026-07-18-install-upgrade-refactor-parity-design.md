@@ -21,7 +21,7 @@ The desired result is a smaller, accurate lifecycle surface whose architectural 
 - Preserve historical evidence and the bounded removal/migration mechanisms that are still intentionally needed.
 - Establish one machine-readable definition of active lifecycle surfaces and permitted legacy references.
 - Validate promoter image contents, mounts, state, capabilities, and Docker access before portal drain.
-- Exercise the actual N-1 portal-to-candidate upgrade boundary for upgrade-sensitive pull requests and nightly.
+- Exercise the immutable promoter compatibility boundary for upgrade-sensitive pull requests and nightly, without claiming a full portal-to-portal N-1 run until the platform exposes a supported harness control API.
 - Keep Windows PowerShell 5.1+ and macOS/Linux Bash installation paths behaviorally equivalent.
 - Fail closed with a precise remediation while leaving the current portal available.
 
@@ -169,6 +169,8 @@ Readiness MUST NOT stop, drain, recreate, or mutate portal/database services. A 
 Successful readiness is necessary but not sufficient for promotion. Existing recovery point, quiescence, swap, health verification, and rollback behavior remain authoritative.
 
 ### 5.5 N-1 acceptance topology
+
+**Implementation refinement (2026-07-18).** Repository inspection found no supported HTTP control/evidence API for a CI harness to request a self-upgrade or poll its completion. The originally sketched `/api/ops/self-upgrade` and `/api/ops/self-upgrade/evidence` endpoints do not exist. A workflow that called them would be permanently red and would not constitute N-1 evidence. The required introduction lane therefore validates the real boundary that failed in production: it builds the candidate promoter, verifies its immutable source/contract labels, runs readiness with production-shaped source/state/socket mounts, and proves malformed canonical state exits 78 with `quiescenceBegan=false`. The dependency-injected orchestration tests separately prove readiness precedes drain and the validated digest is reused. A future full N-1 lane requires a governed, authenticated harness control/evidence interface; until then neither the workflow nor its artifacts may claim a portal-to-portal upgrade occurred.
 
 The acceptance harness uses an isolated, uniquely named Compose project and temporary host state. It performs the following causal sequence:
 

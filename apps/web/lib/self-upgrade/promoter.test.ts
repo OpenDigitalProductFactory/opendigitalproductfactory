@@ -275,7 +275,7 @@ describe("buildPromoterCommand", () => {
   it("omits PROMOTE_COMPOSE_FILES when no chain is recorded (promote.sh base-only fallback)", () => {
     const joined = buildPromoterCommand(BASE).args.join(" ");
     expect(joined).not.toContain("PROMOTE_COMPOSE_FILES=");
-    expect(joined).not.toContain("PROMOTE_COMPOSE_PROJECT=");
+    expect(joined).toContain("PROMOTE_COMPOSE_PROJECT=dpf");
   });
 });
 

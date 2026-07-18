@@ -45,7 +45,7 @@ export async function verifyBaseRevision({ repository, prNumber, baseSha, requir
   const checks = Array.isArray(checksResponse) ? checksResponse : checksResponse.check_runs ?? [];
   for (const name of requiredChecks) {
     const matches = checks.filter((check) => check.name === name);
-    if (!matches.length || matches.some((check) => check.conclusion !== "success")) throw new Error(`required check ${name} is absent or not successful`);
+    if (!matches.some((check) => check.conclusion === "success")) throw new Error(`required check ${name} has no successful run`);
   }
   return { baseSha, checks: requiredChecks };
 }

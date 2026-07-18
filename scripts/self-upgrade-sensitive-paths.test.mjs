@@ -57,5 +57,7 @@ test("acceptance workflow is path-sensitive, nightly, least-privilege, bounded, 
   assert.match(workflow, /retention-days:\s*30/);
   assert.match(workflow, /timeout-minutes:/);
   assert.match(workflow, /if:\s*always\(\)/);
-  assert.match(workflow, /--inject-readiness-failure/);
+  assert.match(workflow, /Build candidate promoter with immutable contract identity/);
+  assert.match(workflow, /Invalid state refuses before quiescence/);
+  assert.match(workflow, /\.quiescenceBegan == false/);
 });

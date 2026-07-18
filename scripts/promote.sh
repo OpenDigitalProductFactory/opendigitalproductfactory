@@ -58,7 +58,8 @@ if [[ $_readiness -eq 1 ]]; then
   _state_dir="${DPF_STATE_DIR:-/dpf-state}"
   _state_file="$_state_dir/install-state.json"
   [[ -d "$_state_dir" && -w "$_state_dir" ]] || _readiness_failures+=(state_mount_unwritable)
-  if [[ ! -r "$_state_file" ]] || ! jq -e 'type == "object"' "$_state_file" >/dev/null 2>&1; then
+  _state_validator="$_promoter_dir/installer/validate-install-state.mjs"
+  if [[ ! -r "$_state_file" ]] || [[ ! -f "$_state_validator" ]] || ! node "$_state_validator" "$_state_file" >/dev/null 2>&1; then
     _readiness_failures+=(install_state_invalid)
   fi
   _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"

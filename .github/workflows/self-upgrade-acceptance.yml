@@ -1,4 +1,4 @@
-name: Self-upgrade N-1 acceptance
+name: Self-upgrade compatibility acceptance
 
 on:
   pull_request:
@@ -41,36 +41,62 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DPF_N1_PROJECT: dpf-n1-${{ github.run_id }}-${{ github.run_attempt }}
       DPF_N1_EVIDENCE: ${{ github.workspace }}/.dpf-n1-evidence
-      DPF_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
-      DPF_PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Fast harness invariants
         run: node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs
-      - name: Resolve nightly base SHA
-        if: github.event_name != 'pull_request'
-        run: echo "DPF_BASE_SHA=$(git rev-parse "$GITHUB_SHA^")" >> "$GITHUB_ENV"
-      - name: Baseline upgrades to candidate
-        run: >-
-          node scripts/test-n-minus-one-upgrade.mjs
-          --base-sha "$DPF_BASE_SHA"
-          --candidate-sha "$GITHUB_SHA"
-          --repository "$GITHUB_REPOSITORY"
-          --pr-number "$DPF_PR_NUMBER"
-          --project "$DPF_N1_PROJECT"
-          --evidence-dir "$DPF_N1_EVIDENCE"
-      - name: Readiness refusal leaves baseline serving
-        run: >-
-          node scripts/test-n-minus-one-upgrade.mjs
-          --base-sha "$DPF_BASE_SHA"
-          --candidate-sha "$GITHUB_SHA"
-          --repository "$GITHUB_REPOSITORY"
-          --pr-number "$DPF_PR_NUMBER"
-          --project "${DPF_N1_PROJECT}-failure"
-          --evidence-dir "$DPF_N1_EVIDENCE/failure"
-          --inject-readiness-failure
+      - name: Build candidate promoter with immutable contract identity
+        run: |
+          contract_digest="sha256:$(sha256sum promoter-contract.json | cut -d' ' -f1)"
+          image="dpf-promoter-acceptance:${GITHUB_SHA}"
+          docker build \
+            --build-arg "DPF_PROMOTER_SOURCE_SHA=${GITHUB_SHA}" \
+            --build-arg "DPF_PROMOTER_CONTRACT_DIGEST=${contract_digest}" \
+            -f Dockerfile.promoter -t "$image" .
+          image_digest="$(docker image inspect "$image" --format '{{.Id}}')"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}')" = "$GITHUB_SHA"
+          test "$(docker image inspect "$image" --format '{{index .Config.Labels \"org.opendpf.promoter.contract-digest\"}}')" = "$contract_digest"
+          mkdir -p "$DPF_N1_EVIDENCE" "$RUNNER_TEMP/dpf-state" "$RUNNER_TEMP/dpf-backups"
+          printf '%s\n' "{\"candidateSha\":\"${GITHUB_SHA}\",\"candidateDigest\":\"${image_digest}\",\"contractDigest\":\"${contract_digest}\"}" > "$DPF_N1_EVIDENCE/artifact.json"
+          echo "DPF_ACCEPTANCE_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Candidate readiness succeeds without quiescence
+        run: |
+          printf '%s\n' '{"schemaVersion":1,"installerVersion":"acceptance","platform":"linux","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":null,"capabilityStateVersion":null}' > "$RUNNER_TEMP/dpf-state/install-state.json"
+          docker run --rm --read-only \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/host-source:ro" \
+            -v "$RUNNER_TEMP/dpf-state:/dpf-state" \
+            -v "$RUNNER_TEMP/dpf-backups:/backups" \
+            -e DPF_STATE_DIR=/dpf-state \
+            -e PROMOTE_SOURCE=/host-source \
+            -e PROMOTE_TARGET_SHA="$GITHUB_SHA" \
+            -e PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health \
+            -e PROMOTE_COMPOSE_PROJECT="$DPF_N1_PROJECT" \
+            -e PROMOTE_BACKUP_PATH=/backups/recovery \
+            "$DPF_ACCEPTANCE_IMAGE" --readiness --json | tee "$DPF_N1_EVIDENCE/readiness-success.json"
+          jq -e '.result == "ready" and .quiescenceBegan == false and (.failures | length == 0)' "$DPF_N1_EVIDENCE/readiness-success.json"
+      - name: Invalid state refuses before quiescence
+        run: |
+          printf '%s\n' '{}' > "$RUNNER_TEMP/dpf-state/install-state.json"
+          set +e
+          docker run --rm --read-only \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/host-source:ro" \
+            -v "$RUNNER_TEMP/dpf-state:/dpf-state" \
+            -v "$RUNNER_TEMP/dpf-backups:/backups" \
+            -e DPF_STATE_DIR=/dpf-state \
+            -e PROMOTE_SOURCE=/host-source \
+            -e PROMOTE_TARGET_SHA="$GITHUB_SHA" \
+            -e PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health \
+            -e PROMOTE_COMPOSE_PROJECT="$DPF_N1_PROJECT" \
+            -e PROMOTE_BACKUP_PATH=/backups/recovery \
+            "$DPF_ACCEPTANCE_IMAGE" --readiness --json > "$DPF_N1_EVIDENCE/readiness-refusal.json"
+          status=$?
+          set -e
+          test "$status" -eq 78
+          jq -e '.result == "failed" and .quiescenceBegan == false and (.failures | length > 0)' "$DPF_N1_EVIDENCE/readiness-refusal.json"
       - name: Safe cleanup
         if: always()
         run: node scripts/test-n-minus-one-upgrade.mjs --cleanup-project "$DPF_N1_PROJECT"

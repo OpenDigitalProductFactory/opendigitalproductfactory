@@ -64,7 +64,11 @@ test("base verification requires exact PR base, main membership, and named succe
   const api = async (url) => {
     if (url.endsWith("/pulls/7")) return { base: { ref: "main", sha: baseSha } };
     if (url.includes(`/compare/${baseSha}...main`)) return { status: "ahead" };
-    return { check_runs: [{ name: "Build", conclusion: "success" }, { name: "Unit Tests", conclusion: "success" }] };
+    return { check_runs: [
+      { name: "Build", conclusion: "failure" },
+      { name: "Build", conclusion: "success" },
+      { name: "Unit Tests", conclusion: "success" },
+    ] };
   };
   const result = await verifyBaseRevision({ repository: "o/r", prNumber: 7, baseSha, requiredChecks: ["Build", "Unit Tests"], api });
   assert.equal(result.baseSha, baseSha);

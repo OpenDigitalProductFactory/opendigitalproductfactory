@@ -16,5 +16,6 @@ test("readiness contract is non-mutating and reports every required dependency",
     "recovery_parent_unavailable", "transition_secret_parent_unavailable",
   ]) assert.match(block, new RegExp(code));
   assert.match(block, /"quiescenceBegan":false/);
+  assert.match(block, /validate-install-state\.mjs.*\$_state_file/s);
   assert.doesNotMatch(block, /docker compose (?:down|up)|docker stop|docker rm|cp .*install-state/);
 });
