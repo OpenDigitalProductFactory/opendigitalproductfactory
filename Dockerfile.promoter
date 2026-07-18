@@ -22,6 +22,8 @@ COPY scripts/lib/transition-signing.mjs /promoter/lib/transition-signing.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/installer/validate-install-state.mjs
 COPY scripts/installer/migrate-install-state.mjs /promoter/installer/migrate-install-state.mjs
 COPY scripts/installer/resolve-host-identity.mjs /promoter/installer/resolve-host-identity.mjs
+COPY scripts/installer/install-state-transaction.mjs /promoter/installer/install-state-transaction.mjs
+COPY scripts/installer/install-state-lock-contract.json /promoter/installer/install-state-lock-contract.json
 COPY scripts/installer/install-state-schema-registry.mjs /promoter/installer/install-state-schema-registry.mjs
 COPY scripts/installer/install-state.schema.json /promoter/installer/install-state.schema.json
 COPY scripts/installer/install-state.v1.schema.json /promoter/installer/install-state.v1.schema.json

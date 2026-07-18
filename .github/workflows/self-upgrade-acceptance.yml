@@ -61,6 +61,10 @@ jobs:
           mkdir -p "$DPF_N1_EVIDENCE" "$RUNNER_TEMP/dpf-state" "$RUNNER_TEMP/dpf-backups"
           printf '%s\n' "{\"candidateSha\":\"${GITHUB_SHA}\",\"candidateDigest\":\"${image_digest}\",\"contractDigest\":\"${contract_digest}\"}" > "$DPF_N1_EVIDENCE/artifact.json"
           echo "DPF_ACCEPTANCE_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Signed promotion rollback restores exact legacy state
+        run: |
+          node --test scripts/promote-install-state-rollback.test.mjs \
+            | tee "$DPF_N1_EVIDENCE/signed-promotion-rollback.tap"
       - name: Candidate readiness succeeds without quiescence
         run: |
           printf '\357\273\277%s\n' '{"schemaVersion":1,"installerVersion":"acceptance","platform":"linux","arch":"amd64","installPath":"/opt/dpf","stateDir":"/dpf-state","composeProjectName":"dpf"}' > "$RUNNER_TEMP/dpf-state/install-state.json"

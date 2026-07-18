@@ -94,6 +94,8 @@ test("consumer release assets are integrity-bound and execute the canonical adap
       "scripts/installer/install-state.v2.schema.json",
       "scripts/installer/install-state-schema-registry.mjs",
       "scripts/installer/validate-install-state.mjs",
+      "scripts/installer/install-state-transaction.mjs",
+      "scripts/installer/install-state-lock-contract.json",
       "scripts/installer/lib/state.ps1",
     ];
     const manifest = [];
@@ -265,9 +267,13 @@ test("dpf-compose uses XDG state and effective roots outside the working directo
     await copyFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(install, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
     await copyFile(join(root, "scripts", "lib", "govern-capability-compose-args.mjs"), join(install, "scripts", "lib", "govern-capability-compose-args.mjs"));
     await copyFile(join(root, "scripts", "lib", "capability-state-hash.mjs"), join(install, "scripts", "lib", "capability-state-hash.mjs"));
+    await mkdir(join(install, "scripts", "installer"), { recursive: true });
+    for (const file of ["install-state-transaction.mjs", "install-state-lock-contract.json", "validate-install-state.mjs", "install-state-schema-registry.mjs", "install-state.schema.json", "install-state.v1.schema.json", "install-state.v2.schema.json"]) {
+      await copyFile(join(root, "scripts", "installer", file), join(install, "scripts", "installer", file));
+    }
     await copyFile(join(root, "scripts", "capability-service-catalog.generated.json"), join(install, "scripts", "capability-service-catalog.generated.json"));
     await writeFile(join(install, "docker-compose.yml"), "name: dpf-context\nservices: {}\n");
-    await writeFile(join(stateDir, "install-state.json"), `${JSON.stringify({ schemaVersion: 1, installPath: install, platform: "win32", enabledRuntimeCapabilities: [] })}\n`);
+    await writeFile(join(stateDir, "install-state.json"), `${JSON.stringify({ schemaVersion: 1, installerVersion: "test", installPath: install, platform: "win32", arch: "amd64", enabledRuntimeCapabilities: [] })}\n`);
     const env = { ...process.env, XDG_STATE_HOME: xdg, COMPOSE_PROJECT_NAME: "dpf-context" };
     const byProjectDirectory = spawnSync(process.execPath, [join(root, "scripts", "dpf-compose.mjs"), "--project-directory", install, "-f", join(install, "docker-compose.yml"), "ps"], { cwd: elsewhere, env, encoding: "utf8" });
     assert.equal(byProjectDirectory.status, 0, byProjectDirectory.stderr);
@@ -277,7 +283,7 @@ test("dpf-compose uses XDG state and effective roots outside the working directo
     assert.equal(typeof migrated.capabilityCatalogHash, "string");
     assert.equal(typeof migrated.capabilityStateVersion, "string");
 
-    await writeFile(join(stateDir, "install-state.json"), `${JSON.stringify({ schemaVersion: 1, installPath: join(dir, "other"), platform: "win32" })}\n`);
+    await writeFile(join(stateDir, "install-state.json"), `${JSON.stringify({ schemaVersion: 1, installerVersion: "test", installPath: join(dir, "other"), platform: "win32", arch: "amd64" })}\n`);
     const mismatch = spawnSync(process.execPath, [join(root, "scripts", "dpf-compose.mjs"), "--project-directory", install, "ps"], { cwd: elsewhere, env, encoding: "utf8" });
     assert.equal(mismatch.status, 2);
     assert.match(mismatch.stderr, /capability_install_state_mismatch/);
@@ -313,7 +319,8 @@ test("promotion recovery snapshot is copied and restored after a simulated Docke
     const source = join(dir, "source"); const state = join(dir, "state"); const bin = join(dir, "bin"); const backup = join(dir, "backup");
     await mkdir(join(source, "scripts", "lib"), { recursive: true }); await mkdir(state); await mkdir(bin);
     await writeFile(join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "process.stdout.write('{\"composeProfiles\":[],\"requiredServices\":[]}\\n');\n");
-    await writeFile(join(state, "install-state.json"), "original-snapshot\n");
+    const originalSnapshot = `${JSON.stringify({ schemaVersion: 2, installerVersion: "test", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: [], capabilityCatalogHash: null, capabilityStateVersion: null })}\n`;
+    await writeFile(join(state, "install-state.json"), originalSnapshot);
     spawnSync("git", ["init", "-q", source]); spawnSync("git", ["-C", source, "config", "user.email", "test@example.com"]); spawnSync("git", ["-C", source, "config", "user.name", "Test"]); spawnSync("git", ["-C", source, "add", "."]); spawnSync("git", ["-C", source, "commit", "-q", "-m", "fixture"]);
     const sha = spawnSync("git", ["-C", source, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
     await writeFile(join(bin, "node"), windowsNodeShim);
@@ -322,8 +329,8 @@ test("promotion recovery snapshot is copied and restored after a simulated Docke
     const handoff = await signedInstallStateHandoff(join(state, "install-state.json"), dir);
     const result = runBash(`${bashExports({ ...handoff, WSLENV: signingWslenv })}; PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_PROMOTER_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA='${sha}' PROMOTE_BACKUP_PATH='${bashPath(backup)}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
     assert.notEqual(result.status, 0);
-    assert.equal(await readFile(join(backup, "install-state.json"), "utf8"), "original-snapshot\n");
-    assert.equal(await readFile(join(state, "install-state.json"), "utf8"), "original-snapshot\n");
+    assert.equal(await readFile(join(backup, "install-state.json"), "utf8"), originalSnapshot);
+    assert.equal(await readFile(join(state, "install-state.json"), "utf8"), originalSnapshot);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

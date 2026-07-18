@@ -208,6 +208,12 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
       for (const stage of ["build", "swap", "health"]) expect(source).toContain(`DPF_PROMOTE_TEST_FAIL_AT:-}\" != \"${stage}`);
       expect(source).toContain("_restore_capability_snapshot");
+      for (const event of ["recovery-created", "state-migrated", "state-restored"]) {
+        expect(source).toContain(`_record_promote_test_event ${event}`);
+      }
+      const workflow = readFileSync(join(REPO_ROOT, ".github/workflows/self-upgrade-acceptance.yml"), "utf8");
+      expect(workflow).toContain("node --test scripts/promote-install-state-rollback.test.mjs");
+      expect(workflow).toContain("signed-promotion-rollback.tap");
     });
 
     it("emits docker-build step", () => {

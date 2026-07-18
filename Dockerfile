@@ -78,8 +78,11 @@ COPY docker-compose.yml docker-compose.release.yml ./
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/resolve-capability-compose-profiles.mjs ./scripts/lib/
 COPY scripts/lib/govern-capability-compose-args.mjs ./scripts/lib/
+COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
+COPY scripts/installer/install-state-transaction.mjs ./scripts/installer/
+COPY scripts/installer/install-state-lock-contract.json ./scripts/installer/
 COPY scripts/installer/install-state-schema-registry.mjs ./scripts/installer/
 COPY scripts/installer/install-state.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v1.schema.json ./scripts/installer/
@@ -130,9 +133,10 @@ RUN node packages/db/scripts/generate-tools-snapshot.js
 RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/installer/lib \
       /dpf-release-assets/monitoring && \
     cp docker-compose.yml docker-compose.release.yml /dpf-release-assets/ && \
-    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/install-state-transaction.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-schema-registry.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
@@ -269,6 +273,8 @@ COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transiti
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/scripts/rotate-runtime-transition-secret.mjs
 COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
+COPY scripts/installer/install-state-transaction.mjs /promoter/scripts/installer/install-state-transaction.mjs
+COPY scripts/installer/install-state-lock-contract.json /promoter/scripts/installer/install-state-lock-contract.json
 COPY scripts/installer/migrate-install-state.mjs /promoter/scripts/installer/migrate-install-state.mjs
 COPY scripts/installer/resolve-host-identity.mjs /promoter/scripts/installer/resolve-host-identity.mjs
 COPY scripts/installer/install-state-schema-registry.mjs /promoter/scripts/installer/install-state-schema-registry.mjs
