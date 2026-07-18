@@ -14,7 +14,9 @@ import {
   githubJson,
   installCleanupHandlers,
   runNMinusOneUpgrade,
+  buildPromoterPromotionDockerArgs,
   buildPromoterReadinessDockerArgs,
+  normalizePromoterReadiness,
   prepareNMinusOneBaseline,
   classifyUpgradeProtocolFloor,
   PROMOTER_READINESS_PROTOCOL_FLOOR_SHA,
@@ -117,7 +119,7 @@ test("success proves immutable candidate bytes, state migration, recovery, healt
   const digest = "sha256:" + "c".repeat(64);
   const result = await runNMinusOneUpgrade({ baseSha: "a".repeat(40), candidateSha: sha, repository: "o/r", project: "dpf-n1-test" }, {
     verifyBase: async () => ({ baseSha: "a".repeat(40) }),
-    prepare: async () => ({ candidateDigest: digest, mode: "post-floor" }),
+    prepare: async () => ({ candidateDigest: digest, mode: "post-floor", baselineSourceV1Hash: "1".repeat(64) }),
     readiness: async () => ({ ok: true, owner: "portal", digest, quiescenceBegan: false }),
     requestUpgrade: async () => ({ requested: true }),
     poll: async () => ({ healthy: true, version: sha, promoterDigest: digest, promoterSourceSha: sha, persistenceDigest: digest,
@@ -126,6 +128,15 @@ test("success proves immutable candidate bytes, state migration, recovery, healt
     cleanup: async () => {}, writeEvidence: async (evidence) => evidence,
   });
   assert.equal(result.result, "passed");
+});
+
+test("promoter readiness accepts only authentic ready output before quiescence", () => {
+  const digest = "sha256:" + "d".repeat(64);
+  const raw = { result: "ready", failures: [], quiescenceBegan: false, sourceHash: "1".repeat(64), projectionHash: "2".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 };
+  assert.deepEqual(normalizePromoterReadiness(raw, { owner: "portal", digest }), { ...raw, ok: true, owner: "portal", digest });
+  assert.equal(normalizePromoterReadiness({ ...raw, result: "failed" }, { owner: "portal", digest }).ok, false);
+  assert.equal(normalizePromoterReadiness({ ...raw, failures: ["install_state_invalid"] }, { owner: "portal", digest }).ok, false);
+  assert.equal(normalizePromoterReadiness({ ...raw, quiescenceBegan: true }, { owner: "portal", digest }).ok, false);
 });
 
 test("protocol floor uses real PR 3276 ancestry rather than caller mode labels", async () => {
@@ -143,6 +154,37 @@ test("runtime readiness supplies the complete state, secret, digest, mount, and 
     "DPF_PROMOTER_STATE_DIR=/dpf-state", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition",
     `DPF_PROMOTER_DIGEST=${digest}`, "DPF_HOST_PLATFORM=linux", "DPF_HOST_ARCH=amd64", "--readiness --json",
   ]) assert.ok(rendered.includes(required), required);
+});
+
+test("governed promotion invokes the signed promoter with writable state and recovery mounts", async () => {
+  const digest = "sha256:" + "d".repeat(64);
+  const envelope = { kind: "install-state-migration", version: 1, runId: "SUR-n1-contract" };
+  const encodedEnvelope = Buffer.from(JSON.stringify(envelope)).toString("base64url");
+  const args = buildPromoterPromotionDockerArgs({
+    candidateDigest: digest, source: "/candidate", state: "/state", backups: "/backups", secret: "/secret",
+    targetSha: "a".repeat(40), project: "dpf-n1-test", envelope, signature: "signed-value",
+  });
+  const rendered = args.join(" ");
+  for (const required of [
+    "/var/run/docker.sock:/var/run/docker.sock:rw", "/candidate:/host-source:ro", "/state:/dpf-state:rw",
+    "/backups:/backups:rw", "/secret:/run/secrets/dpf-runtime-transition:ro", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${encodedEnvelope}`,
+    "DPF_INSTALL_STATE_MIGRATION_SIGNATURE=signed-value", `DPF_PROMOTER_DIGEST=${digest}`, "PROMOTE_SOURCE=/host-source",
+    "PROMOTE_BACKUP_PATH=/backups/recovery", "--self-upgrade",
+  ]) assert.ok(rendered.includes(required), required);
+  const source = await readFile(new URL("./test-n-minus-one-upgrade.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /\/api\/ops\/self-upgrade/);
+});
+
+test("completed evidence must preserve the exact observed baseline bytes", async () => {
+  const sha = "b".repeat(40); const digest = "sha256:" + "c".repeat(64);
+  await assert.rejects(() => runNMinusOneUpgrade({ baseSha: "a".repeat(40), candidateSha: sha, repository: "o/r", project: "dpf-n1-test" }, {
+    verifyBase: async () => ({}), prepare: async () => ({ candidateDigest: digest, mode: "post-floor", baselineSourceV1Hash: "1".repeat(64) }),
+    readiness: async () => ({ ok: true, owner: "portal", digest, quiescenceBegan: false }), requestUpgrade: async () => ({}),
+    poll: async () => ({ healthy: true, version: sha, promoterDigest: digest, promoterSourceSha: sha, persistenceDigest: digest,
+      sourceV1Hash: "3".repeat(64), migratedV2Hash: "2".repeat(64), sourceSchemaVersion: 1, migratedSchemaVersion: 2,
+      recoveryArtifacts: [{ path: "recovery/install-state.json", sha256: "3".repeat(64) }] }),
+    cleanup: async () => {}, writeEvidence: async (value) => value,
+  }), /does not match the observed baseline v1 bytes/);
 });
 
 test("acceptance workflow executes the real baseline-to-candidate N-1 runner", async () => {
@@ -206,7 +248,7 @@ test("upgrade request occurs only after baseline preparation reports healthy", a
   const events = [];
   const sha = "b".repeat(40); const digest = "sha256:" + "c".repeat(64);
   await runNMinusOneUpgrade({ baseSha: "a".repeat(40), candidateSha: sha, repository: "o/r", project: "dpf-n1-test" }, {
-    verifyBase: async () => ({}), prepare: async () => { events.push("baseline-health"); return { candidateDigest: digest, mode: "post-floor" }; },
+    verifyBase: async () => ({}), prepare: async () => { events.push("baseline-health"); return { candidateDigest: digest, mode: "post-floor", baselineSourceV1Hash: "1".repeat(64) }; },
     readiness: async () => ({ ok: true, owner: "portal", digest }), requestUpgrade: async () => events.push("request"),
     poll: async () => ({ healthy: true, version: sha, promoterDigest: digest, promoterSourceSha: sha, persistenceDigest: digest,
       sourceV1Hash: "1".repeat(64), migratedV2Hash: "2".repeat(64), sourceSchemaVersion: 1, migratedSchemaVersion: 2,
@@ -241,7 +283,7 @@ test("derived post-floor mode enforces portal readiness ownership when prepare o
   const sha = "b".repeat(40);
   const digest = "sha256:" + "c".repeat(64);
   await assert.rejects(() => runNMinusOneUpgrade({ baseSha: "a".repeat(40), candidateSha: sha, repository: "o/r", project: "dpf-n1-test" }, {
-    verifyBase: async () => ({}), prepare: async () => ({ candidateDigest: digest }), isAncestor: async () => true,
+    verifyBase: async () => ({}), prepare: async () => ({ candidateDigest: digest, baselineSourceV1Hash: "1".repeat(64) }), isAncestor: async () => true,
     readiness: async () => ({ ok: true, owner: "bridge", digest, quiescenceBegan: false }), requestUpgrade: async () => ({}),
     poll: async () => ({ healthy: true, version: sha, promoterDigest: digest, promoterSourceSha: sha, persistenceDigest: digest,
       sourceV1Hash: "1".repeat(64), migratedV2Hash: "2".repeat(64), sourceSchemaVersion: 1, migratedSchemaVersion: 2,

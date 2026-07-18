@@ -6,6 +6,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
+import { signTransitionPayload } from "./lib/transition-signing.mjs";
 
 const execFile = promisify(execFileCallback);
 const SHA = /^[0-9a-f]{40}$/i;
@@ -23,6 +24,24 @@ export function buildPromoterReadinessDockerArgs({ candidateDigest, source, stat
     "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`, "-e", `PROMOTE_COMPOSE_PROJECT=${project}`,
     "-e", "PROMOTE_BACKUP_PATH=/backups/recovery", "-e", "PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health",
     candidateDigest, "--readiness", "--json"];
+}
+
+export function normalizePromoterReadiness(value, { owner, digest }) {
+  const failures = Array.isArray(value?.failures) ? value.failures : ["readiness_failures_invalid"];
+  const ok = value?.result === "ready" && failures.length === 0 && value?.quiescenceBegan === false;
+  return { ...value, failures, ok, owner, digest };
+}
+
+export function buildPromoterPromotionDockerArgs({ candidateDigest, source, state, backups, secret, targetSha, project, envelope, signature }) {
+  return ["run", "--rm", "--add-host", "host.docker.internal:host-gateway",
+    "-v", "/var/run/docker.sock:/var/run/docker.sock:rw", "-v", `${source}:/host-source:ro`,
+    "-v", `${state}:/dpf-state:rw`, "-v", `${backups}:/backups:rw`, "-v", `${secret}:/run/secrets/dpf-runtime-transition:ro`,
+    "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state", "-e", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition",
+    "-e", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${Buffer.from(JSON.stringify(envelope)).toString("base64url")}`,
+    "-e", `DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${signature}`, "-e", `DPF_SELF_UPGRADE_RUN_ID=${envelope.runId}`,
+    "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`, "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`,
+    "-e", `PROMOTE_COMPOSE_PROJECT=${project}`, "-e", "PROMOTE_BACKUP_PATH=/backups/recovery",
+    "-e", "PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health", candidateDigest, "--self-upgrade"];
 }
 
 export async function classifyUpgradeProtocolFloor(baseSha, isAncestor) {
@@ -208,13 +227,14 @@ export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }
   throw new Error(`N-1 baseline portal failed health check (last status ${lastStatus || "unreachable"})`);
 }
 
-function assertSuccessEvidence(evidence, candidateSha, digest, mode) {
+function assertSuccessEvidence(evidence, candidateSha, digest, mode, baselineSourceV1Hash) {
   if (!evidence.healthy || evidence.version !== candidateSha) throw new Error("candidate portal health/version evidence mismatch");
   if (evidence.promoterDigest !== digest || evidence.promoterSourceSha !== candidateSha) throw new Error("candidate promoter digest/source label mismatch");
   if (evidence.readiness?.digest !== digest || evidence.persistenceDigest !== digest) throw new Error("candidate digest diverged across readiness and persistence");
   if (!/^[a-f0-9]{64}$/.test(evidence.sourceV1Hash ?? "") || !/^[a-f0-9]{64}$/.test(evidence.migratedV2Hash ?? "") || evidence.sourceV1Hash === evidence.migratedV2Hash) throw new Error("independent v1/v2 byte evidence missing");
   if (evidence.sourceSchemaVersion !== 1 || evidence.migratedSchemaVersion !== 2) throw new Error("install-state schema transition evidence missing");
   if (!Array.isArray(evidence.recoveryArtifacts) || evidence.recoveryArtifacts.length !== 1 || evidence.recoveryArtifacts[0].sha256 !== evidence.sourceV1Hash) throw new Error("exactly one governed recovery artifact is required");
+  if (!/^[a-f0-9]{64}$/.test(baselineSourceV1Hash ?? "") || evidence.sourceV1Hash !== baselineSourceV1Hash || evidence.recoveryArtifacts[0].sha256 !== baselineSourceV1Hash) throw new Error("completed recovery evidence does not match the observed baseline v1 bytes");
   if (mode === "post-floor" && evidence.readiness?.owner !== "portal") throw new Error("post-floor baseline must report portal-owned readiness");
 }
 
@@ -240,11 +260,11 @@ export async function runNMinusOneUpgrade(options, deps) {
       evidence.result = "expected-readiness-refusal";
       return await d.writeEvidence(evidence);
     }
-    await d.requestUpgrade({ ...options, ...prepared });
+    await d.requestUpgrade({ ...options, ...prepared, readiness });
     evidence.upgradeRequested = true;
     const completed = await d.poll({ ...options, ...prepared });
     evidence.readiness = readiness;
-    assertSuccessEvidence({ ...completed, readiness }, options.candidateSha, prepared.candidateDigest, mode);
+    assertSuccessEvidence({ ...completed, readiness }, options.candidateSha, prepared.candidateDigest, mode, prepared.baselineSourceV1Hash);
     Object.assign(evidence, completed, { result: "passed", completedAt: new Date().toISOString() });
     return await d.writeEvidence(evidence);
   } finally {
@@ -255,6 +275,7 @@ export async function runNMinusOneUpgrade(options, deps) {
 function createRuntimeDependencies(options) {
   let workspace;
   let cleanupOnce;
+  let promotionCompleted;
   const portalUrl = options.portalUrl ?? "http://127.0.0.1:3000";
   return {
     isAncestor: async (floor, base) => {
@@ -289,30 +310,45 @@ function createRuntimeDependencies(options) {
       if (options.injectReadinessFailure) return { ok: false, owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest, quiescenceBegan: false };
       const args = buildPromoterReadinessDockerArgs({ candidateDigest, source: candidateSource, state: workspace.state, backups: workspace.backups, secret: transitionSecret, targetSha: options.candidateSha, project: options.project });
       const { stdout } = await execFile("docker", args);
-      return { ...JSON.parse(stdout), owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest, quiescenceBegan: false };
+      return normalizePromoterReadiness(JSON.parse(stdout), { owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest });
     },
-    requestUpgrade: async ({ candidateDigest }) => requestJson(`${portalUrl}/api/ops/self-upgrade`, { targetSha: options.candidateSha, promoterImage: candidateDigest }),
+    requestUpgrade: async ({ candidateDigest, candidateSource, transitionSecret, readiness }) => {
+      const secret = (await readFile(transitionSecret, "utf8")).trim();
+      const envelope = {
+        kind: "install-state-migration", version: 1, runId: `SUR-n1-${Date.now()}`, promoterDigest: candidateDigest,
+        sourceHash: readiness.sourceHash, projectionHash: readiness.projectionHash,
+        fromSchemaVersion: readiness.fromSchemaVersion, toSchemaVersion: readiness.toSchemaVersion,
+        hostIdentity: { platform: "linux", arch: "amd64", provenance: "explicit", capabilityHostPlatform: "linux" },
+        issuedAt: new Date(Date.now() - 1_000).toISOString(), expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      };
+      const signature = signTransitionPayload(envelope, secret);
+      const args = buildPromoterPromotionDockerArgs({ candidateDigest, source: candidateSource, state: workspace.state, backups: workspace.backups, secret: transitionSecret, targetSha: options.candidateSha, project: options.project, envelope, signature });
+      const result = await execFile("docker", args, { cwd: candidateSource, maxBuffer: 20 * 1024 * 1024 });
+      promotionCompleted = { envelope, signature, stdout: result.stdout, stderr: result.stderr };
+      return { requested: true, runId: envelope.runId };
+    },
     baselineHealth: async () => (await fetch(`${portalUrl}/api/health`)).ok,
-    poll: () => pollEvidence(portalUrl, options),
+    poll: async ({ candidateDigest, baselineSourceV1Hash }) => {
+      if (!promotionCompleted) throw new Error("governed promoter did not complete");
+      const [health, versionResponse, stateBytes, recoveryBytes] = await Promise.all([
+        fetch(`${portalUrl}/api/health`), fetch(`${portalUrl}/api/health/sha`),
+        readFile(join(workspace.state, "install-state.json")), readFile(join(workspace.backups, "recovery", "install-state.json")),
+      ]);
+      const migrated = JSON.parse(stateBytes.toString("utf8"));
+      const sourceV1Hash = createHash("sha256").update(recoveryBytes).digest("hex");
+      if (sourceV1Hash !== baselineSourceV1Hash) throw new Error("governed recovery bytes diverged from baseline fixture");
+      return {
+        healthy: health.ok, version: (await versionResponse.text()).trim(), promoterDigest: candidateDigest,
+        promoterSourceSha: options.candidateSha, persistenceDigest: candidateDigest,
+        sourceV1Hash, migratedV2Hash: createHash("sha256").update(stateBytes).digest("hex"),
+        sourceSchemaVersion: 1, migratedSchemaVersion: migrated.schemaVersion,
+        recoveryArtifacts: [{ path: "recovery/install-state.json", sha256: sourceV1Hash }],
+        promotionRunId: promotionCompleted.envelope.runId,
+      };
+    },
     writeEvidence: async (value) => { await mkdir(options.evidenceDir, { recursive: true }); await writeFile(join(options.evidenceDir, "n-minus-one-evidence.json"), `${JSON.stringify(value, null, 2)}\n`); return value; },
     cleanup: async () => { if (cleanupOnce) await cleanupOnce(); },
   };
-}
-
-async function requestJson(url, body) {
-  const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!response.ok) throw new Error(`upgrade request failed: ${response.status}`);
-  return response.json();
-}
-
-async function pollEvidence(portalUrl, options) {
-  const deadline = Date.now() + options.timeoutMs;
-  while (Date.now() < deadline) {
-    const response = await fetch(`${portalUrl}/api/ops/self-upgrade/evidence`);
-    if (response.ok) { const value = await response.json(); if (value.version === options.candidateSha && value.healthy) return value; }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 5_000));
-  }
-  throw new Error("bounded polling timed out waiting for candidate evidence");
 }
 
 function parseArgs(argv) {
