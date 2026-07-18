@@ -35,3 +35,18 @@ test("promoter image embeds and labels the exact contract", async () => {
   assert.match(dockerfile, /org\.opendpf\.promoter\.contract-digest="\$\{DPF_PROMOTER_CONTRACT_DIGEST\}"/);
   assert.match(digest, /^sha256:[a-f0-9]{64}$/);
 });
+
+test("every promoter Docker COPY input is mechanically closed by portal baking and JIT staging", async () => {
+  const [promoterDockerfile, portalDockerfile, promoterSource] = await Promise.all([
+    readFile(resolve(root, "Dockerfile.promoter"), "utf8"), readFile(resolve(root, "Dockerfile"), "utf8"),
+    readFile(resolve(root, "apps/web/lib/self-upgrade/promoter.ts"), "utf8"),
+  ]);
+  const sources = [...promoterDockerfile.matchAll(/^COPY\s+(\S+)\s+\S+/gm)].map((match) => match[1]);
+  for (const source of sources) {
+    const baked = source === "promoter-contract.json" ? "/promoter/promoter-contract.json" : `/promoter/${source}`;
+    assert.match(portalDockerfile, new RegExp(`^COPY\\s+${escapeRegex(source)}\\s+${escapeRegex(baked)}$`, "m"), `portal image does not bake ${source}`);
+    assert.ok(promoterSource.includes(`cp ${baked} \\\"$BDIR/${source}\\\"`), `JIT recipe does not stage ${source}`);
+  }
+});
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

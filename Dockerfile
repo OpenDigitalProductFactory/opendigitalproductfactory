@@ -267,11 +267,18 @@ COPY Dockerfile /promoter/Dockerfile
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/scripts/rotate-runtime-transition-secret.mjs
+COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
+COPY scripts/installer/migrate-install-state.mjs /promoter/scripts/installer/migrate-install-state.mjs
+COPY scripts/installer/resolve-host-identity.mjs /promoter/scripts/installer/resolve-host-identity.mjs
 COPY scripts/installer/install-state-schema-registry.mjs /promoter/scripts/installer/install-state-schema-registry.mjs
 COPY scripts/installer/install-state.schema.json /promoter/scripts/installer/install-state.schema.json
 COPY scripts/installer/install-state.v1.schema.json /promoter/scripts/installer/install-state.v1.schema.json
 COPY scripts/installer/install-state.v2.schema.json /promoter/scripts/installer/install-state.v2.schema.json
+COPY scripts/lib/resolve-capability-compose-profiles.mjs /promoter/scripts/lib/resolve-capability-compose-profiles.mjs
+COPY scripts/lib/govern-capability-compose-args.mjs /promoter/scripts/lib/govern-capability-compose-args.mjs
+COPY scripts/lib/capability-state-hash.mjs /promoter/scripts/lib/capability-state-hash.mjs
+COPY scripts/capability-service-catalog.generated.json /promoter/scripts/capability-service-catalog.generated.json
 
 EXPOSE 3000
 # Self-upgrade image-identity guard (BI-5B6C1C35, spec §4.3): the running portal

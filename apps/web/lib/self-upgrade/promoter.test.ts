@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -29,6 +30,18 @@ const BASE = {
   backupPath: "/backups/self-upgrade/run-1",
   healthUrl: "http://localhost:3000/api/health",
 };
+
+it("mechanically closes every Dockerfile.promoter COPY input through portal baking and JIT staging", () => {
+  const root = resolve(__dirname, "../../../..");
+  const promoterDockerfile = readFileSync(join(root, "Dockerfile.promoter"), "utf8");
+  const portalDockerfile = readFileSync(join(root, "Dockerfile"), "utf8");
+  const sources = [...promoterDockerfile.matchAll(/^COPY\s+(\S+)\s+\S+/gm)].map((match) => match[1]);
+  for (const source of sources) {
+    const baked = source === "promoter-contract.json" ? "/promoter/promoter-contract.json" : `/promoter/${source}`;
+    expect(portalDockerfile, `portal image must bake ${source}`).toMatch(new RegExp(`^COPY\\s+${source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+${baked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));
+    expect(PROMOTER_JIT_BUILD_SCRIPT, `JIT recipe must stage ${source}`).toContain(`cp ${baked} \"$BDIR/${source}\"`);
+  }
+});
 
 describe("validateResolvedPromoterArtifact", () => {
   const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });

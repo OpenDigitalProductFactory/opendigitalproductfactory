@@ -388,16 +388,23 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/Dockerfile \"$BDIR/Dockerfile\" && " +
   "cp /promoter/Dockerfile.promoter \"$BDIR/Dockerfile.promoter\" && " +
   "cp /promoter/promoter-contract.json \"$BDIR/promoter-contract.json\" && " +
-  "mkdir -p \"$BDIR/scripts\" && mkdir -p \"$BDIR/scripts/installer\" && " +
+  "mkdir -p \"$BDIR/scripts\" \"$BDIR/scripts/installer\" \"$BDIR/scripts/lib\" && " +
   "cp /promoter/scripts/promote.sh \"$BDIR/scripts/promote.sh\" && " +
   "cp /promoter/scripts/apply-runtime-capability-transition.mjs \"$BDIR/scripts/apply-runtime-capability-transition.mjs\" && " +
   "cp /promoter/scripts/runtime-transition-authority.mjs \"$BDIR/scripts/runtime-transition-authority.mjs\" && " +
   "cp /promoter/scripts/rotate-runtime-transition-secret.mjs \"$BDIR/scripts/rotate-runtime-transition-secret.mjs\" && " +
+  "cp /promoter/scripts/lib/transition-signing.mjs \"$BDIR/scripts/lib/transition-signing.mjs\" && " +
   "cp /promoter/scripts/installer/validate-install-state.mjs \"$BDIR/scripts/installer/validate-install-state.mjs\" && " +
+  "cp /promoter/scripts/installer/migrate-install-state.mjs \"$BDIR/scripts/installer/migrate-install-state.mjs\" && " +
+  "cp /promoter/scripts/installer/resolve-host-identity.mjs \"$BDIR/scripts/installer/resolve-host-identity.mjs\" && " +
   "cp /promoter/scripts/installer/install-state-schema-registry.mjs \"$BDIR/scripts/installer/install-state-schema-registry.mjs\" && " +
   "cp /promoter/scripts/installer/install-state.schema.json \"$BDIR/scripts/installer/install-state.schema.json\" && " +
   "cp /promoter/scripts/installer/install-state.v1.schema.json \"$BDIR/scripts/installer/install-state.v1.schema.json\" && " +
   "cp /promoter/scripts/installer/install-state.v2.schema.json \"$BDIR/scripts/installer/install-state.v2.schema.json\" && " +
+  "cp /promoter/scripts/lib/resolve-capability-compose-profiles.mjs \"$BDIR/scripts/lib/resolve-capability-compose-profiles.mjs\" && " +
+  "cp /promoter/scripts/lib/govern-capability-compose-args.mjs \"$BDIR/scripts/lib/govern-capability-compose-args.mjs\" && " +
+  "cp /promoter/scripts/lib/capability-state-hash.mjs \"$BDIR/scripts/lib/capability-state-hash.mjs\" && " +
+  "cp /promoter/scripts/capability-service-catalog.generated.json \"$BDIR/scripts/capability-service-catalog.generated.json\" && " +
   "tar -C \"$BDIR\" -c . | docker build -t dpf-promoter -f Dockerfile.promoter -";
 
 /**

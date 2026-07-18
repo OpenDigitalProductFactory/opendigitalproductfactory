@@ -28,6 +28,7 @@ COPY scripts/installer/install-state.v1.schema.json /promoter/installer/install-
 COPY scripts/installer/install-state.v2.schema.json /promoter/installer/install-state.v2.schema.json
 COPY scripts/lib/resolve-capability-compose-profiles.mjs /promoter/lib/resolve-capability-compose-profiles.mjs
 COPY scripts/lib/govern-capability-compose-args.mjs /promoter/lib/govern-capability-compose-args.mjs
+COPY scripts/lib/capability-state-hash.mjs /promoter/lib/capability-state-hash.mjs
 COPY scripts/capability-service-catalog.generated.json /promoter/capability-service-catalog.generated.json
 RUN chmod +x /promoter/promote.sh
 

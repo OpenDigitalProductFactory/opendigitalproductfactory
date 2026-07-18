@@ -13,6 +13,9 @@
     "/promoter/installer/install-state.v2.schema.json",
     "/promoter/installer/install-state-schema-registry.mjs",
     "/promoter/lib/transition-signing.mjs",
+    "/promoter/lib/resolve-capability-compose-profiles.mjs",
+    "/promoter/lib/govern-capability-compose-args.mjs",
+    "/promoter/lib/capability-state-hash.mjs",
     "/promoter/capability-service-catalog.generated.json"
   ],
   "requiredMounts": [

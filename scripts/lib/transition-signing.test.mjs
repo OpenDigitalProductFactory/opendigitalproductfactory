@@ -24,9 +24,22 @@ const envelope = {
 };
 
 test("shared signing preserves the existing sorted top-level JSON/HMAC bytes", () => {
-  const payload = canonicalTransitionPayload(envelope);
-  assert.equal(payload, JSON.stringify(envelope, Object.keys(envelope).sort()));
-  assert.equal(signTransitionPayload(envelope, secret), createHmac("sha256", secret).update(payload).digest("hex"));
+  const legacy = { version: 1, transitionId: "RCT-test", issuedAt: "a", expiresAt: "b", previousKeys: ["runtime:core"] };
+  const payload = canonicalTransitionPayload(legacy);
+  assert.equal(payload, JSON.stringify(legacy, Object.keys(legacy).sort()));
+  assert.equal(signTransitionPayload(legacy, secret), createHmac("sha256", secret).update(payload).digest("hex"));
+});
+
+test("every nested host identity field is authenticated by install-state canonicalization", () => {
+  const signature = signTransitionPayload(envelope, secret);
+  for (const [field, value] of [["platform", "linux"], ["arch", "arm64"], ["provenance", "legacy-windows-paths"]]) {
+    const changed = { ...envelope, hostIdentity: { ...envelope.hostIdentity, [field]: value } };
+    assert.notEqual(signTransitionPayload(changed, secret), signature);
+    assert.throws(() => verifyInstallStateMigrationEnvelope(changed, signature, secret, {
+      runId: envelope.runId, promoterDigest: envelope.promoterDigest, sourceHash: envelope.sourceHash,
+      hostIdentity: changed.hostIdentity, now: Date.parse(envelope.issuedAt),
+    }), /tampered/);
+  }
 });
 
 test("install-state envelope binds run, digest, time, and observed source state", () => {

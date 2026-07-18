@@ -60,11 +60,12 @@ const mocks = vi.hoisted(() => ({
   // every existing scheduled test proceeds exactly as before.
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
   readFile: vi.fn(async (path: string) => path.endsWith("install-state.json") ? '{"platform":"linux","arch":"amd64"}' : "s".repeat(32)),
+  resolveSelfUpgradeHostIdentity: vi.fn(() => ({ platform: "linux", arch: "amd64", provenance: "explicit" })),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
-  resolveSelfUpgradeHostIdentity: () => ({ platform: "linux", arch: "amd64", provenance: "explicit" }),
+  resolveSelfUpgradeHostIdentity: mocks.resolveSelfUpgradeHostIdentity,
 }));
 
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
@@ -248,6 +249,8 @@ const OK_RECOVERY_POINT = {
 };
 
 beforeEach(() => {
+  mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? TEST_INSTALL_STATE : "s".repeat(32));
+  mocks.resolveSelfUpgradeHostIdentity.mockReturnValue({ platform: "linux", arch: "amd64", provenance: "explicit" });
   mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue(OK_RECOVERY_POINT);
   mocks.recordRunRecoveryPoint.mockResolvedValue({});
   const artifact = { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } };
@@ -419,6 +422,17 @@ describe("success path", () => {
     expect(result).toMatchObject({ ok: false, reason: "installer-state-repair-required" });
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
     expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it.each(["missing-secret", "malformed-state", "contradictory-identity"])("terminalizes %s preparation failure before quiescence", async (kind) => {
+    if (kind === "missing-secret") mocks.readFile.mockImplementation(async (path: string) => { if (path.endsWith("runtime-transition.secret")) throw new Error("ENOENT"); return TEST_INSTALL_STATE; });
+    if (kind === "malformed-state") mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? "{bad" : "s".repeat(32));
+    if (kind === "contradictory-identity") mocks.resolveSelfUpgradeHostIdentity.mockImplementation(() => { throw new Error("host_identity_contradictory"); });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ ok: false, status: "failed", reason: "installer-state-repair-required" });
+    expect(mocks.failRun).toHaveBeenCalledWith("SUR-AAAABBBB", expect.stringContaining("installer-state-repair-required"));
+    expect(mocks.emitUpgradeEvent).toHaveBeenCalledWith({ type: "upgrade.failed", runId: "SUR-AAAABBBB" });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
 
   it("claims a pre-created queued run instead of creating a second run", async () => {

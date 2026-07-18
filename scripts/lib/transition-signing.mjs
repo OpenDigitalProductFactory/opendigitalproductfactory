@@ -4,7 +4,14 @@ import { fileURLToPath } from "node:url";
 
 /** Canonical top-level serialization retained byte-for-byte for compatibility. */
 export function canonicalTransitionPayload(value) {
+  if (value?.kind === "install-state-migration") return recursiveCanonicalJson(value);
   return JSON.stringify(value, Object.keys(value).sort());
+}
+
+function recursiveCanonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(recursiveCanonicalJson).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${recursiveCanonicalJson(value[key])}`).join(",")}}`;
+  return JSON.stringify(value);
 }
 
 /** Sign a transition-shaped payload using the existing runtime secret. */

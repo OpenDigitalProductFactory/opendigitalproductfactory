@@ -489,9 +489,21 @@ export async function runSelfUpgrade(
   // Candidate-owned preflight. Resolve once, validate the embedded contract,
   // run readiness against that digest, persist evidence, and only then drain.
   // Undefined mode is the post-floor default; legacy-bootstrap is explicit.
-  const installStateBytes = params.dryRun ? undefined : await readFile("/dpf-state/install-state.json", "utf8");
-  const runtimeTransitionSecret = params.dryRun ? undefined : (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
-  const hostIdentity = params.dryRun ? undefined : resolveSelfUpgradeHostIdentity(process.env, JSON.parse(installStateBytes!.replace(/^\uFEFF/, "")));
+  let runtimeTransitionSecret: string | undefined;
+  let hostIdentity: ReturnType<typeof resolveSelfUpgradeHostIdentity> | undefined;
+  try {
+    if (!params.dryRun) {
+      const installStateBytes = await readFile("/dpf-state/install-state.json", "utf8");
+      runtimeTransitionSecret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
+      if (!runtimeTransitionSecret) throw new Error("runtime_transition_secret_empty");
+      hostIdentity = resolveSelfUpgradeHostIdentity(process.env, JSON.parse(installStateBytes.replace(/^\uFEFF/, "")));
+    }
+  } catch (error) {
+    const reason = `installer-state-repair-required: ${error instanceof Error ? error.message : "install_state_preparation_failed"}`;
+    await failRun(run.runId, reason);
+    await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
+    return { ok: false, status: "failed", runId: run.runId, reason: "installer-state-repair-required", excerpt: reason };
+  }
   const preflight = await runCandidatePreflight({
     dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,
     promoterImage: config.promoterImage, callerProtocolVersion: config.callerProtocolVersion,
