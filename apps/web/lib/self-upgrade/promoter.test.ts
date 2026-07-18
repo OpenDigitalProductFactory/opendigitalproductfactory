@@ -74,6 +74,7 @@ describe("buildPromoterReadinessCommand", () => {
     expect(args).not.toContain("--self-upgrade");
     expect(args).not.toContain("/var/run/docker.sock:/var/run/docker.sock");
     expect(args).toContain(`${BASE.stateDirHostPath}:/dpf-state:ro`);
+    expect(args).toContain(`${BASE.backupHostPath}:/backups:ro`);
     expect(args).toContain("DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
   });
 });

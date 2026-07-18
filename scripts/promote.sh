@@ -51,7 +51,9 @@ if [[ $_readiness -eq 1 ]]; then
     done < <(jq -r '.requiredFiles[]? // empty' "$_contract" 2>/dev/null)
   fi
   [[ -x "$_promoter_dir/promote.sh" ]] || _readiness_failures+=(entrypoint_unavailable)
-  [[ "${DPF_PROMOTER_DOCKER_PREFLIGHT:-}" == "ready" ]] || _readiness_failures+=(docker_unavailable)
+  if [[ "${DPF_PROMOTER_DOCKER_PREFLIGHT:-}" != "ready" ]] || ! command -v docker >/dev/null 2>&1 || ! docker --version >/dev/null 2>&1; then
+    _readiness_failures+=(docker_unavailable)
+  fi
   [[ -d "${PROMOTE_SOURCE:-}" && -r "${PROMOTE_SOURCE:-}" ]] || _readiness_failures+=(source_mount_unreadable)
   [[ -n "${PROMOTE_TARGET_SHA:-}" ]] || _readiness_failures+=(target_sha_missing)
   [[ -n "${PROMOTE_HEALTH_URL:-}" ]] || _readiness_failures+=(health_url_missing)

@@ -309,6 +309,8 @@ export function buildPromoterReadinessCommand(
   }
   const stateIndex = command.args.findIndex((arg) => arg.endsWith(":/dpf-state"));
   if (stateIndex >= 0) command.args[stateIndex] = `${command.args[stateIndex]}:ro`;
+  const backupsIndex = command.args.findIndex((arg) => arg.endsWith(":/backups"));
+  if (backupsIndex >= 0) command.args[backupsIndex] = `${command.args[backupsIndex]}:ro`;
   const imageIndex = command.args.indexOf(params.artifact.digest);
   if (imageIndex < 0) throw new Error("promoter_readiness_image_unavailable");
   command.args.splice(imageIndex, 0, "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready");

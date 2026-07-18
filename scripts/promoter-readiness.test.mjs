@@ -18,6 +18,8 @@ test("readiness contract is non-mutating and reports every required dependency",
   assert.match(block, /"quiescenceBegan":false/);
   assert.match(block, /validate-install-state\.mjs.*\$_state_file/s);
   assert.match(block, /DPF_PROMOTER_DOCKER_PREFLIGHT/);
+  assert.match(block, /command -v docker/);
+  assert.match(block, /docker --version/);
   assert.doesNotMatch(block, /-w "\$_state_dir"/);
   assert.doesNotMatch(block, /docker compose (?:down|up)|docker stop|docker rm|cp .*install-state/);
 });

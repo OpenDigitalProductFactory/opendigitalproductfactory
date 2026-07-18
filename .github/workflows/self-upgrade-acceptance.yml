@@ -69,7 +69,7 @@ jobs:
           docker run --rm --read-only \
             -v "$PWD:/host-source:ro" \
             -v "$RUNNER_TEMP/dpf-state:/dpf-state:ro" \
-            -v "$RUNNER_TEMP/dpf-backups:/backups" \
+            -v "$RUNNER_TEMP/dpf-backups:/backups:ro" \
             -e DPF_STATE_DIR=/dpf-state \
             -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
             -e PROMOTE_SOURCE=/host-source \
@@ -86,7 +86,7 @@ jobs:
           docker run --rm --read-only \
             -v "$PWD:/host-source:ro" \
             -v "$RUNNER_TEMP/dpf-state:/dpf-state:ro" \
-            -v "$RUNNER_TEMP/dpf-backups:/backups" \
+            -v "$RUNNER_TEMP/dpf-backups:/backups:ro" \
             -e DPF_STATE_DIR=/dpf-state \
             -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
             -e PROMOTE_SOURCE=/host-source \
