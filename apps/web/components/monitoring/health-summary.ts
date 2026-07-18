@@ -1,4 +1,6 @@
-export type Tone = "success" | "warning" | "critical" | "neutral";
+import type { CapabilityHealthTone } from "@/lib/platform-runtime/service-health";
+
+export type Tone = CapabilityHealthTone | "critical";
 
 export type PrometheusInstantResult = {
   metric: Record<string, string | undefined>;
