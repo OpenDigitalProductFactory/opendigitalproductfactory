@@ -85,8 +85,8 @@ importers:
   .:
     devDependencies:
       '@mermaid-js/mermaid-cli':
-        specifier: 11.16.0
-        version: 11.16.0(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@19.2.17)(puppeteer@23.11.1(typescript@6.0.3))(tsx@4.23.1)(yaml@2.9.0)
+        specifier: 11.15.0
+        version: 11.15.0(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@19.2.17)(puppeteer@23.11.1(typescript@6.0.3))(tsx@4.23.1)(yaml@2.9.0)
       '@playwright/test':
         specifier: ^1.61.1
         version: 1.61.1
@@ -320,8 +320,8 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0(@types/react@19.2.17)(react@19.2.7)
       read-excel-file:
-        specifier: 9.3.1
-        version: 9.3.1
+        specifier: 9.2.0
+        version: 9.2.0
       recharts:
         specifier: ^3.9.2
         version: 3.9.2(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react-is@19.2.7)(react@19.2.7)(redux@5.0.1)
@@ -445,8 +445,8 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
       read-excel-file:
-        specifier: 9.3.1
-        version: 9.3.1
+        specifier: 9.2.0
+        version: 9.2.0
       undici:
         specifier: ^8.7.0
         version: 8.7.0
@@ -2323,12 +2323,12 @@ packages:
     peerDependencies:
       mermaid: 11.15.0
 
-  '@mermaid-js/mermaid-cli@11.16.0':
-    resolution: {integrity: sha512-0InK2nbVIMtzVzCugmdvPkAuvS6wRUqU6Utntff1n8c7lgfRZAdhKY6PSKvcIK9nFmuOUzAgB5+x/XWcroZ7Zg==}
+  '@mermaid-js/mermaid-cli@11.15.0':
+    resolution: {integrity: sha512-rmz9ELKtmKQvRcYJGI2e509FK9yCBvmEVfHeRSYkleGqo6qqh8LFooxRPCqq04uVx3JHMp9g/vmM85gi/QFFlQ==}
     engines: {node: ^18.19 || >=20.0}
     hasBin: true
     peerDependencies:
-      puppeteer: ^23 || ^24 || ^25
+      puppeteer: ^23 || ^24
 
   '@mermaid-js/mermaid-zenuml@0.2.2':
     resolution: {integrity: sha512-sUjwk4NWUpy9uaHypYSIGJDks10ZaZo5CHH9lx9xcmyqv9w7yvd4vecUmlUQxmlHStYO+aqSkYKX5/gFjDfypw==}
@@ -6291,10 +6291,6 @@ packages:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
 
-  iconv-lite@0.7.2:
-    resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}
-    engines: {node: '>=0.10.0'}
-
   iconv-lite@0.7.3:
     resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
     engines: {node: '>=0.10.0'}
@@ -8401,8 +8397,8 @@ packages:
   read-cache@1.0.0:
     resolution: {integrity: sha512-Owdv/Ft7IjOgm/i0xvNDZ1LrRANRfew4b2prF3OWMQLxLfu3bS8FVhCsrSCMK4lR56Y9ya+AThoTpDCTxCmpRA==}
 
-  read-excel-file@9.3.1:
-    resolution: {integrity: sha512-yzC1vJ/yl3PGJfCDrOI6/rBagF0bRm/CK1NTNXYdomB+13mDB9SFyoRibsDXxDAFrwCANfuRqzuUWDljkkSEuQ==}
+  read-excel-file@9.2.0:
+    resolution: {integrity: sha512-jwSi8Q9oCmswrYMkuiKvJ6VdHbAXGQnANSOaHBNQZEm2XvaXx8d0t/V7oepgHqT9YWxlQE3HEuCtDZq8BZBmvw==}
     engines: {node: '>=18'}
 
   readable-stream@2.3.8:
@@ -8589,10 +8585,6 @@ packages:
   sax@1.6.0:
     resolution: {integrity: sha512-6R3J5M4AcbtLUdZmRv2SygeVaM7IhrLXu9BmnOGmmACak8fiUtOsYNWUS4uK7upbmHIBbLBeFeI//477BKLBzA==}
     engines: {node: '>=11.0.0'}
-
-  saxen@11.1.0:
-    resolution: {integrity: sha512-GOxBOAmiWVAytOHBuMlgFMZ4MAk+2Ny5QJpzM9I4IozfPLXq3FsDdIHNviTQGZGIx7G2mBkA+uySiJlYmSU1Gg==}
-    engines: {node: '>= 20.12'}
 
   saxes@6.0.0:
     resolution: {integrity: sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==}
@@ -11654,7 +11646,7 @@ snapshots:
       mermaid: 11.15.0
     optional: true
 
-  '@mermaid-js/mermaid-cli@11.16.0(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@19.2.17)(puppeteer@23.11.1(typescript@6.0.3))(tsx@4.23.1)(yaml@2.9.0)':
+  '@mermaid-js/mermaid-cli@11.15.0(@babel/core@7.29.7)(@babel/template@7.29.7)(@types/react@19.2.17)(puppeteer@23.11.1(typescript@6.0.3))(tsx@4.23.1)(yaml@2.9.0)':
     dependencies:
       '@fortawesome/fontawesome-free': 7.3.1
       '@mermaid-js/layout-elk': 0.2.2(mermaid@11.15.0)
@@ -16165,10 +16157,6 @@ snapshots:
     dependencies:
       safer-buffer: 2.1.2
 
-  iconv-lite@0.7.2:
-    dependencies:
-      safer-buffer: 2.1.2
-
   iconv-lite@0.7.3:
     dependencies:
       safer-buffer: 2.1.2
@@ -17787,7 +17775,7 @@ snapshots:
       aws-ssl-profiles: 1.1.2
       denque: 2.1.0
       generate-function: 2.3.1
-      iconv-lite: 0.7.2
+      iconv-lite: 0.7.3
       long: 5.3.2
       lru.min: 1.1.4
       named-placeholders: 1.1.6
@@ -18563,7 +18551,7 @@ snapshots:
     dependencies:
       bytes: 3.1.2
       http-errors: 2.0.1
-      iconv-lite: 0.7.2
+      iconv-lite: 0.7.3
       unpipe: 1.0.0
 
   rc9@3.0.1:
@@ -18828,10 +18816,10 @@ snapshots:
     dependencies:
       pify: 2.3.0
 
-  read-excel-file@9.3.1:
+  read-excel-file@9.2.0:
     dependencies:
+      '@xmldom/xmldom': 0.8.13
       fflate: 0.8.3
-      saxen: 11.1.0
       unzipper-esm: 0.13.2
 
   readable-stream@2.3.8:
@@ -19068,8 +19056,6 @@ snapshots:
   safer-buffer@2.1.2: {}
 
   sax@1.6.0: {}
-
-  saxen@11.1.0: {}
 
   saxes@6.0.0:
     dependencies:
