@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { compileCapabilityServiceCatalog, resolveCapabilityServiceProjection } from "./capability-service-projection.mjs";
@@ -31,6 +32,7 @@ const service = (serviceName, capabilityId, options = {}) => ({
   volumes: [],
   boundaryReason: "Fixture service boundary.",
   canonicalDataOwner: "none",
+  targetClassification: options.class ?? "capability-activated",
 });
 
 const substrate = {
@@ -43,16 +45,17 @@ const substrate = {
     service("dpf-stt", "runtime:local-speech", { defaultRequired: true, profiles: [] }),
     service("dpf-tts", "runtime:local-speech", { profiles: ["local-speech"], backupPolicy: "separate-required" }),
     service("prometheus", "runtime:deep-observability", { defaultRequired: true, profiles: [], backupPolicy: "separate-required" }),
+    service("grafana", "runtime:deep-observability", { profiles: ["observability-ui"], dependsOn: ["prometheus"], backupPolicy: "separate-required" }),
   ],
   externalRuntimes: [{ runtimeKey: "openai", kind: "ai-runtime", activation: "provider-configuration", canonicalDataOwner: "postgres", boundaryReason: "External inference boundary.", healthSemantics: "provider-health-reconciliation", hostPlatforms: ["windows", "macos", "linux"] }],
 };
 
 const fixtures = {
-  core: { keys: ["runtime:core"], required: ["portal", "postgres"], inactive: ["dpf-stt", "dpf-tts", "prometheus", "promoter", "sandbox"], backup: ["portal", "postgres"], external: [] },
-  build: { keys: ["runtime:build"], required: ["portal", "postgres", "sandbox"], inactive: ["dpf-stt", "dpf-tts", "prometheus", "promoter"], backup: ["portal", "postgres"], external: [] },
-  "local-speech": { keys: ["runtime:local-speech"], required: ["dpf-stt", "portal", "postgres"], inactive: ["dpf-tts", "prometheus", "promoter", "sandbox"], backup: ["portal", "postgres"], external: [] },
-  "deep-observability": { keys: ["runtime:deep-observability"], required: ["portal", "postgres", "prometheus"], inactive: ["dpf-stt", "dpf-tts", "promoter", "sandbox"], backup: ["portal", "postgres", "prometheus"], external: [] },
-  "external-ai": { keys: ["runtime:external-ai"], required: ["portal", "postgres"], inactive: ["dpf-stt", "dpf-tts", "prometheus", "promoter", "sandbox"], backup: ["portal", "postgres"], external: ["openai"] },
+  core: { keys: ["runtime:core"], required: ["portal", "postgres"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox"], profiles: [], backup: ["portal", "postgres"], external: [] },
+  build: { keys: ["runtime:build"], required: ["portal", "postgres", "sandbox"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter"], profiles: [], backup: ["portal", "postgres"], external: [] },
+  "local-speech": { keys: ["runtime:local-speech"], required: ["dpf-stt", "dpf-tts", "portal", "postgres"], inactive: ["grafana", "prometheus", "promoter", "sandbox"], profiles: ["local-speech"], backup: ["dpf-tts", "portal", "postgres"], external: [] },
+  "deep-observability": { keys: ["runtime:deep-observability"], required: ["grafana", "portal", "postgres", "prometheus"], inactive: ["dpf-stt", "dpf-tts", "promoter", "sandbox"], profiles: ["observability-ui"], backup: ["grafana", "portal", "postgres", "prometheus"], external: [] },
+  "external-ai": { keys: ["runtime:external-ai"], required: ["portal", "postgres"], inactive: ["dpf-stt", "dpf-tts", "grafana", "prometheus", "promoter", "sandbox"], profiles: [], backup: ["portal", "postgres"], external: ["openai"] },
 };
 
 for (const [name, expected] of Object.entries(fixtures)) {
@@ -71,13 +74,13 @@ for (const [name, expected] of Object.entries(fixtures)) {
     assert.match(first.capabilityStateVersion, /^[a-f0-9]{64}$/);
     assert.deepEqual(first.requiredServices, expected.required);
     assert.deepEqual(first.inactiveOptionalServices, expected.inactive);
-    assert.deepEqual(first.composeProfiles, []);
+    assert.deepEqual(first.composeProfiles, expected.profiles);
     assert.deepEqual(first.backupServices, expected.backup);
     assert.deepEqual(first.healthRequirements, expected.required.map((serviceName) => ({ service: serviceName, semantics: "compose-healthcheck" })));
     assert.deepEqual(first.externalRuntimes.map((item) => item.runtimeKey), expected.external);
     assert.deepEqual(first.serviceRequirements, expected.required.map((serviceName) => {
       const record = substrate.services.find((entry) => entry.service === serviceName);
-      return { backupPolicy: record.backupPolicy, capability: record.capability, class: record.class, defaultRequired: true, dependsOn: [...record.dependsOn].sort(), healthSemantics: record.healthSemantics, hostPlatforms: [...record.hostPlatforms].sort(), profiles: [], service: serviceName };
+      return { ...record, dependsOn: [...record.dependsOn].sort(), hostPlatforms: [...record.hostPlatforms].sort(), ports: [], profiles: [...record.profiles].sort(), volumes: [] };
     }));
   });
 }
@@ -117,8 +120,21 @@ test("undeclared cross-capability service dependencies fail closed", () => {
   assert.throws(() => compileCapabilityServiceCatalog({ substrate: { version: 2, services, externalRuntimes: [] }, capabilities: records }), /undeclared_cross_capability_dependency:reports:queue:runtime:reports->runtime:queue/);
 });
 
+test("current portal cross-capability dependencies remain a stable failure until profile migration", async () => {
+  const [realSubstrate, realCapabilities] = await Promise.all([
+    readFile(new URL("../platform-substrate-manifest.json", import.meta.url), "utf8").then(JSON.parse),
+    readFile(new URL("../../packages/db/data/platform-runtime-capabilities.json", import.meta.url), "utf8").then(JSON.parse),
+  ]);
+  assert.throws(() => compileCapabilityServiceCatalog({ substrate: realSubstrate, capabilities: realCapabilities.capabilities }), /undeclared_cross_capability_dependency:portal:browser-use:runtime:core->runtime:browser-automation/);
+});
+
 test("closed substrate fields and array values are validated", () => {
   assert.throws(() => compileCapabilityServiceCatalog({ substrate: { ...substrate, services: [{ ...substrate.services[0], profiles: [42] }] }, capabilities }), /invalid_substrate_profiles:postgres/);
   assert.throws(() => compileCapabilityServiceCatalog({ substrate: { ...substrate, services: [{ ...substrate.services[0], backupPolicy: "sometimes" }] }, capabilities }), /invalid_substrate_service:postgres/);
   assert.throws(() => compileCapabilityServiceCatalog({ substrate: { ...substrate, externalRuntimes: [{ ...substrate.externalRuntimes[0], healthSemantics: "ping" }] }, capabilities }), /invalid_external_runtime:openai/);
+});
+
+test("activation policy values are closed", () => {
+  const typo = capabilities.map((entry) => entry.capabilityId === "runtime:build" ? { ...entry, manifest: { runtime: { ...entry.manifest.runtime, activation: { policy: "operator_controlled" } } } } : entry);
+  assert.throws(() => compileCapabilityServiceCatalog({ substrate, capabilities: typo }), /invalid_runtime_manifest:runtime:build/);
 });
