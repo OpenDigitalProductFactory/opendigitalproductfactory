@@ -78,7 +78,25 @@ function makeFakeBin(root: string): string {
   // `docker compose exec`) returns a single stable hash so built==running.
   writeFileSync(
     join(bin, "docker"),
-    '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+    `#!/bin/sh
+env_file=
+take_env_file=0
+for arg in "$@"; do
+  if [ "$take_env_file" = 1 ]; then env_file="$arg"; take_env_file=0; continue; fi
+  if [ "$arg" = "--env-file" ]; then take_env_file=1; fi
+done
+[ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
+case "$*" in
+  *"up -d --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
+    service="\${*##* }"
+    effective_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$env_file" | tail -n 1)"
+    printf 'recreate service=%s DPF_STATE_DIR=%s DPF_PROMOTER_STATE_DIR=%s DPF_STATE_DIR_HOST=%s mount_source=%s\\n' \
+      "$service" "\${DPF_STATE_DIR-<unset>}" "\${DPF_PROMOTER_STATE_DIR-<unset>}" "$effective_state_dir" "$effective_state_dir" >> "$DOCKER_LOG"
+    ;;
+  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;
+esac
+exit 0
+`,
   );
   // For any URL ending in /sha, report the stamped DPF_VERSION (inherited from
   // the script's exported env) — modelling a correctly-stamped portal. Other
@@ -101,6 +119,7 @@ function runPromote(opts: {
   dockerLog?: string;
 }): { status: number | null; stdout: string; stderr: string } {
   const exports = [
+    "unset DPF_STATE_DIR",
     `export PATH=${shellQuote(toBashPath(opts.fakeBin))}:"$PATH"`,
     `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
     `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
@@ -286,11 +305,14 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       // installed sandboxes instead of the promote chain only touching the portal.
       expect(log).toContain("build sandbox");
       expect(log).toContain("up -d --no-deps --force-recreate sandbox");
-      const recreates = log.split(/\r?\n/).filter((line) => /force-recreate (portal|sandbox)$/.test(line));
-      expect(recreates).toHaveLength(2);
+      const recreates = log.split(/\r?\n/).filter((line) => line.startsWith("recreate service="));
+      expect(recreates.map((line) => line.match(/^recreate service=(\S+)/)?.[1]).sort()).toEqual(["portal", "sandbox"]);
       for (const recreate of recreates) {
-        expect(recreate).toContain(`compose --env-file ${toBashPath(envFile)}`);
-        expect(recreate).not.toContain("DPF_STATE_DIR=/dpf-state");
+        expect(recreate).toContain("DPF_STATE_DIR=<unset>");
+        expect(recreate).toContain(`DPF_PROMOTER_STATE_DIR=${toBashPath(join(backup, "state"))}`);
+        expect(recreate).toContain(`DPF_STATE_DIR_HOST=${hostStateDir}`);
+        expect(recreate).toContain(`mount_source=${hostStateDir}`);
+        expect(recreate).not.toContain("=/dpf-state");
       }
     } finally {
       rmSync(root, { recursive: true, force: true });

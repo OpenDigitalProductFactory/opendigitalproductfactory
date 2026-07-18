@@ -30,6 +30,6 @@ test("the complete promoter JavaScript closure never reads host DPF_STATE_DIR", 
   assert.ok(copiedScripts.length > 0, "promoter closure must be discovered from Dockerfile.promoter");
   for (const relative of copiedScripts) {
     const source = readFileSync(resolve(root, relative), "utf8");
-    assert.doesNotMatch(source, /process\.env\.DPF_STATE_DIR\b/, `${relative} must use only the promoter state namespace`);
+    assert.doesNotMatch(source, /\bDPF_STATE_DIR\b/, `${relative} must neither read nor write the host interpolation namespace`);
   }
 });
