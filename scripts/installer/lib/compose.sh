@@ -126,8 +126,15 @@ dpf_compose_files() {
 dpf_compose_profiles() {
   local root="${REPO_ROOT:-$(pwd)}" projection
   projection="$(dpf_resolve_capability_compose_profiles "$root" "${DPF_PLATFORM:-}" "$@")" || return 1
+  DPF_CAPABILITY_PROJECTION="$projection"
   COMPOSE_PROFILES="$(printf '%s' "$projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
-  export COMPOSE_PROFILES
+  export COMPOSE_PROFILES DPF_CAPABILITY_PROJECTION
+}
+
+dpf_capability_service_required() {
+  local service="$1"
+  [ -n "${DPF_CAPABILITY_PROJECTION:-}" ] || dpf_compose_profiles || return 1
+  printf '%s' "$DPF_CAPABILITY_PROJECTION" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);process.exit(p.requiredServices.includes(process.argv[1])?0:1)})' "$service"
 }
 
 # Convenience: print the assembled chain as a space-separated string,

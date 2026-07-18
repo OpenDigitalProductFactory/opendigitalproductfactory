@@ -7,7 +7,7 @@ param(
 
 Set-Location $DPF_DIR
 
-# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
+# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design section 5).
 # Include the local Edge Node overlay ONLY when this install enabled it.
 # -WithEdge / -NoEdge override; otherwise resolve from install-state.json
 # (.edge.enabled), with a grandfather for pre-flip installs that already

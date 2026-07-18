@@ -372,27 +372,17 @@ param(
 
 Set-Location $DPF_DIR
 
-# Edge Node deploy gate (opt-in). Include the local Edge Node overlay only when
-# this install enabled it: -WithEdge/-NoEdge override; else the recorded
-# install-state.json choice (.edge.enabled); else grandfather a pre-flip install
-# whose .env carries the bootstrap token; else OFF.
-$includeEdge = $false
-if ($WithEdge) { $includeEdge = $true }
-elseif (-not $NoEdge) {
-    $statePath = Join-Path $HOME ".dpf\install-state.json"
-    $recorded = $null
-    if (Test-Path -LiteralPath $statePath) {
-        try { $recorded = (Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json).edge.enabled } catch {}
-    }
-    if ($null -ne $recorded) {
-        $includeEdge = [bool]$recorded
-    } else {
-        $envPath = Join-Path $DPF_DIR ".env"
-        if ((Test-Path -LiteralPath $envPath) -and (Select-String -Path $envPath -Pattern '^DPF_BOOTSTRAP_TOKEN=dpf' -Quiet)) {
-            $includeEdge = $true
-        }
-    }
-}
+# The generated entrypoint consumes the same checked-in adapter and state
+# helper as install/setup; it never snapshots service/profile logic.
+if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
+elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
+$stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
+if (-not (Test-Path -LiteralPath $stateLib)) { $stateLib = Join-Path $DPF_DIR "installer\lib\state.ps1" }
+if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
+. $stateLib
+$includeEdge = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
+$capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
+$env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
 
 $composeArgs = @("-f", "docker-compose.yml")
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
@@ -1400,8 +1390,8 @@ providers:
             Write-OK "Created monitoring configuration (Prometheus + Grafana)"
 
             # Write dpf lifecycle scripts for consumer installs (no .git dependency).
-            Get-DPFStartScriptContent | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding UTF8
-            Get-DPFStopScriptContent | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding UTF8
+            Get-DPFStartScriptContent | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding ASCII
+            Get-DPFStopScriptContent | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding ASCII
 
             Write-OK "Platform files written to $DPF_DIR"
         }
@@ -1567,13 +1557,13 @@ if (-not (Test-StepDone "hardware")) {
 
     # Select the largest model that fits the GPU's VRAM WITH HEADROOM for the
     # context window + embedder. Mirrors the canonical headroom-aware logic in
-    # apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS) — PowerShell
+    # apps/web/lib/inference/local-model-policy.ts (LOCAL_MODEL_TIERS) -- PowerShell
     # cannot import TS, so keep this in sync. The Providers UX over-commit guard
     # (same module) catches any drift.
     #
     # Thresholds = model weights + ~5 GB headroom (measured: a 30B at a 24k build
     # context uses ~20.7 GB on a 24 GB card). So a 24 GB 4090 lands on the 30B
-    # coder, NOT the 35B — which would fill the card and over-commit the moment a
+    # coder, NOT the 35B -- which would fill the card and over-commit the moment a
     # build runs. Pinned quant tags (never bare :latest) for reproducible sizes.
     if ($gpuVRAM_GB -ge 53) {
         $selectedModel = "ai/qwen3-coder-next"
@@ -1788,6 +1778,11 @@ Write-Action "Open a new terminal for the PATH change to take effect in other wi
 Write-Step 7 10 "Starting the platform..."
 if (-not (Test-StepDone "started")) {
     Set-Location $DPF_DIR
+    $stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
+    if (-not (Test-Path -LiteralPath $stateLib)) { throw "capability_state_helper_missing" }
+    . $stateLib
+    $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
+    $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
     $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false
 
     if ($InstallMode -eq "consumer") {
@@ -1883,7 +1878,8 @@ if (-not (Test-StepDone "started")) {
     # 0 so the core platform still comes up -- voice degrades, the install does
     # not. Nothing depends_on these sidecars, so scaling to 0 is safe.
     $scaleArgs = @()
-    foreach ($svc in @("dpf-stt")) {
+    if (@($capabilityProjection.requiredServices) -contains "dpf-stt") {
+        $svc = "dpf-stt"
         docker compose @coreComposeArgs pull $svc 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "Optional sidecar '$svc' image is unavailable upstream; bringing up the platform without it."
@@ -1906,11 +1902,11 @@ if (-not (Test-StepDone "started")) {
     if (Test-Path "$DPF_DIR\.host-profile.json") {
         try { $ttsVram = [double]((Get-Content "$DPF_DIR\.host-profile.json" -Raw | ConvertFrom-Json).gpuVramGB) } catch { $ttsVram = 0.0 }
     }
-    if ($ttsVram -ge 6) {
+    if ((@($capabilityProjection.requiredServices) -contains "dpf-tts") -and $ttsVram -ge 6) {
         Write-Action "Starting voice TTS sidecar (dpf-tts -- NVIDIA GPU detected)..."
         $oldEAP = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        docker compose @coreComposeArgs --profile tts up -d dpf-tts 2>&1 | Out-Null
+        docker compose @coreComposeArgs up -d dpf-tts 2>&1 | Out-Null
         $ttsExit = $LASTEXITCODE
         $ErrorActionPreference = $oldEAP
         if ($ttsExit -eq 0) {
@@ -1918,8 +1914,10 @@ if (-not (Test-StepDone "started")) {
         } else {
             Write-Warn "dpf-tts failed to start (NVIDIA container runtime / GPU issue?); voice output will stay silent."
         }
-    } else {
+    } elseif (@($capabilityProjection.requiredServices) -contains "dpf-tts") {
         Write-Action "Voice TTS sidecar skipped (no NVIDIA GPU >=6 GB VRAM detected); STT still works. See docs/install/windows.md -> Voice to enable."
+    } else {
+        Write-Action "Voice TTS sidecar is inactive by capability selection."
     }
 
     # Sync postgres password -- if the volume was reused from a prior install,
@@ -2012,7 +2010,7 @@ if (-not (Test-StepDone "mcp_seed")) {
     Write-OK "Already running"
 }
 
-# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
+# Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design section 5).
 # A local Edge Node is bundled + auto-enrolled ONLY when -WithEdge is passed
 # (or a prior install already enabled it -- .env carries the bootstrap token);
 # -NoEdge forces it off. Default OFF. Map a network from a different machine

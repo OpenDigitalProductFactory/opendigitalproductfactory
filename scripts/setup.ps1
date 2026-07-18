@@ -1,4 +1,4 @@
-﻿# Open Digital Product Factory  first-time setup script (Windows PowerShell)
+# Open Digital Product Factory  first-time setup script (Windows PowerShell)
 # Run from the project root: .\scripts\setup.ps1
 
 $ErrorActionPreference = "Stop"

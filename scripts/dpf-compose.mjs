@@ -5,8 +5,10 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 
 import { validateComposeSafety } from "./lib/compose-safety.mjs";
+import { governCapabilityComposeArgs } from "./lib/govern-capability-compose-args.mjs";
 
-const args = process.argv.slice(2);
+let args = process.argv.slice(2);
+let capabilityProfilesGoverned = false;
 const statePath = process.env.DPF_INSTALL_STATE_PATH ?? resolve(process.env.DPF_STATE_DIR ?? resolve(homedir(), ".dpf"), "install-state.json");
 if (existsSync(statePath)) {
   const state = JSON.parse(readFileSync(statePath, "utf8"));
@@ -19,10 +21,21 @@ if (existsSync(statePath)) {
       process.stderr.write(projection.stderr);
       process.exit(projection.status ?? 2);
     }
-    const explicitProfiles = new Set(args.flatMap((arg, index) => arg === "--profile" ? [args[index + 1]] : arg.startsWith("--profile=") ? [arg.slice(10)] : []));
-    for (const profile of JSON.parse(projection.stdout).runtimeProfiles.reverse()) {
-      if (!explicitProfiles.has(profile)) args.unshift("--profile", profile);
+    try {
+      args = governCapabilityComposeArgs({ args, projection: JSON.parse(projection.stdout) });
+      capabilityProfilesGoverned = true;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(2);
     }
+  }
+}
+if (!capabilityProfilesGoverned) {
+  try {
+    args = governCapabilityComposeArgs({ args, projection: { runtimeProfiles: [] } });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(2);
   }
 }
 const result = validateComposeSafety({ args, env: process.env });

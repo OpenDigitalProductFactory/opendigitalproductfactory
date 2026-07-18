@@ -179,13 +179,13 @@ function Test-DpfStateSchema {
 }
 
 # Resolve whether the bundled local Edge Node overlay should be active for THIS
-# install (the deploy gate, BI-72CFF89D / edge-topology design §5). Edge
+# install (the deploy gate, BI-72CFF89D / edge-topology design section 5). Edge
 # deployment is OPT-IN: default OFF unless explicitly chosen or grandfathered.
 # PowerShell sibling of dpf_resolve_edge_enabled in state.sh. Precedence:
 #   1. explicit $env:DPF_INCLUDE_EDGE=0|1 (callers/flags set this)
 #   2. recorded choice in install-state.json (.edge.enabled)
 #   3. grandfather: no recorded choice but .env carries a bundled-node
-#      bootstrap token (a pre-flip install) -> keep it ON (design §5.3)
+#      bootstrap token (a pre-flip install) -> keep it ON (design section 5.3)
 #   4. default OFF
 # Returns [bool]. $InstallDir is the install root (for .env grandfather check).
 function Resolve-DpfEdgeEnabled {
