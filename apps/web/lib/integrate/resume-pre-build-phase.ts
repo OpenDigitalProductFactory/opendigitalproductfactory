@@ -239,6 +239,7 @@ export async function resumePreBuildPhase(params: {
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
       select: {
+        title: true,
         designDoc: true,
         buildPlan: true,
         planReview: true,
@@ -406,6 +407,41 @@ export async function resumePreBuildPhase(params: {
     }
 
     if (phase === "plan") {
+      // Self-heal (BI-FF8ABFCB): a decomposition child is created directly in
+      // `plan` with no plan.happyPathState.intake, so it hard-blocks at the
+      // plan→build gate ("Intake is incomplete") and churns on every resume.
+      // Backfill its intake from the superseded parent build before doing any
+      // (expensive) plan work, so it can actually advance. Idempotent: no-op
+      // once intake is ready or for non-child builds. Fixed forward at
+      // child-creation time in approve-decomposition.ts; this heals the builds
+      // created before that fix shipped.
+      if (build.parentEpicId != null) {
+        try {
+          const { healDecompositionChildIntake } = await import(
+            "@/lib/build/decomposition-child-intake"
+          );
+          const healed = await healDecompositionChildIntake({
+            child: {
+              buildId,
+              title: (build as { title?: string }).title ?? "",
+              parentEpicId: build.parentEpicId,
+              originatingBacklogItemId: build.originatingBacklogItemId ?? null,
+              plan: build.plan,
+            },
+          });
+          if (healed) {
+            return {
+              kind: "resumed",
+              phase,
+              via: "healDecompositionChildIntake",
+              detail: "backfilled decomposition child intake from parent; gate unblocked for next dispatch",
+            };
+          }
+        } catch (err) {
+          // Non-fatal — fall through to the normal plan resume path.
+          console.warn("[resume-pre-build-phase] child intake heal failed:", { buildId }, err);
+        }
+      }
       if (!hasPlanTasks(build.buildPlan)) {
         // No plan yet — re-dispatch plan generation. The dispatcher auto-runs
         // reviewBuildPlan, which advances plan->build when the gate is satisfied.
