@@ -38,6 +38,12 @@ const BASELINE_PATH = join(REPO_ROOT, "scripts", "hand-rolled-loading-baseline.t
 // The canonical home for loading motion — never counted against the baseline.
 const UI_HOME = join("apps", "web", "components", "ui").replace(/\\/g, "/");
 
+// apps/web/lib is logic + prompt/template text, not rendered UI. The class
+// names appear there only inside STRING literals that teach generated code the
+// loading patterns (e.g. specialist-prompts.ts, tak/route-context-map.ts) — not
+// real indicators, so they are out of the guard's scope.
+const LIB_HOME = join("apps", "web", "lib").replace(/\\/g, "/");
+
 // Raw Tailwind loading-animation utility classes used inline instead of a
 // ui/ primitive. `animate-[spin|pulse]` covers the arbitrary-value form too.
 export const HAND_ROLLED_RE = /\banimate-(?:spin|pulse|\[spin|\[pulse)/g;
@@ -69,6 +75,7 @@ export function scan() {
   for (const file of walk(SCAN_DIR)) {
     const rel = relative(REPO_ROOT, file).replace(/\\/g, "/");
     if (rel.startsWith(`${UI_HOME}/`)) continue;
+    if (rel.startsWith(`${LIB_HOME}/`)) continue;
     const body = readFileSync(file, "utf8");
     const n = (body.match(HAND_ROLLED_RE) ?? []).length;
     if (n > 0) counts[rel] = n;

@@ -4,13 +4,11 @@ apps/web/components/build-studio/PreviewFrame.tsx	2
 apps/web/components/build-studio/StepTracker.tsx	1
 apps/web/components/build-studio/cards/VerificationStripCard.tsx	1
 apps/web/components/build/ClaimBadge.tsx	1
-apps/web/components/build/EvidenceSummary.tsx	2
 apps/web/components/build/FeatureBriefPanel.tsx	2
 apps/web/components/build/VoiceRationalePlayer.tsx	1
 apps/web/components/inventory/TopologyGraph.tsx	1
 apps/web/components/monitoring/AiCoworkerHealthPanel.tsx	1
 apps/web/components/monitoring/PlatformHealthIndicator.tsx	2
-apps/web/components/platform/OllamaManagement.tsx	1
 apps/web/components/platform/OperationsMapLiveShell.tsx	1
 apps/web/components/platform/ProviderDetailForm.tsx	2
 apps/web/components/platform/development/change-lanes/ChangeLaneSourceSummary.tsx	1
@@ -18,5 +16,3 @@ apps/web/components/portfolio/PlatformHealthStrip.tsx	1
 apps/web/components/twin/CapacityChips.tsx	1
 apps/web/components/wiki/VoiceProfileSetup.tsx	2
 apps/web/components/workspace/CalendarSyncPanel.tsx	1
-apps/web/lib/integrate/specialist-prompts.ts	3
-apps/web/lib/tak/route-context-map.ts	2

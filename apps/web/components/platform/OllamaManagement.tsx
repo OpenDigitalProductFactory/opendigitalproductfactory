@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
+import { InlineBusy } from "@/components/ui/InlineBusy";
 import {
   listOllamaModels,
   getOllamaRunningModels,
@@ -429,8 +430,8 @@ export function OllamaManagement({ canWrite, vramGb, providerId }: Props) {
         )}
 
         {!loaded && isPending && (
-          <div style={{ color: "var(--dpf-muted)", fontSize: 12, padding: "16px 0", textAlign: "center" }}>
-            <span className="animate-pulse">Loading models…</span>
+          <div style={{ color: "var(--dpf-muted)", fontSize: 12, padding: "16px 0", display: "flex", justifyContent: "center" }}>
+            <InlineBusy label="Loading models…" />
           </div>
         )}
 
