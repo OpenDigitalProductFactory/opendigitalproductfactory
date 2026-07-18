@@ -18,11 +18,17 @@ COPY scripts/promote.sh /promoter/promote.sh
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/runtime-transition-authority.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/rotate-runtime-transition-secret.mjs
+COPY scripts/lib/transition-signing.mjs /promoter/lib/transition-signing.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/installer/validate-install-state.mjs
+COPY scripts/installer/migrate-install-state.mjs /promoter/installer/migrate-install-state.mjs
+COPY scripts/installer/resolve-host-identity.mjs /promoter/installer/resolve-host-identity.mjs
 COPY scripts/installer/install-state-schema-registry.mjs /promoter/installer/install-state-schema-registry.mjs
 COPY scripts/installer/install-state.schema.json /promoter/installer/install-state.schema.json
 COPY scripts/installer/install-state.v1.schema.json /promoter/installer/install-state.v1.schema.json
 COPY scripts/installer/install-state.v2.schema.json /promoter/installer/install-state.v2.schema.json
+COPY scripts/lib/resolve-capability-compose-profiles.mjs /promoter/lib/resolve-capability-compose-profiles.mjs
+COPY scripts/lib/govern-capability-compose-args.mjs /promoter/lib/govern-capability-compose-args.mjs
+COPY scripts/capability-service-catalog.generated.json /promoter/capability-service-catalog.generated.json
 RUN chmod +x /promoter/promote.sh
 
 ENTRYPOINT ["/promoter/promote.sh"]

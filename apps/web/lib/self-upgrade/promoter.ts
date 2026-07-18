@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import type { SelfUpgradeHostIdentity } from "./config";
 import {
   buildCandidatePromoterArtifactImage,
   resolveCandidatePromoterArtifact,
@@ -134,6 +135,10 @@ export type PromoterParams = {
   runtimeTransitionAuthorityToken?: string;
   /** DB-active transition ids used only by startup reconciliation. */
   runtimeTransitionActiveIds?: string[];
+  hostIdentity?: SelfUpgradeHostIdentity;
+  installStateMigrationEnvelope?: string;
+  installStateMigrationSignature?: string;
+  installStateMigrationRunId?: string;
 };
 
 export type PromoterResult = {
@@ -179,6 +184,8 @@ function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
   if (params.runtimeCapabilitySignature && !RUNTIME_TRANSITION_TOKEN.test(params.runtimeCapabilitySignature)) {
     throw new Error("invalid_runtime_transition_signature");
   }
+  if (params.installStateMigrationEnvelope && !RUNTIME_TRANSITION_ENVELOPE.test(params.installStateMigrationEnvelope)) throw new Error("invalid_install_state_migration_envelope");
+  if (params.installStateMigrationSignature && !RUNTIME_TRANSITION_TOKEN.test(params.installStateMigrationSignature)) throw new Error("invalid_install_state_migration_signature");
 }
 
 /**
@@ -243,6 +250,7 @@ export function buildPromoterCommand(
   if (params.stateDirHostPath) {
     args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_STATE_DIR=/dpf-state");
   }
+  if (params.hostIdentity) args.push("-e", `DPF_HOST_PLATFORM=${params.hostIdentity.platform}`, "-e", `DPF_HOST_ARCH=${params.hostIdentity.arch}`, "-e", `DPF_HOST_IDENTITY_PROVENANCE=${params.hostIdentity.provenance}`);
 
   args.push(
     "-e",
@@ -279,6 +287,10 @@ export function buildPromoterCommand(
     args.push("-v", `${params.runtimeCapabilitySecretFileHostPath}:/run/secrets/dpf-runtime-transition:ro`);
     args.push("-e", `DPF_STATE_DIR=/dpf-state`, "-e", `DPF_RUNTIME_TRANSITION_ENVELOPE=${params.runtimeCapabilityEnvelope}`,
       "-e", `DPF_RUNTIME_TRANSITION_SIGNATURE=${params.runtimeCapabilitySignature}`);
+  }
+  if (params.installStateMigrationEnvelope || params.installStateMigrationSignature) {
+    if (!params.stateDirHostPath || !params.installStateMigrationEnvelope || !params.installStateMigrationSignature || !params.installStateMigrationRunId) throw new Error("install_state_migration_protocol_incomplete");
+    args.push("-v", `${params.stateDirHostPath}/runtime-transition.secret:/run/secrets/dpf-runtime-transition:ro`, "-e", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${params.installStateMigrationEnvelope}`, "-e", `DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${params.installStateMigrationSignature}`, "-e", `DPF_SELF_UPGRADE_RUN_ID=${params.installStateMigrationRunId}`, "-e", `DPF_PROMOTER_DIGEST=${image}`);
   }
 
   args.push(image);

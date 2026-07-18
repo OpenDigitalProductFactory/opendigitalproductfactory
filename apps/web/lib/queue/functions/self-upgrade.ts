@@ -1,6 +1,7 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
-import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { getSelfUpgradeConfig, resolveSelfUpgradeHostIdentity } from "@/lib/self-upgrade/config";
+import { readFile } from "node:fs/promises";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
@@ -486,6 +487,7 @@ export async function runSelfUpgrade(
   // Candidate-owned preflight. Resolve once, validate the embedded contract,
   // run readiness against that digest, persist evidence, and only then drain.
   // Undefined mode is the post-floor default; legacy-bootstrap is explicit.
+  const installStateBytes = params.dryRun ? undefined : await readFile("/dpf-state/install-state.json", "utf8");
   const preflight = await runCandidatePreflight({
     dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,
     promoterImage: config.promoterImage, callerProtocolVersion: config.callerProtocolVersion,
@@ -496,11 +498,14 @@ export async function runSelfUpgrade(
     healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
     runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun,
     emitFailure: async (runId) => emitUpgradeEvent({ type: "upgrade.failed", runId }),
+    hostIdentity: params.dryRun ? undefined : resolveSelfUpgradeHostIdentity(process.env, JSON.parse(installStateBytes!.replace(/^\uFEFF/, ""))),
+    runtimeTransitionSecret: params.dryRun ? undefined : (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim(),
   });
   if (!preflight.ok) {
     return { ok: false, status: "failed", runId: run.runId, reason: preflight.reason };
   }
   const resolvedPromoterDigest = preflight.resolvedPromoterDigest;
+  const migrationHandoff = preflight.migrationHandoff;
 
   // BI-QUIESCE-010 keystone integration: replaces the single-signal
   // getPortalActivity check with the full Activity Quiescence Protocol
@@ -624,6 +629,9 @@ export async function runSelfUpgrade(
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
       promoterImage: resolvedPromoterDigest ?? config.promoterImage,
       stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
+      installStateMigrationEnvelope: migrationHandoff ? Buffer.from(JSON.stringify(migrationHandoff.envelope)).toString("base64url") : undefined,
+      installStateMigrationSignature: migrationHandoff?.signature,
+      installStateMigrationRunId: migrationHandoff?.envelope.runId,
       dryRun: params.dryRun,
       // Deterministic name so a stalled build can be force-removed by name on
       // timeout (runPromoter) or by the watchdog backstop. docker names allow

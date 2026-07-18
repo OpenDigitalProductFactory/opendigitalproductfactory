@@ -83,6 +83,25 @@ describe("buildPromoterReadinessCommand", () => {
     expect(args).toContain(`${readinessParams.backupHostPath}:/backups:ro`);
     expect(args).toContain("DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
   });
+
+  it("passes verified host provenance while keeping install state read-only", () => {
+    const artifact = { digest: `sha256:${"a".repeat(64)}`, sourceSha: "abc1234", contractSchema: 1, contractDigest: `sha256:${"b".repeat(64)}`, callerProtocol: { min: 1, max: 1 } };
+    const { args } = buildPromoterReadinessCommand({ ...BASE, stateDirHostPath: "/state", artifact, hostIdentity: { platform: "linux", arch: "arm64", provenance: "explicit" } });
+    expect(args).toContain("/state:/dpf-state:ro");
+    expect(args).toContain("DPF_HOST_PLATFORM=linux");
+    expect(args).toContain("DPF_HOST_IDENTITY_PROVENANCE=explicit");
+  });
+});
+
+describe("install-state migration promotion carrier", () => {
+  it("mounts the existing secret read-only and forwards the exact signed object", () => {
+    const encoded = Buffer.from(JSON.stringify({ runId: "SUR-1" })).toString("base64url");
+    const digest = `sha256:${"d".repeat(64)}`;
+    const { args } = buildPromoterCommand({ ...BASE, promoterImage: digest, stateDirHostPath: "/state", installStateMigrationEnvelope: encoded, installStateMigrationSignature: "a".repeat(64), installStateMigrationRunId: "SUR-1" });
+    expect(args).toContain("/state/runtime-transition.secret:/run/secrets/dpf-runtime-transition:ro");
+    expect(args).toContain(`DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${encoded}`);
+    expect(args).toContain(`DPF_PROMOTER_DIGEST=${digest}`);
+  });
 });
 
 describe("resolvePromoterArtifact", () => {

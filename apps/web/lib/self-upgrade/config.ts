@@ -5,6 +5,7 @@ import {
   DEFAULT_BATCH_MAX_WAIT_HOURS,
 } from "./release-batch";
 import { isWithinWindows, nextWindowStartForWindows } from "./windows-eval";
+import { resolveHostIdentity } from "../../../../scripts/installer/resolve-host-identity.mjs";
 
 export type MaintenanceWindow = {
   dayOfWeek: number[];
@@ -26,6 +27,16 @@ export type MaintenanceWindow = {
 export type UpgradeSourceMode = "upstream" | "local";
 export type SelfUpgradeReadinessOwner = "bridge" | "portal" | "unavailable";
 export type SelfUpgradeReadinessMode = "enforced" | "legacy-bootstrap";
+export type SelfUpgradeHostIdentity = {
+  platform: "win32" | "darwin" | "linux";
+  arch: "amd64" | "arm64" | "x86_64";
+  provenance: "explicit" | "legacy-windows-paths";
+};
+
+export function resolveSelfUpgradeHostIdentity(env: Record<string, string | undefined> = process.env, state: Record<string, unknown> = {}): SelfUpgradeHostIdentity {
+  const resolved = resolveHostIdentity({ env, state });
+  return { platform: resolved.platform, arch: resolved.arch, provenance: resolved.provenance } as SelfUpgradeHostIdentity;
+}
 
 export const DEFAULT_INSTALL_BRANCH = "dpf/install";
 

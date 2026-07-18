@@ -68,6 +68,17 @@ if [[ $_readiness -eq 1 ]]; then
   if [[ ! -f "$_profile_adapter" ]] || ! node "$_profile_adapter" --state "$_state_file" --overlay promote >/dev/null 2>&1; then
     _readiness_failures+=(capability_projection_failed)
   fi
+  _migration_projection=""
+  if [[ -n "${DPF_HOST_PLATFORM:-}" && -n "${DPF_HOST_ARCH:-}" ]]; then
+    _migration_projection="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" node --input-type=module -e '
+      import { readFile } from "node:fs/promises"; import { projectInstallState } from process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs";
+      const bytes=await readFile(process.env.STATE_FILE); const source=JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,"")); const catalog=JSON.parse(await readFile(process.env.PROMOTER_DIR+"/capability-service-catalog.generated.json","utf8"));
+      const p=process.env.DPF_HOST_PLATFORM; const hostIdentity={platform:p,arch:process.env.DPF_HOST_ARCH,provenance:process.env.DPF_HOST_IDENTITY_PROVENANCE,capabilityHostPlatform:p==="win32"?"windows":p==="darwin"?"macos":p};
+      const r=await projectInstallState({bytes,hostIdentity,catalog}); process.stdout.write(JSON.stringify({sourceHash:r.sourceHash,projectionHash:r.projectionHash,migrationRequired:r.migrationRequired,fromSchemaVersion:source.schemaVersion??1,toSchemaVersion:r.projectedState.schemaVersion}));
+    ' 2>/dev/null)" || _readiness_failures+=(install_state_projection_failed)
+  else
+    _readiness_failures+=(host_identity_missing)
+  fi
   [[ -n "${PROMOTE_COMPOSE_PROJECT:-}" ]] || _readiness_failures+=(compose_identity_missing)
   [[ -n "${PROMOTE_BACKUP_PATH:-}" && -d "$(dirname "${PROMOTE_BACKUP_PATH:-/missing}")" ]] || _readiness_failures+=(recovery_parent_unavailable)
   [[ -d "$_state_dir" ]] || _readiness_failures+=(transition_secret_parent_unavailable)
@@ -81,7 +92,7 @@ if [[ $_readiness -eq 1 ]]; then
     printf ']}\n'
     exit 78
   fi
-  printf '{"stage":"preflight","result":"ready","quiescenceBegan":false,"failures":[]}\n'
+  printf '%s\n' "$_migration_projection" | jq -c '. + {stage:"preflight",result:"ready",quiescenceBegan:false,failures:[]}'
   exit 0
 fi
 
@@ -97,6 +108,11 @@ _missing=()
 if [[ ${#_missing[@]} -gt 0 ]]; then
   printf 'error: missing required variables: %s\n' "${_missing[*]}" >&2
   exit 1
+fi
+
+if [[ $_dry_run -eq 0 ]]; then
+  [[ -n "${DPF_INSTALL_STATE_MIGRATION_ENVELOPE:-}" && -n "${DPF_INSTALL_STATE_MIGRATION_SIGNATURE:-}" ]] || { printf 'error: install_state_migration_handoff_missing\n' >&2; exit 78; }
+  node "$_promoter_dir/lib/transition-signing.mjs" >/dev/null || exit $?
 fi
 
 # Resolve the exact runtime profile closure from the governed install snapshot.

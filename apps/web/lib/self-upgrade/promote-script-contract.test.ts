@@ -41,6 +41,12 @@ function resolveBashPath(path: string) {
 const SCRIPT = resolveBashPath(resolve(__dirname, "../../../../scripts/promote.sh"));
 const REPO_ROOT = resolve(__dirname, "../../../..");
 
+it("verifies the signed install-state handoff before reading the promotion projection", () => {
+  const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+  expect(source.indexOf('lib/transition-signing.mjs')).toBeGreaterThan(0);
+  expect(source.indexOf('lib/transition-signing.mjs')).toBeLessThan(source.indexOf('_capability_projection='));
+});
+
 const BASE_ENV: Record<string, string> = {
   PROMOTE_SOURCE: "/opt/app/release",
   PROMOTE_TARGET_SHA: "a1b2c3d4e5f6",

@@ -54,11 +54,15 @@ const mocks = vi.hoisted(() => ({
   // Operator blackout gate (BI-59591B14). Default null = no active blackout, so
   // every existing scheduled test proceeds exactly as before.
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
+  readFile: vi.fn(async (path: string) => path.endsWith("install-state.json") ? JSON.stringify({ platform: "linux", arch: "amd64" }) : "s".repeat(32)),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
+  resolveSelfUpgradeHostIdentity: () => ({ platform: "linux", arch: "amd64", provenance: "explicit" }),
 }));
+
+vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
 
 vi.mock("@/lib/self-upgrade/window", () => ({
   isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
@@ -243,7 +247,7 @@ beforeEach(() => {
   mocks.recordRunRecoveryPoint.mockResolvedValue({});
   const artifact = { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } };
   mocks.resolvePromoterArtifact.mockResolvedValue(artifact);
-  mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 0, stdout: '{"stage":"preflight","result":"ready","failures":[]}', stderr: "" });
+  mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ stage: "preflight", result: "ready", failures: [], sourceHash: "a".repeat(64), projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" });
   mocks.recordPromoterReadiness.mockResolvedValue({});
   mocks.summarizeRecoveryPointFailure.mockReturnValue(
     "recovery-point-failed: postgres BR-PG",
@@ -368,7 +372,7 @@ describe("success path", () => {
   it("resolves and validates readiness before quiescence, then promotes the same digest", async () => {
     const order: string[] = [];
     mocks.resolvePromoterArtifact.mockImplementation(async () => { order.push("resolve"); return { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } }; });
-    mocks.runPromoterReadiness.mockImplementation(async () => { order.push("readiness"); return { exitCode: 0, stdout: '{"failures":[]}', stderr: "" }; });
+    mocks.runPromoterReadiness.mockImplementation(async () => { order.push("readiness"); return { exitCode: 0, stdout: JSON.stringify({ failures: [], sourceHash: "a".repeat(64), projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" }; });
     mocks.recordPromoterReadiness.mockImplementation(async () => { order.push("evidence"); return {}; });
     mocks.startQuiescence.mockImplementation(async () => { order.push("quiescence"); return { runId: "QR-1", awaitReady: async () => ({ ok: true, outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }) }; });
     mocks.runPromoter.mockImplementation(async (promoterParams: { promoterImage?: string }) => { order.push("promotion"); expect(promoterParams.promoterImage).toBe(`sha256:${"d".repeat(64)}`); return { exitCode: 0, stdout: "", stderr: "" }; });
