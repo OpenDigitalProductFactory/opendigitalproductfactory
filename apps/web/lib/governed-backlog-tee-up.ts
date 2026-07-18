@@ -238,7 +238,7 @@ export async function promoteBacklogItemToBuildDraft(
   input: PromoteBacklogItemToBuildDraftInput,
 ): Promise<PromoteBacklogItemToBuildDraftResult> {
   const { tx, itemId, userId, governedBacklogEnabled, activity } = input;
-  if ("$queryRaw" in tx && "platformCapability" in tx && "runtimeCapabilityTransition" in tx) {
+  if ("$executeRaw" in tx && "platformCapability" in tx && "runtimeCapabilityTransition" in tx) {
     await admitRuntimeGuardedWork(tx as never, "build-studio-active");
   }
   const item = await tx.backlogItem.findUnique({
