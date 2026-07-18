@@ -185,7 +185,7 @@ New `prompts/specialist/ux-design-critic.prompt.md` following the [2026-04-27 pe
 
 1. **`# Role`** — "You are the UX Design Critic (AGT-906). Your domain is the cognitive-load, predictability, error-resilience, agentic-AI, and density properties of a screen — distinct from but complementary to AGT-903's WCAG focus."
 2. **`# Accountable For`** — lens-grouped invariants (Hick's, Fitts's, Miller's, Doherty, Jakob's, Poka-Yoke, Intent Preview, Confidence Signal, Autonomy Dial, Explainable Rationale, OOUX, Role-Disclosure, Demo-Driven trap, Inclusive Design sub-lenses).
-3. **`# Interfaces With`** — AGT-903 (paired reviewer), AGT-BUILD-FE (consumes findings), AGT-ORCH-300 (release gate), AGT-ORCH-000 / Jiminy (cross-platform recurring patterns), HR-300 (supervisor).
+3. **`# Interfaces With`** — AGT-903 (paired reviewer), AGT-BUILD-FE (consumes findings), AGT-ORCH-300 (release gate), AGT-ORCH-000 / the COO (cross-platform recurring patterns), HR-300 (supervisor).
 4. **`# Out Of Scope`** — fixing UI (filers, not implementers), aesthetic taste, WCAG/accessibility (AGT-903's lane), direct user conversation.
 5. **`# Tools Available`** — mirrors registry `tool_grants` exactly (per the persona audit's PERSONA-007 invariant).
 6. **`# Operating Rules`** — the lens checklist below, with pass/fail criteria each.

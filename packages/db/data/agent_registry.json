@@ -2783,7 +2783,7 @@
       "tier": "specialist",
       "value_stream": "cross-cutting",
       "role": "operator",
-      "capability_domain": "First-run onboarding COO. Walks new platform owners through initial setup with personalised, business-context-aware conversation. Distinct from AGT-ORCH-000 (Jiminy) \u00e2\u20ac\u201d runs only for /setup wizard, has its own grants and model tier per bootstrap-first-run.ts.",
+      "capability_domain": "First-run onboarding COO. Walks new platform owners through initial setup with personalised, business-context-aware conversation. Distinct from AGT-ORCH-000 (the standing COO) \u00e2\u20ac\u201d runs only for /setup wizard, has its own grants and model tier per bootstrap-first-run.ts.",
       "human_supervisor_id": "HR-000",
       "hitl_tier_default": 0,
       "delegates_to": [],
