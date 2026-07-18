@@ -54,13 +54,17 @@ dpf_state_rfc3339_epoch() {
 }
 
 dpf_state_active_reclaim_first() {
-  local lock="$1" now ticket expiry
+  local lock="$1" now ticket expiry target current quarantine ticket_pid ticket_host local_host
   now="$(date +%s)"
+  local_host="$(hostname)"
   for ticket in "${lock}.reclaim-"*; do
     [ -f "$ticket" ] || continue
     expiry="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$ticket" 2>/dev/null)"
-    if [ -n "$expiry" ] && [ "$expiry" -gt "$now" ]; then echo "$ticket"; return 0; fi
-    rm -f "$ticket"
+    ticket_pid="$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$ticket" 2>/dev/null)"; ticket_host="$(sed -n 's/.*"hostname":"\([^"]*\)".*/\1/p' "$ticket" 2>/dev/null)"
+    if { [ -n "$expiry" ] && [ "$expiry" -gt "$now" ]; } || { [ "$ticket_host" = "$local_host" ] && kill -0 "$ticket_pid" 2>/dev/null; }; then echo "$ticket"; return 0; fi
+    target="$(sed -n 's/.*"targetOwnerId":"\([^"]*\)".*/\1/p' "$ticket" 2>/dev/null)"; current="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"
+    if [ -n "$target" ] && [ "$current" = "$target" ]; then quarantine="${lock}.stale-recovery-$$"; mv "$lock" "$quarantine" 2>/dev/null && rm -f "$quarantine"; fi
+    current="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"; if [ "$current" != "$target" ]; then rm -f "$ticket"; else echo "$ticket"; return 0; fi
   done
   return 1
 }
@@ -80,11 +84,12 @@ dpf_state_lock_acquire() {
     lock_pid="$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$lock" 2>/dev/null)"
     lock_host="$(sed -n 's/.*"hostname":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"
     if [ -n "$lock_expires" ] && [ "$lock_expires" -le "$now" ] && { [ "$lock_host" != "$host" ] || ! kill -0 "$lock_pid" 2>/dev/null; }; then
-      local reclaim="${lock}.reclaim-${owner_id}" first
+      local stale_owner generation reclaim
+      stale_owner="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"
+      generation="$(printf '%s' "$stale_owner" | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | awk '{print substr($1,1,24)}')"
+      local reclaim="${lock}.reclaim-${generation}"
       if ( set -C; : > "$reclaim" ) 2>/dev/null; then
-        printf '{"protocolVersion":1,"ownerId":"%s","runId":"%s","pid":%s,"hostname":"%s","acquiredAt":"%s","expiresAt":"%s","expiresAtEpoch":%s}\n' "$owner_id" "$run_id" "$$" "$host" "$(dpf_state_rfc3339_epoch "$now")" "$(dpf_state_rfc3339_epoch "$((now + 5))")" "$((now + 5))" > "$reclaim"
-        first="$(dpf_state_active_reclaim_first "$lock")"
-        if [ "$first" != "$reclaim" ]; then rm -f "$reclaim"; sleep 0.05; continue; fi
+        printf '{"protocolVersion":1,"ownerId":"%s","runId":"%s","targetOwnerId":"%s","pid":%s,"hostname":"%s","acquiredAt":"%s","expiresAt":"%s","expiresAtEpoch":%s}\n' "$owner_id" "$run_id" "$stale_owner" "$$" "$host" "$(dpf_state_rfc3339_epoch "$now")" "$(dpf_state_rfc3339_epoch "$((now + 5))")" "$((now + 5))" > "$reclaim"
         lock_expires="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$lock" 2>/dev/null)"
         if [ -n "$lock_expires" ] && [ "$lock_expires" -le "$now" ]; then mv "$lock" "${lock}.stale-${owner_id}" 2>/dev/null && rm -f "${lock}.stale-${owner_id}"; fi
         rm -f "$reclaim"; continue

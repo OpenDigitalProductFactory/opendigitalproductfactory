@@ -67,6 +67,17 @@ test("two stale reclaimers cannot ABA-remove a fresh live claim", { timeout: 100
   await fresh.release();
 });
 
+test("late lower-sorted nomination cannot join after reclaim election closes", { timeout: 1000 }, async () => {
+  const { statePath } = await fixture(); const lockPath = `${statePath}.lock`;
+  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "stale-generation", runId: "dead", pid: 99999999, hostname: "foreign", acquiredAt: "2000-01-01T00:00:00Z", expiresAt: "2000-01-01T00:00:01Z", expiresAtEpoch: 946684801 }));
+  let elected; const electionClosed = new Promise(resolve => { elected = resolve; }); let resume; const paused = new Promise(resolve => { resume = resolve; });
+  const first = acquireInstallStateLock(statePath, { timeoutMs: 500, reclaimOwnerId: "z-winner", onReclaimElected: async () => { elected(); await paused; } });
+  await electionClosed;
+  const second = acquireInstallStateLock(statePath, { timeoutMs: 150, reclaimOwnerId: "a-late" });
+  await assert.rejects(second, /lock_timeout/);
+  resume(); const acquired = await first; await acquired.release();
+});
+
 test("release never removes a lock now owned by another live owner", async () => {
   const { statePath } = await fixture();
   const held = await acquireInstallStateLock(statePath);

@@ -56,8 +56,13 @@ function Get-DpfStateSha256 {
 
 function Get-DpfActiveReclaimFirst {
     param([Parameter(Mandatory)][string]$LockPath)
-    $active = @(); foreach ($ticket in Get-ChildItem -Path "$LockPath.reclaim-*" -File -ErrorAction SilentlyContinue) { try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ticket.FullName)); if ([long]$owner.expiresAtEpoch -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { $active += $ticket.FullName } else { Remove-Item $ticket.FullName -Force } } catch {} }
+    $active = @(); foreach ($ticket in Get-ChildItem -Path "$LockPath.reclaim-*" -File -ErrorAction SilentlyContinue) { try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ticket.FullName)); $live = $false; if ($owner.hostname -eq [Environment]::MachineName) { try { Get-Process -Id ([int]$owner.pid) -ErrorAction Stop | Out-Null; $live = $true } catch {} }; if ([long]$owner.expiresAtEpoch -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -or $live) { $active += $ticket.FullName } else { $current = if (Test-Path $LockPath) { ConvertFrom-Json ([IO.File]::ReadAllText($LockPath)) } else { $null }; if ($current.ownerId -eq $owner.targetOwnerId) { Move-Item $LockPath "$LockPath.stale-recovery-$PID" -ErrorAction Stop; Remove-Item "$LockPath.stale-recovery-$PID" -Force }; $after = if (Test-Path $LockPath) { ConvertFrom-Json ([IO.File]::ReadAllText($LockPath)) } else { $null }; if ($after.ownerId -ne $owner.targetOwnerId) { Remove-Item $ticket.FullName -Force } else { $active += $ticket.FullName } } } catch {} }
     return ($active | Sort-Object | Select-Object -First 1)
+}
+
+function Get-DpfStringSha256 {
+    param([string]$Value)
+    $sha = [Security.Cryptography.SHA256]::Create(); try { $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes($Value); return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant() } finally { $sha.Dispose() }
 }
 
 function Replace-DpfStateFileAtomic {
@@ -100,15 +105,15 @@ function Enter-DpfStateLock {
                 } catch {}
             }
             if ($stale) {
+                $createdReclaim = $false
                 try {
-                    $reclaimPath = "$lockPath.reclaim-$ownerId"
+                    $staleOwnerId = [string]$owner.ownerId; $generation = (Get-DpfStringSha256 $staleOwnerId).Substring(0,24); $reclaimPath = "$lockPath.reclaim-$generation"
                     $reclaim = New-Object IO.FileStream($reclaimPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-                    $reclaimOwner = [ordered]@{ protocolVersion = 1; ownerId = $ownerId; runId = $runId; pid = $PID; hostname = [Environment]::MachineName; acquiredAt = [DateTimeOffset]::UtcNow.ToString("o"); expiresAt = [DateTimeOffset]::UtcNow.AddSeconds(5).ToString("o"); expiresAtEpoch = [DateTimeOffset]::UtcNow.AddSeconds(5).ToUnixTimeSeconds() }
+                    $createdReclaim = $true; $reclaimOwner = [ordered]@{ protocolVersion = 1; ownerId = $ownerId; runId = $runId; targetOwnerId = $staleOwnerId; pid = $PID; hostname = [Environment]::MachineName; acquiredAt = [DateTimeOffset]::UtcNow.ToString("o"); expiresAt = [DateTimeOffset]::UtcNow.AddSeconds(5).ToString("o"); expiresAtEpoch = [DateTimeOffset]::UtcNow.AddSeconds(5).ToUnixTimeSeconds() }
                     $reclaimBytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($reclaimOwner | ConvertTo-Json -Compress)); try { $reclaim.Write($reclaimBytes,0,$reclaimBytes.Length); $reclaim.Flush($true) } finally { $reclaim.Dispose() }
-                    if ((Get-DpfActiveReclaimFirst $lockPath) -ne $reclaimPath) { Remove-Item $reclaimPath -Force; Start-Sleep -Milliseconds 20; continue }
                     $current = ConvertFrom-Json ([IO.File]::ReadAllText($lockPath)); if ([long]$current.expiresAtEpoch -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { Move-Item -LiteralPath $lockPath -Destination "$lockPath.stale-$ownerId" -ErrorAction Stop; Remove-Item -LiteralPath "$lockPath.stale-$ownerId" -Force -ErrorAction Stop }
                     Remove-Item -LiteralPath $reclaimPath -Force -ErrorAction Stop; continue
-                } catch { if ($reclaimPath -and (Test-Path -LiteralPath $reclaimPath)) { Remove-Item $reclaimPath -Force -ErrorAction SilentlyContinue } }
+                } catch { if ($createdReclaim -and $reclaimPath -and (Test-Path -LiteralPath $reclaimPath)) { Remove-Item $reclaimPath -Force -ErrorAction SilentlyContinue } }
             }
             if ([DateTimeOffset]::UtcNow -ge $deadline) { throw "install_state_lock_timeout" }
             Start-Sleep -Milliseconds 20
