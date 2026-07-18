@@ -15,7 +15,7 @@ describe("ensureAllBackupScheduledJobs", () => {
     expect(result).toEqual({ postgres: { created: true }, postgresTrialRestore: { created: true }, supersededDeactivated: 2 });
     expect(scheduledJob.updateMany).toHaveBeenCalledWith({
       where: { jobId: { in: ["neo4j-daily-backup", "qdrant-daily-backup"] } },
-      data: { schedule: "inactive" },
+      data: { enabled: false, nextRunAt: null },
     });
     expect(scheduledJob.deleteMany).not.toHaveBeenCalled();
   });

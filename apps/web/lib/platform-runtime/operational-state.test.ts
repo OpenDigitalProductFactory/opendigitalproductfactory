@@ -3,14 +3,34 @@ import { describe, expect, it } from "vitest";
 import { createOperationalCapabilityState, loadOperationalCapabilityState } from "./operational-state";
 
 describe("createOperationalCapabilityState", () => {
-  it("joins persisted enabled state with observations at one typed boundary", () => {
-    const state = createOperationalCapabilityState({
+  it("rejects stale persisted catalog identity", () => {
+    expect(() => createOperationalCapabilityState({
       installSnapshot: {
         enabledRuntimeCapabilities: ["runtime:core"],
         capabilityCatalogHash: "snapshot-catalog",
         capabilityStateVersion: "snapshot-state",
       },
-      capabilityStates: [{ capabilityId: "runtime:core", state: "active" }],
+      capabilityStates: catalogStates(["runtime:core"]),
+      observedServices: {},
+      observedProviders: {},
+    })).toThrow(/install_catalog_stale/);
+  });
+
+  it("rejects stale persisted capability state identity", () => {
+    expect(() => createOperationalCapabilityState({
+      installSnapshot: { enabledRuntimeCapabilities: ["runtime:core"], capabilityStateVersion: "stale" },
+      capabilityStates: catalogStates(["runtime:core"]),
+      observedServices: {},
+      observedProviders: {},
+    })).toThrow(/install_capability_state_stale/);
+  });
+
+  it("joins persisted enabled state with observations at one typed boundary", () => {
+    const state = createOperationalCapabilityState({
+      installSnapshot: {
+        enabledRuntimeCapabilities: ["runtime:core"],
+      },
+      capabilityStates: catalogStates(["runtime:core"]),
       observedServices: { postgres: { composePresent: true, healthy: true } },
       observedProviders: { openai: { configured: true, healthy: true } },
     });
@@ -25,7 +45,7 @@ describe("createOperationalCapabilityState", () => {
   it("classifies disabled and enabled-but-missing optional services", () => {
     const inactive = createOperationalCapabilityState({
       installSnapshot: { enabledRuntimeCapabilities: ["runtime:core"] },
-      capabilityStates: [{ capabilityId: "runtime:core", state: "active" }],
+      capabilityStates: catalogStates(["runtime:core"]),
       observedServices: {},
       observedProviders: {},
     });
@@ -33,10 +53,7 @@ describe("createOperationalCapabilityState", () => {
 
     const degraded = createOperationalCapabilityState({
       installSnapshot: { enabledRuntimeCapabilities: ["runtime:browser-automation", "runtime:core"] },
-      capabilityStates: [
-        { capabilityId: "runtime:browser-automation", state: "active" },
-        { capabilityId: "runtime:core", state: "active" },
-      ],
+      capabilityStates: catalogStates(["runtime:browser-automation", "runtime:core"]),
       observedServices: {},
       observedProviders: {},
     });
@@ -48,8 +65,13 @@ describe("createOperationalCapabilityState", () => {
       observedServices: {},
       observedProviders: {},
       readInstallSnapshot: async () => ({ enabledRuntimeCapabilities: ["runtime:core"] }),
-      readCapabilityStates: async () => [{ capabilityId: "runtime:core", state: "active" }],
+      readCapabilityStates: async () => catalogStates(["runtime:core"]),
     });
     expect(state.enabledRuntimeCapabilities).toEqual(["runtime:core"]);
   });
 });
+
+const CAPABILITIES = ["runtime:adp-integration", "runtime:browser-automation", "runtime:build", "runtime:core", "runtime:deep-observability", "runtime:development", "runtime:durable-automation", "runtime:external-ai", "runtime:local-speech"];
+function catalogStates(enabled: string[]) {
+  return CAPABILITIES.map((capabilityId) => ({ capabilityId, state: enabled.includes(capabilityId) ? "active" as const : "disabled" as const }));
+}

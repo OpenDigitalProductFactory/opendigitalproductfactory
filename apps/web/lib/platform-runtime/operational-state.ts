@@ -26,6 +26,7 @@ export interface OperationalCapabilityState {
   serviceRequirements: CapabilityServiceRequirement[];
   observedServices: Record<string, ObservedServiceState>;
   backupServices: string[];
+  capabilityBackupCandidates: string[];
   externalRuntimes: ExternalRuntimeRequirement[];
   providerState: Record<string, ObservedProviderState>;
   serviceStates: Record<string, OperationalServiceStatus>;
@@ -41,6 +42,12 @@ export function createOperationalCapabilityState(input: {
     enabledRuntimeCapabilities: input.installSnapshot.enabledRuntimeCapabilities,
     capabilityStates: input.capabilityStates,
   });
+  if (input.installSnapshot.capabilityCatalogHash && input.installSnapshot.capabilityCatalogHash !== projection.catalogHash) {
+    throw new Error("install_catalog_stale");
+  }
+  if (input.installSnapshot.capabilityStateVersion && input.installSnapshot.capabilityStateVersion !== projection.capabilityStateVersion) {
+    throw new Error("install_capability_state_stale");
+  }
   const serviceStates: Record<string, OperationalServiceStatus> = {};
   for (const name of projection.inactiveOptionalServices) serviceStates[name] = "optional_inactive";
   for (const service of projection.serviceRequirements) {
@@ -59,6 +66,7 @@ export function createOperationalCapabilityState(input: {
     serviceRequirements: projection.serviceRequirements,
     observedServices: input.observedServices,
     backupServices: projection.backupServices,
+    capabilityBackupCandidates: projection.capabilityBackupCandidates,
     externalRuntimes: projection.externalRuntimes,
     providerState: input.observedProviders,
     serviceStates,
@@ -75,11 +83,10 @@ export async function loadOperationalCapabilityState(input: {
     JSON.parse(await readFile("/dpf-state/install-state.json", "utf8")) as PersistedInstallSnapshot);
   const readCapabilityStates = input.readCapabilityStates ?? (async () => {
     const rows = await prisma.platformCapability.findMany({
+      where: { capabilityId: { startsWith: "runtime:" } },
       select: { capabilityId: true, state: true },
     });
-    return rows
-      .filter((row): row is { capabilityId: string; state: "active" | "disabled" } => row.state === "active" || row.state === "disabled")
-      .map((row) => ({ capabilityId: row.capabilityId, state: row.state }));
+    return rows.map((row) => ({ capabilityId: row.capabilityId, state: row.state as LiveCapabilityState["state"] }));
   });
   const [installSnapshot, capabilityStates] = await Promise.all([
     readInstallSnapshot(),

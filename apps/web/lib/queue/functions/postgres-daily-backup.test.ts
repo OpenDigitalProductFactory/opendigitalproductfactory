@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { capabilityBackupReceipt, selectCapabilityBackupServices } from "./postgres-daily-backup";
+import { describe, expect, it, vi } from "vitest";
+import { capabilityBackupReceipt, runCapabilityOwnedBackupSteps, selectCapabilityBackupServices } from "./postgres-daily-backup";
 
 describe("capability-owned backup selection", () => {
   it("keeps postgres scheduled and selects enabled targets from the projection", () => {
@@ -11,5 +11,19 @@ describe("capability-owned backup selection", () => {
       target: "browser-use",
       status: "optional_inactive",
     });
+  });
+
+  it("dispatches enabled capability targets and receipts disabled targets in the production planner", async () => {
+    const run = vi.fn(async (_name: string, operation: () => unknown) => operation());
+    const browserRunner = vi.fn(async () => ({ ok: true }));
+    const receipts = await runCapabilityOwnedBackupSteps({ run }, {
+      backupServices: ["postgres", "browser-use"],
+      capabilityBackupCandidates: ["browser-use", "dpf-tts"],
+    } as never, { "browser-use": browserRunner });
+    expect(browserRunner).toHaveBeenCalledOnce();
+    expect(receipts).toEqual([
+      { target: "browser-use", status: "selected", result: { ok: true } },
+      { target: "dpf-tts", status: "optional_inactive" },
+    ]);
   });
 });

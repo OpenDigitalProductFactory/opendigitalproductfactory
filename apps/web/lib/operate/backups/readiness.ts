@@ -17,6 +17,7 @@ import {
   type ReadinessSummary,
 } from "./types";
 import type { OperationalCapabilityState } from "@/lib/platform-runtime/operational-state";
+import { loadOperationalCapabilityState } from "@/lib/platform-runtime/operational-state";
 
 const BACKUPS_ROOT = "/backups";
 
@@ -159,7 +160,15 @@ export async function getPostgresBackupReadiness(): Promise<ReadinessSummary> {
 // postgres-only after BET-5 retired the neo4j + qdrant backup jobs.
 export async function getAllBackupReadiness(): Promise<{
   postgres: ReadinessSummary;
+  capabilityOwned: Array<{ target: string; status: "required" | "optional_inactive" | "optional_degraded" }>;
 }> {
-  const postgres = await getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres");
-  return { postgres };
+  const [postgres, operationalState] = await Promise.all([
+    getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres"),
+    loadOperationalCapabilityState({ observedServices: {}, observedProviders: {} }),
+  ]);
+  return {
+    postgres,
+    capabilityOwned: operationalState.capabilityBackupCandidates.map((target) =>
+      projectCapabilityBackupReadiness(target, operationalState)),
+  };
 }

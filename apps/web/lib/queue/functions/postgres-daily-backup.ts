@@ -21,11 +21,13 @@ import {
   POSTGRES_TRIAL_RESTORE_EVENT,
 } from "@/lib/operate/backups/constants";
 import type { OperationalCapabilityState } from "@/lib/platform-runtime/operational-state";
+import { loadOperationalCapabilityState } from "@/lib/platform-runtime/operational-state";
 
 type BackupProjection = Pick<OperationalCapabilityState, "backupServices">;
 export type CapabilityBackupReceipt = {
   target: string;
-  status: "selected" | "optional_inactive";
+  status: "selected" | "optional_inactive" | "optional_degraded";
+  result?: unknown;
 };
 
 /** Core Postgres remains first; capability-owned targets come only from the shared projection. */
@@ -37,6 +39,32 @@ export function capabilityBackupReceipt(target: string, projection: BackupProjec
   return projection.backupServices.includes(target)
     ? { target, status: "selected" }
     : { target, status: "optional_inactive" };
+}
+
+type CapabilityBackupRunner = () => Promise<unknown>;
+type StepRunner = { run(name: string, operation: () => Promise<unknown> | unknown): Promise<unknown> };
+
+/** Runs only capability-owned candidates declared by the catalog; BET-5 engines are deliberately absent. */
+export async function runCapabilityOwnedBackupSteps(
+  step: StepRunner,
+  state: Pick<OperationalCapabilityState, "backupServices" | "capabilityBackupCandidates">,
+  runners: Readonly<Record<string, CapabilityBackupRunner>> = {},
+): Promise<CapabilityBackupReceipt[]> {
+  const receipts: CapabilityBackupReceipt[] = [];
+  for (const target of state.capabilityBackupCandidates) {
+    if (!state.backupServices.includes(target)) {
+      receipts.push({ target, status: "optional_inactive" });
+      continue;
+    }
+    const runner = runners[target];
+    if (!runner) {
+      receipts.push({ target, status: "optional_degraded" });
+      continue;
+    }
+    const result = await step.run(`run-${target}-backup-scheduled`, runner);
+    receipts.push({ target, status: "selected", result });
+  }
+  return receipts;
 }
 
 // ─── Daily cron (postgres backup + trial-restore) ────────────────────────────
@@ -52,12 +80,19 @@ export const allBackupsDailyScheduled = inngest.createFunction(
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    const operationalState = await step.run("load-operational-capability-state", () =>
+      loadOperationalCapabilityState({ observedServices: {}, observedProviders: {} }));
+
     const pgResult = await step.run("run-postgres-backup-scheduled", async () => {
       const { runPostgresBackup } = await import(
         "@/lib/operate/backups/postgres-backup-runner"
       );
       return runPostgresBackup({ trigger: "scheduled" });
     });
+    const capabilityReceipts = await runCapabilityOwnedBackupSteps(
+      step,
+      operationalState as OperationalCapabilityState,
+    );
 
     // Postgres trial-restore verification (BI-31C9FBDF). Runs AFTER the
     // postgres backup completes — verifies the dump is functionally
@@ -75,7 +110,7 @@ export const allBackupsDailyScheduled = inngest.createFunction(
       },
     );
 
-    return { pgResult, trialRestoreResult };
+    return { pgResult, capabilityReceipts, trialRestoreResult };
   },
 );
 

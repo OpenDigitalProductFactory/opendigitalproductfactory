@@ -34,6 +34,7 @@ export interface CapabilityServiceProjection {
   requiredServices: string[];
   inactiveOptionalServices: string[];
   backupServices: string[];
+  capabilityBackupCandidates: string[];
   serviceRequirements: CapabilityServiceRequirement[];
   externalRuntimes: ExternalRuntimeRequirement[];
 }
@@ -60,17 +61,27 @@ export function projectCapabilityServices(input: {
   capabilityStates: LiveCapabilityState[];
 }): CapabilityServiceProjection {
   const enabled = new Set(input.enabledRuntimeCapabilities);
-  const liveById = new Map(input.capabilityStates.map((item) => [item.capabilityId, item.state]));
+  const catalogIds = new Set(generatedCatalog.capabilities.map((item) => item.capabilityId));
+  if (enabled.size !== input.enabledRuntimeCapabilities.length) throw new Error("duplicate_enabled_runtime_capability");
+  for (const id of enabled) if (!catalogIds.has(id)) throw new Error(`unknown_runtime_capability:${id}`);
+  const liveById = new Map<string, CapabilityState>();
+  for (const item of input.capabilityStates) {
+    if (!catalogIds.has(item.capabilityId)) throw new Error(`unknown_live_capability:${item.capabilityId}`);
+    if (item.state !== "active" && item.state !== "disabled") throw new Error(`invalid_live_capability_state:${item.capabilityId}`);
+    if (liveById.has(item.capabilityId)) throw new Error(`duplicate_live_capability:${item.capabilityId}`);
+    liveById.set(item.capabilityId, item.state);
+  }
   for (const capability of generatedCatalog.capabilities) {
     const live = liveById.get(capability.capabilityId);
-    if (live && (live === "active") !== enabled.has(capability.capabilityId)) {
+    if (!live) throw new Error(`missing_live_capability:${capability.capabilityId}`);
+    if ((live === "active") !== enabled.has(capability.capabilityId)) {
       throw new Error(`capability_state_stale:${capability.capabilityId}`);
     }
   }
 
   const capabilities = generatedCatalog.capabilities.map((entry) => ({
     capabilityId: entry.capabilityId,
-    state: enabled.has(entry.capabilityId) ? "active" : "disabled",
+    state: liveById.get(entry.capabilityId),
     manifest: { runtime: { dependencies: entry.dependencies, activation: { policy: entry.activationPolicy }, workGuards: entry.workGuards } },
   }));
   const substrate = {
@@ -79,11 +90,20 @@ export function projectCapabilityServices(input: {
     externalRuntimes: generatedCatalog.capabilities.flatMap((entry) => entry.externalRuntimes),
   };
 
-  return resolveCapabilityServiceProjection({
+  const projection = resolveCapabilityServiceProjection({
     substrate,
     capabilities,
     enabledRuntimeCapabilities: input.enabledRuntimeCapabilities,
   }) as CapabilityServiceProjection;
+  return {
+    ...projection,
+    capabilityBackupCandidates: generatedCatalog.capabilities
+      .filter((entry) => entry.capabilityId !== "runtime:core")
+      .flatMap((entry) => entry.services)
+      .filter((service) => service.backupPolicy === "separate-required")
+      .map((service) => service.service)
+      .sort(),
+  };
 }
 
 export const capabilityServiceCatalogIdentity = Object.freeze({

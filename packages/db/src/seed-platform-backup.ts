@@ -59,6 +59,7 @@ async function ensureBackupScheduledJob(
       data: {
         name,
         schedule,
+        enabled: true,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },
     });
@@ -66,7 +67,7 @@ async function ensureBackupScheduledJob(
   }
 
   await prisma.scheduledJob.create({
-    data: { jobId, name, schedule, nextRunAt },
+    data: { jobId, name, schedule, enabled: true, nextRunAt },
   });
   return { created: true };
 }
@@ -117,7 +118,7 @@ export async function ensureAllBackupScheduledJobs(
     ensureBackupScheduledJob(prisma, POSTGRES_TRIAL_RESTORE_JOB_ID, POSTGRES_TRIAL_RESTORE_JOB_NAME, POSTGRES_TRIAL_RESTORE_SCHEDULE, now),
     prisma.scheduledJob.updateMany({
       where: { jobId: { in: [NEO4J_BACKUP_JOB_ID, QDRANT_BACKUP_JOB_ID] } },
-      data: { schedule: "inactive" },
+      data: { enabled: false, nextRunAt: null },
     }),
   ]);
   return { postgres, postgresTrialRestore, supersededDeactivated: superseded.count };
