@@ -28,6 +28,7 @@ import {
 import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { tryAcquireBacklogClaimAtomic } from "@/lib/backlog/claim-on-start";
 
 const definitions: ToolDefinition[] = [
   {
@@ -925,41 +926,11 @@ async function updateBacklogItemStatus(
       message: `cannot move ${itemIdRaw} from ${item.status} to ${target}`,
     };
 
-  // Claim-on-start gate (capsule-first enforcement): moving a BI to
-  // in-progress is the "I am starting this" signal on the direct-build path.
-  // Acquire the BacklogItem claim atomically and refuse if another active
-  // session already holds a FRESH claim — this is what stops two concurrent
-  // sessions from independently building the same BI (the EP-F7E35344
-  // collision). A claim older than STALE_BACKLOG_CLAIM_MS is treated as
-  // abandoned (a dead session) and is reclaimable; force=true overrides a
-  // live conflict deliberately. Releasing happens when the item leaves
-  // in-progress (mirrors the Build Studio claim/release in actions/build.ts).
-  const STALE_BACKLOG_CLAIM_MS = 12 * 60 * 60 * 1000;
+  // Claim-on-start (BI-B62B9F1E): the DB UPDATE is the gate (row-level
+  // serialize), not a pre-transaction freshness read. Concurrent sessions
+  // race on the same row; the loser's WHERE fails (count=0) → claim_conflict.
+  // Stale claims reclaim inline; force=true takes over. Release on leave.
   const forceClaim = params["force"] === true;
-  if (target === "in-progress") {
-    const claimAgeMs = item.claimedAt ? Date.now() - new Date(item.claimedAt).getTime() : Infinity;
-    const claimIsFresh = claimAgeMs < STALE_BACKLOG_CLAIM_MS;
-    const ownedByCaller =
-      (item.claimedById != null && item.claimedById === userId) ||
-      (item.claimedByAgentId != null && item.claimedByAgentId === (context?.agentId ?? null));
-    const activelyClaimedByOther =
-      item.claimStatus === "active" && claimIsFresh && !ownedByCaller &&
-      (item.claimedById != null || item.claimedByAgentId != null);
-    if (activelyClaimedByOther && !forceClaim) {
-      return {
-        success: false,
-        error: "claim_conflict",
-        message:
-          `${itemIdRaw} is already claimed (active, ${Math.round(claimAgeMs / 60000)}m ago) by another session. ` +
-          "Coordinate with the holder, pick different work, or pass force=true to take it over.",
-        data: {
-          claimedById: item.claimedById,
-          claimedByAgentId: item.claimedByAgentId,
-          claimedAt: item.claimedAt,
-        },
-      };
-    }
-  }
   if (item.status === target) {
     return {
       success: true,
@@ -978,6 +949,33 @@ async function updateBacklogItemStatus(
     };
   }
 
+  let forcedClaimAcquired = false;
+  if (target === "in-progress") {
+    const claimResult = await tryAcquireBacklogClaimAtomic({
+      db: prisma,
+      itemRowId: item.id,
+      userId,
+      agentId: context?.agentId ?? null,
+      force: forceClaim,
+    });
+    if (!claimResult.ok) {
+      return {
+        success: false,
+        error: "claim_conflict",
+        message:
+          `${itemIdRaw} is already claimed (active` +
+          (claimResult.claimAgeMinutes != null ? `, ${claimResult.claimAgeMinutes}m ago` : "") +
+          ") by another session. Coordinate with the holder, pick different work, or pass force=true to take it over.",
+        data: {
+          claimedById: claimResult.claimedById,
+          claimedByAgentId: claimResult.claimedByAgentId,
+          claimedAt: claimResult.claimedAt,
+        },
+      };
+    }
+    forcedClaimAcquired = claimResult.forced;
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     const next = await tx.backlogItem.update({
       where: { id: item.id },
@@ -985,15 +983,7 @@ async function updateBacklogItemStatus(
         status: target,
         ...(target === "done" ? { completedAt: new Date(), resolution } : {}),
         ...(isRetriage ? { triageOutcome: null, effortSize: null, completedAt: null } : {}),
-        // Acquire the claim on entering in-progress; release it on leaving.
-        ...(target === "in-progress"
-          ? {
-              claimStatus: "active",
-              claimedById: userId,
-              claimedByAgentId: context?.agentId ?? null,
-              claimedAt: new Date(),
-            }
-          : {}),
+        // Claim fields written by tryAcquireBacklogClaimAtomic above.
         ...(item.status === "in-progress" && target !== "in-progress"
           ? { claimStatus: "released" }
           : {}),
@@ -1018,7 +1008,7 @@ async function updateBacklogItemStatus(
               }
             : {}),
           ...(target === "in-progress"
-            ? { claimAction: "acquired", forcedClaim: forceClaim }
+            ? { claimAction: "acquired", forcedClaim: forcedClaimAcquired }
             : item.status === "in-progress"
               ? { claimAction: "released" }
               : {}),
