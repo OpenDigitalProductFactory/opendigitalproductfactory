@@ -439,7 +439,8 @@
       "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
-        "runtime-deep-observability"
+        "runtime-deep-observability",
+        "observability-ui"
       ],
       "ports": [
         "127.0.0.1:3100:3100"
@@ -467,7 +468,8 @@
       "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
-        "runtime-deep-observability"
+        "runtime-deep-observability",
+        "observability-ui"
       ],
       "ports": [],
       "volumes": [
@@ -547,7 +549,8 @@
       "boundaryReason": "Separate postgres-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
-        "runtime-deep-observability"
+        "runtime-deep-observability",
+        "observability-ui"
       ],
       "ports": [
         "9187:9187"
@@ -653,7 +656,8 @@
       "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
-        "runtime-local-speech"
+        "runtime-local-speech",
+        "tts"
       ],
       "ports": [
         "127.0.0.1:8765:9000"

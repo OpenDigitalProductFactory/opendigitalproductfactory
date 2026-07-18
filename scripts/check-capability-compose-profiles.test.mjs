@@ -98,3 +98,23 @@ test("preserves_special_profile_semantics", async () => {
   const broken = checkCapabilityComposeProfiles({ composeSource: brokenAlias, substrate });
   assert.ok(broken.errors.includes("profile_dependency_unreachable:grafana:prometheus:observability-ui"));
 });
+
+test("compatibility_aliases_equal_their_portable_runtime_profile_closures", async () => {
+  const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const macos = await readFile(new URL("../docker-compose.macos.yml", import.meta.url), "utf8");
+  const linux = await readFile(new URL("../docker-compose.linux.yml", import.meta.url), "utf8");
+  const substrate = JSON.parse(await readFile(new URL("./platform-substrate-manifest.json", import.meta.url), "utf8"));
+  const result = checkCapabilityComposeProfiles({ composeSource: compose, overlaySources: { macos, linux }, substrate });
+  for (const host of ["windows", "macos", "linux"]) {
+    assert.deepEqual(
+      result.renderProfiles(host, ["observability-ui"]),
+      result.renderProfiles(host, ["runtime-deep-observability"]),
+      `${host} observability-ui alias`,
+    );
+    assert.deepEqual(
+      result.renderProfiles(host, ["tts"]),
+      result.renderProfiles(host, ["runtime-local-speech"]),
+      `${host} tts alias`,
+    );
+  }
+});

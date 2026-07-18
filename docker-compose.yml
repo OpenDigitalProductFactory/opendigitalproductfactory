@@ -610,8 +610,8 @@ services:
     # (Postgres + Neo4j + Prometheus) on the System Health tab and delivers
     # alerts via the Inngest poll-bridge, so Grafana is not on the operational or
     # alerting path. The whole monitoring stack follows the deep-observability
-    # capability; this legacy alias still selects the dashboard and prerequisite:
-    #   docker compose --profile observability-ui up -d grafana
+    # capability; the legacy alias selects the same portable service closure:
+    #   docker compose --profile observability-ui up -d
     profiles: ["runtime-deep-observability", "observability-ui"]
     ports:
       - "3002:3000"
@@ -644,7 +644,7 @@ services:
   # Captures EVERY container's stdout/stderr with 14-day retention so errors
   # stop scrolling out of the ephemeral Docker buffer unseen.
   loki:
-    profiles: ["runtime-deep-observability"]
+    profiles: ["runtime-deep-observability", "observability-ui"]
     image: grafana/loki:3.4.3
     restart: unless-stopped
     logging: *default-logging
@@ -664,7 +664,7 @@ services:
     # scrapes it and the portal's log-issues panel talks to its API.
 
   alloy:
-    profiles: ["runtime-deep-observability"]
+    profiles: ["runtime-deep-observability", "observability-ui"]
     image: grafana/alloy:v1.7.5
     restart: unless-stopped
     logging: *default-logging
@@ -723,7 +723,7 @@ services:
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
 
   postgres-exporter:
-    profiles: ["runtime-deep-observability"]
+    profiles: ["runtime-deep-observability", "observability-ui"]
     image: prometheuscommunity/postgres-exporter:v0.19.1
     restart: unless-stopped
     logging: *default-logging
@@ -841,7 +841,7 @@ services:
   #
   # The local-speech capability activates this sidecar.
   dpf-stt:
-    profiles: ["runtime-local-speech"]
+    profiles: ["runtime-local-speech", "tts"]
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
     # resolved on 2026-07-17 (the prior 3ee18f84… digest was deleted from the
     # registry — Release Image Manifest Guard caught it again). The registry
@@ -900,7 +900,8 @@ services:
   #   Tier 3 (API):   Set TTS_PROVIDER=cartesia or TTS_PROVIDER=fish-audio in
   #                   the portal service env to route to a managed API instead.
   #
-  # Compatibility alias: docker compose --profile tts up
+  # Compatibility alias selects the full local-speech closure:
+  #   docker compose --profile tts up
   dpf-tts:
     image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:v0.1.0}
     profiles: ["runtime-local-speech", "tts"]

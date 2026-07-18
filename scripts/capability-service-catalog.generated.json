@@ -314,6 +314,7 @@
           ],
           "ports": [],
           "profiles": [
+            "observability-ui",
             "runtime-deep-observability"
           ],
           "service": "alloy",
@@ -399,6 +400,7 @@
             "127.0.0.1:3100:3100"
           ],
           "profiles": [
+            "observability-ui",
             "runtime-deep-observability"
           ],
           "service": "loki",
@@ -455,6 +457,7 @@
             "9187:9187"
           ],
           "profiles": [
+            "observability-ui",
             "runtime-deep-observability"
           ],
           "service": "postgres-exporter",
@@ -1124,7 +1127,8 @@
             "127.0.0.1:8765:9000"
           ],
           "profiles": [
-            "runtime-local-speech"
+            "runtime-local-speech",
+            "tts"
           ],
           "service": "dpf-stt",
           "targetClassification": "capability-activated",
@@ -1165,7 +1169,7 @@
       ]
     }
   ],
-  "catalogHash": "1f0750d173d35c2f899a846f668f6490d223a6827fdac9b5dcc72107df59a322",
+  "catalogHash": "0d23205cbadd063e14d63ab45835f19f212d6b9cb76808abd75665259f52229c",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

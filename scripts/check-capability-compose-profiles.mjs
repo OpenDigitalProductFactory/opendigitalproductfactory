@@ -139,7 +139,8 @@ export function checkCapabilityComposeProfiles({ composeSource, overlaySources =
     if (JSON.stringify(projection.composeProfiles) !== JSON.stringify(sorted(fixture.composeProfiles))) throw new Error(`fixture_profile_mismatch:${projection.composeProfiles.join(",")}:${fixture.composeProfiles.join(",")}`);
     return { composeServices: selectedComposeServices(hostServices[hostPlatform] ?? services, fixture.composeProfiles), projectedServices: sorted(projection.requiredServices) };
   };
-  return { errors: [...new Set(errors)], services, hostServices, resolveFixture };
+  const renderProfiles = (hostPlatform, profiles) => selectedComposeServices(hostServices[hostPlatform] ?? services, profiles);
+  return { errors: [...new Set(errors)], services, hostServices, resolveFixture, renderProfiles };
 }
 
 async function main() {
