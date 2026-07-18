@@ -44,10 +44,12 @@ export function createOperationalCapabilityState(input: {
     enabledRuntimeCapabilities: input.installSnapshot.enabledRuntimeCapabilities,
     capabilityStates: input.capabilityStates,
   });
-  if (input.installSnapshot.capabilityCatalogHash && input.installSnapshot.capabilityCatalogHash !== projection.catalogHash) {
+  if (!/^[a-f0-9]{64}$/.test(input.installSnapshot.capabilityCatalogHash ?? "")) throw new Error("install_catalog_identity_invalid");
+  if (!/^[a-f0-9]{64}$/.test(input.installSnapshot.capabilityStateVersion ?? "")) throw new Error("install_capability_state_identity_invalid");
+  if (input.installSnapshot.capabilityCatalogHash !== projection.catalogHash) {
     throw new Error("install_catalog_stale");
   }
-  if (input.installSnapshot.capabilityStateVersion && input.installSnapshot.capabilityStateVersion !== projection.capabilityStateVersion) {
+  if (input.installSnapshot.capabilityStateVersion !== projection.capabilityStateVersion) {
     throw new Error("install_capability_state_stale");
   }
   const serviceStates: Record<string, OperationalServiceStatus> = {};
@@ -127,13 +129,14 @@ export async function observeDockerProjectServices(get: DockerGet = dockerSocket
 function dockerSocketGet(path: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const req = request({ socketPath: "/var/run/docker.sock", path, method: "GET" }, (response) => {
-      const chunks: Buffer[] = [];
-      response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      const chunks: Buffer[] = []; let bytes = 0;
+      response.on("data", (chunk) => { const buffer = Buffer.from(chunk); bytes += buffer.length; if (bytes > 1024 * 1024) { req.destroy(new Error("docker_engine_response_too_large")); return; } chunks.push(buffer); });
       response.on("end", () => {
         if ((response.statusCode ?? 500) >= 400) return reject(new Error(`docker_engine_http_${response.statusCode}`));
         try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch (error) { reject(error); }
       });
     });
+    req.setTimeout(5_000, () => req.destroy(new Error("docker_engine_timeout")));
     req.on("error", reject); req.end();
   });
 }

@@ -19,4 +19,10 @@ describe("ensureAllBackupScheduledJobs", () => {
     });
     expect(scheduledJob.deleteMany).not.toHaveBeenCalled();
   });
+
+  it("preserves an existing operator-disabled core schedule", async () => {
+    const scheduledJob = { findUnique: vi.fn().mockResolvedValue({ jobId: "existing", nextRunAt: null }), create: vi.fn(), update: vi.fn().mockResolvedValue({}), updateMany: vi.fn().mockResolvedValue({ count: 0 }) };
+    await ensureAllBackupScheduledJobs({ scheduledJob } as never, new Date("2026-07-18T00:00:00Z"));
+    for (const call of scheduledJob.update.mock.calls) expect(call[0].data).not.toHaveProperty("enabled");
+  });
 });

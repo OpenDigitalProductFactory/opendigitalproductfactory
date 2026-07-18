@@ -86,19 +86,19 @@ export const allBackupsDailyScheduled = inngest.createFunction(
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    const operationalState = await step.run("load-operational-capability-state", () =>
-      loadOperationalCapabilityState({ observedProviders: {} }));
-
     const pgResult = await step.run("run-postgres-backup-scheduled", async () => {
       const { runPostgresBackup } = await import(
         "@/lib/operate/backups/postgres-backup-runner"
       );
       return runPostgresBackup({ trigger: "scheduled" });
     });
-    const capabilityReceipts = await runCapabilityOwnedBackupSteps(
-      step,
-      operationalState as OperationalCapabilityState,
-    );
+    let capabilityReceipts: CapabilityBackupReceipt[];
+    try {
+      const operationalState = await step.run("load-operational-capability-state", () => loadOperationalCapabilityState({ observedProviders: {} }));
+      capabilityReceipts = await runCapabilityOwnedBackupSteps(step, operationalState as OperationalCapabilityState);
+    } catch (error) {
+      capabilityReceipts = [{ target: "capability-planning", status: "optional_degraded", selection: "selected", result: { error: error instanceof Error ? error.message : "capability_planning_failed" } }];
+    }
 
     // Postgres trial-restore verification (BI-31C9FBDF). Runs AFTER the
     // postgres backup completes — verifies the dump is functionally

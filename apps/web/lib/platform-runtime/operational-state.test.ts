@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createOperationalCapabilityState, loadOperationalCapabilityState, observeDockerProjectServices } from "./operational-state";
+import { projectCapabilityServices } from "./capability-service-projection";
 
 describe("createOperationalCapabilityState", () => {
+  it.each([{}, { capabilityCatalogHash: "bad", capabilityStateVersion: "bad" }])("rejects missing or invalid install identity", (identity) => {
+    expect(() => createOperationalCapabilityState({ installSnapshot: { enabledRuntimeCapabilities: ["runtime:core"], ...identity }, capabilityStates: catalogStates(["runtime:core"]), observedServices: {}, observedProviders: {} })).toThrow(/identity_invalid/);
+  });
   it("rejects stale persisted catalog identity", () => {
     expect(() => createOperationalCapabilityState({
       installSnapshot: {
@@ -27,9 +31,7 @@ describe("createOperationalCapabilityState", () => {
 
   it("joins persisted enabled state with observations at one typed boundary", () => {
     const state = createOperationalCapabilityState({
-      installSnapshot: {
-        enabledRuntimeCapabilities: ["runtime:core"],
-      },
+      installSnapshot: snapshot(["runtime:core"]),
       capabilityStates: catalogStates(["runtime:core"]),
       observedServices: { postgres: { composePresent: true, healthy: true } },
       observedProviders: { openai: { configured: true, healthy: true } },
@@ -44,7 +46,7 @@ describe("createOperationalCapabilityState", () => {
 
   it("classifies disabled and enabled-but-missing optional services", () => {
     const inactive = createOperationalCapabilityState({
-      installSnapshot: { enabledRuntimeCapabilities: ["runtime:core"] },
+      installSnapshot: snapshot(["runtime:core"]),
       capabilityStates: catalogStates(["runtime:core"]),
       observedServices: {},
       observedProviders: {},
@@ -52,7 +54,7 @@ describe("createOperationalCapabilityState", () => {
     expect(inactive.serviceStates["browser-use"]).toBe("optional_inactive");
 
     const degraded = createOperationalCapabilityState({
-      installSnapshot: { enabledRuntimeCapabilities: ["runtime:browser-automation", "runtime:core"] },
+      installSnapshot: snapshot(["runtime:browser-automation", "runtime:core"]),
       capabilityStates: catalogStates(["runtime:browser-automation", "runtime:core"]),
       observedServices: {},
       observedProviders: {},
@@ -64,7 +66,7 @@ describe("createOperationalCapabilityState", () => {
     const state = await loadOperationalCapabilityState({
       observedServices: {},
       observedProviders: {},
-      readInstallSnapshot: async () => ({ enabledRuntimeCapabilities: ["runtime:core"] }),
+      readInstallSnapshot: async () => snapshot(["runtime:core"]),
       readCapabilityStates: async () => catalogStates(["runtime:core"]),
     });
     expect(state.enabledRuntimeCapabilities).toEqual(["runtime:core"]);
@@ -73,7 +75,7 @@ describe("createOperationalCapabilityState", () => {
   it("loads observations from the host-authority callback when callers do not inject them", async () => {
     const state = await loadOperationalCapabilityState({
       observedProviders: {},
-      readInstallSnapshot: async () => ({ enabledRuntimeCapabilities: ["runtime:core"] }),
+      readInstallSnapshot: async () => snapshot(["runtime:core"]),
       readCapabilityStates: async () => catalogStates(["runtime:core"]),
       readObservedServices: async () => ({ postgres: { composePresent: true, healthy: true } }),
     });
@@ -82,7 +84,7 @@ describe("createOperationalCapabilityState", () => {
 
   it("defaults to honest missing observations without reading an invented host file", async () => {
     const state = await loadOperationalCapabilityState({
-      observedProviders: {}, readInstallSnapshot: async () => ({ enabledRuntimeCapabilities: ["runtime:browser-automation", "runtime:core"] }),
+      observedProviders: {}, readInstallSnapshot: async () => snapshot(["runtime:browser-automation", "runtime:core"]),
       readCapabilityStates: async () => catalogStates(["runtime:browser-automation", "runtime:core"]), readObservedServices: async () => ({}),
     });
     expect(state.observedServices).toEqual({});
@@ -101,4 +103,8 @@ describe("createOperationalCapabilityState", () => {
 const CAPABILITIES = ["runtime:adp-integration", "runtime:browser-automation", "runtime:build", "runtime:core", "runtime:deep-observability", "runtime:development", "runtime:durable-automation", "runtime:external-ai", "runtime:local-speech"];
 function catalogStates(enabled: string[]) {
   return CAPABILITIES.map((capabilityId) => ({ capabilityId, state: enabled.includes(capabilityId) ? "active" as const : "disabled" as const }));
+}
+function snapshot(enabled: string[]) {
+  const projected = projectCapabilityServices({ enabledRuntimeCapabilities: enabled, capabilityStates: catalogStates(enabled) });
+  return { enabledRuntimeCapabilities: enabled, capabilityCatalogHash: projected.catalogHash, capabilityStateVersion: projected.capabilityStateVersion };
 }

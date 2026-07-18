@@ -59,7 +59,6 @@ async function ensureBackupScheduledJob(
       data: {
         name,
         schedule,
-        enabled: true,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },
     });
