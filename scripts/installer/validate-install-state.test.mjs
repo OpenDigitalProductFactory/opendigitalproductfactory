@@ -122,6 +122,26 @@ test("requires schema-version increments and migration edges for required-field 
   assert.equal(schemasByVersion.get(currentSchemaVersion).properties.schemaVersion.const, currentSchemaVersion);
 });
 
+test("allows agentToolchain.antigravityWired (5th CLI) — BI-F7823007 schema drift", async () => {
+  const withAntigravity = {
+    ...valid,
+    agentToolchain: {
+      appliedAt: "2026-07-18T00:00:00Z",
+      dpfPlatformVersion: "0.2.2",
+      superpowersVersion: null,
+      claudeCodeWired: true,
+      codexWired: true,
+      grokWired: true,
+      antigravityWired: true,
+      memorySeededAt: "2026-07-18T00:00:00Z",
+      mcpReadiness: { ok: true, toolCount: 222, observedAt: "2026-07-18T00:00:00Z" },
+      smokeTest: { result: "skipped", reason: "no_token" },
+      readinessState: "ready",
+    },
+  };
+  assert.deepEqual(await validateInstallState(withAntigravity), { valid: true, errors: [] });
+});
+
 test("enforces nested, format, uniqueness, and additional-property constraints", async () => {
   const result = await validateInstallState({
     ...valid,

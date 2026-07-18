@@ -177,6 +177,23 @@ describe("classifyBuildFailure", () => {
     expect(c.failingTrace).toContain("mounts denied");
   });
 
+  it("classifies the capability_state_stale preflight abort instead of leaving it unknown (BI-B132DF1D)", () => {
+    // The real fleet symptom: promote.sh's capability preflight aborts in ~4s
+    // before any build, and the wrapper reported it as "unknown (unclassified)".
+    const log = [
+      "[build-failure-class] unknown (unclassified)",
+      "--- stderr (tail) ---",
+      "error: capability_state_stale",
+    ].join("\n");
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("capability-state-preflight-unavailable");
+    expect(c.class).not.toBe("unknown");
+    expect(c.summary).toContain("MISLABEL");
+    expect(c.summary).toContain("#3272");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.failingTrace).toContain("capability_state_stale");
+  });
+
   it("keeps an unrelated mounts-denied path out of the state-dir advice", () => {
     const log = "Error response from daemon: mounts denied: The path /some/other/vol is not shared from the host.";
     const c = classifyBuildFailure({ log });

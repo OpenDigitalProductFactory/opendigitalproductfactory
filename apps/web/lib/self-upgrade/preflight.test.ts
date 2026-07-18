@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
-import { runCandidatePreflight } from "./preflight";
+import { resolveReadinessBackupHostPath, runCandidatePreflight } from "./preflight";
 
 describe("candidate signed install-state handoff", () => {
   it("returns a digest-bound signed envelope from candidate readiness", async () => {
@@ -20,5 +20,25 @@ describe("candidate signed install-state handoff", () => {
     const result = await runCandidatePreflight({ readinessMode: "legacy-bootstrap", readinessOwner: "bridge", sourcePath: "/source", hostInstallPath: "/host", canonicalInstallPath: "/host", targetSha: "target", runId: "SUR-legacy", composeFiles: [], healthUrl: "http://health", runtime: vi.fn(), recordReadiness: vi.fn(), failRun, emitFailure: vi.fn() });
     expect(result).toEqual({ ok: false, reason: "installer-state-repair-required" });
     expect(failRun).toHaveBeenCalledWith("SUR-legacy", expect.stringContaining("installer-state-repair-required"));
+  });
+});
+
+describe("resolveReadinessBackupHostPath (BI-E2625B79)", () => {
+  it("uses an explicit DPF_BACKUPS_HOST_PATH when set", () => {
+    expect(resolveReadinessBackupHostPath("/vol/backups", "/opt/dpf")).toBe("/vol/backups");
+  });
+
+  it("falls back to <install>/backups when the env var is EMPTY (the documented compose default)", () => {
+    // .env ships DPF_BACKUPS_HOST_PATH= empty by design; a plain `?? undefined`
+    // leaks "" through and skips the /backups mount -> recovery_parent_unavailable.
+    expect(resolveReadinessBackupHostPath("", "/opt/dpf")).toBe("/opt/dpf/backups");
+  });
+
+  it("falls back to <install>/backups when the env var is unset", () => {
+    expect(resolveReadinessBackupHostPath(undefined, "/opt/dpf")).toBe("/opt/dpf/backups");
+  });
+
+  it("treats whitespace-only as unset and strips a trailing slash from the install path", () => {
+    expect(resolveReadinessBackupHostPath("   ", "/opt/dpf/")).toBe("/opt/dpf/backups");
   });
 });

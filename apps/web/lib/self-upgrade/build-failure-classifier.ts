@@ -89,6 +89,14 @@ export type BuildFailureClass =
   // Desktop won't share it — the run dies silently at step=migrate. Fixed by
   // pinning DPF_STATE_DIR to an absolute shared host path in the install .env.
   | "docker-mount-denied"
+  // promote.sh's capability preflight aborted with `error: capability_state_stale`
+  // — a MISLABEL: it means /dpf-state/install-state.json (or the compose-profile
+  // adapter) was not available inside the promoter, not that capability state is
+  // stale. Root cause is a promoter launcher predating the /dpf-state self-upgrade
+  // mount (#3272) running a promote.sh that requires it (#3266); an install
+  // deployed in that window can't self-heal (BI-B132DF1D). Version-skew, not a
+  // defect in this run's code.
+  | "capability-state-preflight-unavailable"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -164,6 +172,12 @@ const MOUNTS_DENIED_PLAYBOOK = "docs/runbooks/2026-07-18-self-upgrade-mounts-den
 // unshareable /root/.dpf (#3262). Deliberately specific so an ordinary bad
 // bind-mount stays unclassified rather than being swept into the state-dir fix.
 const MOUNTS_DENIED = /mounts denied:[\s\S]{0,120}?path\s+(\S+)\s+is not shared from the host/i;
+// promote.sh's capability preflight aborts with exactly this line when the
+// governed install snapshot or the compose-profile adapter is not resolvable in
+// the promoter (a missing /dpf-state mount, not a genuinely stale state). Anchor
+// on the emitted string; the wrapper "unknown (unclassified)" was the live
+// symptom this rule replaces (BI-B132DF1D).
+const CAPABILITY_STATE_STALE = /^error: capability_state_stale$/im;
 // `CREATE EXTENSION vector` on a Postgres image without pgvector: the canonical
 // Postgres errors are `extension "vector" is not available` and a `DETAIL: Could
 // not open extension control file ".../vector.control"`. Deliberately anchored on
@@ -243,6 +257,21 @@ export function classifyBuildFailure(
         : `Docker Desktop refused to share the host path ${deniedPath} into a self-upgrade container. Point the mount at an absolute path Docker Desktop shares (Docker → Settings → Resources → File Sharing) — or provision the DPF_STATE_DIR / DPF_*_HOST_PATH env var the mount relies on in the install .env.`,
       playbookLink: MOUNTS_DENIED_PLAYBOOK,
       failingTrace: traceAround(log, MOUNTS_DENIED),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
+  // promote.sh's capability preflight aborted before any build (`error:
+  // capability_state_stale`). Decisive and precedes the build output, like the
+  // mount-denied case — classify it here so it stops surfacing as
+  // "unknown (unclassified)" pointing at the wrong playbook (BI-B132DF1D).
+  if (CAPABILITY_STATE_STALE.test(log)) {
+    return {
+      class: "capability-state-preflight-unavailable",
+      summary:
+        "promote.sh's capability preflight aborted with `error: capability_state_stale` — a MISLABEL: it means the governed install snapshot (/dpf-state/install-state.json) or the compose-profile adapter was not available inside the promoter, not that capability state is genuinely stale. Root cause is a promoter launcher predating the /dpf-state self-upgrade mount (#3272) running a promote.sh that already requires it (#3266): an install deployed in that window cannot self-heal and must be bootstrapped out-of-band onto a portal >= #3272 (BI-B132DF1D). Version-skew / environment, not a defect in this run's code.",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, CAPABILITY_STATE_STALE),
       isMainDefectVsEnvironment: "environment",
     };
   }

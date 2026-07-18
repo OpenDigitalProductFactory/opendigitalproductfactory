@@ -16,6 +16,24 @@ export type CandidatePreflightResult =
   | { ok: true; resolvedPromoterDigest?: string; migrationHandoff?: InstallStateMigrationHandoff }
   | { ok: false; reason: "promoter-readiness-failed" | "installer-state-repair-required" };
 
+/**
+ * Resolve the host path bound to /backups in the readiness container, mirroring
+ * the compose-level default `${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH}/backups}`.
+ * DPF_BACKUPS_HOST_PATH ships EMPTY by design (compose fills the default), so an
+ * empty/whitespace value must be treated as unset — a plain `?? undefined` only
+ * catches undefined and leaks "" through, which skips the /backups mount and makes
+ * the readiness preflight fail `recovery_parent_unavailable`. BI-E2625B79.
+ */
+export function resolveReadinessBackupHostPath(
+  backupsHostPathEnv: string | undefined,
+  canonicalInstallPath: string,
+): string | undefined {
+  const explicit = backupsHostPathEnv?.trim();
+  if (explicit) return explicit;
+  const root = canonicalInstallPath.replace(/\/$/, "");
+  return root ? `${root}/backups` : undefined;
+}
+
 export async function runCandidatePreflight(params: {
   dryRun?: boolean;
   readinessMode?: string;
@@ -66,7 +84,7 @@ export async function runCandidatePreflight(params: {
       hostInstallPath: params.hostInstallPath,
       targetSha: params.targetSha,
       backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${params.runId}`,
-      backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
+      backupHostPath: resolveReadinessBackupHostPath(process.env.DPF_BACKUPS_HOST_PATH, params.canonicalInstallPath),
       composeEnvFileHostPath: params.canonicalInstallPath
         ? `${params.canonicalInstallPath.replace(/\/$/, "")}/.env`
         : undefined,
