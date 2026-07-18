@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto";
 
-const compare = (left, right) => left.localeCompare(right);
+const compare = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+const SERVICE_CLASSES = new Set(["universal-core", "capability-activated", "ephemeral-lifecycle", "separate-distribution", "test-development-only"]);
+const BACKUP_POLICIES = new Set(["included", "separate-required", "excluded-ephemeral", "excluded-rebuildable", "excluded-stateless"]);
+const HEALTH_SEMANTICS = new Set(["compose-healthcheck", "consumer-observed", "lifecycle-completion"]);
+const HOST_PLATFORMS = new Set(["windows", "macos", "linux"]);
+const EXTERNAL_KINDS = new Set(["ai-runtime"]);
+const EXTERNAL_ACTIVATIONS = new Set(["provider-configuration"]);
+const EXTERNAL_HEALTH_SEMANTICS = new Set(["provider-health-reconciliation"]);
 const stable = (value) => {
   if (Array.isArray(value)) return value.map(stable);
   if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort(compare).map((key) => [key, stable(value[key])]));
@@ -10,20 +17,30 @@ const bytes = (value) => `${JSON.stringify(stable(value), null, 2)}\n`;
 const hash = (value) => createHash("sha256").update(bytes(value)).digest("hex");
 const sortedStrings = (values) => [...values].sort(compare);
 const canonicalService = (record) => stable({
-  ...record,
+  service: record.service,
+  capability: record.capability,
+  class: record.class,
+  defaultRequired: record.defaultRequired,
   profiles: sortedStrings(record.profiles),
   dependsOn: sortedStrings(record.dependsOn),
-  ...(Array.isArray(record.hostPlatforms) ? { hostPlatforms: sortedStrings(record.hostPlatforms) } : {}),
-  ...(Array.isArray(record.ports) ? { ports: sortedStrings(record.ports) } : {}),
-  ...(Array.isArray(record.volumes) ? { volumes: sortedStrings(record.volumes) } : {}),
+  backupPolicy: record.backupPolicy,
+  healthSemantics: record.healthSemantics,
+  hostPlatforms: sortedStrings(record.hostPlatforms),
 });
 const canonicalRuntime = (record) => stable({
-  ...record,
-  ...(Array.isArray(record.hostPlatforms) ? { hostPlatforms: sortedStrings(record.hostPlatforms) } : {}),
+  runtimeKey: record.runtimeKey,
+  kind: record.kind,
+  activation: record.activation,
+  healthSemantics: record.healthSemantics,
+  hostPlatforms: sortedStrings(record.hostPlatforms),
 });
 
 function assertRecord(value, error) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(error);
+}
+
+function assertStringArray(value, error, allowed) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string") || new Set(value).size !== value.length || (allowed && value.some((item) => !allowed.has(item)))) throw new Error(error);
 }
 
 function normalizeInputs({ substrate, capabilities }) {
@@ -65,16 +82,33 @@ function normalizeInputs({ substrate, capabilities }) {
     if (typeof record.service !== "string" || !record.service) throw new Error("invalid_substrate_service_name");
     if (serviceByName.has(record.service)) throw new Error(`duplicate_substrate_service:${record.service}`);
     if (!capabilityById.has(record.capability)) throw new Error(`unknown_service_capability:${record.service}:${record.capability}`);
-    if (!Array.isArray(record.profiles) || !Array.isArray(record.dependsOn) || typeof record.defaultRequired !== "boolean") throw new Error(`invalid_substrate_service:${record.service}`);
+    if (!SERVICE_CLASSES.has(record.class) || typeof record.defaultRequired !== "boolean" || !BACKUP_POLICIES.has(record.backupPolicy) || !HEALTH_SEMANTICS.has(record.healthSemantics) || typeof record.boundaryReason !== "string" || !record.boundaryReason || typeof record.canonicalDataOwner !== "string" || !record.canonicalDataOwner) throw new Error(`invalid_substrate_service:${record.service}`);
+    assertStringArray(record.profiles, `invalid_substrate_profiles:${record.service}`);
+    assertStringArray(record.dependsOn, `invalid_substrate_dependencies:${record.service}`);
+    assertStringArray(record.ports, `invalid_substrate_ports:${record.service}`);
+    assertStringArray(record.volumes, `invalid_substrate_volumes:${record.service}`);
+    assertStringArray(record.hostPlatforms, `invalid_substrate_host_platforms:${record.service}`, HOST_PLATFORMS);
     serviceByName.set(record.service, record);
   }
   for (const record of serviceByName.values()) for (const dependency of record.dependsOn) {
     if (!serviceByName.has(dependency)) throw new Error(`unknown_service_dependency:${record.service}:${dependency}`);
+    const targetCapability = serviceByName.get(dependency).capability;
+    if (targetCapability !== record.capability) {
+      const closure = new Set();
+      const addDependencies = (id) => { for (const item of capabilityById.get(id).manifest.runtime.dependencies) if (!closure.has(item)) { closure.add(item); addDependencies(item); } };
+      addDependencies(record.capability);
+      const target = serviceByName.get(dependency);
+      const currentDefaultCompatibility = target.defaultRequired && target.profiles.length === 0;
+      if (!closure.has(targetCapability) && !currentDefaultCompatibility) throw new Error(`undeclared_cross_capability_dependency:${record.service}:${dependency}:${record.capability}->${targetCapability}`);
+    }
   }
   const runtimeKeys = new Set();
   for (const runtime of substrate.externalRuntimes) {
+    assertRecord(runtime, "invalid_external_runtime");
     if (typeof runtime.runtimeKey !== "string" || !runtime.runtimeKey) throw new Error("invalid_external_runtime");
     if (runtimeKeys.has(runtime.runtimeKey)) throw new Error(`duplicate_external_runtime:${runtime.runtimeKey}`);
+    if (!EXTERNAL_KINDS.has(runtime.kind) || !EXTERNAL_ACTIVATIONS.has(runtime.activation) || !EXTERNAL_HEALTH_SEMANTICS.has(runtime.healthSemantics) || typeof runtime.canonicalDataOwner !== "string" || !runtime.canonicalDataOwner || typeof runtime.boundaryReason !== "string" || !runtime.boundaryReason) throw new Error(`invalid_external_runtime:${runtime.runtimeKey}`);
+    assertStringArray(runtime.hostPlatforms, `invalid_external_runtime_host_platforms:${runtime.runtimeKey}`, HOST_PLATFORMS);
     runtimeKeys.add(runtime.runtimeKey);
   }
   if (substrate.externalRuntimes.length && !capabilityById.has("runtime:external-ai")) throw new Error("missing_external_runtime_capability:runtime:external-ai");
@@ -115,7 +149,7 @@ export function resolveCapabilityServiceProjection({ substrate, capabilities, en
   const liveEnabledKeys = [...capabilityById].filter(([, record]) => record.state === "active").map(([id]) => id).sort(compare);
   if (JSON.stringify(liveEnabledKeys) !== JSON.stringify(enabledKeys)) throw new Error("capability_state_stale");
   const enabledEntries = catalog.capabilities.filter((entry) => enabled.has(entry.capabilityId));
-  const serviceRequirements = enabledEntries.flatMap((entry) => entry.services).sort((a, b) => compare(a.service, b.service));
+  const serviceRequirements = enabledEntries.flatMap((entry) => entry.services).filter((entry) => entry.defaultRequired).sort((a, b) => compare(a.service, b.service));
   const requiredServices = serviceRequirements.map((entry) => entry.service);
   const requiredSet = new Set(requiredServices);
   const stateLines = [...capabilityById].map(([id, record]) => `${id}=${record.state}`).sort(compare).join("\n");

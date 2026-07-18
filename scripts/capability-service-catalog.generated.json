@@ -10,8 +10,6 @@
       "services": [
         {
           "backupPolicy": "included",
-          "boundaryReason": "Separate adp runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "postgres",
           "capability": "runtime:adp-integration",
           "class": "separate-distribution",
           "defaultRequired": false,
@@ -24,15 +22,10 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "8600:8600"
-          ],
           "profiles": [
             "integrations-adp"
           ],
-          "service": "adp",
-          "targetClassification": "separate-distribution",
-          "volumes": []
+          "service": "adp"
         }
       ]
     },
@@ -46,8 +39,6 @@
       "services": [
         {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate browser-use runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "browser-profiles",
           "capability": "runtime:browser-automation",
           "class": "capability-activated",
           "defaultRequired": true,
@@ -58,16 +49,8 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "8500:8500"
-          ],
           "profiles": [],
-          "service": "browser-use",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "browser_evidence:/evidence",
-            "browser_profiles:/profiles"
-          ]
+          "service": "browser-use"
         }
       ]
     },
@@ -81,8 +64,6 @@
       "services": [
         {
           "backupPolicy": "excluded-ephemeral",
-          "boundaryReason": "Separate sandbox runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "sandbox-postgres",
           "capability": "runtime:build",
           "class": "ephemeral-lifecycle",
           "defaultRequired": true,
@@ -95,20 +76,11 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "3035:3000"
-          ],
           "profiles": [],
-          "service": "sandbox",
-          "targetClassification": "ephemeral-lifecycle",
-          "volumes": [
-            "sandbox_workspace:/workspace"
-          ]
+          "service": "sandbox"
         },
         {
           "backupPolicy": "excluded-ephemeral",
-          "boundaryReason": "Separate sandbox-init runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "sandbox-postgres",
           "capability": "runtime:build",
           "class": "ephemeral-lifecycle",
           "defaultRequired": true,
@@ -121,18 +93,11 @@
             "macos",
             "windows"
           ],
-          "ports": [],
           "profiles": [],
-          "service": "sandbox-init",
-          "targetClassification": "ephemeral-lifecycle",
-          "volumes": [
-            "sandbox_workspace:/workspace"
-          ]
+          "service": "sandbox-init"
         },
         {
           "backupPolicy": "excluded-ephemeral",
-          "boundaryReason": "Separate sandbox-postgres runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "sandbox-postgres",
           "capability": "runtime:build",
           "class": "ephemeral-lifecycle",
           "defaultRequired": true,
@@ -143,13 +108,8 @@
             "macos",
             "windows"
           ],
-          "ports": [],
           "profiles": [],
-          "service": "sandbox-postgres",
-          "targetClassification": "ephemeral-lifecycle",
-          "volumes": [
-            "sandbox_pgdata:/var/lib/postgresql/data"
-          ]
+          "service": "sandbox-postgres"
         }
       ]
     },
@@ -161,8 +121,6 @@
       "services": [
         {
           "backupPolicy": "included",
-          "boundaryReason": "Universal canonical platform contract.",
-          "canonicalDataOwner": "postgres",
           "capability": "runtime:core",
           "class": "universal-core",
           "defaultRequired": true,
@@ -177,26 +135,11 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "1455:3000",
-            "3000:3000"
-          ],
           "profiles": [],
-          "service": "portal",
-          "targetClassification": "universal-core",
-          "volumes": [
-            "/var/run/docker.sock:/var/run/docker.sock",
-            "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
-            "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
-            "browser_evidence:/evidence:ro",
-            "dpf-source-code:/workspace",
-            "sandbox_workspace:/sandbox-workspace"
-          ]
+          "service": "portal"
         },
         {
           "backupPolicy": "included",
-          "boundaryReason": "Separate portal-init runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "postgres",
           "capability": "runtime:core",
           "class": "ephemeral-lifecycle",
           "defaultRequired": true,
@@ -209,18 +152,11 @@
             "macos",
             "windows"
           ],
-          "ports": [],
           "profiles": [],
-          "service": "portal-init",
-          "targetClassification": "ephemeral-lifecycle",
-          "volumes": [
-            "dpf-source-code:/workspace"
-          ]
+          "service": "portal-init"
         },
         {
           "backupPolicy": "included",
-          "boundaryReason": "Universal canonical platform contract.",
-          "canonicalDataOwner": "postgres",
           "capability": "runtime:core",
           "class": "universal-core",
           "defaultRequired": true,
@@ -231,18 +167,11 @@
             "macos",
             "windows"
           ],
-          "ports": [],
           "profiles": [],
-          "service": "postgres",
-          "targetClassification": "universal-core",
-          "volumes": [
-            "pgdata:/var/lib/postgresql/data"
-          ]
+          "service": "postgres"
         },
         {
           "backupPolicy": "included",
-          "boundaryReason": "Separate promoter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "postgres",
           "capability": "runtime:core",
           "class": "ephemeral-lifecycle",
           "defaultRequired": false,
@@ -255,17 +184,10 @@
             "macos",
             "windows"
           ],
-          "ports": [],
           "profiles": [
             "promote"
           ],
-          "service": "promoter",
-          "targetClassification": "ephemeral-lifecycle",
-          "volumes": [
-            "/var/run/docker.sock:/var/run/docker.sock",
-            "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
-            "${DPF_HOST_INSTALL_PATH:-.}:/host-source:ro"
-          ]
+          "service": "promoter"
         }
       ]
     },
@@ -279,8 +201,6 @@
       "services": [
         {
           "backupPolicy": "excluded-rebuildable",
-          "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
           "defaultRequired": true,
@@ -293,20 +213,11 @@
             "macos",
             "windows"
           ],
-          "ports": [],
           "profiles": [],
-          "service": "alloy",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro",
-            "/var/run/docker.sock:/var/run/docker.sock:ro",
-            "alloy_data:/var/lib/alloy/data"
-          ]
+          "service": "alloy"
         },
         {
           "backupPolicy": "excluded-stateless",
-          "boundaryReason": "Separate cadvisor runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
           "defaultRequired": false,
@@ -315,24 +226,13 @@
           "hostPlatforms": [
             "linux"
           ],
-          "ports": [
-            "8080:8080"
-          ],
           "profiles": [
             "linux-monitoring"
           ],
-          "service": "cadvisor",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "/sys:/sys:ro",
-            "/var/lib/docker:/var/lib/docker:ro",
-            "/var/run/docker.sock:/var/run/docker.sock:ro"
-          ]
+          "service": "cadvisor"
         },
         {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate grafana runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "grafana",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
           "defaultRequired": false,
@@ -345,24 +245,13 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "3002:3000"
-          ],
           "profiles": [
             "observability-ui"
           ],
-          "service": "grafana",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro",
-            "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro",
-            "grafana_data:/var/lib/grafana"
-          ]
+          "service": "grafana"
         },
         {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "loki",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
           "defaultRequired": true,
@@ -373,22 +262,11 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "127.0.0.1:3100:3100"
-          ],
           "profiles": [],
-          "service": "loki",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro",
-            "./monitoring/loki/rules/dpf-log-alerts.yml:/loki/rules-config/fake/dpf-log-alerts.yml:ro",
-            "loki_data:/loki"
-          ]
+          "service": "loki"
         },
         {
           "backupPolicy": "excluded-stateless",
-          "boundaryReason": "Separate node-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
           "defaultRequired": false,
@@ -397,24 +275,13 @@
           "hostPlatforms": [
             "linux"
           ],
-          "ports": [
-            "9100:9100"
-          ],
           "profiles": [
             "linux-monitoring"
           ],
-          "service": "node-exporter",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "/:/rootfs:ro",
-            "/proc:/host/proc:ro",
-            "/sys:/host/sys:ro"
-          ]
+          "service": "node-exporter"
         },
         {
           "backupPolicy": "excluded-stateless",
-          "boundaryReason": "Separate postgres-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
           "defaultRequired": true,
@@ -427,20 +294,11 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "9187:9187"
-          ],
           "profiles": [],
-          "service": "postgres-exporter",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "./monitoring/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro"
-          ]
+          "service": "postgres-exporter"
         },
         {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate prometheus runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "prometheus",
           "capability": "runtime:deep-observability",
           "class": "capability-activated",
           "defaultRequired": true,
@@ -451,17 +309,8 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "9090:9090"
-          ],
           "profiles": [],
-          "service": "prometheus",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro",
-            "./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro",
-            "prometheus_data:/prometheus"
-          ]
+          "service": "prometheus"
         }
       ]
     },
@@ -475,8 +324,6 @@
       "services": [
         {
           "backupPolicy": "excluded-ephemeral",
-          "boundaryReason": "Separate dev-init runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "dev-postgres",
           "capability": "runtime:development",
           "class": "test-development-only",
           "defaultRequired": false,
@@ -490,34 +337,13 @@
             "macos",
             "windows"
           ],
-          "ports": [],
           "profiles": [
             "dev"
           ],
-          "service": "dev-init",
-          "targetClassification": "test-development-only",
-          "volumes": [
-            ".:/workspace",
-            "dev_nm_api_client:/workspace/packages/api-client/node_modules",
-            "dev_nm_apps_mobile:/workspace/apps/mobile/node_modules",
-            "dev_nm_apps_web:/workspace/apps/web/node_modules",
-            "dev_nm_db:/workspace/packages/db/node_modules",
-            "dev_nm_dpf_bootstrap:/workspace/packages/dpf-bootstrap/node_modules",
-            "dev_nm_finance_templates:/workspace/packages/finance-templates/node_modules",
-            "dev_nm_integration_shared:/workspace/packages/integration-shared/node_modules",
-            "dev_nm_storefront_templates:/workspace/packages/storefront-templates/node_modules",
-            "dev_nm_svc_adp:/workspace/services/adp/node_modules",
-            "dev_nm_svc_edge_node:/workspace/services/edge-node/node_modules",
-            "dev_nm_svc_integration_test_harness:/workspace/services/integration-test-harness/node_modules",
-            "dev_nm_types:/workspace/packages/types/node_modules",
-            "dev_nm_validators:/workspace/packages/validators/node_modules",
-            "dev_node_modules:/workspace/node_modules"
-          ]
+          "service": "dev-init"
         },
         {
           "backupPolicy": "excluded-ephemeral",
-          "boundaryReason": "Separate dev-portal runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "dev-postgres",
           "capability": "runtime:development",
           "class": "test-development-only",
           "defaultRequired": false,
@@ -530,36 +356,13 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "3001:3000"
-          ],
           "profiles": [
             "dev"
           ],
-          "service": "dev-portal",
-          "targetClassification": "test-development-only",
-          "volumes": [
-            ".:/workspace",
-            "dev_nm_api_client:/workspace/packages/api-client/node_modules",
-            "dev_nm_apps_mobile:/workspace/apps/mobile/node_modules",
-            "dev_nm_apps_web:/workspace/apps/web/node_modules",
-            "dev_nm_db:/workspace/packages/db/node_modules",
-            "dev_nm_dpf_bootstrap:/workspace/packages/dpf-bootstrap/node_modules",
-            "dev_nm_finance_templates:/workspace/packages/finance-templates/node_modules",
-            "dev_nm_integration_shared:/workspace/packages/integration-shared/node_modules",
-            "dev_nm_storefront_templates:/workspace/packages/storefront-templates/node_modules",
-            "dev_nm_svc_adp:/workspace/services/adp/node_modules",
-            "dev_nm_svc_edge_node:/workspace/services/edge-node/node_modules",
-            "dev_nm_svc_integration_test_harness:/workspace/services/integration-test-harness/node_modules",
-            "dev_nm_types:/workspace/packages/types/node_modules",
-            "dev_nm_validators:/workspace/packages/validators/node_modules",
-            "dev_node_modules:/workspace/node_modules"
-          ]
+          "service": "dev-portal"
         },
         {
           "backupPolicy": "excluded-ephemeral",
-          "boundaryReason": "Separate dev-postgres runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "dev-postgres",
           "capability": "runtime:development",
           "class": "test-development-only",
           "defaultRequired": false,
@@ -569,23 +372,14 @@
             "linux",
             "macos",
             "windows"
-          ],
-          "ports": [
-            "5433:5432"
           ],
           "profiles": [
             "dev"
           ],
-          "service": "dev-postgres",
-          "targetClassification": "test-development-only",
-          "volumes": [
-            "dev_pgdata:/var/lib/postgresql/data"
-          ]
+          "service": "dev-postgres"
         },
         {
           "backupPolicy": "excluded-stateless",
-          "boundaryReason": "Separate integration-test-harness runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
           "capability": "runtime:development",
           "class": "test-development-only",
           "defaultRequired": false,
@@ -595,16 +389,11 @@
             "linux",
             "macos",
             "windows"
-          ],
-          "ports": [
-            "8700:8700"
           ],
           "profiles": [
             "integration-test"
           ],
-          "service": "integration-test-harness",
-          "targetClassification": "test-development-only",
-          "volumes": []
+          "service": "integration-test-harness"
         }
       ]
     },
@@ -618,8 +407,6 @@
       "services": [
         {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate inngest runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "postgres-and-redis",
           "capability": "runtime:durable-automation",
           "class": "capability-activated",
           "defaultRequired": true,
@@ -633,19 +420,11 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "8288:8288",
-            "8289:8289"
-          ],
           "profiles": [],
-          "service": "inngest",
-          "targetClassification": "capability-activated",
-          "volumes": []
+          "service": "inngest"
         },
         {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate redis runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "redis",
           "capability": "runtime:durable-automation",
           "class": "capability-activated",
           "defaultRequired": true,
@@ -656,20 +435,11 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "6379:6379"
-          ],
           "profiles": [],
-          "service": "redis",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "redis_data:/data"
-          ]
+          "service": "redis"
         },
         {
           "backupPolicy": "excluded-stateless",
-          "boundaryReason": "Separate redis-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
           "capability": "runtime:durable-automation",
           "class": "capability-activated",
           "defaultRequired": true,
@@ -682,11 +452,8 @@
             "macos",
             "windows"
           ],
-          "ports": [],
           "profiles": [],
-          "service": "redis-exporter",
-          "targetClassification": "capability-activated",
-          "volumes": []
+          "service": "redis-exporter"
         }
       ]
     },
@@ -699,8 +466,6 @@
       "externalRuntimes": [
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -712,8 +477,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -725,8 +488,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -738,8 +499,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -751,8 +510,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -764,8 +521,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -777,8 +532,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -790,8 +543,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -803,8 +554,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -816,8 +565,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -829,8 +576,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -842,8 +587,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -855,8 +598,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -868,8 +609,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -881,8 +620,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -894,8 +631,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -907,8 +642,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -920,8 +653,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -933,8 +664,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -946,8 +675,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -959,8 +686,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -972,8 +697,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -985,8 +708,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -998,8 +719,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -1011,8 +730,6 @@
         },
         {
           "activation": "provider-configuration",
-          "boundaryReason": "External inference boundary.",
-          "canonicalDataOwner": "postgres",
           "healthSemantics": "provider-health-reconciliation",
           "hostPlatforms": [
             "linux",
@@ -1035,8 +752,6 @@
       "services": [
         {
           "backupPolicy": "excluded-rebuildable",
-          "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
           "capability": "runtime:local-speech",
           "class": "capability-activated",
           "defaultRequired": true,
@@ -1047,20 +762,11 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "127.0.0.1:8765:9000"
-          ],
           "profiles": [],
-          "service": "dpf-stt",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "dpf_stt_models:/app/models"
-          ]
+          "service": "dpf-stt"
         },
         {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "tts-voices",
           "capability": "runtime:local-speech",
           "class": "capability-activated",
           "defaultRequired": false,
@@ -1071,22 +777,15 @@
             "macos",
             "windows"
           ],
-          "ports": [
-            "127.0.0.1:8766:8000"
-          ],
           "profiles": [
             "tts"
           ],
-          "service": "dpf-tts",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "dpf_tts_voices:/app/voices"
-          ]
+          "service": "dpf-tts"
         }
       ]
     }
   ],
-  "catalogHash": "50ce7c8875c3dde2c40b918cd8a89df6631e535a7b90e98ac1e32b24b556ad21",
+  "catalogHash": "973c0bb07109b0e2eb81a814b24bce46e7eb5d2c96d748a123e60e1e91494a8e",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }
