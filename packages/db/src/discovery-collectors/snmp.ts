@@ -22,6 +22,11 @@ const OID = {
   sysName: "1.3.6.1.2.1.1.5.0",
   sysLocation: "1.3.6.1.2.1.1.6.0",
 
+  // ENTITY-MIB physical serial (entPhysicalSerialNum) — hardware serial per physical
+  // entity; the chassis (first non-empty) is the device's asset serial. The estate
+  // bridges (BI-828998DC / BI-1093AF1C) match on it. Optional — many devices omit it.
+  entPhysicalSerialNum: "1.3.6.1.2.1.47.1.1.1.1.11",
+
   // IF-MIB interface table
   ifTable: "1.3.6.1.2.1.2.2.1",        // ifEntry
   ifDescr: "1.3.6.1.2.1.2.2.1.2",       // interface name
@@ -160,6 +165,13 @@ async function discoverSnmpDevice(
     const sysName = varbindToString(sysVarbinds[1]);
     const sysLocation = varbindToString(sysVarbinds[2]);
 
+    // Hardware serial from ENTITY-MIB — the first non-empty entPhysicalSerialNum (the
+    // chassis). Walk never rejects, so an unsupported device just yields no serial.
+    const serialVbs = await snmpWalk(session, OID.entPhysicalSerialNum);
+    const serialNumber = serialVbs
+      .map((vb) => varbindToString(vb).trim())
+      .find((s) => s !== "") ?? null;
+
     const deviceRef = `snmp-device:${target.address}`;
     const deviceName = sysName || `Device ${target.address}`;
 
@@ -180,6 +192,8 @@ async function discoverSnmpDevice(
         networkAddress: target.address,
         protocolFamily: "ipv4",
         discoveredVia: "snmp",
+        // Canonical serial key the estate bridges read off InventoryEntity.properties.
+        ...(serialNumber ? { serialNumber } : {}),
       },
     });
 
