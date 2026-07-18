@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { SelfUpgradeHostIdentity } from "./config";
+import type { InstallStateMigrationHandoff } from "./preflight";
 import {
   buildCandidatePromoterArtifactImage,
   resolveCandidatePromoterArtifact,
@@ -139,6 +140,8 @@ export type PromoterParams = {
   installStateMigrationEnvelope?: string;
   installStateMigrationSignature?: string;
   installStateMigrationRunId?: string;
+  /** Exact portal-verified carrier retained for orchestration identity/audit. */
+  installStateMigrationHandoff?: InstallStateMigrationHandoff;
 };
 
 export type PromoterResult = {

@@ -24,9 +24,14 @@ export function verifyTransitionSignature(value, signature, secret) {
 export function verifyInstallStateMigrationEnvelope(envelope, signature, secret, expected) {
   verifyTransitionSignature(envelope, signature, secret);
   if (envelope.kind !== "install-state-migration" || envelope.version !== 1) throw new Error("install_state_envelope_invalid");
+  if (!/^[a-f0-9]{64}$/.test(envelope.sourceHash ?? "") || !/^[a-f0-9]{64}$/.test(envelope.projectionHash ?? "")) throw new Error("install_state_envelope_invalid_hash");
+  if (!Number.isInteger(envelope.fromSchemaVersion) || envelope.fromSchemaVersion < 1 || !Number.isInteger(envelope.toSchemaVersion) || envelope.toSchemaVersion < 1) throw new Error("install_state_envelope_invalid_schema");
+  const identity = envelope.hostIdentity;
+  if (!identity || !["win32", "darwin", "linux"].includes(identity.platform) || !["amd64", "arm64", "x86_64"].includes(identity.arch) || !["explicit", "legacy-windows-paths"].includes(identity.provenance)) throw new Error("install_state_envelope_invalid_identity");
   if (envelope.runId !== expected.runId) throw new Error("install_state_envelope_wrong_run");
   if (envelope.promoterDigest !== expected.promoterDigest) throw new Error("install_state_envelope_wrong_digest");
   if (envelope.sourceHash !== expected.sourceHash) throw new Error("install_state_envelope_state_changed");
+  if (expected.hostIdentity && canonicalTransitionPayload(identity) !== canonicalTransitionPayload(expected.hostIdentity)) throw new Error("install_state_envelope_wrong_identity");
   const issuedAt = Date.parse(envelope.issuedAt);
   const expiresAt = Date.parse(envelope.expiresAt);
   if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || expected.now < issuedAt - 30_000 || expected.now > expiresAt) {

@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createHash } from "node:crypto";
+import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
+
+const TEST_INSTALL_STATE = JSON.stringify({ platform: "linux", arch: "amd64" });
+const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).digest("hex");
 
 const mocks = vi.hoisted(() => ({
   getSelfUpgradeConfig: vi.fn(),
@@ -54,7 +59,7 @@ const mocks = vi.hoisted(() => ({
   // Operator blackout gate (BI-59591B14). Default null = no active blackout, so
   // every existing scheduled test proceeds exactly as before.
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
-  readFile: vi.fn(async (path: string) => path.endsWith("install-state.json") ? JSON.stringify({ platform: "linux", arch: "amd64" }) : "s".repeat(32)),
+  readFile: vi.fn(async (path: string) => path.endsWith("install-state.json") ? '{"platform":"linux","arch":"amd64"}' : "s".repeat(32)),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
@@ -247,7 +252,7 @@ beforeEach(() => {
   mocks.recordRunRecoveryPoint.mockResolvedValue({});
   const artifact = { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } };
   mocks.resolvePromoterArtifact.mockResolvedValue(artifact);
-  mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ stage: "preflight", result: "ready", failures: [], sourceHash: "a".repeat(64), projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" });
+  mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ stage: "preflight", result: "ready", failures: [], sourceHash: TEST_INSTALL_STATE_HASH, projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" });
   mocks.recordPromoterReadiness.mockResolvedValue({});
   mocks.summarizeRecoveryPointFailure.mockReturnValue(
     "recovery-point-failed: postgres BR-PG",
@@ -371,11 +376,12 @@ describe("success path", () => {
 
   it("resolves and validates readiness before quiescence, then promotes the same digest", async () => {
     const order: string[] = [];
+    let persistedHandoff: unknown;
     mocks.resolvePromoterArtifact.mockImplementation(async () => { order.push("resolve"); return { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } }; });
-    mocks.runPromoterReadiness.mockImplementation(async () => { order.push("readiness"); return { exitCode: 0, stdout: JSON.stringify({ failures: [], sourceHash: "a".repeat(64), projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" }; });
-    mocks.recordPromoterReadiness.mockImplementation(async () => { order.push("evidence"); return {}; });
+    mocks.runPromoterReadiness.mockImplementation(async () => { order.push("readiness"); return { exitCode: 0, stdout: JSON.stringify({ failures: [], sourceHash: TEST_INSTALL_STATE_HASH, projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" }; });
+    mocks.recordPromoterReadiness.mockImplementation(async (_runId, report) => { order.push("evidence"); persistedHandoff = report.migrationHandoff; return {}; });
     mocks.startQuiescence.mockImplementation(async () => { order.push("quiescence"); return { runId: "QR-1", awaitReady: async () => ({ ok: true, outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }) }; });
-    mocks.runPromoter.mockImplementation(async (promoterParams: { promoterImage?: string }) => { order.push("promotion"); expect(promoterParams.promoterImage).toBe(`sha256:${"d".repeat(64)}`); return { exitCode: 0, stdout: "", stderr: "" }; });
+    mocks.runPromoter.mockImplementation(async (promoterParams: { promoterImage?: string; installStateMigrationHandoff?: unknown }) => { order.push("promotion"); expect(promoterParams.promoterImage).toBe(`sha256:${"d".repeat(64)}`); expect(promoterParams.installStateMigrationHandoff).toBe(persistedHandoff); return { exitCode: 0, stdout: "", stderr: "" }; });
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(order).toEqual(["resolve", "readiness", "evidence", "quiescence", "promotion"]);
   });
@@ -391,6 +397,27 @@ describe("success path", () => {
     expect(mocks.recordPromoterReadiness).toHaveBeenCalled();
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
     expect(mocks.createSelfUpgradeRecoveryPoint).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it.each(["missing", "tampered", "expired", "wrong-run", "wrong-digest", "changed-source", "wrong-identity"])("rejects %s migration evidence before quiescence", async (kind) => {
+    mocks.recordPromoterReadiness.mockImplementation(async (_runId, report: any) => {
+      const handoff = report.migrationHandoff;
+      if (kind === "missing") { delete handoff.envelope.projectionHash; handoff.signature = signTransitionPayload(handoff.envelope, "s".repeat(32)); }
+      else if (kind === "tampered") handoff.envelope.projectionHash = "c".repeat(64);
+      else {
+        if (kind === "expired") handoff.envelope.expiresAt = new Date(0).toISOString();
+        if (kind === "wrong-run") handoff.envelope.runId = "SUR-other";
+        if (kind === "wrong-digest") handoff.envelope.promoterDigest = `sha256:${"e".repeat(64)}`;
+        if (kind === "changed-source") handoff.envelope.sourceHash = "e".repeat(64);
+        if (kind === "wrong-identity") handoff.envelope.hostIdentity = { platform: "linux", arch: "arm64", provenance: "explicit" };
+        handoff.signature = signTransitionPayload(handoff.envelope, "s".repeat(32));
+      }
+      return {};
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ ok: false, reason: "installer-state-repair-required" });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
     expect(mocks.runPromoter).not.toHaveBeenCalled();
   });
 

@@ -1,6 +1,7 @@
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { ReadinessOwner } from "./promoter";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
+import { verifyInstallStateMigrationEnvelope } from "../../../../scripts/lib/transition-signing.mjs";
 import type { SelfUpgradeHostIdentity } from "./config";
 
 type PromoterRuntime = Pick<
@@ -13,7 +14,7 @@ type ReadinessFailure = { code: string; message: string; remediation?: string };
 
 export type CandidatePreflightResult =
   | { ok: true; resolvedPromoterDigest?: string; migrationHandoff?: InstallStateMigrationHandoff }
-  | { ok: false; reason: "promoter-readiness-failed" };
+  | { ok: false; reason: "promoter-readiness-failed" | "installer-state-repair-required" };
 
 export async function runCandidatePreflight(params: {
   dryRun?: boolean;
@@ -42,12 +43,14 @@ export async function runCandidatePreflight(params: {
   if (params.readinessMode === "legacy-bootstrap") {
     await params.recordReadiness(params.runId, {
       stage: "preflight", owner: params.readinessOwner ?? "unavailable", mode: "legacy-bootstrap",
-      result: params.readinessOwner === "bridge" ? "ready" : "unavailable",
+      result: "unavailable",
       baselineSha: params.baselineSha ?? undefined, targetSha: params.targetSha,
       startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
-      quiescenceBegan: false, failures: [],
+      quiescenceBegan: false, failures: [{ code: "installer_state_repair_required", message: "Legacy bootstrap cannot produce the signed install-state migration handoff required before quiescence." }],
     });
-    return { ok: true };
+    await params.failRun(params.runId, "installer-state-repair-required: legacy bootstrap cannot produce a signed install-state migration handoff");
+    await params.emitFailure(params.runId);
+    return { ok: false, reason: "installer-state-repair-required" };
   }
 
   const runtime = await params.runtime();
@@ -99,6 +102,10 @@ export async function runCandidatePreflight(params: {
         hostIdentity: params.hostIdentity, promoterDigest: artifact.digest,
       };
       migrationHandoff = { envelope, signature: signTransitionPayload(envelope, params.runtimeTransitionSecret) };
+      verifyInstallStateMigrationEnvelope(envelope, migrationHandoff.signature, params.runtimeTransitionSecret, {
+        runId: params.runId, promoterDigest: artifact.digest, sourceHash: envelope.sourceHash,
+        hostIdentity: params.hostIdentity, now: now.getTime(),
+      });
     }
     await params.recordReadiness(params.runId, {
       stage: "preflight", owner: "portal", mode: "enforced", result: ready ? "ready" : "failed",

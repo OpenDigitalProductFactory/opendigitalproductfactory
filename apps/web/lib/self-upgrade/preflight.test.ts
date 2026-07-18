@@ -14,4 +14,11 @@ describe("candidate signed install-state handoff", () => {
     expect(result.migrationHandoff.signature).toBe(signTransitionPayload(result.migrationHandoff.envelope, secret));
     expect(runtime.runPromoterReadiness).toHaveBeenCalledWith(expect.objectContaining({ hostIdentity: result.migrationHandoff.envelope.hostIdentity }));
   });
+
+  it("refuses legacy bootstrap without a signed migration carrier", async () => {
+    const failRun = vi.fn();
+    const result = await runCandidatePreflight({ readinessMode: "legacy-bootstrap", readinessOwner: "bridge", sourcePath: "/source", hostInstallPath: "/host", canonicalInstallPath: "/host", targetSha: "target", runId: "SUR-legacy", composeFiles: [], healthUrl: "http://health", runtime: vi.fn(), recordReadiness: vi.fn(), failRun, emitFailure: vi.fn() });
+    expect(result).toEqual({ ok: false, reason: "installer-state-repair-required" });
+    expect(failRun).toHaveBeenCalledWith("SUR-legacy", expect.stringContaining("installer-state-repair-required"));
+  });
 });

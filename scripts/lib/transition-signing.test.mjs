@@ -19,7 +19,7 @@ const envelope = {
   projectionHash: "b".repeat(64),
   fromSchemaVersion: 1,
   toSchemaVersion: 2,
-  hostIdentity: { platform: "windows", arch: "amd64", provenance: "installer-environment" },
+  hostIdentity: { platform: "win32", arch: "amd64", provenance: "explicit" },
   promoterDigest: `sha256:${"c".repeat(64)}`,
 };
 
@@ -43,4 +43,29 @@ test("install-state envelope binds run, digest, time, and observed source state"
   assert.throws(() => verifyInstallStateMigrationEnvelope({ ...envelope, projectionHash: "d".repeat(64) }, signature, secret, {
     runId: envelope.runId, promoterDigest: envelope.promoterDigest, sourceHash: envelope.sourceHash, now: Date.parse(envelope.issuedAt),
   }), /tampered/);
+});
+
+test("signed but incomplete install-state envelopes are rejected", () => {
+  for (const field of ["projectionHash", "fromSchemaVersion", "toSchemaVersion", "hostIdentity"]) {
+    const incomplete = { ...envelope };
+    delete incomplete[field];
+    assert.throws(() => verifyInstallStateMigrationEnvelope(incomplete, signTransitionPayload(incomplete, secret), secret, {
+      runId: envelope.runId, promoterDigest: envelope.promoterDigest, sourceHash: envelope.sourceHash, hostIdentity: envelope.hostIdentity, now: Date.parse(envelope.issuedAt),
+    }), /invalid/);
+  }
+  for (const field of ["platform", "arch", "provenance"]) {
+    const incomplete = { ...envelope, hostIdentity: { ...envelope.hostIdentity } };
+    delete incomplete.hostIdentity[field];
+    assert.throws(() => verifyInstallStateMigrationEnvelope(incomplete, signTransitionPayload(incomplete, secret), secret, {
+      runId: envelope.runId, promoterDigest: envelope.promoterDigest, sourceHash: envelope.sourceHash, hostIdentity: envelope.hostIdentity, now: Date.parse(envelope.issuedAt),
+    }), /invalid/);
+  }
+});
+
+test("host identity is bound to the authoritative portal identity", () => {
+  const signature = signTransitionPayload(envelope, secret);
+  assert.throws(() => verifyInstallStateMigrationEnvelope(envelope, signature, secret, {
+    runId: envelope.runId, promoterDigest: envelope.promoterDigest, sourceHash: envelope.sourceHash,
+    hostIdentity: { ...envelope.hostIdentity, arch: "arm64" }, now: Date.parse(envelope.issuedAt),
+  }), /identity/);
 });
