@@ -65,6 +65,25 @@ const SOURCE_DIFF_EXCLUDES = [
   ":!packages/db/generated/**",
 ] as const;
 
+/**
+ * Whether a build/* branch already carries work that must survive a
+ * start_build / review-phase resume (BI-8C6AA60E). Hard-resetting a branch that
+ * is ahead (or has source deltas) of the fork point wiped generated code and
+ * left ship with "no releasable changes".
+ */
+export function shouldPreserveBuildBranchWork(
+  snapshot: Pick<
+    SandboxSourceCurrencySnapshot,
+    "status" | "aheadBy" | "localSourceChangeCount" | "dirty"
+  >,
+): boolean {
+  if (snapshot.dirty) return true;
+  if ((snapshot.aheadBy ?? 0) > 0) return true;
+  if ((snapshot.localSourceChangeCount ?? 0) > 0) return true;
+  if (snapshot.status === "ahead" || snapshot.status === "diverged") return true;
+  return false;
+}
+
 export function classifySandboxSourceCurrency(
   input: SandboxSourceCurrencyInput,
 ): SandboxSourceCurrencySnapshot {

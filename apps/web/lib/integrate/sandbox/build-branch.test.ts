@@ -19,8 +19,8 @@ import {
   resolveBuildWorkdir,
   getClientIdentity,
   wrapSandboxGitCommand,
-  shouldPreserveBuildBranchWork,
 } from "./build-branch";
+import { shouldPreserveBuildBranchWork } from "./sandbox-source-currency";
 
 describe("wrapSandboxGitCommand", () => {
   it("excludes recursive cache and dependency directories from sandbox baseline commits", () => {

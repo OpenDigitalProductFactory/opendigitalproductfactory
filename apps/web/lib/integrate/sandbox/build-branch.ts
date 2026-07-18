@@ -26,6 +26,7 @@ import {
   classifySandboxSourceCurrency,
   formatSandboxSourceCurrencySummary,
   parseSandboxSourceCurrencyProbeOutput,
+  shouldPreserveBuildBranchWork,
   type SandboxSourceCurrencySnapshot,
 } from "./sandbox-source-currency";
 
@@ -356,70 +357,29 @@ async function recordBuildSourceCurrency(
   }).catch(() => {});
 }
 
-/**
- * Whether a build/* branch already carries work that must survive a
- * start_build / review-phase resume. Pure predicate for BI-8C6AA60E:
- * hard-resetting a branch that is ahead (or has source deltas) of the
- * fork point wiped generated code and left ship with "no releasable changes".
- */
-export function shouldPreserveBuildBranchWork(
-  snapshot: Pick<
-    SandboxSourceCurrencySnapshot,
-    "status" | "aheadBy" | "localSourceChangeCount" | "dirty"
-  >,
-): boolean {
-  if (snapshot.dirty) return true;
-  if ((snapshot.aheadBy ?? 0) > 0) return true;
-  if ((snapshot.localSourceChangeCount ?? 0) > 0) return true;
-  if (snapshot.status === "ahead" || snapshot.status === "diverged") return true;
-  return false;
-}
-
 async function refreshCurrentBranchFromTarget(args: {
   buildId: string;
   branchName: string;
   targetRef: string;
   blockUnknown: boolean;
-  /**
-   * When true (build/* resume path), never hard-reset if the branch already
-   * has committed or dirty source work relative to targetRef (BI-8C6AA60E).
-   */
+  /** BI-8C6AA60E: skip hard-reset when build/* already has local work. */
   preserveExistingWork?: boolean;
 }): Promise<SandboxSourceCurrencySnapshot> {
   const before = await inspectCurrentSandboxSourceCurrency(args.targetRef);
 
-  if (
-    args.preserveExistingWork &&
-    shouldPreserveBuildBranchWork(before)
-  ) {
-    await recordBuildSourceCurrency(
-      args.buildId,
-      before,
-      `Preserved existing work on ${args.branchName} (aheadBy=${before.aheadBy ?? "?"} sourceDelta=${before.localSourceChangeCount ?? "?"}); skipped hard-reset to ${args.targetRef}.`,
-    );
-    console.log(
-      `[build-branch] Preserved ${JSON.stringify(args.branchName)} work ` +
-        `(status=${before.status}, aheadBy=${before.aheadBy}, sourceDelta=${before.localSourceChangeCount}); skip hard-reset`,
-    );
+  // Preserve ahead/dirty/source-delta build branches on resume (BI-8C6AA60E).
+  if (args.preserveExistingWork && shouldPreserveBuildBranchWork(before)) {
+    await recordBuildSourceCurrency(args.buildId, before, `Preserved work on ${args.branchName}; skipped hard-reset to ${args.targetRef}.`);
+    console.log(`[build-branch] Preserved ${JSON.stringify(args.branchName)} (status=${before.status}, aheadBy=${before.aheadBy}); skip hard-reset`);
     return before;
   }
 
   if (before.status === "behind") {
-    await recordBuildSourceCurrency(
-      args.buildId,
-      before,
-      `Auto-refreshing ${args.branchName} before Build Studio work starts.`,
-    );
-    await execSandboxGit(
-      `git -C ${WORKSPACE} reset --hard ${quoteGitPathspec(args.targetRef)}`,
-    );
+    await recordBuildSourceCurrency(args.buildId, before, `Auto-refreshing ${args.branchName} before Build Studio work starts.`);
+    await execSandboxGit(`git -C ${WORKSPACE} reset --hard ${quoteGitPathspec(args.targetRef)}`);
     await normalizeSandboxBranchArtifacts(args.branchName);
     const after = await inspectCurrentSandboxSourceCurrency(args.targetRef);
-    await recordBuildSourceCurrency(
-      args.buildId,
-      after,
-      `Auto-refreshed ${args.branchName}.`,
-    );
+    await recordBuildSourceCurrency(args.buildId, after, `Auto-refreshed ${args.branchName}.`);
     return after;
   }
 
@@ -772,16 +732,9 @@ export async function startBuildBranch(buildId: string): Promise<SandboxSourceCu
         `git -C ${WORKSPACE} checkout "${branchName}"`,
       );
       await normalizeSandboxBranchArtifacts(branchName);
-      // BI-8C6AA60E: review-phase resume re-enters start_build. A hard-reset to
-      // the client branch wiped commits that already passed build/review gates
-      // ("sandbox baseline" re-init → ship "no releasable changes"). Preserve
-      // any branch that is ahead / dirty / has source deltas vs the client fork.
+      // BI-8C6AA60E: preserve commitsAhead/source work on review-phase resume.
       await refreshCurrentBranchFromTarget({
-        buildId,
-        branchName,
-        targetRef: identity.clientBranch,
-        blockUnknown: true,
-        preserveExistingWork: true,
+        buildId, branchName, targetRef: identity.clientBranch, blockUnknown: true, preserveExistingWork: true,
       });
       console.log(`[build-branch] Resumed build branch: ${JSON.stringify(branchName)}`);
     } else {
