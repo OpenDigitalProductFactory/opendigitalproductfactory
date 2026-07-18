@@ -3,7 +3,12 @@
 // This is the core behavioral difference between a chatbot and an agent.
 
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
-import { detectRepeatedToolCall, recordRepeatedToolIssue } from "@/lib/tak/runtime-issues";
+import {
+  detectRepeatedToolCall,
+  detectApproachingRepeatedToolCall,
+  buildNoProgressNudgeMessage,
+  recordRepeatedToolIssue,
+} from "@/lib/tak/runtime-issues";
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/actions/coworker-tool-budget";
@@ -1368,6 +1373,8 @@ export async function runAgenticLoop(params: {
   const executedTools: AgenticResult["executedTools"] = [];
   let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
+  // BI-PIR-2fc2106c: one soft no-progress nudge per args signature.
+  const noProgressNudgedSigs = new Set<string>();
   let fabricationRetries = 0;
   let frustrationCount = 0;
   // Evidence-integrity gate (INV-1). Decide once whether this turn's answer
@@ -1605,47 +1612,28 @@ export async function runAgenticLoop(params: {
       };
     }
 
-    // Repetition detector — extracted to lib/tak/runtime-issues.ts so the
-    // existing "agent stuck" PlatformIssueReport write and the new reflection
-    // trigger share one detection site.
-    //
-    // No special-casing for review tools. reviewDesignDoc/reviewBuildPlan take no args,
-    // so every call hashes identically — 3 calls trips the guard. This caps the agent at
-    // 2 revision attempts per review, which is enough. If the design/plan still fails after
-    // 2 revisions the user needs to intervene.
+    // Repetition detector (runtime-issues). BI-PIR-2fc2106c: no-progress hard-stops
+    // without warm-up; soft-nudge once at threshold-1 for identical successes.
     const repeated = detectRepeatedToolCall({ executedTools, iteration });
     if (repeated) {
-      console.warn(
-        `[agentic-loop] stuck: ${repeated.toolName} called ${repeated.count}x with same args in last 40 calls.${repeated.reasonHint}`,
-      );
+      console.warn(`[agentic-loop] stuck: ${repeated.toolName} x${repeated.count} same args.${repeated.reasonHint}`);
       const content = buildRepeatedToolStopMessage({
-        toolName: repeated.toolName,
-        count: repeated.count,
-        routeContext,
-        reasonHint: repeated.reasonHint,
+        toolName: repeated.toolName, count: repeated.count, routeContext, reasonHint: repeated.reasonHint,
       });
       await recordRepeatedToolIssue({
-        repeated,
-        routeContext: routeContext ?? null,
-        userId,
-        agentId: agentId ?? null,
-        threadId: threadId ?? null,
-        taskRunId: taskRunId ?? null,
+        repeated, routeContext: routeContext ?? null, userId,
+        agentId: agentId ?? null, threadId: threadId ?? null, taskRunId: taskRunId ?? null,
       });
-      // Return immediately — do NOT make another inference call here.
-      // The summary inference call was the source of 300s hangs when the preferred provider
-      // was unavailable. The executedTools list already contains the full work history.
       return {
-        content,
-        providerId: "",
-        modelId: "",
-        downgraded: false,
-        downgradeMessage: null,
-        totalInputTokens,
-        totalOutputTokens,
-        executedTools,
-        proposal: null,
+        content, providerId: "", modelId: "", downgraded: false, downgradeMessage: null,
+        totalInputTokens, totalOutputTokens, executedTools, proposal: null,
       };
+    }
+    const approaching = detectApproachingRepeatedToolCall({ executedTools });
+    if (approaching && !noProgressNudgedSigs.has(approaching.signature)) {
+      noProgressNudgedSigs.add(approaching.signature);
+      console.warn(`[agentic-loop] no-progress nudge: ${approaching.toolName} x${approaching.count}`);
+      messages = [...messages, { role: "user" as const, content: buildNoProgressNudgeMessage(approaching) }];
     }
 
     // Dynamic tool descriptions: annotate tools that failed earlier in this session
