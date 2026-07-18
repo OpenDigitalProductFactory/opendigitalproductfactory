@@ -1,5 +1,3 @@
-import { prisma } from "@dpf/db";
-
 import {
   loadOperationalCapabilityState,
   type OperationalCapabilityState,
@@ -9,17 +7,20 @@ import {
   projectCapabilityServiceHealth,
   type CapabilityServiceHealthProjection,
 } from "./service-health";
-import { loadProviderHealth } from "@/lib/routing/provider-health-loader";
+import {
+  loadProviderHealthBatch,
+  type ProviderHealthBatchEntry,
+} from "@/lib/routing/provider-health-loader";
 import type { ProviderHealth } from "@/lib/routing/provider-health";
+import { providerDetailHref } from "@/lib/routing/provider-health";
 import { getEndpointRuntimeState } from "@/lib/routing/rate-tracker";
 
 type LoaderDependencies = {
   loadOperationalState?: () => Promise<OperationalCapabilityState>;
-  readProviderConfigurations?: () => Promise<Array<{ providerId: string; status: string }>>;
-  loadProviderHealth?: (providerId: string) => Promise<ProviderHealth>;
+  loadProviderHealthBatch?: (
+    providerIds: string[],
+  ) => Promise<Map<string, ProviderHealthBatchEntry>>;
 };
-
-const CONFIGURED_PROVIDER_STATUSES = new Set(["active", "degraded", "disabled"]);
 
 /**
  * Server-side loader for the shared operator projection. Provider rows are
@@ -31,30 +32,32 @@ export async function loadCapabilityServiceHealth(
 ): Promise<CapabilityServiceHealthProjection> {
   const loadOperationalState = dependencies.loadOperationalState ?? (() =>
     loadOperationalCapabilityState({ observedProviders: {} }));
-  const readProviderConfigurations = dependencies.readProviderConfigurations ?? (() =>
-    prisma.modelProvider.findMany({
-      where: { retiredAt: null },
-      select: { providerId: true, status: true },
-    }));
-  const readHealth = dependencies.loadProviderHealth ?? ((providerId: string) =>
-    loadProviderHealth(providerId, { runtimeState: getEndpointRuntimeState }));
+  const readHealthBatch = dependencies.loadProviderHealthBatch ?? ((providerIds: string[]) =>
+    loadProviderHealthBatch(providerIds, { runtimeState: getEndpointRuntimeState }));
 
-  const [operational, providerConfigurations] = await Promise.all([
-    loadOperationalState(),
-    readProviderConfigurations(),
-  ]);
+  const operational = await loadOperationalState();
   const allowedRuntimeKeys = new Set(
     operational.externalRuntimes.map((runtime) => runtime.runtimeKey),
   );
   const providerState: Record<string, ObservedProviderState> = {};
-  const providerIds = providerConfigurations
-    .filter((provider) => CONFIGURED_PROVIDER_STATUSES.has(provider.status))
-    .map((provider) => provider.providerId)
-    .filter((providerId) => allowedRuntimeKeys.has(providerId));
-  const providerHealth = await Promise.all(
-    providerIds.map(async (providerId) => ({ providerId, health: await readHealth(providerId) })),
-  );
-  for (const { providerId, health } of providerHealth) {
+  const providerIds = [...allowedRuntimeKeys].sort();
+  const providerHealth = await readHealthBatch(providerIds);
+  for (const providerId of providerIds) {
+    const entry = providerHealth.get(providerId);
+    if (!entry) continue;
+    if (entry.status === "rejected") {
+      if (!entry.configured) continue;
+      providerState[providerId] = {
+        configured: true,
+        healthy: null,
+        detail: "Provider health evidence is temporarily unavailable.",
+        action: "Open provider settings or retry after health evidence refreshes.",
+        actionHref: providerDetailHref(providerId),
+      };
+      continue;
+    }
+    const health = entry.value;
+    if (health.status === "unconfigured") continue;
     providerState[providerId] = {
       configured: true,
       healthy: health.status === "healthy" ? true : health.status === "unknown" ? null : false,

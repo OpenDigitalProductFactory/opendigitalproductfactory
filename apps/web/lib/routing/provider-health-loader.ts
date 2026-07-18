@@ -12,7 +12,7 @@
  * lookup once both land.
  */
 
-import { prisma } from "@dpf/db";
+import { Prisma, prisma } from "@dpf/db";
 import {
   deriveProviderHealth,
   type ProviderHealth,
@@ -32,6 +32,119 @@ export interface LoadProviderHealthOptions {
   recentLimit?: number;
   /** Optional runtime-circuit lookup (Slice A). Omitted → DB-only health. */
   runtimeState?: RuntimeStateLookup;
+}
+
+export type ProviderHealthBatchEntry =
+  | { status: "fulfilled"; value: ProviderHealth }
+  | { status: "rejected"; configured: boolean };
+
+type ProviderHealthBatchOutcome = {
+  providerId: string;
+  providerErrorCode: string | null;
+  fallbackOccurred: boolean;
+  createdAt: Date;
+  latencyMs: number;
+  modelId: string;
+};
+
+/**
+ * Batch provider reconciliation for operator surfaces. The three shared reads
+ * stay constant as the provider catalog grows, while a failure in one pure
+ * reconciliation is represented only on that provider.
+ */
+export async function loadProviderHealthBatch(
+  providerIds: string[],
+  opts: LoadProviderHealthOptions = {},
+): Promise<Map<string, ProviderHealthBatchEntry>> {
+  const uniqueIds = [...new Set(providerIds)];
+  if (uniqueIds.length === 0) return new Map();
+  const now = opts.now ?? Date.now();
+  const recentLimit = opts.recentLimit ?? 20;
+
+  const [providers, outcomes, capacityRows] = await Promise.all([
+    prisma.modelProvider.findMany({
+      where: { providerId: { in: uniqueIds }, retiredAt: null },
+      select: { providerId: true, status: true, authMethod: true },
+    }),
+    prisma.$queryRaw<ProviderHealthBatchOutcome[]>`
+      WITH ranked AS (
+        SELECT
+          "providerId",
+          "providerErrorCode",
+          "fallbackOccurred",
+          "createdAt",
+          "latencyMs",
+          "modelId",
+          ROW_NUMBER() OVER (PARTITION BY "providerId" ORDER BY "createdAt" DESC) AS rn
+        FROM "RouteOutcome"
+        WHERE "providerId" IN (${Prisma.join(uniqueIds)})
+      )
+      SELECT
+        "providerId",
+        "providerErrorCode",
+        "fallbackOccurred",
+        "createdAt",
+        "latencyMs",
+        "modelId"
+      FROM ranked
+      WHERE rn <= ${recentLimit}
+      ORDER BY "providerId", "createdAt" DESC
+    `,
+    prisma.providerCapacityStatus.findMany({
+      where: { providerId: { in: uniqueIds } },
+      select: {
+        providerId: true,
+        state: true,
+        action: true,
+        retryAt: true,
+        safeSummary: true,
+        isHumanActionRequired: true,
+      },
+    }),
+  ]);
+
+  const providersById = new Map(providers.map((provider) => [provider.providerId, provider]));
+  const capacityById = new Map(capacityRows.map((capacity) => [capacity.providerId, capacity]));
+  const outcomesById = new Map<string, ProviderHealthBatchOutcome[]>();
+  for (const outcome of outcomes) {
+    const bucket = outcomesById.get(outcome.providerId) ?? [];
+    bucket.push(outcome);
+    outcomesById.set(outcome.providerId, bucket);
+  }
+
+  const result = new Map<string, ProviderHealthBatchEntry>();
+  for (const providerId of uniqueIds) {
+    try {
+      const provider = providersById.get(providerId);
+      const providerOutcomes = outcomesById.get(providerId) ?? [];
+      const representativeModelId = providerOutcomes[0]?.modelId;
+      const runtimeCooldown = opts.runtimeState && representativeModelId
+        ? opts.runtimeState(providerId, representativeModelId)
+        : undefined;
+      const value = deriveProviderHealth({
+        providerId,
+        lifecycleStatus: provider?.status ?? "unconfigured",
+        authMethod: provider?.authMethod,
+        recentOutcomes: providerOutcomes.map((outcome) => ({
+          providerErrorCode: outcome.providerErrorCode,
+          fallbackOccurred: outcome.fallbackOccurred,
+          createdAt: outcome.createdAt,
+          latencyMs: outcome.latencyMs,
+        })),
+        capacityStatus: capacityById.get(providerId),
+        ...(runtimeCooldown ? { runtimeCooldown } : {}),
+        now,
+      });
+      result.set(providerId, { status: "fulfilled", value });
+    } catch {
+      const lifecycle = providersById.get(providerId)?.status;
+      result.set(providerId, {
+        status: "rejected",
+        configured: lifecycle !== undefined && lifecycle !== "unconfigured" && lifecycle !== "inactive",
+      });
+    }
+  }
+  return result;
 }
 
 export async function loadProviderHealth(

@@ -6,12 +6,27 @@ import {
 } from "lucide-react";
 
 import type {
+  CapabilityHealthAvailability,
   CapabilityHealthState,
+  CapabilityHealthTone,
   CapabilityServiceHealthProjection,
 } from "@/lib/platform-runtime/service-health";
 
 type CapabilityServiceHealthProps = {
   projection: CapabilityServiceHealthProjection;
+};
+
+const AVAILABILITY_LABEL: Record<CapabilityHealthAvailability, string> = {
+  available: "Available",
+  unavailable: "Unavailable",
+  inactive: "Inactive",
+  unknown: "Unknown",
+};
+
+const TONE_CLASS: Record<CapabilityHealthTone, string> = {
+  success: "text-[var(--dpf-success)]",
+  warning: "text-[var(--dpf-warning)]",
+  neutral: "text-[var(--dpf-muted)]",
 };
 
 const STATE_PRESENTATION: Record<
@@ -80,6 +95,9 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
                     </h3>
                     <p className="mt-1 text-xs font-medium text-[var(--dpf-text)]">
                       {item.label}
+                    </p>
+                    <p className={`mt-1 text-[11px] font-semibold ${TONE_CLASS[item.tone]}`}>
+                      Availability: {AVAILABILITY_LABEL[item.availability]}
                     </p>
                     {item.detail && (
                       <p className="mt-1 text-[11px] leading-4 text-[var(--dpf-muted)]">

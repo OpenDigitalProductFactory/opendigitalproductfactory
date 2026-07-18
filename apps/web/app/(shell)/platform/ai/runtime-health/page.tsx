@@ -18,7 +18,7 @@ import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import { AiReadinessHeaderLink } from "@/components/platform/AiReadinessHeaderLink";
 import { QueueHealthSection } from "@/components/queue/QueueHealthSection";
 import { readQueueSnapshots } from "@/lib/queue/queue-snapshot-service";
-import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
+import { getJobEngineHealth, type JobEngineHealth } from "@/lib/queue/job-engine-health";
 import { PhaseRemediationActions } from "@/components/platform/PhaseRemediationActions";
 import Link from "next/link";
 import { CapabilityServiceHealth } from "@/components/monitoring/CapabilityServiceHealth";
@@ -109,30 +109,37 @@ const th: React.CSSProperties = {
 export default async function RuntimeHealthPage() {
   await auth(); // (shell)/platform layout gates platform access; render read-only.
 
-  let overview: ModelSelectionOverview | null = null;
-  let loadError: string | null = null;
-  let capabilityHealth: CapabilityServiceHealthProjection | null = null;
-  let capabilityAuthorityError: string | null = null;
-  try {
-    overview = await resolveModelSelectionByPhase();
-  } catch (err) {
-    loadError = (err as Error).message;
-  }
+  const overviewPromise = resolveModelSelectionByPhase()
+    .then((value) => ({ value, unavailable: false as const }))
+    .catch(() => {
+      logRuntimeHealthReadFailure("model-selection");
+      return { value: null, unavailable: true as const };
+    });
+  const capabilityPromise = loadCapabilityServiceHealth()
+    .then((value) => ({ value, unavailable: false as const }))
+    .catch(() => {
+      logRuntimeHealthReadFailure("capability-authority");
+      return { value: null, unavailable: true as const };
+    });
+  const queuePromise = readQueueSnapshots({ limit: 24 }).catch(() => {
+    logRuntimeHealthReadFailure("queue-snapshots");
+    return [];
+  });
+  const jobEnginePromise = getJobEngineHealth().catch(() => {
+    logRuntimeHealthReadFailure("job-engine");
+    return unavailableJobEngineHealth();
+  });
 
-  try {
-    capabilityHealth = await loadCapabilityServiceHealth();
-  } catch (err) {
-    capabilityAuthorityError = (err as Error).message;
-  }
-
-  const errorCount = overview?.flags.filter((f) => f.severity === "error").length ?? 0;
-
-  // Fetch here (in the async page body) and pass to the synchronous section so
-  // the page renders in a single synchronous pass — no suspending child.
-  const [queueSnapshots, jobEngineHealth] = await Promise.all([
-    readQueueSnapshots({ limit: 24 }),
-    getJobEngineHealth(),
+  const [overviewResult, capabilityResult, queueSnapshots, jobEngineHealth] = await Promise.all([
+    overviewPromise,
+    capabilityPromise,
+    queuePromise,
+    jobEnginePromise,
   ]);
+  const overview: ModelSelectionOverview | null = overviewResult.value;
+  const capabilityHealth: CapabilityServiceHealthProjection | null = capabilityResult.value;
+  const loadError = overviewResult.unavailable;
+  const errorCount = overview?.flags.filter((f) => f.severity === "error").length ?? 0;
 
   return (
     <div>
@@ -168,7 +175,7 @@ export default async function RuntimeHealthPage() {
             </h2>
             <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
               Capability authority is unavailable. Service requirements cannot be classified safely
-              right now{capabilityAuthorityError ? `: ${capabilityAuthorityError}` : "."}
+              right now.
             </p>
           </section>
         )}
@@ -257,7 +264,7 @@ export default async function RuntimeHealthPage() {
             color: "var(--dpf-text)",
           }}
         >
-          Could not resolve model selection: {loadError}
+          Model selection is temporarily unavailable. Review provider and routing diagnostics, then retry.
         </div>
       )}
 
@@ -430,4 +437,28 @@ export default async function RuntimeHealthPage() {
       )}
     </div>
   );
+}
+
+function logRuntimeHealthReadFailure(source: string): void {
+  console.error("[runtime-health] read unavailable", {
+    event: "runtime_health_read_unavailable",
+    source,
+    route: "/platform/ai/runtime-health",
+  });
+}
+
+function unavailableJobEngineHealth(): JobEngineHealth {
+  return {
+    status: "unknown",
+    detail: "Background job health is temporarily unavailable.",
+    checkedAt: null,
+    watchdog: {
+      status: "unknown",
+      detail: "Background job watchdog evidence is temporarily unavailable.",
+      lastInvocationAt: null,
+      lastGatewayHitAt: null,
+      lastRecoveryAttemptAt: null,
+      lastRecoverySummary: null,
+    },
+  };
 }

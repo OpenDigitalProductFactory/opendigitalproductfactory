@@ -65,6 +65,9 @@ describe("CapabilityServiceHealth", () => {
     expect(html).toContain("Enable its runtime capability");
     expect(html).toContain("Restore the enabled optional service");
     expect(html).toContain("Manage availability and credentials");
+    expect(html).toContain("Availability: Unavailable");
+    expect(html).toContain("Availability: Inactive");
+    expect(html).toContain("Availability: Available");
     expect(html.match(/aria-hidden="true"/g)?.length).toBe(4);
   });
 
@@ -113,6 +116,8 @@ describe("CapabilityServiceHealth", () => {
     );
 
     expect(html).toContain("No recent activity");
+    expect(html).toContain("Availability: Unknown");
+    expect(html).toContain("Availability: Unavailable");
     expect(html).toContain("Run a request to establish current provider health");
     expect(html).toContain("Recent requests are failing");
     expect(html).toContain('href="/platform/ai/providers/anthropic"');

@@ -15,19 +15,18 @@ const operational = {
 
 describe("loadCapabilityServiceHealth", () => {
   it("joins catalog-owned providers to reconciled provider health", async () => {
-    const loadProviderHealth = vi.fn().mockResolvedValue({
-      status: "degraded",
-      remediationKind: "provider_settings",
-      safeSummary: "Recent requests are failing. Check this provider's settings.",
-      adminActionHref: "/platform/ai/providers/openai",
-    });
+    const loadProviderHealthBatch = vi.fn().mockResolvedValue(new Map([["openai", {
+      status: "fulfilled",
+      value: {
+        status: "degraded",
+        remediationKind: "provider_settings",
+        safeSummary: "Recent requests are failing. Check this provider's settings.",
+        adminActionHref: "/platform/ai/providers/openai",
+      },
+    }]]));
     const result = await loadCapabilityServiceHealth({
       loadOperationalState: vi.fn().mockResolvedValue(operational),
-      readProviderConfigurations: vi.fn().mockResolvedValue([
-        { providerId: "openai", status: "active" },
-        { providerId: "custom-not-in-catalog", status: "active" },
-      ]),
-      loadProviderHealth,
+      loadProviderHealthBatch,
     });
 
     expect(result.items).toEqual([
@@ -40,21 +39,21 @@ describe("loadCapabilityServiceHealth", () => {
         actionHref: "/platform/ai/providers/openai",
       }),
     ]);
-    expect(loadProviderHealth).toHaveBeenCalledTimes(1);
-    expect(loadProviderHealth).toHaveBeenCalledWith("openai");
+    expect(loadProviderHealthBatch).toHaveBeenCalledTimes(1);
+    expect(loadProviderHealthBatch).toHaveBeenCalledWith(["openai"]);
   });
 
   it("preserves no-recent-signal provider health as unknown", async () => {
     const result = await loadCapabilityServiceHealth({
       loadOperationalState: vi.fn().mockResolvedValue(operational),
-      readProviderConfigurations: vi.fn().mockResolvedValue([
-        { providerId: "openai", status: "active" },
-      ]),
-      loadProviderHealth: vi.fn().mockResolvedValue({
-        status: "unknown",
-        remediationKind: "none",
-        safeSummary: "No recent activity. Health will update after the next request.",
-      }),
+      loadProviderHealthBatch: vi.fn().mockResolvedValue(new Map([["openai", {
+        status: "fulfilled",
+        value: {
+          status: "unknown",
+          remediationKind: "none",
+          safeSummary: "No recent activity. Health will update after the next request.",
+        },
+      }]])),
     });
 
     expect(result.items).toEqual([
@@ -68,12 +67,25 @@ describe("loadCapabilityServiceHealth", () => {
   });
 
   it("keeps a disabled configured provider visible with reconciled reauthentication guidance", async () => {
-    const loadProviderHealth = vi.fn().mockResolvedValue({
-      status: "needs_reauth",
-      remediationKind: "reauth",
-      safeSummary: "Needs re-authentication. Reconnect this provider to restore access.",
-      adminActionHref: "/platform/ai/providers/openai",
-    });
+    const loadProviderHealthBatch = vi.fn().mockResolvedValue(new Map([
+      ["openai", {
+        status: "fulfilled" as const,
+        value: {
+          status: "needs_reauth" as const,
+          remediationKind: "reauth" as const,
+          safeSummary: "Needs re-authentication. Reconnect this provider to restore access.",
+          adminActionHref: "/platform/ai/providers/openai",
+        },
+      }],
+      ["anthropic", {
+        status: "fulfilled" as const,
+        value: { status: "unconfigured" as const, remediationKind: "provider_settings" as const, safeSummary: "Not connected." },
+      }],
+      ["gemini", {
+        status: "fulfilled" as const,
+        value: { status: "unconfigured" as const, remediationKind: "provider_settings" as const, safeSummary: "Not connected." },
+      }],
+    ]));
     const result = await loadCapabilityServiceHealth({
       loadOperationalState: vi.fn().mockResolvedValue({
         ...operational,
@@ -83,12 +95,7 @@ describe("loadCapabilityServiceHealth", () => {
           { capability: "runtime:external-ai", runtimeKey: "gemini", healthSemantics: "provider-api" },
         ],
       }),
-      readProviderConfigurations: vi.fn().mockResolvedValue([
-        { providerId: "openai", status: "disabled" },
-        { providerId: "anthropic", status: "unconfigured" },
-        { providerId: "gemini", status: "inactive" },
-      ]),
-      loadProviderHealth,
+      loadProviderHealthBatch,
     });
 
     expect(result.items).toEqual([
@@ -101,7 +108,51 @@ describe("loadCapabilityServiceHealth", () => {
         actionHref: "/platform/ai/providers/openai",
       }),
     ]);
-    expect(loadProviderHealth).toHaveBeenCalledTimes(1);
-    expect(loadProviderHealth).toHaveBeenCalledWith("openai");
+    expect(result.items).toHaveLength(1);
+    expect(loadProviderHealthBatch).toHaveBeenCalledWith(["anthropic", "gemini", "openai"]);
+  });
+
+  it("keeps services and other providers visible when one provider reconciliation fails", async () => {
+    const result = await loadCapabilityServiceHealth({
+      loadOperationalState: vi.fn().mockResolvedValue({
+        ...operational,
+        serviceRequirements: [{
+          service: "portal",
+          capability: "runtime:core",
+          backupPolicy: "included",
+          healthSemantics: "http",
+          dependsOn: [],
+          profiles: [],
+          volumes: [],
+        }],
+        serviceStates: { portal: "required" },
+        observedServices: { portal: { composePresent: true, healthy: true } },
+        externalRuntimes: [
+          ...operational.externalRuntimes,
+          { capability: "runtime:external-ai", runtimeKey: "anthropic", healthSemantics: "provider-api" },
+        ],
+      }),
+      loadProviderHealthBatch: vi.fn().mockResolvedValue(new Map([
+        ["openai", { status: "rejected", configured: true }],
+        ["anthropic", {
+          status: "fulfilled",
+          value: {
+            status: "healthy",
+            remediationKind: "none",
+            safeSummary: "Reachable — recent requests are completing.",
+          },
+        }],
+      ])),
+    });
+
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "portal", label: "Required — operational" }),
+      expect.objectContaining({
+        key: "openai",
+        availability: "unknown",
+        detail: "Provider health evidence is temporarily unavailable.",
+      }),
+      expect.objectContaining({ key: "anthropic", availability: "available" }),
+    ]));
   });
 });

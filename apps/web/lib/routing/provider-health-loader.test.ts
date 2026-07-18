@@ -2,24 +2,77 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    modelProvider: { findUnique: vi.fn() },
+    modelProvider: { findUnique: vi.fn(), findMany: vi.fn() },
     routeOutcome: { findMany: vi.fn() },
-    providerCapacityStatus: { findUnique: vi.fn() },
+    providerCapacityStatus: { findUnique: vi.fn(), findMany: vi.fn() },
+    $queryRaw: vi.fn(),
   },
+  Prisma: { join: vi.fn((values: string[]) => values) },
 }));
 
-import { loadProviderHealth } from "./provider-health-loader";
+import { loadProviderHealth, loadProviderHealthBatch } from "./provider-health-loader";
 import { prisma } from "@dpf/db";
 
 const mockProvider = prisma.modelProvider.findUnique as ReturnType<typeof vi.fn>;
 const mockOutcomes = prisma.routeOutcome.findMany as ReturnType<typeof vi.fn>;
 const mockCapacity = prisma.providerCapacityStatus.findUnique as ReturnType<typeof vi.fn>;
+const mockProviderBatch = prisma.modelProvider.findMany as ReturnType<typeof vi.fn>;
+const mockCapacityBatch = prisma.providerCapacityStatus.findMany as ReturnType<typeof vi.fn>;
+const mockOutcomeBatch = prisma.$queryRaw as ReturnType<typeof vi.fn>;
 
 const NOW = 1_700_000_000_000;
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockCapacity.mockResolvedValue(null);
+});
+
+describe("loadProviderHealthBatch", () => {
+  it("reconciles 25 providers with three shared queries", async () => {
+    const ids = Array.from({ length: 25 }, (_, index) => `provider-${index}`);
+    mockProviderBatch.mockResolvedValue(ids.map((providerId) => ({
+      providerId,
+      status: "active",
+      authMethod: "api_key",
+    })));
+    mockOutcomeBatch.mockResolvedValue(ids.map((providerId) => ({
+      providerId,
+      providerErrorCode: null,
+      fallbackOccurred: false,
+      createdAt: new Date(NOW - 1_000),
+      latencyMs: 100,
+      modelId: "model",
+    })));
+    mockCapacityBatch.mockResolvedValue([]);
+
+    const result = await loadProviderHealthBatch(ids, { now: NOW });
+
+    expect([...result.values()].every((entry) => entry.status === "fulfilled")).toBe(true);
+    expect(mockProviderBatch).toHaveBeenCalledTimes(1);
+    expect(mockOutcomeBatch).toHaveBeenCalledTimes(1);
+    expect(mockCapacityBatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("isolates a runtime reconciliation failure to one provider", async () => {
+    mockProviderBatch.mockResolvedValue([
+      { providerId: "openai", status: "active", authMethod: "api_key" },
+      { providerId: "anthropic", status: "active", authMethod: "api_key" },
+    ]);
+    mockOutcomeBatch.mockResolvedValue([
+      { providerId: "openai", providerErrorCode: null, fallbackOccurred: false, createdAt: new Date(NOW - 1_000), latencyMs: 100, modelId: "m" },
+      { providerId: "anthropic", providerErrorCode: null, fallbackOccurred: false, createdAt: new Date(NOW - 1_000), latencyMs: 100, modelId: "m" },
+    ]);
+    mockCapacityBatch.mockResolvedValue([]);
+    const runtimeState = vi.fn((providerId: string) => {
+      if (providerId === "openai") throw new Error("private provider failure");
+      return { unavailable: false };
+    });
+
+    const result = await loadProviderHealthBatch(["openai", "anthropic"], { now: NOW, runtimeState });
+
+    expect(result.get("openai")).toEqual({ status: "rejected", configured: true });
+    expect(result.get("anthropic")).toMatchObject({ status: "fulfilled", value: { status: "healthy" } });
+  });
 });
 
 describe("loadProviderHealth", () => {
