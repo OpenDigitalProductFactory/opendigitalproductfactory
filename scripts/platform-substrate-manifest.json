@@ -1,10 +1,10 @@
 {
-  "version": 1,
+  "version": 2,
   "services": [
     {
       "service": "postgres",
       "class": "universal-core",
-      "capability": "postgres",
+      "capability": "runtime:core",
       "boundaryReason": "Universal canonical platform contract.",
       "defaultRequired": true,
       "profiles": [],
@@ -26,7 +26,7 @@
     {
       "service": "portal-init",
       "class": "ephemeral-lifecycle",
-      "capability": "portal-init",
+      "capability": "runtime:core",
       "boundaryReason": "Separate portal-init runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": true,
       "profiles": [],
@@ -50,7 +50,7 @@
     {
       "service": "portal",
       "class": "universal-core",
-      "capability": "portal",
+      "capability": "runtime:core",
       "boundaryReason": "Universal canonical platform contract.",
       "defaultRequired": true,
       "profiles": [],
@@ -84,9 +84,9 @@
     {
       "service": "sandbox-postgres",
       "class": "ephemeral-lifecycle",
-      "capability": "sandbox-postgres",
+      "capability": "runtime:build",
       "boundaryReason": "Separate sandbox-postgres runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [],
       "volumes": [
@@ -106,9 +106,9 @@
     {
       "service": "sandbox-init",
       "class": "ephemeral-lifecycle",
-      "capability": "sandbox-init",
+      "capability": "runtime:build",
       "boundaryReason": "Separate sandbox-init runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [],
       "volumes": [
@@ -130,9 +130,9 @@
     {
       "service": "sandbox",
       "class": "ephemeral-lifecycle",
-      "capability": "sandbox",
+      "capability": "runtime:build",
       "boundaryReason": "Separate sandbox runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [
         "3035:3000"
@@ -156,7 +156,7 @@
     {
       "service": "promoter",
       "class": "ephemeral-lifecycle",
-      "capability": "promoter",
+      "capability": "runtime:core",
       "boundaryReason": "Separate promoter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
@@ -184,9 +184,9 @@
     {
       "service": "browser-use",
       "class": "capability-activated",
-      "capability": "browser-use",
+      "capability": "runtime:browser-automation",
       "boundaryReason": "Separate browser-use runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [
         "8500:8500"
@@ -209,7 +209,7 @@
     {
       "service": "adp",
       "class": "separate-distribution",
-      "capability": "adp",
+      "capability": "runtime:adp-integration",
       "boundaryReason": "Separate adp runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
@@ -235,7 +235,7 @@
     {
       "service": "integration-test-harness",
       "class": "test-development-only",
-      "capability": "integration-test-harness",
+      "capability": "runtime:development",
       "boundaryReason": "Separate integration-test-harness runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
@@ -259,7 +259,7 @@
     {
       "service": "dev-postgres",
       "class": "test-development-only",
-      "capability": "dev-postgres",
+      "capability": "runtime:development",
       "boundaryReason": "Separate dev-postgres runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
@@ -285,7 +285,7 @@
     {
       "service": "dev-init",
       "class": "test-development-only",
-      "capability": "dev-init",
+      "capability": "runtime:development",
       "boundaryReason": "Separate dev-init runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
@@ -326,7 +326,7 @@
     {
       "service": "dev-portal",
       "class": "test-development-only",
-      "capability": "dev-portal",
+      "capability": "runtime:development",
       "boundaryReason": "Separate dev-portal runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
@@ -368,9 +368,9 @@
     {
       "service": "prometheus",
       "class": "capability-activated",
-      "capability": "prometheus",
+      "capability": "runtime:deep-observability",
       "boundaryReason": "Separate prometheus runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [
         "9090:9090"
@@ -394,7 +394,7 @@
     {
       "service": "grafana",
       "class": "capability-activated",
-      "capability": "grafana",
+      "capability": "runtime:deep-observability",
       "boundaryReason": "Separate grafana runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
@@ -424,9 +424,9 @@
     {
       "service": "loki",
       "class": "capability-activated",
-      "capability": "loki",
+      "capability": "runtime:deep-observability",
       "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [
         "127.0.0.1:3100:3100"
@@ -450,9 +450,9 @@
     {
       "service": "alloy",
       "class": "capability-activated",
-      "capability": "alloy",
+      "capability": "runtime:deep-observability",
       "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [],
       "volumes": [
@@ -476,7 +476,7 @@
     {
       "service": "cadvisor",
       "class": "capability-activated",
-      "capability": "cadvisor",
+      "capability": "runtime:deep-observability",
       "boundaryReason": "Separate cadvisor runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
@@ -502,7 +502,7 @@
     {
       "service": "node-exporter",
       "class": "capability-activated",
-      "capability": "node-exporter",
+      "capability": "runtime:deep-observability",
       "boundaryReason": "Separate node-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [
@@ -528,9 +528,9 @@
     {
       "service": "postgres-exporter",
       "class": "capability-activated",
-      "capability": "postgres-exporter",
+      "capability": "runtime:deep-observability",
       "boundaryReason": "Separate postgres-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [
         "9187:9187"
@@ -554,9 +554,9 @@
     {
       "service": "redis",
       "class": "capability-activated",
-      "capability": "redis",
+      "capability": "runtime:durable-automation",
       "boundaryReason": "Separate redis runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [
         "6379:6379"
@@ -578,9 +578,9 @@
     {
       "service": "redis-exporter",
       "class": "capability-activated",
-      "capability": "redis-exporter",
+      "capability": "runtime:durable-automation",
       "boundaryReason": "Separate redis-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [],
       "volumes": [],
@@ -600,9 +600,9 @@
     {
       "service": "inngest",
       "class": "capability-activated",
-      "capability": "inngest",
+      "capability": "runtime:durable-automation",
       "boundaryReason": "Separate inngest runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [
         "8288:8288",
@@ -626,9 +626,9 @@
     {
       "service": "dpf-stt",
       "class": "capability-activated",
-      "capability": "dpf-stt",
+      "capability": "runtime:local-speech",
       "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": true,
+      "defaultRequired": false,
       "profiles": [],
       "ports": [
         "127.0.0.1:8765:9000"
@@ -650,7 +650,7 @@
     {
       "service": "dpf-tts",
       "class": "capability-activated",
-      "capability": "dpf-tts",
+      "capability": "runtime:local-speech",
       "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
       "defaultRequired": false,
       "profiles": [

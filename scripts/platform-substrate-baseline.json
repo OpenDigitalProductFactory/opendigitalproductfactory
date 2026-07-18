@@ -1,14 +1,15 @@
 {
   "changeRationale": {
+    "defaultRequiredServiceCount": "Capability classification now records only PostgreSQL, portal initialization, and portal as universal defaults; Compose activation changes land separately.",
     "prismaModelCount": "IntegrationCallbackReceipt is the single durable idempotency/outbox record required to consolidate provider-local callback recovery in the connector kernel."
   },
-  "generatedAt": "2026-07-17T21:49:34.178Z",
-  "gitSha": "9c2f4790b987957e7b9327daf117353ef6a13367",
-  "manifestVersion": 1,
+  "generatedAt": "2026-07-18T00:32:23.166Z",
+  "gitSha": "0afed086b122d425c8952eee09b080832d67edc4",
+  "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
       "direction": "non-increasing",
-      "value": 15
+      "value": 3
     },
     "directInngestImportCount": {
       "direction": "non-increasing",
@@ -24,7 +25,7 @@
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 13924
+      "value": 13965
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",

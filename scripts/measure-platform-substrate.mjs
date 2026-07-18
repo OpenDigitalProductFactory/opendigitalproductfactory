@@ -18,6 +18,7 @@ const defaults = (repoRoot) => ({
   composePath: resolve(repoRoot,"docker-compose.yml"),
   providersPath: resolve(repoRoot,"packages/db/data/providers-registry.json"),
   baselinePath: resolve(repoRoot,"scripts/platform-substrate-baseline.json"),
+  capabilitiesPath: resolve(repoRoot,"packages/db/data/platform-runtime-capabilities.json"),
 });
 
 async function json(path,label) {
@@ -54,12 +55,13 @@ export async function runSubstrateMeasurement(options={}) {
   const repoRoot=resolve(options.repoRoot ?? scriptRoot);
   const paths={...defaults(repoRoot),...Object.fromEntries(Object.entries(options).filter(([key])=>key.endsWith("Path")))};
   try {
-    const [manifest,composeText,providers]=await Promise.all([
+    const [manifest,composeText,providers,capabilitySeed]=await Promise.all([
       json(paths.manifestPath,"substrate manifest"),
       readFile(paths.composePath,"utf8"),
       json(paths.providersPath,"provider inventory"),
+      json(paths.capabilitiesPath,"runtime capability seed"),
     ]);
-    const errors=validateSubstrateManifest(manifest,{composeText,providers});
+    const errors=validateSubstrateManifest(manifest,{composeText,providers,capabilities:capabilitySeed.capabilities});
     if (errors.length) throw new Error(`Invalid substrate manifest:\n${errors.map((e)=>`- ${e}`).join("\n")}`);
     const provenance={generatedAt:options.generatedAt ?? new Date().toISOString(),gitSha:options.gitSha ?? sha(repoRoot)};
     const measurements=await collectRepositoryMeasurements({repoRoot,manifest,...provenance});
@@ -84,7 +86,7 @@ export async function runSubstrateMeasurement(options={}) {
 
 function parseArgs(argv) {
   const options={};
-  const keys={"--repo-root":"repoRoot","--manifest":"manifestPath","--compose":"composePath","--providers":"providersPath","--baseline":"baselinePath"};
+  const keys={"--repo-root":"repoRoot","--manifest":"manifestPath","--compose":"composePath","--providers":"providersPath","--capabilities":"capabilitiesPath","--baseline":"baselinePath"};
   for(let i=0;i<argv.length;i++) {
     if(argv[i]==="--json") options.json=true;
     else if(argv[i]==="--update") options.update=true;

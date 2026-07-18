@@ -4,7 +4,7 @@ This contract makes platform simplification measurable. It belongs to [EP-PLATFO
 
 ## Boundary inventory
 
-The versioned [substrate manifest](../../scripts/platform-substrate-manifest.json) is the source of truth for the classified inventory. Every Compose service is exactly one of:
+The versioned [substrate manifest](../../scripts/platform-substrate-manifest.json) is the source of truth for physical topology facts. Its version 2 `capability` values are stable `runtime:*` join keys, not capability definitions or enabled state. Every Compose service is exactly one of:
 
 - `universal-core`: a continuously running service required by every supported product installation.
 - `ephemeral-lifecycle`: a first-party service that runs for a bounded initialization, sandbox, promotion, or other lifecycle operation rather than as an always-on boundary.
@@ -13,6 +13,14 @@ The versioned [substrate manifest](../../scripts/platform-substrate-manifest.jso
 - `separate-distribution`: an integration distributed and operated as a separate product boundary rather than absorbed into the universal portal runtime.
 
 External provider runtimes are listed separately and do not form a sixth Compose class, because provider configuration is not a container lifecycle. The manifest records activation, data ownership, health semantics, supported hosts, and the intended target classification for each boundary.
+
+## Split authority and transitions
+
+Runtime capability definitions are deployed from [the checked-in seed](../../packages/db/data/platform-runtime-capabilities.json). Sync merges their definition metadata into `PlatformCapability.manifest.runtime`; after bootstrap, that PostgreSQL manifest is the product-capability authority. Existing `PlatformCapability.state` values are operator-controlled and sync never resets them. The substrate manifest separately owns service names, profiles, ports, volumes, backup policy, health semantics, host support, and boundary classification. It never owns capability dependencies or enabled state.
+
+The stable `runtime:*` key is the only join between these authorities. Missing capabilities, unknown services, or duplicate service bindings fail closed. A later generated `CapabilityServiceProjection` will be the sole operational input for install, upgrade, health, backup, and diagnostics; those consumers must not recreate service lists.
+
+Capability state follows the convergence design's governed lifecycle: dependency resolution precedes enablement; disablement drains or cancels attributed work before services stop; upgrades preserve the enabled set; rollback restores the prior snapshot. Health reports desired plus observed state but cannot initiate a transition. This slice defines and synchronizes the authorities only—it does not implement the projection compiler or transition saga.
 
 A separate runtime needs a concrete boundary reason: independent lifecycle or scaling, failure or security isolation, a distinct protocol, host/hardware affinity, external distribution, or development-only tooling. “It already exists” and “the image is convenient” are not reasons. A boundary without a continuing reason should be hybridized into an existing owner or removed, with its data ownership, backup, health, rollback, and compatibility obligations handled first.
 

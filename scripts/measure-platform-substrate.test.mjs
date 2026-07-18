@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { runSubstrateMeasurement } from "./measure-platform-substrate.mjs";
+import { validateCapabilityServiceBindings } from "./lib/platform-substrate-measurements.mjs";
 
 async function fixture(run) {
   const root = await mkdtemp(join(tmpdir(), "substrate-cli-"));
@@ -12,12 +13,13 @@ async function fixture(run) {
     const files = {
       "docker-compose.yml": "services:\n  portal:\n    image: portal\n",
       "packages/db/data/providers-registry.json": "[]\n",
+      "packages/db/data/platform-runtime-capabilities.json": `${JSON.stringify({version:1,capabilities:[capability("runtime:core")]})}\n`,
       "packages/db/prisma/schema.prisma": "model User { id String @id }\n",
       "packages/db/src/seed.ts": "export const seed = true;\n",
       "scripts/check-module-size.mjs": "const SOFT_CEILING = 800;\n",
     };
-    const service = { service:"portal", class:"universal-core", capability:"portal", boundaryReason:"Portal.", defaultRequired:true, profiles:[], ports:[], volumes:[], dependsOn:[], canonicalDataOwner:"none", backupPolicy:"excluded-stateless", healthSemantics:"consumer-observed", hostPlatforms:["windows"], targetClassification:"universal-core" };
-    files["scripts/platform-substrate-manifest.json"] = `${JSON.stringify({version:1,services:[service],externalRuntimes:[]}, null, 2)}\n`;
+    const service = { service:"portal", class:"universal-core", capability:"runtime:core", boundaryReason:"Portal.", defaultRequired:true, profiles:[], ports:[], volumes:[], dependsOn:[], canonicalDataOwner:"none", backupPolicy:"excluded-stateless", healthSemantics:"consumer-observed", hostPlatforms:["windows"], targetClassification:"universal-core" };
+    files["scripts/platform-substrate-manifest.json"] = `${JSON.stringify({version:2,services:[service],externalRuntimes:[]}, null, 2)}\n`;
     for (const [name, value] of Object.entries(files)) { const path=join(root,name); await mkdir(dirname(path),{recursive:true}); await writeFile(path,value); }
     return await run(root);
   } finally { await rm(root,{recursive:true,force:true}); }
@@ -35,6 +37,26 @@ test("--update writes a deterministic canonical baseline and --json checks it", 
   await runSubstrateMeasurement({repoRoot,baselinePath,update:true,generatedAt:"2026-07-17T00:00:00Z",gitSha:"abc"});
   assert.equal(await readFile(baselinePath,"utf8"),first);
 }));
+
+const capability = (capabilityId) => ({ capabilityId, manifest: { runtime: {} } });
+const service = (serviceName, capabilityId) => ({ service: serviceName, capability: capabilityId });
+
+test("capability service joins fail closed", () => {
+  assert.deepEqual(validateCapabilityServiceBindings({
+    services: [service("portal", "runtime:core")], capabilities: [],
+  }), ["missing_capability:runtime:core"]);
+  assert.deepEqual(validateCapabilityServiceBindings({
+    services: [service("unknown", "runtime:core")],
+    capabilities: [capability("runtime:core")], composeServiceNames: ["portal"],
+  }), ["unknown_service_binding:unknown"]);
+  assert.deepEqual(validateCapabilityServiceBindings({
+    services: [service("portal", "runtime:core"), service("portal", "runtime:build")],
+    capabilities: [capability("runtime:core"), capability("runtime:build")],
+  }), ["duplicate_service_binding:portal"]);
+  assert.deepEqual(validateCapabilityServiceBindings({
+    services: [service("portal", "core")], capabilities: [capability("runtime:core")],
+  }), ["missing_capability:core"]);
+});
 
 test("check fails closed for a missing baseline", async () => fixture(async (repoRoot) => {
   const result=await runSubstrateMeasurement({repoRoot,baselinePath:join(repoRoot,"missing.json")});

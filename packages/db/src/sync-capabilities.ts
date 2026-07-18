@@ -24,6 +24,21 @@ interface ToolSnapshot {
   buildPhases: BuildPhaseTag[] | null;
 }
 
+interface RuntimeCapabilitySeed {
+  capabilityId: string;
+  name: string;
+  description: string;
+  state: string;
+  manifest: Record<string, unknown>;
+}
+
+export const RUNTIME_CAPABILITY_IDS = [
+  "runtime:core", "runtime:build", "runtime:browser-automation",
+  "runtime:durable-automation", "runtime:local-speech",
+  "runtime:deep-observability", "runtime:adp-integration",
+  "runtime:development", "runtime:external-ai",
+] as const;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function computeDefinitionHash(tool: ToolSnapshot): string {
@@ -57,6 +72,22 @@ function loadToolsSnapshot(): ToolSnapshot[] {
   return JSON.parse(raw) as ToolSnapshot[];
 }
 
+function loadRuntimeCapabilities(): RuntimeCapabilitySeed[] {
+  const seedPath = join(__dirname, "../data/platform-runtime-capabilities.json");
+  const parsed = JSON.parse(readFileSync(seedPath, "utf8")) as {
+    version: number;
+    capabilities: RuntimeCapabilitySeed[];
+  };
+  if (parsed.version !== 1 || !Array.isArray(parsed.capabilities)) {
+    throw new Error("Unsupported runtime capability seed");
+  }
+  const ids = parsed.capabilities.map(({ capabilityId }) => capabilityId);
+  if (JSON.stringify(ids) !== JSON.stringify(RUNTIME_CAPABILITY_IDS)) {
+    throw new Error("Runtime capability seed identifiers do not match the canonical inventory");
+  }
+  return parsed.capabilities;
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function syncCapabilities(prisma: PrismaClient): Promise<void> {
@@ -72,6 +103,33 @@ export async function syncCapabilities(prisma: PrismaClient): Promise<void> {
       err instanceof Error ? err.message : err
     );
     return; // fail-open
+  }
+
+  const runtimeCapabilities = loadRuntimeCapabilities();
+  for (const capability of runtimeCapabilities) {
+    const existing = await prisma.platformCapability.findUnique({
+      where: { capabilityId: capability.capabilityId },
+      select: { manifest: true, state: true },
+    });
+    const existingManifest = existing?.manifest && typeof existing.manifest === "object"
+      ? existing.manifest as Record<string, unknown>
+      : {};
+    const manifest = { ...existingManifest, ...capability.manifest };
+    await prisma.platformCapability.upsert({
+      where: { capabilityId: capability.capabilityId },
+      update: {
+        name: capability.name,
+        description: capability.description,
+        manifest: manifest as Prisma.InputJsonValue,
+      },
+      create: {
+        capabilityId: capability.capabilityId,
+        name: capability.name,
+        description: capability.description,
+        state: capability.state,
+        manifest: manifest as Prisma.InputJsonValue,
+      },
+    });
   }
 
   const seenCapabilityIds = new Set<string>();
@@ -164,6 +222,6 @@ export async function syncCapabilities(prisma: PrismaClient): Promise<void> {
   }
 
   console.log(
-    `[sync-capabilities] Done. Synced ${seenCapabilityIds.size} platform capabilities.`
+    `[sync-capabilities] Done. Synced ${seenCapabilityIds.size} platform and ${runtimeCapabilities.length} runtime capabilities.`
   );
 }

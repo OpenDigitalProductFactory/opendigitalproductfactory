@@ -7,7 +7,7 @@ import {
   readModuleSources,
 } from "./module-size-scope.mjs";
 
-export const SUPPORTED_MANIFEST_VERSION = 1;
+export const SUPPORTED_MANIFEST_VERSION = 2;
 export const SUBSTRATE_CLASSES = [
   "universal-core",
   "ephemeral-lifecycle",
@@ -393,7 +393,7 @@ function validateHostPlatforms(errors, service, platforms) {
   }
 }
 
-export function validateSubstrateManifest(manifest, { composeText, providers = [] }) {
+export function validateSubstrateManifest(manifest, { composeText, providers = [], capabilities }) {
   const errors = [];
   if (!Number.isInteger(manifest?.version) || manifest.version !== SUPPORTED_MANIFEST_VERSION) {
     errors.push(`Manifest version must be the supported positive integer ${SUPPORTED_MANIFEST_VERSION}`);
@@ -456,5 +456,28 @@ export function validateSubstrateManifest(manifest, { composeText, providers = [
   for (const runtimeKey of runtimeKeys) {
     if (!expectedRuntimeKeys.includes(runtimeKey)) errors.push(`Manifest external runtime ${runtimeKey} is absent from providers and Compose`);
   }
+  if (capabilities) {
+    errors.push(...validateCapabilityServiceBindings({
+      services: records,
+      capabilities,
+      composeServiceNames: composeServices.map(({ service }) => service),
+    }));
+  }
   return errors;
+}
+
+export function validateCapabilityServiceBindings({ services, capabilities, composeServiceNames }) {
+  const errors = [];
+  const capabilityIds = new Set((capabilities ?? []).map(({ capabilityId }) => capabilityId));
+  const knownServices = composeServiceNames ? new Set(composeServiceNames) : null;
+  const serviceCounts = new Map();
+  for (const record of services ?? []) {
+    serviceCounts.set(record.service, (serviceCounts.get(record.service) ?? 0) + 1);
+    if (!capabilityIds.has(record.capability)) errors.push(`missing_capability:${record.capability}`);
+    if (knownServices && !knownServices.has(record.service)) errors.push(`unknown_service_binding:${record.service}`);
+  }
+  for (const [service, count] of serviceCounts) {
+    if (count > 1) errors.push(`duplicate_service_binding:${service}`);
+  }
+  return [...new Set(errors)].sort();
 }
