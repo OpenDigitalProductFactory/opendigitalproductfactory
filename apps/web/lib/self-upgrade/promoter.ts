@@ -442,6 +442,77 @@ export async function ensurePromoterImage(
 /** Exit code runPromoter reports when it kills a promoter that blew its budget. */
 export const PROMOTER_TIMEOUT_EXIT_CODE = 124; // GNU `timeout` convention.
 
+// The already-running sentinel lives in a PURE sibling module so server bundle
+// entrypoints (the Inngest orchestrator) can import it statically without
+// pulling this Docker-spawning module into the bundle (BI-98AF1066). Re-exported
+// here for runPromoter's own use and the unit tests that import from ./promoter.
+export { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "./promoter-exit-codes";
+import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "./promoter-exit-codes";
+
+export type PromoterContainerState =
+  | "running" // an active promoter is building this run right now
+  | "present" // a container with the name exists but is not running (dead corpse)
+  | "absent"; // no such container
+
+/**
+ * Classify `docker inspect -f '{{.State.Running}}' <name>` output. Pure so the
+ * mapping is unit-testable without a daemon. A nonzero exit is docker's "no such
+ * object" — absent. `true` is a live build; anything else (e.g. `false` for an
+ * exited container `--rm` never cleaned) is present-but-dead.
+ */
+export function interpretContainerInspect(
+  exitCode: number,
+  stdout: string,
+): PromoterContainerState {
+  if (exitCode !== 0) return "absent";
+  return stdout.trim() === "true" ? "running" : "present";
+}
+
+/**
+ * Decide how to launch given the state of a same-named container. Pure.
+ * - running  → `defer`: another dispatch of this runId is already building; a
+ *   second `docker run --name` would collide and false-fail that healthy build.
+ * - present  → `reclaim`: a dead corpse holds the name (crash/daemon restart
+ *   left it, `--rm` never fired); force-remove it, then launch fresh.
+ * - absent   → `launch`: nothing in the way.
+ */
+export function decidePromoterLaunch(
+  state: PromoterContainerState,
+): "defer" | "reclaim" | "launch" {
+  if (state === "running") return "defer";
+  if (state === "present") return "reclaim";
+  return "launch";
+}
+
+/**
+ * Inspect a promoter container by name. Never throws: resolves "absent" when
+ * docker is unreachable or no such container exists, so the launch path treats
+ * an inspect failure as "nothing in the way" and proceeds normally.
+ */
+export async function inspectPromoterContainerState(
+  name: string,
+): Promise<PromoterContainerState> {
+  if (!name) return "absent";
+  return new Promise((resolve) => {
+    try {
+      const child = spawn("docker", ["inspect", "-f", "{{.State.Running}}", name], {
+        env: { ...process.env },
+      });
+      let stdout = "";
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdout += chunk;
+      });
+      child.stderr?.on("data", () => {});
+      child.on("close", (code: number | null) =>
+        resolve(interpretContainerInspect(code ?? 1, stdout)),
+      );
+      child.on("error", () => resolve("absent"));
+    } catch {
+      resolve("absent");
+    }
+  });
+}
+
 /** Default hard budget for the promoter subprocess: 25 min (env-overridable). */
 export function resolvePromoterTimeoutMs(params: PromoterParams): number {
   if (typeof params.timeoutMs === "number" && params.timeoutMs > 0) return params.timeoutMs;
@@ -528,6 +599,28 @@ export async function runProcessWithBudget(
 }
 
 export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
+  // Idempotency guard (SUR-E2BF265E). The container name is deterministic
+  // (`dpf-promoter-<runId>`), so a concurrent or retried dispatch of the SAME
+  // run reaching here would issue a second `docker run --name <name>` and hit
+  // "The container name is already in use" — recorded by the orchestrator as a
+  // build FAILURE even though the first promoter is still healthily building.
+  const name = params.containerName;
+  if (name) {
+    const action = decidePromoterLaunch(await inspectPromoterContainerState(name));
+    if (action === "defer") {
+      return {
+        exitCode: PROMOTER_ALREADY_RUNNING_EXIT_CODE,
+        stdout: "",
+        stderr: `[promoter-already-running] a promoter container named ${name} is already building this run; deferring to it instead of launching a duplicate.`,
+      };
+    }
+    if (action === "reclaim") {
+      // A prior promoter for this run exists but is no longer running — a
+      // crash/daemon-restart corpse `--rm` never cleaned. Remove it so the fresh
+      // launch below doesn't collide on the name.
+      await forceRemovePromoterContainer(name);
+    }
+  }
   const { command, args } = buildPromoterCommand(params);
   // Hard wall-clock bound. Without it a stalled `docker build` (SUR-756751D1: an
   // `apk add` fetch that crawled for 52 min) never closes, so `await runPromoter`

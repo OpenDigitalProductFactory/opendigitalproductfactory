@@ -120,7 +120,10 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestSucceededRun: mocks.getLatestSucceededRun,
 }));
 
-vi.mock("@/lib/self-upgrade/promoter", () => ({
+vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
+  // Keep the real pure exports (constants like PROMOTER_ALREADY_RUNNING_EXIT_CODE
+  // that the orchestrator imports statically) and mock only the spawn-heavy fns.
+  ...(await importOriginal<typeof import("@/lib/self-upgrade/promoter")>()),
   runPromoter: mocks.runPromoter,
   isPromoterAvailable: mocks.isPromoterAvailable,
   ensurePromoterImage: mocks.ensurePromoterImage,
@@ -164,6 +167,7 @@ import {
   runSelfUpgrade,
 } from "./self-upgrade";
 import { allFunctions } from "./index";
+import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter";
 
 /**
  * Helper to set up startQuiescence to return a successful ready-to-swap
@@ -771,6 +775,21 @@ describe("failure path", () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "promote script failed" });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ ok: false, status: "failed", runId: "SUR-FAILTEST" });
+  });
+
+  it("defers (does NOT fail) when a promoter for this run is already building (SUR-E2BF265E)", async () => {
+    // runPromoter's idempotency guard declines to launch a duplicate and reports
+    // the sentinel. The orchestrator must leave run state untouched — no failRun,
+    // no cooldown — so a healthy in-flight build is never recorded as failed.
+    mocks.runPromoter.mockResolvedValue({
+      exitCode: PROMOTER_ALREADY_RUNNING_EXIT_CODE,
+      stdout: "",
+      stderr: "[promoter-already-running] deferring to it",
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ ok: true, status: "already-in-flight", runId: "SUR-FAILTEST" });
+    expect(mocks.failRun).not.toHaveBeenCalled();
+    expect(mocks.recordCooldown).not.toHaveBeenCalled();
   });
 
   // The failure excerpt now LEADS with a build-failure classification and
