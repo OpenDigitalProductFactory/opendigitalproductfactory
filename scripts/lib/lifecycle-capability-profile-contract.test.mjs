@@ -37,19 +37,45 @@ async function signedInstallStateHandoff(statePath, dir) {
   return handoff;
 }
 const bashExports = (values) => Object.entries(values).map(([key, value]) => `export ${key}='${value}'`).join("; ");
+const signingWslenv = [
+  "DPF_INSTALL_STATE_MIGRATION_ENVELOPE",
+  "DPF_INSTALL_STATE_MIGRATION_SIGNATURE",
+  "DPF_RUNTIME_TRANSITION_SECRET_FILE/p",
+  "DPF_SELF_UPGRADE_RUN_ID",
+  "DPF_PROMOTER_DIGEST",
+  "DPF_PROMOTER_STATE_DIR/p",
+].join(":");
 const windowsNodeShim = `#!/usr/bin/env bash
 converted=()
 for arg in "$@"; do
   case "$arg" in /mnt/*) arg="$(wslpath -w "$arg")" ;; esac
   converted+=("$arg")
 done
-# The handoff was cryptographically verified by signedInstallStateHandoff in
-# the host test process. WSL does not forward ad-hoc Linux env vars into a
-# Windows node.exe child, so acknowledge only this already-verified boundary;
-# every other Node call executes for real through the path adapter below.
-case "\${converted[0]:-}" in *transition-signing.mjs) exit 0 ;; esac
 exec '${bashPath(process.execPath)}' "\${converted[@]}"
 `;
+
+test("the real install-state handoff verifier rejects every mutated binding", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-signed-handoff-"));
+  try {
+    const stateDir = join(dir, "state");
+    const statePath = join(stateDir, "install-state.json");
+    await mkdir(stateDir);
+    await writeFile(statePath, "signed-state\n");
+    const handoff = await signedInstallStateHandoff(statePath, dir);
+    const verifier = join(root, "scripts", "lib", "transition-signing.mjs");
+    const validEnv = { ...process.env, ...handoff, DPF_RUNTIME_TRANSITION_SECRET_FILE: join(dir, "transition.secret"), DPF_PROMOTER_STATE_DIR: stateDir };
+    const run = (overrides = {}) => spawnSync(process.execPath, [verifier], { encoding: "utf8", env: { ...validEnv, ...overrides } });
+    assert.equal(run().status, 0);
+    assert.notEqual(run({ DPF_SELF_UPGRADE_RUN_ID: "SUR-wrong-run" }).status, 0);
+    assert.notEqual(run({ DPF_PROMOTER_DIGEST: "sha256:wrong-digest" }).status, 0);
+    await writeFile(statePath, "mutated-state\n");
+    assert.notEqual(run().status, 0);
+    await writeFile(statePath, "signed-state\n");
+    const wrongSecret = join(dir, "wrong.secret");
+    await writeFile(wrongSecret, "wrong-lifecycle-contract-secret-32");
+    assert.notEqual(run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: wrongSecret }).status, 0);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
 
 test("consumer release assets are integrity-bound and execute the canonical adapter", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-consumer-assets-"));
@@ -274,7 +300,7 @@ test("promotion refuses stale state before Docker", async () => {
     await writeFile(join(bin, "docker"), `#!/bin/sh\ntouch '${bashPath(join(dir, "docker-called"))}'\n`);
     await chmod(join(bin, "node"), 0o755); await chmod(join(bin, "docker"), 0o755);
     const handoff = await signedInstallStateHandoff(join(state, "install-state.json"), dir);
-    const result = runBash(`${bashExports(handoff)}; PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_PROMOTER_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA=x PROMOTE_BACKUP_PATH='${bashPath(join(dir, "backup"))}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
+    const result = runBash(`${bashExports({ ...handoff, WSLENV: signingWslenv })}; PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_PROMOTER_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA=x PROMOTE_BACKUP_PATH='${bashPath(join(dir, "backup"))}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /capability_state_stale/);
     assert.equal(spawnSync("pwsh", ["-NoProfile", "-Command", `Test-Path '${join(dir, "docker-called")}'`], { encoding: "utf8" }).stdout.trim(), "False");
@@ -294,7 +320,7 @@ test("promotion recovery snapshot is copied and restored after a simulated Docke
     await writeFile(join(bin, "docker"), `#!/bin/sh\nprintf 'corrupted\\n' > '${bashPath(join(state, "install-state.json"))}'\nexit 42\n`);
     await chmod(join(bin, "node"), 0o755); await chmod(join(bin, "docker"), 0o755);
     const handoff = await signedInstallStateHandoff(join(state, "install-state.json"), dir);
-    const result = runBash(`${bashExports(handoff)}; PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_PROMOTER_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA='${sha}' PROMOTE_BACKUP_PATH='${bashPath(backup)}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
+    const result = runBash(`${bashExports({ ...handoff, WSLENV: signingWslenv })}; PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_PROMOTER_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA='${sha}' PROMOTE_BACKUP_PATH='${bashPath(backup)}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
     assert.notEqual(result.status, 0);
     assert.equal(await readFile(join(backup, "install-state.json"), "utf8"), "original-snapshot\n");
     assert.equal(await readFile(join(state, "install-state.json"), "utf8"), "original-snapshot\n");
