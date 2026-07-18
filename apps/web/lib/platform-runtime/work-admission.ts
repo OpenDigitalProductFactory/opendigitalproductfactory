@@ -3,7 +3,7 @@ import type { RuntimeWorkGuard } from "./work-attribution";
 const ACTIVE_TRANSITION_STATUSES = ["pending", "applying", "host_applied", "compensating"] as const;
 
 type AdmissionTx = {
-  $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
+  $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
   platformCapability: { findMany(args: unknown): Promise<Array<{ capabilityId: string; state: string; manifest: unknown }>> };
   runtimeCapabilityTransition: { findFirst(args: unknown): Promise<{ previousKeys: string[]; desiredKeys: string[] } | null> };
 };
@@ -23,7 +23,12 @@ function guardsFromManifest(manifest: unknown): string[] {
  * between the coordinator's drain count and a producer's insert.
  */
 export async function admitRuntimeGuardedWork(tx: AdmissionTx, guard: RuntimeWorkGuard): Promise<void> {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+  // BI-8BA6AC56: acquire the lock via $executeRaw, NOT $queryRaw. pg_advisory_xact_lock
+  // returns `void`, and Prisma 7.8's driver adapter throws UnsupportedNativeDataType
+  // (P2010) trying to deserialize a void column from $queryRaw — which crashed every
+  // Build Studio promote/start (this is the admission gate). $executeRaw runs the
+  // statement without deserializing a result set (matches care-appointment-repository).
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
   const capabilities = await tx.platformCapability.findMany({
     where: { capabilityId: { startsWith: "runtime:" } },
     select: { capabilityId: true, state: true, manifest: true },
