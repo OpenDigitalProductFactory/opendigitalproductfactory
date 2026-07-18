@@ -116,7 +116,7 @@ export async function collectRuntimeMeasurements(options) {
   requireLease(options.lease);
   if (!Array.isArray(options.manifest?.services) || !Number.isInteger(options.manifest.version)) throw new Error("Runtime measurement requires a valid capability/service manifest");
   const manifestNames = options.manifest.services.map((item) => item.service);
-  if (manifestNames.some((item) => typeof item !== "string") || new Set(manifestNames).size !== manifestNames.length || options.manifest.services.some((item) => typeof item.defaultRequired !== "boolean")) throw new Error("Runtime capability/service projection is malformed or duplicated");
+  if (manifestNames.some((item) => typeof item !== "string") || new Set(manifestNames).size !== manifestNames.length) throw new Error("Runtime capability/service projection is malformed or duplicated");
   const execute = options.execute ?? defaultExecute;
   const fetchJson = options.fetchJson ?? defaultFetchJson;
   const ps = parseJsonRecords(await execute("docker", ["compose", "ps", "--format", "json", "--all"]), "docker compose ps");
@@ -138,8 +138,12 @@ export async function collectRuntimeMeasurements(options) {
   const byService = new Map(ps.map((record) => [service(record), record]));
   const hostPlatform = normalizeHostPlatform(String(options.hostProfile ?? platform()).split("-")[0]);
   const eligible = options.manifest.services.filter((item) => !Array.isArray(item.hostPlatforms) || item.hostPlatforms.includes(hostPlatform));
-  const required = eligible.filter((item) => item.defaultRequired);
-  const optional = eligible.filter((item) => !item.defaultRequired);
+  const operationalState = options.operationalState ?? options.manifest.operationalState;
+  if (!operationalState?.serviceStates || typeof operationalState.serviceStates !== "object") throw new Error("Serialized OperationalCapabilityState is required for runtime diagnostics");
+  const required = eligible.filter((item) => operationalState.serviceStates[item.service] === "required");
+  const optionalInactive = eligible.filter((item) => operationalState.serviceStates[item.service] === "optional_inactive");
+  const optionalDegraded = eligible.filter((item) => operationalState.serviceStates[item.service] === "optional_degraded");
+  for (const item of eligible) if (!operationalState.serviceStates[item.service]) throw new Error(`OperationalCapabilityState is missing service ${item.service}`);
   const missingRequired = required.filter((item) => !byService.has(item.service));
   if (missingRequired.length) throw new Error(`docker compose ps is missing required services: ${missingRequired.map((item) => item.service).join(", ")}`);
   const running = ps.filter(isRunning);
@@ -167,8 +171,8 @@ export async function collectRuntimeMeasurements(options) {
         const exitCode = Number(record?.ExitCode ?? record?.exitCode);
         return !(item.healthSemantics === "lifecycle-completion" && state(record) === "exited" && exitCode === 0);
       }).length),
-      optionalInactiveServices: metric("informational", optional.filter((item) => !isRunning(byService.get(item.service) ?? {})).length),
-      optionalDegradedServices: metric("informational", optional.filter((item) => byService.has(item.service) && isDegraded(byService.get(item.service))).length),
+      optionalInactiveServices: metric("informational", optionalInactive.length),
+      optionalDegradedServices: metric("informational", optionalDegraded.filter((item) => !byService.has(item.service) || isDegraded(byService.get(item.service))).length),
       servedIdentity: metric("informational", { gitSha: identity.gitSha, imageVersion: identity.imageVersion ?? null, version: identity.version ?? null }),
     },
   };

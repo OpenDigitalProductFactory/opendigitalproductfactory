@@ -164,7 +164,7 @@ export async function getAllBackupReadiness(): Promise<{
 }> {
   const [postgres, operationalState] = await Promise.all([
     getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres"),
-    loadOperationalCapabilityState({ observedServices: {}, observedProviders: {} }),
+    loadOperationalCapabilityState({ observedProviders: {} }),
   ]);
   return {
     postgres,

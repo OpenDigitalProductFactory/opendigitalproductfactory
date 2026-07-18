@@ -6,6 +6,8 @@ import {
 } from "./capability-service-projection";
 import { readFile } from "node:fs/promises";
 import { prisma } from "@dpf/db";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 export type OperationalServiceStatus = "required" | "optional_inactive" | "optional_degraded";
 export interface ObservedServiceState { composePresent: boolean; healthy: boolean | null }
@@ -74,7 +76,7 @@ export function createOperationalCapabilityState(input: {
 }
 
 export async function loadOperationalCapabilityState(input: {
-  observedServices: Record<string, ObservedServiceState>;
+  observedServices?: Record<string, ObservedServiceState>;
   observedProviders: Record<string, ObservedProviderState>;
   readInstallSnapshot?: () => Promise<PersistedInstallSnapshot>;
   readCapabilityStates?: () => Promise<LiveCapabilityState[]>;
@@ -88,14 +90,36 @@ export async function loadOperationalCapabilityState(input: {
     });
     return rows.map((row) => ({ capabilityId: row.capabilityId, state: row.state as LiveCapabilityState["state"] }));
   });
-  const [installSnapshot, capabilityStates] = await Promise.all([
+  const [installSnapshot, capabilityStates, observedServices] = await Promise.all([
     readInstallSnapshot(),
     readCapabilityStates(),
+    input.observedServices ? Promise.resolve(input.observedServices) : observeComposeServices(),
   ]);
   return createOperationalCapabilityState({
     installSnapshot,
     capabilityStates,
-    observedServices: input.observedServices,
+    observedServices,
     observedProviders: input.observedProviders,
   });
+}
+
+const execFileAsync = promisify(execFile);
+export async function observeComposeServices(): Promise<Record<string, ObservedServiceState>> {
+  const { stdout } = await execFileAsync("docker", ["compose", "ps", "--format", "json", "--all"], { timeout: 10_000, encoding: "utf8" });
+  const trimmed = stdout.trim();
+  if (!trimmed) return {};
+  let records: Array<Record<string, unknown>>;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    records = Array.isArray(parsed) ? parsed as Array<Record<string, unknown>> : [parsed as Record<string, unknown>];
+  } catch {
+    records = trimmed.split(/\r?\n/).map((line) => JSON.parse(line) as Record<string, unknown>);
+  }
+  return Object.fromEntries(records.map((record) => {
+    const service = String(record.Service ?? record.service ?? "");
+    if (!service) throw new Error("compose_observation_missing_service");
+    const state = String(record.State ?? record.state ?? "").toLowerCase();
+    const health = String(record.Health ?? record.health ?? "").toLowerCase();
+    return [service, { composePresent: true, healthy: state === "running" && (!health || health === "healthy") }];
+  }));
 }

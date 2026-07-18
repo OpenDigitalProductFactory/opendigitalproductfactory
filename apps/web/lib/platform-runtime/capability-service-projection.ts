@@ -100,7 +100,7 @@ export function projectCapabilityServices(input: {
     capabilityBackupCandidates: generatedCatalog.capabilities
       .filter((entry) => entry.capabilityId !== "runtime:core")
       .flatMap((entry) => entry.services)
-      .filter((service) => service.backupPolicy === "separate-required")
+      .filter((service) => service.backupPolicy === "included" || service.backupPolicy === "separate-required")
       .map((service) => service.service)
       .sort(),
   };

@@ -8,6 +8,7 @@ const modulePath = "./measure-platform-substrate-runtime.mjs";
 
 const manifest = {
   version: 1,
+  operationalState: { serviceStates: { postgres: "required", portal: "required", optional: "optional_degraded", inactive: "optional_inactive", "linux-only": "optional_inactive" } },
   services: [
     { service: "postgres", capability: "postgres", defaultRequired: true, healthSemantics: "compose-healthcheck", hostPlatforms: ["windows", "macos", "linux"] },
     { service: "portal", capability: "portal", defaultRequired: true, healthSemantics: "compose-healthcheck", hostPlatforms: ["windows", "macos", "linux"] },
@@ -61,6 +62,14 @@ test("collects required, memory, health, optional-state, and served identity met
   });
 });
 
+test("runtime diagnostics consume serialized operational state for inactive and degraded optional services", async () => {
+  const { collectRuntimeMeasurements } = await import(modulePath);
+  const result = await collectRuntimeMeasurements({ manifest, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal", lease: { id: "l", environmentKey: "local-integration-ci" }, hostProfile: "windows-x64" });
+  assert.equal(result.metrics.optionalInactiveServices.value, 1);
+  assert.equal(result.metrics.optionalDegradedServices.value, 1);
+  await assert.rejects(collectRuntimeMeasurements({ manifest: { ...manifest, operationalState: undefined }, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal", lease: { id: "l", environmentKey: "local-integration-ci" }, hostProfile: "windows-x64" }), /OperationalCapabilityState/);
+});
+
 test("normalizes Node host platform names before applying hostPlatforms", async () => {
   const { normalizeHostPlatform } = await import(modulePath);
   assert.equal(normalizeHostPlatform("win32"), "windows");
@@ -73,7 +82,7 @@ test("stopped required services are unhealthy but successful lifecycle completio
   const lifecycleManifest = { version: 1, services: [
     ...manifest.services,
     { service: "portal-init", capability: "portal-init", defaultRequired: true, healthSemantics: "lifecycle-completion", hostPlatforms: ["windows", "macos", "linux"] },
-  ] };
+  ], operationalState: { serviceStates: { ...manifest.operationalState.serviceStates, "portal-init": "required" } } };
   const fetchJson = async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" };
   const basePs = [...ps, { Service: "portal-init", Name: "dpf-portal-init-1", State: "exited", Health: "", ExitCode: 0 }];
   const execute = (command, args) => args[0] === "compose" ? JSON.stringify(basePs) : stats.map(JSON.stringify).join("\n");

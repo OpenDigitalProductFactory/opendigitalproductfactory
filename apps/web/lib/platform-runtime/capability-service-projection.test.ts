@@ -22,6 +22,16 @@ describe("projectCapabilityServices", () => {
 
     expect(result.serviceRequirements.find((item) => item.service === "browser-use")?.backupPolicy).toBe("separate-required");
     expect(result.backupServices).toContain("browser-use");
+    expect(result.capabilityBackupCandidates).toContain("browser-use");
+  });
+
+  it("keeps included non-core services in the complete capability backup candidate set", () => {
+    const result = projectCapabilityServices({
+      enabledRuntimeCapabilities: ["runtime:adp-integration", "runtime:core"],
+      capabilityStates: catalogStates(["runtime:adp-integration", "runtime:core"]),
+    });
+    expect(result.backupServices).toContain("adp");
+    expect(result.capabilityBackupCandidates).toContain("adp");
   });
 
   it("never treats provider-managed external runtimes as local backup targets", () => {

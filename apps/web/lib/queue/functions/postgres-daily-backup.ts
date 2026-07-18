@@ -27,6 +27,7 @@ type BackupProjection = Pick<OperationalCapabilityState, "backupServices">;
 export type CapabilityBackupReceipt = {
   target: string;
   status: "selected" | "optional_inactive" | "optional_degraded";
+  selection: "selected" | "not_selected";
   result?: unknown;
 };
 
@@ -37,8 +38,8 @@ export function selectCapabilityBackupServices(projection: BackupProjection): st
 
 export function capabilityBackupReceipt(target: string, projection: BackupProjection): CapabilityBackupReceipt {
   return projection.backupServices.includes(target)
-    ? { target, status: "selected" }
-    : { target, status: "optional_inactive" };
+    ? { target, status: "selected", selection: "selected" }
+    : { target, status: "optional_inactive", selection: "not_selected" };
 }
 
 type CapabilityBackupRunner = () => Promise<unknown>;
@@ -53,16 +54,16 @@ export async function runCapabilityOwnedBackupSteps(
   const receipts: CapabilityBackupReceipt[] = [];
   for (const target of state.capabilityBackupCandidates) {
     if (!state.backupServices.includes(target)) {
-      receipts.push({ target, status: "optional_inactive" });
+      receipts.push({ target, status: "optional_inactive", selection: "not_selected" });
       continue;
     }
     const runner = runners[target];
     if (!runner) {
-      receipts.push({ target, status: "optional_degraded" });
+      receipts.push({ target, status: "optional_degraded", selection: "selected" });
       continue;
     }
     const result = await step.run(`run-${target}-backup-scheduled`, runner);
-    receipts.push({ target, status: "selected", result });
+    receipts.push({ target, status: "selected", selection: "selected", result });
   }
   return receipts;
 }
@@ -81,7 +82,7 @@ export const allBackupsDailyScheduled = inngest.createFunction(
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const operationalState = await step.run("load-operational-capability-state", () =>
-      loadOperationalCapabilityState({ observedServices: {}, observedProviders: {} }));
+      loadOperationalCapabilityState({ observedProviders: {} }));
 
     const pgResult = await step.run("run-postgres-backup-scheduled", async () => {
       const { runPostgresBackup } = await import(
