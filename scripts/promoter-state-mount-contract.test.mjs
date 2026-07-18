@@ -24,12 +24,32 @@ test("promoter internal state path cannot override install env host interpolatio
   assert.ok(!contract.requiredEnvironment.includes("DPF_STATE_DIR"));
 });
 
-test("the complete promoter JavaScript closure never reads host DPF_STATE_DIR", () => {
+function assertNoHostStateNamespace(relative, source) {
+  let executableSource = source;
+  if (relative === "scripts/capability-service-catalog.generated.json") {
+    // This generated catalog carries the portal's declarative host bind-mount
+    // contract. The promoter reads only its service/capability projection; the
+    // exact Compose interpolation string is data, not promoter process state.
+    const declarativeMount = "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro";
+    assert.equal(source.split(declarativeMount).length - 1, 1, "catalog exception must remain one exact declarative mount");
+    executableSource = source.replace(declarativeMount, "<install-state-host-mount>");
+  }
+  assert.doesNotMatch(executableSource, /\bDPF_STATE_DIR\b/, `${relative} must neither read nor write the host interpolation namespace`);
+}
+
+test("the complete promoter scripts closure never reads or writes host DPF_STATE_DIR", () => {
   const dockerfile = readFileSync(resolve(root, "Dockerfile.promoter"), "utf8");
-  const copiedScripts = [...dockerfile.matchAll(/^COPY (scripts\/[^ ]+\.mjs) /gm)].map((match) => match[1]);
+  const copiedScripts = [...dockerfile.matchAll(/^COPY (scripts\/[^ ]+) /gm)].map((match) => match[1]);
   assert.ok(copiedScripts.length > 0, "promoter closure must be discovered from Dockerfile.promoter");
   for (const relative of copiedScripts) {
     const source = readFileSync(resolve(root, relative), "utf8");
-    assert.doesNotMatch(source, /\bDPF_STATE_DIR\b/, `${relative} must neither read nor write the host interpolation namespace`);
+    assertNoHostStateNamespace(relative, source);
   }
+});
+
+test("the closure guard rejects a promoter entrypoint that exports the host namespace", () => {
+  assert.throws(
+    () => assertNoHostStateNamespace("scripts/promote.sh", `${script}\nexport DPF_STATE_DIR=/dpf-state\n`),
+    /scripts\/promote\.sh must neither read nor write/,
+  );
 });
