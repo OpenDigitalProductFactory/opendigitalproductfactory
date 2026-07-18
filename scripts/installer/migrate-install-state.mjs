@@ -1,4 +1,8 @@
+#!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { resolveCapabilityComposeProfiles } from "../lib/resolve-capability-compose-profiles.mjs";
 import { parseAndValidateInstallStateBytes, validateInstallState } from "./validate-install-state.mjs";
@@ -41,3 +45,30 @@ export async function projectInstallState({ bytes, hostIdentity, catalog }) {
     projectedState,
   };
 }
+
+function parseArgs(argv) {
+  const args = { write: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--write") args.write = true;
+    else if (["--state", "--catalog", "--host-platform", "--host-arch"].includes(arg)) args[arg.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = argv[++index];
+    else throw new Error(`unknown_argument:${arg}`);
+  }
+  if (!args.state || !args.catalog || !args.hostPlatform || !args.hostArch) throw new Error("migration_arguments_required");
+  return args;
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const [bytes, catalog] = await Promise.all([readFile(args.state), readFile(args.catalog, "utf8").then(JSON.parse)]);
+  const platform = new Map([["windows", "win32"], ["macos", "darwin"]]).get(args.hostPlatform) ?? args.hostPlatform;
+  const capabilityHostPlatform = platform === "win32" ? "windows" : platform === "darwin" ? "macos" : platform;
+  const result = await projectInstallState({ bytes, catalog, hostIdentity: { platform, arch: args.hostArch, capabilityHostPlatform, provenance: "installer" } });
+  if (args.write && result.migrationRequired) {
+    const { updateInstallState } = await import("./install-state-transaction.mjs");
+    await updateInstallState(args.state, () => result.projectedState, { expectedSourceSha256: result.sourceHash });
+  }
+  process.stdout.write(`${JSON.stringify({ sourceHash: result.sourceHash, projectionHash: result.projectionHash, migrationRequired: result.migrationRequired })}\n`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(error.message); process.exitCode = 2; });

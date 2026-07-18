@@ -99,7 +99,7 @@ test("concurrent PowerShell initializers converge on one complete BOM-free state
   const bytes = await readFile(join(dir, "install-state.json"));
   assert.notDeepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
   const state = JSON.parse(bytes.toString("utf8"));
-  assert.equal(state.schemaVersion, 1);
+  assert.equal(state.schemaVersion, 2);
   assert.equal(state.composeProjectName, "dpf");
   assert.match(state.installerVersion, /^init[0-7]$/);
 });

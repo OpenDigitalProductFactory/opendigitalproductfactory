@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { projectInstallState } from "./migrate-install-state.mjs";
@@ -45,4 +49,21 @@ test("refuses contradictory capability snapshots", async () => {
 test("refuses unverifiable and future-version state", async () => {
   await assert.rejects(projectInstallState({ bytes: Buffer.from(JSON.stringify(legacy)), catalog }), /host_identity_required/);
   await assert.rejects(projectInstallState({ bytes: Buffer.from(JSON.stringify({ ...legacy, schemaVersion: 3 })), hostIdentity: identity, catalog }), /install_state_newer_than_runtime/);
+});
+
+test("CLI persists the canonical projection through the shared transaction", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dpf-migrator-cli-"));
+  const statePath = join(directory, "install-state.json");
+  await writeFile(statePath, Buffer.from(`\ufeff${JSON.stringify(legacy)}`));
+  const result = spawnSync(process.execPath, [
+    fileURLToPath(new URL("./migrate-install-state.mjs", import.meta.url)), "--state", statePath,
+    "--catalog", fileURLToPath(new URL("../capability-service-catalog.generated.json", import.meta.url)),
+    "--host-platform", "win32", "--host-arch", "amd64", "--write",
+  ], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const migrated = JSON.parse(await readFile(statePath, "utf8"));
+  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.platform, "win32");
+  assert.equal(migrated.arch, "amd64");
+  assert.equal(migrated.capabilityCatalogHash, catalog.catalogHash);
 });

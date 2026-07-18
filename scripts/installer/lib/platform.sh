@@ -3,8 +3,8 @@
 # Source this file; do not execute directly.
 #
 # Provides:
-#   dpf_platform        - exports DPF_PLATFORM = "darwin" | "linux" | "unsupported"
-#   dpf_arch            - exports DPF_ARCH     = "arm64" | "amd64" | "<raw>"
+#   dpf_platform        - exports DPF_PLATFORM = "darwin" | "linux" | "win32"
+#   dpf_arch            - exports DPF_ARCH     = "arm64" | "amd64"
 #   dpf_sed_inplace     - portable sed -i wrapper that works on GNU sed
 #                          (Linux) and BSD sed (macOS) without bak files
 #                          left behind. Usage: dpf_sed_inplace 's|a|b|' file
@@ -20,7 +20,8 @@ dpf_platform() {
   case "$(uname -s)" in
     Darwin)  DPF_PLATFORM="darwin" ;;
     Linux)   DPF_PLATFORM="linux"  ;;
-    *)       DPF_PLATFORM="unsupported" ;;
+    MINGW*|MSYS*|CYGWIN*) DPF_PLATFORM="win32" ;;
+    *) echo "dpf_platform: unsupported host platform: $(uname -s)" >&2; return 1 ;;
   esac
   export DPF_PLATFORM
 }
@@ -29,7 +30,7 @@ dpf_arch() {
   case "$(uname -m)" in
     arm64|aarch64)  DPF_ARCH="arm64" ;;
     x86_64|amd64)   DPF_ARCH="amd64" ;;
-    *)              DPF_ARCH="$(uname -m)" ;;
+    *) echo "dpf_arch: unsupported host architecture: $(uname -m)" >&2; return 1 ;;
   esac
   export DPF_ARCH
 }

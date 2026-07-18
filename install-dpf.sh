@@ -655,6 +655,19 @@ else
   fi
 fi
 
+# Persist the same canonical host identity written to install-state.json. These
+# installer-owned values are the portal/promoter authority; container OS is not.
+dpf_platform
+dpf_arch
+for _host_identity in "DPF_HOST_PLATFORM=$DPF_PLATFORM" "DPF_HOST_ARCH=$DPF_ARCH"; do
+  _host_key="${_host_identity%%=*}"
+  if grep -q "^${_host_key}=" .env 2>/dev/null; then
+    dpf_sed_inplace "s|^${_host_key}=.*|${_host_identity}|" .env
+  else
+    printf '%s\n' "$_host_identity" >> .env
+  fi
+done
+
 # Record the platform-correct compose chain for the self-upgrade promoter. The
 # orchestrator reads DPF_SELF_UPGRADE_COMPOSE_FILES and passes it to promote.sh as
 # PROMOTE_COMPOSE_FILES so the portal is recreated with THIS install's own

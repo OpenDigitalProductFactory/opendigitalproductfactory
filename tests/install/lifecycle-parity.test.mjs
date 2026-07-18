@@ -56,3 +56,44 @@ test("uninstall and diagnostics do not address retired services", async () => {
     assert.doesNotMatch(await source(path), /neo4j|qdrant|\b(?:7474|7687|6333)\b/i, path);
   }
 });
+
+test("lifecycle adapters use schema v2 and delegate migration to the canonical Node migrator", async () => {
+  const bash = await source("scripts/installer/lib/state.sh");
+  const powershell = await source("scripts/installer/lib/state.ps1");
+  assert.match(bash, /DPF_STATE_SCHEMA_VERSION=2/);
+  assert.match(powershell, /DPF_STATE_SCHEMA_VERSION = 2/);
+  assert.match(bash, /migrate-install-state\.mjs/);
+  assert.match(powershell, /migrate-install-state\.mjs/);
+  assert.doesNotMatch(bash, /dpf_state_write schemaVersion/);
+  assert.doesNotMatch(powershell, /Set-DpfStateValue[^\n]*schemaVersion/i);
+});
+
+test("Bash platform detection canonicalizes MSYS Windows and refuses unknown identity", async () => {
+  const platform = await source("scripts/installer/lib/platform.sh");
+  assert.match(platform, /MINGW\*\|MSYS\*\|CYGWIN\*\) DPF_PLATFORM="win32"/);
+  assert.match(platform, /x86_64\|amd64\)\s+DPF_ARCH="amd64"/);
+  assert.match(platform, /unsupported host platform:[^\n]+>&2; return 1/);
+  assert.match(platform, /unsupported host architecture:[^\n]+>&2; return 1/);
+});
+
+test("installers persist canonical host identity and Compose passes it to the portal", async () => {
+  const bashInstaller = await source("install-dpf.sh");
+  const windowsInstaller = await source("install-dpf.ps1");
+  const compose = await source("docker-compose.yml");
+  const envExample = await source(".env.example");
+  for (const key of ["DPF_HOST_PLATFORM", "DPF_HOST_ARCH"]) {
+    assert.match(bashInstaller, new RegExp(`${key}=`));
+    assert.match(windowsInstaller, new RegExp(`${key}=`));
+    assert.match(compose, new RegExp(`${key}: \\` + `\${${key}:-`));
+    assert.match(envExample, new RegExp(`^${key}=`, "m"));
+  }
+  assert.match(bashInstaller, /DPF_HOST_PLATFORM=\$DPF_PLATFORM/);
+  assert.match(bashInstaller, /DPF_HOST_ARCH=\$DPF_ARCH/);
+  assert.match(windowsInstaller, /DPF_HOST_PLATFORM=win32/);
+  assert.match(windowsInstaller, /DPF_HOST_ARCH=\$hostArch/);
+});
+
+test("agent toolchain bootstrap changes only its owned install-state property", async () => {
+  assert.match(await source("scripts/dpf-bootstrap-agent-toolchain.sh"), /dpf_state_write_json "agentToolchain"/);
+  assert.match(await source("scripts/dpf-bootstrap-agent-toolchain.ps1"), /Set-DpfStateValue -Key "agentToolchain"/);
+});

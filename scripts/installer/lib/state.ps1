@@ -14,7 +14,7 @@ if ($script:DPF_LIB_STATE_PS1_LOADED -eq $true) {
 $script:DPF_LIB_STATE_PS1_LOADED = $true
 
 # Current schema version this installer expects. Keep in sync with state.sh.
-$script:DPF_STATE_SCHEMA_VERSION = 1
+$script:DPF_STATE_SCHEMA_VERSION = 2
 
 function Get-DpfStateDir {
     if ($env:DPF_STATE_DIR) { return $env:DPF_STATE_DIR }
@@ -29,6 +29,14 @@ function Get-DpfStatePath {
 
 function Get-DpfStateValidatorPath {
     return (Join-Path (Split-Path -Parent $PSScriptRoot) "validate-install-state.mjs")
+}
+
+function Get-DpfStateMigratorPath {
+    return (Join-Path (Split-Path -Parent $PSScriptRoot) "migrate-install-state.mjs")
+}
+
+function Get-DpfStateCatalogPath {
+    return (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) "lib\capability-service-catalog.generated.json")
 }
 
 function Test-DpfStateFileValid {
@@ -172,7 +180,8 @@ function Initialize-DpfState {
     Enter-DpfStateLock $path
     try {
     if (Test-Path -LiteralPath $path) { return }
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+    $rawArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+    $arch = switch ($rawArch) { "x64" { "amd64" }; "amd64" { "amd64" }; "arm64" { "arm64" }; default { throw "unsupported host architecture: $rawArch" } }
 
     $initial = [ordered]@{
         schemaVersion                = $script:DPF_STATE_SCHEMA_VERSION
@@ -256,6 +265,9 @@ function Resolve-DpfCapabilityComposeProfiles {
     $adapter = Join-Path $InstallDir "scripts\lib\resolve-capability-compose-profiles.mjs"
     if (-not (Test-Path -LiteralPath $adapter)) { throw "capability_profile_adapter_missing" }
     Initialize-DpfState -InstallPath $InstallDir
+    $schemaStatus = Test-DpfStateSchema
+    if ($schemaStatus -eq 3) { Invoke-DpfStateMigration }
+    elseif ($schemaStatus -ne 0) { throw "install_state_schema_unsupported" }
     $arguments = @($adapter, "--state", (Get-DpfStatePath), "--host", "windows", "--migrate", "--write")
     foreach ($item in $Overlay) { $arguments += @("--overlay", $item) }
     foreach ($item in $Alias) { $arguments += @("--alias", $item) }
@@ -295,6 +307,15 @@ function Test-DpfStateSchema {
         return 3
     }
     return 0
+}
+
+function Invoke-DpfStateMigration {
+    $state = Read-DpfState
+    if ($null -eq $state) { throw "install_state_missing" }
+    $rawArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+    $hostArch = switch ($rawArch) { "x64" { "amd64" }; "amd64" { "amd64" }; "arm64" { "arm64" }; default { throw "unsupported host architecture: $rawArch" } }
+    & node (Get-DpfStateMigratorPath) --state (Get-DpfStatePath) --catalog (Get-DpfStateCatalogPath) --host-platform win32 --host-arch $hostArch --write
+    if ($LASTEXITCODE -ne 0) { throw "install_state_migration_failed" }
 }
 
 # Resolve whether the bundled local Edge Node overlay should be active for THIS

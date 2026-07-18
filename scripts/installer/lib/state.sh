@@ -21,7 +21,7 @@ fi
 
 # Current schema version this installer expects. Bump when adding
 # required fields or breaking-changing existing field semantics.
-DPF_STATE_SCHEMA_VERSION=1
+DPF_STATE_SCHEMA_VERSION=2
 
 # Resolve state directory honoring XDG_STATE_HOME on Linux.
 dpf_state_dir() {
@@ -42,6 +42,18 @@ dpf_state_validator_path() {
   local lib_dir
   lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   echo "$(dirname "$lib_dir")/validate-install-state.mjs"
+}
+
+dpf_state_migrator_path() {
+  local lib_dir
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  echo "$(dirname "$lib_dir")/migrate-install-state.mjs"
+}
+
+dpf_state_catalog_path() {
+  local lib_dir
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  echo "$(dirname "$(dirname "$lib_dir")")/lib/capability-service-catalog.generated.json"
 }
 
 dpf_state_owner_id() {
@@ -159,7 +171,7 @@ dpf_state_init() {
   mkdir -p "$state_dir"
   dpf_platform
   dpf_arch
-  case "$DPF_PLATFORM" in darwin|linux) ;; *) echo "dpf_state_init: unsupported platform" >&2; return 1 ;; esac
+  case "$DPF_PLATFORM" in darwin|linux|win32) ;; *) echo "dpf_state_init: unsupported platform" >&2; return 1 ;; esac
   case "$DPF_ARCH" in arm64|amd64) ;; *) echo "dpf_state_init: unsupported architecture" >&2; return 1 ;; esac
   dpf_state_lock_acquire "$path" || return 1
   dpf_state_cleanup_temps "$path"
@@ -309,17 +321,15 @@ dpf_state_validate() {
   return 0
 }
 
-# Forward-migrate the state file. Currently a stub since
-# DPF_STATE_SCHEMA_VERSION=1; future versions add cases here.
+# Forward-migrate through the single Node schema owner. Bash transports verified
+# host identity and never stamps schemaVersion independently.
 # Args: none
 dpf_state_migrate() {
   local file_ver; file_ver="$(dpf_state_read schemaVersion)"
   echo "dpf_state_migrate: migrating state from schema $file_ver to $DPF_STATE_SCHEMA_VERSION"
-  # Future: per-version migration cases.
-  # case "$file_ver" in
-  #   1) <migrate from 1 to 2> ;;
-  # esac
-  dpf_state_write schemaVersion "$DPF_STATE_SCHEMA_VERSION"
+  dpf_platform || return 1
+  dpf_arch || return 1
+  node "$(dpf_state_migrator_path)" --state "$(dpf_state_path)" --catalog "$(dpf_state_catalog_path)" --host-platform "$DPF_PLATFORM" --host-arch "$DPF_ARCH" --write
 }
 
 # Write a top-level key whose value is a JSON object/array/literal. Used by

@@ -182,6 +182,8 @@ services:
       DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
+      DPF_HOST_PLATFORM: ${DPF_HOST_PLATFORM:-}
+      DPF_HOST_ARCH: ${DPF_HOST_ARCH:-}
       DPF_STATE_DIR_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}
       DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST: ${DPF_STATE_DIR:-${HOME}/.dpf}/runtime-transition.secret
       # Portal-side live-readiness checks run inside the container, where
