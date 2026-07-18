@@ -91,7 +91,10 @@ function listImages(root, files) {
   for (const file of files) {
     args.push("-f", file);
   }
-  args.push("config", "--images");
+  // Manifest verification must include images behind optional profiles. Runtime
+  // activation governs what starts; it must not hide a pinned image from the
+  // release supply-chain check.
+  args.push("--profile", "*", "config", "--images");
 
   const result = spawnSync("docker", args, {
     cwd: root,
