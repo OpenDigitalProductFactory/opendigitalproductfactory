@@ -51,13 +51,13 @@ if [[ $_readiness -eq 1 ]]; then
     done < <(jq -r '.requiredFiles[]? // empty' "$_contract" 2>/dev/null)
   fi
   [[ -x "$_promoter_dir/promote.sh" ]] || _readiness_failures+=(entrypoint_unavailable)
-  docker version --format '{{.Server.APIVersion}}' >/dev/null 2>&1 || _readiness_failures+=(docker_unavailable)
+  [[ "${DPF_PROMOTER_DOCKER_PREFLIGHT:-}" == "ready" ]] || _readiness_failures+=(docker_unavailable)
   [[ -d "${PROMOTE_SOURCE:-}" && -r "${PROMOTE_SOURCE:-}" ]] || _readiness_failures+=(source_mount_unreadable)
   [[ -n "${PROMOTE_TARGET_SHA:-}" ]] || _readiness_failures+=(target_sha_missing)
   [[ -n "${PROMOTE_HEALTH_URL:-}" ]] || _readiness_failures+=(health_url_missing)
   _state_dir="${DPF_STATE_DIR:-/dpf-state}"
   _state_file="$_state_dir/install-state.json"
-  [[ -d "$_state_dir" && -w "$_state_dir" ]] || _readiness_failures+=(state_mount_unwritable)
+  [[ -d "$_state_dir" && -r "$_state_dir" ]] || _readiness_failures+=(state_mount_unreadable)
   _state_validator="$_promoter_dir/installer/validate-install-state.mjs"
   if [[ ! -r "$_state_file" ]] || [[ ! -f "$_state_validator" ]] || ! node "$_state_validator" "$_state_file" >/dev/null 2>&1; then
     _readiness_failures+=(install_state_invalid)

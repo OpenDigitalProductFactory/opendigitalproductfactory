@@ -7,7 +7,7 @@ describe("SelfUpgradeReadiness", () => {
     const html = renderToStaticMarkup(<SelfUpgradeReadiness completionEvidence={{ readiness: {
       stage: "preflight", owner: "portal", mode: "enforced", result: "failed",
       contractVersion: 1, contractDigest: `sha256:${"a".repeat(64)}`,
-      failures: [{ code: "state_mount_unwritable", message: "State mount is not writable", remediation: "Repair the lifecycle state mount" }],
+      failures: [{ code: "state_mount_unreadable", message: "State mount is not readable", remediation: "Repair the lifecycle state mount" }],
     } }} />);
     expect(html).toContain("Pre-drain readiness: failed");
     expect(html).toContain("Validation owner: portal");

@@ -303,6 +303,15 @@ export function buildPromoterReadinessCommand(
   params: PromoterParams & { artifact: ResolvedPromoterArtifact },
 ): { command: string; args: string[] } {
   const command = buildPromoterCommand({ ...params, promoterImage: params.artifact.digest });
+  const socketIndex = command.args.indexOf("/var/run/docker.sock:/var/run/docker.sock");
+  if (socketIndex > 0 && command.args[socketIndex - 1] === "-v") {
+    command.args.splice(socketIndex - 1, 2);
+  }
+  const stateIndex = command.args.findIndex((arg) => arg.endsWith(":/dpf-state"));
+  if (stateIndex >= 0) command.args[stateIndex] = `${command.args[stateIndex]}:ro`;
+  const imageIndex = command.args.indexOf(params.artifact.digest);
+  if (imageIndex < 0) throw new Error("promoter_readiness_image_unavailable");
+  command.args.splice(imageIndex, 0, "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
   const modeIndex = command.args.lastIndexOf("--self-upgrade");
   if (modeIndex < 0) throw new Error("promoter_readiness_mode_unavailable");
   command.args[modeIndex] = "--readiness";

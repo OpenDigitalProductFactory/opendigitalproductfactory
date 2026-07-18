@@ -11,11 +11,13 @@ test("readiness contract is non-mutating and reports every required dependency",
   for (const code of [
     "contract_unreadable", "entrypoint_unavailable", "docker_unavailable",
     "source_mount_unreadable", "target_sha_missing", "health_url_missing",
-    "state_mount_unwritable", "install_state_invalid",
+    "state_mount_unreadable", "install_state_invalid",
     "capability_projection_failed", "compose_identity_missing",
     "recovery_parent_unavailable", "transition_secret_parent_unavailable",
   ]) assert.match(block, new RegExp(code));
   assert.match(block, /"quiescenceBegan":false/);
   assert.match(block, /validate-install-state\.mjs.*\$_state_file/s);
+  assert.match(block, /DPF_PROMOTER_DOCKER_PREFLIGHT/);
+  assert.doesNotMatch(block, /-w "\$_state_dir"/);
   assert.doesNotMatch(block, /docker compose (?:down|up)|docker stop|docker rm|cp .*install-state/);
 });

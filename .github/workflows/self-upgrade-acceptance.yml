@@ -67,11 +67,11 @@ jobs:
           node scripts/lib/resolve-capability-compose-profiles.mjs \
             --state "$RUNNER_TEMP/dpf-state/install-state.json" --migrate --write
           docker run --rm --read-only \
-            -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD:/host-source:ro" \
-            -v "$RUNNER_TEMP/dpf-state:/dpf-state" \
+            -v "$RUNNER_TEMP/dpf-state:/dpf-state:ro" \
             -v "$RUNNER_TEMP/dpf-backups:/backups" \
             -e DPF_STATE_DIR=/dpf-state \
+            -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
             -e PROMOTE_SOURCE=/host-source \
             -e PROMOTE_TARGET_SHA="$GITHUB_SHA" \
             -e PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health \
@@ -84,11 +84,11 @@ jobs:
           printf '%s\n' '{}' > "$RUNNER_TEMP/dpf-state/install-state.json"
           set +e
           docker run --rm --read-only \
-            -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD:/host-source:ro" \
-            -v "$RUNNER_TEMP/dpf-state:/dpf-state" \
+            -v "$RUNNER_TEMP/dpf-state:/dpf-state:ro" \
             -v "$RUNNER_TEMP/dpf-backups:/backups" \
             -e DPF_STATE_DIR=/dpf-state \
+            -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
             -e PROMOTE_SOURCE=/host-source \
             -e PROMOTE_TARGET_SHA="$GITHUB_SHA" \
             -e PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health \

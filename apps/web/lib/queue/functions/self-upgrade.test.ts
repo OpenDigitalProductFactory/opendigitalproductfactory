@@ -381,7 +381,7 @@ describe("success path", () => {
     ["readiness dependency", "readiness"],
   ])("fails before drain, recovery, and promotion on %s failure", async (_label, failure) => {
     if (failure === "resolve") mocks.resolvePromoterArtifact.mockRejectedValue(new Error("source SHA mismatch"));
-    else mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 78, stdout: '{"failures":[{"code":"state_mount_unwritable","message":"Repair the state mount"}]}', stderr: "" });
+    else mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 78, stdout: '{"failures":[{"code":"state_mount_unreadable","message":"Repair the state mount"}]}', stderr: "" });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ ok: false, reason: "promoter-readiness-failed" });
     expect(mocks.recordPromoterReadiness).toHaveBeenCalled();
