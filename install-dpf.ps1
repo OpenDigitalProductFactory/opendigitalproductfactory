@@ -391,10 +391,55 @@ function Export-DPFConsumerReleaseAssets {
     }
 }
 
+function Set-DPFReleaseEnvIdentityAtomic {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string]$Owner,
+        [scriptblock]$BeforeReplace
+    )
+    $content = if (Test-Path -LiteralPath $Path) { [IO.File]::ReadAllText($Path) } else { "" }
+    $newLine = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
+    foreach ($entry in @(@("DPF_IMAGE_TAG", $Version), @("GHCR_OWNER", $Owner))) {
+        $key = $entry[0]
+        $value = $entry[1]
+        $pattern = "(?m)^$([Text.RegularExpressions.Regex]::Escape($key))=.*$"
+        if ([Text.RegularExpressions.Regex]::IsMatch($content, $pattern)) {
+            $content = [Text.RegularExpressions.Regex]::Replace($content, $pattern, "$key=$value")
+        } else {
+            if ($content.Length -gt 0 -and -not $content.EndsWith("`n")) { $content += $newLine }
+            $content += "$key=$value$newLine"
+        }
+    }
+
+    $directory = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $directory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
+    $temporary = Join-Path $directory ("." + [IO.Path]::GetFileName($Path) + "." + [guid]::NewGuid().ToString("N") + ".tmp")
+    $backup = Join-Path $directory ("." + [IO.Path]::GetFileName($Path) + "." + [guid]::NewGuid().ToString("N") + ".bak")
+    try {
+        $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
+        try {
+            $writer = [IO.StreamWriter]::new($stream, (New-Object Text.UTF8Encoding($false)), 1024, $true)
+            try { $writer.Write($content); $writer.Flush(); $stream.Flush($true) } finally { $writer.Dispose() }
+        } finally { $stream.Dispose() }
+        if ($BeforeReplace) { & $BeforeReplace }
+        if (Test-Path -LiteralPath $Path) {
+            [IO.File]::Replace($temporary, $Path, $backup, $true)
+            Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+        } else {
+            [IO.File]::Move($temporary, $Path)
+        }
+    } finally {
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Set-DPFConsumerReleaseIdentity {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
-        [Parameter(Mandatory)][string]$Version
+        [Parameter(Mandatory)][string]$Version,
+        [scriptblock]$BeforeReplace
     )
     if ($Version -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$') { throw "consumer_release_version_invalid" }
     $marker = Join-Path $InstallDir ".verified-release-assets-version"
@@ -402,8 +447,7 @@ function Set-DPFConsumerReleaseIdentity {
     if ((Get-Content -LiteralPath $marker -Raw).Trim() -cne $Version) { throw "consumer_release_assets_version_mismatch" }
     Test-DPFReleaseAssetManifest -Root $InstallDir -ManifestPath (Join-Path $InstallDir ".verified-release-assets.sha256")
     $envPath = Join-Path $InstallDir ".env"
-    Set-DPFEnvFileValue -Path $envPath -Key "DPF_IMAGE_TAG" -Value $Version
-    Set-DPFEnvFileValue -Path $envPath -Key "GHCR_OWNER" -Value "opendigitalproductfactory"
+    Set-DPFReleaseEnvIdentityAtomic -Path $envPath -Version $Version -Owner "opendigitalproductfactory" -BeforeReplace $BeforeReplace
 }
 
 function Get-DPFEdgeComposeContent {

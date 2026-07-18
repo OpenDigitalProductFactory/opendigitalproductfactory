@@ -33,7 +33,7 @@ test("consumer release assets are integrity-bound and execute the canonical adap
     }
     await writeFile(join(carrier, "SHA256SUMS"), `${manifest.join("\n")}\n`);
     await mkdir(install, { recursive: true });
-    await writeFile(join(install, ".env"), "KEEP_ME=yes\nDPF_IMAGE_TAG=old\n");
+    await writeFile(join(install, ".env"), "# operator setting\nKEEP_ME=yes\nDPF_IMAGE_TAG=old\n");
     const trace = join(dir, "docker.txt");
     const stateDir = join(dir, "state");
     const exportCommand = [
@@ -63,6 +63,7 @@ test("consumer release assets are integrity-bound and execute the canonical adap
     assert.match(installedEnv, /^DPF_IMAGE_TAG=v-test-42$/m);
     assert.match(installedEnv, /^GHCR_OWNER=opendigitalproductfactory$/m);
     assert.match(installedEnv, /^KEEP_ME=yes$/m);
+    assert.match(installedEnv, /^# operator setting$/m);
     const releaseCompose = await readFile(join(install, "docker-compose.release.yml"), "utf8");
     const releaseImages = [...releaseCompose.matchAll(/^\s+image:\s+(\S+)$/gm)].map((match) => match[1]);
     const renderedImages = releaseImages.map((image) => image
@@ -76,6 +77,13 @@ test("consumer release assets are integrity-bound and execute the canonical adap
     const installer = await readFile(join(root, "install-dpf.ps1"), "ascii");
     assert.doesNotMatch(installer, /consumerAssetsVerifiedThisRun/);
     assert.match(installer, /if \(\$InstallMode -eq "consumer"\) \{\s+Set-DPFConsumerReleaseIdentity/s);
+
+    const beforeInjectedFailure = Buffer.from("# exact bytes\r\nKEEP_ME=yes\r\nDPF_IMAGE_TAG=previous-good\r\nGHCR_OWNER=mirror\r\n", "utf8");
+    await writeFile(join(install, ".env"), beforeInjectedFailure);
+    const injected = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Set-DPFConsumerReleaseIdentity -InstallDir '${install}' -Version 'v-test-42' -BeforeReplace { throw 'injected_pre_replace_failure' }`], { encoding: "utf8" });
+    assert.notEqual(injected.status, 0);
+    assert.match(injected.stderr, /injected_pre_replace_failure/);
+    assert.deepEqual(await readFile(join(install, ".env")), beforeInjectedFailure);
 
     const missingEnv = join(dir, "missing-env-resume");
     const missingPrepared = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Export-DPFConsumerReleaseAssets -InstallDir '${missingEnv}' -Version 'v-resume' -AssetSource '${carrier}'`], { encoding: "utf8" });
