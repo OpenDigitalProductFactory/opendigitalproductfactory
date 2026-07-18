@@ -41,11 +41,14 @@ async function readOwner(path) { try { return JSON.parse(await readFile(path, "u
 
 async function activeReclaimGuards(lockPath, options = {}) {
   const directory = dirname(lockPath); const prefix = `${basename(lockPath)}${contract.reclaimSuffix}`; const active = [];
+  const currentOwnerId = (await readOwner(lockPath))?.ownerId;
   for (const name of await readdir(directory)) {
     if (!name.startsWith(prefix)) continue; const path = join(directory, name); const guard = await readOwner(path); if (!guard) continue;
+    if (guard.targetOwnerId !== currentOwnerId) continue;
     if ((Number.isSafeInteger(guard.expiresAtEpoch) && guard.expiresAtEpoch * 1000 > Date.now()) || (guard.hostname === localHostname && pidIsLive(guard.pid))) { active.push({ path, owner: guard }); continue; }
     await options.onExpiredGuardObserved?.(guard);
-    await rm(path, { force: true });
+    const observedAfter = await readOwner(path);
+    if (observedAfter?.targetOwnerId === currentOwnerId && ((Number.isSafeInteger(observedAfter.expiresAtEpoch) && observedAfter.expiresAtEpoch * 1000 > Date.now()) || (observedAfter.hostname === localHostname && pidIsLive(observedAfter.pid)))) active.push({ path, owner: observedAfter });
   }
   return active;
 }
@@ -57,8 +60,13 @@ async function acquireReclaimGuard(lockPath, staleOwnerId, options, deadline) {
       const handle = await open(path, "wx", 0o600); const owner = { ...makeOwner(ownerId, runId, options.reclaimLeaseMs ?? 5000), targetOwnerId: staleOwnerId };
       try { await handle.writeFile(`${JSON.stringify(owner)}\n`); await handle.sync(); } finally { await handle.close(); }
       await options.onReclaimElected?.();
-      return async () => { await rm(path, { force: true }); };
+      return async () => {};
     } catch (error) { if (error?.code !== "EEXIST") throw error; }
+    const existing = await readOwner(path);
+    if (existing?.targetOwnerId === staleOwnerId) {
+      const live = existing.hostname === localHostname && pidIsLive(existing.pid);
+      if (!live && Number.isSafeInteger(existing.expiresAtEpoch) && existing.expiresAtEpoch * 1000 <= Date.now()) return async () => {};
+    }
     await activeReclaimGuards(lockPath, options);
     if (Date.now() >= deadline) throw new Error("install_state_lock_timeout");
     await sleep(options.retryDelayMs ?? contract.retryDelayMs);

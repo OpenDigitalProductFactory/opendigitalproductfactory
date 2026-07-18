@@ -4,6 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const repo = resolve(import.meta.dirname, "../..");
 const bashSource = await readFile(join(repo, "scripts/installer/lib/state.sh"), "utf8");
@@ -68,13 +69,17 @@ test("Node recovers an abandoned Bash-format lock and Bash recovers a Node-forma
 });
 
 test("Node Bash and PowerShell recover an abandoned reclaim claim", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "dpf-reclaim-interop-")); const statePath = join(dir, "install-state.json"); const reclaimPath = `${statePath}.lock.reclaim-dead`;
+  const dir = await mkdtemp(join(tmpdir(), "dpf-reclaim-interop-")); const statePath = join(dir, "install-state.json"); const lockPath = `${statePath}.lock`;
   await writeFile(statePath, '{"schemaVersion":2,"installerVersion":"seed","platform":"win32","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","capabilityStateVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n');
-  const expired = JSON.stringify({ protocolVersion: 1, ownerId: "dead-reclaim", runId: "dead-run", targetOwnerId: "absent-generation", pid: 99999999, hostname: "foreign", acquiredAt: "2000-01-01T00:00:00Z", expiresAt: "2000-01-01T00:00:01Z", expiresAtEpoch: 946684801 });
   const node = join(repo, "scripts/installer/install-state-transaction.mjs"); const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash"; const pwsh = process.platform === "win32" ? "powershell.exe" : "pwsh"; const env = { DPF_STATE_DIR: dir, HOME: dir };
-  await writeFile(reclaimPath, expired); await run(process.execPath, [node, "set", "--state", statePath, "--key", "installerVersion", "--value", '"node"'], env);
-  await writeFile(reclaimPath, expired); await run(bash, ["-lc", `. scripts/installer/lib/state.sh; dpf_state_write installerVersion bash`], env);
-  await writeFile(reclaimPath, expired); await run(pwsh, ["-NoProfile", "-Command", `. ./scripts/installer/lib/state.ps1; Set-DpfStateValue -Key installerVersion -Value ps`], env);
+  const seedExpiredGeneration = async ownerId => {
+    const owner = { protocolVersion: 1, ownerId, runId: "dead-run", pid: 99999999, hostname: "foreign", acquiredAt: "2000-01-01T00:00:00Z", expiresAt: "2000-01-01T00:00:01Z", expiresAtEpoch: 946684801 };
+    const reclaimPath = `${lockPath}.reclaim-${createHash("sha256").update(ownerId).digest("hex").slice(0, 24)}`;
+    await writeFile(lockPath, JSON.stringify(owner)); await writeFile(reclaimPath, JSON.stringify({ ...owner, ownerId: `reclaimer-${ownerId}`, targetOwnerId: ownerId })); return reclaimPath;
+  };
+  const nodeTombstone = await seedExpiredGeneration("node-dead"); await run(process.execPath, [node, "set", "--state", statePath, "--key", "installerVersion", "--value", '"node"'], env); await readFile(nodeTombstone);
+  const bashTombstone = await seedExpiredGeneration("bash-dead"); await run(bash, ["-lc", `. scripts/installer/lib/state.sh; dpf_state_write installerVersion bash`], env); await readFile(bashTombstone);
+  const psTombstone = await seedExpiredGeneration("ps-dead"); await run(pwsh, ["-NoProfile", "-Command", `. ./scripts/installer/lib/state.ps1; Set-DpfStateValue -Key installerVersion -Value ps`], env); await readFile(psTombstone);
   assert.equal(JSON.parse(await readFile(statePath, "utf8")).installerVersion, "ps");
 });
 

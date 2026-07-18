@@ -56,7 +56,8 @@ function Get-DpfStateSha256 {
 
 function Get-DpfActiveReclaimFirst {
     param([Parameter(Mandatory)][string]$LockPath)
-    $active = @(); foreach ($ticket in Get-ChildItem -Path "$LockPath.reclaim-*" -File -ErrorAction SilentlyContinue) { try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ticket.FullName)); $live = $false; if ($owner.hostname -eq [Environment]::MachineName) { try { Get-Process -Id ([int]$owner.pid) -ErrorAction Stop | Out-Null; $live = $true } catch {} }; if ([long]$owner.expiresAtEpoch -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -or $live) { $active += $ticket.FullName } else { Remove-Item $ticket.FullName -Force } } catch {} }
+    $currentOwnerId = try { (ConvertFrom-Json ([IO.File]::ReadAllText($LockPath))).ownerId } catch { $null }
+    $active = @(); foreach ($ticket in Get-ChildItem -Path "$LockPath.reclaim-*" -File -ErrorAction SilentlyContinue) { try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ticket.FullName)); if ($owner.targetOwnerId -ne $currentOwnerId) { continue }; $live = $false; if ($owner.hostname -eq [Environment]::MachineName) { try { Get-Process -Id ([int]$owner.pid) -ErrorAction Stop | Out-Null; $live = $true } catch {} }; if ([long]$owner.expiresAtEpoch -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -or $live) { $active += $ticket.FullName } } catch {} }
     return ($active | Sort-Object | Select-Object -First 1)
 }
 
@@ -118,8 +119,12 @@ function Enter-DpfStateLock {
                     $createdReclaim = $true; $reclaimOwner = [ordered]@{ protocolVersion = 1; ownerId = $ownerId; runId = $runId; targetOwnerId = $staleOwnerId; pid = $PID; hostname = [Environment]::MachineName; acquiredAt = [DateTimeOffset]::UtcNow.ToString("o"); expiresAt = [DateTimeOffset]::UtcNow.AddSeconds(5).ToString("o"); expiresAtEpoch = [DateTimeOffset]::UtcNow.AddSeconds(5).ToUnixTimeSeconds() }
                     $reclaimBytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($reclaimOwner | ConvertTo-Json -Compress)); try { $reclaim.Write($reclaimBytes,0,$reclaimBytes.Length); $reclaim.Flush($true) } finally { $reclaim.Dispose() }
                     $current = ConvertFrom-Json ([IO.File]::ReadAllText($lockPath)); if ($current.ownerId -eq $staleOwnerId -and [long]$current.expiresAtEpoch -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { Move-Item -LiteralPath $lockPath -Destination "$lockPath.stale-$ownerId" -ErrorAction Stop; Remove-Item -LiteralPath "$lockPath.stale-$ownerId" -Force -ErrorAction Stop }
-                    Remove-Item -LiteralPath $reclaimPath -Force -ErrorAction Stop; continue
-                } catch { if ($createdReclaim -and $reclaimPath -and (Test-Path -LiteralPath $reclaimPath)) { Remove-Item $reclaimPath -Force -ErrorAction SilentlyContinue } }
+                    continue
+                } catch {
+                    if (-not $createdReclaim -and $reclaimPath -and (Test-Path -LiteralPath $reclaimPath)) {
+                        try { $existingReclaim = ConvertFrom-Json ([IO.File]::ReadAllText($reclaimPath)); $reclaimLive = $false; if ($existingReclaim.hostname -eq [Environment]::MachineName) { try { Get-Process -Id ([int]$existingReclaim.pid) -ErrorAction Stop | Out-Null; $reclaimLive = $true } catch {} }; if ($existingReclaim.targetOwnerId -eq $staleOwnerId -and [long]$existingReclaim.expiresAtEpoch -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -and -not $reclaimLive) { $current = ConvertFrom-Json ([IO.File]::ReadAllText($lockPath)); if ($current.ownerId -eq $staleOwnerId -and [long]$current.expiresAtEpoch -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { Move-Item -LiteralPath $lockPath -Destination "$lockPath.stale-$ownerId" -ErrorAction Stop; Remove-Item -LiteralPath "$lockPath.stale-$ownerId" -Force -ErrorAction Stop }; continue } } catch {}
+                    }
+                }
             }
             if ([DateTimeOffset]::UtcNow -ge $deadline) { throw "install_state_lock_timeout" }
             Start-Sleep -Milliseconds 20
