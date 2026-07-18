@@ -20,6 +20,24 @@ import {
   POSTGRES_BACKUP_EVENT,
   POSTGRES_TRIAL_RESTORE_EVENT,
 } from "@/lib/operate/backups/constants";
+import type { OperationalCapabilityState } from "@/lib/platform-runtime/operational-state";
+
+type BackupProjection = Pick<OperationalCapabilityState, "backupServices">;
+export type CapabilityBackupReceipt = {
+  target: string;
+  status: "selected" | "optional_inactive";
+};
+
+/** Core Postgres remains first; capability-owned targets come only from the shared projection. */
+export function selectCapabilityBackupServices(projection: BackupProjection): string[] {
+  return ["postgres", ...projection.backupServices.filter((service) => service !== "postgres")];
+}
+
+export function capabilityBackupReceipt(target: string, projection: BackupProjection): CapabilityBackupReceipt {
+  return projection.backupServices.includes(target)
+    ? { target, status: "selected" }
+    : { target, status: "optional_inactive" };
+}
 
 // ─── Daily cron (postgres backup + trial-restore) ────────────────────────────
 

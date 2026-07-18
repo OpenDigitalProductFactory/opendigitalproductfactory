@@ -16,8 +16,19 @@ import {
   type BackupTarget,
   type ReadinessSummary,
 } from "./types";
+import type { OperationalCapabilityState } from "@/lib/platform-runtime/operational-state";
 
 const BACKUPS_ROOT = "/backups";
+
+type BackupOperationalState = Pick<OperationalCapabilityState, "backupServices" | "serviceStates">;
+
+export function projectCapabilityBackupReadiness(target: string, state: BackupOperationalState): {
+  target: string;
+  status: "required" | "optional_inactive" | "optional_degraded";
+} {
+  if (!state.backupServices.includes(target)) return { target, status: "optional_inactive" };
+  return { target, status: state.serviceStates[target] ?? "optional_degraded" };
+}
 
 async function getReadinessForTarget(
   jobId: string,
