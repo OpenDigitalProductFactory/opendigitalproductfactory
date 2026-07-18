@@ -82,6 +82,8 @@ export type PromoterParams = {
   runtimeCapabilitySecretFileHostPath?: string;
   stateDirHostPath?: string;
   runtimeCapabilityProfiles?: string[];
+  /** Reserve/release the durable host authority marker without applying. */
+  runtimeTransitionAuthorityOperation?: "reserve" | "release";
 };
 
 export type PromoterResult = {
@@ -171,7 +173,10 @@ export function buildPromoterCommand(
     args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject}`);
   }
 
-  if (params.runtimeCapabilityTransitionId) {
+  if (params.runtimeTransitionAuthorityOperation) {
+    if (!params.runtimeCapabilityTransitionId || !params.stateDirHostPath) throw new Error("runtime_transition_authority_protocol_incomplete");
+    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_STATE_DIR=/dpf-state");
+  } else if (params.runtimeCapabilityTransitionId) {
     if (!params.stateDirHostPath || !params.runtimeCapabilityEnvelope || !params.runtimeCapabilitySignature || !params.runtimeCapabilitySecretFileHostPath) {
       throw new Error("runtime_transition_protocol_incomplete");
     }
@@ -181,7 +186,9 @@ export function buildPromoterCommand(
   }
 
   args.push(image);
-  if (params.runtimeCapabilityTransitionId) {
+  if (params.runtimeTransitionAuthorityOperation) {
+    args.push("--runtime-transition-authority", params.runtimeTransitionAuthorityOperation, params.runtimeCapabilityTransitionId!);
+  } else if (params.runtimeCapabilityTransitionId) {
     args.push("--runtime-capability-transition", params.runtimeCapabilityTransitionId);
   } else {
     args.push("--self-upgrade");

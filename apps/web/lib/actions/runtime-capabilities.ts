@@ -2,6 +2,7 @@
 
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { executeProductionRuntimeCapabilityTransition } from "@/lib/platform-runtime/runtime-capability-executor";
+import { assertRuntimeCapabilityTransitionAdmission } from "@/lib/platform-runtime/transition-recovery";
 
 export type RuntimeCapabilityMutationInput = { transitionId: string; desiredKeys: string[] };
 
@@ -9,5 +10,6 @@ export type RuntimeCapabilityMutationInput = { transitionId: string; desiredKeys
  * replaced by the verified session identity before the durable saga begins. */
 export async function requestRuntimeCapabilityTransition(input: RuntimeCapabilityMutationInput) {
   const { userId } = await requireCapability("manage_platform");
+  await assertRuntimeCapabilityTransitionAdmission();
   return executeProductionRuntimeCapabilityTransition({ ...input, requestedById: userId });
 }

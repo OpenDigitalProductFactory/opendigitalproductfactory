@@ -15,6 +15,7 @@ const secretPath = join(stateDir, "runtime-transition.secret");
 const transitionsPath = join(stateDir, "runtime-capability-transitions");
 const lockPath = join(stateDir, ".runtime-transition-secret.lock");
 const applyLockPath = join(stateDir, ".runtime-transition-apply.lock");
+const authorityPath = join(stateDir, "runtime-transition-authority.json");
 const secure = async (path) => {
   await chmod(path, 0o600);
   if (process.platform === "win32") {
@@ -35,6 +36,10 @@ await mkdir(stateDir, { recursive: true, mode: 0o700 });
 try { await mkdir(lockPath); } catch { process.stderr.write("secret_rotation_in_progress\n"); process.exit(75); }
 let temporary;
 try {
+  try {
+    await stat(authorityPath);
+    const error = new Error("transition_in_progress"); error.code = "DPF_TRANSITION_IN_PROGRESS"; throw error;
+  } catch (error) { if (error.code !== "ENOENT") throw error; }
   try {
     await stat(applyLockPath);
     let expiresAt;

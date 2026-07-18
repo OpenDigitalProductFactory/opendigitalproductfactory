@@ -38,6 +38,15 @@ test("rotation fails closed while the host apply lock is held", async () => {
   assert.match(result.stderr, /transition_in_progress/);
 });
 
+test("rotation fails closed while durable transition authority is reserved before DB pending", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-rotate-"));
+  assert.equal(run(dir, "--initialize").status, 0);
+  await writeFile(join(dir, "runtime-transition-authority.json"), JSON.stringify({ transitionId: "RCT-before-db" }));
+  const result = run(dir, "--rotate");
+  assert.equal(result.status, 75);
+  assert.match(result.stderr, /transition_in_progress/);
+});
+
 test("rotation archives the old key with its receipts and installs a new key", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-rotate-"));
   assert.equal(run(dir, "--initialize").status, 0);

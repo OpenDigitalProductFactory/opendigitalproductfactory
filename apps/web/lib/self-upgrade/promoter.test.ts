@@ -18,6 +18,12 @@ const BASE = {
 };
 
 describe("buildPromoterCommand", () => {
+  it("reserves host transition authority without requiring an apply envelope", () => {
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeTransitionAuthorityOperation: "reserve" });
+    expect(args.slice(-3)).toEqual(["--runtime-transition-authority", "reserve", "RCT-123"]);
+    expect(args).toContain("/state:/dpf-state");
+    expect(args).not.toContain("--runtime-capability-transition");
+  });
   it("selects the dedicated runtime capability transition mode without self-upgrade argv", () => {
     const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeCapabilityEnvelope: "encoded", runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecretFileHostPath: "/state/transition-secret" });
     expect(args).toContain("--runtime-capability-transition");
