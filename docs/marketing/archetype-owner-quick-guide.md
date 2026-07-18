@@ -2,7 +2,7 @@
 
 **Status:** Draft - 2026-07-18  
 **Scope:** Skimmable owner-facing summary of the current 95 archetypes across 21 categories. Use this as the fast orientation layer before reading the detailed positioning, value-stream, audit, or creative-narrative documents.  
-**Related:** [Market Archetypes And Coworkers](../user-guide/market-archetypes.md), [Archetype Owner Positioning](../architecture/archetype-owner-positioning.md), [Archetype Business Value Streams](../architecture/archetype-business-value-streams.md), [Archetype Audit Plan](../testing/archetype-audit-plan.md), [Archetype Persona Creative Narratives](archetype-persona-creative-narratives.md)
+**Related:** [Market Archetypes And Coworkers](../user-guide/market-archetypes.md), [Archetype Owner Positioning](../architecture/archetype-owner-positioning.md), [Archetype Business Value Streams](../architecture/archetype-business-value-streams.md), [Archetype Audit Plan](../testing/archetype-audit-plan.md), [Archetype Persona Creative Narratives](archetype-persona-creative-narratives.md), [Archetype Visual Asset Pack](archetype-visual-asset-pack.md)
 
 ## How To Read This
 

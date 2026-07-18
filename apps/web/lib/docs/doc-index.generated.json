@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 520,
+  "pageCount": 521,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3790,6 +3790,20 @@
         "live-events-and-venues",
         "rental-and-shared-assets",
         "5-claim-ux-anchor-source-and-permission-register"
+      ]
+    },
+    "docs/marketing/archetype-visual-asset-pack.md": {
+      "publicHref": "/marketing/archetype-visual-asset-pack/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-visual-asset-pack",
+        "usage-rule",
+        "persona-hero-images",
+        "category-contact-sheets",
+        "visual-guardrails",
+        "next-production-pass"
       ]
     },
     "docs/operations/antigravity-cli-onboarding.md": {
