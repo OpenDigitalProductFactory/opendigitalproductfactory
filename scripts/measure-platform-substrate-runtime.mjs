@@ -33,6 +33,10 @@ function parseJsonRecords(text, label) {
     catch (error) { throw new Error(`${label} returned malformed JSON: ${error.message}`); }
   }
 }
+function parseLiveCapabilityRows(text) {
+  if (typeof text !== "string" || !text.trim()) throw new Error("Live PlatformCapability runtime query returned no rows");
+  return text.trim().split(/\r?\n/).map((line) => { const [capabilityId, state, extra] = line.split("\t"); if (!capabilityId || !state || extra !== undefined) throw new Error("Live PlatformCapability runtime query returned malformed rows"); return { capabilityId, state }; });
+}
 
 function bytes(value) {
   const match = String(value ?? "").split("/")[0].trim().match(/^(\d+(?:\.\d+)?)\s*(B|KiB|MiB|GiB|TiB)$/i);
@@ -113,11 +117,20 @@ function isRunning(record) { return state(record) === "running"; }
 function isDegraded(record) { return !isRunning(record) || ["unhealthy", "starting"].includes(health(record)); }
 function isUnhealthy(record) { return ["unhealthy", "starting"].includes(health(record)); }
 
-export function buildOperationalStateFromAuthorities(catalog, installSnapshot, composeRecords) {
+export function resolveDpfStateDir(env = process.env, hostPlatform = platform(), home = homedir()) {
+  if (env.DPF_STATE_DIR) return env.DPF_STATE_DIR;
+  if (hostPlatform === "win32") return join(env.USERPROFILE || home, ".dpf");
+  return env.XDG_STATE_HOME ? join(env.XDG_STATE_HOME, "dpf") : join(env.HOME || home, ".dpf");
+}
+
+export function buildOperationalStateFromAuthorities(catalog, installSnapshot, composeRecords, liveCapabilityStates) {
   if (!catalog || !Array.isArray(catalog.capabilities) || !/^[a-f0-9]{64}$/.test(catalog.catalogHash ?? "")) throw new Error("Generated capability catalog identity is invalid");
   if (!Array.isArray(installSnapshot?.enabledRuntimeCapabilities) || installSnapshot.capabilityCatalogHash !== catalog.catalogHash || !/^[a-f0-9]{64}$/.test(installSnapshot.capabilityStateVersion ?? "")) throw new Error("Install capability identity is missing or stale");
-  const enabled = new Set(installSnapshot.enabledRuntimeCapabilities);
-  const capabilities = catalog.capabilities.map((entry) => ({ capabilityId: entry.capabilityId, state: enabled.has(entry.capabilityId) ? "active" : "disabled", manifest: { runtime: { dependencies: entry.dependencies, activation: { policy: entry.activationPolicy }, workGuards: entry.workGuards } } }));
+  if (!Array.isArray(liveCapabilityStates)) throw new Error("Live PlatformCapability runtime state is missing");
+  const live = new Map();
+  for (const row of liveCapabilityStates) { if (!catalog.capabilities.some((entry) => entry.capabilityId === row.capabilityId) || !["active", "disabled"].includes(row.state) || live.has(row.capabilityId)) throw new Error(`Invalid live runtime capability: ${row.capabilityId}`); live.set(row.capabilityId, row.state); }
+  if (live.size !== catalog.capabilities.length) throw new Error("Live PlatformCapability runtime state is incomplete");
+  const capabilities = catalog.capabilities.map((entry) => ({ capabilityId: entry.capabilityId, state: live.get(entry.capabilityId), manifest: { runtime: { dependencies: entry.dependencies, activation: { policy: entry.activationPolicy }, workGuards: entry.workGuards } } }));
   const substrate = { version: catalog.substrateManifestVersion, services: catalog.capabilities.flatMap((entry) => entry.services), externalRuntimes: catalog.capabilities.flatMap((entry) => entry.externalRuntimes) };
   const projection = resolveCapabilityServiceProjection({ substrate, capabilities, enabledRuntimeCapabilities: installSnapshot.enabledRuntimeCapabilities });
   if (projection.catalogHash !== catalog.catalogHash || projection.capabilityStateVersion !== installSnapshot.capabilityStateVersion) throw new Error("Install capability state identity is stale");
@@ -153,7 +166,7 @@ export async function collectRuntimeMeasurements(options) {
   const byService = new Map(ps.map((record) => [service(record), record]));
   const hostPlatform = normalizeHostPlatform(String(options.hostProfile ?? platform()).split("-")[0]);
   const eligible = options.manifest.services.filter((item) => !Array.isArray(item.hostPlatforms) || item.hostPlatforms.includes(hostPlatform));
-  const operationalState = options.operationalState ?? options.manifest.operationalState ?? buildOperationalStateFromAuthorities(options.catalog, options.installSnapshot, ps);
+  const operationalState = options.operationalState ?? options.manifest.operationalState ?? buildOperationalStateFromAuthorities(options.catalog, options.installSnapshot, ps, options.liveCapabilityStates);
   if (!operationalState?.serviceStates || typeof operationalState.serviceStates !== "object") throw new Error("Serialized OperationalCapabilityState is required for runtime diagnostics");
   if (!Number.isInteger(operationalState.catalogVersion) || !/^[a-f0-9]{64}$/.test(operationalState.catalogHash ?? "") || !/^[a-f0-9]{64}$/.test(operationalState.capabilityStateVersion ?? "")) throw new Error("OperationalCapabilityState catalog/state identity is missing or invalid");
   if (options.manifest.capabilityCatalogHash && operationalState.catalogHash !== options.manifest.capabilityCatalogHash) throw new Error("OperationalCapabilityState catalog identity is stale");
@@ -286,12 +299,13 @@ export async function runRuntimeMeasurement(options = {}) {
     const manifest = await loadJson(manifestPath, "substrate manifest");
     const operationalState = options.operationalState ?? (options.operationalStatePath ? await loadJson(options.operationalStatePath, "operational capability state") : manifest.operationalState);
     const catalog = operationalState ? undefined : await loadJson(resolve(options.catalogPath ?? join(scriptRoot, "scripts/capability-service-catalog.generated.json")), "generated capability catalog");
-    const installStatePath = options.installStatePath ?? join(process.env.DPF_STATE_DIR ?? join(homedir(), ".dpf"), "install-state.json");
+    const installStatePath = options.installStatePath ?? join(resolveDpfStateDir(), "install-state.json");
     const installSnapshot = operationalState ? undefined : await loadJson(resolve(installStatePath), "install state");
-    const current = await collectRuntimeMeasurements({ ...options, manifest, operationalState, catalog, installSnapshot });
+    const liveCapabilityStates = operationalState ? undefined : parseLiveCapabilityRows((options.execute ?? defaultExecute)("docker", ["compose", "exec", "-T", "postgres", "psql", "-U", process.env.POSTGRES_USER ?? "dpf", "-d", process.env.POSTGRES_DB ?? "dpf", "-At", "-F", "\t", "-c", "SELECT \"capabilityId\", state FROM \"PlatformCapability\" WHERE \"capabilityId\" LIKE 'runtime:%' ORDER BY \"capabilityId\""]));
+    const current = await collectRuntimeMeasurements({ ...options, manifest, operationalState, catalog, installSnapshot, liveCapabilityStates });
     if (options.update) {
       await verifyActiveLease(options.lease, options);
-      const second = await collectRuntimeMeasurements({ ...options, manifest, operationalState, catalog, installSnapshot });
+      const second = await collectRuntimeMeasurements({ ...options, manifest, operationalState, catalog, installSnapshot, liveCapabilityStates });
       const baseline = mergeStableSamples(current, second);
       await verifyActiveLease(options.lease, options);
       await atomicWriteFile(baselinePath, serializeRuntimeBaseline(baseline), options.io);

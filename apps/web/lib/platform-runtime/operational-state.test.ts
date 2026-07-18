@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { createOperationalCapabilityState, loadOperationalCapabilityState } from "./operational-state";
+import { createOperationalCapabilityState, loadOperationalCapabilityState, observeDockerProjectServices } from "./operational-state";
 
 describe("createOperationalCapabilityState", () => {
   it("rejects stale persisted catalog identity", () => {
@@ -83,10 +83,18 @@ describe("createOperationalCapabilityState", () => {
   it("defaults to honest missing observations without reading an invented host file", async () => {
     const state = await loadOperationalCapabilityState({
       observedProviders: {}, readInstallSnapshot: async () => ({ enabledRuntimeCapabilities: ["runtime:browser-automation", "runtime:core"] }),
-      readCapabilityStates: async () => catalogStates(["runtime:browser-automation", "runtime:core"]),
+      readCapabilityStates: async () => catalogStates(["runtime:browser-automation", "runtime:core"]), readObservedServices: async () => ({}),
     });
     expect(state.observedServices).toEqual({});
     expect(state.serviceStates["browser-use"]).toBe("optional_degraded");
+  });
+
+  it("observes only the current Compose project through Docker Engine labels", async () => {
+    vi.stubEnv("HOSTNAME", "portal-id");
+    const observed = await observeDockerProjectServices(async (path) => path.includes("portal-id")
+      ? { Config: { Labels: { "com.docker.compose.project": "dpf" } } }
+      : [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "postgres" } }, { State: "exited", Status: "Exited", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "browser-use" } }, { State: "running", Labels: { "com.docker.compose.project": "other", "com.docker.compose.service": "postgres" } }]);
+    expect(observed).toEqual({ postgres: { composePresent: true, healthy: true }, "browser-use": { composePresent: true, healthy: false } });
   });
 });
 

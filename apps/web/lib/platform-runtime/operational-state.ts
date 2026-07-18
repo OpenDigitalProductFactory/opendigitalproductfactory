@@ -6,6 +6,7 @@ import {
 } from "./capability-service-projection";
 import { readFile } from "node:fs/promises";
 import { prisma } from "@dpf/db";
+import { request } from "node:http";
 
 export type OperationalServiceStatus = "required" | "optional_inactive" | "optional_degraded";
 export interface ObservedServiceState { composePresent: boolean; healthy: boolean | null }
@@ -94,12 +95,45 @@ export async function loadOperationalCapabilityState(input: {
   const [installSnapshot, capabilityStates, observedServices] = await Promise.all([
     readInstallSnapshot(),
     readCapabilityStates(),
-    input.observedServices ? Promise.resolve(input.observedServices) : (input.readObservedServices ? input.readObservedServices() : Promise.resolve({})),
+    input.observedServices ? Promise.resolve(input.observedServices) : (input.readObservedServices ? input.readObservedServices() : observeDockerProjectServices()),
   ]);
   return createOperationalCapabilityState({
     installSnapshot,
     capabilityStates,
     observedServices,
     observedProviders: input.observedProviders,
+  });
+}
+
+type DockerGet = (path: string) => Promise<unknown>;
+export async function observeDockerProjectServices(get: DockerGet = dockerSocketGet): Promise<Record<string, ObservedServiceState>> {
+  try {
+    const hostname = process.env.HOSTNAME;
+    if (!hostname) return {};
+    const current = await get(`/containers/${encodeURIComponent(hostname)}/json`) as { Config?: { Labels?: Record<string, string> } };
+    const project = current.Config?.Labels?.["com.docker.compose.project"];
+    if (!project) return {};
+    const containers = await get("/containers/json?all=1") as Array<{ State?: string; Status?: string; Labels?: Record<string, string> }>;
+    return Object.fromEntries(containers.filter((item) => item.Labels?.["com.docker.compose.project"] === project).flatMap((item) => {
+      const service = item.Labels?.["com.docker.compose.service"];
+      if (!service) return [];
+      const state = String(item.State ?? "").toLowerCase();
+      const status = String(item.Status ?? "").toLowerCase();
+      return [[service, { composePresent: true, healthy: state === "running" && !status.includes("unhealthy") }]];
+    }));
+  } catch { return {}; }
+}
+
+function dockerSocketGet(path: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const req = request({ socketPath: "/var/run/docker.sock", path, method: "GET" }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      response.on("end", () => {
+        if ((response.statusCode ?? 500) >= 400) return reject(new Error(`docker_engine_http_${response.statusCode}`));
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch (error) { reject(error); }
+      });
+    });
+    req.on("error", reject); req.end();
   });
 }

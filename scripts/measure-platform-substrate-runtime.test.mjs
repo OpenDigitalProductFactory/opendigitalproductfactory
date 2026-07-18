@@ -84,10 +84,14 @@ test("production runner reads explicit serialized operational state path and fai
 });
 
 test("normalizes Node host platform names before applying hostPlatforms", async () => {
-  const { normalizeHostPlatform } = await import(modulePath);
+  const { normalizeHostPlatform, resolveDpfStateDir } = await import(modulePath);
   assert.equal(normalizeHostPlatform("win32"), "windows");
   assert.equal(normalizeHostPlatform("darwin"), "macos");
   assert.equal(normalizeHostPlatform("linux"), "linux");
+  assert.equal(resolveDpfStateDir({ DPF_STATE_DIR: "/explicit" }, "linux", "/home/u"), "/explicit");
+  assert.equal(resolveDpfStateDir({ XDG_STATE_HOME: "/state", HOME: "/home/u" }, "linux", "/fallback"), join("/state", "dpf"));
+  assert.equal(resolveDpfStateDir({ HOME: "/home/u" }, "linux", "/fallback"), join("/home/u", ".dpf"));
+  assert.equal(resolveDpfStateDir({ USERPROFILE: "C:/Users/u" }, "win32", "C:/fallback"), join("C:/Users/u", ".dpf"));
 });
 
 test("stopped required services are unhealthy but successful lifecycle completion is not", async () => {
