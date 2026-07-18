@@ -17,7 +17,7 @@ import { RecentAlertsPanel } from "./RecentAlertsPanel";
 import { PortalHealthSummary } from "./PortalHealthSummary";
 import {
   HOST_RESOURCE_QUERIES,
-  derivePlatformSummary,
+  deriveLegacyPlatformSummary,
   isHostTelemetryConfigured,
 } from "./health-summary";
 import { useAlertQuery } from "./useAlertQuery";
@@ -71,7 +71,7 @@ function ServiceHealthContent({
   // The Platform Status StatCard surfaces the worst critical alert summary;
   // suppress the matching AlertBanner row so the same line doesn't render
   // twice on the same screen.
-  const platform = derivePlatformSummary({
+  const platform = deriveLegacyPlatformSummary({
     checked,
     online,
     upTargets,

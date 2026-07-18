@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   TONE_COLOR,
   deriveMonitoringSummary,
-  derivePlatformSummary,
+  deriveLegacyPlatformSummary,
   deriveReleaseSummary,
   type HealthSummary,
   type ReleaseHealthCardData,
@@ -29,7 +29,7 @@ export function PortalHealthSummary({ openBacklogItems, backlogHref, releaseHeal
   const { data: upTargets, loading: upTargetsLoading } = useMetricQuery("up");
   const { alerts } = useAlertQuery();
 
-  const platform = derivePlatformSummary({
+  const platform = deriveLegacyPlatformSummary({
     checked,
     online,
     upTargets,

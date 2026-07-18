@@ -1,4 +1,7 @@
-import type { CapabilityHealthTone } from "@/lib/platform-runtime/service-health";
+import type {
+  CapabilityHealthTone,
+  CapabilityServiceHealthProjection,
+} from "@/lib/platform-runtime/service-health";
 
 export type Tone = CapabilityHealthTone | "critical";
 
@@ -105,6 +108,14 @@ type SummaryInput = {
   upTargetsLoading?: boolean;
 };
 
+type CapabilityPlatformSummaryInput = Omit<
+  SummaryInput,
+  "upTargets" | "upTargetsLoading"
+> & {
+  capabilityHealth: CapabilityServiceHealthProjection;
+  loading?: boolean;
+};
+
 type ServiceStatusInput = {
   services: ServiceDefinition[];
   upTargets: PrometheusInstantResult[] | null | undefined;
@@ -112,8 +123,6 @@ type ServiceStatusInput = {
   offline: boolean;
 };
 
-// BET-5: qdrant retired (Postgres-only), so it's no longer a required job.
-const PLATFORM_REQUIRED_JOBS = ["portal", "postgres", "sandbox"];
 const TELEMETRY_JOBS = ["node-exporter", "cadvisor"];
 const TELEMETRY_JOB_SET = new Set(TELEMETRY_JOBS);
 // Host-hardware telemetry exporters, one per substrate (Windows / Linux).
@@ -139,11 +148,11 @@ export const TONE_COLOR: Record<Tone, string> = {
 export function derivePlatformSummary({
   checked,
   online,
-  upTargets,
+  capabilityHealth,
   alerts,
-  upTargetsLoading = false,
-}: SummaryInput): HealthSummary {
-  if (!checked || upTargetsLoading) {
+  loading = false,
+}: CapabilityPlatformSummaryInput): HealthSummary {
+  if (!checked || loading) {
     return { value: "Checking", tone: "neutral", detail: "Collecting current health signals" };
   }
 
@@ -161,25 +170,6 @@ export function derivePlatformSummary({
     };
   }
 
-  const jobStatus = buildJobStatusMap(upTargets);
-  const downRequiredJobs = PLATFORM_REQUIRED_JOBS.filter((job) => jobStatus.get(job) === 0);
-  if (downRequiredJobs.length > 0) {
-    return {
-      value: "Critical",
-      tone: "critical",
-      detail: `${humanizeJobList(downRequiredJobs)} ${downRequiredJobs.length === 1 ? "is" : "are"} down`,
-    };
-  }
-
-  const missingRequiredJobs = PLATFORM_REQUIRED_JOBS.filter((job) => !jobStatus.has(job));
-  if (missingRequiredJobs.length > 0) {
-    return {
-      value: "Degraded",
-      tone: "warning",
-      detail: `${humanizeJobList(missingRequiredJobs)} ${missingRequiredJobs.length === 1 ? "is" : "are"} not reporting`,
-    };
-  }
-
   const warningAlerts = activeAlerts.filter((alert) => alert.labels.severity === "warning");
   if (warningAlerts.length > 0) {
     return {
@@ -189,7 +179,56 @@ export function derivePlatformSummary({
     };
   }
 
-  return { value: "Operational", tone: "success", detail: "Required platform services are up" };
+  return capabilityHealth.aggregate;
+}
+
+/**
+ * Transitional adapter for monitoring-only callers that do not yet load the
+ * operational capability boundary. It never declares which services are
+ * required; configured target failures and alerts are the only safe signals.
+ */
+export function deriveLegacyPlatformSummary(input: SummaryInput): HealthSummary {
+  const { checked, online, upTargets, alerts, upTargetsLoading = false } = input;
+  const activeAlerts = getPlatformImpactAlerts(alerts);
+  const criticalAlert = activeAlerts.find((alert) => alert.labels.severity === "critical");
+  if (!checked || upTargetsLoading) {
+    return { value: "Checking", tone: "neutral", detail: "Collecting current health signals" };
+  }
+  if (!online) {
+    return { value: "Unavailable", tone: "critical", detail: "Monitoring stack is unreachable" };
+  }
+  if (criticalAlert) {
+    return {
+      value: "Critical",
+      tone: "critical",
+      detail: alertSummary(criticalAlert) ?? "A critical platform alert is firing",
+    };
+  }
+  const warningAlert = activeAlerts.find((alert) => alert.labels.severity === "warning");
+  if (warningAlert) {
+    return {
+      value: "Degraded",
+      tone: "warning",
+      detail: alertSummary(warningAlert) ?? "A platform warning is firing",
+    };
+  }
+  const unavailableTargets = [...buildJobStatusMap(upTargets)]
+    .filter(([job, status]) => status === 0 && !TELEMETRY_JOB_SET.has(job))
+    .map(([job]) => job);
+  if (unavailableTargets.length > 0) {
+    return {
+      value: "Degraded",
+      tone: "warning",
+      detail: `${humanizeJobList(unavailableTargets)} ${
+        unavailableTargets.length === 1 ? "is" : "are"
+      } unavailable`,
+    };
+  }
+  return {
+    value: "Operational",
+    tone: "success",
+    detail: "Configured platform targets are reporting",
+  };
 }
 
 export function deriveMonitoringSummary({
