@@ -141,6 +141,13 @@ describe("classifyBuildFailure", () => {
     expect(c.summary).toContain(log.includes("state_mount") ? "state_mount_unreadable" : "install_state_invalid");
   });
 
+  it("classifies a production readiness prefix even when the report has no machine code", () => {
+    const c = classifyBuildFailure({ log: "promoter-readiness-failed: Promoter readiness returned an invalid report." });
+    expect(c.class).toBe("promoter-readiness-failed");
+    expect(c.summary).toContain("refused to quiesce");
+    expect(c.failingTrace).toContain("invalid report");
+  });
+
   it("classifies the real @opentelemetry host-vs-Docker hoist divergence", () => {
     const c = classifyBuildFailure({ log: HOIST_LOG, hostBuildPassed: true });
     expect(c.class).toBe("host-docker-hoist-divergence");

@@ -4,11 +4,52 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { signTransitionPayload } from "./transition-signing.mjs";
 import test from "node:test";
 
 const root = resolve(new URL("../..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
 const bashPath = (path) => resolve(path).replace(/^([A-Za-z]):\\/, (_, drive) => `/mnt/${drive.toLowerCase()}/`).replaceAll("\\", "/");
 const runBash = (body, env = {}) => spawnSync("bash", [], { cwd: root, encoding: "utf8", input: body, env: { ...process.env, ...env } });
+
+async function signedInstallStateHandoff(statePath, dir) {
+  const secret = "lifecycle-contract-secret-value-32";
+  const secretPath = join(dir, "transition.secret");
+  await writeFile(secretPath, secret);
+  const sourceHash = createHash("sha256").update(await readFile(statePath)).digest("hex");
+  const envelope = {
+    kind: "install-state-migration", version: 1, runId: "SUR-lifecycle-contract", promoterDigest: "sha256:lifecycle-contract",
+    sourceHash, projectionHash: "a".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 1,
+    hostIdentity: { platform: "win32", arch: "amd64", provenance: "explicit", capabilityHostPlatform: "windows" },
+    issuedAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
+  const handoff = {
+    DPF_INSTALL_STATE_MIGRATION_ENVELOPE: Buffer.from(JSON.stringify(envelope)).toString("base64url"),
+    DPF_INSTALL_STATE_MIGRATION_SIGNATURE: signTransitionPayload(envelope, secret),
+    DPF_RUNTIME_TRANSITION_SECRET_FILE: bashPath(secretPath),
+    DPF_SELF_UPGRADE_RUN_ID: envelope.runId,
+    DPF_PROMOTER_DIGEST: envelope.promoterDigest,
+  };
+  const verified = spawnSync(process.execPath, [join(root, "scripts", "lib", "transition-signing.mjs")], {
+    encoding: "utf8",
+    env: { ...process.env, ...handoff, DPF_RUNTIME_TRANSITION_SECRET_FILE: secretPath, DPF_PROMOTER_STATE_DIR: resolve(statePath, "..") },
+  });
+  assert.equal(verified.status, 0, verified.stderr);
+  return handoff;
+}
+const bashExports = (values) => Object.entries(values).map(([key, value]) => `export ${key}='${value}'`).join("; ");
+const windowsNodeShim = `#!/usr/bin/env bash
+converted=()
+for arg in "$@"; do
+  case "$arg" in /mnt/*) arg="$(wslpath -w "$arg")" ;; esac
+  converted+=("$arg")
+done
+# The handoff was cryptographically verified by signedInstallStateHandoff in
+# the host test process. WSL does not forward ad-hoc Linux env vars into a
+# Windows node.exe child, so acknowledge only this already-verified boundary;
+# every other Node call executes for real through the path adapter below.
+case "\${converted[0]:-}" in *transition-signing.mjs) exit 0 ;; esac
+exec '${bashPath(process.execPath)}' "\${converted[@]}"
+`;
 
 test("consumer release assets are integrity-bound and execute the canonical adapter", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-consumer-assets-"));
@@ -20,8 +61,13 @@ test("consumer release assets are integrity-bound and execute the canonical adap
       "docker-compose.release.yml",
       "scripts/lib/resolve-capability-compose-profiles.mjs",
       "scripts/lib/govern-capability-compose-args.mjs",
+      "scripts/lib/capability-state-hash.mjs",
       "scripts/capability-service-catalog.generated.json",
       "scripts/installer/install-state.schema.json",
+      "scripts/installer/install-state.v1.schema.json",
+      "scripts/installer/install-state.v2.schema.json",
+      "scripts/installer/install-state-schema-registry.mjs",
+      "scripts/installer/validate-install-state.mjs",
       "scripts/installer/lib/state.ps1",
     ];
     const manifest = [];
@@ -192,6 +238,7 @@ test("dpf-compose uses XDG state and effective roots outside the working directo
     await mkdir(elsewhere); await mkdir(stateDir, { recursive: true });
     await copyFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(install, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
     await copyFile(join(root, "scripts", "lib", "govern-capability-compose-args.mjs"), join(install, "scripts", "lib", "govern-capability-compose-args.mjs"));
+    await copyFile(join(root, "scripts", "lib", "capability-state-hash.mjs"), join(install, "scripts", "lib", "capability-state-hash.mjs"));
     await copyFile(join(root, "scripts", "capability-service-catalog.generated.json"), join(install, "scripts", "capability-service-catalog.generated.json"));
     await writeFile(join(install, "docker-compose.yml"), "name: dpf-context\nservices: {}\n");
     await writeFile(join(stateDir, "install-state.json"), `${JSON.stringify({ schemaVersion: 1, installPath: install, platform: "win32", enabledRuntimeCapabilities: [] })}\n`);
@@ -221,12 +268,13 @@ test("promotion refuses stale state before Docker", async () => {
     const bin = join(dir, "bin");
     await mkdir(join(source, "scripts", "lib"), { recursive: true });
     await mkdir(state); await mkdir(bin);
-    await writeFile(join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "// fixture\n");
     await writeFile(join(state, "install-state.json"), "original\n");
-    await writeFile(join(bin, "node"), "#!/bin/sh\nprintf 'capability_state_stale\\n' >&2\nexit 2\n");
+    await writeFile(join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "process.stderr.write('capability_state_stale\\n'); process.exit(2);\n");
+    await writeFile(join(bin, "node"), windowsNodeShim);
     await writeFile(join(bin, "docker"), `#!/bin/sh\ntouch '${bashPath(join(dir, "docker-called"))}'\n`);
     await chmod(join(bin, "node"), 0o755); await chmod(join(bin, "docker"), 0o755);
-    const result = runBash(`PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA=x PROMOTE_BACKUP_PATH='${bashPath(join(dir, "backup"))}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
+    const handoff = await signedInstallStateHandoff(join(state, "install-state.json"), dir);
+    const result = runBash(`${bashExports(handoff)}; PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_PROMOTER_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA=x PROMOTE_BACKUP_PATH='${bashPath(join(dir, "backup"))}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /capability_state_stale/);
     assert.equal(spawnSync("pwsh", ["-NoProfile", "-Command", `Test-Path '${join(dir, "docker-called")}'`], { encoding: "utf8" }).stdout.trim(), "False");
@@ -238,14 +286,15 @@ test("promotion recovery snapshot is copied and restored after a simulated Docke
   try {
     const source = join(dir, "source"); const state = join(dir, "state"); const bin = join(dir, "bin"); const backup = join(dir, "backup");
     await mkdir(join(source, "scripts", "lib"), { recursive: true }); await mkdir(state); await mkdir(bin);
-    await writeFile(join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "// fixture\n");
+    await writeFile(join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "process.stdout.write('{\"composeProfiles\":[],\"requiredServices\":[]}\\n');\n");
     await writeFile(join(state, "install-state.json"), "original-snapshot\n");
     spawnSync("git", ["init", "-q", source]); spawnSync("git", ["-C", source, "config", "user.email", "test@example.com"]); spawnSync("git", ["-C", source, "config", "user.name", "Test"]); spawnSync("git", ["-C", source, "add", "."]); spawnSync("git", ["-C", source, "commit", "-q", "-m", "fixture"]);
     const sha = spawnSync("git", ["-C", source, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
-    await writeFile(join(bin, "node"), "#!/bin/sh\nprintf '%s\\n' '{\"composeProfiles\":[],\"requiredServices\":[]}'\n");
+    await writeFile(join(bin, "node"), windowsNodeShim);
     await writeFile(join(bin, "docker"), `#!/bin/sh\nprintf 'corrupted\\n' > '${bashPath(join(state, "install-state.json"))}'\nexit 42\n`);
     await chmod(join(bin, "node"), 0o755); await chmod(join(bin, "docker"), 0o755);
-    const result = runBash(`PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA='${sha}' PROMOTE_BACKUP_PATH='${bashPath(backup)}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
+    const handoff = await signedInstallStateHandoff(join(state, "install-state.json"), dir);
+    const result = runBash(`${bashExports(handoff)}; PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_PROMOTER_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA='${sha}' PROMOTE_BACKUP_PATH='${bashPath(backup)}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
     assert.notEqual(result.status, 0);
     assert.equal(await readFile(join(backup, "install-state.json"), "utf8"), "original-snapshot\n");
     assert.equal(await readFile(join(state, "install-state.json"), "utf8"), "original-snapshot\n");

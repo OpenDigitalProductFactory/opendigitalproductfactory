@@ -148,9 +148,11 @@ const PNPM_FETCH_ERROR = /ERR_PNPM_FETCH|ERR_PNPM_META_FETCH_FAIL|GET https:\/\/
 const PROMOTER_TIMEOUT = /\[promoter-timeout\]/i;
 // Production wraps the terminal machine code in a human-readable diagnostic:
 // `promoter-readiness-failed: Promoter readiness check failed: <code>`.
-// The short form is retained for older promoters. Keep this line-bounded so a
-// later diagnostic cannot be mistaken for the readiness result.
-const PROMOTER_READINESS_FAILED = /promoter-readiness-failed:\s*(?:Promoter readiness check failed:\s*)?([a-z0-9_-]+)(?=\s*(?:\r?$|\n))/im;
+// The prefix itself is the stable contract; older promoters and malformed
+// reports may not carry a machine code. Extract a code only when the same line
+// ends in a compound snake/kebab token, never from later diagnostics.
+const PROMOTER_READINESS_FAILED = /promoter-readiness-failed:/i;
+const PROMOTER_READINESS_CODE = /(?:^|:)\s*([a-z0-9]+(?:[_-][a-z0-9]+)+)\s*$/i;
 // BET-5 migrate-step failures. Both recovery procedures live in the runbook.
 const BET5_PLAYBOOK = "docs/runbooks/bet5-windows-self-upgrade.md";
 // Docker Desktop mounts-denied on the /dpf-state mount (#3262).
@@ -200,10 +202,11 @@ export function classifyBuildFailure(
 
   const readinessFailure = log.match(PROMOTER_READINESS_FAILED);
   if (readinessFailure) {
-    const code = readinessFailure[1];
+    const readinessLine = log.slice(readinessFailure.index).split(/\r?\n/, 1)[0];
+    const code = readinessLine.match(PROMOTER_READINESS_CODE)?.[1];
     return {
       class: "promoter-readiness-failed",
-      summary: `Promoter readiness refused to quiesce the portal (${code}). Resolve the reported candidate/state/environment prerequisite, then retry; the running portal was left serving traffic.`,
+      summary: `Promoter readiness refused to quiesce the portal${code ? ` (${code})` : ""}. Resolve the reported candidate/state/environment prerequisite, then retry; the running portal was left serving traffic.`,
       playbookLink: SPEC,
       failingTrace: traceAround(log, PROMOTER_READINESS_FAILED),
       isMainDefectVsEnvironment: null,
