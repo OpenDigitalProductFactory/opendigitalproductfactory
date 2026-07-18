@@ -36,9 +36,14 @@ test("consumer release assets are integrity-bound and execute the canonical adap
     await writeFile(join(install, ".env"), "KEEP_ME=yes\nDPF_IMAGE_TAG=old\n");
     const trace = join(dir, "docker.txt");
     const stateDir = join(dir, "state");
-    const command = [
+    const exportCommand = [
       `. '${join(root, "install-dpf.ps1")}' -LibraryOnly`,
       `Export-DPFConsumerReleaseAssets -InstallDir '${install}' -Version 'v-test-42' -AssetSource '${carrier}'`,
+    ].join("; ");
+    const exported = spawnSync("pwsh", ["-NoProfile", "-Command", exportCommand], { encoding: "utf8" });
+    assert.equal(exported.status, 0, exported.stderr);
+    const command = [
+      `. '${join(root, "install-dpf.ps1")}' -LibraryOnly`,
       `Set-DPFConsumerReleaseIdentity -InstallDir '${install}' -Version 'v-test-42'`,
       `[IO.File]::WriteAllText('${join(install, "dpf-start.ps1")}', (Get-DPFStartScriptContent), [Text.Encoding]::ASCII)`,
       `$env:DPF_STATE_DIR='${stateDir}'`,
@@ -68,6 +73,39 @@ test("consumer release assets are integrity-bound and execute the canonical adap
     const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
     assert.match(dockerfile, /COPY --from=init \/dpf-release-assets \/dpf-release-assets/);
     assert.match(dockerfile, /sha256sum > SHA256SUMS/);
+    const installer = await readFile(join(root, "install-dpf.ps1"), "ascii");
+    assert.doesNotMatch(installer, /consumerAssetsVerifiedThisRun/);
+    assert.match(installer, /if \(\$InstallMode -eq "consumer"\) \{\s+Set-DPFConsumerReleaseIdentity/s);
+
+    const missingEnv = join(dir, "missing-env-resume");
+    const missingPrepared = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Export-DPFConsumerReleaseAssets -InstallDir '${missingEnv}' -Version 'v-resume' -AssetSource '${carrier}'`], { encoding: "utf8" });
+    assert.equal(missingPrepared.status, 0, missingPrepared.stderr);
+    const missingResumed = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Set-DPFConsumerReleaseIdentity -InstallDir '${missingEnv}' -Version 'v-resume'`], { encoding: "utf8" });
+    assert.equal(missingResumed.status, 0, missingResumed.stderr);
+    assert.match(await readFile(join(missingEnv, ".env"), "utf8"), /^DPF_IMAGE_TAG=v-resume$/m);
+
+    const mismatch = join(dir, "mismatch-resume");
+    await mkdir(mismatch);
+    await writeFile(join(mismatch, ".env"), "DPF_IMAGE_TAG=previous-good\n");
+    const mismatchPrepared = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Export-DPFConsumerReleaseAssets -InstallDir '${mismatch}' -Version 'v-next' -AssetSource '${carrier}'`], { encoding: "utf8" });
+    assert.equal(mismatchPrepared.status, 0, mismatchPrepared.stderr);
+    await writeFile(join(mismatch, ".verified-release-assets-version"), "wrong-version");
+    const mismatchResume = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Set-DPFConsumerReleaseIdentity -InstallDir '${mismatch}' -Version 'v-next'`], { encoding: "utf8" });
+    assert.notEqual(mismatchResume.status, 0);
+    assert.match(mismatchResume.stderr, /consumer_release_assets_version_mismatch/);
+    assert.equal(await readFile(join(mismatch, ".env"), "utf8"), "DPF_IMAGE_TAG=previous-good\n");
+
+    const corrupt = join(dir, "corrupt-resume");
+    await mkdir(corrupt);
+    await writeFile(join(corrupt, ".env"), "DPF_IMAGE_TAG=previous-good\n");
+    const prepared = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Export-DPFConsumerReleaseAssets -InstallDir '${corrupt}' -Version 'v-next' -AssetSource '${carrier}'`], { encoding: "utf8" });
+    assert.equal(prepared.status, 0, prepared.stderr);
+    await writeFile(join(corrupt, "docker-compose.release.yml"), "corrupted\n");
+    const corruptResume = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Set-DPFConsumerReleaseIdentity -InstallDir '${corrupt}' -Version 'v-next'`], { encoding: "utf8" });
+    assert.notEqual(corruptResume.status, 0);
+    assert.match(corruptResume.stderr, /consumer_release_asset_integrity_failed/);
+    assert.equal(await readFile(join(corrupt, ".env"), "utf8"), "DPF_IMAGE_TAG=previous-good\n");
+
     await writeFile(join(carrier, "unverified.txt"), "not in manifest\n");
     const rejected = join(dir, "rejected");
     await mkdir(rejected);

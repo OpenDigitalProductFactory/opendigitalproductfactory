@@ -322,6 +322,36 @@ function Get-DPFComposeArgs {
     return $composeArgs
 }
 
+function Test-DPFReleaseAssetManifest {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$ManifestPath,
+        [switch]$RejectUnlisted
+    )
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { throw "consumer_release_asset_manifest_missing" }
+    $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $manifestFullPath = [IO.Path]::GetFullPath($ManifestPath)
+    $verifiedFiles = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($line in Get-Content -LiteralPath $manifestFullPath) {
+        if ($line -notmatch '^([0-9a-fA-F]{64})\s+\*?(.+)$') { throw "consumer_release_asset_manifest_invalid" }
+        $expected = $Matches[1].ToLowerInvariant()
+        $relative = $Matches[2].Replace('/', [IO.Path]::DirectorySeparatorChar)
+        $candidate = [IO.Path]::GetFullPath((Join-Path $Root $relative))
+        if (-not $candidate.StartsWith($rootPath, [StringComparison]::OrdinalIgnoreCase)) { throw "consumer_release_asset_path_invalid" }
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "consumer_release_asset_missing:$relative" }
+        $actual = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $expected) { throw "consumer_release_asset_integrity_failed:$relative" }
+        if (-not $verifiedFiles.Add($candidate)) { throw "consumer_release_asset_manifest_duplicate:$relative" }
+    }
+    if ($RejectUnlisted) {
+        foreach ($file in Get-ChildItem -LiteralPath $Root -File -Recurse) {
+            if ($file.FullName -ne $manifestFullPath -and -not $verifiedFiles.Contains($file.FullName)) {
+                throw "consumer_release_asset_unverified:$($file.FullName.Substring($rootPath.Length))"
+            }
+        }
+    }
+}
+
 function Export-DPFConsumerReleaseAssets {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
@@ -348,29 +378,12 @@ function Export-DPFConsumerReleaseAssets {
         }
 
         $manifestPath = Join-Path $staging "SHA256SUMS"
-        if (-not (Test-Path -LiteralPath $manifestPath)) { throw "consumer_release_asset_manifest_missing" }
-        $stagingRoot = [IO.Path]::GetFullPath($staging).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-        $verifiedFiles = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-        foreach ($line in Get-Content -LiteralPath $manifestPath) {
-            if ($line -notmatch '^([0-9a-fA-F]{64})\s+\*?(.+)$') { throw "consumer_release_asset_manifest_invalid" }
-            $expected = $Matches[1].ToLowerInvariant()
-            $relative = $Matches[2].Replace('/', [IO.Path]::DirectorySeparatorChar)
-            $candidate = [IO.Path]::GetFullPath((Join-Path $staging $relative))
-            if (-not $candidate.StartsWith($stagingRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "consumer_release_asset_path_invalid" }
-            if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "consumer_release_asset_missing:$relative" }
-            $actual = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -ne $expected) { throw "consumer_release_asset_integrity_failed:$relative" }
-            if (-not $verifiedFiles.Add($candidate)) { throw "consumer_release_asset_manifest_duplicate:$relative" }
-        }
-        foreach ($file in Get-ChildItem -LiteralPath $staging -File -Recurse) {
-            if ($file.FullName -ne $manifestPath -and -not $verifiedFiles.Contains($file.FullName)) {
-                throw "consumer_release_asset_unverified:$($file.FullName.Substring($stagingRoot.Length))"
-            }
-        }
+        Test-DPFReleaseAssetManifest -Root $staging -ManifestPath $manifestPath -RejectUnlisted
 
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
         Get-ChildItem -LiteralPath $staging -Force | Where-Object Name -ne "SHA256SUMS" |
             Copy-Item -Destination $InstallDir -Recurse -Force
+        Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $InstallDir ".verified-release-assets.sha256") -Force
         [IO.File]::WriteAllText((Join-Path $InstallDir ".verified-release-assets-version"), $Version, [Text.Encoding]::ASCII)
     } finally {
         if ($containerId) { docker rm $containerId 2>&1 | Out-Null }
@@ -387,6 +400,7 @@ function Set-DPFConsumerReleaseIdentity {
     $marker = Join-Path $InstallDir ".verified-release-assets-version"
     if (-not (Test-Path -LiteralPath $marker)) { throw "consumer_release_assets_unverified" }
     if ((Get-Content -LiteralPath $marker -Raw).Trim() -cne $Version) { throw "consumer_release_assets_version_mismatch" }
+    Test-DPFReleaseAssetManifest -Root $InstallDir -ManifestPath (Join-Path $InstallDir ".verified-release-assets.sha256")
     $envPath = Join-Path $InstallDir ".env"
     Set-DPFEnvFileValue -Path $envPath -Key "DPF_IMAGE_TAG" -Value $Version
     Set-DPFEnvFileValue -Path $envPath -Key "GHCR_OWNER" -Value "opendigitalproductfactory"
@@ -682,7 +696,6 @@ $GHCR_PORTAL = "ghcr.io/opendigitalproductfactory/dpf-portal"
 $GHCR_SANDBOX = "ghcr.io/opendigitalproductfactory/dpf-sandbox"
 
 $InstallMode = $null  # Set in Step 4: "consumer", "contributor", or "private"
-$consumerAssetsVerifiedThisRun = $false
 
 # --- Banner -------------------------------------------------------------------
 
@@ -1040,7 +1053,6 @@ if (-not (Test-StepDone "download")) {
             # Materialize the exact release topology and lifecycle adapter carried by
             # the pulled portal image, then verify every byte before installation.
             Export-DPFConsumerReleaseAssets -InstallDir $DPF_DIR -Version $Version -Image "ghcr.io/opendigitalproductfactory/dpf-portal:$Version"
-            $consumerAssetsVerifiedThisRun = $true
             Get-DPFEdgeComposeContent -Version $Version | Set-Content "$DPF_DIR\docker-compose.edge.yml" -Encoding UTF8
             Get-DPFStartScriptContent | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding ASCII
             Get-DPFStopScriptContent | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding ASCII
@@ -1298,7 +1310,7 @@ GF_ADMIN_PASSWORD=$adminPass
 "@ | Set-Content "$DPF_DIR\.env"
 }
 
-if ($InstallMode -eq "consumer" -and $consumerAssetsVerifiedThisRun) {
+if ($InstallMode -eq "consumer") {
     Set-DPFConsumerReleaseIdentity -InstallDir $DPF_DIR -Version $Version
 }
 
