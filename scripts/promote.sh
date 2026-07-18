@@ -18,7 +18,7 @@ _readiness=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 if [[ "${1:-}" == "--runtime-transition-secret-rotation" ]]; then
-  exec node "$_promoter_dir/rotate-runtime-transition-secret.mjs" --state-dir "${DPF_STATE_DIR:-/dpf-state}" --rotate
+  exec node "$_promoter_dir/rotate-runtime-transition-secret.mjs" --state-dir "${DPF_PROMOTER_STATE_DIR:-/dpf-state}" --rotate
 elif [[ "${1:-}" == "--runtime-transition-authority" ]]; then
   _operation="${2:-}"
   _transition_id="${3:-}"
@@ -57,7 +57,7 @@ if [[ $_readiness -eq 1 ]]; then
   [[ -d "${PROMOTE_SOURCE:-}" && -r "${PROMOTE_SOURCE:-}" ]] || _readiness_failures+=(source_mount_unreadable)
   [[ -n "${PROMOTE_TARGET_SHA:-}" ]] || _readiness_failures+=(target_sha_missing)
   [[ -n "${PROMOTE_HEALTH_URL:-}" ]] || _readiness_failures+=(health_url_missing)
-  _state_dir="${DPF_STATE_DIR:-/dpf-state}"
+  _state_dir="${DPF_PROMOTER_STATE_DIR:-/dpf-state}"
   _state_file="$_state_dir/install-state.json"
   [[ -d "$_state_dir" && -r "$_state_dir" ]] || _readiness_failures+=(state_mount_unreadable)
   _state_validator="$_promoter_dir/installer/validate-install-state.mjs"
@@ -118,7 +118,7 @@ fi
 # Resolve the exact runtime profile closure from the governed install snapshot.
 # A stale catalog/state pair fails before Docker mutation. Copy the snapshot to
 # the recovery point and restore it atomically if any later promotion step fails.
-_install_state="${DPF_STATE_DIR:-/dpf-state}/install-state.json"
+_install_state="${DPF_PROMOTER_STATE_DIR:-/dpf-state}/install-state.json"
 _profile_adapter="$PROMOTE_SOURCE/scripts/lib/resolve-capability-compose-profiles.mjs"
 [[ -f "$_install_state" && -f "$_profile_adapter" ]] || { printf 'error: capability_state_stale\n' >&2; exit 1; }
 _capability_projection="$(node "$_profile_adapter" --state "$_install_state" --overlay promote)" || exit $?

@@ -82,7 +82,7 @@ Add a repository-owned policy module consumed by a fast invariant test. It defin
 - forbidden retired-runtime tokens and operational patterns (`neo4j`, `qdrant`, retired ports, restart commands, credentials, and health probes);
 - narrowly scoped legacy exceptions with a reason and an expiry/removal condition;
 - promoter contract inputs derived from `Dockerfile.promoter`, never duplicated in an installer comment or array;
-- required state-directory wiring from host, through Compose, into the promoter launch.
+- required state-directory wiring from host, through Compose, into the promoter launch and back through every promoter-owned portal/sandbox recreate boundary. The promoter's container-local state path uses `DPF_PROMOTER_STATE_DIR`; it must never export Compose's host interpolation variable `DPF_STATE_DIR`, so the install `.env` remains the host-path source of truth across swaps.
 
 Exceptions are allowed only for immutable migrations, historical research/incident evidence, decommission tooling, and explicitly temporary transition code. An exception identifies the exact file or bounded line pattern and why runtime removal would be unsafe. Broad directory exclusions are prohibited.
 
@@ -104,7 +104,7 @@ The implementation updates these active surfaces as one concern:
 | current user/operations documentation | Describe PostgreSQL authority and current memory implementation only |
 | decommission/migration paths | Retain only where still required, label legacy intent, and register a policy exception |
 
-Installer completion must prove that the canonical host state directory exists, `install-state.json` parses, required identity/version fields exist, capability projection succeeds, and the portal receives the same host path it will later pass to the promoter. This prevents a successful install from producing a system that cannot self-upgrade.
+Installer completion must prove that the canonical host state directory exists, `install-state.json` parses, required identity/version fields exist, capability projection succeeds, and the portal receives the same host path it will later pass to the promoter. Promotion completion must prove the recreated portal and sandbox still resolve that install `.env` host path, never the promoter-internal `/dpf-state` path. This prevents either installation or a successful swap from producing a system that cannot self-upgrade.
 
 The shared behavior matrix is:
 

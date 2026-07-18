@@ -213,7 +213,8 @@ describe("buildPromoterCommand", () => {
   it("mounts lifecycle state for an ordinary self-upgrade", () => {
     const { args } = buildPromoterCommand({ ...BASE, stateDirHostPath: "/host/.dpf" });
     expect(args).toContain("/host/.dpf:/dpf-state");
-    expect(args).toContain("DPF_STATE_DIR=/dpf-state");
+    expect(args).toContain("DPF_PROMOTER_STATE_DIR=/dpf-state");
+    expect(args).not.toContain("DPF_STATE_DIR=/dpf-state");
   });
 
   it("gives transition mode only the state mount as writable and signs fixed protocol env", () => {
@@ -222,7 +223,8 @@ describe("buildPromoterCommand", () => {
     expect(args.join(" ")).not.toContain("x".repeat(32));
     expect(args).toContain("/Users/me/dpf:/host-source:ro");
     expect(args).toContain("/host/.dpf:/dpf-state");
-    expect(args).toContain("DPF_STATE_DIR=/dpf-state");
+    expect(args).toContain("DPF_PROMOTER_STATE_DIR=/dpf-state");
+    expect(args).not.toContain("DPF_STATE_DIR=/dpf-state");
     expect(args).toContain(`DPF_RUNTIME_TRANSITION_ENVELOPE=${envelope}`);
     expect(args.filter((arg) => arg.includes(":/host-source") && !arg.endsWith(":ro"))).toEqual([]);
   });

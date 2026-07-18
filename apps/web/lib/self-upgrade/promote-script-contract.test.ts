@@ -74,7 +74,7 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     const mapped = { ...env };
     if (mapped.PROMOTE_SOURCE !== undefined) mapped.PROMOTE_SOURCE = resolveBashPath(source);
     if (mapped.PROMOTE_BACKUP_PATH !== undefined) mapped.PROMOTE_BACKUP_PATH = resolveBashPath(join(root, basename(mapped.PROMOTE_BACKUP_PATH)));
-    const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", DPF_STATE_DIR: resolveBashPath(stateDir), ...mapped };
+    const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", DPF_PROMOTER_STATE_DIR: resolveBashPath(stateDir), ...mapped };
     const envAssignments = Object.entries(envSource).flatMap(([key, value]) => value === undefined ? [] : [`${key}=${quoteForBash(value)}`]);
     const command = ["env", "-i", 'PATH="$PATH"', ...envAssignments, "bash", quoteForBash(SCRIPT), "--self-upgrade", ...extraArgs.map(quoteForBash)].join(" ");
     return spawnSync(BASH_COMMAND, ["-lc", command], { encoding: "utf8" });

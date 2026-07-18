@@ -251,7 +251,7 @@ export function buildPromoterCommand(
   // every portal rebuild, including ordinary self-upgrades. Mount lifecycle
   // state for every mode rather than only transition-authority calls.
   if (params.stateDirHostPath) {
-    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_STATE_DIR=/dpf-state");
+    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state");
   }
   if (params.hostIdentity) args.push("-e", `DPF_HOST_PLATFORM=${params.hostIdentity.platform}`, "-e", `DPF_HOST_ARCH=${params.hostIdentity.arch}`, "-e", `DPF_HOST_IDENTITY_PROVENANCE=${params.hostIdentity.provenance}`);
 
@@ -288,7 +288,7 @@ export function buildPromoterCommand(
       throw new Error("runtime_transition_protocol_incomplete");
     }
     args.push("-v", `${params.runtimeCapabilitySecretFileHostPath}:/run/secrets/dpf-runtime-transition:ro`);
-    args.push("-e", `DPF_STATE_DIR=/dpf-state`, "-e", `DPF_RUNTIME_TRANSITION_ENVELOPE=${params.runtimeCapabilityEnvelope}`,
+    args.push("-e", `DPF_RUNTIME_TRANSITION_ENVELOPE=${params.runtimeCapabilityEnvelope}`,
       "-e", `DPF_RUNTIME_TRANSITION_SIGNATURE=${params.runtimeCapabilitySignature}`);
   }
   if (params.installStateMigrationEnvelope || params.installStateMigrationSignature) {

@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const valueAfter = (flag) => { const index = args.indexOf(flag); return index < 0 ? undefined : args[index + 1]; };
-const stateDir = resolve(valueAfter("--state-dir") ?? process.env.DPF_STATE_DIR ?? join(process.env.HOME ?? process.env.USERPROFILE ?? ".", ".dpf"));
+const stateDir = resolve(valueAfter("--state-dir") ?? process.env.DPF_PROMOTER_STATE_DIR ?? process.env.DPF_STATE_DIR ?? join(process.env.HOME ?? process.env.USERPROFILE ?? ".", ".dpf"));
 const initialize = args.includes("--initialize");
 const rotate = args.includes("--rotate");
 if (initialize === rotate) { process.stderr.write("choose_exactly_one_of_initialize_or_rotate\n"); process.exit(64); }

@@ -24,7 +24,7 @@
     { "path": "/dpf-state", "mode": "rw" }
   ],
   "requiredEnvironment": [
-    "DPF_STATE_DIR",
+    "DPF_PROMOTER_STATE_DIR",
     "PROMOTE_BACKUP_PATH",
     "PROMOTE_COMPOSE_PROJECT",
     "PROMOTE_HEALTH_URL",

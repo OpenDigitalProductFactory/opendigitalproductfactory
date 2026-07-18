@@ -11,7 +11,7 @@ const canonical = (v) => JSON.stringify(v, Object.keys(v).sort());
 const catalogBytes = (v) => `${JSON.stringify(stable(v), null, 2)}\n`;
 const sha = (v) => createHash("sha256").update(v).digest("hex");
 const sign = (v, secret) => createHmac("sha256", secret).update(canonical(v)).digest("hex");
-const stateDir = process.env.DPF_STATE_DIR ?? "/dpf-state";
+const stateDir = process.env.DPF_PROMOTER_STATE_DIR ?? process.env.DPF_STATE_DIR ?? "/dpf-state";
 const receiptDir = join(stateDir, "runtime-capability-transitions");
 const applyLock = join(stateDir, ".runtime-transition-apply.lock");
 const rotationLock = join(stateDir, ".runtime-transition-secret.lock");
