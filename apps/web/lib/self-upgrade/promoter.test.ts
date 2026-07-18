@@ -156,7 +156,7 @@ describe("buildPromoterCommand", () => {
 describe("runtime transition promoter entrypoint", () => {
   it("recognizes the mode and fails closed without protocol secret material", async () => {
     const script = resolve(process.cwd(), "../../scripts/promote.sh");
-    const result = await runProcessWithBudget("sh", [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
+    const result = await runProcessWithBudget("bash", [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
     expect(result.exitCode).toBe(78);
     expect(result.stderr).toContain('"failure":"transition_secret_unreadable"');
   });
