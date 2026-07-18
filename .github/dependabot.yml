@@ -79,6 +79,27 @@ updates:
       # then be free to propose.
       - dependency-name: "react-data-grid"
         versions: ["7.0.0-alpha.*", "7.0.0-canary.*", "7.0.0-beta.60"]
+      # Mermaid is pinned to an exact line (11.15.0) and enforced by the
+      # Diagram Dependency Pin Guard (scripts/check-diagram-dependency-pins.mjs):
+      # package.json must retain "@mermaid-js/mermaid-cli": "11.15.0", the
+      # pnpm-workspace override pins `mermaid: '11.15.0'`, and the lockfile guard
+      # rejects newer @zenuml/@mermaid-zenuml transitives. Dependabot bumps here
+      # (e.g. 11.15.0 → 11.16.0) always fail that gate, so block them — the pin
+      # moves deliberately in lockstep with the guard, not via Dependabot.
+      - dependency-name: "@mermaid-js/mermaid-cli"
+      - dependency-name: "mermaid"
+      # @floating-ui/* is pinned via pnpm-workspace overrides and the same
+      # Diagram Dependency Pin Guard, whose rejected-lock list blocks
+      # @floating-ui/react@0.27.20 and its sibling bumps. Dependabot proposals
+      # (0.27.19 → 0.27.20) fail the guard, so block the family; it moves with
+      # the guard's override list, not independently.
+      - dependency-name: "@floating-ui/*"
+      # read-excel-file is pinned to an exact 9.2.0. The 9.3.x line is a breaking
+      # change — `readFiles(...)` no longer returns a thenable, so
+      # excel-sheet-reader.test.ts fails with "readFiles(...).then is not a
+      # function". Block until the reader is migrated to the new 9.3+ API and the
+      # pin is bumped deliberately.
+      - dependency-name: "read-excel-file"
 
   - package-ecosystem: "github-actions"
     directory: "/"

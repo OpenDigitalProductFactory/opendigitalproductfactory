@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "undici": "^8.6.0"
+    "undici": "^8.7.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
