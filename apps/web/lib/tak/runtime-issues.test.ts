@@ -10,6 +10,8 @@ vi.mock("@dpf/db", () => ({
 
 import {
   detectRepeatedToolCall,
+  detectApproachingRepeatedToolCall,
+  buildNoProgressNudgeMessage,
   recordRepeatedToolIssue,
   type ExecutedToolRecord,
 } from "./runtime-issues";
@@ -24,17 +26,39 @@ describe("detectRepeatedToolCall", () => {
     expect(detectRepeatedToolCall({ executedTools, iteration: 10 })).toBeNull();
   });
 
-  it("returns null when iteration <= 5 (loop warm-up window)", () => {
-    const executedTools = [makeCall("a"), makeCall("a"), makeCall("a")];
+  it("keeps warm-up for failing retries (iteration <= 5, changing outcomes)", () => {
+    // Failures with the same error still share a fingerprint — warm-up applies
+    // only when noProgress is false (mixed or failing). Use mixed results.
+    const executedTools: ExecutedToolRecord[] = [
+      { name: "a", args: {}, result: { success: false, error: "e1" } },
+      { name: "a", args: {}, result: { success: false, error: "e2" } },
+      { name: "a", args: {}, result: { success: false, error: "e3" } },
+    ];
     expect(detectRepeatedToolCall({ executedTools, iteration: 5 })).toBeNull();
   });
 
-  it("flags 3 identical calls within the window", () => {
+  it("hard-stops no-progress success loops even during warm-up (BI-PIR-2fc2106c)", () => {
+    // query_backlog ×3 with identical successful results — stop without waiting for iter>5
+    const executedTools = [
+      makeCall("query_backlog", { status: "open" }),
+      makeCall("query_backlog", { status: "open" }),
+      makeCall("query_backlog", { status: "open" }),
+    ];
+    const result = detectRepeatedToolCall({ executedTools, iteration: 3 });
+    expect(result).not.toBeNull();
+    expect(result?.toolName).toBe("query_backlog");
+    expect(result?.noProgress).toBe(true);
+    expect(result?.reasonHint).toMatch(/no progress/i);
+  });
+
+  it("flags 3 identical successful calls within the window", () => {
     const executedTools = [makeCall("a"), makeCall("a"), makeCall("a")];
     const result = detectRepeatedToolCall({ executedTools, iteration: 10 });
     expect(result).not.toBeNull();
     expect(result?.toolName).toBe("a");
     expect(result?.count).toBe(3);
+    // Generic tool names are not read-like; noProgress flag stays false.
+    expect(result?.noProgress).toBe(false);
   });
 
   it("treats differently-keyed args as distinct calls", () => {
@@ -67,14 +91,41 @@ describe("detectRepeatedToolCall", () => {
     expect(detectRepeatedToolCall({ executedTools, iteration: 10, window: 2 })).toBeNull();
   });
 
-  it("surfaces the last failure error as a reasonHint", () => {
+  it("surfaces the last failure error as a reasonHint when outcomes change", () => {
     const executedTools: ExecutedToolRecord[] = [
-      { name: "a", args: {}, result: { success: true } },
+      { name: "a", args: {}, result: { success: false, error: "timeout after 30s" } },
       { name: "a", args: {}, result: { success: false, error: "timeout after 30s" } },
       { name: "a", args: {}, result: { success: false, error: "timeout after 30s" } },
     ];
+    // Same error fingerprint + all failures → noProgress requires all success;
+    // this path uses warm-up unless iteration > 5
+    const warm = detectRepeatedToolCall({ executedTools, iteration: 5 });
+    expect(warm).toBeNull();
     const result = detectRepeatedToolCall({ executedTools, iteration: 10 });
     expect(result?.reasonHint).toContain("timeout after 30s");
+    expect(result?.noProgress).toBe(false);
+  });
+});
+
+describe("detectApproachingRepeatedToolCall + nudge (BI-PIR-2fc2106c)", () => {
+  it("flags 2 identical successful reads as approaching (soft nudge)", () => {
+    const executedTools = [
+      makeCall("query_backlog", { status: "open" }),
+      makeCall("query_backlog", { status: "open" }),
+    ];
+    const approaching = detectApproachingRepeatedToolCall({ executedTools });
+    expect(approaching).not.toBeNull();
+    expect(approaching?.count).toBe(2);
+    expect(approaching?.noProgress).toBe(true);
+    expect(buildNoProgressNudgeMessage(approaching!)).toMatch(/Do NOT call query_backlog again/);
+  });
+
+  it("does not soft-nudge after a single call", () => {
+    expect(
+      detectApproachingRepeatedToolCall({
+        executedTools: [makeCall("query_backlog")],
+      }),
+    ).toBeNull();
   });
 });
 
@@ -87,7 +138,7 @@ describe("recordRepeatedToolIssue", () => {
 
   it("writes a PlatformIssueReport with the expected fields and source coworker_runtime", async () => {
     const result = await recordRepeatedToolIssue({
-      repeated: { toolName: "create_backlog_item", count: 3, signature: "s", reasonHint: "" },
+      repeated: { toolName: "create_backlog_item", count: 3, signature: "s", reasonHint: "", noProgress: false },
       routeContext: "/customer",
       userId: "user-1",
       agentId: "AGT-1",
@@ -109,7 +160,7 @@ describe("recordRepeatedToolIssue", () => {
 
   it("skips writing on /build routes (Build Studio owns its own verification)", async () => {
     const result = await recordRepeatedToolIssue({
-      repeated: { toolName: "x", count: 3, signature: "s", reasonHint: "" },
+      repeated: { toolName: "x", count: 3, signature: "s", reasonHint: "", noProgress: false },
       routeContext: "/build/feature-123",
       userId: "u",
       agentId: "a",
@@ -123,7 +174,7 @@ describe("recordRepeatedToolIssue", () => {
   it("returns null on DB failure but does not throw", async () => {
     create.mockRejectedValue(new Error("db down"));
     const result = await recordRepeatedToolIssue({
-      repeated: { toolName: "x", count: 3, signature: "s", reasonHint: "" },
+      repeated: { toolName: "x", count: 3, signature: "s", reasonHint: "", noProgress: false },
       routeContext: "/customer",
       userId: "u",
       agentId: "a",
