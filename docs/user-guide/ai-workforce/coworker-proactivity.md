@@ -10,7 +10,7 @@ relatedCode:
 
 ## What This Covers
 
-**Proactivity** is how much a coworker acts on its own before it involves you. The consolidated view lives at **Coworker Decision Engine → Coworker proactivity**, and lists every coworker with the level it currently acts at.
+**Proactivity** is how much a coworker acts on its own before it involves you. The consolidated view lives at **Coworker Decision Engine → Coworker proactivity**, and lists every coworker with the level it currently acts at, **grouped by business area** — customers and sales, your team, operations and delivery, and platform and back office — so the roster reads as a few navigable sections instead of one long list.
 
 ## How the Defaults Are Set
 
