@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,6 +12,9 @@ import {
   resolvePromoterTimeoutMs,
   runProcessWithBudget,
 } from "./promoter";
+
+const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
+const testBash = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
 
 const BASE = {
   hostInstallPath: "/Users/me/dpf",
@@ -178,7 +182,7 @@ describe("runtime transition promoter entrypoint", () => {
     try {
       vi.stubEnv("DPF_STATE_DIR", stateDir);
       vi.stubEnv("DPF_RUNTIME_TRANSITION_SECRET_FILE", join(stateDir, "missing-secret"));
-      const result = await runProcessWithBudget("bash", [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
+      const result = await runProcessWithBudget(testBash, [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
       expect(result.exitCode).toBe(78);
       expect(result.stderr).toContain('"failure":"transition_secret_unreadable"');
     } finally {
@@ -268,7 +272,7 @@ describe("runProcessWithBudget (the runPromoter timeout path)", () => {
   it("kills a hung process at the budget and resolves with a promoter-timeout marker", async () => {
     // Stand in for a stalled `docker build` that never closes.
     const started = Date.now();
-    const result = await runProcessWithBudget("sh", ["-c", "sleep 30"], { timeoutMs: 150 });
+    const result = await runProcessWithBudget(process.execPath, ["-e", "setTimeout(() => {}, 30_000)"], { timeoutMs: 150 });
     expect(Date.now() - started).toBeLessThan(5000); // did NOT wait 30s
     expect(result.exitCode).toBe(PROMOTER_TIMEOUT_EXIT_CODE);
     expect(result.stderr).toContain("[promoter-timeout]");
@@ -276,8 +280,8 @@ describe("runProcessWithBudget (the runPromoter timeout path)", () => {
 
   it("returns the real exit code + output when the process finishes within budget", async () => {
     const result = await runProcessWithBudget(
-      "sh",
-      ["-c", "echo built; exit 0"],
+      process.execPath,
+      ["-e", "console.log('built')"],
       { timeoutMs: 10_000 },
     );
     expect(result.exitCode).toBe(0);
@@ -286,7 +290,7 @@ describe("runProcessWithBudget (the runPromoter timeout path)", () => {
   });
 
   it("propagates a nonzero exit unchanged (real build failure, not a timeout)", async () => {
-    const result = await runProcessWithBudget("sh", ["-c", "exit 3"], { timeoutMs: 10_000 });
+    const result = await runProcessWithBudget(process.execPath, ["-e", "process.exit(3)"], { timeoutMs: 10_000 });
     expect(result.exitCode).toBe(3);
     expect(result.stderr).not.toContain("[promoter-timeout]");
   });

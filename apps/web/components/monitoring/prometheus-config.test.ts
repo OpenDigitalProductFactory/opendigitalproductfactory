@@ -83,8 +83,11 @@ describe("Prometheus substrate configs", () => {
   });
 
   it("starts Linux exporter containers when the Linux scrape config is mounted", () => {
-    const config = readRepoFile("docker-compose.linux.yml");
+    const base = readRepoFile("docker-compose.yml");
+    const overlay = readRepoFile("docker-compose.linux.yml");
 
-    expect(config.match(/profiles: !reset \[\]/g)).toHaveLength(2);
+    expect(base).toMatch(/cadvisor:[\s\S]*?profiles: \["linux-monitoring"\]/);
+    expect(base).toMatch(/node-exporter:[\s\S]*?profiles: \["linux-monitoring"\]/);
+    expect(overlay).toContain("prometheus.linux.yml:/etc/prometheus/prometheus.yml:ro");
   });
 });

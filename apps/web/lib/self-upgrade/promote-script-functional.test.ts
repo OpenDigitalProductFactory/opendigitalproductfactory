@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync, mkdirSync, rmSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -14,7 +15,10 @@ import { join, resolve } from "node:path";
 // in production: the running runtime reports the SHA of the code that was built.
 
 const SCRIPT = resolve(__dirname, "../../../../scripts/promote.sh");
-const BASH_OK = spawnSync("bash", ["--version"], { encoding: "utf8" }).status === 0;
+const REPO_ROOT = resolve(__dirname, "../../../..");
+const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
+const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
+const BASH_OK = spawnSync(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
 const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
 const PROMOTE_TEST_TIMEOUT_MS = 30_000;
 
@@ -30,7 +34,7 @@ function toBashPath(value: string): string {
   const rest = drivePath[2];
   if (bashDrivePrefix === undefined) {
     const cwdDrive = /^([A-Za-z]):/.exec(process.cwd())?.[1]?.toLowerCase();
-    const pwd = spawnSync("bash", ["-lc", "pwd"], { encoding: "utf8" }).stdout.trim();
+    const pwd = spawnSync(BASH_COMMAND, ["-lc", "pwd"], { encoding: "utf8" }).stdout.trim();
     bashDrivePrefix = cwdDrive && pwd.startsWith(`/mnt/${cwdDrive}/`) ? "/mnt" : "";
   }
   return `${bashDrivePrefix}/${drive}/${rest}`;
@@ -56,6 +60,9 @@ function gitInit(dir: string): string {
   writeFileSync(join(dir, "Dockerfile"), "FROM scratch\n");
   writeFileSync(join(dir, "docker-compose.yml"), "services: {}\n");
   writeFileSync(join(dir, "docker-compose.macos.yml"), "services: {}\n");
+  mkdirSync(join(dir, "scripts", "lib"), { recursive: true });
+  copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(dir, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
+  copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(dir, "scripts", "capability-service-catalog.generated.json"));
   execFileSync("git", ["-C", dir, "add", "-A"], { env });
   execFileSync("git", ["-C", dir, "-c", "commit.gpgsign=false", "commit", "-m", "seed"], { env });
   return execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { env }).toString().trim();
@@ -97,6 +104,7 @@ function runPromote(opts: {
     `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
     `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
     `export PROMOTE_BACKUP_PATH=${shellQuote(toBashPath(opts.backup))}`,
+    `export DPF_STATE_DIR=${shellQuote(toBashPath(join(opts.backup, "state")))}`,
     "export PROMOTE_HEALTH_URL='http://127.0.0.1:9/api/health'",
     "export PROMOTE_COMPOSE_PROJECT='dpf-functest'",
     ...(opts.composeEnvFile
@@ -104,7 +112,7 @@ function runPromote(opts: {
       : []),
     ...(opts.dockerLog ? [`export DOCKER_LOG=${shellQuote(toBashPath(opts.dockerLog))}`] : []),
   ];
-  const r = spawnSync("bash", ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade`], {
+  const r = spawnSync(BASH_COMMAND, ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade`], {
     encoding: "utf8",
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
@@ -117,7 +125,17 @@ function makeScratch(): { root: string; source: string; backup: string; fakeBin:
   mkdirSync(source, { recursive: true });
   const head = gitInit(source);
   const fakeBin = makeFakeBin(root);
-  return { root, source, backup: join(root, "backup"), fakeBin, head };
+  const backup = join(root, "backup");
+  const stateDir = join(backup, "state");
+  mkdirSync(stateDir, { recursive: true });
+  const catalog = JSON.parse(readFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), "utf8")) as { catalogHash: string; capabilities: Array<{ capabilityId: string }> };
+  // The historical functional fixture exercises sandbox refresh, which is
+  // owned by the build capability in the governed catalog.
+  const enabledRuntimeCapabilities = ["runtime:build", "runtime:core"];
+  const stateLines = catalog.capabilities.map(({ capabilityId }) => `${capabilityId}=${enabledRuntimeCapabilities.includes(capabilityId) ? "active" : "disabled"}`).sort().join("\n");
+  const capabilityStateVersion = createHash("sha256").update(`${catalog.catalogHash}\n${stateLines}`).digest("hex");
+  writeFileSync(join(stateDir, "install-state.json"), JSON.stringify({ platform: "linux", enabledRuntimeCapabilities, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion }));
+  return { root, source, backup, fakeBin, head };
 }
 
 describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run", () => {

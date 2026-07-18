@@ -9,11 +9,12 @@ describe("createOperationalCapabilityState", () => {
     expect(() => createOperationalCapabilityState({ installSnapshot: { enabledRuntimeCapabilities: ["runtime:core"], ...identity }, capabilityStates: catalogStates(["runtime:core"]), observedServices: {}, observedProviders: {} })).toThrow(/identity_invalid/);
   });
   it("rejects stale persisted catalog identity", () => {
+    const current = snapshot(["runtime:core"]);
     expect(() => createOperationalCapabilityState({
       installSnapshot: {
         enabledRuntimeCapabilities: ["runtime:core"],
-        capabilityCatalogHash: "snapshot-catalog",
-        capabilityStateVersion: "snapshot-state",
+        capabilityCatalogHash: "0".repeat(64),
+        capabilityStateVersion: current.capabilityStateVersion,
       },
       capabilityStates: catalogStates(["runtime:core"]),
       observedServices: {},
@@ -22,8 +23,9 @@ describe("createOperationalCapabilityState", () => {
   });
 
   it("rejects stale persisted capability state identity", () => {
+    const current = snapshot(["runtime:core"]);
     expect(() => createOperationalCapabilityState({
-      installSnapshot: { enabledRuntimeCapabilities: ["runtime:core"], capabilityStateVersion: "stale" },
+      installSnapshot: { ...current, capabilityStateVersion: "0".repeat(64) },
       capabilityStates: catalogStates(["runtime:core"]),
       observedServices: {},
       observedProviders: {},
