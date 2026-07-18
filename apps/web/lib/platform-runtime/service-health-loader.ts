@@ -41,7 +41,19 @@ export async function loadCapabilityServiceHealth(
   );
   const providerState: Record<string, ObservedProviderState> = {};
   const providerIds = [...allowedRuntimeKeys].sort();
-  const providerHealth = await readHealthBatch(providerIds);
+  let providerHealth: Map<string, ProviderHealthBatchEntry>;
+  try {
+    providerHealth = await readHealthBatch(providerIds);
+  } catch {
+    console.error("[capability-service-health] provider observations unavailable", {
+      event: "provider_health_batch_unavailable",
+      providerCount: providerIds.length,
+    });
+    // The operational capability boundary is still authoritative for local
+    // services. Without provider configuration evidence, omit external rows
+    // instead of fabricating that any provider is configured.
+    providerHealth = new Map();
+  }
   for (const providerId of providerIds) {
     const entry = providerHealth.get(providerId);
     if (!entry) continue;

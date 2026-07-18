@@ -155,4 +155,41 @@ describe("loadCapabilityServiceHealth", () => {
       expect.objectContaining({ key: "anthropic", availability: "available" }),
     ]));
   });
+
+  it("preserves required-service classification when the provider batch read fails", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await loadCapabilityServiceHealth({
+      loadOperationalState: vi.fn().mockResolvedValue({
+        ...operational,
+        serviceRequirements: [{
+          service: "portal",
+          capability: "runtime:core",
+          backupPolicy: "included",
+          healthSemantics: "http",
+          dependsOn: [],
+          profiles: [],
+          volumes: [],
+        }],
+        serviceStates: { portal: "required" },
+        observedServices: { portal: { composePresent: false, healthy: null } },
+      }),
+      loadProviderHealthBatch: vi.fn().mockRejectedValue(new Error("provider observation unavailable")),
+    });
+
+    expect(result.aggregate).toEqual({
+      value: "Degraded",
+      tone: "warning",
+      detail: "portal requires attention",
+    });
+    expect(result.items).toEqual([
+      expect.objectContaining({ key: "portal", label: "Required — unavailable" }),
+    ]);
+    expect(result.items.some((item) => item.state === "external")).toBe(false);
+    expect(log).toHaveBeenCalledWith(
+      "[capability-service-health] provider observations unavailable",
+      { event: "provider_health_batch_unavailable", providerCount: 1 },
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain("provider observation unavailable");
+    log.mockRestore();
+  });
 });
