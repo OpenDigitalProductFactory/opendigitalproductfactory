@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-
-const schemaUrl = new URL("./install-state.schema.json", import.meta.url);
+import { currentSchemaVersion, getInstallStateSchema } from "./install-state-schema-registry.mjs";
 
 function isType(value, type) {
   if (type === "null") return value === null;
@@ -42,11 +41,30 @@ function visit(schema, value, path, errors) {
   }
 }
 
-export async function validateInstallState(value, schemaPath = schemaUrl) {
-  const schema = JSON.parse(await readFile(schemaPath, "utf8"));
+export async function validateInstallState(value, schemaPath) {
+  const schema = schemaPath
+    ? JSON.parse(await readFile(schemaPath, "utf8"))
+    : getInstallStateSchema(value?.schemaVersion);
+  if (!Number.isInteger(value?.schemaVersion)) return { valid: false, errors: ["$.schemaVersion: required integer"] };
+  if (value.schemaVersion > currentSchemaVersion) return { valid: false, errors: ["$: install_state_newer_than_runtime"] };
+  if (!schema) return { valid: false, errors: ["$.schemaVersion: unsupported"] };
   const errors = [];
   visit(schema, value, "$", errors);
   return { valid: errors.length === 0, errors };
+}
+
+export async function parseAndValidateInstallStateBytes(bytes) {
+  try {
+    const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+    const normalized = buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf
+      ? buffer.subarray(3)
+      : buffer;
+    const value = JSON.parse(normalized.toString("utf8"));
+    const result = await validateInstallState(value);
+    return { ...result, value: result.valid ? value : undefined, schemaVersion: value?.schemaVersion };
+  } catch {
+    return { valid: false, errors: ["$: malformed_json"], value: undefined, schemaVersion: undefined };
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -56,8 +74,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exitCode = 64;
   } else {
     try {
-      const value = JSON.parse(await readFile(statePath, "utf8"));
-      const result = await validateInstallState(value);
+      const result = await parseAndValidateInstallStateBytes(await readFile(statePath));
       if (!result.valid) {
         console.error(`install-state invalid: ${result.errors.join(", ")}`);
         process.exitCode = 1;

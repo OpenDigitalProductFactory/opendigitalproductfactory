@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://dpf.local/schemas/install-state.v1.json",
+  "title": "DPF Install State v1",
+  "type": "object",
+  "required": ["schemaVersion", "installerVersion", "platform", "arch"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "installerVersion": { "type": "string" },
+    "lastSuccessfulInstallVersion": { "type": ["string", "null"] },
+    "lastSuccessfulComposeHash": { "type": ["string", "null"] },
+    "composeProjectName": { "type": "string" },
+    "enabledRuntimeCapabilities": { "type": "array", "items": { "type": "string", "pattern": "^runtime:[a-z0-9-]+$" }, "uniqueItems": true },
+    "capabilityCatalogHash": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+    "capabilityStateVersion": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+    "platform": { "type": "string", "enum": ["darwin", "linux", "win32", "unsupported"] },
+    "arch": { "type": "string" },
+    "dockerContext": { "type": ["string", "null"] },
+    "dockerEndpoint": { "type": ["string", "null"] },
+    "installPath": { "type": "string" },
+    "devWorkspacePath": { "type": ["string", "null"] },
+    "stateDir": { "type": "string" },
+    "installMode": { "type": ["string", "null"] },
+    "edge": { "type": "object", "required": ["enabled", "mode"], "properties": { "enabled": { "type": "boolean" }, "mode": { "type": ["string", "null"] } }, "additionalProperties": false },
+    "composeFiles": { "type": "array", "items": { "type": "string" } },
+    "imageTag": { "type": ["string", "null"] },
+    "llmProvider": { "type": ["string", "null"], "enum": ["model-runner", "ollama", "external", null] },
+    "resourceLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+    "autostart": { "type": "object", "properties": { "enabled": { "type": "boolean" }, "kind": { "type": "string", "enum": ["launchagent", "systemd-user", "scheduled-task", "none"] } }, "required": ["enabled", "kind"], "additionalProperties": false },
+    "lastHealthCheck": { "type": ["string", "null"], "format": "date-time" },
+    "lastBackupAt": { "type": ["string", "null"], "format": "date-time" },
+    "lastDoctorBundlePath": { "type": ["string", "null"] },
+    "agentToolchain": {
+      "type": "object",
+      "required": ["appliedAt", "dpfPlatformVersion", "superpowersVersion", "claudeCodeWired", "codexWired", "grokWired", "memorySeededAt", "mcpReadiness", "smokeTest", "readinessState"],
+      "properties": {
+        "appliedAt": { "type": "string", "format": "date-time" },
+        "dpfPlatformVersion": { "type": "string" },
+        "superpowersVersion": { "type": ["string", "null"] },
+        "claudeCodeWired": { "type": "boolean" },
+        "codexWired": { "type": "boolean" },
+        "grokWired": { "type": "boolean" },
+        "memorySeededAt": { "type": ["string", "null"], "format": "date-time" },
+        "mcpReadiness": {
+          "type": "object",
+          "properties": {
+            "ok": { "type": "boolean" },
+            "toolCount": { "type": "integer", "minimum": 0 },
+            "observedAt": { "type": "string", "format": "date-time" },
+            "reason": { "type": "string" },
+            "httpStatus": { "type": ["integer", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "smokeTest": {
+          "type": "object",
+          "properties": {
+            "result": { "type": "string", "enum": ["passed", "failed", "skipped"] },
+            "kernelPrincipleObserved": { "type": "string" },
+            "transcript": { "type": "string" },
+            "reason": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "readinessState": { "type": "string", "enum": ["ready", "partial", "missing_cli", "missing_token", "needs_refresh", "portal-unavailable", "mcp-unavailable", "failed_smoke"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

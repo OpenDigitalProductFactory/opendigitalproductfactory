@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { validateInstallState } from "./validate-install-state.mjs";
+import { parseAndValidateInstallStateBytes, validateInstallState } from "./validate-install-state.mjs";
+import { currentSchemaVersion, migrationEdges, schemasByVersion } from "./install-state-schema-registry.mjs";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,7 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const valid = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   installerVersion: "2026.07.18",
   platform: "linux",
   arch: "amd64",
@@ -20,6 +21,65 @@ const valid = {
 
 test("validates the canonical install-state schema", async () => {
   assert.deepEqual(await validateInstallState(valid), { valid: true, errors: [] });
+});
+
+test("accepts the exact observed BOM-bearing bounded v1 state", async () => {
+  const observed = {
+    schemaVersion: 1,
+    installerVersion: "2026.06.26",
+    lastSuccessfulInstallVersion: null,
+    lastSuccessfulComposeHash: null,
+    platform: "unsupported",
+    arch: "x86_64-pc-msys",
+    composeProjectName: "dpf",
+    dockerContext: null,
+    dockerEndpoint: null,
+    installPath: "D:/DPF",
+    stateDir: "C:/Users/operator/.dpf",
+    installMode: null,
+    composeFiles: [],
+    edge: { enabled: false, mode: null },
+    imageTag: null,
+    llmProvider: null,
+    resourceLabels: { dpf: "true" },
+    autostart: { enabled: false, kind: "none" },
+    lastHealthCheck: null,
+    lastBackupAt: null,
+    lastDoctorBundlePath: null,
+  };
+  const bytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(JSON.stringify(observed))]);
+  assert.deepEqual(await parseAndValidateInstallStateBytes(bytes), { valid: true, errors: [], value: observed, schemaVersion: 1 });
+});
+
+test("dispatches strict version 2 state to the current schema", async () => {
+  assert.deepEqual(await parseAndValidateInstallStateBytes(Buffer.from(JSON.stringify(valid))), {
+    valid: true,
+    errors: [],
+    value: valid,
+    schemaVersion: 2,
+  });
+});
+
+test("rejects unsupported future schema versions with a bounded error", async () => {
+  const result = await parseAndValidateInstallStateBytes(Buffer.from(JSON.stringify({ ...valid, schemaVersion: 99 })));
+  assert.deepEqual(result, { valid: false, errors: ["$: install_state_newer_than_runtime"], value: undefined, schemaVersion: 99 });
+});
+
+test("rejects unknown version 1 properties", async () => {
+  const result = await validateInstallState({ schemaVersion: 1, installerVersion: "2026.06.26", platform: "linux", arch: "amd64", surprise: true });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /\$\.surprise: additionalProperties/);
+});
+
+test("requires schema-version increments and migration edges for required-field changes", () => {
+  for (let version = 2; version <= currentSchemaVersion; version += 1) {
+    const previous = new Set(schemasByVersion.get(version - 1).required ?? []);
+    const added = (schemasByVersion.get(version).required ?? []).filter((field) => !previous.has(field));
+    const edge = migrationEdges.get(`${version - 1}->${version}`);
+    if (added.length > 0) assert.ok(edge, `required fields ${added.join(", ")} need a migration edge`);
+    assert.deepEqual(edge?.addedRequiredFields ?? [], added, `migration edge must declare every required field added in version ${version}`);
+  }
+  assert.equal(schemasByVersion.get(currentSchemaVersion).properties.schemaVersion.const, currentSchemaVersion);
 });
 
 test("enforces nested, format, uniqueness, and additional-property constraints", async () => {
@@ -39,6 +99,8 @@ test("enforces nested, format, uniqueness, and additional-property constraints",
 
 test("uses the repository schema rather than a duplicated field list", async () => {
   const schema = JSON.parse(await readFile(new URL("./install-state.schema.json", import.meta.url), "utf8"));
+  const versioned = JSON.parse(await readFile(new URL("./install-state.v2.schema.json", import.meta.url), "utf8"));
+  assert.deepEqual(schema, versioned);
   const missing = { ...valid };
   delete missing[schema.required[0]];
   const result = await validateInstallState(missing);
