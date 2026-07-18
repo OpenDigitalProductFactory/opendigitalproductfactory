@@ -19,6 +19,23 @@ import { prisma } from "@dpf/db";
 const mockFindUnique = vi.mocked(prisma.platformConfig.findUnique);
 
 describe("parseSelfUpgradeConfig", () => {
+  it("parses protocol readiness disclosure without inferring legacy validation", () => {
+    expect(parseSelfUpgradeConfig({
+      readinessMode: "legacy-bootstrap",
+      readinessOwner: "unavailable",
+      callerProtocolVersion: 1,
+    })).toMatchObject({
+      readinessMode: "legacy-bootstrap",
+      readinessOwner: "unavailable",
+      callerProtocolVersion: 1,
+    });
+    expect(parseSelfUpgradeConfig({
+      readinessMode: "unknown",
+      readinessOwner: "candidate",
+      callerProtocolVersion: 0,
+    })).not.toMatchObject({ readinessMode: expect.anything(), readinessOwner: expect.anything(), callerProtocolVersion: expect.anything() });
+  });
+
   it("returns disabled defaults when raw is null (missing config)", () => {
     expect(parseSelfUpgradeConfig(null)).toEqual({
       enabled: false,

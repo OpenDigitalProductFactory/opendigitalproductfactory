@@ -123,13 +123,95 @@ export async function recordRunRecoveryPoint(
   runId: string,
   recoveryPoint: unknown,
 ) {
+  const current = await prisma.selfUpgradeRun.findUnique({
+    where: { runId },
+    select: { completionEvidence: true },
+  });
   return prisma.selfUpgradeRun.update({
     where: { runId },
     data: {
       completionEvidence: toJson({
+        ...asEvidenceRecord(current?.completionEvidence),
         recoveryPoint,
       }),
     },
+  });
+}
+
+export type PromoterReadinessReport = {
+  stage: "preflight";
+  owner: "bridge" | "portal" | "unavailable";
+  mode: "enforced" | "legacy-bootstrap";
+  result: "ready" | "failed" | "unavailable";
+  baselineSha?: string;
+  targetSha: string;
+  imageDigest?: string;
+  contractVersion?: number;
+  contractDigest?: string;
+  startedAt: string;
+  completedAt: string;
+  quiescenceBegan: false;
+  failures: Array<{ code: string; message: string; remediation?: string }>;
+};
+
+const READINESS_MESSAGE_LIMIT = 500;
+const READINESS_FAILURE_LIMIT = 12;
+const READINESS_ATTEMPT_LIMIT = 5;
+
+function asEvidenceRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
+}
+
+function redactReadinessText(value: string): string {
+  return value
+    .replace(/(token|secret|password|authorization)\s*[=:]\s*\S+/gi, "$1=[redacted]")
+    .replace(/dpfmcp_[A-Za-z0-9_-]+/g, "[redacted]")
+    .slice(0, READINESS_MESSAGE_LIMIT);
+}
+
+export function sanitizePromoterReadinessReport(report: PromoterReadinessReport): PromoterReadinessReport {
+  return {
+    ...report,
+    failures: report.failures.slice(0, READINESS_FAILURE_LIMIT).map((failure) => ({
+      code: failure.code.slice(0, 80),
+      message: redactReadinessText(failure.message),
+      ...(failure.remediation ? { remediation: redactReadinessText(failure.remediation) } : {}),
+    })),
+  };
+}
+
+/** Read/merge/write keeps recovery and rollback evidence while replacing only readiness. */
+export async function recordPromoterReadiness(runId: string, report: PromoterReadinessReport) {
+  const current = await prisma.selfUpgradeRun.findUnique({
+    where: { runId },
+    select: { completionEvidence: true },
+  });
+  const evidence = asEvidenceRecord(current?.completionEvidence);
+  const prior = asEvidenceRecord(evidence.readiness);
+  const attempts = Array.isArray(prior.attempts) ? prior.attempts : [];
+  const sanitized = sanitizePromoterReadinessReport(report);
+  const readiness = {
+    ...sanitized,
+    attempts: [
+      ...attempts,
+      {
+        result: prior.result,
+        completedAt: prior.completedAt,
+        failureCodes: Array.isArray(prior.failures)
+          ? prior.failures.slice(0, READINESS_FAILURE_LIMIT).map((failure) =>
+              typeof failure === "object" && failure !== null && "code" in failure
+                ? String((failure as { code: unknown }).code).slice(0, 80)
+                : "unknown",
+            )
+          : [],
+      },
+    ].filter((attempt) => attempt.result).slice(-READINESS_ATTEMPT_LIMIT),
+  };
+  return prisma.selfUpgradeRun.update({
+    where: { runId },
+    data: { completionEvidence: toJson({ ...evidence, readiness }) },
   });
 }
 

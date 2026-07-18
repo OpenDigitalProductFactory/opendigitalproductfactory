@@ -162,10 +162,6 @@ services:
       AUTH_TRUST_HOST: "true"
       PUBLIC_URL: ${PUBLIC_URL:-}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
-      NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-dpf_dev_password}
-      QDRANT_INTERNAL_URL: ${QDRANT_INTERNAL_URL:-http://qdrant:6333}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       # Management API for Ollama pull/delete/tags (distinct from OpenAI-compat
       # inference URL above). On Docker Desktop, host.docker.internal reaches
@@ -193,11 +189,7 @@ services:
       # helpers at the mounted host source so verify_live_install_readiness can
       # decide CAN-TEST vs MUST-ADVANCE without depending on github.com.
       DPF_REPO_ROOT: /host-dpf
-      # Forwarded so scripts/backup-neo4j.sh + scripts/restore-neo4j.sh can
-      # translate the portal's /backups view to the host path that the
-      # docker-in-docker dump container needs as its bind mount source.
-      # Falls back to ${DPF_HOST_INSTALL_PATH}/backups inside the bash
-      # scripts when unset (legacy in-tree layout).
+      # Host path used by the governed PostgreSQL recovery-point workflow.
       DPF_BACKUPS_HOST_PATH: ${DPF_BACKUPS_HOST_PATH:-}
       DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
       INSTANCE_TYPE: dev
@@ -351,10 +343,6 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
       AUTH_TRUST_HOST: "true"
       APP_URL: http://localhost:3035
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j/dpf_dev}
-      QDRANT_INTERNAL_URL: http://qdrant:6333
       NODE_ENV: development
       DPF_ENVIRONMENT: sandbox
       DPF_BUILD_WORKTREE_ISOLATION: ${DPF_BUILD_WORKTREE_ISOLATION:-1}
@@ -518,10 +506,6 @@ services:
       retries: 5
 
   # BET-5 (BI-A1E864A5): Neo4j/Qdrant retired — platform runs on Postgres
-  # (pgvector + graph mirror). Legacy env on portal/sandbox targets surviving
-  # containers during the one-time upgrade backfill; containers are removed by
-  # scripts/decommission-neo4j-qdrant.{sh,ps1}.
-
   dev-init:
     build:
       context: .
@@ -532,10 +516,6 @@ services:
       CI: "true"
       DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
       PRODUCTION_DATABASE_URL: postgresql://dpf:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/dpf
-      NEO4J_URI: bolt://dev-neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: dpf_dev_password
-      PRODUCTION_NEO4J_URI: bolt://neo4j:7687
       DPF_ENVIRONMENT: dev
     volumes: *dev-workspace-volumes
     depends_on:
@@ -561,10 +541,6 @@ services:
     volumes: *dev-workspace-volumes
     environment:
       DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
-      NEO4J_URI: bolt://dev-neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: dpf_dev_password
-      QDRANT_INTERNAL_URL: http://dev-qdrant:6333
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DPF_ENVIRONMENT: dev
       # Preflight reads cwd (/workspace); override only for tests.

@@ -82,11 +82,7 @@ describe("DPF_BACKUPS_HOST_PATH relocation (BI-8004BCD8)", () => {
     const dockerfile = read("Dockerfile");
     const managedScripts = [
       "backup-postgres.sh",
-      "backup-neo4j.sh",
-      "backup-qdrant.sh",
       "restore-postgres.sh",
-      "restore-neo4j.sh",
-      "restore-qdrant.sh",
       "postgres-trial-restore.sh",
     ];
 
@@ -97,6 +93,19 @@ describe("DPF_BACKUPS_HOST_PATH relocation (BI-8004BCD8)", () => {
         );
       }
       expect(dockerfile).toContain("COPY --from=init /app/scripts ./scripts");
+    });
+
+    it("runtime image does not package retired graph or vector backup scripts", () => {
+      for (const script of [
+        "backup-neo4j.sh",
+        "backup-qdrant.sh",
+        "restore-neo4j.sh",
+        "restore-qdrant.sh",
+      ]) {
+        expect(dockerfile, `${script} must remain outside the runtime image`).not.toContain(
+          `COPY scripts/${script}`,
+        );
+      }
     });
 
     it("neo4j-backup-runner.ts forwards DPF_BACKUPS_HOST_PATH explicitly", () => {

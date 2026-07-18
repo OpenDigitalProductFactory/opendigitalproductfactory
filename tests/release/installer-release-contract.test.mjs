@@ -59,6 +59,15 @@ test("installer populates the previously-null install-state fields", () => {
   assert.match(installer, /dpf_state_write\s+imageTag\s+"\$DPF_RESOLVED_IMAGE_TAG"/);
 });
 
+test("production installers validate canonical lifecycle state before completion", () => {
+  assert.match(read("install-dpf.sh"), /validate-install-state\.mjs" "\$\(dpf_state_path\)"/);
+  assert.match(read("install-dpf.ps1"), /validate-install-state\.mjs/);
+  assert.match(read("install-dpf.ps1"), /Get-DpfStatePath/);
+  const compose = read("docker-compose.yml");
+  assert.match(compose, /\$\{DPF_STATE_DIR:-\$\{HOME\}\/\.dpf\}:\/dpf-state:ro/);
+  assert.match(compose, /DPF_STATE_DIR_HOST: \$\{DPF_STATE_DIR:-\$\{HOME\}\/\.dpf\}/);
+});
+
 test("install-state helper functions backing the new fields are defined", () => {
   assert.match(read("scripts/installer/lib/docker.sh"), /dpf_docker_context\(\)\s*\{/);
   assert.match(read("scripts/installer/lib/compose.sh"), /dpf_compose_files_json\(\)\s*\{/);

@@ -1,5 +1,16 @@
 import { spawn } from "node:child_process";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import {
+  buildCandidatePromoterArtifactImage,
+  resolveCandidatePromoterArtifact,
+  type ResolvedPromoterArtifact,
+} from "./promoter-artifact";
+export {
+  PROMOTER_CONTRACT_SCHEMA_VERSION,
+  SELF_UPGRADE_CALLER_PROTOCOL_VERSION,
+  validateResolvedPromoterArtifact,
+  type ResolvedPromoterArtifact,
+} from "./promoter-artifact";
 
 /**
  * The promoter runs as a SIBLING container, never inside the portal.
@@ -31,6 +42,41 @@ const DEFAULT_PROMOTER_IMAGE = "dpf-promoter";
 // docker-compose.yml so promote.sh sees the same path either way.
 const PROMOTER_CONTAINER_SOURCE = "/host-source";
 const PROMOTER_COMPOSE_ENV_FILE = "/install-env/.env";
+
+export type ReadinessOwner = "bridge" | "portal" | "unavailable";
+export type UpgradeReadinessMode = "enforced" | "legacy-bootstrap";
+
+export type PromoterDockerRunner = (args: string[]) => Promise<PromoterResult>;
+
+async function defaultPromoterDockerRunner(args: string[]): Promise<PromoterResult> {
+  return runProcessWithBudget("docker", args, { timeoutMs: 5 * 60_000 });
+}
+
+/** Build the candidate-owned local promoter from the prepared source tree. */
+export async function buildCandidatePromoterImage(
+  params: { sourcePath: string; targetSha: string; promoterImage?: string },
+  runDocker: PromoterDockerRunner = defaultPromoterDockerRunner,
+): Promise<string> {
+  return buildCandidatePromoterArtifactImage(params, runDocker);
+}
+
+/** Pulls/inspects a target reference once and verifies its embedded contract. */
+export async function resolvePromoterArtifact(
+  params: { promoterImage?: string; targetSha: string; callerProtocol?: number },
+  runDocker: PromoterDockerRunner = defaultPromoterDockerRunner,
+): Promise<ResolvedPromoterArtifact> {
+  return resolveCandidatePromoterArtifact(params, runDocker);
+}
+
+export async function runPromoterReadiness(
+  params: PromoterParams & { artifact: ResolvedPromoterArtifact },
+): Promise<PromoterResult> {
+  const { command, args } = buildPromoterReadinessCommand(params);
+  return runProcessWithBudget(command, args, {
+    timeoutMs: Math.min(resolvePromoterTimeoutMs(params), 5 * 60_000),
+    containerName: params.containerName,
+  });
+}
 
 export type PromoterParams = {
   /** HOST path of the install tree; bind-mounted into the promoter. */
@@ -220,9 +266,7 @@ export function buildPromoterCommand(
     args.push("-e", `PROMOTE_COMPOSE_FILES=${params.composeFiles.join(" ")}`);
   }
 
-  if (params.composeProject && params.composeProject.length > 0) {
-    args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject}`);
-  }
+  args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject || "dpf"}`);
 
   if (params.runtimeTransitionAuthorityOperation) {
     if (!params.stateDirHostPath || (!["reconcile", "rotate-secret"].includes(params.runtimeTransitionAuthorityOperation) && !params.runtimeCapabilityTransitionId) ||
@@ -252,6 +296,28 @@ export function buildPromoterCommand(
   if (params.dryRun) args.push("--dry-run");
 
   return { command: "docker", args };
+}
+
+/** Readiness always launches the previously resolved immutable artifact. */
+export function buildPromoterReadinessCommand(
+  params: PromoterParams & { artifact: ResolvedPromoterArtifact },
+): { command: string; args: string[] } {
+  const command = buildPromoterCommand({ ...params, promoterImage: params.artifact.digest });
+  const socketIndex = command.args.indexOf("/var/run/docker.sock:/var/run/docker.sock");
+  if (socketIndex > 0 && command.args[socketIndex - 1] === "-v") {
+    command.args.splice(socketIndex - 1, 2);
+  }
+  const stateIndex = command.args.findIndex((arg) => arg.endsWith(":/dpf-state"));
+  if (stateIndex >= 0) command.args[stateIndex] = `${command.args[stateIndex]}:ro`;
+  const backupsIndex = command.args.findIndex((arg) => arg.endsWith(":/backups"));
+  if (backupsIndex >= 0) command.args[backupsIndex] = `${command.args[backupsIndex]}:ro`;
+  const imageIndex = command.args.indexOf(params.artifact.digest);
+  if (imageIndex < 0) throw new Error("promoter_readiness_image_unavailable");
+  command.args.splice(imageIndex, 0, "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
+  const modeIndex = command.args.lastIndexOf("--self-upgrade");
+  if (modeIndex < 0) throw new Error("promoter_readiness_mode_unavailable");
+  command.args[modeIndex] = "--readiness";
+  return command;
 }
 
 /**
@@ -306,6 +372,7 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "BDIR=$(mktemp -d) && trap 'rm -rf \"$BDIR\"' EXIT && " +
   "cp /promoter/Dockerfile \"$BDIR/Dockerfile\" && " +
   "cp /promoter/Dockerfile.promoter \"$BDIR/Dockerfile.promoter\" && " +
+  "cp /promoter/promoter-contract.json \"$BDIR/promoter-contract.json\" && " +
   "mkdir -p \"$BDIR/scripts\" && mkdir -p \"$BDIR/scripts/installer\" && " +
   "cp /promoter/scripts/promote.sh \"$BDIR/scripts/promote.sh\" && " +
   "cp /promoter/scripts/apply-runtime-capability-transition.mjs \"$BDIR/scripts/apply-runtime-capability-transition.mjs\" && " +

@@ -83,11 +83,7 @@ COPY scripts/installer/install-state.schema.json ./scripts/installer/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
-COPY scripts/backup-neo4j.sh ./scripts/
-COPY scripts/backup-qdrant.sh ./scripts/
 COPY scripts/restore-postgres.sh ./scripts/
-COPY scripts/restore-neo4j.sh ./scripts/
-COPY scripts/restore-qdrant.sh ./scripts/
 COPY scripts/postgres-trial-restore.sh ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
@@ -257,6 +253,7 @@ RUN if [ -n "$DPF_PLATFORM_VERSION" ]; then \
 # Promoter build context (autonomous deployment pipeline)
 # These files let the portal build the dpf-promoter image on first use.
 COPY Dockerfile.promoter /promoter/Dockerfile.promoter
+COPY promoter-contract.json /promoter/promoter-contract.json
 COPY scripts/promote.sh /promoter/scripts/promote.sh
 COPY Dockerfile /promoter/Dockerfile
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs

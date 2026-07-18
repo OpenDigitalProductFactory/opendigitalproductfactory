@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   buildPromoterCommand,
+  buildCandidatePromoterImage,
+  buildPromoterReadinessCommand,
   decidePromoterEnsureAction,
   decidePromoterLaunch,
   interpretContainerInspect,
@@ -14,6 +16,8 @@ import {
   PROMOTER_TIMEOUT_EXIT_CODE,
   resolvePromoterTimeoutMs,
   runProcessWithBudget,
+  validateResolvedPromoterArtifact,
+  resolvePromoterArtifact,
 } from "./promoter";
 
 const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
@@ -25,6 +29,107 @@ const BASE = {
   backupPath: "/backups/self-upgrade/run-1",
   healthUrl: "http://localhost:3000/api/health",
 };
+
+describe("validateResolvedPromoterArtifact", () => {
+  const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });
+  const digest = "sha256:" + "a".repeat(64);
+  const labels = {
+    "org.opencontainers.image.revision": "abc1234",
+    "org.opendpf.promoter.contract-schema": "1",
+    "org.opendpf.promoter.contract-digest": "sha256:" + "b".repeat(64),
+  };
+
+  it("returns an immutable artifact when identity and protocol agree", () => {
+    expect(validateResolvedPromoterArtifact({ targetSha: "abc1234", callerProtocol: 1, digest, manifest, labels, computedContractDigest: labels["org.opendpf.promoter.contract-digest"] })).toEqual({
+      digest,
+      sourceSha: "abc1234",
+      contractSchema: 1,
+      contractDigest: labels["org.opendpf.promoter.contract-digest"],
+      callerProtocol: { min: 1, max: 1 },
+    });
+  });
+
+  it.each([
+    ["source SHA mismatch", { targetSha: "other" }],
+    ["unknown schema", { manifest: JSON.stringify({ schemaVersion: 2, callerProtocol: { min: 1, max: 1 } }) }],
+    ["caller protocol mismatch", { callerProtocol: 2 }],
+    ["contract digest mismatch", { computedContractDigest: "sha256:" + "c".repeat(64) }],
+    ["mutable image reference", { digest: "dpf-promoter:latest" }],
+  ])("rejects %s", (_name, override) => {
+    expect(() => validateResolvedPromoterArtifact({ targetSha: "abc1234", callerProtocol: 1, digest, manifest, labels, computedContractDigest: labels["org.opendpf.promoter.contract-digest"], ...override })).toThrow();
+  });
+});
+
+describe("buildPromoterReadinessCommand", () => {
+  it("runs readiness against the immutable digest", () => {
+    const artifact = validateResolvedPromoterArtifact({
+      targetSha: "abc1234", callerProtocol: 1, digest: "sha256:" + "a".repeat(64),
+      manifest: JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } }),
+      labels: { "org.opencontainers.image.revision": "abc1234", "org.opendpf.promoter.contract-schema": "1", "org.opendpf.promoter.contract-digest": "sha256:" + "b".repeat(64) },
+      computedContractDigest: "sha256:" + "b".repeat(64),
+    });
+    const readinessParams = {
+      ...BASE,
+      stateDirHostPath: "/Users/me/.dpf",
+      backupHostPath: "/Users/me/dpf-backups",
+      artifact,
+    };
+    const { args } = buildPromoterReadinessCommand(readinessParams);
+    expect(args).toContain(artifact.digest);
+    expect(args).toContain("--readiness");
+    expect(args).not.toContain("--self-upgrade");
+    expect(args).not.toContain("/var/run/docker.sock:/var/run/docker.sock");
+    expect(args).toContain(`${readinessParams.stateDirHostPath}:/dpf-state:ro`);
+    expect(args).toContain(`${readinessParams.backupHostPath}:/backups:ro`);
+    expect(args).toContain("DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
+  });
+});
+
+describe("resolvePromoterArtifact", () => {
+  it("pulls a target-SHA tag once and returns its immutable digest", async () => {
+    const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });
+    const contractDigest = `sha256:${(await import("node:crypto")).createHash("sha256").update(manifest).digest("hex")}`;
+    const digest = `sha256:${"d".repeat(64)}`;
+    const calls: string[][] = [];
+    const artifact = await resolvePromoterArtifact({ promoterImage: "registry/dpf-promoter", targetSha: "abc1234" }, async (args) => {
+      calls.push(args);
+      if (args[0] === "pull") return { exitCode: 0, stdout: "", stderr: "" };
+      if (args[0] === "image") return { exitCode: 0, stdout: JSON.stringify({ RepoDigests: [`registry/dpf-promoter@${digest}`], Config: { Labels: { "org.opencontainers.image.revision": "abc1234", "org.opendpf.promoter.contract-schema": "1", "org.opendpf.promoter.contract-digest": contractDigest } } }), stderr: "" };
+      return { exitCode: 0, stdout: manifest, stderr: "" };
+    });
+    expect(artifact.digest).toBe(digest);
+    expect(calls[0]).toEqual(["pull", "registry/dpf-promoter:abc1234"]);
+    expect(calls[2]).toContain(digest);
+  });
+
+  it("fails closed when pull, inspect, manifest, or identity verification fails", async () => {
+    await expect(resolvePromoterArtifact({ targetSha: "abc" }, async () => ({ exitCode: 1, stdout: "", stderr: "absent" }))).rejects.toThrow("promoter_inspect_failed");
+  });
+});
+
+describe("buildCandidatePromoterImage", () => {
+  it("builds and labels an offline target-SHA image from prepared candidate source", async () => {
+    const sourcePath = await mkdtemp(join(tmpdir(), "dpf-promoter-candidate-"));
+    try {
+      await mkdir(join(sourcePath, "scripts"));
+      await writeFile(join(sourcePath, "promoter-contract.json"), "{\"schemaVersion\":1}\n");
+      const calls: string[][] = [];
+      const image = await buildCandidatePromoterImage(
+        { sourcePath, targetSha: "abc1234" },
+        async (args) => {
+          calls.push(args);
+          return { exitCode: 0, stdout: "", stderr: "" };
+        },
+      );
+      expect(image).toBe("dpf-promoter:abc1234");
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toContain("DPF_PROMOTER_SOURCE_SHA=abc1234");
+      expect(calls[0]?.at(-1)).toBe(sourcePath);
+    } finally {
+      await rm(sourcePath, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("buildPromoterCommand", () => {
   it("reserves host transition authority without requiring an apply envelope", () => {
@@ -180,7 +285,7 @@ describe("buildPromoterCommand", () => {
   it("omits PROMOTE_COMPOSE_FILES when no chain is recorded (promote.sh base-only fallback)", () => {
     const joined = buildPromoterCommand(BASE).args.join(" ");
     expect(joined).not.toContain("PROMOTE_COMPOSE_FILES=");
-    expect(joined).not.toContain("PROMOTE_COMPOSE_PROJECT=");
+    expect(joined).toContain("PROMOTE_COMPOSE_PROJECT=dpf");
   });
 });
 

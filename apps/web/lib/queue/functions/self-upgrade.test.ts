@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   skipRun: vi.fn(),
   updateRunPlan: vi.fn(),
   recordRunRecoveryPoint: vi.fn(),
+  recordPromoterReadiness: vi.fn(),
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   runPromoter: vi.fn(),
@@ -28,6 +29,9 @@ const mocks = vi.hoisted(() => ({
   ensurePromoterImage: vi
     .fn()
     .mockResolvedValue({ ok: true, alreadyPresent: false, built: true }),
+  buildCandidatePromoterImage: vi.fn().mockResolvedValue("dpf-promoter:abc1234deadbeef"),
+  resolvePromoterArtifact: vi.fn(),
+  runPromoterReadiness: vi.fn(),
   // Cooldown backoff (this fix): no active cooldown by default.
   getCooldownUntil: vi.fn().mockResolvedValue(null),
   recordCooldown: vi.fn().mockResolvedValue(undefined),
@@ -116,6 +120,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   skipRun: mocks.skipRun,
   updateRunPlan: mocks.updateRunPlan,
   recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
+  recordPromoterReadiness: mocks.recordPromoterReadiness,
   getLatestRun: mocks.getLatestRun,
   getLatestSucceededRun: mocks.getLatestSucceededRun,
 }));
@@ -127,6 +132,9 @@ vi.mock("@/lib/self-upgrade/promoter", async (importOriginal) => ({
   runPromoter: mocks.runPromoter,
   isPromoterAvailable: mocks.isPromoterAvailable,
   ensurePromoterImage: mocks.ensurePromoterImage,
+  buildCandidatePromoterImage: mocks.buildCandidatePromoterImage,
+  resolvePromoterArtifact: mocks.resolvePromoterArtifact,
+  runPromoterReadiness: mocks.runPromoterReadiness,
 }));
 
 vi.mock("@/lib/self-upgrade/cooldown", () => ({
@@ -233,6 +241,10 @@ const OK_RECOVERY_POINT = {
 beforeEach(() => {
   mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue(OK_RECOVERY_POINT);
   mocks.recordRunRecoveryPoint.mockResolvedValue({});
+  const artifact = { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } };
+  mocks.resolvePromoterArtifact.mockResolvedValue(artifact);
+  mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 0, stdout: '{"stage":"preflight","result":"ready","failures":[]}', stderr: "" });
+  mocks.recordPromoterReadiness.mockResolvedValue({});
   mocks.summarizeRecoveryPointFailure.mockReturnValue(
     "recovery-point-failed: postgres BR-PG",
   );
@@ -351,6 +363,31 @@ describe("success path", () => {
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-AAAABBBB" });
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
+  });
+
+  it("resolves and validates readiness before quiescence, then promotes the same digest", async () => {
+    const order: string[] = [];
+    mocks.resolvePromoterArtifact.mockImplementation(async () => { order.push("resolve"); return { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } }; });
+    mocks.runPromoterReadiness.mockImplementation(async () => { order.push("readiness"); return { exitCode: 0, stdout: '{"failures":[]}', stderr: "" }; });
+    mocks.recordPromoterReadiness.mockImplementation(async () => { order.push("evidence"); return {}; });
+    mocks.startQuiescence.mockImplementation(async () => { order.push("quiescence"); return { runId: "QR-1", awaitReady: async () => ({ ok: true, outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }) }; });
+    mocks.runPromoter.mockImplementation(async (promoterParams: { promoterImage?: string }) => { order.push("promotion"); expect(promoterParams.promoterImage).toBe(`sha256:${"d".repeat(64)}`); return { exitCode: 0, stdout: "", stderr: "" }; });
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(order).toEqual(["resolve", "readiness", "evidence", "quiescence", "promotion"]);
+  });
+
+  it.each([
+    ["artifact resolution", "resolve"],
+    ["readiness dependency", "readiness"],
+  ])("fails before drain, recovery, and promotion on %s failure", async (_label, failure) => {
+    if (failure === "resolve") mocks.resolvePromoterArtifact.mockRejectedValue(new Error("source SHA mismatch"));
+    else mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 78, stdout: '{"failures":[{"code":"state_mount_unreadable","message":"Repair the state mount"}]}', stderr: "" });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ ok: false, reason: "promoter-readiness-failed" });
+    expect(mocks.recordPromoterReadiness).toHaveBeenCalled();
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.createSelfUpgradeRecoveryPoint).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
   });
 
   it("claims a pre-created queued run instead of creating a second run", async () => {
@@ -503,7 +540,7 @@ describe("success path", () => {
         targetSha: "abc1234deadbeef",
         backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
         healthUrl: "http://localhost:3000/api/health",
-        promoterImage: "dpf-promoter",
+        promoterImage: `sha256:${"d".repeat(64)}`,
         stateDirHostPath: "/Users/me/.dpf",
       }),
     );
@@ -1130,7 +1167,11 @@ describe("quiescence-defer path (BI-QUIESCE-010)", () => {
 describe("skip-before-drain guards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.getSelfUpgradeConfig.mockResolvedValue({
+      ...ENABLED_CONFIG,
+      readinessMode: "legacy-bootstrap",
+      readinessOwner: "unavailable",
+    });
     mocks.isUpgradeWindowOpen.mockReturnValue(true);
     // clearAllMocks resets call history but NOT implementations, so re-assert
     // the gate defaults each test (a prior describe can leave them flipped).

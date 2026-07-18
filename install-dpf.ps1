@@ -1893,6 +1893,11 @@ if (-not (Test-StepDone "model")) {
     Write-OK "Already set up"
 }
 
+# Validate the same canonical host state path exposed to the portal and promoter.
+$stateValidator = Join-Path $DPF_DIR "scripts\installer\validate-install-state.mjs"
+& node $stateValidator (Get-DpfStatePath)
+if ($LASTEXITCODE -ne 0) { throw "Install state is not upgrade-ready" }
+
 # --- Step 8: Open Browser -----------------------------------------------------
 
 Write-Step 9 10 "Configuring auto-start on logon..."

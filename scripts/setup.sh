@@ -13,7 +13,7 @@
 #   3. Installs pnpm workspace dependencies
 #   4. Generates apps/web/.env.local and root .env from examples (with
 #      portable in-place sed and openssl/python3 secret generation)
-#   5. Brings up the contributor compose stack (Postgres + Neo4j + Qdrant)
+#   5. Brings up the contributor PostgreSQL dependency
 #   6. Waits for Postgres readiness and runs Prisma migrations + seed
 #   7. Verifies the agent rulebook (AGENTS.md + pointer files) is intact
 #
@@ -137,8 +137,7 @@ fi
 
 # ── Compose services ─────────────────────────────────────────────────────────
 
-# BET-5 (BI-A1E864A5): the platform runs on Postgres only (pgvector for vectors, a
-# graph_node/graph_edge mirror for the graph). Neo4j + Qdrant are retired.
+# PostgreSQL owns relational, vector, and graph persistence.
 step "Starting contributor compose stack (Postgres)"
 docker compose up -d postgres
 
@@ -180,7 +179,7 @@ if [ "${DPF_INCLUDE_EDGE:-0}" = "1" ] && [ "${DPF_SKIP_EDGE_BOOTSTRAP:-0}" != "1
   EDGE_COMPOSE_ARGS=("-f" "docker-compose.yml" "-f" "docker-compose.edge.yml")
 
   # The portal must be reachable for the token mint (Prisma → Postgres) to
-  # succeed. We brought up Postgres/Neo4j/Qdrant above but not the portal,
+  # succeed. We brought up PostgreSQL above but not the portal,
   # so do that now (best-effort; warns instead of failing).
   if docker compose "${EDGE_COMPOSE_ARGS[@]}" up -d portal edge-node >/dev/null 2>&1; then
     HEALTH_URL="http://localhost:3000/api/health"

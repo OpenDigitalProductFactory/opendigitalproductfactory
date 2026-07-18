@@ -47,7 +47,7 @@ apps/web/lib/mcp/packs/contribution-hive-pack.ts	858
 apps/web/lib/mcp/packs/sandbox-pack.ts	920
 apps/web/lib/navigation/portal-navigation-model.ts	937
 apps/web/lib/operate/coworker-regression-detector.ts	935
-apps/web/lib/queue/functions/self-upgrade.test.ts	1354
+apps/web/lib/queue/functions/self-upgrade.test.ts	1395
 apps/web/lib/routing/chat-adapter.test.ts	820
 apps/web/lib/routing/fallback.test.ts	1038
 apps/web/lib/self-upgrade/quiescence.test.ts	865

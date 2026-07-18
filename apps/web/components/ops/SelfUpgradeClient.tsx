@@ -16,6 +16,7 @@ import { UpgradeScopeRibbon } from "@/components/ops/UpgradeScopeRibbon";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
 
 type LatestRun = {
   runId: string;
@@ -72,7 +73,6 @@ type QuiescenceActivity = {
   blockers: QuiescenceBlockerLine[];
 };
 
-// §4.5 admission observability projection (apps/web/lib/queue/admission-observability.ts).
 type AdmissionSnapshot = {
   lane: { enabled: boolean; limit: number | null; key: string };
   buildHolders: number;
@@ -1247,7 +1247,7 @@ export default function SelfUpgradeClient({
               </div>
             </details>
           )}
-
+          <SelfUpgradeReadiness completionEvidence={latestRun.completionEvidence} />
           {/* A skipped run persists WHY on `reason`. Without surfacing it, the
               operator sees only a "skipped" badge with no words — the silent
               no-op an operator should never be left guessing about. */}

@@ -16,6 +16,7 @@ import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepa
 // NOT be statically imported into this server bundle entrypoint (BI-98AF1066);
 // that is what the dynamic loadPromoterRuntime() below is for.
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
+import { runCandidatePreflight } from "@/lib/self-upgrade/preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import {
   classifyBuildFailure,
@@ -29,6 +30,7 @@ import {
   skipRun,
   updateRunPlan,
   recordRunRecoveryPoint,
+  recordPromoterReadiness,
   getLatestRun,
   getLatestSucceededRun,
 } from "@/lib/self-upgrade/run-store";
@@ -59,7 +61,7 @@ export const SELF_UPGRADE_EVENT = "ops/self-upgrade.run";
 
 type PromoterRuntime = Pick<
   typeof import("@/lib/self-upgrade/promoter"),
-  "isPromoterAvailable" | "ensurePromoterImage" | "runPromoter"
+  "isPromoterAvailable" | "ensurePromoterImage" | "buildCandidatePromoterImage" | "resolvePromoterArtifact" | "runPromoterReadiness" | "runPromoter"
 >;
 
 async function loadPromoterRuntime(): Promise<PromoterRuntime> {
@@ -214,7 +216,7 @@ export async function runSelfUpgrade(
   // build it here — still BEFORE any drain — and only skip if the build itself
   // fails (or a custom/registry image is configured, which the operator pulls).
   // A skip here remains a clean no-op: no cooldown, and the next tick re-checks.
-  if (!params.dryRun) {
+  if (!params.dryRun && config.readinessMode === "legacy-bootstrap") {
     const { ensurePromoterImage } = await loadPromoterRuntime();
     // ALWAYS rebuild the promoter before a swap, not only when its image is absent.
     // The promoter bakes promote.sh into its image (Dockerfile.promoter ENTRYPOINT), so a
@@ -481,6 +483,25 @@ export async function runSelfUpgrade(
   await startRun(run.runId);
   await emitUpgradeEvent({ type: "upgrade.started", runId: run.runId });
 
+  // Candidate-owned preflight. Resolve once, validate the embedded contract,
+  // run readiness against that digest, persist evidence, and only then drain.
+  // Undefined mode is the post-floor default; legacy-bootstrap is explicit.
+  const preflight = await runCandidatePreflight({
+    dryRun: params.dryRun, readinessMode: config.readinessMode, readinessOwner: config.readinessOwner,
+    promoterImage: config.promoterImage, callerProtocolVersion: config.callerProtocolVersion,
+    sourcePath: upgradeWorkspaceMountPath ?? hostSourcePath,
+    hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
+    canonicalInstallPath: hostInstallPathResolved, targetSha: builtStamp, baselineSha: deployedSha,
+    runId: run.runId, composeFiles: composeFiles ?? [], composeProject,
+    healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
+    runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun,
+    emitFailure: async (runId) => emitUpgradeEvent({ type: "upgrade.failed", runId }),
+  });
+  if (!preflight.ok) {
+    return { ok: false, status: "failed", runId: run.runId, reason: preflight.reason };
+  }
+  const resolvedPromoterDigest = preflight.resolvedPromoterDigest;
+
   // BI-QUIESCE-010 keystone integration: replaces the single-signal
   // getPortalActivity check with the full Activity Quiescence Protocol
   // coordinator (BI-QUIESCE-002). The coordinator inventories all 30
@@ -601,7 +622,7 @@ export async function runSelfUpgrade(
       composeFiles,
       composeProject,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
-      promoterImage: config.promoterImage,
+      promoterImage: resolvedPromoterDigest ?? config.promoterImage,
       stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
       dryRun: params.dryRun,
       // Deterministic name so a stalled build can be force-removed by name on

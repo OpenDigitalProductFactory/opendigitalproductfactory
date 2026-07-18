@@ -102,7 +102,6 @@ if (-not (Test-Path $envFile)) {
 POSTGRES_USER=dpf
 POSTGRES_PASSWORD=dpf_dev
 DATABASE_URL=postgresql://dpf:dpf_dev@postgres:5432/dpf
-NEO4J_AUTH=neo4j/dpf_dev_password
 AUTH_SECRET=$authSecret
 CREDENTIAL_ENCRYPTION_KEY=$encKey
 ADMIN_PASSWORD=changeme123
@@ -151,7 +150,7 @@ $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
 $dockerDataDir = "${InstallDrive}:\docker-data\dpf"
 
 if (-not $SkipDocker) {
-    # BET-5 (BI-A1E864A5): Postgres-only platform (pgvector + graph mirror); Neo4j + Qdrant retired.
+    # PostgreSQL owns relational, vector, and graph persistence.
     Write-Step "Starting Docker services (PostgreSQL)"
 
     # Tear down any existing containers and volumes from a previous install
@@ -257,7 +256,7 @@ services:
         Write-Fail "PostgreSQL did not become ready. See logs above."
     }
     Write-Ok "PostgreSQL is ready"
-    # BET-5: vectors live in Postgres (pgvector) -- no separate Qdrant readiness wait.
+    # Vectors live in PostgreSQL through pgvector.
 }
 
 Write-Host "========================================================" 

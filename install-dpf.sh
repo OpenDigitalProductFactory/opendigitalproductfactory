@@ -1064,6 +1064,7 @@ fi
 # 14. Persist successful install state.
 dpf_state_write lastSuccessfulInstallVersion "$DPF_INSTALLER_VERSION" 2>/dev/null || true
 dpf_state_write lastHealthCheck "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || true
+node "$REPO_ROOT/scripts/installer/validate-install-state.mjs" "$(dpf_state_path)" || fail "Install state is not upgrade-ready"
 
 # 15. Autostart unit (LaunchAgent on macOS, systemd-user unit on Linux).
 #     Gated by --no-autostart for operators who manage their own.
