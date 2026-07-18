@@ -13,6 +13,60 @@ function envelope(now = Date.now()) { return { version: 1, transitionId: "RCT-te
 function run(env, id = "RCT-test") { return spawnSync(process.execPath, [script, "--runtime-capability-transition", id], { env: { ...process.env, ...env }, encoding: "utf8" }); }
 async function secretFile(dir) { const path = join(dir, "secret"); await writeFile(path, secret, { mode: 0o600 }); return path; }
 
+async function validTransition(dir, health = "healthy") {
+  const catalogPath = new URL("./capability-service-catalog.generated.json", import.meta.url);
+  const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
+  const project = (requested) => {
+    const enabled = new Set();
+    const byId = new Map(catalog.capabilities.map((capability) => [capability.capabilityId, capability]));
+    const add = (id) => { if (enabled.has(id)) return; const capability = byId.get(id); for (const dependency of capability.dependencies) add(dependency); enabled.add(id); };
+    for (const capability of catalog.capabilities) if (capability.activationPolicy === "always") add(capability.capabilityId);
+    for (const id of requested) add(id);
+    const keys = [...enabled].sort();
+    const services = catalog.capabilities.filter((capability) => enabled.has(capability.capabilityId)).flatMap((capability) => capability.services).filter((service) => service.targetClassification !== "ephemeral-lifecycle");
+    return { keys, profiles: [...new Set(services.flatMap((service) => service.profiles))].sort(), required: [...new Set(services.map((service) => service.service))].sort(), hash: createHash("sha256").update(`${catalog.catalogHash}\n${catalog.capabilities.map((capability) => `${capability.capabilityId}=${enabled.has(capability.capabilityId) ? "active" : "disabled"}`).sort().join("\n")}`).digest("hex") };
+  };
+  const previous = project([]);
+  const optional = catalog.capabilities.find((capability) => capability.activationPolicy !== "always");
+  assert.ok(optional, "fixture needs an optional runtime capability");
+  const desired = project([optional.capabilityId]);
+  const value = { ...envelope(), catalogHash: catalog.catalogHash, previousStateHash: previous.hash, desiredStateHash: desired.hash, previousKeys: previous.keys, desiredKeys: desired.keys, previousProfiles: previous.profiles, desiredProfiles: desired.profiles, previousServices: previous.required, desiredServices: desired.required };
+  const signature = createHmac("sha256", secret).update(canonical(value)).digest("hex");
+  await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: previous.keys, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: previous.hash }));
+  const fakeDocker = join(dir, "fake-docker.mjs");
+  const psRows = desired.required.map((Service) => ({ Service, State: "running", Health: health }));
+  await writeFile(fakeDocker, `const args = process.argv.slice(2).join(" ");\nif (args.includes("ps --format json")) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});\n`);
+  return { value, signature, catalogPath: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), desired, env: { DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf", DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]) } };
+}
+
+for (const [crashPoint, durablePhase] of [["prepared", "prepared"], ["state-mutated", "prepared"], ["state-written", "state-written"], ["runtime-mutated", "state-written"], ["runtime-reconciled", "runtime-reconciled"]]) test(`recovers atomically from a crash after ${crashPoint}`, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "dpf-transition-crash-"));
+    const fixture = await validTransition(dir);
+    const crashed = run({ ...fixture.env, DPF_TEST_CRASH_AFTER_PHASE: crashPoint });
+    assert.equal(crashed.status, 86, crashed.stderr);
+    const journalPath = join(dir, "runtime-capability-transitions", "RCT-test.journal.json");
+    assert.equal(JSON.parse(await readFile(journalPath, "utf8")).phase, durablePhase);
+
+    const recovered = run(fixture.env);
+    assert.equal(recovered.status, 0, recovered.stderr);
+    const state = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
+    assert.deepEqual(state.enabledRuntimeCapabilities, fixture.desired.keys);
+    await assert.rejects(readFile(journalPath, "utf8"), { code: "ENOENT" });
+    const receipt = JSON.parse(await readFile(join(dir, "runtime-capability-transitions", "RCT-test.json"), "utf8"));
+    assert.equal(receipt.status, "applied");
+    assert.deepEqual(Object.keys(receipt.observedHealth), fixture.desired.required);
+  });
+
+test("fails and restores install state when a required compose healthcheck is unhealthy", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-unhealthy-"));
+  const fixture = await validTransition(dir, "unhealthy");
+  const result = run(fixture.env);
+  assert.equal(result.status, 78);
+  assert.match(result.stderr, /required_health_failed_/);
+  const state = JSON.parse(await readFile(join(dir, "install-state.json"), "utf8"));
+  assert.deepEqual(state.enabledRuntimeCapabilities, fixture.value.previousKeys);
+});
+
 test("rejects a schema-invalid install state before host mutation", async () => {
   const catalogPath = new URL("./capability-service-catalog.generated.json", import.meta.url);
   const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
