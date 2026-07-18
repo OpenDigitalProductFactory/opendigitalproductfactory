@@ -12,6 +12,8 @@ vi.mock("@/lib/shared/new-id", () => ({
   newId: vi.fn().mockReturnValue("ABC12345"),
 }));
 
+const { mockCorrelateAssets } = vi.hoisted(() => ({ mockCorrelateAssets: vi.fn() }));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     fixedAsset: {
@@ -21,7 +23,13 @@ vi.mock("@dpf/db", () => ({
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    inventoryEntity: {
+      findMany: vi.fn(),
+    },
   },
+  // Pure correlation is covered by inventory-asset-bridge.test.ts; stubbed here so the
+  // getAssetRegisterReconciliation glue test stays focused on loading + passthrough.
+  correlateDiscoveryToAssets: mockCorrelateAssets,
 }));
 
 import { auth } from "@/lib/auth";
@@ -34,6 +42,7 @@ import {
   calculateDepreciation,
   disposeAsset,
   runMonthlyDepreciation,
+  getAssetRegisterReconciliation,
 } from "./assets";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
@@ -45,6 +54,9 @@ const mockPrisma = prisma as unknown as {
     findMany: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     updateMany: ReturnType<typeof vi.fn>;
+  };
+  inventoryEntity: {
+    findMany: ReturnType<typeof vi.fn>;
   };
 };
 
@@ -267,5 +279,38 @@ describe("runMonthlyDepreciation", () => {
     const result = await runMonthlyDepreciation();
     expect(result.processed).toBe(0);
     expect(mockPrisma.fixedAsset.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("getAssetRegisterReconciliation (BI-1093AF1C)", () => {
+  it("requires manage_finance", async () => {
+    unauthorisedUser();
+    await expect(getAssetRegisterReconciliation()).rejects.toThrow();
+  });
+
+  it("loads the org estate + active assets and returns the reconciliation counts", async () => {
+    authorisedUser();
+    mockPrisma.fixedAsset.findMany.mockResolvedValue([{ id: "fa-1", serialNumber: "SN1" }]);
+    mockPrisma.inventoryEntity.findMany.mockResolvedValue([{ id: "e-1", properties: { serialNumber: "SN1" } }]);
+    mockCorrelateAssets.mockReturnValue({
+      matches: [{ inventoryEntityId: "e-1", fixedAssetId: "fa-1", method: "serial", confidence: 0.99 }],
+      capitalizedAndDiscovered: 1,
+      capitalizedNotDiscovered: 0,
+      discoveredNotCapitalized: 0,
+      serialBearingDevices: 1,
+    });
+
+    const result = await getAssetRegisterReconciliation();
+
+    // Scoped to the org's own estate, not customer equipment.
+    expect(mockPrisma.inventoryEntity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ scopeKey: "organization:internal" }) }),
+    );
+    expect(result).toEqual({
+      capitalizedAndDiscovered: 1,
+      capitalizedNotDiscovered: 0,
+      discoveredNotCapitalized: 0,
+      serialBearingDevices: 1,
+    });
   });
 });

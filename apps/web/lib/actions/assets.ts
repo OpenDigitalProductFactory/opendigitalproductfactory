@@ -2,6 +2,7 @@
 
 import { newId } from "@/lib/shared/new-id";
 import { prisma } from "@dpf/db";
+import { correlateDiscoveryToAssets } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import type { CreateAssetInput, DisposeAssetInput } from "@/lib/asset-validation";
 import { periodKeyOf } from "@/lib/finance/ledger";
@@ -133,6 +134,49 @@ export async function listAssets(filters?: { status?: string; category?: string 
   if (filters?.category) where.category = filters.category;
 
   return prisma.fixedAsset.findMany({ where, orderBy: { name: "asc" } });
+}
+
+// ─── getAssetRegisterReconciliation (BI-1093AF1C, HAM D2) ───────────────────────
+
+export type AssetRegisterReconciliation = {
+  capitalizedAndDiscovered: number;
+  capitalizedNotDiscovered: number;
+  discoveredNotCapitalized: number;
+  serialBearingDevices: number;
+};
+
+/**
+ * Reconcile the finance asset register against the discovered estate by serial (read-model,
+ * no authority move / no persistence — spec §7). Answers: which capitalized assets are live
+ * on the network, which are on the books but unseen, and which serial-bearing discovered
+ * devices aren't capitalized. Scoped to the org's OWN estate (`organization:internal`) —
+ * FixedAsset is the org's finance register, not customer equipment.
+ */
+export async function getAssetRegisterReconciliation(): Promise<AssetRegisterReconciliation> {
+  await requireManageFinance();
+
+  const [assets, devices] = await Promise.all([
+    prisma.fixedAsset.findMany({
+      where: { status: "active" },
+      select: { id: true, serialNumber: true },
+    }),
+    prisma.inventoryEntity.findMany({
+      where: { scopeKey: "organization:internal", status: { not: "stale" } },
+      select: { id: true, properties: true },
+    }),
+  ]);
+
+  const result = correlateDiscoveryToAssets(
+    devices.map((d) => ({ id: d.id, properties: d.properties as Record<string, unknown> | null })),
+    assets.map((a) => ({ id: a.id, serialNumber: a.serialNumber })),
+  );
+
+  return {
+    capitalizedAndDiscovered: result.capitalizedAndDiscovered,
+    capitalizedNotDiscovered: result.capitalizedNotDiscovered,
+    discoveredNotCapitalized: result.discoveredNotCapitalized,
+    serialBearingDevices: result.serialBearingDevices,
+  };
 }
 
 // ─── runMonthlyDepreciation ───────────────────────────────────────────────────
