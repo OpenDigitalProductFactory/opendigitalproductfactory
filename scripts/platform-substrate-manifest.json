@@ -698,6 +698,30 @@
         "linux"
       ],
       "targetClassification": "capability-activated"
+    },
+    {
+      "service": "ollama",
+      "class": "capability-activated",
+      "capability": "runtime:external-ai",
+      "boundaryReason": "Linux-native in-cluster inference endpoint; provider identity and health remain reconciled through the external AI runtime authority.",
+      "defaultRequired": false,
+      "profiles": [
+        "runtime-external-ai"
+      ],
+      "ports": [
+        "11434:11434"
+      ],
+      "volumes": [
+        "ollama_data:/root/.ollama"
+      ],
+      "dependsOn": [],
+      "canonicalDataOwner": "none",
+      "backupPolicy": "excluded-rebuildable",
+      "healthSemantics": "compose-healthcheck",
+      "hostPlatforms": [
+        "linux"
+      ],
+      "targetClassification": "capability-activated"
     }
   ],
   "externalRuntimes": [

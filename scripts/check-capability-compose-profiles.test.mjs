@@ -21,11 +21,13 @@ test("rejects_default_started_optional_service", async () => {
 
 test("resolves_each_fixture_dependency_closure", async () => {
   const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const macosOverlay = await readFile(new URL("../docker-compose.macos.yml", import.meta.url), "utf8");
+  const linuxOverlay = await readFile(new URL("../docker-compose.linux.yml", import.meta.url), "utf8");
   const substrate = JSON.parse(await readFile(new URL("./platform-substrate-manifest.json", import.meta.url), "utf8"));
   const capabilities = JSON.parse(await readFile(new URL("../packages/db/data/platform-runtime-capabilities.json", import.meta.url), "utf8")).capabilities;
   const catalog = JSON.parse(await readFile(new URL("./capability-service-catalog.generated.json", import.meta.url), "utf8"));
 
-  const result = checkCapabilityComposeProfiles({ composeSource: compose, substrate, capabilities, catalog });
+  const result = checkCapabilityComposeProfiles({ composeSource: compose, overlaySources: { macos: macosOverlay, linux: linuxOverlay }, substrate, capabilities, catalog });
   assert.equal(result.errors.length, 0, result.errors.join("\n"));
 
   for (const name of ["core", "build", "local-speech", "deep-observability", "external-ai"]) {
@@ -42,6 +44,22 @@ test("resolves_each_fixture_dependency_closure", async () => {
       assert.deepEqual(linux.composeServices, linux.projectedServices, "Linux deep-observability closure");
     }
   }
+  const linuxCore = result.resolveFixture(await loadCapabilityProfileFixture(new URL("./fixtures/capability-profiles/core.env", import.meta.url)), "linux");
+  assert.ok(!linuxCore.composeServices.includes("ollama"), "Linux core must not default-start Ollama");
+  const linuxExternal = result.resolveFixture(await loadCapabilityProfileFixture(new URL("./fixtures/capability-profiles/external-ai-linux.env", import.meta.url)), "linux");
+  assert.ok(linuxExternal.projectedServices.includes("ollama"));
+  assert.deepEqual(linuxExternal.composeServices, linuxExternal.projectedServices);
+});
+
+test("classifies_every_platform_overlay_service", async () => {
+  const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const macos = await readFile(new URL("../docker-compose.macos.yml", import.meta.url), "utf8");
+  const linux = await readFile(new URL("../docker-compose.linux.yml", import.meta.url), "utf8");
+  const substrate = JSON.parse(await readFile(new URL("./platform-substrate-manifest.json", import.meta.url), "utf8"));
+  const result = checkCapabilityComposeProfiles({ composeSource: compose, overlaySources: { macos, linux }, substrate });
+  assert.equal(result.errors.length, 0, result.errors.join("\n"));
+  assert.ok(result.hostServices.linux.has("ollama"));
+  assert.deepEqual(result.hostServices.linux.get("portal").dependsOn, ["portal-init"]);
 });
 
 test("rejects_core_dependency_on_optional_profile", async () => {

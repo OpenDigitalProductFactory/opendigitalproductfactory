@@ -1065,7 +1065,32 @@
           "runtimeKey": "zai-coding"
         }
       ],
-      "services": [],
+      "services": [
+        {
+          "backupPolicy": "excluded-rebuildable",
+          "boundaryReason": "Linux-native in-cluster inference endpoint; provider identity and health remain reconciled through the external AI runtime authority.",
+          "canonicalDataOwner": "none",
+          "capability": "runtime:external-ai",
+          "class": "capability-activated",
+          "defaultRequired": false,
+          "dependsOn": [],
+          "healthSemantics": "compose-healthcheck",
+          "hostPlatforms": [
+            "linux"
+          ],
+          "ports": [
+            "11434:11434"
+          ],
+          "profiles": [
+            "runtime-external-ai"
+          ],
+          "service": "ollama",
+          "targetClassification": "capability-activated",
+          "volumes": [
+            "ollama_data:/root/.ollama"
+          ]
+        }
+      ],
       "workGuards": [
         "task-run:build",
         "task-run:coworker",
@@ -1140,7 +1165,7 @@
       ]
     }
   ],
-  "catalogHash": "9ccc0a3cf2ffdd9a9b2631481656eef8a88584e0a6d4fefd660916671d1e69b8",
+  "catalogHash": "1f0750d173d35c2f899a846f668f6490d223a6827fdac9b5dcc72107df59a322",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

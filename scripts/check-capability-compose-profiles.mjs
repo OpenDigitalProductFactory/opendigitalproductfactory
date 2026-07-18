@@ -27,7 +27,7 @@ export function parseComposeServices(source) {
     if (/^[^\s#][^:]*:/.test(line)) break;
     const serviceMatch = /^  ([a-zA-Z0-9][a-zA-Z0-9_-]*):\s*$/.exec(line);
     if (serviceMatch) {
-      current = { service: serviceMatch[1], profiles: [], dependsOn: [] };
+      current = { service: serviceMatch[1], profiles: [], dependsOn: [], hasProfiles: false, hasDependsOn: false };
       services.set(current.service, current);
       inDependsOn = false;
       continue;
@@ -36,7 +36,8 @@ export function parseComposeServices(source) {
     const propertyMatch = /^    ([a-zA-Z0-9_-]+):(?:\s*(.*))?$/.exec(line);
     if (propertyMatch) {
       inDependsOn = propertyMatch[1] === "depends_on";
-      if (propertyMatch[1] === "profiles") current.profiles = parseInlineList(propertyMatch[2] ?? "");
+      if (propertyMatch[1] === "profiles") { current.profiles = parseInlineList(propertyMatch[2] ?? ""); current.hasProfiles = true; }
+      if (propertyMatch[1] === "depends_on") current.hasDependsOn = true;
       continue;
     }
     if (inDependsOn) {
@@ -46,6 +47,21 @@ export function parseComposeServices(source) {
     }
   }
   return services;
+}
+
+function mergeComposeServices(base, overlay) {
+  const merged = new Map([...base].map(([name, service]) => [name, { ...service, profiles: [...service.profiles], dependsOn: [...service.dependsOn] }]));
+  for (const [name, service] of overlay) {
+    const current = merged.get(name);
+    merged.set(name, current ? {
+      ...current,
+      profiles: service.hasProfiles ? [...service.profiles] : current.profiles,
+      dependsOn: service.hasDependsOn ? [...new Set([...current.dependsOn, ...service.dependsOn])] : current.dependsOn,
+      hasProfiles: current.hasProfiles || service.hasProfiles,
+      hasDependsOn: current.hasDependsOn || service.hasDependsOn,
+    } : { ...service, profiles: [...service.profiles], dependsOn: [...service.dependsOn] });
+  }
+  return merged;
 }
 
 export async function loadCapabilityProfileFixture(url) {
@@ -84,12 +100,17 @@ function selectedComposeServices(services, profiles) {
   return sorted(selected);
 }
 
-export function checkCapabilityComposeProfiles({ composeSource, substrate, capabilities, catalog }) {
+export function checkCapabilityComposeProfiles({ composeSource, overlaySources = {}, substrate, capabilities, catalog }) {
   const services = parseComposeServices(composeSource);
+  const hostServices = {
+    windows: services,
+    macos: mergeComposeServices(services, parseComposeServices(overlaySources.macos ?? "services:\n")),
+    linux: mergeComposeServices(services, parseComposeServices(overlaySources.linux ?? "services:\n")),
+  };
   const errors = [];
   const manifestByName = new Map(substrate.services.map((service) => [service.service, service]));
   for (const record of substrate.services) {
-    const compose = services.get(record.service);
+    const compose = services.get(record.service) ?? record.hostPlatforms.map((host) => hostServices[host]?.get(record.service)).find(Boolean);
     if (!compose) { errors.push(`missing_compose_service:${record.service}`); continue; }
     const capabilityActivated = record.capability !== "runtime:core" && (record.class === "capability-activated" || record.capability === "runtime:build");
     if (capabilityActivated && (compose.profiles.length === 0 || record.defaultRequired)) errors.push(`default_started_optional_service:${record.service}`);
@@ -99,9 +120,9 @@ export function checkCapabilityComposeProfiles({ composeSource, substrate, capab
     if (JSON.stringify(sorted(record.profiles)) !== JSON.stringify(sorted(compose.profiles))) errors.push(`compose_profile_mismatch:${record.service}`);
     if (JSON.stringify(sorted(record.dependsOn)) !== JSON.stringify(sorted(compose.dependsOn))) errors.push(`compose_dependency_mismatch:${record.service}`);
   }
-  for (const name of services.keys()) if (!manifestByName.has(name)) errors.push(`missing_substrate_binding:${name}`);
-  for (const service of services.values()) for (const dependencyName of service.dependsOn) {
-    const dependency = services.get(dependencyName);
+  for (const [host, inventory] of Object.entries(hostServices)) for (const name of inventory.keys()) if (!manifestByName.has(name)) errors.push(`missing_substrate_binding:${host}:${name}`);
+  for (const inventory of Object.values(hostServices)) for (const service of inventory.values()) for (const dependencyName of service.dependsOn) {
+    const dependency = inventory.get(dependencyName);
     if (!dependency || dependency.profiles.length === 0) continue;
     if (service.profiles.length === 0) errors.push(`core_dependency_on_optional_profile:${service.service}:${dependencyName}`);
     for (const profile of service.profiles) if (!dependency.profiles.includes(profile)) {
@@ -109,33 +130,38 @@ export function checkCapabilityComposeProfiles({ composeSource, substrate, capab
     }
   }
 
-  const resolveFixture = (fixture) => {
+  const resolveFixture = (fixture, hostOverride) => {
     if (!capabilities || !catalog) throw new Error("fixture_resolution_requires_catalog_authorities");
     const runtimeCapabilities = withFixtureStates(capabilities, fixture.enabledRuntimeCapabilities);
-    const projection = resolveCapabilityServiceProjection({ substrate, capabilities: runtimeCapabilities, enabledRuntimeCapabilities: fixture.enabledRuntimeCapabilities, hostPlatform: fixture.hostPlatform });
+    const hostPlatform = hostOverride ?? fixture.hostPlatform;
+    const projection = resolveCapabilityServiceProjection({ substrate, capabilities: runtimeCapabilities, enabledRuntimeCapabilities: fixture.enabledRuntimeCapabilities, hostPlatform });
     if (projection.catalogHash !== catalog.catalogHash) throw new Error("stale_capability_service_catalog");
     if (JSON.stringify(projection.composeProfiles) !== JSON.stringify(sorted(fixture.composeProfiles))) throw new Error(`fixture_profile_mismatch:${projection.composeProfiles.join(",")}:${fixture.composeProfiles.join(",")}`);
-    return { composeServices: selectedComposeServices(services, fixture.composeProfiles), projectedServices: sorted(projection.requiredServices) };
+    return { composeServices: selectedComposeServices(hostServices[hostPlatform] ?? services, fixture.composeProfiles), projectedServices: sorted(projection.requiredServices) };
   };
-  return { errors, services, resolveFixture };
+  return { errors: [...new Set(errors)], services, hostServices, resolveFixture };
 }
 
 async function main() {
-  const [composeSource, substrateSource, capabilitiesSource, catalogSource] = await Promise.all([
+  const [composeSource, macosOverlay, linuxOverlay, substrateSource, capabilitiesSource, catalogSource] = await Promise.all([
     readFile(new URL("../docker-compose.yml", import.meta.url), "utf8"),
+    readFile(new URL("../docker-compose.macos.yml", import.meta.url), "utf8"),
+    readFile(new URL("../docker-compose.linux.yml", import.meta.url), "utf8"),
     readFile(new URL("./platform-substrate-manifest.json", import.meta.url), "utf8"),
     readFile(new URL("../packages/db/data/platform-runtime-capabilities.json", import.meta.url), "utf8"),
     readFile(new URL("./capability-service-catalog.generated.json", import.meta.url), "utf8"),
   ]);
-  const result = checkCapabilityComposeProfiles({ composeSource, substrate: JSON.parse(substrateSource), capabilities: JSON.parse(capabilitiesSource).capabilities, catalog: JSON.parse(catalogSource) });
+  const result = checkCapabilityComposeProfiles({ composeSource, overlaySources: { macos: macosOverlay, linux: linuxOverlay }, substrate: JSON.parse(substrateSource), capabilities: JSON.parse(capabilitiesSource).capabilities, catalog: JSON.parse(catalogSource) });
   for (const name of ["core", "build", "local-speech", "deep-observability", "external-ai"]) {
     const fixture = await loadCapabilityProfileFixture(new URL(`./fixtures/capability-profiles/${name}.env`, import.meta.url));
     const rendered = result.resolveFixture(fixture);
     if (JSON.stringify(rendered.composeServices) !== JSON.stringify(rendered.projectedServices)) result.errors.push(`fixture_service_closure_mismatch:${name}:${rendered.composeServices.join(",")}:${rendered.projectedServices.join(",")}`);
   }
-  const linuxFixture = await loadCapabilityProfileFixture(new URL("./fixtures/capability-profiles/deep-observability-linux.env", import.meta.url));
-  const linuxRendered = result.resolveFixture(linuxFixture);
-  if (JSON.stringify(linuxRendered.composeServices) !== JSON.stringify(linuxRendered.projectedServices)) result.errors.push(`fixture_service_closure_mismatch:deep-observability-linux:${linuxRendered.composeServices.join(",")}:${linuxRendered.projectedServices.join(",")}`);
+  for (const name of ["deep-observability-linux", "external-ai-linux"]) {
+    const linuxFixture = await loadCapabilityProfileFixture(new URL(`./fixtures/capability-profiles/${name}.env`, import.meta.url));
+    const linuxRendered = result.resolveFixture(linuxFixture);
+    if (JSON.stringify(linuxRendered.composeServices) !== JSON.stringify(linuxRendered.projectedServices)) result.errors.push(`fixture_service_closure_mismatch:${name}:${linuxRendered.composeServices.join(",")}:${linuxRendered.projectedServices.join(",")}`);
+  }
   if (result.errors.length) throw new Error(result.errors.join("\n"));
   process.stdout.write("capability_compose_profiles_ok\n");
 }

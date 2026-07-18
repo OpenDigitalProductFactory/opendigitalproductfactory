@@ -16,6 +16,8 @@ const scriptRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaults = (repoRoot) => ({
   manifestPath: resolve(repoRoot,"scripts/platform-substrate-manifest.json"),
   composePath: resolve(repoRoot,"docker-compose.yml"),
+  macosComposePath: resolve(repoRoot,"docker-compose.macos.yml"),
+  linuxComposePath: resolve(repoRoot,"docker-compose.linux.yml"),
   providersPath: resolve(repoRoot,"packages/db/data/providers-registry.json"),
   baselinePath: resolve(repoRoot,"scripts/platform-substrate-baseline.json"),
   capabilitiesPath: resolve(repoRoot,"packages/db/data/platform-runtime-capabilities.json"),
@@ -55,13 +57,15 @@ export async function runSubstrateMeasurement(options={}) {
   const repoRoot=resolve(options.repoRoot ?? scriptRoot);
   const paths={...defaults(repoRoot),...Object.fromEntries(Object.entries(options).filter(([key])=>key.endsWith("Path")))};
   try {
-    const [manifest,composeText,providers,capabilitySeed]=await Promise.all([
+    const [manifest,composeText,macosComposeText,linuxComposeText,providers,capabilitySeed]=await Promise.all([
       json(paths.manifestPath,"substrate manifest"),
       readFile(paths.composePath,"utf8"),
+      readFile(paths.macosComposePath,"utf8"),
+      readFile(paths.linuxComposePath,"utf8"),
       json(paths.providersPath,"provider inventory"),
       json(paths.capabilitiesPath,"runtime capability seed"),
     ]);
-    const errors=validateSubstrateManifest(manifest,{composeText,providers,capabilities:capabilitySeed.capabilities});
+    const errors=validateSubstrateManifest(manifest,{composeText,overlayComposeTexts:[macosComposeText,linuxComposeText],providers,capabilities:capabilitySeed.capabilities});
     if (errors.length) throw new Error(`Invalid substrate manifest:\n${errors.map((e)=>`- ${e}`).join("\n")}`);
     const provenance={generatedAt:options.generatedAt ?? new Date().toISOString(),gitSha:options.gitSha ?? sha(repoRoot)};
     const measurements=await collectRepositoryMeasurements({repoRoot,manifest,...provenance});

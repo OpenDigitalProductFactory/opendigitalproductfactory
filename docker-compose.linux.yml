@@ -34,6 +34,7 @@ services:
   # CPU-only by default; customers with GPU passthrough can add
   # device reservations.
   ollama:
+    profiles: ["runtime-external-ai"]
     image: ollama/ollama:latest
     restart: unless-stopped
     ports:
@@ -56,9 +57,6 @@ services:
       # Management API for pull/delete/tags — distinct from the OpenAI-compatible
       # inference endpoint above. Used by the portal's Ollama provider routes.
       OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://ollama:11434}
-    depends_on:
-      ollama:
-        condition: service_healthy
 
   sandbox:
     environment:
