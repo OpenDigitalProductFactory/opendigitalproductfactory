@@ -133,6 +133,19 @@ export type RuntimeTransitionReconcileRow = {
   envelope: RuntimeTransitionEnvelope | null; envelopeSignature: string | null;
 };
 
+type InstallStateIdentity = { schemaVersion?: unknown; installerVersion?: unknown; platform?: unknown; arch?: unknown; enabledRuntimeCapabilities?: unknown; capabilityCatalogHash?: unknown; capabilityStateVersion?: unknown };
+export function classifyRuntimeInstallState(value: InstallStateIdentity, row: RuntimeTransitionReconcileRow): "previous" | "desired" | "unknown" {
+  if (!Number.isInteger(value.schemaVersion) || (value.schemaVersion as number) < 1 || typeof value.installerVersion !== "string" ||
+      !["darwin", "linux", "win32"].includes(String(value.platform)) || !["arm64", "amd64", "x86_64"].includes(String(value.arch)) ||
+      !Array.isArray(value.enabledRuntimeCapabilities) || value.enabledRuntimeCapabilities.some((key) => typeof key !== "string" || !/^runtime:[a-z0-9-]+$/.test(key)) ||
+      JSON.stringify(value.enabledRuntimeCapabilities) !== JSON.stringify([...new Set(value.enabledRuntimeCapabilities)].sort()) ||
+      value.capabilityCatalogHash !== row.catalogHash || typeof value.capabilityStateVersion !== "string") return "unknown";
+  const keys = JSON.stringify(value.enabledRuntimeCapabilities);
+  if (value.capabilityStateVersion === row.previousStateHash && keys === JSON.stringify(row.previousKeys)) return "previous";
+  if (value.capabilityStateVersion === row.desiredStateHash && keys === JSON.stringify(row.desiredKeys)) return "desired";
+  return "unknown";
+}
+
 /** Startup recovery runs before mutation is enabled and converges every nonterminal row. */
 export async function reconcileRuntimeCapabilityTransitions(deps: {
   listActive(): Promise<RuntimeTransitionReconcileRow[]>;
@@ -144,7 +157,7 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
   compensate(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
   /** Durable host journal distinguishes a clean previous state from an apply
    * that may have crossed the filesystem/Compose boundary before receipt. */
-  isHostMutationStarted?(row: RuntimeTransitionReconcileRow): Promise<boolean>;
+  inspectHostInstallState?(row: RuntimeTransitionReconcileRow): Promise<"previous" | "desired" | "unknown">;
   markCleanPrevious?(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
   protocolSecret: string;
   now?: () => number;
@@ -170,9 +183,16 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
       if (Date.parse(row.envelope.expiresAt) >= now && Date.parse(row.envelope.issuedAt) <= now + 30_000) {
         await deps.relaunch(row);
       } else {
-        if (deps.isHostMutationStarted && deps.markCleanPrevious && !(await deps.isHostMutationStarted(row))) {
-          await deps.markCleanPrevious(row, "host_receipt_absent_or_expired_before_mutation");
-          continue;
+        if (deps.inspectHostInstallState) {
+          const hostState = await deps.inspectHostInstallState(row);
+          if (hostState === "previous" && deps.markCleanPrevious) {
+            await deps.markCleanPrevious(row, "host_receipt_absent_or_expired_before_mutation");
+            continue;
+          }
+          if (hostState === "unknown") {
+            await deps.markRecoveryRequired(row, "runtime_transition_install_state_unknown");
+            continue;
+          }
         }
         try {
           await deps.compensate(row, "host_receipt_absent_or_expired");

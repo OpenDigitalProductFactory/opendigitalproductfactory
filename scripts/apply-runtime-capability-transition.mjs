@@ -143,7 +143,7 @@ if (!journal) {
 if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "prepared") process.exit(86);
 if (journal.phase === "prepared") {
   if (!currentIsNext) await atomicJson(statePath, next);
-  if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "state-mutated") process.exit(86);
+  if (["state-mutated", "install-state-renamed-before-journal"].includes(process.env.DPF_TEST_CRASH_AFTER_PHASE ?? "")) process.exit(86);
   const { signature: _preparedSignature, ...preparedJournal } = journal;
   journal = { ...preparedJournal, phase: "state-written" };
   journal.signature = createHmac("sha256", secret).update(JSON.stringify(stable(journal))).digest("hex");

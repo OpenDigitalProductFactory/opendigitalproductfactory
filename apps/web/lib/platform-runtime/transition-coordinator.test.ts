@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { coordinateRuntimeCapabilityTransition, computeCapabilityStateVersion, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions } from "./transition-coordinator";
+import { classifyRuntimeInstallState, coordinateRuntimeCapabilityTransition, computeCapabilityStateVersion, createPrismaRuntimeTransitionReceipts, reconcileRuntimeCapabilityTransitions } from "./transition-coordinator";
 import type { RuntimeCapabilityCoordinatorDeps, RuntimeCapabilityTransitionReceipts } from "./transition-coordinator";
 import { signTransitionPayload } from "./transition-protocol";
 import { requiredRuntimeServicesAreHealthy } from "./runtime-capability-executor";
@@ -43,6 +43,13 @@ function deps(overrides: Partial<RuntimeCapabilityCoordinatorDeps> = {}): Runtim
 }
 
 describe("runtime capability transition coordinator", () => {
+  it("classifies the persisted state by schema identity and hashes, never journal phase", () => {
+    const row = { ...request, ...persistedEnvelope, previousStateHash: "before", desiredStateHash: "after", previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(), status: "pending", envelope: persistedEnvelope, envelopeSignature: "x" };
+    const base = { schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", capabilityCatalogHash: row.catalogHash };
+    expect(classifyRuntimeInstallState({ ...base, enabledRuntimeCapabilities: row.previousKeys, capabilityStateVersion: "before" }, row)).toBe("previous");
+    expect(classifyRuntimeInstallState({ ...base, enabledRuntimeCapabilities: row.desiredKeys, capabilityStateVersion: "after" }, row)).toBe("desired");
+    expect(classifyRuntimeInstallState({ ...base, enabledRuntimeCapabilities: row.desiredKeys, capabilityStateVersion: "neither" }, row)).toBe("unknown");
+  });
   it("requires Compose healthchecks to report healthy, not merely running", () => {
     expect(requiredRuntimeServicesAreHealthy(["portal", "postgres"], ["portal", "postgres"], { portal: "healthy", postgres: "healthy" })).toBe(true);
     expect(requiredRuntimeServicesAreHealthy(["portal", "postgres"], ["portal", "postgres"], { portal: "starting", postgres: "healthy" })).toBe(false);
@@ -63,10 +70,31 @@ describe("runtime capability transition coordinator", () => {
     const envelope = { ...persistedEnvelope, issuedAt: new Date(1_000).toISOString(), expiresAt: new Date(2_000).toISOString() };
     const row = { ...request, ...envelope, previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(1_000), status: "pending", envelope, envelopeSignature: signTransitionPayload(envelope, secret) };
     const clean = vi.fn(); const compensate = vi.fn(); const recovery = vi.fn();
-    await reconcileRuntimeCapabilityTransitions({ listActive: async () => [row], readHostReceipt: async () => null, completeFromReceipt: vi.fn(), classifyTerminalReceipt: vi.fn(), relaunch: vi.fn(), compensate, markRecoveryRequired: recovery, protocolSecret: secret, now: () => 3_000, isHostMutationStarted: async () => false, markCleanPrevious: clean });
+    await reconcileRuntimeCapabilityTransitions({ listActive: async () => [row], readHostReceipt: async () => null, completeFromReceipt: vi.fn(), classifyTerminalReceipt: vi.fn(), relaunch: vi.fn(), compensate, markRecoveryRequired: recovery, protocolSecret: secret, now: () => 3_000, inspectHostInstallState: async () => "previous", markCleanPrevious: clean });
     expect(clean).toHaveBeenCalledWith(row, "host_receipt_absent_or_expired_before_mutation");
     expect(compensate).not.toHaveBeenCalled();
     expect(recovery).not.toHaveBeenCalled();
+  });
+
+  it("compensates when install-state reached desired while the journal still says prepared", async () => {
+    const secret = "x".repeat(32);
+    const envelope = { ...persistedEnvelope, issuedAt: new Date(1_000).toISOString(), expiresAt: new Date(2_000).toISOString() };
+    const row = { ...request, ...envelope, previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(1_000), status: "pending", envelope, envelopeSignature: signTransitionPayload(envelope, secret) };
+    const clean = vi.fn(); const compensate = vi.fn(); const recovery = vi.fn();
+    await reconcileRuntimeCapabilityTransitions({ listActive: async () => [row], readHostReceipt: async () => null, completeFromReceipt: vi.fn(), classifyTerminalReceipt: vi.fn(), relaunch: vi.fn(), compensate, markRecoveryRequired: recovery, protocolSecret: secret, now: () => 3_000, inspectHostInstallState: async () => "desired", markCleanPrevious: clean });
+    expect(compensate).toHaveBeenCalledWith(row, "host_receipt_absent_or_expired");
+    expect(clean).not.toHaveBeenCalled();
+    expect(recovery).not.toHaveBeenCalled();
+  });
+
+  it("requires recovery when persisted install-state matches neither snapshot", async () => {
+    const secret = "x".repeat(32);
+    const envelope = { ...persistedEnvelope, issuedAt: new Date(1_000).toISOString(), expiresAt: new Date(2_000).toISOString() };
+    const row = { ...request, ...envelope, previousStates: request.previousStates, desiredStates: request.desiredStates, createdAt: new Date(1_000), status: "pending", envelope, envelopeSignature: signTransitionPayload(envelope, secret) };
+    const recovery = vi.fn(); const compensate = vi.fn();
+    await reconcileRuntimeCapabilityTransitions({ listActive: async () => [row], readHostReceipt: async () => null, completeFromReceipt: vi.fn(), classifyTerminalReceipt: vi.fn(), relaunch: vi.fn(), compensate, markRecoveryRequired: recovery, protocolSecret: secret, now: () => 3_000, inspectHostInstallState: async () => "unknown", markCleanPrevious: vi.fn() });
+    expect(recovery).toHaveBeenCalledWith(row, "runtime_transition_install_state_unknown");
+    expect(compensate).not.toHaveBeenCalled();
   });
 
   it("marks legacy nullable-envelope rows recovery_required without relaunch", async () => {

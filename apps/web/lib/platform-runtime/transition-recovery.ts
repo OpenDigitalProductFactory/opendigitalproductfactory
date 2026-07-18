@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import { readFile } from "node:fs/promises";
-import { reconcileRuntimeCapabilityTransitions, type RuntimeTransitionReconcileRow } from "./transition-coordinator";
+import { classifyRuntimeInstallState, reconcileRuntimeCapabilityTransitions, type RuntimeTransitionReconcileRow } from "./transition-coordinator";
 import { signTransitionPayload, verifyHistoricalTransitionReceipt, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
 
@@ -18,7 +18,7 @@ export async function assertRuntimeCapabilityTransitionAdmission(): Promise<void
 }
 
 const receiptPath = (id: string) => `/dpf-state/runtime-capability-transitions/${id}.json`;
-const journalPath = (id: string) => `/dpf-state/runtime-capability-transitions/${id}.journal.json`;
+type InstallStateIdentity = Parameters<typeof classifyRuntimeInstallState>[0];
 async function readReceipt(id: string): Promise<RuntimeTransitionReceipt | null> {
   try { return JSON.parse(await readFile(receiptPath(id), "utf8")) as RuntimeTransitionReceipt; }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
@@ -47,6 +47,13 @@ export async function createProductionRuntimeTransitionHost() {
   return {
     protocolSecret,
     readReceipt,
+    reconcileAuthority: async (activeTransitionIds: string[]) => {
+      const hostInstallPath = process.env.DPF_HOST_INSTALL_PATH;
+      const stateDirHostPath = process.env.DPF_STATE_DIR_HOST;
+      if (!hostInstallPath || !stateDirHostPath) throw new Error("runtime_transition_host_configuration_missing");
+      const result = await runPromoter({ hostInstallPath, stateDirHostPath, targetSha: process.env.DEPLOYED_SHA ?? "runtime-capability-transition", backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`, runtimeTransitionAuthorityOperation: "reconcile", runtimeTransitionActiveIds: activeTransitionIds, containerName: "dpf-promoter-authority-reconcile", timeoutMs: 60_000 });
+      if (result.exitCode !== 0) throw new Error("runtime_transition_authority_reconcile_failed");
+    },
     relaunch: async (row: RuntimeTransitionReconcileRow) => {
       if (!row.envelope || !row.envelopeSignature) throw new Error("transition_envelope_identity_missing");
       const result = await runPromoter(promoterParams(row, row.envelope, row.envelopeSignature));
@@ -78,6 +85,7 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
   relaunch(row: RuntimeTransitionReconcileRow): Promise<void>;
   compensate(row: RuntimeTransitionReconcileRow, reason: string): Promise<void>;
   protocolSecret: string;
+  reconcileAuthority?(activeTransitionIds: string[]): Promise<void>;
 }): Promise<void> {
   admission = "reconciling";
   let recoveryRequired = false;
@@ -86,18 +94,22 @@ export async function reconcileRuntimeCapabilityTransitionsOnStartup(host: {
     orderBy: { createdAt: "asc" },
     select: { transitionId: true, status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true, previousStates: true, desiredStates: true, envelope: true, envelopeSignature: true, createdAt: true },
   }) as unknown as Promise<RuntimeTransitionReconcileRow[]>;
+  const startupRows = await listActive();
+  await host.reconcileAuthority?.(startupRows.map((row) => row.transitionId));
   await reconcileRuntimeCapabilityTransitions({
-    listActive,
+    listActive: async () => startupRows,
     readHostReceipt: host.readReceipt,
     protocolSecret: host.protocolSecret,
     relaunch: host.relaunch,
     compensate: host.compensate,
-    isHostMutationStarted: async (row) => {
+    inspectHostInstallState: async (row) => {
       try {
-        const journal = JSON.parse(await readFile(journalPath(row.transitionId), "utf8")) as { phase?: string };
-        return journal.phase === "state-written" || journal.phase === "runtime-reconciled";
+        // Journal phase is deliberately ignored. The process can die after
+        // rename(install-state) and before advancing a prepared journal.
+        const state = JSON.parse(await readFile("/dpf-state/install-state.json", "utf8")) as InstallStateIdentity;
+        return classifyRuntimeInstallState(state, row);
       }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+      catch { return "unknown"; }
     },
     markCleanPrevious: async (row, reason) => {
       await prisma.$transaction(async (tx) => {

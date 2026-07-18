@@ -39,7 +39,7 @@ async function validTransition(dir, health = "healthy") {
   return { value, signature, catalogPath: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), desired, env: { DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf", DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]) } };
 }
 
-for (const [crashPoint, durablePhase] of [["prepared", "prepared"], ["state-mutated", "prepared"], ["state-written", "state-written"], ["runtime-mutated", "state-written"], ["runtime-reconciled", "runtime-reconciled"]]) test(`recovers atomically from a crash after ${crashPoint}`, async () => {
+for (const [crashPoint, durablePhase] of [["prepared", "prepared"], ["install-state-renamed-before-journal", "prepared"], ["state-written", "state-written"], ["runtime-mutated", "state-written"], ["runtime-reconciled", "runtime-reconciled"]]) test(`recovers atomically from a crash after ${crashPoint}`, async () => {
     const dir = await mkdtemp(join(tmpdir(), "dpf-transition-crash-"));
     const fixture = await validTransition(dir);
     const crashed = run({ ...fixture.env, DPF_TEST_CRASH_AFTER_PHASE: crashPoint });
