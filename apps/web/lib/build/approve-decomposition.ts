@@ -28,9 +28,13 @@
 // violation per the invariant module's discipline.
 
 import { prisma } from "@dpf/db";
-import { generateBuildId } from "@/lib/explore/feature-build-types";
+import { generateBuildId, normalizeHappyPathState } from "@/lib/explore/feature-build-types";
 import type { BuildDesignDoc, ReviewResult } from "@/lib/explore/feature-build-types";
 import { isPlanReviewOscillating } from "@/lib/build/plan-oscillation-decomposition";
+import {
+  applyChildIntakeToPlan,
+  buildDecompositionChildIntakePatch,
+} from "./decomposition-child-intake";
 
 import {
   candidateToChildDesignDocs,
@@ -172,6 +176,7 @@ export async function approveDecomposition(
       designDoc: true,
       designReview: true,
       planReview: true,
+      plan: true,
       parentEpicId: true,
       originatingBacklogItemId: true,
       digitalProductId: true,
@@ -340,12 +345,31 @@ export async function approveDecomposition(
       },
     });
 
+    // Children go straight to `plan`, so they never pass through the ideate
+    // reviewDesignDoc step that normally populates plan.happyPathState.intake.
+    // Without it they hard-block at the plan→build gate ("Intake is incomplete")
+    // and churn forever (BI-FF8ABFCB). Derive each child's intake from the
+    // parent build's intake (same epic/backlog/taxonomy, child-specific goal).
+    const parentIntake = normalizeHappyPathState(
+      (build.plan as Record<string, unknown> | null)?.["happyPathState"],
+    ).intake;
+
     // Create children with real epic.id.
     const orderToRealBuildId = new Map<number, string>();
     const orderToRealRowId = new Map<number, string>();
     for (let i = 0; i < childDocs.length; i++) {
       const child = childDocs[i]!;
       const childBuildLogical = childBuildLogicalIds[i]!;
+      const childPlan = applyChildIntakeToPlan(
+        null,
+        buildDecompositionChildIntakePatch({
+          parentIntake,
+          epicSemanticId: createdEpic.epicId,
+          childTitle: child.title,
+          childOriginatingBacklogItemId: build.originatingBacklogItemId ?? null,
+          childBuildId: childBuildLogical,
+        }),
+      );
       const created = await tx.featureBuild.create({
         data: {
           buildId: childBuildLogical,
@@ -355,6 +379,7 @@ export async function approveDecomposition(
           childOrder: child.childOrder,
           designDoc: child.designDoc as never,
           designReview: review as never,
+          plan: childPlan as never,
           createdById: args.userId,
           ...(build.originatingBacklogItemId
             ? { originatingBacklogItemId: build.originatingBacklogItemId }
