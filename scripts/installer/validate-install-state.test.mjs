@@ -71,6 +71,46 @@ test("rejects unknown version 1 properties", async () => {
   assert.match(result.errors.join("\n"), /\$\.surprise: additionalProperties/);
 });
 
+const legacyAgentToolchain = {
+  appliedAt: "2026-06-26T12:00:00.000Z",
+  dpfPlatformVersion: "2026.06.26",
+  superpowersVersion: null,
+  claudeCodeWired: true,
+  codexWired: true,
+  grokWired: false,
+  memorySeededAt: null,
+  mcpReadiness: { ok: true, toolCount: 12, observedAt: "2026-06-26T12:00:00.000Z" },
+  smokeTest: { result: "passed", kernelPrincipleObserved: "never-fabricate", transcript: "ok" },
+  readinessState: "ready",
+};
+
+test("rejects an empty v1 agentToolchain readiness discriminator", async () => {
+  const result = await validateInstallState({
+    schemaVersion: 1,
+    installerVersion: "2026.06.26",
+    platform: "linux",
+    arch: "amd64",
+    agentToolchain: { ...legacyAgentToolchain, mcpReadiness: {} },
+  });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /mcpReadiness: oneOf/);
+});
+
+test("rejects contradictory v1 agentToolchain smoke-test variants", async () => {
+  const result = await validateInstallState({
+    schemaVersion: 1,
+    installerVersion: "2026.06.26",
+    platform: "linux",
+    arch: "amd64",
+    agentToolchain: {
+      ...legacyAgentToolchain,
+      smokeTest: { result: "passed", kernelPrincipleObserved: "never-fabricate", transcript: "ok", reason: "failed" },
+    },
+  });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join("\n"), /smokeTest: oneOf/);
+});
+
 test("requires schema-version increments and migration edges for required-field changes", () => {
   for (let version = 2; version <= currentSchemaVersion; version += 1) {
     const previous = new Set(schemasByVersion.get(version - 1).required ?? []);
