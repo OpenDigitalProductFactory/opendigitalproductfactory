@@ -37,6 +37,8 @@ function fakeDb(configured: { archetypeId: string; name: string } | null) {
       ],
     },
     storefrontConfig: { findFirst: async () => (configured ? { archetype: configured } : null) },
+    // Org is US → the twin renders USD (from OrgSettings), not the legacy GBP bill row.
+    orgSettings: { findFirst: async () => ({ baseCurrency: "USD", locale: "en-US", countryCode: "US" }) },
     bill: { findMany: async () => [{ amountDue: 500, dueDate: NOW, status: "open", currency: "GBP" }] },
     taxObligationPeriod: { findMany: async () => [] },
     obligation: { findMany: async () => [] },
@@ -107,8 +109,8 @@ describe("loadWorkspaceTwinPresentation — live overlay", () => {
     expect(result!.demo).toBe(false);
     // live presence carries the real workforce (a human + an AI coworker)
     expect(result!.snapshot.presence.some((p) => p.kind === "ai")).toBe(true);
-    // real finance flows through
-    expect(result!.snapshot.utility.find((m) => m.key === "bills")!.value).toContain("£500");
+    // real finance flows through, rendered in the ORG currency (USD), not the GBP bill row
+    expect(result!.snapshot.utility.find((m) => m.key === "bills")!.value).toContain("$500");
     // home-mount condensing still applies to the live snapshot
     expect(result!.snapshot.cog).toBeUndefined();
     expect(result!.snapshot.quests).toEqual([]);

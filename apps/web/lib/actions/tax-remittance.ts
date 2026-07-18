@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { applyOrgCountry } from "@/lib/actions/currency";
 import { auth } from "@/lib/auth";
 import { encryptSecret } from "@/lib/govern/credential-crypto";
 import { can } from "@/lib/permissions";
@@ -63,7 +64,6 @@ async function requireManageFinance() {
   ) {
     throw new Error("Unauthorized");
   }
-
   return user;
 }
 
@@ -71,7 +71,6 @@ async function requireOrganization() {
   const organization = await prisma.organization.findFirst({
     orderBy: { createdAt: "asc" },
   });
-
   if (!organization) {
     throw new Error("No organization configured");
   }
@@ -121,6 +120,7 @@ export async function updateOrganizationTaxProfile(input: UpdateOrganizationTaxP
       notes: nullableString(parsed.notes),
     },
   });
+  await applyOrgCountry(updated.homeCountryCode).catch(() => null); // EP-ORG-LOCALE-CURRENCY: sync org currency/locale from the captured home country (non-fatal)
 
   const registrations = await prisma.taxRegistration.findMany({
     where: { organizationTaxProfileId: profile.id },

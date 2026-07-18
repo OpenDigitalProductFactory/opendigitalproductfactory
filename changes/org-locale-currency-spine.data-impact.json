@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "EP-ORG-LOCALE-CURRENCY / BI-0530BB74. Adds the org locale/currency spine (OrgSettings.locale + countryCode) and retires the British-by-default column defaults (currency GBP->USD on ~24 finance/commerce models; StorefrontConfig.timezone Europe/London->UTC). Default-only changes add NO new persistent data and never re-denominate existing rows; the only new persistent fields are the two OrgSettings columns below.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "OrgSettings",
+      "lifecycleDisposition": "retain-for-org-lifetime",
+      "fields": [
+        {
+          "name": "locale",
+          "resolution": "not-applicable",
+          "reason": "Operational display preference (BCP-47 locale) for money/date formatting; not personal data and not tied to a data subject.",
+          "provenance": "Derived at onboarding from the operator's home country (OrganizationTaxProfile.homeCountryCode) or set explicitly by the operator; default en-US.",
+          "flags": []
+        },
+        {
+          "name": "countryCode",
+          "resolution": "not-applicable",
+          "reason": "The organisation's own home country (ISO-3166 alpha-2), business-configuration data used to derive currency/locale; not a data subject's personal attribute.",
+          "provenance": "Synced from the operator-provided OrganizationTaxProfile.homeCountryCode at onboarding via applyOrgCountry(); nullable until captured.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
