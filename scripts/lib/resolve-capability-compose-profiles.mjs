@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { governCapabilityComposeEnvironment } from "./govern-capability-compose-args.mjs";
 import { computeCapabilityStateVersion } from "./capability-state-hash.mjs";
+import { updateInstallState } from "../installer/install-state-transaction.mjs";
 
 const HOSTS = new Set(["windows", "macos", "linux"]);
 const OVERLAYS = new Set(["promote", "dev", "integration-test", "linux-monitoring"]);
@@ -110,17 +111,17 @@ async function main() {
     const statePath = resolve(args.statePath);
     const [catalog, state] = await Promise.all([
       readFile(catalogPath, "utf8").then(JSON.parse),
-      readFile(statePath, "utf8").then(JSON.parse),
+      readFile(statePath, "utf8").then((text) => JSON.parse(text.replace(/^\uFEFF/, ""))),
     ]);
     if (!args.hostPlatform) {
       args.hostPlatform = state.platform === "win32" ? "windows" : state.platform === "darwin" ? "macos" : state.platform;
     }
-    const projection = resolveCapabilityComposeProfiles({ catalog, state, ...args });
+    let projection = resolveCapabilityComposeProfiles({ catalog, state, ...args });
     if (args.write) {
-      const updated = { ...state, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, capabilityCatalogHash: projection.capabilityCatalogHash, capabilityStateVersion: projection.capabilityStateVersion };
-      const temporary = `${statePath}.tmp`;
-      await writeFile(temporary, `${JSON.stringify(updated, null, 2)}\n`, { mode: 0o600 });
-      await rename(temporary, statePath);
+      await updateInstallState(statePath, current => {
+        projection = resolveCapabilityComposeProfiles({ catalog, state: current, ...args });
+        return { ...current, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, capabilityCatalogHash: projection.capabilityCatalogHash, capabilityStateVersion: projection.capabilityStateVersion };
+      });
     }
     process.stdout.write(`${JSON.stringify(projection)}\n`);
   } catch (error) {

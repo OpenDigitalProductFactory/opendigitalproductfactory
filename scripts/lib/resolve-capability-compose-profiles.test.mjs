@@ -87,7 +87,7 @@ test("a previous-release state migrates to the documented default-start compatib
 });
 
 test("a fresh initialized state migrates to the core-only capability closure", async () => {
-  const result = await run({ schemaVersion: 1, enabledRuntimeCapabilities: [] }, "--host", "linux", "--migrate", "--write");
+  const result = await run({ schemaVersion: 1, installerVersion: "fresh", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: [] }, "--host", "linux", "--migrate", "--write");
   assert.equal(result.status, 0, result.stderr);
   const resolved = JSON.parse(result.stdout);
   assert.deepEqual(resolved.enabledRuntimeCapabilities, ["runtime:core"]);
@@ -99,7 +99,7 @@ test("a fresh initialized state migrates to the core-only capability closure", a
 });
 
 test("migration atomically persists the resolved snapshot for restart and autostart", async () => {
-  const migrated = await run({ schemaVersion: 1, installerVersion: "previous" }, "--host", "windows", "--migrate", "--write");
+  const migrated = await run({ schemaVersion: 1, installerVersion: "previous", platform: "win32", arch: "amd64" }, "--host", "windows", "--migrate", "--write");
   assert.equal(migrated.status, 0, migrated.stderr);
   const stored = JSON.parse(await readFile(migrated.statePath, "utf8"));
   const projection = JSON.parse(migrated.stdout);
@@ -109,6 +109,13 @@ test("migration atomically persists the resolved snapshot for restart and autost
   const restart = await run(stored, "--host", "windows");
   assert.equal(restart.status, 0, restart.stderr);
   assert.deepEqual(JSON.parse(restart.stdout), projection);
+});
+
+test("write mode delegates to the canonical install-state transaction", async () => {
+  const source = await readFile(adapter, "utf8");
+  assert.match(source, /updateInstallState/);
+  assert.doesNotMatch(source, /`\$\{statePath\}\.tmp`/);
+  assert.doesNotMatch(source, /rename\(temporary, statePath\)/);
 });
 
 test("special lifecycle profiles remain overlays and compatibility aliases resolve canonical closures", async () => {

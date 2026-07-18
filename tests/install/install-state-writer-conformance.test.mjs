@@ -56,6 +56,23 @@ test("Node Bash and PowerShell repeatedly preserve every owned property without 
   for (let round = 0; round < 4; round++) await runMixedRace();
 });
 
+test("capability projection reprojects under the shared lock without losing concurrent fields", { timeout: 120000 }, async () => {
+  const adapter = join(repo, "scripts/lib/resolve-capability-compose-profiles.mjs");
+  const node = join(repo, "scripts/installer/install-state-transaction.mjs");
+  for (let round = 0; round < 8; round++) {
+    const dir = await mkdtemp(join(tmpdir(), "dpf-capability-writer-race-"));
+    const statePath = join(dir, "install-state.json");
+    await writeFile(statePath, '{"schemaVersion":1,"installerVersion":"seed","platform":"win32","arch":"amd64"}\n');
+    await Promise.all([
+      run(process.execPath, [adapter, "--state", statePath, "--host", "windows", "--migrate", "--write"], {}),
+      run(process.execPath, [node, "set", "--state", statePath, "--key", "installerVersion", "--value", JSON.stringify(`concurrent-${round}`)], {}),
+    ]);
+    const state = JSON.parse(await readFile(statePath, "utf8"));
+    assert.equal(state.installerVersion, `concurrent-${round}`);
+    assert.equal(typeof state.capabilityStateVersion, "string");
+  }
+});
+
 test("Node recovers an abandoned Bash-format lock and Bash recovers a Node-format lock", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-lock-interop-")); const statePath = join(dir, "install-state.json"); const lockPath = `${statePath}.lock`;
   await writeFile(statePath, '{"schemaVersion":2,"installerVersion":"seed","platform":"linux","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","capabilityStateVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n');
