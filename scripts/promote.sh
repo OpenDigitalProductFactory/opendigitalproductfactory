@@ -261,6 +261,7 @@ if [[ $_dry_run -eq 0 ]]; then
       --recovery-path "$_capability_recovery" \
       --write >/dev/null
   fi
+  [[ "${DPF_PROMOTE_TEST_FAIL_AT:-}" != "build" ]] || { printf 'error: injected post-migration build failure\n' >&2; exit 91; }
 fi
 
 # Real platform version from the source's git release tags, baked into the new
@@ -417,6 +418,7 @@ fi
 # SHA of the code it is running at /api/health/sha.
 emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
+  [[ "${DPF_PROMOTE_TEST_FAIL_AT:-}" != "swap" ]] || { printf 'error: injected post-migration swap failure\n' >&2; exit 92; }
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" up -d --no-deps --force-recreate portal
 fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
@@ -452,6 +454,7 @@ fi
 # Wait for the recreated portal to report healthy (it takes time to boot).
 emit_step health
 if [[ $_dry_run -eq 0 ]]; then
+  [[ "${DPF_PROMOTE_TEST_FAIL_AT:-}" != "health" ]] || { printf 'error: injected post-migration health failure\n' >&2; exit 93; }
   _healthy=0
   for _i in $(seq 1 60); do
     if curl -fsS "$PROMOTE_HEALTH_URL" >/dev/null 2>&1; then _healthy=1; break; fi

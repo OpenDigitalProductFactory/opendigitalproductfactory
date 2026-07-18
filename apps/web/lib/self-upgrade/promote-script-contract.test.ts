@@ -204,6 +204,12 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       expect(scriptSource).toContain('--recovery-path "$_capability_recovery"');
     });
 
+    it("provides deterministic post-migration build, swap, and health fault boundaries", () => {
+      const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+      for (const stage of ["build", "swap", "health"]) expect(source).toContain(`DPF_PROMOTE_TEST_FAIL_AT:-}\" != \"${stage}`);
+      expect(source).toContain("_restore_capability_snapshot");
+    });
+
     it("emits docker-build step", () => {
       expect(dryRunResult.stdout).toContain("step=docker-build");
     });
