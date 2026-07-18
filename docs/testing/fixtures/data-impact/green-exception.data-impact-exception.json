@@ -1,0 +1,9 @@
+{
+  "scope": "projection:legacy-report-cache",
+  "approver": "privacy-compliance-authority",
+  "rationale": "Legacy report cache predates the derived-data contract; migration is scheduled.",
+  "compensatingControl": "cache is internal-only, encrypted at rest, and access-logged",
+  "expiry": "2027-06-30",
+  "remediationBI": "BI-DG-015",
+  "waives": ["projection-contract"]
+}

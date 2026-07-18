@@ -27,6 +27,7 @@
     "check:diagram-dependency-pins": "node scripts/check-diagram-dependency-pins.mjs",
     "check:reporting-composition": "node scripts/check-reporting-composition.mjs",
     "check:module-size": "node scripts/check-module-size.mjs",
+    "check:data-impact": "node scripts/check-data-impact.mjs",
     "measure:substrate": "node scripts/measure-platform-substrate.mjs --json",
     "check:substrate": "node scripts/measure-platform-substrate.mjs",
     "measure:substrate:runtime": "node scripts/measure-platform-substrate-runtime.mjs --json",

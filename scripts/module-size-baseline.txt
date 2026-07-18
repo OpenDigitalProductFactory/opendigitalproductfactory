@@ -36,7 +36,7 @@ apps/web/lib/explore/build-process-matrix.ts	811
 apps/web/lib/explore/feature-build-types.ts	1109
 apps/web/lib/finance/ai-provider-finance.ts	1309
 apps/web/lib/inference/ai-provider-internals.ts	1228
-apps/web/lib/integrate/build-agent-prompts.ts	1054
+apps/web/lib/integrate/build-agent-prompts.ts	1064
 apps/web/lib/integrate/build-orchestrator.ts	1779
 apps/web/lib/integrate/sandbox/build-branch.ts	854
 apps/web/lib/marketing.ts	1367

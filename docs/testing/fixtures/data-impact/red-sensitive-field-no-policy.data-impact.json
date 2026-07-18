@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:new-widget",
+      "prismaModel": "NewWidget",
+      "lifecycleDisposition": "operational",
+      "fields": [
+        {
+          "fieldId": "data:new-widget#email",
+          "resolution": "governed",
+          "reason": "subject contact",
+          "provenance": "manual/data-steward",
+          "flags": ["sensitive", "subject"]
+        }
+      ]
+    }
+  ]
+}

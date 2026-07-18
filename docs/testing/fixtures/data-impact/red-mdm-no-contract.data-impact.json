@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "accountableOwner": "data-owner",
+  "changes": [
+    {
+      "kind": "mdm-domain",
+      "domain": "new-domain",
+      "ownership": "data-owner",
+      "crosswalk": "master-data-source-ref",
+      "match": "config-v1",
+      "quality": "slo-v1"
+    }
+  ]
+}

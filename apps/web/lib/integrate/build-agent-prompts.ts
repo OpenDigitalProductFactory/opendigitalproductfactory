@@ -303,6 +303,16 @@ WORKFLOW FOR SCHEMA CHANGES (Prisma models, enums, relations):
 4. ONLY after validate_schema passes: run_sandbox_command with "pnpm --filter @dpf/db exec prisma migrate dev --name <name>"
 5. run_sandbox_command with "pnpm --filter @dpf/db exec prisma generate" to regenerate the client
 NEVER run prisma migrate without calling validate_schema first.
+6. DATA-IMPACT GATE (BI-DG-003, spec §6.9): any change to a persistent surface — a Prisma
+   model/field, migration, projection producer, AI-context source, MDM domain, or lifecycle
+   executor — MUST ship a generated DataImpactManifest (a *.data-impact.json file) describing
+   the affected logical assets: change kinds, per-field resolution (inherited|governed|
+   not-applicable with reason + provenance), governed field policy for sensitive/subject/
+   prohibited fields, derived-copy contracts + cleanup/reconciliation for new projections,
+   hold-check + disposition evidence on destructive paths, and policy test vectors. Only a
+   structured *.data-impact-exception.json (scope, approver, rationale, compensating control,
+   expiry, remediation BI) may cover a temporary gap — never a new-model asset/lifecycle gap
+   or prohibited storage. CI runs `node scripts/check-data-impact.mjs`.
 
 ENUM CASING — MANDATORY:
 - Prisma enums in this project use LOWERCASE values: open, assigned, resolved, closed — NOT Open, OPEN, etc.
