@@ -17,7 +17,10 @@ $script:DPF_LIB_STATE_PS1_LOADED = $true
 $script:DPF_STATE_SCHEMA_VERSION = 1
 
 function Get-DpfStateDir {
-    return (Join-Path $HOME ".dpf")
+    if ($env:DPF_STATE_DIR) { return $env:DPF_STATE_DIR }
+    if ($env:XDG_STATE_HOME) { return (Join-Path $env:XDG_STATE_HOME "dpf") }
+    $profileRoot = if ($HOME) { $HOME } else { $env:USERPROFILE }
+    return (Join-Path $profileRoot ".dpf")
 }
 
 function Get-DpfStatePath {
@@ -72,7 +75,7 @@ function Initialize-DpfState {
     }
 
     $json = $initial | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText($path, $json, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 # Read the full state object. Returns $null if the file is absent.
@@ -122,7 +125,7 @@ function Set-DpfStateValue {
     $hashtable[$Key] = $Value
 
     $json = $hashtable | ConvertTo-Json -Depth 20
-    [System.IO.File]::WriteAllText($path, $json, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 # Resolve and, for a previous-release state, atomically persist the canonical

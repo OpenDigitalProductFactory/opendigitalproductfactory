@@ -6,16 +6,33 @@ import { resolve } from "node:path";
 
 import { validateComposeSafety } from "./lib/compose-safety.mjs";
 import { governCapabilityComposeArgs } from "./lib/govern-capability-compose-args.mjs";
+import { resolveComposeInstallContext, resolveDpfStatePath } from "./lib/resolve-compose-install-context.mjs";
 
 let args = process.argv.slice(2);
 let capabilityProfilesGoverned = false;
-const statePath = process.env.DPF_INSTALL_STATE_PATH ?? resolve(process.env.DPF_STATE_DIR ?? resolve(homedir(), ".dpf"), "install-state.json");
+let projectRoot;
+try {
+  projectRoot = resolveComposeInstallContext({ args, cwd: process.cwd() }).projectRoot;
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(2);
+}
+const statePath = resolveDpfStatePath({ env: process.env, home: homedir() });
 if (existsSync(statePath)) {
-  const state = JSON.parse(readFileSync(statePath, "utf8"));
-  const currentRoot = resolve(process.cwd());
-  if (state.installPath && resolve(state.installPath) === currentRoot) {
+  let state;
+  try {
+    state = JSON.parse(readFileSync(statePath, "utf8"));
+  } catch {
+    console.error("capability_install_state_invalid");
+    process.exit(2);
+  }
+  if (state.installPath && resolve(state.installPath) !== projectRoot) {
+    console.error("capability_install_state_mismatch");
+    process.exit(2);
+  }
+  if (state.installPath) {
     const host = process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux";
-    const adapter = resolve(currentRoot, "scripts/lib/resolve-capability-compose-profiles.mjs");
+    const adapter = resolve(projectRoot, "scripts/lib/resolve-capability-compose-profiles.mjs");
     const projection = spawnSync(process.execPath, [adapter, "--state", statePath, "--host", host, "--migrate", "--write"], { encoding: "utf8" });
     if (projection.status !== 0) {
       process.stderr.write(projection.stderr);

@@ -3,11 +3,65 @@ import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 const root = resolve(new URL("../..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
 const bashPath = (path) => resolve(path).replace(/^([A-Za-z]):\\/, (_, drive) => `/mnt/${drive.toLowerCase()}/`).replaceAll("\\", "/");
 const runBash = (body, env = {}) => spawnSync("bash", [], { cwd: root, encoding: "utf8", input: body, env: { ...process.env, ...env } });
+
+test("consumer release assets are integrity-bound and execute the canonical adapter", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-consumer-assets-"));
+  try {
+    const carrier = join(dir, "carrier");
+    const install = join(dir, "install");
+    const files = [
+      "docker-compose.yml",
+      "docker-compose.release.yml",
+      "scripts/lib/resolve-capability-compose-profiles.mjs",
+      "scripts/capability-service-catalog.generated.json",
+      "scripts/installer/install-state.schema.json",
+      "scripts/installer/lib/state.ps1",
+    ];
+    const manifest = [];
+    for (const relative of files) {
+      const target = join(carrier, relative);
+      await mkdir(resolve(target, ".."), { recursive: true });
+      await copyFile(join(root, relative), target);
+      const bytes = await readFile(target);
+      manifest.push(`${createHash("sha256").update(bytes).digest("hex")}  ${relative.replaceAll("\\", "/")}`);
+    }
+    await writeFile(join(carrier, "SHA256SUMS"), `${manifest.join("\n")}\n`);
+    const trace = join(dir, "docker.txt");
+    const stateDir = join(dir, "state");
+    const command = [
+      `. '${join(root, "install-dpf.ps1")}' -LibraryOnly`,
+      `Export-DPFConsumerReleaseAssets -InstallDir '${install}' -AssetSource '${carrier}'`,
+      `[IO.File]::WriteAllText('${join(install, "dpf-start.ps1")}', (Get-DPFStartScriptContent), [Text.Encoding]::ASCII)`,
+      `$env:DPF_STATE_DIR='${stateDir}'`,
+      `. '${join(install, "scripts", "installer", "lib", "state.ps1")}'`,
+      `Initialize-DpfState -InstallPath '${install}'`,
+      `function docker { Add-Content -LiteralPath '${trace}' -Value ($args -join ' ') }`,
+      `function Invoke-WebRequest { [pscustomobject]@{StatusCode=200} }`,
+      `& '${join(install, "dpf-start.ps1")}' -DPF_DIR '${install}' -NoBrowser`,
+    ].join("; ");
+    const result = spawnSync("pwsh", ["-NoProfile", "-Command", command], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    const compose = await readFile(join(install, "docker-compose.yml"), "utf8");
+    assert.doesNotMatch(compose, /^  (neo4j|qdrant):/m);
+    assert.equal(await readFile(join(install, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "utf8"), await readFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "utf8"));
+    assert.match(await readFile(trace, "utf8"), /compose -f docker-compose\.yml -f docker-compose\.release\.yml up -d/);
+    const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
+    assert.match(dockerfile, /COPY --from=init \/dpf-release-assets \/dpf-release-assets/);
+    assert.match(dockerfile, /sha256sum > SHA256SUMS/);
+    await writeFile(join(carrier, "unverified.txt"), "not in manifest\n");
+    const unverified = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Export-DPFConsumerReleaseAssets -InstallDir '${join(dir, "rejected")}' -AssetSource '${carrier}'`], { encoding: "utf8" });
+    assert.notEqual(unverified.status, 0);
+    assert.match(unverified.stderr, /consumer_release_asset_unverified/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 test("generated Windows start script executes the canonical adapter before Compose", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-win-start-"));
@@ -49,6 +103,37 @@ test("POSIX autostart resolves and executes the XDG state snapshot", async () =>
   }
 });
 
+test("dpf-compose uses XDG state and effective roots outside the working directory", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-compose-context-"));
+  try {
+    const install = join(dir, "install");
+    const elsewhere = join(dir, "elsewhere");
+    const xdg = join(dir, "xdg");
+    const stateDir = join(xdg, "dpf");
+    await mkdir(join(install, "scripts", "lib"), { recursive: true });
+    await mkdir(elsewhere); await mkdir(stateDir, { recursive: true });
+    await copyFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(install, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
+    await copyFile(join(root, "scripts", "capability-service-catalog.generated.json"), join(install, "scripts", "capability-service-catalog.generated.json"));
+    await writeFile(join(install, "docker-compose.yml"), "name: dpf-context\nservices: {}\n");
+    await writeFile(join(stateDir, "install-state.json"), `${JSON.stringify({ schemaVersion: 1, installPath: install, platform: "win32", enabledRuntimeCapabilities: [] })}\n`);
+    const env = { ...process.env, XDG_STATE_HOME: xdg, COMPOSE_PROJECT_NAME: "dpf-context" };
+    const byProjectDirectory = spawnSync(process.execPath, [join(root, "scripts", "dpf-compose.mjs"), "--project-directory", install, "-f", join(install, "docker-compose.yml"), "ps"], { cwd: elsewhere, env, encoding: "utf8" });
+    assert.equal(byProjectDirectory.status, 0, byProjectDirectory.stderr);
+    const byFile = spawnSync(process.execPath, [join(root, "scripts", "dpf-compose.mjs"), "-f", join(install, "docker-compose.yml"), "ps"], { cwd: elsewhere, env, encoding: "utf8" });
+    assert.equal(byFile.status, 0, byFile.stderr);
+    const migrated = JSON.parse(await readFile(join(stateDir, "install-state.json"), "utf8"));
+    assert.equal(typeof migrated.capabilityCatalogHash, "string");
+    assert.equal(typeof migrated.capabilityStateVersion, "string");
+
+    await writeFile(join(stateDir, "install-state.json"), `${JSON.stringify({ schemaVersion: 1, installPath: join(dir, "other"), platform: "win32" })}\n`);
+    const mismatch = spawnSync(process.execPath, [join(root, "scripts", "dpf-compose.mjs"), "--project-directory", install, "ps"], { cwd: elsewhere, env, encoding: "utf8" });
+    assert.equal(mismatch.status, 2);
+    assert.match(mismatch.stderr, /capability_install_state_mismatch/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("promotion refuses stale state before Docker", async () => {
   const dir = await mkdtemp(join(root, ".task5-promote-stale-"));
   try {
@@ -79,7 +164,7 @@ test("promotion recovery snapshot is copied and restored after a simulated Docke
     spawnSync("git", ["init", "-q", source]); spawnSync("git", ["-C", source, "config", "user.email", "test@example.com"]); spawnSync("git", ["-C", source, "config", "user.name", "Test"]); spawnSync("git", ["-C", source, "add", "."]); spawnSync("git", ["-C", source, "commit", "-q", "-m", "fixture"]);
     const sha = spawnSync("git", ["-C", source, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
     await writeFile(join(bin, "node"), "#!/bin/sh\nprintf '%s\\n' '{\"composeProfiles\":[],\"requiredServices\":[]}'\n");
-    await writeFile(join(bin, "docker"), `#!/bin/sh\nprintf 'corrupted\\n' > '${bashPath(join(state, "install-state.json"))}'\n+exit 42\n`);
+    await writeFile(join(bin, "docker"), `#!/bin/sh\nprintf 'corrupted\\n' > '${bashPath(join(state, "install-state.json"))}'\nexit 42\n`);
     await chmod(join(bin, "node"), 0o755); await chmod(join(bin, "docker"), 0o755);
     const result = runBash(`PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin' DPF_STATE_DIR='${bashPath(state)}' PROMOTE_SOURCE='${bashPath(source)}' PROMOTE_TARGET_SHA='${sha}' PROMOTE_BACKUP_PATH='${bashPath(backup)}' PROMOTE_HEALTH_URL=http://invalid bash scripts/promote.sh --self-upgrade`);
     assert.notEqual(result.status, 0);
