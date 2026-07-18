@@ -112,7 +112,7 @@ function normalizeInputs({ substrate, capabilities }) {
 }
 
 export function compileCapabilityServiceCatalog(input) {
-  const { substrate, capabilities } = input;
+  const { substrate } = input;
   const { capabilityById } = normalizeInputs(input);
   const entries = [...capabilityById.keys()].sort(compare).map((capabilityId) => {
     const record = capabilityById.get(capabilityId);
