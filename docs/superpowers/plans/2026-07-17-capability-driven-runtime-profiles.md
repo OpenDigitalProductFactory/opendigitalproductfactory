@@ -87,7 +87,7 @@
 - [x] **Step 9: Make the host apply script atomic at its boundary:** write a sibling temporary install-state file, validate schema/hash, replace the persisted file, reconcile profiles, and return before/after hashes plus observed services. An idempotent retry returns the existing matching receipt. On failure restore the previous file/profile closure. Portal startup runs `reconcileRuntimeCapabilityTransitions()` before accepting new transitions; a pending row plus successful host receipt completes the DB commit, while absent/failed receipt triggers compensation.
 - [x] **Step 10: Add coordinator/promoter tests** proving a core-only install can enable a capability, disabling `runtime:durable-automation` completes after its services stop, unrelated work does not block, dependent work cannot be missed, replay/tamper is rejected, and crash recovery aligns DB, install state, observed services, and audit receipt.
 - [ ] **Step 11: Run `pnpm --filter web exec vitest run lib/platform-runtime/work-attribution.test.ts lib/platform-runtime/capability-transition.test.ts lib/actions/runtime-capabilities.test.ts lib/platform-runtime/transition-coordinator.test.ts lib/self-upgrade/promoter.test.ts` and `pnpm exec node --test scripts/apply-runtime-capability-transition.test.mjs`.**
-- [ ] **Step 12: Commit** with `git commit -s -m "feat(substrate): govern capability runtime transitions"`.
+- [x] **Step 12: Commit** the governed capability runtime transition implementation as DCO-signed, reviewable checkpoints.
 
 ## Chunk 2: Operational consumers and Compose activation
 
