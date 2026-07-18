@@ -18,11 +18,13 @@ import {
   detectOpencodeFatalError,
   buildOpencodeRunnerScript,
   recordOpencodeCapacityFailure,
+} from "./opencode-dispatch";
+import {
   estimatePromptTokens,
   computeInputTokenBudget,
   trimTaskPromptToContext,
   OPENCODE_OUTPUT_RESERVE_MIN_TOKENS,
-} from "./opencode-dispatch";
+} from "./opencode-task-context-budget";
 
 describe("trimTaskPromptToContext (BI-B195F224)", () => {
   const samplePrompt = [
