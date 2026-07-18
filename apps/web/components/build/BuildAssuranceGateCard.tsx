@@ -10,6 +10,7 @@ import type { BomSummary } from "@/lib/assurance/bom-read";
 import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
 import { buildTrustMessage } from "@/lib/trust-vector";
 import { TrustBadge } from "@/components/ui/TrustBadge";
+import { Spinner } from "@/components/ui/Spinner";
 import { AssuranceFindingsList } from "./AssuranceFindingsList";
 
 type RequestState = "idle" | "queued" | "failed";
@@ -122,7 +123,11 @@ export function BuildAssuranceGateCard({
               });
             }}
           >
-            <RefreshCw className={pending ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden="true" />
+            {pending ? (
+              <Spinner size="xs" tone="current" presentational />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
             {buttonLabel}
           </button>
           <button
@@ -139,7 +144,11 @@ export function BuildAssuranceGateCard({
               });
             }}
           >
-            <ScanLine className={scanPending ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden="true" />
+            {scanPending ? (
+              <Spinner size="xs" tone="current" presentational />
+            ) : (
+              <ScanLine className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
             {scanButtonLabel}
           </button>
         </div>

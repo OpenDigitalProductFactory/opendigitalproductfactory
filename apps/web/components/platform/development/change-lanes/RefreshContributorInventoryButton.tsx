@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { InlineBusy } from "@/components/ui/InlineBusy";
 
 import {
   getContributorInventorySyncStatusAction,
@@ -125,12 +126,7 @@ export function RefreshContributorInventoryButton({
         }}
       >
         {state.kind === "dispatching" || state.kind === "polling" ? (
-          <>
-            <span aria-hidden className="mr-1 inline-block animate-spin">
-              ⟳
-            </span>
-            Syncing…
-          </>
+          <InlineBusy label="Syncing…" tone="current" />
         ) : (
           "Refresh now"
         )}
