@@ -578,9 +578,8 @@ export async function runSelfUpgrade(
   try {
     const { runPromoter } = await loadPromoterRuntime();
     result = await runPromoter({
-      // HOST path of the install tree, bind-mounted into the promoter
-      // container. Daemon-resolved, so it must be a host path (not an
-      // in-portal path). hostSourceMountPath is the in-container mount and
+      // HOST path of the install tree, bind-mounted into the promoter container.
+      // Daemon-resolved host path, not an in-portal path; hostSourceMountPath
       // is no longer passed — runPromoter mounts to a fixed /host-source.
       // BI-A8A7CCFD — when isolated workspace is on, the promoter builds from
       // the workspace HOST path (which holds the merged tree), not the
@@ -603,6 +602,7 @@ export async function runSelfUpgrade(
       composeProject,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
       promoterImage: config.promoterImage,
+      stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
       dryRun: params.dryRun,
       // Deterministic name so a stalled build can be force-removed by name on
       // timeout (runPromoter) or by the watchdog backstop. docker names allow
