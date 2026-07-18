@@ -672,10 +672,10 @@ export async function sendMessage(input: {
     }
   }
 
-  // Cross-cutting overlay agents (today: Jiminy / AGT-ORCH-000 only) read
+  // Cross-cutting overlay agents (today: the COO / AGT-ORCH-000 only) read
   // memory globally rather than scoped to a single route. See the topology
   // decision DR-2026-04-28-02. Specialists keep route-scoped recall (Pass 1
-  // first, global fallback if <3 results). Jiminy skips Pass 1 entirely so
+  // first, global fallback if <3 results). The COO skips Pass 1 entirely so
   // cross-route follow-ups surface reliably regardless of how many memories
   // happen to be tagged with the current route.
   const isCrossCuttingOverlay = agent.agentId === "AGT-ORCH-000";
@@ -1139,7 +1139,7 @@ export async function sendMessage(input: {
     // Semantic memory: recall relevant context from ALL conversations.
     // With a short recent window (8 messages), semantic recall is the primary
     // mechanism for remembering older context — both cross-thread and same-thread.
-    // Jiminy / cross-cutting overlay passes undefined to skip route-scoped Pass 1.
+    // The COO / cross-cutting overlay passes undefined to skip route-scoped Pass 1.
     const { buildGovernedMemoryContext } = await import("@/lib/tak/governed-memory");
     const governedMemory = await buildGovernedMemoryContext({
       userId: user.id!,

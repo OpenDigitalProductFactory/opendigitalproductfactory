@@ -7,7 +7,7 @@
 
 ## Problem
 
-When a coworker cannot complete a request, its default behavior is to **dead-end**: it explains what's wrong at length and/or deflects to "ask an administrator / that's outside what I can do here." The AI Ops Engineer did exactly this on the AI Readiness console — it summarized three blockers and routed the operator to "Jiminy or System Admin," when the real next step was a one-click Act-mode toggle plus, now, a tool it can call. That is high cognitive load and no path forward.
+When a coworker cannot complete a request, its default behavior is to **dead-end**: it explains what's wrong at length and/or deflects to "ask an administrator / that's outside what I can do here." The AI Ops Engineer did exactly this on the AI Readiness console — it summarized three blockers and routed the operator to "the COO or System Admin," when the real next step was a one-click Act-mode toggle plus, now, a tool it can call. That is high cognitive load and no path forward.
 
 This is a *behavioral* gap, not a capability gap. The platform already has:
 - the `manage_coworker_tool_grant` MCP door (PR #2556) for the self-serve case,
