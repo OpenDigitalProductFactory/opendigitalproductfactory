@@ -32,15 +32,33 @@ export function normalizePromoterReadiness(value, { owner, digest }) {
   return { ...value, failures, ok, owner, digest };
 }
 
-export function buildPromoterPromotionDockerArgs({ candidateDigest, source, state, backups, secret, targetSha, project, envelope, signature }) {
+export function assertPromotionSourceIdentity(envFileContent, candidateSource) {
+  const entry = envFileContent.split(/\r?\n/).find((line) => line.startsWith("DPF_HOST_INSTALL_PATH="));
+  if (entry?.slice("DPF_HOST_INSTALL_PATH=".length) !== candidateSource) {
+    throw new Error("promotion source diverges from Compose host install identity");
+  }
+}
+
+export function assertRecreatedPortalProvenance(container, image, { project }) {
+  if (container?.Config?.Labels?.["com.docker.compose.project"] !== project || container?.Config?.Labels?.["com.docker.compose.service"] !== "portal") {
+    throw new Error("recreated portal does not belong to the isolated promotion project");
+  }
+  if (!/^sha256:[a-f0-9]{64}$/.test(container?.Image ?? "") || container.Image !== image?.Id) {
+    throw new Error("recreated portal image provenance does not match the promoted candidate");
+  }
+}
+
+export function buildPromoterPromotionDockerArgs({ candidateDigest, source, state, backups, secret, composeEnvFile, targetSha, project, envelope, signature }) {
+  const composeEnvContainerPath = "/run/dpf/n-minus-one.env";
   return ["run", "--rm", "--add-host", "host.docker.internal:host-gateway",
     "-v", "/var/run/docker.sock:/var/run/docker.sock:rw", "-v", `${source}:/host-source:ro`,
     "-v", `${state}:/dpf-state:rw`, "-v", `${backups}:/backups:rw`, "-v", `${secret}:/run/secrets/dpf-runtime-transition:ro`,
+    "-v", `${composeEnvFile}:${composeEnvContainerPath}:ro`,
     "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state", "-e", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition",
     "-e", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${Buffer.from(JSON.stringify(envelope)).toString("base64url")}`,
     "-e", `DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${signature}`, "-e", `DPF_SELF_UPGRADE_RUN_ID=${envelope.runId}`,
     "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`, "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`,
-    "-e", `PROMOTE_COMPOSE_PROJECT=${project}`, "-e", "PROMOTE_BACKUP_PATH=/backups/recovery",
+    "-e", `PROMOTE_COMPOSE_PROJECT=${project}`, "-e", `PROMOTE_COMPOSE_ENV_FILE=${composeEnvContainerPath}`, "-e", "PROMOTE_BACKUP_PATH=/backups/recovery",
     "-e", "PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health", candidateDigest, "--self-upgrade"];
 }
 
@@ -296,6 +314,7 @@ function createRuntimeDependencies(options) {
       const transitionSecret = join(workspace.root, "transition.secret");
       await writeFile(transitionSecret, randomBytes(32).toString("hex"));
       const baseline = await prepareNMinusOneBaseline({ workspace, project: options.project, portalUrl });
+      await execFile("git", ["checkout", "--detach", options.candidateSha], { cwd: workspace.source });
       const contractDigest = createHash("sha256").update(await readFile(join(process.cwd(), "promoter-contract.json"))).digest("hex");
       const image = `${options.project}-promoter:${options.candidateSha}`;
       await execFile("docker", ["build", "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${options.candidateSha}`, "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=sha256:${contractDigest}`, "-f", "Dockerfile.promoter", "-t", image, "."], { cwd: process.cwd() });
@@ -304,7 +323,7 @@ function createRuntimeDependencies(options) {
       const candidateDigest = inspected.Id;
       const labels = inspected.Config?.Labels ?? {};
       if (labels["org.opencontainers.image.revision"] !== options.candidateSha || labels["org.opendpf.promoter.contract-digest"] !== `sha256:${contractDigest}`) throw new Error("candidate image labels do not bind source SHA and contract digest");
-      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, workspace, transitionSecret, candidateSource: process.cwd(), baselineSourceV1Hash: baseline.sourceV1Hash };
+      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, workspace, transitionSecret, candidateSource: workspace.source, baselineSourceV1Hash: baseline.sourceV1Hash };
     },
     readiness: async ({ candidateDigest, candidateSource, transitionSecret }) => {
       if (options.injectReadinessFailure) return { ok: false, owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest, quiescenceBegan: false };
@@ -313,6 +332,7 @@ function createRuntimeDependencies(options) {
       return normalizePromoterReadiness(JSON.parse(stdout), { owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest });
     },
     requestUpgrade: async ({ candidateDigest, candidateSource, transitionSecret, readiness }) => {
+      assertPromotionSourceIdentity(await readFile(workspace.harnessEnvFile, "utf8"), candidateSource);
       const secret = (await readFile(transitionSecret, "utf8")).trim();
       const envelope = {
         kind: "install-state-migration", version: 1, runId: `SUR-n1-${Date.now()}`, promoterDigest: candidateDigest,
@@ -322,7 +342,7 @@ function createRuntimeDependencies(options) {
         issuedAt: new Date(Date.now() - 1_000).toISOString(), expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
       };
       const signature = signTransitionPayload(envelope, secret);
-      const args = buildPromoterPromotionDockerArgs({ candidateDigest, source: candidateSource, state: workspace.state, backups: workspace.backups, secret: transitionSecret, targetSha: options.candidateSha, project: options.project, envelope, signature });
+      const args = buildPromoterPromotionDockerArgs({ candidateDigest, source: candidateSource, state: workspace.state, backups: workspace.backups, secret: transitionSecret, composeEnvFile: workspace.harnessEnvFile, targetSha: options.candidateSha, project: options.project, envelope, signature });
       const result = await execFile("docker", args, { cwd: candidateSource, maxBuffer: 20 * 1024 * 1024 });
       promotionCompleted = { envelope, signature, stdout: result.stdout, stderr: result.stderr };
       return { requested: true, runId: envelope.runId };
@@ -330,6 +350,14 @@ function createRuntimeDependencies(options) {
     baselineHealth: async () => (await fetch(`${portalUrl}/api/health`)).ok,
     poll: async ({ candidateDigest, baselineSourceV1Hash }) => {
       if (!promotionCompleted) throw new Error("governed promoter did not complete");
+      const { stdout: portalIds } = await execFile("docker", ["ps", "-q", "--filter", `label=com.docker.compose.project=${options.project}`, "--filter", "label=com.docker.compose.service=portal"]);
+      const portalId = portalIds.trim();
+      if (!portalId || portalId.includes("\n")) throw new Error("promotion did not recreate exactly one isolated portal");
+      const { stdout: containerJson } = await execFile("docker", ["container", "inspect", portalId, "--format", "{{json .}}"]);
+      const container = JSON.parse(containerJson);
+      const { stdout: imageJson } = await execFile("docker", ["image", "inspect", container.Image, "--format", "{{json .}}"]);
+      const image = JSON.parse(imageJson);
+      assertRecreatedPortalProvenance(container, image, { project: options.project });
       const [health, versionResponse, stateBytes, recoveryBytes] = await Promise.all([
         fetch(`${portalUrl}/api/health`), fetch(`${portalUrl}/api/health/sha`),
         readFile(join(workspace.state, "install-state.json")), readFile(join(workspace.backups, "recovery", "install-state.json")),
@@ -343,7 +371,7 @@ function createRuntimeDependencies(options) {
         sourceV1Hash, migratedV2Hash: createHash("sha256").update(stateBytes).digest("hex"),
         sourceSchemaVersion: 1, migratedSchemaVersion: migrated.schemaVersion,
         recoveryArtifacts: [{ path: "recovery/install-state.json", sha256: sourceV1Hash }],
-        promotionRunId: promotionCompleted.envelope.runId,
+        promotionRunId: promotionCompleted.envelope.runId, portalImageId: image.Id,
       };
     },
     writeEvidence: async (value) => { await mkdir(options.evidenceDir, { recursive: true }); await writeFile(join(options.evidenceDir, "n-minus-one-evidence.json"), `${JSON.stringify(value, null, 2)}\n`); return value; },

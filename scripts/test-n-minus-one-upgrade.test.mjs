@@ -7,6 +7,8 @@ import test from "node:test";
 
 import {
   assertSafeHarnessConfig,
+  assertPromotionSourceIdentity,
+  assertRecreatedPortalProvenance,
   cleanupHarness,
   cleanupNMinusOneBaseline,
   cleanupProject,
@@ -161,18 +163,33 @@ test("governed promotion invokes the signed promoter with writable state and rec
   const envelope = { kind: "install-state-migration", version: 1, runId: "SUR-n1-contract" };
   const encodedEnvelope = Buffer.from(JSON.stringify(envelope)).toString("base64url");
   const args = buildPromoterPromotionDockerArgs({
-    candidateDigest: digest, source: "/candidate", state: "/state", backups: "/backups", secret: "/secret",
+    candidateDigest: digest, source: "/candidate", state: "/state", backups: "/backups", secret: "/secret", composeEnvFile: "/workspace/n-minus-one.env",
     targetSha: "a".repeat(40), project: "dpf-n1-test", envelope, signature: "signed-value",
   });
   const rendered = args.join(" ");
   for (const required of [
     "/var/run/docker.sock:/var/run/docker.sock:rw", "/candidate:/host-source:ro", "/state:/dpf-state:rw",
-    "/backups:/backups:rw", "/secret:/run/secrets/dpf-runtime-transition:ro", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${encodedEnvelope}`,
+    "/backups:/backups:rw", "/secret:/run/secrets/dpf-runtime-transition:ro", "/workspace/n-minus-one.env:/run/dpf/n-minus-one.env:ro",
+    "PROMOTE_COMPOSE_ENV_FILE=/run/dpf/n-minus-one.env", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${encodedEnvelope}`,
     "DPF_INSTALL_STATE_MIGRATION_SIGNATURE=signed-value", `DPF_PROMOTER_DIGEST=${digest}`, "PROMOTE_SOURCE=/host-source",
-    "PROMOTE_BACKUP_PATH=/backups/recovery", "--self-upgrade",
+    `PROMOTE_TARGET_SHA=${"a".repeat(40)}`, "PROMOTE_COMPOSE_PROJECT=dpf-n1-test", "PROMOTE_BACKUP_PATH=/backups/recovery", "--self-upgrade",
   ]) assert.ok(rendered.includes(required), required);
   const source = await readFile(new URL("./test-n-minus-one-upgrade.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(source, /\/api\/ops\/self-upgrade/);
+});
+
+test("promotion refuses stale Compose host-source identity", () => {
+  assert.doesNotThrow(() => assertPromotionSourceIdentity("DPF_HOST_INSTALL_PATH=/candidate\nAUTH_SECRET=x\n", "/candidate"));
+  assert.throws(() => assertPromotionSourceIdentity("DPF_HOST_INSTALL_PATH=/baseline\n", "/candidate"), /source diverges/);
+  assert.throws(() => assertPromotionSourceIdentity("AUTH_SECRET=x\n", "/candidate"), /source diverges/);
+});
+
+test("recreated portal provenance is bound to the isolated project and candidate image", () => {
+  const image = { Id: "sha256:" + "d".repeat(64) };
+  const container = { Image: image.Id, Config: { Labels: { "com.docker.compose.project": "dpf-n1-test", "com.docker.compose.service": "portal" } } };
+  assert.doesNotThrow(() => assertRecreatedPortalProvenance(container, image, { project: "dpf-n1-test" }));
+  assert.throws(() => assertRecreatedPortalProvenance(container, image, { project: "dpf-n1-other" }), /isolated promotion project/);
+  assert.throws(() => assertRecreatedPortalProvenance(container, { ...image, Id: "sha256:" + "e".repeat(64) }, { project: "dpf-n1-test" }), /image provenance/);
 });
 
 test("completed evidence must preserve the exact observed baseline bytes", async () => {
@@ -226,6 +243,10 @@ test("baseline preparation uses the unique harness project and proves health aft
     const envFile = events[0].args[events[0].args.indexOf("--env-file") + 1];
     const seeded = await readFile(envFile, "utf8");
     assert.ok(seeded.includes(`DPF_STATE_DIR=${workspace.state}\n`));
+    assert.ok(seeded.includes(`DPF_STATE_DIR_HOST=${workspace.state}\n`));
+    assert.ok(seeded.includes(`DPF_HOST_INSTALL_PATH=${workspace.source}\n`));
+    assert.ok(seeded.includes(`AUTH_SECRET=${events[0].env.AUTH_SECRET}\n`));
+    assert.ok(seeded.includes(`CREDENTIAL_ENCRYPTION_KEY=${events[0].env.CREDENTIAL_ENCRYPTION_KEY}\n`));
     assert.match(seeded, /^DPF_N1_HARNESS=1$/m);
     assert.deepEqual(workspace.harnessEnvironment, events[0].env);
     const stateBytes = await readFile(join(workspace.state, "install-state.json"));
