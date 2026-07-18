@@ -27,6 +27,12 @@ import { buildStageFlow, type StageDemand } from "./stage-flow";
 
 import type { Intent } from "@/components/ui/report-kit";
 import {
+  formatMoney,
+  resolveOrgLocale,
+  type OrgLocaleClient,
+  type OrgLocaleSettings,
+} from "@/lib/org-locale/org-locale";
+import {
   loadWorkforceRoster,
   type WorkforceMember,
   type WorkforceRosterClient,
@@ -49,7 +55,7 @@ import type {
 
 // ── Structural client (satisfied by the real PrismaClient and by test fakes) ──
 type FindMany = (args: unknown) => Promise<unknown>;
-export type LivingBusinessClient = WorkforceRosterClient & {
+export type LivingBusinessClient = WorkforceRosterClient & OrgLocaleClient & {
   storefrontConfig: { findFirst: (args: unknown) => Promise<unknown> };
   bill: { findMany: FindMany };
   /** Optional — outcomes (paid-invoice revenue) degrade to empty if absent. */
@@ -137,28 +143,10 @@ function monthDay(d: Date): string {
 function isWalkInWait(b: { scheduledAt: Date | null }): boolean {
   return b.scheduledAt == null;
 }
-// Money is formatted from its OWN currency's locale so a USD amount never renders
-// with en-GB grouping/symbol (and vice-versa). This removes the previous
-// hardcoded `en-GB`; the org-level currency/locale source (so the whole platform
-// stops defaulting to GBP for a non-UK operator) is the follow-on remediation
-// tracked in EP-ORG-LOCALE-CURRENCY. When the currency is unknown we format a
-// bare, locale-neutral grouped number rather than guessing a symbol.
-const CURRENCY_LOCALE: Record<string, string> = { GBP: "en-GB", USD: "en-US", EUR: "en-IE" };
-export function formatMoney(amount: number, code: string | null): string {
-  const value = Math.round(amount);
-  if (code) {
-    try {
-      return new Intl.NumberFormat(CURRENCY_LOCALE[code] ?? "en-US", {
-        style: "currency",
-        currency: code,
-        maximumFractionDigits: 0,
-      }).format(value);
-    } catch {
-      // Unknown ISO code — fall through to a bare number.
-    }
-  }
-  return value.toLocaleString("en-US");
-}
+// Money formatting + the org's currency/locale now come from the shared
+// `@/lib/org-locale` spine (EP-ORG-LOCALE-CURRENCY) so the twin renders the
+// org's real currency (from OrgSettings, derived from the operator's country)
+// instead of inferring it from whichever bill row happened to carry one.
 
 // ─────────────────────────── pure mapping helpers ───────────────────────────
 
@@ -282,6 +270,7 @@ export function financeToUtility(input: {
   billsDueCount: number;
   billsDueAmount: number;
   currency: string | null;
+  locale?: string | null;
   nextTaxDueDays: number | null;
   complianceOpenCount: number;
   coworkerGaps: number;
@@ -300,7 +289,7 @@ export function financeToUtility(input: {
       label: "Bills due",
       value:
         input.billsDueCount > 0
-          ? `${input.billsDueCount} · ${formatMoney(input.billsDueAmount, input.currency)}`
+          ? `${input.billsDueCount} · ${formatMoney(input.billsDueAmount, input.currency, input.locale)}`
           : "None due",
       intent: input.billsDueCount > 0 ? "warning" : "success",
       hint: "Next 7 days",
@@ -486,7 +475,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
   const profile: TwinProfile = deriveTwinProfile(def);
 
   const in90 = new Date(now.getTime() - 90 * 86_400_000);
-  const [roster, bills, taxPeriods, obligations, bookings, providers, paidInvoices] = await Promise.all([
+  const [roster, bills, taxPeriods, obligations, bookings, providers, paidInvoices, orgLocale] = await Promise.all([
     loadWorkforceRoster({ db }).catch(() => ({ members: [], summary: { total: 0, humans: 0, agents: 0, agentsWithUnmetNeeds: 0 } })),
     db.bill
       .findMany({
@@ -530,11 +519,15 @@ export async function loadLivingBusinessSnapshot(opts?: {
           })
           .catch(() => [])
       : Promise.resolve([])) as Promise<InvoiceRow[]>,
+    resolveOrgLocale(db),
   ]);
 
   const members = roster.members;
   const billsDueAmount = bills.reduce((sum, b) => sum + toNum(b.amountDue), 0);
-  const currency = bills.find((b) => b.currency)?.currency ?? null;
+  // The org's own currency + locale (from OrgSettings, derived from the operator's
+  // country) is authoritative for every money surface here — never inferred from
+  // whichever bill/invoice row happened to carry a currency.
+  const { currency: orgCurrency, locale: orgLocaleStr } = orgLocale as OrgLocaleSettings;
   const nextTaxDueDays =
     taxPeriods[0]?.dueDate != null ? Math.max(0, daysBetween(now, taxPeriods[0].dueDate)) : null;
   const complianceOpenCount = obligations.filter(
@@ -596,12 +589,11 @@ export async function loadLivingBusinessSnapshot(opts?: {
   // Customer outcomes (workstream D): revenue realized in the last 90 days + the
   // count of settled+paid work — the proof the business is producing.
   const paidRevenue = paidInvoices.reduce((sum, inv) => sum + toNum(inv.totalAmount), 0);
-  const revenueCurrency = paidInvoices.find((i) => i.currency)?.currency ?? currency;
   const outcomes: TwinOutcome[] = [
     {
       key: "revenue",
       label: "Revenue in",
-      value: formatMoney(paidRevenue, revenueCurrency),
+      value: formatMoney(paidRevenue, orgCurrency, orgLocaleStr),
       intent: "success",
       hint: "Paid · 90 days",
     },
@@ -642,7 +634,8 @@ export async function loadLivingBusinessSnapshot(opts?: {
     utility: financeToUtility({
       billsDueCount: bills.length,
       billsDueAmount,
-      currency,
+      currency: orgCurrency,
+      locale: orgLocaleStr,
       nextTaxDueDays,
       complianceOpenCount,
       coworkerGaps: roster.summary.agentsWithUnmetNeeds,

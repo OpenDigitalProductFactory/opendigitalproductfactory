@@ -2,6 +2,8 @@
 
 import { prisma } from "@dpf/db";
 
+import { deriveLocaleCurrencyFromCountry } from "@/lib/org-locale/org-locale";
+
 // ─── Hardcoded fallback rates (GBP base) ──────────────────────────────────────
 
 const FALLBACK_RATES: Record<string, Record<string, number>> = {
@@ -28,6 +30,32 @@ export async function updateBaseCurrency(currency: string) {
   return prisma.orgSettings.update({
     where: { id: settings.id },
     data: { baseCurrency: currency },
+  });
+}
+
+// ─── applyOrgCountry ──────────────────────────────────────────────────────────
+
+/**
+ * Sync the org's locale/currency spine from its home country (EP-ORG-LOCALE-
+ * CURRENCY). Called wherever onboarding captures the operator's country. Always
+ * records `countryCode`; initializes `baseCurrency` + `locale` from the country
+ * ONLY the first time a country is captured, so a later explicit operator
+ * currency choice (via `updateBaseCurrency`) is never clobbered.
+ */
+export async function applyOrgCountry(countryCode: string | null | undefined) {
+  const iso = countryCode?.trim().toUpperCase() || null;
+  if (!iso) return null;
+
+  const settings = await getOrgSettings();
+  const isFirstCountry = !settings.countryCode;
+  const derived = deriveLocaleCurrencyFromCountry(iso);
+
+  return prisma.orgSettings.update({
+    where: { id: settings.id },
+    data: {
+      countryCode: iso,
+      ...(isFirstCountry ? { baseCurrency: derived.currency, locale: derived.locale } : {}),
+    },
   });
 }
 

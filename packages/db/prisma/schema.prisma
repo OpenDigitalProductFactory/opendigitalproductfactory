@@ -3087,7 +3087,7 @@ model CustomerAccount {
   industry               String?
   employeeCount          Int?
   annualRevenue          Decimal?
-  currency               String                      @default("GBP")
+  currency               String                      @default("USD")
   notes                  String?
   sourceSystem           String?
   sourceId               String?
@@ -3281,7 +3281,7 @@ model CustomerConfigurationItem {
   customerChargeModel   String?
   unitCost              Decimal?        @db.Decimal(12, 2)
   customerUnitPrice     Decimal?        @db.Decimal(12, 2)
-  currency              String          @default("GBP")
+  currency              String          @default("USD")
   properties            Json?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
@@ -3552,7 +3552,7 @@ model Opportunity {
   isDormant      Boolean   @default(false)
   probability    Int       @default(10) // 0-100%
   expectedValue  Decimal?
-  currency       String    @default("GBP")
+  currency       String    @default("USD")
   expectedClose  DateTime?
   actualClose    DateTime?
   lostReason     String?
@@ -3600,7 +3600,7 @@ model Quote {
   discountValue Decimal   @default(0)
   taxAmount     Decimal   @default(0)
   totalAmount   Decimal
-  currency      String    @default("GBP")
+  currency      String    @default("USD")
   terms         String?
   notes         String?
   // Public accept-link token (mirrors Invoice.payToken): possession authorizes
@@ -3653,7 +3653,7 @@ model SalesOrder {
   quoteId     String    @unique // 1:1 with accepted Quote
   accountId   String
   totalAmount Decimal
-  currency    String    @default("GBP")
+  currency    String    @default("USD")
   fulfilledAt DateTime?
   cancelledAt DateTime?
   notes       String?
@@ -3684,7 +3684,7 @@ model Subscription {
   planName        String // e.g. "DPF Managed Instance — Support & Hosting"
   billingCadence  String    @default("annual") // monthly | quarterly | annual
   totalValue      Decimal
-  currency        String    @default("GBP")
+  currency        String    @default("USD")
   startDate       DateTime  @default(now())
   renewalDate     DateTime
   endDate         DateTime?
@@ -4065,7 +4065,7 @@ model TaxLiabilityEntry {
   direction                String
   taxableAmount            Decimal  @default(0)
   taxAmount                Decimal  @default(0)
-  currency                 String   @default("GBP")
+  currency                 String   @default("USD")
   notes                    String?
   occurredAt               DateTime
   createdAt                DateTime @default(now())
@@ -8561,7 +8561,7 @@ model StorefrontConfig {
   designSystem          Json?
   isPublished           Boolean                          @default(false)
   customDomain          String?
-  timezone              String                           @default("Europe/London")
+  timezone              String                           @default("UTC")
   portfolioId           String?
   createdAt             DateTime                         @default(now())
   updatedAt             DateTime                         @updatedAt
@@ -9084,7 +9084,7 @@ model StorefrontItem {
   description         String?
   category            String?
   priceAmount         Decimal?
-  priceCurrency       String                          @default("GBP")
+  priceCurrency       String                          @default("USD")
   priceType           String?
   imageUrl            String?
   ctaType             String
@@ -9730,7 +9730,7 @@ model StorefrontOrder {
   deliveryAddress   Json?
   items             Json
   totalAmount       Decimal
-  currency          String           @default("GBP")
+  currency          String           @default("USD")
   status            String           @default("pending")
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
@@ -9786,7 +9786,7 @@ model RentalAgreement {
   pricingModel         String    @default("per-day") // per-day|per-week|usage-based|fixed
   rateAmount           Decimal?
   depositAmount        Decimal?
-  currency             String    @default("GBP")
+  currency             String    @default("USD")
   status               String    @default("reserved") // reserved|verified|active|returned|closed|cancelled
   verificationStatus   String    @default("not-required") // not-required|pending|verified|failed
   checkoutConditionId  String?   @unique
@@ -9947,7 +9947,7 @@ model StorefrontDonation {
   donorEmail        String
   donorName         String?
   amount            Decimal
-  currency          String           @default("GBP")
+  currency          String           @default("USD")
   campaignId        String?
   message           String?
   isAnonymous       Boolean          @default(false)
@@ -10057,7 +10057,7 @@ model Invoice {
   sourceId          String?
   issueDate         DateTime  @default(now())
   dueDate           DateTime
-  currency          String    @default("GBP")
+  currency          String    @default("USD")
   subtotal          Decimal
   taxAmount         Decimal   @default(0)
   discountAmount    Decimal   @default(0)
@@ -10127,7 +10127,7 @@ model Payment {
   method             String
   status             String    @default("pending")
   amount             Decimal
-  currency           String    @default("GBP")
+  currency           String    @default("USD")
   exchangeRate       Decimal   @default(1)
   baseCurrencyAmount Decimal?
   reference          String?
@@ -10182,7 +10182,7 @@ model Supplier {
   address         Json?
   taxId           String?
   paymentTerms    String?  @default("Net 30")
-  defaultCurrency String   @default("GBP")
+  defaultCurrency String   @default("USD")
   status          String   @default("active")
   bankDetails     Json?
   notes           String?
@@ -10384,7 +10384,7 @@ model Bill {
   invoiceRef         String?
   issueDate          DateTime
   dueDate            DateTime
-  currency           String   @default("GBP")
+  currency           String   @default("USD")
   subtotal           Decimal
   taxAmount          Decimal  @default(0)
   totalAmount        Decimal
@@ -10435,7 +10435,7 @@ model PurchaseOrder {
   poNumber     String    @unique
   supplierId   String
   status       String    @default("draft")
-  currency     String    @default("GBP")
+  currency     String    @default("USD")
   subtotal     Decimal
   taxAmount    Decimal   @default(0)
   totalAmount  Decimal
@@ -10537,7 +10537,7 @@ model BankAccount {
   sortCode         String?
   iban             String?
   swift            String?
-  currency         String    @default("GBP")
+  currency         String    @default("USD")
   accountType      String    @default("current")
   isDefault        Boolean   @default(false)
   openingBalance   Decimal   @default(0)
@@ -10599,7 +10599,7 @@ model RecurringSchedule {
   name            String
   frequency       String
   amount          Decimal
-  currency        String    @default("GBP")
+  currency        String    @default("USD")
   startDate       DateTime
   endDate         DateTime?
   nextInvoiceDate DateTime
@@ -10690,7 +10690,7 @@ model ExpenseClaim {
   status         String    @default("draft")
   title          String
   totalAmount    Decimal
-  currency       String    @default("GBP")
+  currency       String    @default("USD")
   submittedAt    DateTime?
   approvedById   String?
   approvedAt     DateTime?
@@ -10716,7 +10716,7 @@ model ExpenseItem {
   category       String
   description    String
   amount         Decimal
-  currency       String   @default("GBP")
+  currency       String   @default("USD")
   receiptUrl     String?
   taxReclaimable Boolean  @default(false)
   taxAmount      Decimal  @default(0)
@@ -10738,7 +10738,7 @@ model FixedAsset {
   category                String
   purchaseDate            DateTime
   purchaseCost            Decimal
-  currency                String    @default("GBP")
+  currency                String    @default("USD")
   depreciationMethod      String    @default("straight_line")
   usefulLifeMonths        Int
   residualValue           Decimal   @default(0)
@@ -10791,7 +10791,13 @@ model Complaint {
 
 model OrgSettings {
   id                 String    @id @default(cuid())
-  baseCurrency       String    @default("GBP")
+  // The single-org locale/currency spine (EP-ORG-LOCALE-CURRENCY). baseCurrency
+  // + locale are the operator-facing money-format source; countryCode is the ISO
+  // alpha-2 the two are derived from at onboarding (see lib/org-locale). Default
+  // is the neutral USD/en-US, NOT a hardcoded foreign GBP/Europe-London.
+  baseCurrency       String    @default("USD")
+  locale             String    @default("en-US")
+  countryCode        String?
   autoFetchRates     Boolean   @default(true)
   lastRateFetchAt    DateTime?
   // Archetype finance profile actually applied during setup. Lets surfaces
@@ -13543,7 +13549,7 @@ model LedgerAccount {
   parentId       String? // hierarchical roll-up within the chart
   isActive       Boolean  @default(true)
   isControl      Boolean  @default(false) // control/reconciliation account (AR, AP, bank)
-  currency       String   @default("GBP")
+  currency       String   @default("USD")
   description    String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -13570,7 +13576,7 @@ model JournalEntry {
   source         String    @default("manual")
   sourceType     String? // originating sub-ledger model, e.g. "Invoice"
   sourceId       String? // originating document id
-  currency       String    @default("GBP")
+  currency       String    @default("USD")
   postedAt       DateTime?
   postedById     String?
   reversalOfId   String?   @unique // set when this entry reverses another
@@ -13600,7 +13606,7 @@ model JournalLine {
   // Decimal. The posting service enforces sum(debit) == sum(credit) per entry.
   debit             Decimal  @default(0)
   credit            Decimal  @default(0)
-  currency          String   @default("GBP")
+  currency          String   @default("USD")
   description       String?
   // Optional analytical dimensions (ACDOCA-style rich line): who the posting relates to.
   customerAccountId String?

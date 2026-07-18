@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { applyOrgCountry } from "@/lib/actions/currency";
 import { auth } from "@/lib/auth";
 import { encryptSecret } from "@/lib/govern/credential-crypto";
 import { can } from "@/lib/permissions";
@@ -121,6 +122,11 @@ export async function updateOrganizationTaxProfile(input: UpdateOrganizationTaxP
       notes: nullableString(parsed.notes),
     },
   });
+
+  // Onboarding captured the operator's home country here — sync it to the org's
+  // locale/currency spine so a US business is USD/en-US, not GBP/Europe-London
+  // (EP-ORG-LOCALE-CURRENCY). Non-fatal: a sync failure must not fail tax setup.
+  await applyOrgCountry(updated.homeCountryCode).catch(() => null);
 
   const registrations = await prisma.taxRegistration.findMany({
     where: { organizationTaxProfileId: profile.id },

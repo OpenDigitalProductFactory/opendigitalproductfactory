@@ -140,6 +140,24 @@ function isOptionalityWidening(baseLine, headLine) {
   return base.suffix === head.suffix;
 }
 
+// A change to a column's `@default(...)` value is NOT a regression: it only
+// affects new inserts, never existing rows, and the field/type/other attributes
+// are unchanged. Tolerate it the same way optionality-widening is tolerated, so
+// a legitimate default change (e.g. GBP -> USD to retire a locale bias) isn't
+// misread as a field removal. Same field name + type, and the suffixes are
+// identical once each side's `@default(...)` argument is normalized away.
+function normalizeDefaultArg(suffix) {
+  return suffix.replace(/@default\([^)]*\)/, "@default()").trim();
+}
+function isDefaultValueChange(baseLine, headLine) {
+  const base = parseModelFieldLine(baseLine);
+  const head = parseModelFieldLine(headLine);
+  if (!base || !head) return false;
+  if (base.name !== head.name || base.type !== head.type) return false;
+  if (!/@default\(/.test(base.suffix) || !/@default\(/.test(head.suffix)) return false;
+  return normalizeDefaultArg(base.suffix) === normalizeDefaultArg(head.suffix);
+}
+
 // Fields intentionally removed via a steward-reviewed migration (AGENTS.md §11).
 // Each entry is "Model.field". The guard skips these specific removals so an
 // approved schema-convergence migration can land, while still blocking every
@@ -187,6 +205,11 @@ export function diffSchemas(base, head, allowlist = INTENTIONAL_FIELD_REMOVALS) 
           isOptionalityWidening(line, headLine),
         );
         if (equivalentWidening) continue;
+        // A default-value-only change is not a removal (new-insert default only).
+        const defaultOnlyChange = [...headLines].some((headLine) =>
+          isDefaultValueChange(line, headLine),
+        );
+        if (defaultOnlyChange) continue;
         // Sanctioned, steward-reviewed removals are skipped; everything else
         // (accidental drops) still regresses.
         const parsed = parseModelFieldLine(line);

@@ -100,6 +100,33 @@ describe("schema-regression-guard", () => {
     expect(regressions(before, BASE)).toEqual([]);
   });
 
+  it("tolerates a column default-value change (not a removal)", () => {
+    // Changing @default only affects new inserts, never existing rows —
+    // e.g. retiring a GBP-by-default bias to USD (EP-ORG-LOCALE-CURRENCY).
+    const withDefault = BASE.replace(
+      /name      String/,
+      'name      String   @default("GBP")',
+    );
+    const flipped = BASE.replace(
+      /name      String/,
+      'name      String   @default("USD")',
+    );
+    expect(regressions(withDefault, flipped)).toEqual([]);
+  });
+
+  it("still flags a field removal even when another field's default changed", () => {
+    const withDefault = BASE.replace(
+      /name      String/,
+      'name      String   @default("GBP")',
+    );
+    const flippedAndDropped = BASE
+      .replace(/name      String/, 'name      String   @default("USD")')
+      .replace(/  ownerId   String\?\n/, "");
+    const found = regressions(withDefault, flippedAndDropped);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(/ownerId/);
+  });
+
   it("passes when a required relation field is widened to optional", () => {
     const before = `
 model SupplierContract {

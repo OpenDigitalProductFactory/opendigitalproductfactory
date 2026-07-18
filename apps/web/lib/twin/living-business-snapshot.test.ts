@@ -271,6 +271,9 @@ describe("loadLivingBusinessSnapshot — loader", () => {
       storefrontConfig: {
         findFirst: async () => ({ archetype: { archetypeId: "restaurant", name: "Dine-in restaurant" } }),
       },
+      // Org is US → the twin renders USD regardless of any legacy GBP-denominated
+      // bill row (currency comes from OrgSettings, not the bill).
+      orgSettings: { findFirst: async () => ({ baseCurrency: "USD", locale: "en-US", countryCode: "US" }) },
       bill: { findMany: async () => [{ amountDue: 500, dueDate: NOW, status: "open", currency: "GBP" }] },
       taxObligationPeriod: { findMany: async () => [{ dueDate: new Date("2026-07-20T00:00:00Z"), status: "open", filedAt: null }] },
       obligation: { findMany: async () => [] },
@@ -295,8 +298,8 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     // presence carries both the human and the AI coworker
     expect(snap!.presence.some((p) => p.kind === "ai")).toBe(true);
     expect(snap!.presence.some((p) => p.kind === "human")).toBe(true);
-    // finance is real
-    expect(snap!.utility.find((m) => m.key === "bills")!.value).toContain("£500");
+    // finance renders the ORG currency (USD), not the legacy GBP bill row
+    expect(snap!.utility.find((m) => m.key === "bills")!.value).toContain("$500");
     // a pending booking becomes queue demand + a cog proposal
     expect(snap!.queues[0].items.length).toBeGreaterThan(0);
     expect(snap!.cog).toBeTruthy();
