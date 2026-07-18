@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -11,7 +11,19 @@ const execFile = promisify(execFileCallback);
 const SHA = /^[0-9a-f]{40}$/i;
 const DIGEST = /^sha256:[0-9a-f]{64}$/i;
 const PROJECT = /^dpf-n1-[a-z0-9][a-z0-9_-]*$/i;
-export const PROMOTER_READINESS_PROTOCOL_FLOOR_SHA = "21969d012";
+export const PROMOTER_READINESS_PROTOCOL_FLOOR_SHA = "21969d012ad8ab382d47a2c59ffc955530796bd2";
+
+export function buildPromoterReadinessDockerArgs({ candidateDigest, source, state, backups, secret, targetSha, project }) {
+  return ["run", "--rm", "--read-only",
+    "-v", `${source}:/host-source:ro`, "-v", `${state}:/dpf-state:ro`, "-v", `${backups}:/backups:ro`,
+    "-v", `${secret}:/run/secrets/dpf-runtime-transition:ro`,
+    "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state", "-e", "DPF_HOST_PLATFORM=linux", "-e", "DPF_HOST_ARCH=amd64",
+    "-e", "DPF_HOST_IDENTITY_PROVENANCE=explicit", "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready",
+    "-e", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition", "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`,
+    "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`, "-e", `PROMOTE_COMPOSE_PROJECT=${project}`,
+    "-e", "PROMOTE_BACKUP_PATH=/backups/recovery", "-e", "PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health",
+    candidateDigest, "--readiness", "--json"];
+}
 
 export async function classifyUpgradeProtocolFloor(baseSha, isAncestor) {
   if (!SHA.test(baseSha)) throw new Error("protocol floor classification requires an exact base SHA");
@@ -197,11 +209,15 @@ function createRuntimeDependencies(options) {
       const candidateDigest = inspected.Id;
       const labels = inspected.Config?.Labels ?? {};
       if (labels["org.opencontainers.image.revision"] !== options.candidateSha || labels["org.opendpf.promoter.contract-digest"] !== `sha256:${contractDigest}`) throw new Error("candidate image labels do not bind source SHA and contract digest");
-      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, workspace };
+      const transitionSecret = join(workspace.root, "transition.secret");
+      await writeFile(transitionSecret, randomBytes(32).toString("hex"));
+      await writeFile(join(workspace.state, "install-state.json"), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(`${JSON.stringify({ schemaVersion: 1, installerVersion: "n-minus-one", platform: "linux", arch: "amd64", installPath: workspace.source, stateDir: workspace.state, composeProjectName: options.project })}\n`)]));
+      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, workspace, transitionSecret, candidateSource: process.cwd() };
     },
-    readiness: async ({ candidateDigest }) => {
+    readiness: async ({ candidateDigest, candidateSource, transitionSecret }) => {
       if (options.injectReadinessFailure) return { ok: false, owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest, quiescenceBegan: false };
-      const { stdout } = await execFile("docker", ["run", "--rm", "--read-only", candidateDigest, "--readiness", "--json"]);
+      const args = buildPromoterReadinessDockerArgs({ candidateDigest, source: candidateSource, state: workspace.state, backups: workspace.backups, secret: transitionSecret, targetSha: options.candidateSha, project: options.project });
+      const { stdout } = await execFile("docker", args);
       return { ...JSON.parse(stdout), owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest, quiescenceBegan: false };
     },
     requestUpgrade: async ({ candidateDigest }) => requestJson(`${portalUrl}/api/ops/self-upgrade`, { targetSha: options.candidateSha, promoterImage: candidateDigest }),

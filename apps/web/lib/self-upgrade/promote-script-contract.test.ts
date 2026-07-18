@@ -204,13 +204,11 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       expect(scriptSource).toContain('--recovery-path "$_capability_recovery"');
     });
 
-    it("provides deterministic post-migration build, swap, and health fault boundaries", () => {
+    it("keeps rollback fault injection outside the privileged production promoter", () => {
       const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
-      for (const stage of ["build", "swap", "health"]) expect(source).toContain(`DPF_PROMOTE_TEST_FAIL_AT:-}\" != \"${stage}`);
       expect(source).toContain("_restore_capability_snapshot");
-      for (const event of ["recovery-created", "state-migrated", "state-restored"]) {
-        expect(source).toContain(`_record_promote_test_event ${event}`);
-      }
+      expect(source).not.toContain("DPF_PROMOTE_TEST_FAIL_AT");
+      expect(source).not.toContain("DPF_PROMOTE_TEST_EVENT_LOG");
       const workflow = readFileSync(join(REPO_ROOT, ".github/workflows/self-upgrade-acceptance.yml"), "utf8");
       expect(workflow).toContain("node --test scripts/promote-install-state-rollback.test.mjs");
       expect(workflow).toContain("signed-promotion-rollback.tap");

@@ -11,6 +11,8 @@ test("schema-v1 manifest declares the complete pre-drain contract", async () => 
   const manifest = JSON.parse(await readFile(resolve(root, "promoter-contract.json"), "utf8"));
   assert.equal(schema.properties.schemaVersion.const, 1);
   assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.readinessProtocolFloorSha, "21969d012ad8ab382d47a2c59ffc955530796bd2");
+  assert.equal(schema.properties.readinessProtocolFloorSha.const, manifest.readinessProtocolFloorSha);
   assert.deepEqual(manifest.callerProtocol, { min: 1, max: 1 });
   assert.equal(manifest.entrypoint, "/promoter/promote.sh");
   assert.deepEqual(manifest.requiredMounts, [

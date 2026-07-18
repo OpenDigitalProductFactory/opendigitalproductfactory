@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "readinessProtocolFloorSha": "21969d012ad8ab382d47a2c59ffc955530796bd2",
   "entrypoint": "/promoter/promote.sh",
   "requiredFiles": [
     "/app/promoter-contract.json",

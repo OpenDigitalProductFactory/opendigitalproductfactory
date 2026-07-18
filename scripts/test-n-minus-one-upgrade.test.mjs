@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -12,7 +12,9 @@ import {
   githubJson,
   installCleanupHandlers,
   runNMinusOneUpgrade,
+  buildPromoterReadinessDockerArgs,
   classifyUpgradeProtocolFloor,
+  PROMOTER_READINESS_PROTOCOL_FLOOR_SHA,
   verifyBaseRevision,
 } from "./test-n-minus-one-upgrade.mjs";
 
@@ -124,8 +126,27 @@ test("success proves immutable candidate bytes, state migration, recovery, healt
 });
 
 test("protocol floor uses real PR 3276 ancestry rather than caller mode labels", async () => {
-  assert.equal(await classifyUpgradeProtocolFloor("a".repeat(40), async (floor, base) => floor === "21969d012" && base === "a".repeat(40)), "post-floor");
+  assert.equal(PROMOTER_READINESS_PROTOCOL_FLOOR_SHA, "21969d012ad8ab382d47a2c59ffc955530796bd2");
+  assert.equal(await classifyUpgradeProtocolFloor("a".repeat(40), async (floor, base) => floor === PROMOTER_READINESS_PROTOCOL_FLOOR_SHA && base === "a".repeat(40)), "post-floor");
   assert.equal(await classifyUpgradeProtocolFloor("b".repeat(40), async () => false), "legacy-bootstrap");
+});
+
+test("runtime readiness supplies the complete state, secret, digest, mount, and host contract", () => {
+  const digest = "sha256:" + "d".repeat(64);
+  const args = buildPromoterReadinessDockerArgs({ candidateDigest: digest, source: "/candidate", state: "/state", backups: "/backups", secret: "/secret", targetSha: "a".repeat(40), project: "dpf-n1-test" });
+  const rendered = args.join(" ");
+  for (const required of [
+    "/candidate:/host-source:ro", "/state:/dpf-state:ro", "/backups:/backups:ro", "/secret:/run/secrets/dpf-runtime-transition:ro",
+    "DPF_PROMOTER_STATE_DIR=/dpf-state", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition",
+    `DPF_PROMOTER_DIGEST=${digest}`, "DPF_HOST_PLATFORM=linux", "DPF_HOST_ARCH=amd64", "--readiness --json",
+  ]) assert.ok(rendered.includes(required), required);
+});
+
+test("acceptance workflow executes the real baseline-to-candidate N-1 runner", async () => {
+  const workflow = await readFile(join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), ".github/workflows/self-upgrade-acceptance.yml"), "utf8");
+  assert.match(workflow, /node scripts\/test-n-minus-one-upgrade\.mjs \\/);
+  for (const flag of ["--base-sha", "--candidate-sha", "--repository", "--project", "--evidence-dir"]) assert.match(workflow, new RegExp(flag));
+  assert.match(workflow, /21969d012ad8ab382d47a2c59ffc955530796bd2/);
 });
 
 test("honest pre-floor legacy-bootstrap mode refuses automatic migration", async () => {

@@ -124,20 +124,15 @@ _profile_adapter="$PROMOTE_SOURCE/scripts/lib/resolve-capability-compose-profile
 _capability_projection="$(node "$_profile_adapter" --state "$_install_state" --overlay promote)" || exit $?
 export COMPOSE_PROFILES="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
 _capability_recovery="$PROMOTE_BACKUP_PATH/install-state.json"
-_record_promote_test_event() {
-  [[ -z "${DPF_PROMOTE_TEST_EVENT_LOG:-}" ]] || printf '%s\n' "$1" >> "$DPF_PROMOTE_TEST_EVENT_LOG"
-}
 _restore_capability_snapshot() {
   if [[ -f "$_capability_recovery" ]]; then
     node "$_promoter_dir/installer/install-state-transaction.mjs" restore \
       --state "$_install_state" --recovery-path "$_capability_recovery"
-    _record_promote_test_event state-restored
   fi
 }
 if [[ $_dry_run -eq 0 ]]; then
   mkdir -p "$PROMOTE_BACKUP_PATH"
   cp "$_install_state" "$_capability_recovery"
-  _record_promote_test_event recovery-created
   trap '_rc=$?; if [[ $_rc -ne 0 ]]; then _restore_capability_snapshot; fi' EXIT
 fi
 
@@ -266,8 +261,6 @@ if [[ $_dry_run -eq 0 ]]; then
       --recovery-path "$_capability_recovery" \
       --write >/dev/null
   fi
-  _record_promote_test_event state-migrated
-  [[ "${DPF_PROMOTE_TEST_FAIL_AT:-}" != "build" ]] || { _record_promote_test_event failure-injected:build; printf 'error: injected post-migration build failure\n' >&2; exit 91; }
 fi
 
 # Real platform version from the source's git release tags, baked into the new
@@ -424,7 +417,6 @@ fi
 # SHA of the code it is running at /api/health/sha.
 emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
-  [[ "${DPF_PROMOTE_TEST_FAIL_AT:-}" != "swap" ]] || { _record_promote_test_event failure-injected:swap; printf 'error: injected post-migration swap failure\n' >&2; exit 92; }
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" up -d --no-deps --force-recreate portal
 fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
@@ -460,7 +452,6 @@ fi
 # Wait for the recreated portal to report healthy (it takes time to boot).
 emit_step health
 if [[ $_dry_run -eq 0 ]]; then
-  [[ "${DPF_PROMOTE_TEST_FAIL_AT:-}" != "health" ]] || { _record_promote_test_event failure-injected:health; printf 'error: injected post-migration health failure\n' >&2; exit 93; }
   _healthy=0
   for _i in $(seq 1 60); do
     if curl -fsS "$PROMOTE_HEALTH_URL" >/dev/null 2>&1; then _healthy=1; break; fi
