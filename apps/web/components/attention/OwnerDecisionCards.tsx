@@ -45,57 +45,59 @@ export function OwnerDecisionCards({
 
 function DecisionSummary({ entry }: { entry: OwnerAttentionEntry }) {
   const { card } = entry;
+  // Prefer the concrete "what the coworker was doing and why it stalled" rationale;
+  // fall back to the generic why-it-matters for self-explanatory approvals.
+  const rationale = card.situation ?? card.whyItMatters;
   return (
-    <span className="block space-y-3">
-      <span className="flex flex-wrap items-center gap-2">
-        {card.tags.map((tag) => (
-          <StatusBadge
-            key={`${tag.kind}:${tag.label}`}
-            domain="ownerDecisionImpact"
-            status={tag.kind}
-            label={tag.label}
-            variant="soft"
-            uppercase={false}
-            className="rounded-full"
-          />
-        ))}
-      </span>
-
-      <span className="block">
+    <span className="block">
+      <span className="flex items-start justify-between gap-3">
         <span className="block text-base font-semibold leading-snug text-[var(--dpf-text)]">
           {card.headline}
         </span>
-        <span className="mt-1 block text-sm leading-relaxed text-[var(--dpf-muted)]">
-          {card.whyItMatters}
-        </span>
+        {card.tags.length > 0 ? (
+          <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            {card.tags.map((tag) => (
+              <StatusBadge
+                key={`${tag.kind}:${tag.label}`}
+                domain="ownerDecisionImpact"
+                status={tag.kind}
+                label={tag.label}
+                variant="soft"
+                uppercase={false}
+                className="rounded-full"
+              />
+            ))}
+          </span>
+        ) : null}
       </span>
 
-      <span className="grid gap-3 md:grid-cols-2">
-        <span className="block rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-          <span className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">
+      <span className="mt-1.5 block text-sm leading-relaxed text-[var(--dpf-muted)]">
+        {rationale}
+      </span>
+
+      <span className="mt-2 block space-y-1.5 border-t border-[var(--dpf-border)] pt-2">
+        <span className="block leading-snug">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">
             If you do nothing
           </span>
-          <span className="mt-1 block text-xs leading-relaxed text-[var(--dpf-text)]">
+          <span className="ml-2 text-xs text-[var(--dpf-text)]">
             {stripConsequenceLead(card.ifYouDoNothing)}
           </span>
         </span>
-
-        <span className="block rounded-md border border-[var(--dpf-accent)]/40 bg-[var(--dpf-surface-2)] p-3">
-          <span className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
-              {card.recommendation.lead}
-            </span>
-            <span className="text-[10px] text-[var(--dpf-muted)]">
-              {card.recommendation.specialistByline}
-            </span>
+        <span className="block leading-snug">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
+            {card.recommendation.lead}
           </span>
-          <span className="mt-1 block text-xs leading-relaxed text-[var(--dpf-text)]">
+          <span className="ml-1.5 text-[10px] text-[var(--dpf-muted)]">
+            {card.recommendation.specialistByline}
+          </span>
+          <span className="ml-2 text-xs text-[var(--dpf-text)]">
             {capitalize(card.recommendation.text)}
           </span>
         </span>
       </span>
 
-      <span className="block text-[11px] font-medium text-[var(--dpf-muted)]">
+      <span className="mt-2 block text-[11px] font-medium text-[var(--dpf-muted)]">
         Technical detail — for builders and your digital team
       </span>
     </span>

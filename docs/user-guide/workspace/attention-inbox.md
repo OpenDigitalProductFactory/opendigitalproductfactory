@@ -25,7 +25,7 @@ Folding "a human must decide this now" into the backlog is a category error: the
 
 - **Only owner decisions reach the daily count.** Routine platform recovery, missing credentials, stalled builds, and service health stay with your digital team. They appear only if they create a real business choice for you.
 - **Money and public actions always come to you.** A proactivity setting can change how routine work is handled, but it cannot bypass approval when money leaves the business or something goes public.
-- **Every card explains the decision.** The top of the card gives a short question, why it matters, what happens if you do nothing, the recommendation, and no more than three plain choices. It never invents a confidence score.
+- **Every card explains the decision.** The top of the card gives a short question; for a blocked coworker, a plain line saying **what it was doing and why it stalled**; a concrete **impact** ("if ignored…"); the **recommendation** with the specialist it came from; and no more than three plain choices. It never invents a confidence score.
 - **Technical detail is preserved.** Open **Technical detail** to see the original title, source, work fields, linked identifiers, detection details, and builder actions. That information is moved one click down, not deleted.
 - **A projection, not another queue.** The inbox is a read-only view *over* each area's own records; it is not a second backlog or ticket tracker. Acting on an item updates the record in its home area.
 - **An empty inbox is a good day.** When nothing needs a decision, the inbox shows **"You're all caught up"** — and, when relevant, a short summary of what your digital team is handling on its own. An empty inbox is reassurance, not an unfinished list.
