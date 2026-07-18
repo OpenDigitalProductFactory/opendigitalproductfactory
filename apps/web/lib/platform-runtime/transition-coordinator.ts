@@ -21,7 +21,11 @@ export type RuntimeCapabilityTransitionRequest = {
 
 export interface RuntimeCapabilityTransitionReceipts {
   /** Implementations serialize with an advisory lock + the DB partial unique index. */
-  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string }): Promise<{ created: boolean; status?: string }>;
+  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string }): Promise<
+    | { created: true }
+    | { created: false; kind: "replay"; status: string }
+    | { created: false; kind: "active_conflict"; status: string; transitionId: string }
+  >;
   markFailed(transitionId: string, failure: string): Promise<void>;
   markHostApplied(transitionId: string): Promise<void>;
 }
@@ -34,8 +38,8 @@ export type RuntimeCapabilityCoordinatorDeps = {
 };
 
 type TransitionModel = {
-  findFirst(args: unknown): Promise<unknown>;
-  findUnique(args: unknown): Promise<{ status: string } | null>;
+  findFirst(args: unknown): Promise<{ transitionId: string; status: string } | null>;
+  findUnique(args: unknown): Promise<{ status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string; previousKeys: string[]; desiredKeys: string[] } | null>;
   create(args: unknown): Promise<unknown>;
   updateMany(args: unknown): Promise<{ count: number }>;
 };
@@ -51,10 +55,14 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       // Fixed SQL with no interpolation: the transaction-scoped lock serializes
       // the read/create pair before the partial unique index supplies backstop.
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
-      const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true } });
-      if (replay) return { created: false, status: replay.status };
-      const active = await tx.runtimeCapabilityTransition.findFirst({ where: { status: { in: [...ACTIVE_RUNTIME_TRANSITION_STATUSES] } }, select: { id: true } });
-      if (active) return { created: false };
+      const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true } });
+      if (replay) {
+        const same = replay.catalogHash === input.catalogHash && replay.previousStateHash === input.previousStateHash && replay.desiredStateHash === input.desiredStateHash && JSON.stringify(replay.previousKeys) === JSON.stringify([...input.previousKeys].sort()) && JSON.stringify(replay.desiredKeys) === JSON.stringify([...input.desiredKeys].sort());
+        if (!same) throw new Error("transition_id_conflict");
+        return { created: false, kind: "replay", status: replay.status };
+      }
+      const active = await tx.runtimeCapabilityTransition.findFirst({ where: { status: { in: [...ACTIVE_RUNTIME_TRANSITION_STATUSES] } }, select: { transitionId: true, status: true } });
+      if (active) return { created: false, kind: "active_conflict", status: active.status, transitionId: active.transitionId };
       await tx.runtimeCapabilityTransition.create({ data: {
         transitionId: input.transitionId,
         previousKeys: [...input.previousKeys].sort(),
@@ -83,9 +91,8 @@ function validateRequest(request: RuntimeCapabilityTransitionRequest): void {
 }
 
 /**
- * Portal-core half of the saga. This deliberately stops at host_applied: signed
- * receipt verification, health validation, DB commit, and compensation belong
- * to Steps 7-9 and no action/API calls this coordinator before they exist.
+ * Portal-core half of the saga. The promoter currently fails closed before host
+ * apply; reaching host_applied requires Step 7 signed receipt verification.
  */
 export async function coordinateRuntimeCapabilityTransition(
   request: RuntimeCapabilityTransitionRequest,
@@ -100,7 +107,10 @@ export async function coordinateRuntimeCapabilityTransition(
     desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates),
   };
   const pending = await deps.receipts.createPending(normalized);
-  if (!pending.created) return ACTIVE_RUNTIME_TRANSITION_STATUSES.includes(pending.status as never) ? { status: "transition_in_progress" as const } : { status: "already_terminal" as const, transitionStatus: pending.status };
+  if (!pending.created) {
+    if (pending.kind === "active_conflict" || ACTIVE_RUNTIME_TRANSITION_STATUSES.includes(pending.status as never)) return { status: "transition_in_progress" as const };
+    return { status: "already_terminal" as const, transitionStatus: pending.status };
+  }
   let available = false;
   try { available = await deps.isPromoterAvailable(deps.promoterParams.promoterImage); } catch { available = false; }
   if (!available) {

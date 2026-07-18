@@ -36,7 +36,7 @@ describe("runtime capability transition coordinator", () => {
   });
 
   it("serializes transitions and never launches a second promoter", async () => {
-    const d = deps({ receipts: { createPending: vi.fn(async () => ({ created: false as const, status: "pending" })), markFailed: vi.fn(), markHostApplied: vi.fn() } });
+    const d = deps({ receipts: { createPending: vi.fn(async () => ({ created: false as const, kind: "active_conflict" as const, status: "pending", transitionId: "RCT-OTHER" })), markFailed: vi.fn(), markHostApplied: vi.fn() } });
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "transition_in_progress" });
     expect(d.runPromoter).not.toHaveBeenCalled();
   });
@@ -53,12 +53,29 @@ describe("runtime capability transition coordinator", () => {
   });
 
   it("reconciles an idempotent transition-id retry without creating another row", async () => {
-    const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "host_applied" })), create: vi.fn(), updateMany: vi.fn() };
+    const envelope = { catalogHash: request.catalogHash, previousStateHash: "before", desiredStateHash: "after", previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys] };
+    const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "host_applied", ...envelope })), create: vi.fn(), updateMany: vi.fn() };
     const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
-    await expect(receipts.createPending({ ...request, previousStateHash: "before", desiredStateHash: "after" })).resolves.toEqual({ created: false, status: "host_applied" });
+    await expect(receipts.createPending({ ...request, previousStateHash: "before", desiredStateHash: "after" })).resolves.toEqual({ created: false, kind: "replay", status: "host_applied" });
     expect(model.create).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a replayed transition id carries a different immutable envelope", async () => {
+    const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "pending", catalogHash: request.catalogHash, previousStateHash: "different", desiredStateHash: "after", previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys] })), create: vi.fn(), updateMany: vi.fn() };
+    const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
+    await expect(receipts.createPending({ ...request, previousStateHash: "before", desiredStateHash: "after" })).rejects.toThrow("transition_id_conflict");
+  });
+
+  it("surfaces a different active receipt as transition_in_progress through the Prisma repository", async () => {
+    const model = { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => ({ transitionId: "RCT-OTHER", status: "applying" })), create: vi.fn(), updateMany: vi.fn() };
+    const tx = { $queryRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
+    const d = deps({ receipts });
+    await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "transition_in_progress" });
+    expect(d.runPromoter).not.toHaveBeenCalled();
   });
 
   it("uses compare-and-set updates and rejects terminal regression", async () => {
