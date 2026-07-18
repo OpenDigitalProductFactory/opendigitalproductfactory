@@ -151,7 +151,15 @@ test("bounds validation errors and stops with a deterministic truncation sentine
 });
 
 test("enforces strict RFC3339 calendar-valid date-time values", async () => {
-  for (const invalid of ["2026", "2026-07-18", "2026-02-30T12:00:00Z", "2025-02-29T12:00:00Z", "2026-07-18T12:00:00+24:00"]) {
+  for (const invalid of [
+    "2026",
+    "2026-07-18",
+    "2026-02-30T12:00:00Z",
+    "2025-02-29T12:00:00Z",
+    "2026-07-18T12:00:00+24:00",
+    "2026-01-01T12:34:60Z",
+    "1990-12-31T22:59:60Z",
+  ]) {
     const result = await validateInstallState({ ...valid, lastHealthCheck: invalid });
     assert.equal(result.valid, false, invalid);
     assert.match(result.errors.join("\n"), /date-time format/, invalid);
@@ -160,6 +168,7 @@ test("enforces strict RFC3339 calendar-valid date-time values", async () => {
     "2024-02-29T12:34:56Z",
     "2026-07-18T12:34:56.123456-05:30",
     "1990-12-31T23:59:60Z",
+    "1991-01-01T00:59:60+01:00",
     "0000-01-01T00:00:00Z",
     "0099-12-31T23:59:59Z",
   ]) {

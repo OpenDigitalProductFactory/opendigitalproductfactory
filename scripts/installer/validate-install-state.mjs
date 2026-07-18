@@ -16,15 +16,49 @@ function errorCollector() {
   };
 }
 
+function isLeapYear(year) {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function monthLength(year, month) {
+  return [31, isLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+}
+
+function daysBeforeYear(year) {
+  if (year === 0) return 0;
+  const multiplesThroughPreviousYear = (divisor) => Math.floor((year - 1) / divisor) + 1;
+  return 365 * year + multiplesThroughPreviousYear(4) - multiplesThroughPreviousYear(100) + multiplesThroughPreviousYear(400);
+}
+
+function calendarOrdinal(year, month, day) {
+  let ordinal = daysBeforeYear(year) + day - 1;
+  for (let priorMonth = 1; priorMonth < month; priorMonth += 1) ordinal += monthLength(year, priorMonth);
+  return ordinal;
+}
+
 function isRfc3339DateTime(value) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
   if (!match) return false;
-  const [, year, month, day, hour, minute, second, offsetHour, offsetMinute] = match.map(Number);
-  if (hour > 23 || minute > 59 || second > 60 || (offsetHour !== undefined && (offsetHour > 23 || offsetMinute > 59))) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, offsetSign, offsetHourText, offsetMinuteText] = match;
+  const [year, month, day, hour, minute, second] = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const offsetHour = offsetHourText === undefined ? 0 : Number(offsetHourText);
+  const offsetMinute = offsetMinuteText === undefined ? 0 : Number(offsetMinuteText);
+  if (hour > 23 || minute > 59 || second > 60 || offsetHour > 23 || offsetMinute > 59) return false;
   if (month < 1 || month > 12 || day < 1) return false;
-  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return day <= daysInMonth[month - 1];
+  if (day > monthLength(year, month)) return false;
+  if (second !== 60) return true;
+
+  const signedOffsetMinutes = (offsetHour * 60 + offsetMinute) * (offsetSign === "-" ? -1 : 1);
+  const utcTotalMinutes = calendarOrdinal(year, month, day) * 1440 + hour * 60 + minute - signedOffsetMinutes;
+  const utcOrdinal = Math.floor(utcTotalMinutes / 1440);
+  const utcMinuteOfDay = ((utcTotalMinutes % 1440) + 1440) % 1440;
+  if (utcMinuteOfDay !== 23 * 60 + 59) return false;
+  for (let candidateYear = Math.max(0, year - 1); candidateYear <= Math.min(9999, year + 1); candidateYear += 1) {
+    for (let candidateMonth = 1; candidateMonth <= 12; candidateMonth += 1) {
+      if (calendarOrdinal(candidateYear, candidateMonth, monthLength(candidateYear, candidateMonth)) === utcOrdinal) return true;
+    }
+  }
+  return false;
 }
 
 function isType(value, type) {
