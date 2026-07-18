@@ -12,6 +12,10 @@ import {
   evaluateReleaseBatch,
 } from "@/lib/self-upgrade/release-batch";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
+// Pure constant from a spawn-free module — the host-only ./promoter runtime must
+// NOT be statically imported into this server bundle entrypoint (BI-98AF1066);
+// that is what the dynamic loadPromoterRuntime() below is for.
+import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import {
   classifyBuildFailure,
@@ -615,6 +619,23 @@ export async function runSelfUpgrade(
     await recordCooldown(now, cooldownMinutes);
     await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
     return { ok: false, status: "failed", runId: run.runId, quiescenceRunId, excerpt: msg };
+  }
+
+  if (result.exitCode === PROMOTER_ALREADY_RUNNING_EXIT_CODE) {
+    // A concurrent/retried dispatch for THIS runId found a promoter already
+    // building it (runPromoter's idempotency guard declined to launch a
+    // duplicate). Leave run state untouched — the owning dispatch, and as a
+    // backstop the stuck-run watchdog, finalizes the run. Calling failRun here
+    // is exactly the SUR-E2BF265E defect: a healthy in-flight build recorded as
+    // failed because a second `docker run` collided on the deterministic name.
+    // No cooldown, no failure event — this dispatch is a no-op, not a failure.
+    return {
+      ok: true,
+      status: "already-in-flight",
+      runId: run.runId,
+      quiescenceRunId,
+      note: result.stderr.trim(),
+    };
   }
 
   if (result.exitCode === 0) {

@@ -6,7 +6,10 @@ import { join, resolve } from "node:path";
 import {
   buildPromoterCommand,
   decidePromoterEnsureAction,
+  decidePromoterLaunch,
+  interpretContainerInspect,
   isJitBuildablePromoterImage,
+  PROMOTER_ALREADY_RUNNING_EXIT_CODE,
   PROMOTER_JIT_BUILD_SCRIPT,
   PROMOTER_TIMEOUT_EXIT_CODE,
   resolvePromoterTimeoutMs,
@@ -172,6 +175,44 @@ describe("buildPromoterCommand", () => {
     const joined = buildPromoterCommand(BASE).args.join(" ");
     expect(joined).not.toContain("PROMOTE_COMPOSE_FILES=");
     expect(joined).not.toContain("PROMOTE_COMPOSE_PROJECT=");
+  });
+});
+
+describe("promoter launch idempotency (SUR-E2BF265E)", () => {
+  // The defect: the promoter container name is deterministic
+  // (`dpf-promoter-<runId>`), so a concurrent/retried dispatch of the SAME run
+  // issued a second `docker run --name dpf-promoter-SUR-E2BF265E`, hit
+  // "The container name is already in use", and the orchestrator recorded a
+  // build FAILURE — while the first promoter was still healthily building
+  // (past Step 40/119). runPromoter must first inspect the name and defer.
+
+  it("classifies docker inspect .State.Running output into a container state", () => {
+    // `docker inspect -f '{{.State.Running}}' <name>` — exit 0 + "true" while a
+    // build runs, exit 0 + "false" for an exited corpse `--rm` never cleaned,
+    // nonzero when there is no such container.
+    expect(interpretContainerInspect(0, "true\n")).toBe("running");
+    expect(interpretContainerInspect(0, "false\n")).toBe("present");
+    expect(interpretContainerInspect(1, "")).toBe("absent");
+  });
+
+  it("defers to an already-running promoter instead of relaunching and colliding", () => {
+    expect(decidePromoterLaunch("running")).toBe("defer");
+  });
+
+  it("reclaims a dead corpse (--rm never fired) before a fresh launch", () => {
+    expect(decidePromoterLaunch("present")).toBe("reclaim");
+  });
+
+  it("launches normally when no container by that name exists", () => {
+    expect(decidePromoterLaunch("absent")).toBe("launch");
+  });
+
+  it("signals a defer with a distinct sentinel exit code, never a real failure or timeout", () => {
+    // The orchestrator special-cases this code to leave run state untouched
+    // instead of calling failRun — so it must not collide with 0 (success) or
+    // the timeout code (a real failure the orchestrator DOES record).
+    expect(PROMOTER_ALREADY_RUNNING_EXIT_CODE).not.toBe(0);
+    expect(PROMOTER_ALREADY_RUNNING_EXIT_CODE).not.toBe(PROMOTER_TIMEOUT_EXIT_CODE);
   });
 });
 
