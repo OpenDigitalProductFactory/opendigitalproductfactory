@@ -53,6 +53,20 @@ test("expired dead ownership is recovered but an expired live owner is not", asy
   await assert.rejects(acquireInstallStateLock(statePath, { timeoutMs: 25 }), /lock_timeout/);
 });
 
+test("two stale reclaimers cannot ABA-remove a fresh live claim", { timeout: 1000 }, async () => {
+  const { statePath } = await fixture(); const lockPath = `${statePath}.lock`;
+  await writeFile(lockPath, JSON.stringify({ protocolVersion: 1, ownerId: "dead", runId: "dead-run", pid: 99999999, hostname: "foreign", acquiredAt: "2000-01-01T00:00:00Z", expiresAt: "2000-01-01T00:00:01Z", expiresAtEpoch: 946684801 }));
+  let observed; const staleObserved = new Promise(resolve => { observed = resolve; });
+  let resume; const paused = new Promise(resolve => { resume = resolve; });
+  const first = acquireInstallStateLock(statePath, { timeoutMs: 150, onStaleObserved: async () => { observed(); await paused; } });
+  await staleObserved;
+  const fresh = await acquireInstallStateLock(statePath, { timeoutMs: 150 });
+  resume();
+  await assert.rejects(first, /lock_timeout/);
+  assert.equal(JSON.parse(await readFile(lockPath, "utf8")).ownerId, fresh.owner.ownerId);
+  await fresh.release();
+});
+
 test("release never removes a lock now owned by another live owner", async () => {
   const { statePath } = await fixture();
   const held = await acquireInstallStateLock(statePath);

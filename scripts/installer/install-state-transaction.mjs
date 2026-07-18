@@ -11,6 +11,7 @@ const PROTOCOL_VERSION = contract.protocolVersion;
 const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
 export const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const localHostname = hostname();
+const makeOwner = (ownerId, runId, leaseMs) => { const now = Date.now(); return { protocolVersion: PROTOCOL_VERSION, ownerId, runId, pid: process.pid, hostname: localHostname, acquiredAt: new Date(now).toISOString(), expiresAt: new Date(now + leaseMs).toISOString(), expiresAtEpoch: Math.ceil((now + leaseMs) / 1000) }; };
 
 const pidIsLive = pid => {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
@@ -36,6 +37,27 @@ async function staleOwner(lockPath, now) {
   return true;
 }
 
+async function activeReclaimTickets(lockPath) {
+  const directory = dirname(lockPath); const prefix = `${basename(lockPath)}${contract.reclaimSuffix}`; const active = [];
+  for (const name of await readdir(directory)) {
+    if (!name.startsWith(prefix)) continue; const path = join(directory, name);
+    try { const owner = JSON.parse(await readFile(path, "utf8")); if (Number.isSafeInteger(owner.expiresAtEpoch) && owner.expiresAtEpoch * 1000 > Date.now()) active.push({ path, owner }); else await rm(path, { force: true }); } catch {}
+  }
+  return active.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+async function acquireReclaimGuard(lockPath, options, deadline) {
+  const ownerId = randomUUID(); const path = `${lockPath}${contract.reclaimSuffix}${ownerId}`; const runId = options.runId ?? process.env.DPF_RUN_ID ?? randomUUID();
+  const handle = await open(path, "wx", 0o600); const owner = makeOwner(ownerId, runId, options.reclaimLeaseMs ?? 5000);
+  try { await handle.writeFile(`${JSON.stringify(owner)}\n`); await handle.sync(); } finally { await handle.close(); }
+  for (;;) {
+    const active = await activeReclaimTickets(lockPath);
+    if (active[0]?.path === path) return async () => { await rm(path, { force: true }); };
+    if (Date.now() >= deadline) { await rm(path, { force: true }); throw new Error("install_state_lock_timeout"); }
+    await sleep(options.retryDelayMs ?? contract.retryDelayMs);
+  }
+}
+
 export async function acquireInstallStateLock(statePath, options = {}) {
   const target = await assertSafeTarget(statePath);
   const lockPath = `${target}.lock`;
@@ -47,10 +69,11 @@ export async function acquireInstallStateLock(statePath, options = {}) {
   const ownerPath = lockPath;
   for (;;) {
     try {
-      const now = Date.now();
-      const owner = { protocolVersion: PROTOCOL_VERSION, ownerId, runId, pid: process.pid, hostname: localHostname, acquiredAt: new Date(now).toISOString(), expiresAt: new Date(now + leaseMs).toISOString(), expiresAtEpoch: Math.ceil((now + leaseMs) / 1000) };
+      if ((await activeReclaimTickets(lockPath)).length) { if (Date.now() >= deadline) throw new Error("install_state_lock_timeout"); await sleep(options.retryDelayMs ?? contract.retryDelayMs); continue; }
+      const owner = makeOwner(ownerId, runId, leaseMs);
       const handle = await open(ownerPath, "wx", 0o600);
       try { await handle.writeFile(`${JSON.stringify(owner)}\n`, "utf8"); await handle.sync(); } finally { await handle.close(); }
+      if ((await activeReclaimTickets(lockPath)).length) { await rm(ownerPath, { force: true }); continue; }
       return { lockPath, owner, async release() {
         let current;
         try { current = JSON.parse(await readFile(ownerPath, "utf8")); } catch { return; }
@@ -62,8 +85,11 @@ export async function acquireInstallStateLock(statePath, options = {}) {
         throw error;
       }
       if (await staleOwner(lockPath, Date.now())) {
-        const quarantine = `${lockPath}.stale-${randomUUID()}`;
-        try { await rename(ownerPath, quarantine); await rm(quarantine, { force: true }); continue; } catch (recoveryError) { if (!["ENOENT", "EEXIST"].includes(recoveryError?.code)) throw recoveryError; }
+        await options.onStaleObserved?.();
+        const releaseReclaim = await acquireReclaimGuard(lockPath, options, deadline);
+        try { if (await staleOwner(lockPath, Date.now())) { const quarantine = `${lockPath}.stale-${randomUUID()}`; try { await rename(ownerPath, quarantine); await rm(quarantine, { force: true }); } catch (recoveryError) { if (!["ENOENT", "EEXIST"].includes(recoveryError?.code)) throw recoveryError; } } }
+        finally { await releaseReclaim(); }
+        continue;
       }
       if (Date.now() >= deadline) throw new Error("install_state_lock_timeout");
       await sleep(options.retryDelayMs ?? contract.retryDelayMs);

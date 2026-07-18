@@ -1,10 +1,11 @@
 {
   "protocolVersion": 1,
   "lockSuffix": ".lock",
+  "reclaimSuffix": ".reclaim-",
   "ownerFile": null,
   "exclusiveClaim": "adjacent lock file create-new",
   "defaultLeaseMs": 30000,
-  "defaultTimeoutMs": 15000,
+  "defaultTimeoutMs": 30000,
   "retryDelayMs": 20,
   "tempPrefix": ".install-state.json.tmp-",
   "recoverySuffix": ".recovery",

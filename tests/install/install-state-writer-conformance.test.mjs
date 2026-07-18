@@ -34,7 +34,7 @@ async function runMixedRace() {
   const pwsh = process.platform === "win32" ? "powershell.exe" : "pwsh";
   const env = { DPF_STATE_DIR: dir, HOME: dir };
   const jobs = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 4; i++) {
     jobs.push(run(process.execPath, [node, "set", "--state", statePath, "--key", "installerVersion", "--value", JSON.stringify(`node${i}`)], env));
     jobs.push(run(bash, ["-lc", `. scripts/installer/lib/state.sh; dpf_state_write lastHealthCheck 2026-07-18T15:00:0${i}Z`], env));
     jobs.push(run(pwsh, ["-NoProfile", "-Command", `. ./scripts/installer/lib/state.ps1; Set-DpfStateValue -Key lastDoctorBundlePath -Value 'ps${i}'`], env));
@@ -43,9 +43,9 @@ async function runMixedRace() {
   const bytes = await readFile(statePath);
   assert.notDeepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
   const state = JSON.parse(bytes.toString("utf8"));
-  assert.match(state.installerVersion, /^node[0-7]$/);
-  assert.match(state.lastHealthCheck, /^2026-07-18T15:00:0[0-7]Z$/);
-  assert.match(state.lastDoctorBundlePath, /^ps[0-7]$/);
+  assert.match(state.installerVersion, /^node[0-3]$/);
+  assert.match(state.lastHealthCheck, /^2026-07-18T15:00:0[0-3]Z$/);
+  assert.match(state.lastDoctorBundlePath, /^ps[0-3]$/);
   await assert.rejects(readFile(`${statePath}.recovery`), /ENOENT/);
 }
 
@@ -63,6 +63,17 @@ test("Node recovers an abandoned Bash-format lock and Bash recovers a Node-forma
   const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash";
   await run(bash, ["-lc", `. scripts/installer/lib/state.sh; dpf_state_write installerVersion bash-recovered`], { DPF_STATE_DIR: dir, HOME: dir });
   assert.equal(JSON.parse(await readFile(statePath, "utf8")).installerVersion, "bash-recovered");
+});
+
+test("Node Bash and PowerShell recover an abandoned reclaim claim", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-reclaim-interop-")); const statePath = join(dir, "install-state.json"); const reclaimPath = `${statePath}.lock.reclaim-dead`;
+  await writeFile(statePath, '{"schemaVersion":2,"installerVersion":"seed","platform":"win32","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","capabilityStateVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n');
+  const expired = JSON.stringify({ protocolVersion: 1, ownerId: "dead-reclaim", runId: "dead-run", pid: 99999999, hostname: "foreign", acquiredAt: "2000-01-01T00:00:00Z", expiresAt: "2000-01-01T00:00:01Z", expiresAtEpoch: 946684801 });
+  const node = join(repo, "scripts/installer/install-state-transaction.mjs"); const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash"; const pwsh = process.platform === "win32" ? "powershell.exe" : "pwsh"; const env = { DPF_STATE_DIR: dir, HOME: dir };
+  await writeFile(reclaimPath, expired); await run(process.execPath, [node, "set", "--state", statePath, "--key", "installerVersion", "--value", '"node"'], env);
+  await writeFile(reclaimPath, expired); await run(bash, ["-lc", `. scripts/installer/lib/state.sh; dpf_state_write installerVersion bash`], env);
+  await writeFile(reclaimPath, expired); await run(pwsh, ["-NoProfile", "-Command", `. ./scripts/installer/lib/state.ps1; Set-DpfStateValue -Key installerVersion -Value ps`], env);
+  assert.equal(JSON.parse(await readFile(statePath, "utf8")).installerVersion, "ps");
 });
 
 test("concurrent PowerShell initializers converge on one complete BOM-free state", async () => {

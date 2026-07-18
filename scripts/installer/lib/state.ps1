@@ -54,6 +54,12 @@ function Get-DpfStateSha256 {
     try { return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "").ToLowerInvariant() } finally { $stream.Dispose(); $sha.Dispose() }
 }
 
+function Get-DpfActiveReclaimFirst {
+    param([Parameter(Mandatory)][string]$LockPath)
+    $active = @(); foreach ($ticket in Get-ChildItem -Path "$LockPath.reclaim-*" -File -ErrorAction SilentlyContinue) { try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ticket.FullName)); if ([long]$owner.expiresAtEpoch -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { $active += $ticket.FullName } else { Remove-Item $ticket.FullName -Force } } catch {} }
+    return ($active | Sort-Object | Select-Object -First 1)
+}
+
 function Replace-DpfStateFileAtomic {
     param([Parameter(Mandatory)][string]$Source, [Parameter(Mandatory)][string]$Destination)
     $method = [IO.File].GetMethod("Replace", [type[]]@([string], [string], [string]))
@@ -71,18 +77,20 @@ function Replace-DpfStateFileAtomic {
 function Enter-DpfStateLock {
     param([Parameter(Mandatory)][string]$Path)
     $lockPath = "$Path.lock"; $ownerId = [guid]::NewGuid().ToString(); $runId = if ($env:DPF_RUN_ID) { $env:DPF_RUN_ID } else { [guid]::NewGuid().ToString() }
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
     while ($true) {
+        if (Get-DpfActiveReclaimFirst $lockPath) { if ([DateTimeOffset]::UtcNow -ge $deadline) { throw "install_state_lock_timeout" }; Start-Sleep -Milliseconds 20; continue }
         try {
             $now = [DateTimeOffset]::UtcNow
             $owner = [ordered]@{ protocolVersion = 1; ownerId = $ownerId; runId = $runId; pid = $PID; hostname = [Environment]::MachineName; acquiredAt = $now.ToString("o"); expiresAt = $now.AddSeconds(30).ToString("o"); expiresAtEpoch = $now.AddSeconds(30).ToUnixTimeSeconds() }
             $ownerPath = $lockPath; $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($owner | ConvertTo-Json -Compress))
             $claim = New-Object IO.FileStream($ownerPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
             try { $claim.Write($bytes, 0, $bytes.Length); $claim.Flush($true) } finally { $claim.Dispose() }
+            if (Get-DpfActiveReclaimFirst $lockPath) { Remove-Item -LiteralPath $lockPath -Force; Start-Sleep -Milliseconds 20; continue }
             $script:DPF_STATE_LOCK_OWNER_ID = $ownerId
             return
         } catch {
-            $ownerPath = Join-Path $lockPath "owner.json"; $stale = $false
+            $ownerPath = $lockPath; $stale = $false
             if (Test-Path -LiteralPath $ownerPath) {
                 try {
                     $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ownerPath)); $nowEpoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -91,7 +99,17 @@ function Enter-DpfStateLock {
                     $stale = ([long]$owner.expiresAtEpoch -le $nowEpoch -and -not $live)
                 } catch {}
             }
-            if ($stale) { try { Move-Item -LiteralPath $ownerPath -Destination "$lockPath.stale-$ownerId" -ErrorAction Stop; Remove-Item -LiteralPath "$lockPath.stale-$ownerId" -Force -ErrorAction Stop; continue } catch {} }
+            if ($stale) {
+                try {
+                    $reclaimPath = "$lockPath.reclaim-$ownerId"
+                    $reclaim = New-Object IO.FileStream($reclaimPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                    $reclaimOwner = [ordered]@{ protocolVersion = 1; ownerId = $ownerId; runId = $runId; pid = $PID; hostname = [Environment]::MachineName; acquiredAt = [DateTimeOffset]::UtcNow.ToString("o"); expiresAt = [DateTimeOffset]::UtcNow.AddSeconds(5).ToString("o"); expiresAtEpoch = [DateTimeOffset]::UtcNow.AddSeconds(5).ToUnixTimeSeconds() }
+                    $reclaimBytes = (New-Object Text.UTF8Encoding($false)).GetBytes(($reclaimOwner | ConvertTo-Json -Compress)); try { $reclaim.Write($reclaimBytes,0,$reclaimBytes.Length); $reclaim.Flush($true) } finally { $reclaim.Dispose() }
+                    if ((Get-DpfActiveReclaimFirst $lockPath) -ne $reclaimPath) { Remove-Item $reclaimPath -Force; Start-Sleep -Milliseconds 20; continue }
+                    $current = ConvertFrom-Json ([IO.File]::ReadAllText($lockPath)); if ([long]$current.expiresAtEpoch -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { Move-Item -LiteralPath $lockPath -Destination "$lockPath.stale-$ownerId" -ErrorAction Stop; Remove-Item -LiteralPath "$lockPath.stale-$ownerId" -Force -ErrorAction Stop }
+                    Remove-Item -LiteralPath $reclaimPath -Force -ErrorAction Stop; continue
+                } catch { if ($reclaimPath -and (Test-Path -LiteralPath $reclaimPath)) { Remove-Item $reclaimPath -Force -ErrorAction SilentlyContinue } }
+            }
             if ([DateTimeOffset]::UtcNow -ge $deadline) { throw "install_state_lock_timeout" }
             Start-Sleep -Milliseconds 20
         }
