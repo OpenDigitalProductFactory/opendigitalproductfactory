@@ -42,6 +42,7 @@ import { resolveBuildWorkdir } from "./sandbox/build-branch";
 import { classifyProviderCapacity } from "@/lib/routing/provider-capacity";
 import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { recordProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
+import { formatTrimProgressMessage, trimTaskPromptToContext } from "./opencode-task-context-budget";
 
 const DEFAULT_SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -262,6 +263,8 @@ type OpencodeDispatchTarget = OpencodeProviderConfigTarget & {
   apiKeyValue: string;
   portalBaseUrl: string;
   sandboxBaseUrl: string;
+  /** Served n_ctx for local preflight (BI-B195F224 trim); null when unknown. */
+  servedContextTokens?: number | null;
 };
 
 function localOpencodeTarget(sandboxBaseUrl: string, model: string): OpencodeProviderConfigTarget {
@@ -389,6 +392,7 @@ async function resolveOpencodeDispatchTarget(params: {
         apiKeyValue: "local",
         portalBaseUrl,
         sandboxBaseUrl,
+        servedContextTokens: pre.servedContextTokens ?? pre.reportedContextTokens ?? null,
       },
     };
   }
@@ -487,12 +491,7 @@ export async function dispatchOpencodeTask(params: {
   const startedAt = new Date();
   const startMs = Date.now();
 
-  // Resolve the endpoint the PORTAL uses (for preflight) and the rewritten URL
-  // the SANDBOX uses (for the actual run).
-  // the SANDBOX uses (for the actual run). Local endpoints keep the hard
-  // preflight; credentialed remote OpenCode providers resolve through
-  // ModelProvider + CredentialEntry because their /models behavior can vary by
-  // account entitlement.
+  // Local: hard preflight. Remote OpenCode: ModelProvider + CredentialEntry.
   const targetResult = await resolveOpencodeDispatchTarget({
     providerId,
     requestedModel: params.model ?? "",
@@ -523,7 +522,27 @@ export async function dispatchOpencodeTask(params: {
   }
 
   const instructions = buildOpencodeInstructions(role, buildContext, priorResults);
-  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions, workdir });
+  // BI-B195F224: trim to served n_ctx or fail early (CWE-117: sanitize log args).
+  const fitted = trimTaskPromptToContext({
+    prompt: buildSpecialistTaskPrompt({ task, instructions, workdir }),
+    servedContextTokens: target.servedContextTokens,
+  });
+  if (!fitted.fit) {
+    const blocked = fitted.reason ?? "Task prompt exceeds local model context window.";
+    console.error("[opencode-dispatch] Task %s blocked: %s", sanitizeForLog(task.title), sanitizeForLog(blocked));
+    await recordBuildDispatchAttempt({
+      buildId: params.buildId, taskTitle: task.title, specialist: role, providerId, model,
+      startedAt, completedAt: new Date(), durationMs: Date.now() - startMs,
+      exitCode: null, success: false, stdout: "", stderr: blocked,
+    }).catch(() => {});
+    return { content: `BLOCKED: ${blocked}`, success: false, executedTools: [], durationMs: Date.now() - startMs };
+  }
+  if (fitted.trimmed) {
+    const msg = formatTrimProgressMessage(fitted, target.servedContextTokens);
+    console.log("[opencode-dispatch] %s task=%s", sanitizeForLog(msg), sanitizeForLog(task.title));
+    params.onProgress?.(msg);
+  }
+  const taskPrompt = fitted.prompt;
 
   try {
     // Write the opencode provider config for the node user (global path, applies

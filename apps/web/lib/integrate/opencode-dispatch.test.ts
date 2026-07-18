@@ -19,6 +19,133 @@ import {
   buildOpencodeRunnerScript,
   recordOpencodeCapacityFailure,
 } from "./opencode-dispatch";
+import {
+  estimatePromptTokens,
+  computeInputTokenBudget,
+  trimTaskPromptToContext,
+  OPENCODE_OUTPUT_RESERVE_MIN_TOKENS,
+} from "./opencode-task-context-budget";
+
+describe("trimTaskPromptToContext (BI-B195F224)", () => {
+  const samplePrompt = [
+    "You are a software engineer building Next.js server actions.",
+    "",
+    "PROJECT CONTEXT:",
+    "A".repeat(4_000),
+    "",
+    "RESULTS FROM PRIOR TASKS:",
+    "B".repeat(3_000),
+    "",
+    "DPF BUILD DISCIPLINE (MANDATORY):",
+    "- GROUND DOMAIN FACTS",
+    "",
+    "CRITICAL: This is a pnpm monorepo. Working directory is /workspace.",
+    "",
+    "TASK: Build accessible calendar grid component",
+    "",
+    "Implement the calendar grid with keyboard navigation.",
+    "",
+    "FILES (use these exact paths):",
+    "- apps/web/components/calendar-grid.tsx (create): accessible grid",
+    "",
+    "TEST FIRST: write vitest for keyboard nav",
+    "VERIFY: pnpm --filter web exec vitest run",
+  ].join("\n");
+
+  it("estimates ~chars/4", () => {
+    expect(estimatePromptTokens("abcd")).toBe(1);
+    expect(estimatePromptTokens("a".repeat(8))).toBe(2);
+  });
+
+  it("reserves output headroom inside the served window", () => {
+    // 131072 * 0.15 = 19660.8 → clamped to MAX 8192
+    const budget = computeInputTokenBudget(131_072);
+    expect(budget).toBe(131_072 - 8_192);
+    // tiny window: still leave MIN reserve, budget floored at MIN_INPUT
+    const small = computeInputTokenBudget(3_000);
+    expect(small).toBeGreaterThanOrEqual(OPENCODE_OUTPUT_RESERVE_MIN_TOKENS > 3_000 ? 1_024 : 3_000 - OPENCODE_OUTPUT_RESERVE_MIN_TOKENS);
+  });
+
+  it("passes through when served context is unknown", () => {
+    const res = trimTaskPromptToContext({ prompt: samplePrompt, servedContextTokens: null });
+    expect(res.fit).toBe(true);
+    expect(res.trimmed).toBe(false);
+    expect(res.prompt).toBe(samplePrompt);
+    expect(res.budgetTokens).toBeNull();
+  });
+
+  it("does not trim when the prompt already fits", () => {
+    const res = trimTaskPromptToContext({
+      prompt: samplePrompt,
+      servedContextTokens: 131_072,
+    });
+    expect(res.fit).toBe(true);
+    expect(res.trimmed).toBe(false);
+    expect(res.prompt).toBe(samplePrompt);
+    expect(res.estimatedTokens).toBeLessThanOrEqual(res.budgetTokens!);
+  });
+
+  it("trims prior results then project context to fit a tight local window", () => {
+    // Oversized soft context (~40k chars ≈ 10k tokens) vs a 4k-token input budget.
+    const bulky = [
+      "You are a software engineer.",
+      "",
+      "PROJECT CONTEXT:",
+      "P".repeat(20_000),
+      "",
+      "RESULTS FROM PRIOR TASKS:",
+      "R".repeat(20_000),
+      "",
+      "DPF BUILD DISCIPLINE (MANDATORY):",
+      "- GROUND DOMAIN FACTS",
+      "",
+      "CRITICAL: This is a pnpm monorepo. Working directory is /workspace.",
+      "",
+      "TASK: Build accessible calendar grid component",
+      "",
+      "Implement the calendar grid with keyboard navigation.",
+      "",
+      "FILES (use these exact paths):",
+      "- apps/web/components/calendar-grid.tsx (create): accessible grid",
+      "",
+      "TEST FIRST: write vitest for keyboard nav",
+      "VERIFY: pnpm --filter web exec vitest run",
+    ].join("\n");
+    const res = trimTaskPromptToContext({
+      prompt: bulky,
+      servedContextTokens: 5_000,
+      outputReserveTokens: 1_000, // budget = 4000 tokens ≈ 16k chars
+    });
+    expect(res.fit).toBe(true);
+    expect(res.trimmed).toBe(true);
+    expect(res.estimatedTokens).toBeLessThanOrEqual(res.budgetTokens!);
+    // Task core must survive
+    expect(res.prompt).toContain("CRITICAL:");
+    expect(res.prompt).toContain("TASK: Build accessible calendar grid component");
+    expect(res.prompt).toContain("calendar-grid.tsx");
+    // Soft bulk should be reduced
+    expect(res.prompt.length).toBeLessThan(bulky.length);
+    expect(res.prompt).toMatch(/trimmed to fit local model context window/i);
+  });
+
+  it("fails closed with an actionable message when the task core alone exceeds budget", () => {
+    const hugeCore = [
+      "ROLE preamble",
+      "",
+      "CRITICAL: monorepo root",
+      "TASK: impossible",
+      "X".repeat(20_000),
+    ].join("\n");
+    const res = trimTaskPromptToContext({
+      prompt: hugeCore,
+      servedContextTokens: 2_500,
+      outputReserveTokens: 1_000, // budget = 1500 tokens ≈ 6k chars; core is ~5k tokens
+    });
+    expect(res.fit).toBe(false);
+    expect(res.reason).toMatch(/exceeds the local model input budget/i);
+    expect(res.reason).toMatch(/cloud|context window/i);
+  });
+});
 
 describe("detectOpencodeFatalError", () => {
   it("detects a llama.cpp ContextOverflowError in the stream", () => {
