@@ -79,6 +79,12 @@ export type BuildFailureClass =
   // (the pgdata volume is intact). Matched on the specific Prisma phrasing, NOT a
   // bare ECONNREFUSED (which is ambiguous and stays unclassified).
   | "database-unreachable"
+  // Docker Desktop refused to share a host path into a self-upgrade container
+  // (#3262 fleet blocker): the portal's /dpf-state mount falls back to
+  // ${HOME}/.dpf, which is /root/.dpf inside the root-run promoter, and Docker
+  // Desktop won't share it — the run dies silently at step=migrate. Fixed by
+  // pinning DPF_STATE_DIR to an absolute shared host path in the install .env.
+  | "docker-mount-denied"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -138,6 +144,15 @@ const PNPM_FETCH_ERROR = /ERR_PNPM_FETCH|ERR_PNPM_META_FETCH_FAIL|GET https:\/\/
 const PROMOTER_TIMEOUT = /\[promoter-timeout\]/i;
 // BET-5 migrate-step failures. Both recovery procedures live in the runbook.
 const BET5_PLAYBOOK = "docs/runbooks/bet5-windows-self-upgrade.md";
+// Docker Desktop mounts-denied on the /dpf-state mount (#3262).
+const MOUNTS_DENIED_PLAYBOOK = "docs/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir.md";
+// Docker Desktop file-sharing rejection. Anchored on the daemon's exact
+// "mounts denied … not shared from the host" phrasing and captures the denied
+// path. The /dpf-state mount uses ${DPF_STATE_DIR:-${HOME}/.dpf}; under the
+// root-run promoter ${HOME}=/root, so an unset DPF_STATE_DIR resolves to the
+// unshareable /root/.dpf (#3262). Deliberately specific so an ordinary bad
+// bind-mount stays unclassified rather than being swept into the state-dir fix.
+const MOUNTS_DENIED = /mounts denied:[\s\S]{0,120}?path\s+(\S+)\s+is not shared from the host/i;
 // `CREATE EXTENSION vector` on a Postgres image without pgvector: the canonical
 // Postgres errors are `extension "vector" is not available` and a `DETAIL: Could
 // not open extension control file ".../vector.control"`. Deliberately anchored on
@@ -184,6 +199,25 @@ export function classifyBuildFailure(
         "The promoter exceeded its wall-clock budget and was killed (its container force-removed). Almost always a transient environment stall — a docker-build step hanging on a degraded network fetch (SUR-756751D1: an `apk add` that crawled 52 min). Retry the upgrade; only dig deeper if it times out the same way twice.",
       playbookLink: SPEC,
       failingTrace: traceAround(log, PROMOTER_TIMEOUT),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
+  // Docker Desktop refused a host-path mount for a self-upgrade container. This
+  // is a config gap, not a code defect in the run: the operator can unblock now
+  // by pinning DPF_STATE_DIR. Check it early — the daemon error is decisive and
+  // the build output above it (a clean image build) is not the cause (#3262).
+  const mountDenied = log.match(MOUNTS_DENIED);
+  if (mountDenied) {
+    const deniedPath = mountDenied[1];
+    const isStateDir = /[/\\]\.dpf(?:[/\\]|$)|dpf-state/i.test(deniedPath);
+    return {
+      class: "docker-mount-denied",
+      summary: isStateDir
+        ? `Docker Desktop refused to share ${deniedPath} into a self-upgrade container — the /dpf-state mount fell back to \${HOME}/.dpf, which is /root/.dpf inside the root-run promoter. Set DPF_STATE_DIR in the install .env to an ABSOLUTE, Docker-Desktop-shared host path (e.g. /Users/<user>/.dpf) and re-trigger the upgrade.`
+        : `Docker Desktop refused to share the host path ${deniedPath} into a self-upgrade container. Point the mount at an absolute path Docker Desktop shares (Docker → Settings → Resources → File Sharing) — or provision the DPF_STATE_DIR / DPF_*_HOST_PATH env var the mount relies on in the install .env.`,
+      playbookLink: MOUNTS_DENIED_PLAYBOOK,
+      failingTrace: traceAround(log, MOUNTS_DENIED),
       isMainDefectVsEnvironment: "environment",
     };
   }

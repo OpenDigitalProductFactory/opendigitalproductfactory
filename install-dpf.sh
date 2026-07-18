@@ -620,6 +620,16 @@ if [ ! -f .env ]; then
     printf '# docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §5.3).\n' >> .env
     printf 'DPF_BACKUPS_HOST_PATH=%s-backups\n' "$REPO_ROOT" >> .env
   fi
+  # Runtime state dir (/dpf-state mount). Pin to an ABSOLUTE host path so the
+  # self-upgrade promoter — which runs as root, HOME=/root — does NOT fall back to
+  # ${HOME}/.dpf = /root/.dpf and fail the migrate step with "mounts denied" (#3262).
+  # ~/.dpf is under the operator home, which Docker Desktop shares by default.
+  if ! grep -q "^DPF_STATE_DIR=" .env 2>/dev/null; then
+    printf '\n# Runtime state dir — capability-transition receipts + install-state (compose\n' >> .env
+    printf '# mounts it read-only at /dpf-state). ABSOLUTE so the root-run promoter does\n' >> .env
+    printf '# not fall back to /root/.dpf and fail with "mounts denied" (#3262).\n' >> .env
+    printf 'DPF_STATE_DIR=%s/.dpf\n' "$HOME" >> .env
+  fi
   ok ".env created with generated secrets"
   info "  Admin password: $ADMIN_PW_VAL"
   info "  (Stored in .env; change before any non-local deployment)"
@@ -633,6 +643,15 @@ else
     printf '# OUTSIDE install root so repo wipes cannot destroy them).\n' >> .env
     printf 'DPF_BACKUPS_HOST_PATH=%s-backups\n' "$REPO_ROOT" >> .env
     info "Added DPF_BACKUPS_HOST_PATH=$REPO_ROOT-backups to existing .env"
+  fi
+  # Existing installs upgrading past #3262 need DPF_STATE_DIR added, else the
+  # self-upgrade promoter (root, HOME=/root) hits /root/.dpf → "mounts denied" at
+  # step=migrate. Append only; never clobber an operator-set value.
+  if ! grep -q "^DPF_STATE_DIR=" .env 2>/dev/null; then
+    printf '\n# Runtime state dir (added by installer — #3262). ABSOLUTE + Docker-shared so\n' >> .env
+    printf '# the root-run self-upgrade promoter does not fall back to /root/.dpf.\n' >> .env
+    printf 'DPF_STATE_DIR=%s/.dpf\n' "$HOME" >> .env
+    info "Added DPF_STATE_DIR=$HOME/.dpf to existing .env"
   fi
 fi
 

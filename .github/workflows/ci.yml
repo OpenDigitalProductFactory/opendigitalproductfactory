@@ -250,6 +250,27 @@ jobs:
       - name: Run guard
         run: node scripts/check-reporting-composition.mjs
 
+  compose-env-contract-guard:
+    name: Compose Env Contract Guard
+    runs-on: ubuntu-latest
+    # #3262 fleet incident. A portal volume `${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state`
+    # shipped with DPF_STATE_DIR undocumented + unprovisioned, so every install fell
+    # back to ${HOME}/.dpf — fine for `docker compose up`, but the self-upgrade
+    # PROMOTER runs as root (HOME=/root) → /root/.dpf → Docker Desktop "mounts denied"
+    # → every upgrade died at step=migrate, fleet-wide, with nothing in CI exercising
+    # the promoter's compose path. This static guard fails a PR whose compose volume
+    # host-path (a) references a DPF_* var not declared in .env.example, or (b) uses a
+    # host/shell var (HOME/USER/…) as the PRIMARY path determiner. Escape: a trailing
+    # `# compose-env-allow` on the line.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-compose-env-contract.mjs
+
   module-size-guard:
     name: Module Size Guard
     runs-on: ubuntu-latest
