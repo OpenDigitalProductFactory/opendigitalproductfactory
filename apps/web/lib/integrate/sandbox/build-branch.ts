@@ -26,6 +26,7 @@ import {
   classifySandboxSourceCurrency,
   formatSandboxSourceCurrencySummary,
   parseSandboxSourceCurrencyProbeOutput,
+  shouldPreserveBuildBranchWork,
   type SandboxSourceCurrencySnapshot,
 } from "./sandbox-source-currency";
 
@@ -361,25 +362,24 @@ async function refreshCurrentBranchFromTarget(args: {
   branchName: string;
   targetRef: string;
   blockUnknown: boolean;
+  /** BI-8C6AA60E: skip hard-reset when build/* already has local work. */
+  preserveExistingWork?: boolean;
 }): Promise<SandboxSourceCurrencySnapshot> {
   const before = await inspectCurrentSandboxSourceCurrency(args.targetRef);
 
+  // Preserve ahead/dirty/source-delta build branches on resume (BI-8C6AA60E).
+  if (args.preserveExistingWork && shouldPreserveBuildBranchWork(before)) {
+    await recordBuildSourceCurrency(args.buildId, before, `Preserved work on ${args.branchName}; skipped hard-reset to ${args.targetRef}.`);
+    console.log(`[build-branch] Preserved ${JSON.stringify(args.branchName)} (status=${before.status}, aheadBy=${before.aheadBy}); skip hard-reset`);
+    return before;
+  }
+
   if (before.status === "behind") {
-    await recordBuildSourceCurrency(
-      args.buildId,
-      before,
-      `Auto-refreshing ${args.branchName} before Build Studio work starts.`,
-    );
-    await execSandboxGit(
-      `git -C ${WORKSPACE} reset --hard ${quoteGitPathspec(args.targetRef)}`,
-    );
+    await recordBuildSourceCurrency(args.buildId, before, `Auto-refreshing ${args.branchName} before Build Studio work starts.`);
+    await execSandboxGit(`git -C ${WORKSPACE} reset --hard ${quoteGitPathspec(args.targetRef)}`);
     await normalizeSandboxBranchArtifacts(args.branchName);
     const after = await inspectCurrentSandboxSourceCurrency(args.targetRef);
-    await recordBuildSourceCurrency(
-      args.buildId,
-      after,
-      `Auto-refreshed ${args.branchName}.`,
-    );
+    await recordBuildSourceCurrency(args.buildId, after, `Auto-refreshed ${args.branchName}.`);
     return after;
   }
 
@@ -732,11 +732,9 @@ export async function startBuildBranch(buildId: string): Promise<SandboxSourceCu
         `git -C ${WORKSPACE} checkout "${branchName}"`,
       );
       await normalizeSandboxBranchArtifacts(branchName);
+      // BI-8C6AA60E: preserve commitsAhead/source work on review-phase resume.
       await refreshCurrentBranchFromTarget({
-        buildId,
-        branchName,
-        targetRef: identity.clientBranch,
-        blockUnknown: true,
+        buildId, branchName, targetRef: identity.clientBranch, blockUnknown: true, preserveExistingWork: true,
       });
       console.log(`[build-branch] Resumed build branch: ${JSON.stringify(branchName)}`);
     } else {
