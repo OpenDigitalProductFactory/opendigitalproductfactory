@@ -325,9 +325,12 @@ function Get-DPFComposeArgs {
 function Export-DPFConsumerReleaseAssets {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
+        [Parameter(Mandatory)][string]$Version,
         [string]$Image = "ghcr.io/opendigitalproductfactory/dpf-portal:latest",
         [string]$AssetSource
     )
+
+    if ($Version -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$') { throw "consumer_release_version_invalid" }
 
     $staging = Join-Path ([IO.Path]::GetTempPath()) ("dpf-release-assets-" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $staging -Force | Out-Null
@@ -368,10 +371,25 @@ function Export-DPFConsumerReleaseAssets {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
         Get-ChildItem -LiteralPath $staging -Force | Where-Object Name -ne "SHA256SUMS" |
             Copy-Item -Destination $InstallDir -Recurse -Force
+        [IO.File]::WriteAllText((Join-Path $InstallDir ".verified-release-assets-version"), $Version, [Text.Encoding]::ASCII)
     } finally {
         if ($containerId) { docker rm $containerId 2>&1 | Out-Null }
         Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Set-DPFConsumerReleaseIdentity {
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [Parameter(Mandatory)][string]$Version
+    )
+    if ($Version -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$') { throw "consumer_release_version_invalid" }
+    $marker = Join-Path $InstallDir ".verified-release-assets-version"
+    if (-not (Test-Path -LiteralPath $marker)) { throw "consumer_release_assets_unverified" }
+    if ((Get-Content -LiteralPath $marker -Raw).Trim() -cne $Version) { throw "consumer_release_assets_version_mismatch" }
+    $envPath = Join-Path $InstallDir ".env"
+    Set-DPFEnvFileValue -Path $envPath -Key "DPF_IMAGE_TAG" -Value $Version
+    Set-DPFEnvFileValue -Path $envPath -Key "GHCR_OWNER" -Value "opendigitalproductfactory"
 }
 
 function Get-DPFEdgeComposeContent {
@@ -664,6 +682,7 @@ $GHCR_PORTAL = "ghcr.io/opendigitalproductfactory/dpf-portal"
 $GHCR_SANDBOX = "ghcr.io/opendigitalproductfactory/dpf-sandbox"
 
 $InstallMode = $null  # Set in Step 4: "consumer", "contributor", or "private"
+$consumerAssetsVerifiedThisRun = $false
 
 # --- Banner -------------------------------------------------------------------
 
@@ -1020,7 +1039,8 @@ if (-not (Test-StepDone "download")) {
 
             # Materialize the exact release topology and lifecycle adapter carried by
             # the pulled portal image, then verify every byte before installation.
-            Export-DPFConsumerReleaseAssets -InstallDir $DPF_DIR -Image "ghcr.io/opendigitalproductfactory/dpf-portal:$Version"
+            Export-DPFConsumerReleaseAssets -InstallDir $DPF_DIR -Version $Version -Image "ghcr.io/opendigitalproductfactory/dpf-portal:$Version"
+            $consumerAssetsVerifiedThisRun = $true
             Get-DPFEdgeComposeContent -Version $Version | Set-Content "$DPF_DIR\docker-compose.edge.yml" -Encoding UTF8
             Get-DPFStartScriptContent | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding ASCII
             Get-DPFStopScriptContent | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding ASCII
@@ -1276,6 +1296,10 @@ LLM_BASE_URL=http://model-runner.docker.internal/v1
 GF_ADMIN_USER=admin
 GF_ADMIN_PASSWORD=$adminPass
 "@ | Set-Content "$DPF_DIR\.env"
+}
+
+if ($InstallMode -eq "consumer" -and $consumerAssetsVerifiedThisRun) {
+    Set-DPFConsumerReleaseIdentity -InstallDir $DPF_DIR -Version $Version
 }
 
 # --- Ensure backups directory exists OUTSIDE the install root ----------------

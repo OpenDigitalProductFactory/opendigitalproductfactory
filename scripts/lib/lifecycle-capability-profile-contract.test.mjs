@@ -32,11 +32,14 @@ test("consumer release assets are integrity-bound and execute the canonical adap
       manifest.push(`${createHash("sha256").update(bytes).digest("hex")}  ${relative.replaceAll("\\", "/")}`);
     }
     await writeFile(join(carrier, "SHA256SUMS"), `${manifest.join("\n")}\n`);
+    await mkdir(install, { recursive: true });
+    await writeFile(join(install, ".env"), "KEEP_ME=yes\nDPF_IMAGE_TAG=old\n");
     const trace = join(dir, "docker.txt");
     const stateDir = join(dir, "state");
     const command = [
       `. '${join(root, "install-dpf.ps1")}' -LibraryOnly`,
-      `Export-DPFConsumerReleaseAssets -InstallDir '${install}' -AssetSource '${carrier}'`,
+      `Export-DPFConsumerReleaseAssets -InstallDir '${install}' -Version 'v-test-42' -AssetSource '${carrier}'`,
+      `Set-DPFConsumerReleaseIdentity -InstallDir '${install}' -Version 'v-test-42'`,
       `[IO.File]::WriteAllText('${join(install, "dpf-start.ps1")}', (Get-DPFStartScriptContent), [Text.Encoding]::ASCII)`,
       `$env:DPF_STATE_DIR='${stateDir}'`,
       `. '${join(install, "scripts", "installer", "lib", "state.ps1")}'`,
@@ -51,13 +54,28 @@ test("consumer release assets are integrity-bound and execute the canonical adap
     assert.doesNotMatch(compose, /^  (neo4j|qdrant):/m);
     assert.equal(await readFile(join(install, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "utf8"), await readFile(join(root, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), "utf8"));
     assert.match(await readFile(trace, "utf8"), /compose -f docker-compose\.yml -f docker-compose\.release\.yml up -d/);
+    const installedEnv = await readFile(join(install, ".env"), "utf8");
+    assert.match(installedEnv, /^DPF_IMAGE_TAG=v-test-42$/m);
+    assert.match(installedEnv, /^GHCR_OWNER=opendigitalproductfactory$/m);
+    assert.match(installedEnv, /^KEEP_ME=yes$/m);
+    const releaseCompose = await readFile(join(install, "docker-compose.release.yml"), "utf8");
+    const releaseImages = [...releaseCompose.matchAll(/^\s+image:\s+(\S+)$/gm)].map((match) => match[1]);
+    const renderedImages = releaseImages.map((image) => image
+      .replace("${GHCR_OWNER:-opendigitalproductfactory}", "opendigitalproductfactory")
+      .replace("${DPF_IMAGE_TAG:-latest}", "v-test-42"));
+    assert.ok(renderedImages.length > 0);
+    assert.ok(renderedImages.every((image) => image.endsWith(":v-test-42")), renderedImages.join("\n"));
     const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
     assert.match(dockerfile, /COPY --from=init \/dpf-release-assets \/dpf-release-assets/);
     assert.match(dockerfile, /sha256sum > SHA256SUMS/);
     await writeFile(join(carrier, "unverified.txt"), "not in manifest\n");
-    const unverified = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Export-DPFConsumerReleaseAssets -InstallDir '${join(dir, "rejected")}' -AssetSource '${carrier}'`], { encoding: "utf8" });
+    const rejected = join(dir, "rejected");
+    await mkdir(rejected);
+    await writeFile(join(rejected, ".env"), "DPF_IMAGE_TAG=previous-good\n");
+    const unverified = spawnSync("pwsh", ["-NoProfile", "-Command", `. '${join(root, "install-dpf.ps1")}' -LibraryOnly; Export-DPFConsumerReleaseAssets -InstallDir '${rejected}' -Version 'v-rejected' -AssetSource '${carrier}'; Set-DPFConsumerReleaseIdentity -InstallDir '${rejected}' -Version 'v-rejected'`], { encoding: "utf8" });
     assert.notEqual(unverified.status, 0);
     assert.match(unverified.stderr, /consumer_release_asset_unverified/);
+    assert.equal(await readFile(join(rejected, ".env"), "utf8"), "DPF_IMAGE_TAG=previous-good\n");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
