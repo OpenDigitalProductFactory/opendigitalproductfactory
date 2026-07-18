@@ -48,18 +48,20 @@ export function assertRecreatedPortalProvenance(container, image, { project }) {
   }
 }
 
-export async function fetchAndCheckoutCandidate({ repositoryDir, candidateSha, prNumber, run = execFile }) {
+export async function fetchAndCheckoutCandidate({ repositoryDir, candidateSha, eventKind, candidateRef, run = execFile }) {
   if (!SHA.test(candidateSha)) throw new Error("candidate checkout requires an exact 40-character SHA");
-  const candidateRef = "refs/dpf/candidate";
-  const sourceRef = Number(prNumber) > 0 ? `refs/pull/${Number(prNumber)}/merge` : candidateSha;
-  await run("git", ["fetch", "--no-tags", "origin", `+${sourceRef}:${candidateRef}`], { cwd: repositoryDir });
-  const { stdout } = await run("git", ["rev-parse", candidateRef], { cwd: repositoryDir });
+  const localCandidateRef = "refs/dpf/candidate";
+  const isPullRequest = eventKind === "pull_request";
+  if (isPullRequest && !/^refs\/pull\/\d+\/merge$/.test(candidateRef ?? "")) throw new Error("pull request candidate requires an explicit merge ref");
+  if (!isPullRequest && candidateRef !== candidateSha && candidateRef !== "main" && candidateRef !== "refs/heads/main") throw new Error("non-PR candidate requires the exact SHA or main ref");
+  await run("git", ["fetch", "--no-tags", "origin", `+${candidateRef}:${localCandidateRef}`], { cwd: repositoryDir });
+  const { stdout } = await run("git", ["rev-parse", localCandidateRef], { cwd: repositoryDir });
   const resolvedSha = stdout.trim();
   if (resolvedSha !== candidateSha) throw new Error("fetched candidate ref does not match the event candidate SHA");
-  await run("git", ["checkout", "--detach", candidateRef], { cwd: repositoryDir });
+  await run("git", ["checkout", "--detach", localCandidateRef], { cwd: repositoryDir });
   const { stdout: checkedOut } = await run("git", ["rev-parse", "HEAD"], { cwd: repositoryDir });
   if (checkedOut.trim() !== candidateSha) throw new Error("detached candidate checkout does not match the event candidate SHA");
-  return { candidateRef, sourceRef, resolvedSha };
+  return { candidateRef: localCandidateRef, sourceRef: candidateRef, resolvedSha };
 }
 
 export async function cloneAndCheckoutBaseline({ remote, repositoryDir, baseSha, run = execFile }) {
@@ -333,7 +335,7 @@ function createRuntimeDependencies(options) {
       const transitionSecret = join(workspace.root, "transition.secret");
       await writeFile(transitionSecret, randomBytes(32).toString("hex"));
       const baseline = await prepareNMinusOneBaseline({ workspace, project: options.project, portalUrl });
-      await fetchAndCheckoutCandidate({ repositoryDir: workspace.source, candidateSha: options.candidateSha, prNumber: options.prNumber });
+      await fetchAndCheckoutCandidate({ repositoryDir: workspace.source, candidateSha: options.candidateSha, eventKind: options.eventKind, candidateRef: options.candidateRef });
       const contractDigest = createHash("sha256").update(await readFile(join(process.cwd(), "promoter-contract.json"))).digest("hex");
       const image = `${options.project}-promoter:${options.candidateSha}`;
       await execFile("docker", ["build", "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${options.candidateSha}`, "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=sha256:${contractDigest}`, "-f", "Dockerfile.promoter", "-t", image, "."], { cwd: process.cwd() });
@@ -410,6 +412,7 @@ function parseArgs(argv) {
   return {
     baseSha: values.base_sha, candidateSha: values.candidate_sha, repository: values.repository,
     project: values.project, evidenceDir: values.evidence_dir, prNumber: parsedPrNumber,
+    eventKind: values.event_kind, candidateRef: values.candidate_ref,
     requiredChecks: (values.required_checks ?? "Production Build,Unit Tests").split(",").map((v) => v.trim()),
     injectReadinessFailure: Boolean(values.inject_readiness_failure), bridgeMode: Boolean(values.bridge_mode),
     timeoutMs: Number(values.timeout_ms ?? 1_200_000), portalUrl: values.portal_url,

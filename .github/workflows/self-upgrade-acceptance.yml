@@ -93,11 +93,17 @@ jobs:
       - name: Execute real N-1 baseline-to-candidate gate
         if: steps.baseline.outputs.should_run == 'true'
         run: |
+          candidate_ref="$GITHUB_SHA"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            candidate_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
+          fi
           node scripts/test-n-minus-one-upgrade.mjs \
             --base-sha "${{ steps.baseline.outputs.base_sha }}" \
             --candidate-sha "$GITHUB_SHA" \
             --repository "$GITHUB_REPOSITORY" \
             --pr-number "${{ steps.baseline.outputs.pr_number }}" \
+            --event-kind "${{ github.event_name }}" \
+            --candidate-ref "$candidate_ref" \
             --project "$DPF_N1_PROJECT" \
             --evidence-dir "$DPF_N1_EVIDENCE"
       - name: Candidate readiness succeeds without quiescence

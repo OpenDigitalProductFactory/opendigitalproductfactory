@@ -91,8 +91,8 @@ test("base verification requires exact PR base, main membership, and named succe
 test("candidate checkout fetches the event ref, proves its SHA, then detaches", async () => {
   const sha = "b".repeat(40);
   for (const scenario of [
-    { prNumber: 3262, expectedSource: "refs/pull/3262/merge" },
-    { prNumber: undefined, expectedSource: sha },
+    { eventKind: "pull_request", candidateRef: "refs/pull/3262/merge", expectedSource: "refs/pull/3262/merge" },
+    { eventKind: "schedule", candidateRef: sha, expectedSource: sha },
   ]) {
     const calls = [];
     const run = async (_command, args, options) => {
@@ -100,7 +100,7 @@ test("candidate checkout fetches the event ref, proves its SHA, then detaches", 
       if (args[0] === "rev-parse") return { stdout: `${sha}\n` };
       return { stdout: "" };
     };
-    const result = await fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, prNumber: scenario.prNumber, run });
+    const result = await fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, eventKind: scenario.eventKind, candidateRef: scenario.candidateRef, run });
     assert.equal(result.sourceRef, scenario.expectedSource);
     assert.deepEqual(calls.map(({ args }) => args), [
       ["fetch", "--no-tags", "origin", `+${scenario.expectedSource}:refs/dpf/candidate`],
@@ -120,7 +120,7 @@ test("runtime repository provenance orders clone and baseline before event candi
     return { stdout: "" };
   };
   await cloneAndCheckoutBaseline({ remote: "https://github.test/o/r.git", repositoryDir: "/isolated", baseSha, run });
-  await fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha, prNumber: 9, run });
+  await fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha, eventKind: "pull_request", candidateRef: "refs/pull/9/merge", run });
   assert.deepEqual(calls.map(({ args }) => args), [
     ["clone", "--no-checkout", "https://github.test/o/r.git", "/isolated"],
     ["checkout", "--detach", baseSha],
@@ -133,13 +133,23 @@ test("runtime repository provenance orders clone and baseline before event candi
 
 test("candidate checkout fails closed before checkout on a missing or mismatched event ref", async () => {
   const sha = "b".repeat(40); const calls = [];
-  await assert.rejects(() => fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, prNumber: 7, run: async (_command, args) => {
+  await assert.rejects(() => fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, eventKind: "pull_request", candidateRef: "refs/pull/7/merge", run: async (_command, args) => {
     calls.push(args);
     if (args[0] === "fetch") return { stdout: "" };
     return { stdout: `${"c".repeat(40)}\n` };
   } }), /does not match the event candidate SHA/);
   assert.equal(calls.some((args) => args[0] === "checkout"), false);
-  await assert.rejects(() => fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, run: async () => { throw new Error("missing ref"); } }), /missing ref/);
+  await assert.rejects(() => fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, eventKind: "schedule", candidateRef: sha, run: async () => { throw new Error("missing ref"); } }), /missing ref/);
+});
+
+test("scheduled candidate fetch ignores a baseline PR number", async () => {
+  const sha = "b".repeat(40); const calls = [];
+  await fetchAndCheckoutCandidate({ repositoryDir: "/isolated", candidateSha: sha, eventKind: "schedule", candidateRef: sha, prNumber: 3262, run: async (_command, args) => {
+    calls.push(args);
+    return { stdout: args[0] === "rev-parse" ? `${sha}\n` : "" };
+  } });
+  assert.deepEqual(calls[0], ["fetch", "--no-tags", "origin", `+${sha}:refs/dpf/candidate`]);
+  assert.equal(calls[0].some((value) => value.includes("refs/pull/")), false);
 });
 
 test("workspace is mktemp-owned and cleanup refuses root, home, unresolved, and dpf project", async () => {
@@ -265,6 +275,9 @@ test("acceptance workflow executes the real baseline-to-candidate N-1 runner", a
   assert.match(workflow, /node scripts\/test-n-minus-one-upgrade\.mjs \\/);
   for (const flag of ["--base-sha", "--candidate-sha", "--repository", "--project", "--evidence-dir"]) assert.match(workflow, new RegExp(flag));
   assert.match(workflow, /--pr-number "\$\{\{ steps\.baseline\.outputs\.pr_number \}\}"/);
+  assert.match(workflow, /--event-kind "\$\{\{ github\.event_name \}\}"/);
+  assert.match(workflow, /--candidate-ref "\$candidate_ref"/);
+  assert.match(workflow, /candidate_ref="refs\/pull\/\$\{\{ github\.event\.pull_request\.number \}\}\/merge"/);
   assert.match(workflow, /gh api .*pulls\?state=open/);
   assert.match(workflow, /should_run=false/);
   assert.match(workflow, /21969d012ad8ab382d47a2c59ffc955530796bd2/);
