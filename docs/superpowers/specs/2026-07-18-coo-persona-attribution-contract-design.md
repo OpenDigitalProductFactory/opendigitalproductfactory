@@ -83,7 +83,9 @@ Grounded 3-branch debate panel (the governed `start_deliberation` run returned i
 
 **The reframe all three advocates glossed** (surfaced by the skeptic): the options debate *which persona mask*, but the honest byline for "____ recommends: pay this bill" is not a persona at all — it is the accountable **`(human × client × session)`** triple from the attribution spine, at a stated trust level. Even "your COO recommends" manufactures implied C-suite authority the system can't hold.
 
-### Recommendation (pending founder ratification)
+### Decision — RATIFIED (founder, 2026-07-18)
+**Option A — role-only — reframed** (ratified). Implementation BIs filed under EP-COWORKER-INTERACTIVITY: (1) reconcile the three COO identity sources to one role-based identity, retiring "Jiminy"; (2) attribute recommendations to the authenticated `(human × client × session)` triple + add an author field to `AttentionItem`; (3) collapse to one attribution resolver and kill the raw-agentId leaks. The unanimous hard guardrail below is binding on all three.
+
 **Option A — role-only — reframed:** retire "Jiminy"; the overseer's *presentation label* is its role ("your COO" / "your bookkeeper"), but the **byline attributes to the authenticated triple, not the persona** — e.g. *"AI-drafted for [owner] · pending your approval"* rather than *"your COO decided."* Persona is a thin label over the triple, never a substitute for it.
 
 **Unanimous hard guardrail (any option):** no attribution string may imply an accountable actor the system cannot produce on demand from the attribution spine; every recommendation stays AI-labeled; the engine/model badge stays separate; no fabricated confidence; no self-granted authority (rides the L0→L3 trust ladder + proactivity dial).
