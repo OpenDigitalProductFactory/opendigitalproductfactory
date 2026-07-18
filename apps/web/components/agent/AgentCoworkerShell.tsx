@@ -334,12 +334,14 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
     };
   }, [threadContext, threadLoadRetryToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleRetryThreadLoad() {
-    // Manual retry spends the auto-retry budget too: if it fails again the
-    // panel goes straight back to the failed state rather than looping.
-    threadAutoRetryUsedRef.current = true;
-    setThreadLoadState("loading");
-    setThreadLoadRetryToken((token) => token + 1);
+  function handleReloadToReconnect() {
+    // A failed load that survives the bounded auto-retry is, in practice, a
+    // stale tab after a portal self-upgrade: the redeploy rotated the Next.js
+    // server-action IDs, so this tab's cached getOrCreateThreadSnapshot
+    // reference 404s and re-invoking it can never succeed. Only a full reload
+    // fetches the new client bundle with current action IDs, so recovery is a
+    // hard reload rather than a soft re-call of the same dead action.
+    window.location.reload();
   }
 
   function handleOpen() {
@@ -647,7 +649,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
             routeContextOverride={guidedRouteContext ?? undefined}
             isDocked={isDocked}
             threadLoadState={threadLoadState}
-            onRetryThreadLoad={handleRetryThreadLoad}
+            onReloadToReconnect={handleReloadToReconnect}
           />
           {!isDocked && (
             <div

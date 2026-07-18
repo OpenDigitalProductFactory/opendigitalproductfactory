@@ -49,6 +49,12 @@ Verification:
 
 Risks: string assertions in existing tests referencing "Sending..."; the auto-message race if the effect dependency array changes — mitigated by only adding `retryToken` and keeping drain logic in place.
 
+### Phase 1 correction (2026-07-18): failed-state recovery is a reload, not a soft retry
+
+Follow-up on an operator report of the same symptom this plan targets ("conversations aren't loading" — panel showing the load-failed banner after the 10:36 self-upgrade swap). The Phase-1 recovery shipped a **Retry** that bumped `retryToken` to re-invoke `getOrCreateThreadSnapshot`. That cannot recover the *diagnosed* cause: a self-upgrade rotates the Next.js server-action IDs, so the stale tab's cached action reference 404s and re-invoking the **same** reference from the already-loaded bundle fails every time. The `~2s` bounded auto-retry already covers brief transient blips before the banner ever shows, so by the time an operator sees the failed state a soft re-call adds no recovery reload doesn't.
+
+Correction: the failed-state action is now **"Reload to reconnect"** → `window.location.reload()`, which fetches a fresh client bundle with current server-action IDs (the only recovery that fixes the stale-tab case, and a superset recovery for the transient case). `onRetryThreadLoad` → `onReloadToReconnect`; the auto-retry + queued-auto-message drain semantics are unchanged. The shell test now asserts the failed state exposes a reconnect action that reloads without re-invoking the dead server action.
+
 ## Workstream 2 — BI-E3969A69: Operations Map digestibility
 
 ### Phase 2: pure route/recipe presentation module

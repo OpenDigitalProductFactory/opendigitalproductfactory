@@ -366,14 +366,21 @@ describe("AgentCoworkerShell support entry", () => {
     expect(startFeedbackSupportMock).not.toHaveBeenCalled();
   });
 
-  it("surfaces a failed thread load and recovers via retry (BI-D028B2A8)", async () => {
+  it("surfaces a failed thread load and recovers via reload-to-reconnect (BI-D028B2A8)", async () => {
     vi.useFakeTimers();
+    const originalLocation = window.location;
+    const reloadMock = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, reload: reloadMock },
+    });
     try {
-      // Both the initial load and the single bounded auto-retry fail…
+      // Initial load + the single bounded auto-retry both fail — the canonical
+      // stale-tab-after-self-upgrade case where the tab's cached server-action
+      // reference 404s ("Failed to find Server Action").
       getOrCreateThreadSnapshotMock
         .mockRejectedValueOnce(new Error("Failed to find Server Action"))
-        .mockRejectedValueOnce(new Error("Failed to find Server Action"))
-        .mockResolvedValueOnce({ threadId: "thread-recovered", messages: [] });
+        .mockRejectedValueOnce(new Error("Failed to find Server Action"));
 
       renderShell();
       fireEvent.click(screen.getByRole("button", { name: "Open coworker" }));
@@ -384,7 +391,7 @@ describe("AgentCoworkerShell support entry", () => {
       let latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
       expect(latestProps.threadLoadState).toBe("loading");
 
-      // …the auto-retry fires after ~2s and also fails → explicit failed state.
+      // The auto-retry fires after ~2s and also fails → explicit failed state.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2500);
       });
@@ -392,16 +399,21 @@ describe("AgentCoworkerShell support entry", () => {
       expect(latestProps.threadLoadState).toBe("failed");
       expect(getOrCreateThreadSnapshotMock).toHaveBeenCalledTimes(2);
 
-      // Manual retry re-invokes the load and recovers.
-      await act(async () => {
-        (latestProps.onRetryThreadLoad as () => void)();
-        await vi.advanceTimersByTimeAsync(0);
+      // Recovery is a full reload, NOT a soft re-call of the dead action: the
+      // stale bundle's action reference can never succeed, so only a reload
+      // fetches a fresh bundle with current server-action IDs.
+      expect(typeof latestProps.onReloadToReconnect).toBe("function");
+      act(() => {
+        (latestProps.onReloadToReconnect as () => void)();
       });
-      latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
-      expect(getOrCreateThreadSnapshotMock).toHaveBeenCalledTimes(3);
-      expect(latestProps.threadLoadState).toBe("ready");
-      expect(latestProps.threadId).toBe("thread-recovered");
+      expect(reloadMock).toHaveBeenCalledTimes(1);
+      // The reconnect action must not re-invoke the same dead server action.
+      expect(getOrCreateThreadSnapshotMock).toHaveBeenCalledTimes(2);
     } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: originalLocation,
+      });
       vi.useRealTimers();
     }
   });

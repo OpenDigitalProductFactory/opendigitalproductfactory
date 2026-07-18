@@ -85,10 +85,10 @@ type Props = {
    *  Used during setup so all steps route to the onboarding-coo agent. */
   routeContextOverride?: string;
   isDocked?: boolean;
-  /** Thread snapshot load lifecycle from the shell; "failed" renders the
-   *  retry banner instead of a silently dead composer (BI-D028B2A8). */
+  /** Thread snapshot load lifecycle; "failed" renders the reconnect banner (BI-D028B2A8). */
   threadLoadState?: ThreadLoadState;
-  onRetryThreadLoad?: () => void;
+  /** Recovery for a failed load: hard reload to fetch a fresh bundle (see shell handler). */
+  onReloadToReconnect?: () => void;
 };
 
 type MessageSendOptions = {
@@ -147,7 +147,7 @@ export function AgentCoworkerPanel({
   routeContextOverride,
   isDocked = false,
   threadLoadState,
-  onRetryThreadLoad,
+  onReloadToReconnect,
 }: Props) {
   const pathname = usePathname();
   // During setup, use the override so the onboarding-coo agent handles all steps
@@ -1221,10 +1221,10 @@ export function AgentCoworkerPanel({
           }}
         >
           <span style={{ flex: 1 }}>Couldn&apos;t load this conversation.</span>
-          {onRetryThreadLoad && (
+          {onReloadToReconnect && (
             <button
               type="button"
-              onClick={onRetryThreadLoad}
+              onClick={onReloadToReconnect}
               style={{
                 background: "none",
                 border: "1px solid var(--dpf-border)",
@@ -1235,7 +1235,7 @@ export function AgentCoworkerPanel({
                 padding: "3px 12px",
               }}
             >
-              Retry
+              Reload to reconnect
             </button>
           )}
         </div>
