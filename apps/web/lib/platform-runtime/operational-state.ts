@@ -119,7 +119,7 @@ export async function observeDockerProjectServices(get: DockerGet = dockerSocket
       if (!service) return [];
       const state = String(item.State ?? "").toLowerCase();
       const status = String(item.Status ?? "").toLowerCase();
-      return [[service, { composePresent: true, healthy: state === "running" && !status.includes("unhealthy") }]];
+      return [[service, { composePresent: true, healthy: state === "running" && !status.includes("unhealthy") && !status.includes("health: starting") }]];
     }));
   } catch { return {}; }
 }

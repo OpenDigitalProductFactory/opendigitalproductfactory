@@ -93,8 +93,8 @@ describe("createOperationalCapabilityState", () => {
     vi.stubEnv("HOSTNAME", "portal-id");
     const observed = await observeDockerProjectServices(async (path) => path.includes("portal-id")
       ? { Config: { Labels: { "com.docker.compose.project": "dpf" } } }
-      : [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "postgres" } }, { State: "exited", Status: "Exited", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "browser-use" } }, { State: "running", Labels: { "com.docker.compose.project": "other", "com.docker.compose.service": "postgres" } }]);
-    expect(observed).toEqual({ postgres: { composePresent: true, healthy: true }, "browser-use": { composePresent: true, healthy: false } });
+      : [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "postgres" } }, { State: "running", Status: "Up (health: starting)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "starting" } }, { State: "running", Status: "Up (unhealthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "unhealthy" } }, { State: "exited", Status: "Exited", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "browser-use" } }, { State: "running", Labels: { "com.docker.compose.project": "other", "com.docker.compose.service": "postgres" } }]);
+    expect(observed).toEqual({ postgres: { composePresent: true, healthy: true }, starting: { composePresent: true, healthy: false }, unhealthy: { composePresent: true, healthy: false }, "browser-use": { composePresent: true, healthy: false } });
   });
 });
 

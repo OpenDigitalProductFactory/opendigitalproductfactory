@@ -301,7 +301,7 @@ export async function runRuntimeMeasurement(options = {}) {
     const catalog = operationalState ? undefined : await loadJson(resolve(options.catalogPath ?? join(scriptRoot, "scripts/capability-service-catalog.generated.json")), "generated capability catalog");
     const installStatePath = options.installStatePath ?? join(resolveDpfStateDir(), "install-state.json");
     const installSnapshot = operationalState ? undefined : await loadJson(resolve(installStatePath), "install state");
-    const liveCapabilityStates = operationalState ? undefined : parseLiveCapabilityRows((options.execute ?? defaultExecute)("docker", ["compose", "exec", "-T", "postgres", "psql", "-U", process.env.POSTGRES_USER ?? "dpf", "-d", process.env.POSTGRES_DB ?? "dpf", "-At", "-F", "\t", "-c", "SELECT \"capabilityId\", state FROM \"PlatformCapability\" WHERE \"capabilityId\" LIKE 'runtime:%' ORDER BY \"capabilityId\""]));
+    const liveCapabilityStates = operationalState ? undefined : parseLiveCapabilityRows((options.execute ?? defaultExecute)("docker", ["compose", "exec", "-T", "postgres", "sh", "-lc", "psql -U \"${POSTGRES_USER:-dpf}\" -d \"${POSTGRES_DB:-dpf}\" -At -F '\\t' -c 'SELECT \"capabilityId\", state FROM \"PlatformCapability\" WHERE \"capabilityId\" LIKE '\"'\"'runtime:%'\"'\"' ORDER BY \"capabilityId\"'"]));
     const current = await collectRuntimeMeasurements({ ...options, manifest, operationalState, catalog, installSnapshot, liveCapabilityStates });
     if (options.update) {
       await verifyActiveLease(options.lease, options);
