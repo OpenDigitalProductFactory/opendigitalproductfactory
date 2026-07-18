@@ -125,6 +125,33 @@ function Set-DpfStateValue {
     [System.IO.File]::WriteAllText($path, $json, [System.Text.Encoding]::UTF8)
 }
 
+# Resolve and, for a previous-release state, atomically persist the canonical
+# capability snapshot. The Node adapter is the sole owner of capability-to-
+# profile/service resolution; PowerShell only transports its JSON result.
+function Resolve-DpfCapabilityComposeProfiles {
+    param(
+        [string]$InstallDir = (Get-Location).Path,
+        [string[]]$Overlay = @(),
+        [string[]]$Alias = @()
+    )
+    $adapter = Join-Path $InstallDir "scripts\lib\resolve-capability-compose-profiles.mjs"
+    if (-not (Test-Path -LiteralPath $adapter)) { throw "capability_profile_adapter_missing" }
+    Initialize-DpfState -InstallPath $InstallDir
+    $arguments = @($adapter, "--state", (Get-DpfStatePath), "--host", "windows", "--migrate", "--write")
+    foreach ($item in $Overlay) { $arguments += @("--overlay", $item) }
+    foreach ($item in $Alias) { $arguments += @("--alias", $item) }
+    $json = & node @arguments
+    if ($LASTEXITCODE -ne 0) { throw "capability_profile_resolution_failed" }
+    return ($json | ConvertFrom-Json)
+}
+
+function Get-DpfCapabilityProfileArgs {
+    param([Parameter(Mandatory)]$Projection)
+    $result = @()
+    foreach ($profile in $Projection.composeProfiles) { $result += @("--profile", [string]$profile) }
+    return $result
+}
+
 # Validate the state file's schema version.
 # Returns:
 #   0 - matches the installer's expected version

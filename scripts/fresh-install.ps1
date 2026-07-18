@@ -142,6 +142,12 @@ if (Test-Path $envExamplePath) {
     Write-Warn ".env.example not found  skipping app-level .env creation"
 }
 
+# Persist the canonical capability snapshot after Node is available and before
+# any Compose invocation. The adapter owns profile/service selection.
+. (Join-Path $InstallRoot "scripts\installer\lib\state.ps1")
+$capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $InstallRoot
+$env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
+
 $dockerDataDir = "${InstallDrive}:\docker-data\dpf"
 
 if (-not $SkipDocker) {

@@ -114,6 +114,10 @@ if (-not (Test-Path $rootEnv)) {
 # -- Databases -------------------------------------------------------------------
 
 Write-Step "Starting services (PostgreSQL + Ollama)"
+$stateLib = Join-Path (Get-Location).Path "scripts\installer\lib\state.ps1"
+. $stateLib
+$capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir (Get-Location).Path
+$env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
 docker compose up -d
 
 Write-Host "  Waiting for PostgreSQL to be ready..."
@@ -127,19 +131,23 @@ do {
 } while ($true)
 Write-Ok "PostgreSQL is ready"
 
-Write-Host "  Waiting for Ollama... (first run may take a few minutes to download default model)" -ForegroundColor Yellow
-$retries = 90
-do {
-    $null = docker compose exec -T ollama curl -sf http://localhost:11434/api/tags 2>$null
-    if ($LASTEXITCODE -eq 0) { break }
-    $retries--
-    if ($retries -eq 0) {
-        Write-Host "  [FAIL] Ollama did not start in time. Check: docker compose logs ollama" -ForegroundColor Red
-        exit 1
-    }
-    Start-Sleep -Seconds 2
-} while ($true)
-Write-Host "  [OK] Ollama is ready" -ForegroundColor Green
+if (@($capabilityProjection.requiredServices) -contains "ollama") {
+    Write-Host "  Waiting for Ollama... (first run may take a few minutes to download default model)" -ForegroundColor Yellow
+    $retries = 90
+    do {
+        $null = docker compose exec -T ollama curl -sf http://localhost:11434/api/tags 2>$null
+        if ($LASTEXITCODE -eq 0) { break }
+        $retries--
+        if ($retries -eq 0) {
+            Write-Host "  [FAIL] Ollama did not start in time. Check: docker compose logs ollama" -ForegroundColor Red
+            exit 1
+        }
+        Start-Sleep -Seconds 2
+    } while ($true)
+    Write-Host "  [OK] Ollama is ready" -ForegroundColor Green
+} else {
+    Write-Ok "External AI local service is inactive by capability selection"
+}
 
 # -- Database Setup --------------------------------------------------------------
 

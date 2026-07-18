@@ -8,6 +8,28 @@ Operational reference for running the DPF installer and interpreting what it tel
 
 That sentence is the whole contract for non-technical contributors. Everything below is for operators who need to diagnose a degraded state.
 
+## Capability-resolved runtime profiles
+
+Every install, restart, autostart, setup, and governed promotion resolves its
+Compose profiles through `scripts/lib/resolve-capability-compose-profiles.mjs`.
+The persisted snapshot uses the canonical fields `enabledRuntimeCapabilities`,
+`capabilityCatalogHash`, and `capabilityStateVersion`; an unknown capability or
+a mismatched catalog/state hash fails closed before Compose changes the stack.
+
+When upgrading a previous-release state that predates these fields, the adapter
+preserves the capabilities that were active in that release: core, build,
+browser automation, durable automation, local speech, deep observability, and
+external AI. External AI is retained even on hosts where it adds no local
+service because provider configuration remains live state. Previously disabled
+ADP and development capabilities are not enabled by migration. This is the
+compatibility set, rather than every optional service.
+
+`promote`, `dev`, `integration-test`, and `linux-monitoring` remain explicit
+lifecycle/host overlays. For one compatibility release, `tts` resolves to local
+speech and `observability-ui` resolves to deep observability; both aliases select
+the same portable service closure as their canonical runtime profile. Promotion
+copies the install snapshot into its recovery point and restores it on rollback.
+
 ## Agent toolchain readiness
 
 After the install completes, `install-dpf` prints a single readiness banner. There are eight possible states. The wording shown to the contributor matches this table exactly — drift between the table and the installer copy is a CI lint enforced by `readiness-state.test.ts` in the `@dpf/bootstrap` package.

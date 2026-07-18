@@ -241,6 +241,21 @@ PY
   return 1
 }
 
+# Print the one canonical machine-readable capability/profile projection and
+# migrate a previous-release snapshot atomically. Callers must not duplicate
+# capability service/profile lists in shell.
+dpf_resolve_capability_compose_profiles() {
+  local root="${1:-${REPO_ROOT:-$(pwd)}}" host="" write_arg="--write"
+  [ "$#" -gt 0 ] && shift
+  host="${1:-}"
+  [ "$#" -gt 0 ] && shift
+  [ -n "$host" ] || { dpf_platform; host="$DPF_PLATFORM"; }
+  [ "$host" = "darwin" ] && host="macos"
+  [ "${DPF_DRY_RUN:-0}" = "1" ] && write_arg=""
+  node "$root/scripts/lib/resolve-capability-compose-profiles.mjs" \
+    --state "$(dpf_state_path)" --host "$host" --migrate ${write_arg:+$write_arg} "$@"
+}
+
 # Resolve whether the bundled local Edge Node overlay should be active for
 # THIS install (the deploy gate, BI-72CFF89D / edge-topology design §5).
 # Edge deployment is OPT-IN: default OFF unless explicitly chosen or

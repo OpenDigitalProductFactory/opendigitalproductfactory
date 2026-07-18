@@ -29,6 +29,9 @@ try {
     $includeEdge = ($env:DPF_INCLUDE_EDGE -eq '1')
 }
 
+$capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
+$env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
+
 $composeArgs = @("-f", "docker-compose.yml")
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
     $composeArgs += @("-f", "docker-compose.override.yml")
