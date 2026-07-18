@@ -10,6 +10,45 @@
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { BuildQueueState } from "./QueueStateBadge";
 
+// BI-46204009: the fleet status must reflect ACTIVITY FRESHNESS, not just the
+// stored phase. A build frozen in an active phase (its watchdog stall never
+// remediated — see BI-EB33BD37) otherwise renders forever as an animated
+// "running / Working" badge, implying live work where there is none. A build in
+// build/review whose last update is older than this floor is treated as stalled
+// (→ needs-attention, off the "Working" count). Healthy builds checkpoint
+// FeatureBuild.updatedAt every few minutes, so a conservative 30-minute floor
+// avoids false positives on normal long-running steps. A BuildActivity-heartbeat
+// signal (tighter + join-based) is the ideal follow-up.
+export const STALL_THRESHOLD_MS = 30 * 60 * 1000;
+
+function updatedMs(build: Pick<FeatureBuildRow, "updatedAt">): number {
+  // updatedAt is typed Date but arrives as an ISO string after RSC
+  // serialization on the client — new Date() handles both.
+  return new Date(build.updatedAt).getTime();
+}
+
+/**
+ * True when a build sits in an active execution phase (build/review) but has had
+ * no update for longer than {@link STALL_THRESHOLD_MS} — i.e. it is frozen, not
+ * working. Only build/review can stall: ideate/plan are off-rail coworker
+ * custody and ship/complete/failed/abandoned are terminal-ish.
+ */
+export function isBuildStalled(
+  build: Pick<FeatureBuildRow, "phase" | "updatedAt">,
+  now: number = Date.now(),
+): boolean {
+  if (build.phase !== "build" && build.phase !== "review") return false;
+  const ms = updatedMs(build);
+  if (Number.isNaN(ms)) return false;
+  return now - ms > STALL_THRESHOLD_MS;
+}
+
+function stalledReason(build: Pick<FeatureBuildRow, "updatedAt">, now: number): string {
+  const mins = Math.round((now - updatedMs(build)) / 60000);
+  const label = mins >= 120 ? `${Math.round(mins / 60)}h` : `${mins} min`;
+  return `Stalled — no activity for ${label}. Needs attention.`;
+}
+
 /**
  * Derive a BuildQueueState from the FeatureBuildRow's phase + execution state.
  *
@@ -24,10 +63,18 @@ import type { BuildQueueState } from "./QueueStateBadge";
  * a passthrough from that source — the discriminated-union shape doesn't
  * change, so callers won't need to update.
  */
-export function deriveQueueState(build: FeatureBuildRow): BuildQueueState {
+export function deriveQueueState(build: FeatureBuildRow, now: number = Date.now()): BuildQueueState {
   // Terminal failure — operator needs to look.
   if (build.phase === "failed") {
     return { kind: "blocked", reason: "Build failed; reset or retry from the action card." };
+  }
+
+  // BI-46204009: a stalled build/review build is frozen, not running — never show
+  // it as a live "running/Working" badge. Surface it as blocked with the staleness
+  // so the operator sees it needs attention (deriveNeedsAttention agrees, moving it
+  // to the "Needs you" band and out of the "Working" count).
+  if (isBuildStalled(build, now)) {
+    return { kind: "blocked", reason: stalledReason(build, now) };
   }
 
   // Build phase: examine buildExecState for richer signal.
@@ -92,6 +139,7 @@ function humanizeStep(step: string): string {
  *
  * Heuristic — kept conservative so the attention dot stays meaningful:
  *   - phase=failed → yes (terminal)
+ *   - phase=build/review + no update for > STALL_THRESHOLD_MS (stalled) → yes
  *   - phase=build + buildExecState.error set → yes
  *   - planReview / designReview with decision="fail" → yes (waiting on revision)
  *   - phase=ship with no acceptanceMet → yes (operator decision needed)
@@ -100,8 +148,12 @@ function humanizeStep(step: string): string {
  * The fleet row renders this as the plain "Needs you" status so the cue is
  * readable without decoding symbols.
  */
-export function deriveNeedsAttention(build: FeatureBuildRow): boolean {
+export function deriveNeedsAttention(build: FeatureBuildRow, now: number = Date.now()): boolean {
   if (build.phase === "failed") return true;
+
+  // BI-46204009: a build frozen in an active phase (stalled watchdog, never
+  // remediated) needs the operator, not an animated "Working" badge.
+  if (isBuildStalled(build, now)) return true;
 
   if (build.phase === "build") {
     const exec = build.buildExecState as { error?: string | null } | null | undefined;

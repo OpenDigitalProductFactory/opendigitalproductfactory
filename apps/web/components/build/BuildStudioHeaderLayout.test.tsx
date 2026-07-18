@@ -538,6 +538,10 @@ describe("BuildStudio active-build header layout", () => {
         buildId: "FB-FOCUS",
         title: "Review customer entry gate",
         phase: "review",
+        // A genuinely-working build has a fresh heartbeat; without it the
+        // stall check (BI-46204009) correctly reclassifies a build/review build
+        // with a stale updatedAt as "Needs you", not "Working".
+        updatedAt: new Date(),
         originator: null,
       }),
       makeBuild({
@@ -546,6 +550,7 @@ describe("BuildStudio active-build header layout", () => {
         title: "Ship provider readiness check",
         phase: "build",
         buildExecState: { step: "code_generated" } as unknown as FeatureBuildRow["buildExecState"],
+        updatedAt: new Date(),
         originator: null,
       }),
       makeBuild({
