@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type { PromoterParams, PromoterResult } from "@/lib/self-upgrade/promoter";
-import { Prisma } from "@dpf/db";
 
 export const ACTIVE_RUNTIME_TRANSITION_STATUSES = ["pending", "applying", "host_applied", "compensating"] as const;
 
@@ -37,7 +36,7 @@ type TransitionModel = {
   create(args: unknown): Promise<unknown>;
   update(args: unknown): Promise<unknown>;
 };
-type TransitionTx = { $queryRaw(query: unknown): Promise<unknown>; runtimeCapabilityTransition: TransitionModel };
+type TransitionTx = { $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel };
 type TransitionPrisma = {
   runtimeCapabilityTransition: TransitionModel;
   $transaction<T>(operation: (tx: TransitionTx) => Promise<T>, options: { isolationLevel: "Serializable" }): Promise<T>;
@@ -46,7 +45,9 @@ type TransitionPrisma = {
 export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma): RuntimeCapabilityTransitionReceipts {
   return {
     createPending: (input) => prisma.$transaction(async (tx) => {
-      await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`);
+      // Fixed SQL with no interpolation: the transaction-scoped lock serializes
+      // the read/create pair before the partial unique index supplies backstop.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
       const active = await tx.runtimeCapabilityTransition.findFirst({ where: { status: { in: [...ACTIVE_RUNTIME_TRANSITION_STATUSES] } }, select: { id: true } });
       if (active) return { created: false };
       await tx.runtimeCapabilityTransition.create({ data: {

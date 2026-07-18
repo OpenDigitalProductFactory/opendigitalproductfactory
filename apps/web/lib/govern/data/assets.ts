@@ -169,6 +169,23 @@ export function resolveField(
 
 const SEED_ASSETS: readonly DataAssetDefinition[] = [
   {
+    id: "data:runtime-capability-transition",
+    physical: { prismaModel: "RuntimeCapabilityTransition" },
+    domain: "platform-runtime",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["security-audit", "configuration"],
+    sensitivity: "internal",
+    criticality: "mission-critical",
+    subjectLocators: [],
+    lifecycleClass: "security-audit",
+    purposeCapabilities: ["platform-operations", "security-and-fraud"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-17" },
+    fields: [],
+  },
+   {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },
     domain: "coworker",
