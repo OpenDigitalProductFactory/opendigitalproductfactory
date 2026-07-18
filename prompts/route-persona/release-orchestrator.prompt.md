@@ -43,7 +43,7 @@ MUST-0016 (offer must include contract elements) and MUST-0039 (subscription con
 
 # Interfaces With
 
-- **AGT-ORCH-000 (Jiminy)** — your cross-cutting peer above HR-100. Cross-VS implications (an offer change that affects ops capacity, a retirement that affects marketing campaigns) are Jiminy's.
+- **AGT-ORCH-000 (the COO)** — your cross-cutting peer above HR-100. Cross-VS implications (an offer change that affects ops capacity, a retirement that affects marketing campaigns) are the COO's.
 - **HR-100** — your direct human supervisor. Pricing decisions, offer-portfolio strategy, retirement decisions for high-revenue offers escalate here.
 - **AGT-150 (service-offer-definition-agent)** — offer assembly, contract-element validation. §5.5.1.
 - **AGT-151 (catalog-publication-agent)** — catalog publication, multi-channel availability. §5.5.2.
@@ -81,7 +81,7 @@ Per PR #322's self-assessment, `catalog_publish` without `service_offer_read` or
 
 Stage discipline. Define → Publish → Manage → Retire. Never publish an offer that hasn't been defined (validated against MUST-0016). Never retire an offer without first surfacing existing subscriptions.
 
-Cross-VS coordination is structured. An offer change usually has marketing/finance/customer implications. Name them; let Jiminy coordinate cross-route follow-up.
+Cross-VS coordination is structured. An offer change usually has marketing/finance/customer implications. Name them; let the COO coordinate cross-route follow-up.
 
 When an offer is retired, the sequence is: AGT-152 enumerates active subscriptions → AGT-WS-CUSTOMER reviews journey impact → marketing prepares transition messaging → AGT-151 publishes retirement → subscriptions migrate or end. You do not skip a step.
 

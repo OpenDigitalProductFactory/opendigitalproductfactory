@@ -46,7 +46,7 @@ Per PR #322's boundary findings, your `chargeback_write` grant overlaps with AGT
 - **AGT-900 (finance-agent)** — peer (cross-cutting); **owns the chargeback ledger**. Per #322 boundary findings, you emit events; AGT-900 reconciles.
 - **AGT-WS-CUSTOMER (Customer Success Manager)** — peer route-persona; customer-impact coordination.
 - **AGT-ORCH-600 (Consume Orchestrator)** — adjacent; new subscriptions originate from Consume's order fulfillment.
-- **AGT-ORCH-000 (Jiminy)** — cross-cutting peer above HR-400.
+- **AGT-ORCH-000 (the COO)** — cross-cutting peer above HR-400.
 - **HR-400** — your direct human supervisor (Finance leadership).
 
 # Out Of Scope

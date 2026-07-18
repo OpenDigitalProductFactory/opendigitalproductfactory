@@ -55,6 +55,38 @@ export async function getCoworkerProactivityPreference(agentId: string): Promise
   return readProactivityLevel(fact?.value);
 }
 
+/** Batched read of the owner's proactivity overrides for many coworkers in one
+ *  query — powers the consolidated roster (BI-65D622EA) without an N+1. Returns
+ *  only agents that carry an explicit override; the rest fall back to the
+ *  posture-derived default at the resolver. */
+export async function getCoworkerProactivityPreferences(
+  agentIds: string[],
+): Promise<Record<string, ProactivityLevel>> {
+  const user = await currentUser();
+  if (!user || agentIds.length === 0) return {};
+
+  const keyToAgent = new Map(agentIds.map((id) => [proactivityAgentFactKey(id), id]));
+  const facts = await prisma.userFact.findMany({
+    where: {
+      userId: user.id,
+      category: PROACTIVITY_FACT_CATEGORY,
+      key: { in: [...keyToAgent.keys()] },
+      supersededAt: null,
+    },
+    select: { key: true, value: true },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const out: Record<string, ProactivityLevel> = {};
+  for (const fact of facts) {
+    const agentId = keyToAgent.get(fact.key);
+    if (!agentId || out[agentId]) continue; // most-recent wins (orderBy desc)
+    const level = readProactivityLevel(fact.value);
+    if (level) out[agentId] = level;
+  }
+  return out;
+}
+
 export async function saveCoworkerProactivityPreference(
   agentId: string,
   level: ProactivityLevel,

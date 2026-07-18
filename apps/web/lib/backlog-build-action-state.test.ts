@@ -33,6 +33,22 @@ describe("resolveBacklogBuildActionState", () => {
     });
   });
 
+  it("offers Rebuild (a fresh draft) for an abandoned dead draft instead of resuming the corpse", () => {
+    // BI-99D896CF: an abandoned build is a dead draft — resuming it re-strands.
+    // startBacklogBuild (BI-08AE51DC) detaches it and promotes a fresh draft, so
+    // the row must offer a Rebuild action, not a Resume link into the corpse.
+    expect(resolveBacklogBuildActionState({
+      ...baseItem,
+      activeBuildId: "feature-build-row-1",
+      activeBuild: { buildId: "FB-DEAD0001", phase: "abandoned" },
+    })).toEqual({
+      kind: "rebuild",
+      label: "Rebuild",
+      href: null,
+      disabled: false,
+    });
+  });
+
   it("opens a completed linked build as history", () => {
     expect(resolveBacklogBuildActionState({
       ...baseItem,

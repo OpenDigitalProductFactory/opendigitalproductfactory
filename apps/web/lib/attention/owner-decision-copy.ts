@@ -36,6 +36,25 @@ export function specialistFor(source: AttentionSource): string {
   return SPECIALIST[source];
 }
 
+// Approval sources whose headline already says what the decision is — they do not
+// need a separate "what is happening" rationale line.
+const SELF_EXPLANATORY_SOURCES = new Set<AttentionSource>([
+  "approval-bill",
+  "approval-expense",
+  "approval-outbound",
+  "compliance-submission",
+]);
+
+/** The plain "what the coworker was doing and why it stalled" line. Surfaced from
+ *  the item's own context one-liner for sources whose headline is generic
+ *  (blocked/paused/proposal); undefined for self-explanatory approvals. This is
+ *  the rationale the owner needs to decide — it was previously discarded. */
+export function situationFor(item: AttentionItem): string | undefined {
+  if (SELF_EXPLANATORY_SOURCES.has(item.source)) return undefined;
+  const context = (item.context ?? "").trim();
+  return context.length > 0 ? context : undefined;
+}
+
 export function headlineFor(item: AttentionItem): string {
   if (
     item.source === "escalation" &&
@@ -70,9 +89,18 @@ export function whyItMattersFor(item: AttentionItem): string {
   }
 }
 
+// Placeholder blast-radius strings that read as vague ("a coworker task stays
+// blocked") — skip them so the consequence falls through to a source-specific line.
+const GENERIC_BLAST_RADIUS = new Set(["a coworker task", "a coworker waiting on approval"]);
+
 export function consequenceFor(item: AttentionItem): string {
-  if (item.triage.blastRadius && !looksLikeInternalId(item.triage.blastRadius)) {
-    return `If you do nothing, ${lowerFirst(item.triage.blastRadius)} stays blocked.`;
+  const blastRadius = item.triage.blastRadius;
+  if (
+    blastRadius &&
+    !looksLikeInternalId(blastRadius) &&
+    !GENERIC_BLAST_RADIUS.has(blastRadius.trim().toLowerCase())
+  ) {
+    return `If you do nothing, ${lowerFirst(blastRadius)} stays blocked.`;
   }
   switch (item.source) {
     case "approval-bill":
@@ -85,6 +113,10 @@ export function consequenceFor(item: AttentionItem): string {
       return "If you do nothing, the report stays unfiled and may miss its due date.";
     case "research-proposal":
       return "If you do nothing, the research waits for the weekly review.";
+    case "paused-ai":
+    case "ai-decision":
+    case "agent-proposal":
+      return "If you do nothing, your coworker stays stuck here and the work behind it waits.";
     default:
       return "If you do nothing, this work stays paused while your digital team keeps it safe.";
   }

@@ -3,6 +3,7 @@ import {
   consequenceFor,
   headlineFor,
   recommendationFor,
+  situationFor,
   specialistFor,
   whyItMattersFor,
 } from "./owner-decision-copy";
@@ -21,6 +22,11 @@ export type OwnerDecisionCard = {
   id: string;
   source: AttentionSource;
   headline: string;
+  /** Plain "what the coworker was doing and why it stalled" for sources whose
+   *  headline is not self-explanatory (blocked/paused/proposal). Sourced from the
+   *  item's own context one-liner; absent for approvals that speak for
+   *  themselves. Rendered as the card's primary rationale. */
+  situation?: string;
   whyItMatters: string;
   ifYouDoNothing: string;
   recommendation: {
@@ -44,6 +50,7 @@ export function translateAttentionToOwnerDecision(
     id: item.id,
     source: item.source,
     headline: headlineFor(item),
+    situation: situationFor(item),
     whyItMatters: whyItMattersFor(item),
     ifYouDoNothing: consequenceFor(item),
     recommendation: {

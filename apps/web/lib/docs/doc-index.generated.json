@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 521,
+  "pageCount": 522,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -7992,6 +7992,19 @@
         "finance-bridge",
         "where-to-review-it",
         "troubleshooting"
+      ]
+    },
+    "docs/user-guide/ai-workforce/coworker-proactivity.md": {
+      "publicHref": "/user-guide/ai-workforce/coworker-proactivity/",
+      "portalHref": "/docs/ai-workforce/coworker-proactivity",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "what-this-covers",
+        "how-the-defaults-are-set",
+        "the-levels",
+        "the-two-hard-floors",
+        "what-you-can-do"
       ]
     },
     "docs/user-guide/ai-workforce/decision-perspective-in-practice.md": {

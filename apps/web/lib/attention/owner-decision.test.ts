@@ -41,6 +41,36 @@ describe("translateAttentionToOwnerDecision", () => {
     expect(card.recommendation.specialistByline).toBe("Platform operations");
   });
 
+  it("surfaces the coworker's own context as the rationale for a blocked item", () => {
+    const card = translateAttentionToOwnerDecision(
+      item({
+        source: "paused-ai",
+        context: "Waiting for your OK to email the customer the revised quote.",
+        triage: {
+          timeToAct: "none",
+          residueReason: "input-required",
+          blastRadius: "a coworker task",
+          decideEffort: "judgment",
+          irreversible: false,
+        },
+      }),
+      Date.parse("2026-07-17T18:00:00Z"),
+    );
+
+    expect(card.situation).toBe("Waiting for your OK to email the customer the revised quote.");
+    // The vague placeholder blast radius must not leak into the impact line.
+    expect(card.ifYouDoNothing).not.toMatch(/a coworker task/i);
+    expect(card.ifYouDoNothing).toMatch(/stuck|waits/i);
+  });
+
+  it("omits the rationale line for a self-explanatory approval", () => {
+    const card = translateAttentionToOwnerDecision(
+      item({ source: "approval-bill", context: "GBP 240 due" }),
+      Date.parse("2026-07-17T18:00:00Z"),
+    );
+    expect(card.situation).toBeUndefined();
+  });
+
   it("keeps the raw title and builder references in technical detail", () => {
     const card = translateAttentionToOwnerDecision(item(), Date.parse("2026-07-17T18:00:00Z"));
     const details = Object.fromEntries(card.technical.fields.map((field) => [field.label, field.value]));

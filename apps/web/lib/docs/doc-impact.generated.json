@@ -258,11 +258,17 @@
     ]
   },
   "codeToDocs": {
+    "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
     "apps/web/components/attention/AttentionInbox.tsx": [
       "docs/user-guide/workspace/attention-inbox.md"
     ],
     "apps/web/components/attention/OwnerDecisionCards.tsx": [
       "docs/user-guide/workspace/attention-inbox.md"
+    ],
+    "apps/web/components/proactivity/ProactivityRosterList.tsx": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "apps/web/lib/ai-inference.ts": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
@@ -272,6 +278,9 @@
     ],
     "apps/web/lib/integrate/build-orchestrator.ts": [
       "docs/user-guide/build-studio/index.md"
+    ],
+    "apps/web/lib/proactivity/proactivity-roster.ts": [
+      "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "scripts/dpf-bootstrap-agent-toolchain.ps1": [
       "docs/user-guide/getting-started/agent-dev-environments.md"
@@ -462,6 +471,11 @@
   "docToCode": {
     "docs/user-guide/ai-workforce/connecting-providers.md": [
       "apps/web/lib/ai-inference.ts"
+    ],
+    "docs/user-guide/ai-workforce/coworker-proactivity.md": [
+      "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx",
+      "apps/web/components/proactivity/ProactivityRosterList.tsx",
+      "apps/web/lib/proactivity/proactivity-roster.ts"
     ],
     "docs/user-guide/build-studio/index.md": [
       "apps/web/lib/integrate/build-orchestrator.ts"

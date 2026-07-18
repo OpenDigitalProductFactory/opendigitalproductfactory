@@ -1,0 +1,56 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": ["qdrant:agent-memory"],
+  "migration": { "name": "20260717120000_add_widget", "backfill": "none — new table" },
+  "tests": ["lib/govern/data/coverage.live.test.ts"],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:new-widget",
+      "prismaModel": "NewWidget",
+      "lifecycleDisposition": "operational",
+      "fields": [
+        {
+          "fieldId": "data:new-widget#id",
+          "resolution": "inherited",
+          "reason": "ordinary identifier",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:new-widget#email",
+          "resolution": "governed",
+          "reason": "subject contact",
+          "provenance": "manual/data-steward",
+          "flags": ["sensitive", "subject"],
+          "fieldPolicy": "mask-on-read"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "store": "qdrant:widget-index",
+      "derivedContractId": "new-widget->qdrant-widget-index",
+      "cleanupTest": "lib/widgets/widget-cleanup.test.ts",
+      "reconciliationTest": "lib/widgets/widget-reconcile.test.ts"
+    },
+    {
+      "kind": "destructive",
+      "executor": "purgeStaleWidgets",
+      "holdCheck": true,
+      "dispositionEvidence": true
+    },
+    {
+      "kind": "policy",
+      "policyId": "widget-read-mask",
+      "testVectors": {
+        "allow": true,
+        "deny": true,
+        "obligation": true,
+        "unknownContext": true,
+        "precedence": true,
+        "exceptionExpiry": true
+      }
+    }
+  ]
+}

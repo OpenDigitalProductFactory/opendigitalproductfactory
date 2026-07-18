@@ -65,12 +65,29 @@ const TERMINAL_STATUSES = new Set(["done", "deferred"]);
 const CLOSED_TRIAGE_OUTCOMES = new Set(["discard", "duplicate", "defer"]);
 const FAILED_BUILD_PHASES = new Set(["failed", "panicked", "abandoned"]);
 
+// BI-99D896CF age-out: an abandoned draft that has sat untouched this long keeps
+// re-abandoning without progress. It still needs a human (rebuild or retire), so
+// it stays on the personal lens — but it should not lead over a build that just
+// failed, so its risk contribution is bought down once it crosses the threshold.
+const DEAD_DRAFT_PHASES = new Set(["abandoned"]);
+const CHRONIC_STRAND_DAYS = 14;
+const CHRONIC_STRAND_RISK_PENALTY = 3;
+
 const DAY_MS = 1000 * 60 * 60 * 24;
 
 function daysBetween(from: Date | null | undefined, now: Date): number {
   if (!from) return 0;
   const ms = now.getTime() - new Date(from).getTime();
   return ms > 0 ? ms / DAY_MS : 0;
+}
+
+/** True when a linked build has been abandoned and left untouched past the
+ *  chronic threshold — a strand that keeps re-abandoning rather than a fresh
+ *  failure the operator has not yet seen. */
+function isChronicallyStrandedBuild(item: BacklogItemWithRelations, now: Date): boolean {
+  const phase = item.activeBuild?.phase ?? null;
+  if (!phase || !DEAD_DRAFT_PHASES.has(phase)) return false;
+  return daysBetween(item.updatedAt, now) >= CHRONIC_STRAND_DAYS;
 }
 
 /** The severity a given operator reason contributes to the risk key: a broken
@@ -175,13 +192,16 @@ export function selectOperatorQueue(
   for (const item of items) {
     const reason = classifyOperatorReason(item);
     if (!reason) continue;
+    const chronicPenalty = isChronicallyStrandedBuild(item, now)
+      ? CHRONIC_STRAND_RISK_PENALTY
+      : 0;
     entries.push({
       item,
       reason,
       blocksBusinessOutcome: blocksBusinessOutcome(item),
       scope: resolveOperatorScope(item, reason, principalId),
       businessScore: businessScore(item),
-      riskScore: riskScore(item, reason),
+      riskScore: riskScore(item, reason) - chronicPenalty,
       stalenessDays: daysBetween(item.stalenessDetectedAt ?? item.updatedAt, now),
     });
   }

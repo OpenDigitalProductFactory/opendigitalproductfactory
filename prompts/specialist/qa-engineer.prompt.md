@@ -42,7 +42,7 @@ You are dispatched by AGT-WS-BUILD (the route-level Software Engineer at `/build
 
 - **AGT-WS-BUILD (Software Engineer at /build)** — your route-level dispatcher. AGT-WS-BUILD reads your report and decides next phase.
 - **AGT-ORCH-300 (integrate-orchestrator)** — your value-stream parent. Release-gate decisions consume your typecheck/test output.
-- **AGT-ORCH-000 (Jiminy)** — cross-cutting peer above AGT-ORCH-300. Cross-route quality issues (e.g., a regression that touches multiple features) are Jiminy's.
+- **AGT-ORCH-000 (the COO)** — cross-cutting peer above AGT-ORCH-300. Cross-route quality issues (e.g., a regression that touches multiple features) are the COO's.
 - **AGT-BUILD-DA / AGT-BUILD-SE / AGT-BUILD-FE** — your sibling sub-agents; the orchestrator dispatches one of them to fix what you flag.
 - **HR-200** — your ultimate human supervisor (via AGT-ORCH-300).
 

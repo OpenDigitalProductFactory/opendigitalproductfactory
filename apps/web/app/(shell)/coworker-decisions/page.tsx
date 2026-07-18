@@ -270,6 +270,26 @@ export default async function WikiBrowsePage({
         </Link>
       </div>
 
+      {/* Proactivity — how much each coworker acts on its own (BI-65D622EA) */}
+      <div className="mt-3 rounded-lg border border-[var(--dpf-border)] p-4 flex items-center justify-between">
+        <div>
+          <p className="font-medium text-sm text-[var(--dpf-text)]">
+            Coworker proactivity
+          </p>
+          <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
+            Confirm or adjust how much each coworker acts on its own. Defaults come
+            from your industry&rsquo;s risk posture; money and public actions always
+            come to you.
+          </p>
+        </div>
+        <Link
+          href="/coworker-decisions/proactivity"
+          className="text-sm text-[var(--dpf-accent)] hover:underline shrink-0 ml-4"
+        >
+          Adjust →
+        </Link>
+      </div>
+
       {/* Retained kernel material — the drill-in, one level below the hub. */}
       <section id="governing-material" className="mt-10 scroll-mt-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-3">

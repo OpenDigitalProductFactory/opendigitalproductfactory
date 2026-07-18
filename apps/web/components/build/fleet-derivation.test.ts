@@ -14,6 +14,7 @@ import {
   deriveQueueState,
   formatOperatorFocusHeader,
   formatFleetHeader,
+  isBuildStalled,
   isOperatorFocusEntry,
 } from "./fleet-derivation";
 import {
@@ -365,5 +366,45 @@ describe("deriveCoworkerActivityCount", () => {
     ];
     expect(deriveCoworkerActivityCount(builds)).toBe(3);
     expect(deriveCoworkerActivityCount([])).toBe(0);
+  });
+});
+
+describe("stall detection (BI-46204009) — status reflects activity freshness", () => {
+  const now = new Date("2026-07-18T00:00:00Z").getTime();
+  const fresh = new Date(now - 5 * 60 * 1000); // 5 min ago — healthy checkpoint cadence
+  const stale = new Date(now - 3 * 60 * 60 * 1000); // 3h ago — frozen
+
+  it("flags a build- or review-phase build with no recent update as stalled", () => {
+    expect(isBuildStalled(makeBuild({ phase: "build", updatedAt: stale }), now)).toBe(true);
+    expect(isBuildStalled(makeBuild({ phase: "review", updatedAt: stale }), now)).toBe(true);
+  });
+
+  it("does not flag a freshly-updated build as stalled", () => {
+    expect(isBuildStalled(makeBuild({ phase: "build", updatedAt: fresh }), now)).toBe(false);
+  });
+
+  it("never flags off-rail (ideate/plan) or terminal phases, even when stale", () => {
+    for (const phase of ["ideate", "plan", "ship", "complete"] as const) {
+      expect(isBuildStalled(makeBuild({ phase, updatedAt: stale }), now)).toBe(false);
+    }
+  });
+
+  it("reports a stalled build as blocked (not an animated running/Working badge)", () => {
+    const state = deriveQueueState(makeBuild({ phase: "build", updatedAt: stale }), now);
+    expect(state.kind).toBe("blocked");
+    if (state.kind === "blocked") expect(state.reason).toMatch(/^Stalled/);
+  });
+
+  it("keeps a fresh build-phase build as running", () => {
+    const state = deriveQueueState(
+      makeBuild({ phase: "build", updatedAt: fresh, buildExecState: null }),
+      now,
+    );
+    expect(state.kind).toBe("running");
+  });
+
+  it("routes a stalled build to Needs-you, and leaves a fresh one alone", () => {
+    expect(deriveNeedsAttention(makeBuild({ phase: "build", updatedAt: stale }), now)).toBe(true);
+    expect(deriveNeedsAttention(makeBuild({ phase: "build", updatedAt: fresh }), now)).toBe(false);
   });
 });

@@ -70,6 +70,7 @@ describe("OwnerDecisionCards", () => {
     expect(screen.getByText("Approve this bill?")).toBeTruthy();
     expect(screen.getByText(/Paying the right bills/)).toBeTruthy();
     expect(screen.getByText(/If you do nothing/)).toBeTruthy();
+    expect(screen.getByText(/the bill may become late/)).toBeTruthy();
     expect(screen.getByText("Your COO recommends")).toBeTruthy();
     expect(screen.getByText("Finance")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Review bill" }).getAttribute("href")).toBe(

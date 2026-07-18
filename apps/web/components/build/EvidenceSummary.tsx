@@ -2,6 +2,7 @@
 
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import { safeRenderValue } from "@/lib/safe-render";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 type Props = {
   build: FeatureBuildRow;
@@ -11,12 +12,12 @@ type Props = {
 export function EvidenceSummary({ build, loading }: Props) {
   if (loading) {
     return (
-      <div className="space-y-2 animate-fade-in">
-        <div className="h-3 w-28 bg-[var(--dpf-surface-2)] rounded animate-pulse" />
+      <div className="space-y-2 animate-fade-in" aria-busy="true">
+        <Skeleton width={112} height={12} />
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="flex items-center gap-2 px-3 py-2.5 rounded bg-[var(--dpf-surface-2)] animate-pulse">
-            <div className="w-2 h-2 rounded-full bg-[var(--dpf-border)]" />
-            <div className="h-3 flex-1 bg-[var(--dpf-border)] rounded" style={{ width: `${50 + i * 6}%` }} />
+          <div key={i} className="flex items-center gap-2 px-3 py-2.5 rounded bg-[var(--dpf-surface-2)]">
+            <Skeleton circle width={8} height={8} />
+            <Skeleton height={12} width={`${50 + i * 6}%`} />
           </div>
         ))}
       </div>

@@ -587,6 +587,31 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node scripts/check-spec-plan-doc.mjs
 
+  data-impact-gate:
+    name: Data-Impact Gate
+    runs-on: ubuntu-latest
+    # Only meaningful on PRs — it diffs against the PR base for changed persistent surfaces.
+    if: github.event_name == 'pull_request'
+    # BI-DG-003 (spec §6.9). Content-based data-governance conformance gate: a PR that
+    # changes a persistent surface (schema, migration, projection producer, AI-context
+    # source, MDM domain, or lifecycle executor) must carry a generated DataImpactManifest
+    # (*.data-impact.json) or a structured, unexpired exception. The immutable BI-DG-002
+    # legacy baseline covers pre-existing gaps; this gate holds the line on NEW changes.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+      - name: Test the Data-Impact Gate (red/green fixtures)
+        run: node --test scripts/check-data-impact.test.mjs
+      - name: Run the Data-Impact Gate
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-data-impact.mjs
+
   design-grounding-gate:
     name: Design Grounding Gate
     runs-on: ubuntu-latest

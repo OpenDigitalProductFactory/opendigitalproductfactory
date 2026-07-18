@@ -3,7 +3,7 @@
 import { memo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, ExternalLink, Play } from "lucide-react";
+import { AlertTriangle, ExternalLink, Play, RotateCcw } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { deleteBacklogItem, escalateBacklogItemUpstream } from "@/lib/actions/backlog";
 import { startBacklogBuild } from "@/lib/actions/backlog-build";
@@ -217,16 +217,28 @@ function BacklogBuildActionButton({
   isPending: boolean;
   onStart: () => void;
 }) {
-  if (action.kind === "start") {
+  if (action.kind === "start" || action.kind === "rebuild") {
+    // "rebuild" fires the same server action as "start"; startBacklogBuild
+    // (BI-08AE51DC) detaches the abandoned draft and promotes a fresh one, so the
+    // operator gets a real terminal action instead of a Resume link that
+    // re-strands the dead draft (BI-99D896CF).
+    const isRebuild = action.kind === "rebuild";
     return (
       <button
         onClick={onStart}
         disabled={isPending}
         className="inline-flex items-center gap-1 rounded border border-[var(--dpf-accent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-accent)] transition-colors hover:bg-[var(--dpf-accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
-        aria-label="Start Build Studio draft"
+        aria-label={isRebuild ? "Rebuild — start a fresh Build Studio draft" : "Start Build Studio draft"}
+        title={isRebuild ? "The previous draft was abandoned. Start a fresh build." : undefined}
       >
-        {isPending ? <Spinner size="xs" tone="current" presentational /> : <Play className="h-3 w-3" />}
-        <span>{isPending ? "Starting" : action.label}</span>
+        {isPending ? (
+          <Spinner size="xs" tone="current" presentational />
+        ) : isRebuild ? (
+          <RotateCcw className="h-3 w-3" />
+        ) : (
+          <Play className="h-3 w-3" />
+        )}
+        <span>{isPending ? (isRebuild ? "Rebuilding" : "Starting") : action.label}</span>
       </button>
     );
   }

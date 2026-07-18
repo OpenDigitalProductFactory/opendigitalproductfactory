@@ -268,15 +268,26 @@ export const taskrunWatchdog = inngest.createFunction(
       console.warn("[taskrun-watchdog] inert-build reaper failed:", err);
     }
 
+    // BI-B62B9F1E: release stale BacklogItem claims (dead sessions) so they do
+    // not linger as "active" operator noise. Complements the atomic reclaim path.
+    let staleBacklogClaimsReaped = 0;
+    try {
+      const { reapStaleBacklogClaims } = await import("@/lib/backlog/claim-on-start");
+      const { prisma: claimDb } = await import("@dpf/db");
+      staleBacklogClaimsReaped = (await reapStaleBacklogClaims({ db: claimDb })).reaped;
+    } catch (err) {
+      console.warn("[taskrun-watchdog] stale-backlog-claim reaper failed:", err);
+    }
+
     if (!(await isStallWatchdogEnabled())) {
-      return { skipped: true, reason: "flag-off", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped };
+      return { skipped: true, reason: "flag-off", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, staleBacklogClaimsReaped };
     }
 
     const { prisma } = await import("@dpf/db");
 
     const thresholds = await prisma.buildStudioStallThreshold.findMany();
     if (thresholds.length === 0) {
-      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped };
+      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, staleBacklogClaimsReaped };
     }
 
     // Coarse SQL filter using the smallest applicable thresholds across all

@@ -48,7 +48,7 @@ The Release Gate Package is the platform's quality boundary. AGT-ORCH-300 cannot
 - **AGT-190 (security-auditor-agent)** — peer (Evaluate VS); provides security findings input.
 - **AGT-902 (data-governance-agent)** — peer; license / compliance evidence input.
 - **AGT-ORCH-400 (Deploy Orchestrator)** — downstream; receives signed packages.
-- **AGT-ORCH-000 (Jiminy)** — cross-cutting peer above HR-200.
+- **AGT-ORCH-000 (the COO)** — cross-cutting peer above HR-200.
 - **HR-200** — your direct human supervisor; the Digital Product Manager who signs the gate.
 
 # Out Of Scope
