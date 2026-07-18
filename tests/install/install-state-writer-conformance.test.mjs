@@ -14,6 +14,8 @@ test("Bash and PowerShell implement the protocol independently of Node", () => {
   assert.doesNotMatch(psSource, /install-state-transaction\.mjs/);
   assert.match(bashSource, /ownerId.*runId|runId.*ownerId/s);
   assert.match(psSource, /ownerId.*runId|runId.*ownerId/is);
+  assert.match(bashSource, /current.*=.*stale_owner/s);
+  assert.match(psSource, /current\.ownerId -eq \$staleOwnerId/i);
 });
 
 test("Bash initialization refuses unsupported host identity", async () => {

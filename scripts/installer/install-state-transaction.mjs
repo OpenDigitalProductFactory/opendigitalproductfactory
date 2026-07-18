@@ -96,7 +96,11 @@ export async function acquireInstallStateLock(statePath, options = {}) {
         await options.onStaleObserved?.();
         const stale = await readOwner(lockPath); if (!stale) continue;
         const releaseReclaim = await acquireReclaimGuard(lockPath, stale.ownerId, options, deadline);
-        try { if (await staleOwner(lockPath, Date.now())) { const quarantine = `${lockPath}.stale-${randomUUID()}`; try { await rename(ownerPath, quarantine); await rm(quarantine, { force: true }); } catch (recoveryError) { if (!["ENOENT", "EEXIST"].includes(recoveryError?.code)) throw recoveryError; } } }
+        try {
+          const current = await readOwner(lockPath);
+          if (current?.ownerId === stale.ownerId && await staleOwner(lockPath, Date.now())) { const quarantine = `${lockPath}.stale-${randomUUID()}`; try { await rename(ownerPath, quarantine); await rm(quarantine, { force: true }); } catch (recoveryError) { if (!["ENOENT", "EEXIST"].includes(recoveryError?.code)) throw recoveryError; } }
+          else if (current?.ownerId && current.ownerId !== stale.ownerId) await options.onGenerationMismatch?.(current.ownerId);
+        }
         finally { await releaseReclaim(); }
         continue;
       }

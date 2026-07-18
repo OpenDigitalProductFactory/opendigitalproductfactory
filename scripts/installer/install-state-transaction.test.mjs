@@ -78,6 +78,17 @@ test("late lower-sorted nomination cannot join after reclaim election closes", {
   resume(); const acquired = await first; await acquired.release();
 });
 
+test("generation guard never renames a different stale generation", { timeout: 1000 }, async () => {
+  const { statePath } = await fixture(); const lockPath = `${statePath}.lock`; const stale = ownerId => ({ protocolVersion: 1, ownerId, runId: "dead", pid: 99999999, hostname: "foreign", acquiredAt: "2000-01-01T00:00:00Z", expiresAt: "2000-01-01T00:00:01Z", expiresAtEpoch: 946684801 });
+  await writeFile(lockPath, JSON.stringify(stale("generation-a")));
+  let elected; const closed = new Promise(resolve => { elected = resolve; }); let resume; const paused = new Promise(resolve => { resume = resolve; }); let mismatchOwner;
+  const pending = acquireInstallStateLock(statePath, { timeoutMs: 500, onReclaimElected: async () => { elected(); await paused; }, onGenerationMismatch: owner => { mismatchOwner = owner; } });
+  await closed; await writeFile(lockPath, JSON.stringify(stale("generation-b"))); resume();
+  const acquired = await pending;
+  assert.equal(mismatchOwner, "generation-b");
+  await acquired.release();
+});
+
 test("release never removes a lock now owned by another live owner", async () => {
   const { statePath } = await fixture();
   const held = await acquireInstallStateLock(statePath);

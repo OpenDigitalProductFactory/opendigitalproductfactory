@@ -90,8 +90,8 @@ dpf_state_lock_acquire() {
       local reclaim="${lock}.reclaim-${generation}"
       if ( set -C; : > "$reclaim" ) 2>/dev/null; then
         printf '{"protocolVersion":1,"ownerId":"%s","runId":"%s","targetOwnerId":"%s","pid":%s,"hostname":"%s","acquiredAt":"%s","expiresAt":"%s","expiresAtEpoch":%s}\n' "$owner_id" "$run_id" "$stale_owner" "$$" "$host" "$(dpf_state_rfc3339_epoch "$now")" "$(dpf_state_rfc3339_epoch "$((now + 5))")" "$((now + 5))" > "$reclaim"
-        lock_expires="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$lock" 2>/dev/null)"
-        if [ -n "$lock_expires" ] && [ "$lock_expires" -le "$now" ]; then mv "$lock" "${lock}.stale-${owner_id}" 2>/dev/null && rm -f "${lock}.stale-${owner_id}"; fi
+        current="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"; lock_expires="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$lock" 2>/dev/null)"
+        if [ "$current" = "$stale_owner" ] && [ -n "$lock_expires" ] && [ "$lock_expires" -le "$now" ]; then mv "$lock" "${lock}.stale-${owner_id}" 2>/dev/null && rm -f "${lock}.stale-${owner_id}"; fi
         rm -f "$reclaim"; continue
       fi
     fi
