@@ -522,19 +522,14 @@ export async function dispatchOpencodeTask(params: {
   }
 
   const instructions = buildOpencodeInstructions(role, buildContext, priorResults);
-  // BI-B195F224: trim soft context to served n_ctx (or fail early with action).
+  // BI-B195F224: trim to served n_ctx or fail early (CWE-117: sanitize log args).
   const fitted = trimTaskPromptToContext({
     prompt: buildSpecialistTaskPrompt({ task, instructions, workdir }),
     servedContextTokens: target.servedContextTokens,
   });
   if (!fitted.fit) {
     const blocked = fitted.reason ?? "Task prompt exceeds local model context window.";
-    // task.title is operator/BI-authored (CWE-117); sanitize each arg before log.
-    console.error(
-      "[opencode-dispatch] Task %s blocked: %s",
-      sanitizeForLog(task.title),
-      sanitizeForLog(blocked),
-    );
+    console.error("[opencode-dispatch] Task %s blocked: %s", sanitizeForLog(task.title), sanitizeForLog(blocked));
     await recordBuildDispatchAttempt({
       buildId: params.buildId, taskTitle: task.title, specialist: role, providerId, model,
       startedAt, completedAt: new Date(), durationMs: Date.now() - startMs,
@@ -544,11 +539,7 @@ export async function dispatchOpencodeTask(params: {
   }
   if (fitted.trimmed) {
     const msg = formatTrimProgressMessage(fitted, target.servedContextTokens);
-    console.log(
-      "[opencode-dispatch] %s task=%s",
-      sanitizeForLog(msg),
-      sanitizeForLog(task.title),
-    );
+    console.log("[opencode-dispatch] %s task=%s", sanitizeForLog(msg), sanitizeForLog(task.title));
     params.onProgress?.(msg);
   }
   const taskPrompt = fitted.prompt;
