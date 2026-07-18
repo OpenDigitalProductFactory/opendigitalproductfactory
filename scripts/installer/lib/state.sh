@@ -62,9 +62,7 @@ dpf_state_active_reclaim_first() {
     expiry="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$ticket" 2>/dev/null)"
     ticket_pid="$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$ticket" 2>/dev/null)"; ticket_host="$(sed -n 's/.*"hostname":"\([^"]*\)".*/\1/p' "$ticket" 2>/dev/null)"
     if { [ -n "$expiry" ] && [ "$expiry" -gt "$now" ]; } || { [ "$ticket_host" = "$local_host" ] && kill -0 "$ticket_pid" 2>/dev/null; }; then echo "$ticket"; return 0; fi
-    target="$(sed -n 's/.*"targetOwnerId":"\([^"]*\)".*/\1/p' "$ticket" 2>/dev/null)"; current="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"
-    if [ -n "$target" ] && [ "$current" = "$target" ]; then quarantine="${lock}.stale-recovery-$$"; mv "$lock" "$quarantine" 2>/dev/null && rm -f "$quarantine"; fi
-    current="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"; if [ "$current" != "$target" ]; then rm -f "$ticket"; else echo "$ticket"; return 0; fi
+    rm -f "$ticket"
   done
   return 1
 }
@@ -109,6 +107,14 @@ dpf_state_lock_release() {
   if [ -n "$current" ] && [ "$current" = "${DPF_STATE_LOCK_OWNER_ID:-}" ]; then rm -f "$lock"; fi
 }
 
+dpf_state_cleanup_temps() {
+  local path="$1" directory base temp
+  directory="$(dirname "$path")"; base="$(basename "$path")"
+  for temp in "$directory/.${base}.tmp-"*; do [ -f "$temp" ] && rm -f "$temp"; done
+}
+
+dpf_state_temp_path() { echo "$(dirname "$1")/.$(basename "$1").tmp-${DPF_STATE_LOCK_OWNER_ID}"; }
+
 dpf_state_validate_file() {
   node "$(dpf_state_validator_path)" "$1" >/dev/null
 }
@@ -145,6 +151,7 @@ dpf_state_init() {
   case "$DPF_PLATFORM" in darwin|linux) ;; *) echo "dpf_state_init: unsupported platform" >&2; return 1 ;; esac
   case "$DPF_ARCH" in arm64|amd64) ;; *) echo "dpf_state_init: unsupported architecture" >&2; return 1 ;; esac
   dpf_state_lock_acquire "$path" || return 1
+  dpf_state_cleanup_temps "$path"
   if [ -f "$path" ]; then dpf_state_lock_release "$path"; return 0; fi
   DPF_STATE_SOURCE_SHA=""
 
@@ -181,7 +188,7 @@ dpf_state_init() {
 }
 EOF
 )
-  local temp="${path}.tmp-${DPF_STATE_LOCK_OWNER_ID}"
+  local temp; temp="$(dpf_state_temp_path "$path")"
   printf '%s\n' "$initial_json" > "$temp"
   dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
   dpf_state_lock_release "$path"
@@ -227,8 +234,9 @@ dpf_state_write() {
     return 1
   fi
   dpf_state_lock_acquire "$path" || return 1
+  dpf_state_cleanup_temps "$path"
   DPF_STATE_SOURCE_SHA="$(dpf_state_sha256 "$path")"
-  local temp="${path}.tmp-${DPF_STATE_LOCK_OWNER_ID}"
+  local temp; temp="$(dpf_state_temp_path "$path")"
   if command -v jq >/dev/null 2>&1; then
     local json_value
     if [ "$value" = "true" ] || [ "$value" = "false" ] || [ "$value" = "null" ]; then
@@ -318,8 +326,9 @@ dpf_state_write_json() {
     return 1
   fi
   dpf_state_lock_acquire "$path" || return 1
+  dpf_state_cleanup_temps "$path"
   DPF_STATE_SOURCE_SHA="$(dpf_state_sha256 "$path")"
-  local temp="${path}.tmp-${DPF_STATE_LOCK_OWNER_ID}"
+  local temp; temp="$(dpf_state_temp_path "$path")"
   if command -v jq >/dev/null 2>&1; then
     printf '%s' "$value" | jq -e . >/dev/null
     jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$temp" || { dpf_state_lock_release "$path"; return 1; }

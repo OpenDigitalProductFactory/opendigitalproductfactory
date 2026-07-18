@@ -56,13 +56,19 @@ function Get-DpfStateSha256 {
 
 function Get-DpfActiveReclaimFirst {
     param([Parameter(Mandatory)][string]$LockPath)
-    $active = @(); foreach ($ticket in Get-ChildItem -Path "$LockPath.reclaim-*" -File -ErrorAction SilentlyContinue) { try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ticket.FullName)); $live = $false; if ($owner.hostname -eq [Environment]::MachineName) { try { Get-Process -Id ([int]$owner.pid) -ErrorAction Stop | Out-Null; $live = $true } catch {} }; if ([long]$owner.expiresAtEpoch -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -or $live) { $active += $ticket.FullName } else { $current = if (Test-Path $LockPath) { ConvertFrom-Json ([IO.File]::ReadAllText($LockPath)) } else { $null }; if ($current.ownerId -eq $owner.targetOwnerId) { Move-Item $LockPath "$LockPath.stale-recovery-$PID" -ErrorAction Stop; Remove-Item "$LockPath.stale-recovery-$PID" -Force }; $after = if (Test-Path $LockPath) { ConvertFrom-Json ([IO.File]::ReadAllText($LockPath)) } else { $null }; if ($after.ownerId -ne $owner.targetOwnerId) { Remove-Item $ticket.FullName -Force } else { $active += $ticket.FullName } } } catch {} }
+    $active = @(); foreach ($ticket in Get-ChildItem -Path "$LockPath.reclaim-*" -File -ErrorAction SilentlyContinue) { try { $owner = ConvertFrom-Json ([IO.File]::ReadAllText($ticket.FullName)); $live = $false; if ($owner.hostname -eq [Environment]::MachineName) { try { Get-Process -Id ([int]$owner.pid) -ErrorAction Stop | Out-Null; $live = $true } catch {} }; if ([long]$owner.expiresAtEpoch -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -or $live) { $active += $ticket.FullName } else { Remove-Item $ticket.FullName -Force } } catch {} }
     return ($active | Sort-Object | Select-Object -First 1)
 }
 
 function Get-DpfStringSha256 {
     param([string]$Value)
     $sha = [Security.Cryptography.SHA256]::Create(); try { $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes($Value); return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant() } finally { $sha.Dispose() }
+}
+
+function Remove-DpfStateTempLeftovers {
+    param([string]$Path)
+    $directory = Split-Path -Parent $Path; $leaf = Split-Path -Leaf $Path
+    Get-ChildItem -Path (Join-Path $directory ".$leaf.tmp-*") -File -ErrorAction SilentlyContinue | Remove-Item -Force
 }
 
 function Replace-DpfStateFileAtomic {
@@ -129,7 +135,8 @@ function Exit-DpfStateLock {
 
 function Write-DpfStateCandidate {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Json, [string]$SourceSha256)
-    $temp = "$Path.tmp-$script:DPF_STATE_LOCK_OWNER_ID"; $encoding = New-Object Text.UTF8Encoding($false)
+    Remove-DpfStateTempLeftovers $Path
+    $temp = Join-Path (Split-Path -Parent $Path) ("." + (Split-Path -Leaf $Path) + ".tmp-" + $script:DPF_STATE_LOCK_OWNER_ID); $encoding = New-Object Text.UTF8Encoding($false)
     [IO.File]::WriteAllText($temp, $Json, $encoding); Flush-DpfStateFile $temp
     if (-not (Test-DpfStateFileValid $temp)) { Remove-Item -LiteralPath $temp -Force; throw "install_state_schema_validation_failed" }
     if ($SourceSha256) {

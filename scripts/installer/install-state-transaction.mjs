@@ -39,14 +39,13 @@ async function staleOwner(lockPath, now) {
 
 async function readOwner(path) { try { return JSON.parse(await readFile(path, "utf8")); } catch { return null; } }
 
-async function activeReclaimGuards(lockPath) {
+async function activeReclaimGuards(lockPath, options = {}) {
   const directory = dirname(lockPath); const prefix = `${basename(lockPath)}${contract.reclaimSuffix}`; const active = [];
   for (const name of await readdir(directory)) {
     if (!name.startsWith(prefix)) continue; const path = join(directory, name); const guard = await readOwner(path); if (!guard) continue;
     if ((Number.isSafeInteger(guard.expiresAtEpoch) && guard.expiresAtEpoch * 1000 > Date.now()) || (guard.hostname === localHostname && pidIsLive(guard.pid))) { active.push({ path, owner: guard }); continue; }
-    const current = await readOwner(lockPath);
-    if (current?.ownerId === guard.targetOwnerId) { const quarantine = `${lockPath}.stale-${randomUUID()}`; try { await rename(lockPath, quarantine); await rm(quarantine, { force: true }); } catch {} }
-    const after = await readOwner(lockPath); if (after?.ownerId !== guard.targetOwnerId) await rm(path, { force: true }); else active.push({ path, owner: guard });
+    await options.onExpiredGuardObserved?.(guard);
+    await rm(path, { force: true });
   }
   return active;
 }
@@ -60,7 +59,7 @@ async function acquireReclaimGuard(lockPath, staleOwnerId, options, deadline) {
       await options.onReclaimElected?.();
       return async () => { await rm(path, { force: true }); };
     } catch (error) { if (error?.code !== "EEXIST") throw error; }
-    await activeReclaimGuards(lockPath);
+    await activeReclaimGuards(lockPath, options);
     if (Date.now() >= deadline) throw new Error("install_state_lock_timeout");
     await sleep(options.retryDelayMs ?? contract.retryDelayMs);
   }
@@ -77,11 +76,11 @@ export async function acquireInstallStateLock(statePath, options = {}) {
   const ownerPath = lockPath;
   for (;;) {
     try {
-      if ((await activeReclaimGuards(lockPath)).length) { if (Date.now() >= deadline) throw new Error("install_state_lock_timeout"); await sleep(options.retryDelayMs ?? contract.retryDelayMs); continue; }
+      if ((await activeReclaimGuards(lockPath, options)).length) { if (Date.now() >= deadline) throw new Error("install_state_lock_timeout"); await sleep(options.retryDelayMs ?? contract.retryDelayMs); continue; }
       const owner = makeOwner(ownerId, runId, leaseMs);
       const handle = await open(ownerPath, "wx", 0o600);
       try { await handle.writeFile(`${JSON.stringify(owner)}\n`, "utf8"); await handle.sync(); } finally { await handle.close(); }
-      if ((await activeReclaimGuards(lockPath)).length) { await rm(ownerPath, { force: true }); continue; }
+      if ((await activeReclaimGuards(lockPath, options)).length) { await rm(ownerPath, { force: true }); continue; }
       return { lockPath, owner, async release() {
         let current;
         try { current = JSON.parse(await readFile(ownerPath, "utf8")); } catch { return; }

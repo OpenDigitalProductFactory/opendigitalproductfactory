@@ -78,6 +78,14 @@ test("Node Bash and PowerShell recover an abandoned reclaim claim", async () => 
   assert.equal(JSON.parse(await readFile(statePath, "utf8")).installerVersion, "ps");
 });
 
+test("Bash and PowerShell clean only bounded contract temp leftovers", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-temp-cleanup-")); const statePath = join(dir, "install-state.json"); const valid = '{"schemaVersion":2,"installerVersion":"seed","platform":"win32","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","capabilityStateVersion":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n';
+  await writeFile(statePath, valid); await writeFile(join(dir, ".install-state.json.tmp-bash-crash"), "partial"); await writeFile(join(dir, ".install-state.json.tmp-ps-crash"), "partial"); await writeFile(join(dir, "unrelated.tmp-keep"), "keep");
+  const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash"; const pwsh = process.platform === "win32" ? "powershell.exe" : "pwsh"; const env = { DPF_STATE_DIR: dir, HOME: dir };
+  await run(bash, ["-lc", `. scripts/installer/lib/state.sh; dpf_state_write installerVersion bash`], env); await run(pwsh, ["-NoProfile", "-Command", `. ./scripts/installer/lib/state.ps1; Set-DpfStateValue -Key installerVersion -Value ps`], env);
+  const names = await (await import("node:fs/promises")).readdir(dir); assert.equal(names.some(name => name.startsWith(".install-state.json.tmp-")), false); assert.equal(names.includes("unrelated.tmp-keep"), true);
+});
+
 test("concurrent PowerShell initializers converge on one complete BOM-free state", async () => {
   const dir = await mkdtemp(join(tmpdir(), "dpf-initializer-conformance-"));
   const pwsh = process.platform === "win32" ? "powershell.exe" : "pwsh";

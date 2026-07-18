@@ -89,6 +89,17 @@ test("generation guard never renames a different stale generation", { timeout: 1
   await acquired.release();
 });
 
+test("two expired-guard cleaners cannot rename a fresh owner", { timeout: 1000 }, async () => {
+  const { statePath } = await fixture(); const lockPath = `${statePath}.lock`; const guardPath = `${lockPath}.reclaim-deadguard`;
+  const owner = (ownerId, expired = true) => ({ protocolVersion: 1, ownerId, runId: "run", targetOwnerId: "generation-a", pid: expired ? 99999999 : process.pid, hostname: expired ? "foreign" : process.env.COMPUTERNAME ?? "", acquiredAt: "2000-01-01T00:00:00Z", expiresAt: expired ? "2000-01-01T00:00:01Z" : "2999-01-01T00:00:00Z", expiresAtEpoch: expired ? 946684801 : 32472144000 });
+  await writeFile(lockPath, JSON.stringify(owner("generation-a"))); await writeFile(guardPath, JSON.stringify(owner("dead-guard")));
+  let observed; const sawExpired = new Promise(resolve => { observed = resolve; }); let resume; const paused = new Promise(resolve => { resume = resolve; });
+  const first = acquireInstallStateLock(statePath, { timeoutMs: 500, onExpiredGuardObserved: async () => { observed(); await paused; } }); await sawExpired;
+  const second = await acquireInstallStateLock(statePath, { timeoutMs: 500 });
+  resume(); await new Promise(resolve => setTimeout(resolve, 30)); assert.equal(JSON.parse(await readFile(lockPath, "utf8")).ownerId, second.owner.ownerId);
+  await second.release(); const firstResult = await first; await firstResult.release();
+});
+
 test("release never removes a lock now owned by another live owner", async () => {
   const { statePath } = await fixture();
   const held = await acquireInstallStateLock(statePath);
