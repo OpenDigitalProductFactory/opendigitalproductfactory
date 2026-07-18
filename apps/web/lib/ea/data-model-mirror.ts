@@ -19,6 +19,7 @@ import type {
   PrismaModelFact,
   PrismaRelationFact,
 } from "../integrate/code-graph/extractors/prisma-schema-adapter";
+import { DATA_ASSET_REGISTRY, lookupAssetByPrismaModel } from "../govern/data/assets";
 
 export const DATA_MODEL_MIRROR_VERSION = "data-model-mirror-v1";
 export const MODEL_SOURCE_KEY_PREFIX = "prisma:model:";
@@ -105,12 +106,37 @@ function signature(value: unknown): string {
   });
 }
 
+/**
+ * BI-DG-002 (spec §6.1): project the logical asset/classification onto the model's
+ * mirror element — no second ERD. Only models registered in the data-control spine
+ * carry a `governance` block; unregistered models (still in the legacy coverage
+ * baseline) carry none until a coverage wave classifies them.
+ */
+function governanceProperties(modelName: string): Record<string, unknown> {
+  const asset = lookupAssetByPrismaModel(DATA_ASSET_REGISTRY, modelName);
+  if (!asset) return {};
+  return {
+    governance: {
+      assetId: asset.id,
+      domain: asset.domain,
+      sensitivity: asset.sensitivity,
+      categories: asset.categories,
+      criticality: asset.criticality,
+      lifecycleClass: asset.lifecycleClass,
+      projectionClass: asset.projectionClass,
+      masterDataDomain: asset.masterDataDomain ?? null,
+      classificationState: asset.classification.state,
+      classificationSource: asset.classification.source,
+    },
+  };
+}
+
 export function buildDesiredState(facts: PrismaSchemaFacts): {
   elements: DesiredElement[];
   relationships: DesiredRelationship[];
 } {
   const elements: DesiredElement[] = facts.models.map((model) => {
-    const properties = modelElementProperties(model);
+    const properties = { ...modelElementProperties(model), ...governanceProperties(model.name) };
     return {
       sourceKey: modelSourceKey(model.name),
       name: model.name,
