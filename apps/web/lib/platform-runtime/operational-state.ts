@@ -94,7 +94,7 @@ export async function loadOperationalCapabilityState(input: {
   const [installSnapshot, capabilityStates, observedServices] = await Promise.all([
     readInstallSnapshot(),
     readCapabilityStates(),
-    input.observedServices ? Promise.resolve(input.observedServices) : (input.readObservedServices ?? readHostOperationalObservations)(),
+    input.observedServices ? Promise.resolve(input.observedServices) : (input.readObservedServices ? input.readObservedServices() : Promise.resolve({})),
   ]);
   return createOperationalCapabilityState({
     installSnapshot,
@@ -102,10 +102,4 @@ export async function loadOperationalCapabilityState(input: {
     observedServices,
     observedProviders: input.observedProviders,
   });
-}
-
-async function readHostOperationalObservations(): Promise<Record<string, ObservedServiceState>> {
-  const boundary = JSON.parse(await readFile("/dpf-state/operational-capability-state.json", "utf8")) as { observedServices?: unknown };
-  if (!boundary.observedServices || typeof boundary.observedServices !== "object") throw new Error("host_operational_observations_missing");
-  return boundary.observedServices as Record<string, ObservedServiceState>;
 }

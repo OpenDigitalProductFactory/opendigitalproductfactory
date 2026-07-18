@@ -79,6 +79,15 @@ describe("createOperationalCapabilityState", () => {
     });
     expect(state.observedServices.postgres.healthy).toBe(true);
   });
+
+  it("defaults to honest missing observations without reading an invented host file", async () => {
+    const state = await loadOperationalCapabilityState({
+      observedProviders: {}, readInstallSnapshot: async () => ({ enabledRuntimeCapabilities: ["runtime:browser-automation", "runtime:core"] }),
+      readCapabilityStates: async () => catalogStates(["runtime:browser-automation", "runtime:core"]),
+    });
+    expect(state.observedServices).toEqual({});
+    expect(state.serviceStates["browser-use"]).toBe("optional_degraded");
+  });
 });
 
 const CAPABILITIES = ["runtime:adp-integration", "runtime:browser-automation", "runtime:build", "runtime:core", "runtime:deep-observability", "runtime:development", "runtime:durable-automation", "runtime:external-ai", "runtime:local-speech"];

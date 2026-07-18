@@ -8,8 +8,8 @@ const modulePath = "./measure-platform-substrate-runtime.mjs";
 
 const manifest = {
   version: 1,
-  capabilityCatalogHash: "catalog-fixture",
-  operationalState: { catalogVersion: 1, catalogHash: "catalog-fixture", capabilityStateVersion: "state-fixture", serviceStates: { postgres: "required", portal: "required", optional: "optional_degraded", inactive: "optional_inactive", "linux-only": "optional_inactive" } },
+  capabilityCatalogHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  operationalState: { catalogVersion: 1, catalogHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", capabilityStateVersion: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", serviceStates: { postgres: "required", portal: "required", optional: "optional_degraded", inactive: "optional_inactive", "linux-only": "optional_inactive" } },
   services: [
     { service: "postgres", capability: "postgres", defaultRequired: true, healthSemantics: "compose-healthcheck", hostPlatforms: ["windows", "macos", "linux"] },
     { service: "portal", capability: "portal", defaultRequired: true, healthSemantics: "compose-healthcheck", hostPlatforms: ["windows", "macos", "linux"] },
@@ -68,7 +68,7 @@ test("runtime diagnostics consume serialized operational state for inactive and 
   const result = await collectRuntimeMeasurements({ manifest, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal", lease: { id: "l", environmentKey: "local-integration-ci" }, hostProfile: "windows-x64" });
   assert.equal(result.metrics.optionalInactiveServices.value, 1);
   assert.equal(result.metrics.optionalDegradedServices.value, 1);
-  await assert.rejects(collectRuntimeMeasurements({ manifest: { ...manifest, operationalState: undefined }, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal", lease: { id: "l", environmentKey: "local-integration-ci" }, hostProfile: "windows-x64" }), /OperationalCapabilityState/);
+  await assert.rejects(collectRuntimeMeasurements({ manifest: { ...manifest, operationalState: undefined }, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal", lease: { id: "l", environmentKey: "local-integration-ci" }, hostProfile: "windows-x64" }), /capability catalog identity/);
 });
 
 test("production runner reads explicit serialized operational state path and fails closed on stale identity", async () => {
@@ -79,7 +79,7 @@ test("production runner reads explicit serialized operational state path and fai
   await writeFile(statePath, JSON.stringify(manifest.operationalState));
   const base = { manifestPath, operationalStatePath: statePath, baselinePath, update: true, lease: governedLease, verifyLease: verifyGovernedLease, execute: execFixture, fetchJson: async (url) => url.endsWith("/api/health") ? { status: "ok" } : { gitSha: "served" }, portalUrl: "http://portal" };
   assert.equal((await runRuntimeMeasurement(base)).exitCode, 0);
-  await writeFile(statePath, JSON.stringify({ ...manifest.operationalState, catalogHash: "stale" }));
+  await writeFile(statePath, JSON.stringify({ ...manifest.operationalState, catalogHash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }));
   assert.match((await runRuntimeMeasurement(base)).stderr, /catalog identity is stale/);
 });
 
