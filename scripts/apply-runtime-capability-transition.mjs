@@ -33,7 +33,7 @@ if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) await fail(
 const issued = Date.parse(envelope.issuedAt), expires = Date.parse(envelope.expiresAt), now = Date.now();
 if (envelope.version !== 1 || argvId !== envelope.transitionId || !/^RCT-[A-Za-z0-9-]{1,48}$/.test(envelope.transitionId) || !Number.isFinite(issued) || !Number.isFinite(expires) || issued > now + 30_000 || expires < now || expires - issued > 600_000) await fail("expired_or_invalid_envelope");
 for (const k of ["catalogHash", "previousStateHash", "desiredStateHash"]) if (!/^[a-f0-9]{64}$/.test(envelope[k])) await fail("invalid_envelope_hash");
-for (const k of ["previousKeys", "desiredKeys", "previousProfiles", "desiredProfiles"]) if (!Array.isArray(envelope[k]) || JSON.stringify(envelope[k]) !== JSON.stringify([...new Set(envelope[k])].sort()) || envelope[k].some((x) => typeof x !== "string" || (k.endsWith("Keys") ? !/^runtime:[a-z0-9-]+$/.test(x) : !/^[a-z0-9][a-z0-9-]*$/.test(x)))) await fail("invalid_envelope_projection");
+for (const k of ["previousKeys", "desiredKeys", "previousProfiles", "desiredProfiles", "previousServices", "desiredServices"]) if (!Array.isArray(envelope[k]) || JSON.stringify(envelope[k]) !== JSON.stringify([...new Set(envelope[k])].sort()) || envelope[k].some((x) => typeof x !== "string" || (k.endsWith("Keys") ? !/^runtime:[a-z0-9-]+$/.test(x) : !/^[a-z0-9][a-z0-9-]*$/.test(x)))) await fail("invalid_envelope_projection");
 
 await mkdir(receiptDir, { recursive: true });
 const receiptPath = join(receiptDir, `${envelope.transitionId}.json`);
@@ -43,7 +43,13 @@ try {
   await fail("replayed_transition_id");
 } catch (e) { if (e?.code !== "ENOENT") await fail("invalid_existing_receipt"); }
 const claim = `${receiptPath}.claim`;
-try { await mkdir(claim); } catch { await fail("transition_already_claimed"); }
+try { await mkdir(claim); await writeFile(join(claim, "expires-at"), envelope.expiresAt, { flag: "wx", mode: 0o600 }); } catch {
+  try {
+    const claimedUntil = Date.parse((await readFile(join(claim, "expires-at"), "utf8")).trim());
+    if (!Number.isFinite(claimedUntil) || claimedUntil >= now) await fail("transition_already_claimed");
+    await rm(claim, { recursive: true, force: true }); await mkdir(claim); await writeFile(join(claim, "expires-at"), envelope.expiresAt, { flag: "wx", mode: 0o600 });
+  } catch (error) { if (error?.code !== "ENOENT") await fail("transition_already_claimed"); await fail("invalid_transition_claim"); }
+}
 
 const catalogPath = process.env.DPF_CAPABILITY_CATALOG_PATH ?? "/host-source/scripts/capability-service-catalog.generated.json";
 let catalog;
@@ -53,21 +59,29 @@ if (catalogHash !== envelope.catalogHash || sha(catalogBytes(catalogContent)) !=
 const byId = new Map(catalog.capabilities.map((c) => [c.capabilityId, c]));
 const project = (keys) => { const enabled = new Set(); const add = (id) => { const c = byId.get(id); if (!c) throw new Error(`unknown_runtime_capability:${id}`); if (enabled.has(id)) return; for (const d of c.dependencies) add(d); enabled.add(id); }; for (const k of keys) add(k); for (const c of catalog.capabilities) if (c.activationPolicy === "always") add(c.capabilityId); const enabledKeys = [...enabled].sort(); const services = catalog.capabilities.filter((c) => enabled.has(c.capabilityId)).flatMap((c) => c.services).filter((s) => s.targetClassification !== "ephemeral-lifecycle"); return { enabledKeys, profiles: [...new Set(services.flatMap((s) => s.profiles))].sort(), required: [...new Set(services.map((s) => s.service))].sort(), stateHash: sha(`${catalogHash}\n${catalog.capabilities.map((c) => `${c.capabilityId}=${enabled.has(c.capabilityId) ? "active" : "disabled"}`).sort().join("\n")}`) }; };
 let previous, desired; try { previous = project(envelope.previousKeys); desired = project(envelope.desiredKeys); } catch (e) { await fail(e.message); }
-if (canonical(previous.enabledKeys) !== canonical(envelope.previousKeys) || canonical(desired.enabledKeys) !== canonical(envelope.desiredKeys) || canonical(previous.profiles) !== canonical(envelope.previousProfiles) || canonical(desired.profiles) !== canonical(envelope.desiredProfiles) || previous.stateHash !== envelope.previousStateHash || desired.stateHash !== envelope.desiredStateHash) await fail("capability_projection_mismatch");
+if (canonical(previous.enabledKeys) !== canonical(envelope.previousKeys) || canonical(desired.enabledKeys) !== canonical(envelope.desiredKeys) || canonical(previous.profiles) !== canonical(envelope.previousProfiles) || canonical(desired.profiles) !== canonical(envelope.desiredProfiles) || canonical(previous.required) !== canonical(envelope.previousServices) || canonical(desired.required) !== canonical(envelope.desiredServices) || previous.stateHash !== envelope.previousStateHash || desired.stateHash !== envelope.desiredStateHash) await fail("capability_projection_mismatch");
 
 const statePath = join(stateDir, "install-state.json"); let before;
 try { before = JSON.parse(await readFile(statePath, "utf8")); } catch { await fail("install_state_unreadable"); }
-const requiredState = ["schemaVersion", "installerVersion", "platform", "arch"];
+const requiredState = ["schemaVersion", "installerVersion", "platform", "arch", "enabledRuntimeCapabilities", "capabilityCatalogHash", "capabilityStateVersion"];
 if (!before || typeof before !== "object" || Array.isArray(before) || requiredState.some((k) => before[k] === undefined) || !Number.isInteger(before.schemaVersion) || typeof before.installerVersion !== "string" || !["darwin", "linux", "win32"].includes(before.platform) || !["arm64", "amd64", "x86_64"].includes(before.arch) || before.capabilityCatalogHash !== envelope.catalogHash || before.capabilityStateVersion !== envelope.previousStateHash || canonical(before.enabledRuntimeCapabilities) !== canonical(envelope.previousKeys)) await fail("install_state_stale");
 const files = String(process.env.PROMOTE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean); const composeProject = process.env.PROMOTE_COMPOSE_PROJECT;
 if (!composeProject || !/^[a-z0-9][a-z0-9_-]*$/.test(composeProject) || files.length === 0 || files.some((f) => !/^[A-Za-z0-9._-]+$/.test(f))) await fail("invalid_compose_configuration");
 const baseArgs = ["compose", "--project-name", composeProject]; for (const f of files) baseArgs.push("-f", join("/host-source", f)); if (process.env.PROMOTE_COMPOSE_ENV_FILE) baseArgs.push("--env-file", process.env.PROMOTE_COMPOSE_ENV_FILE);
-const reconcile = (profiles) => { const args = [...baseArgs]; for (const p of profiles) args.push("--profile", p); return spawnSync("docker", [...args, "up", "-d", "--remove-orphans"], { encoding: "utf8", timeout: 9 * 60 * 1000 }); };
+const compose = (args, timeout = 9 * 60 * 1000) => spawnSync("docker", [...baseArgs, ...args], { encoding: "utf8", timeout });
+const reconcile = (from, to) => {
+  const disabled = from.required.filter((service) => !to.required.includes(service));
+  if (disabled.length) { const stopped = compose(["stop", ...disabled]); if (stopped.status !== 0) return stopped; const removed = compose(["rm", "-f", ...disabled]); if (removed.status !== 0) return removed; }
+  const args = []; for (const p of to.profiles) args.push("--profile", p); args.push("up", "-d", ...to.required);
+  return compose(args);
+};
+const observe = () => { const ps = compose(["ps", "--services", "--status", "running"], 30_000); return { ps, services: String(ps.stdout ?? "").trim().split(/\r?\n/).filter(Boolean).sort() }; };
+const transitionServices = [...new Set([...envelope.previousServices, ...envelope.desiredServices])];
+const exact = (projection, observed) => projection.required.every((s) => observed.includes(s)) && transitionServices.filter((s) => !projection.required.includes(s)).every((s) => !observed.includes(s));
 const next = { ...before, enabledRuntimeCapabilities: desired.enabledKeys, capabilityCatalogHash: catalogHash, capabilityStateVersion: desired.stateHash };
 await writeFile(`${statePath}.${envelope.transitionId}.tmp`, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.${envelope.transitionId}.tmp`, statePath);
-const applied = reconcile(desired.profiles);
-if (applied.status !== 0) { await writeFile(`${statePath}.restore.tmp`, JSON.stringify(before, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.restore.tmp`, statePath); const rolled = reconcile(previous.profiles); await rm(claim, { recursive: true, force: true }); await fail(rolled.status === 0 ? "compose_reconcile_failed_rolled_back" : "compose_reconcile_failed_rollback_failed", rolled.status === 0 ? "failed" : "rollback_failed"); }
-const ps = spawnSync("docker", [...baseArgs, "ps", "--services", "--status", "running"], { encoding: "utf8", timeout: 30_000 });
-const observed = String(ps.stdout ?? "").trim().split(/\r?\n/).filter(Boolean).sort();
-if (ps.status !== 0 || desired.required.some((s) => !observed.includes(s))) { await writeFile(`${statePath}.restore.tmp`, JSON.stringify(before, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.restore.tmp`, statePath); const rolled = reconcile(previous.profiles); await rm(claim, { recursive: true, force: true }); await fail(rolled.status === 0 ? "required_health_failed_rolled_back" : "required_health_failed_rollback_failed", rolled.status === 0 ? "failed" : "rollback_failed"); }
+const applied = reconcile(previous, desired);
+if (applied.status !== 0) { await writeFile(`${statePath}.restore.tmp`, JSON.stringify(before, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.restore.tmp`, statePath); const rolled = reconcile(desired, previous); const rollbackObserved = observe(); await rm(claim, { recursive: true, force: true }); await fail(rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "compose_reconcile_failed_rolled_back" : "compose_reconcile_failed_rollback_failed", rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "failed" : "rollback_failed"); }
+const { ps, services: observed } = observe();
+if (ps.status !== 0 || !exact(desired, observed)) { await writeFile(`${statePath}.restore.tmp`, JSON.stringify(before, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.restore.tmp`, statePath); const rolled = reconcile(desired, previous); const rollbackObserved = observe(); await rm(claim, { recursive: true, force: true }); await fail(rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "required_health_failed_rolled_back" : "required_health_failed_rollback_failed", rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "failed" : "rollback_failed"); }
 await writeReceipt("applied", undefined, observed); await rm(claim, { recursive: true, force: true }); process.stdout.write(await readFile(receiptPath, "utf8"));

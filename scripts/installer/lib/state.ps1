@@ -51,6 +51,9 @@ function Initialize-DpfState {
         lastSuccessfulInstallVersion = $null
         lastSuccessfulComposeHash    = $null
         composeProjectName           = "dpf"
+        enabledRuntimeCapabilities   = @()
+        capabilityCatalogHash        = $null
+        capabilityStateVersion       = $null
         platform                     = "win32"
         arch                         = $arch
         dockerContext                = $null

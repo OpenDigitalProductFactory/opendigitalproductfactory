@@ -53,7 +53,7 @@
 
 ### Task 3: Protect capability deactivation with a drain decision
 
-**Execution checkpoint (2026-07-18):** The pure transition and durable-receipt foundation is implemented, and the host protocol now binds the signed catalog-derived profile projection, keeps the HMAC secret in a read-only one-shot file mount, validates the host snapshot, verifies required running services, and reconciles the previous profile closure on failure. This remains an internal checkpoint: the production action/authentication boundary, installer secret generation/rotation, boot-time coordinator wiring, complete transactional audit integration, and canonical-runtime crash/rollback verification remain incomplete. Steps 7-9 are therefore deliberately unchecked and capability mutation must not be exposed yet.
+**Execution checkpoint (2026-07-18):** The pure transition and durable-receipt foundation is implemented. The signed host envelope now binds both profile and exact service projections; the host applies an explicit stop/remove/start delta, verifies required and forbidden services, reverses the delta on failure, supports bounded signed-expiry stale-claim recovery, and the installer state contract requires capability fields with legacy-safe null defaults. The coordinator persists before availability checks and verifies the signed receipt even on nonzero host exit. Production action/authentication, installer secret generation/rotation, boot-time concrete adapters, complete transactional audit integration, and canonical-runtime crash/rollback verification remain incomplete. Steps 7-9 remain deliberately unchecked and capability mutation must not be exposed yet.
 
 **Files:**
 - Modify: `scripts/lib/capability-service-projection.mjs`

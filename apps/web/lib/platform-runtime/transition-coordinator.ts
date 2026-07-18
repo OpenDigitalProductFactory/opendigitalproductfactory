@@ -112,6 +112,7 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
 export type RuntimeTransitionReconcileRow = {
   transitionId: string; status: string; catalogHash: string; previousStateHash: string; desiredStateHash: string;
   previousKeys: string[]; desiredKeys: string[]; previousProfiles: string[]; desiredProfiles: string[];
+  previousServices: string[]; desiredServices: string[];
 };
 
 /** Startup recovery runs before mutation is enabled and converges every nonterminal row. */
@@ -126,7 +127,7 @@ export async function reconcileRuntimeCapabilityTransitions(deps: {
   for (const row of await deps.listActive()) {
     const receipt = await deps.readHostReceipt(row.transitionId);
     if (!receipt) { await deps.compensate(row, "host_receipt_absent"); continue; }
-    const envelope: RuntimeTransitionEnvelope = { version: 1, transitionId: row.transitionId, issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt, catalogHash: row.catalogHash, previousStateHash: row.previousStateHash, desiredStateHash: row.desiredStateHash, previousKeys: row.previousKeys, desiredKeys: row.desiredKeys, previousProfiles: row.previousProfiles, desiredProfiles: row.desiredProfiles };
+    const envelope: RuntimeTransitionEnvelope = { version: 1, transitionId: row.transitionId, issuedAt: receipt.issuedAt, expiresAt: receipt.expiresAt, catalogHash: row.catalogHash, previousStateHash: row.previousStateHash, desiredStateHash: row.desiredStateHash, previousKeys: row.previousKeys, desiredKeys: row.desiredKeys, previousProfiles: row.previousProfiles, desiredProfiles: row.desiredProfiles, previousServices: row.previousServices, desiredServices: row.desiredServices };
     try {
       verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
       await deps.completeFromReceipt(row, receipt);
@@ -166,11 +167,6 @@ export async function coordinateRuntimeCapabilityTransition(
     desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates),
   };
   if (!request.requestedById) throw new Error("requested_by_required");
-  let available = false;
-  try { available = await deps.isPromoterAvailable(deps.promoterParams.promoterImage); } catch { available = false; }
-  if (!available) {
-    return { status: "failed" as const, failure: "promoter_unavailable" as const };
-  }
   let result: PromoterResult;
   if (!deps.protocolSecret || deps.protocolSecret.length < 32 || !deps.protocolSecretFileHostPath || !deps.resolveProjection || !deps.promoterParams.stateDirHostPath || !deps.readHostReceipt || !deps.verifyRequiredHealth || !deps.promoterParams.composeProject || !deps.promoterParams.composeFiles?.length) {
     return { status: "failed" as const, failure: "signed_protocol_unavailable" as const };
@@ -193,11 +189,18 @@ export async function coordinateRuntimeCapabilityTransition(
     if (pending.kind === "active_conflict" || ACTIVE_RUNTIME_TRANSITION_STATUSES.includes(pending.status as never)) return { status: "transition_in_progress" as const };
     return { status: "already_terminal" as const, transitionStatus: pending.status };
   }
+  let available = false;
+  try { available = await deps.isPromoterAvailable(deps.promoterParams.promoterImage); } catch { available = false; }
+  if (!available) {
+    await deps.receipts.markFailed(request.transitionId, "promoter_unavailable");
+    return { status: "failed" as const, failure: "promoter_unavailable" as const };
+  }
   const envelope: RuntimeTransitionEnvelope = {
     version: 1, transitionId: request.transitionId, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + 10 * 60 * 1000).toISOString(),
     catalogHash: request.catalogHash, previousStateHash: normalized.previousStateHash, desiredStateHash: normalized.desiredStateHash,
     previousKeys: normalized.previousKeys, desiredKeys: normalized.desiredKeys,
     previousProfiles: previousProjection.composeProfiles, desiredProfiles: desiredProjection.composeProfiles,
+    previousServices: previousProjection.requiredServices, desiredServices: desiredProjection.requiredServices,
   };
   const encodedEnvelope = Buffer.from(JSON.stringify(envelope)).toString("base64url");
   try { result = await deps.runPromoter({
@@ -209,14 +212,11 @@ export async function coordinateRuntimeCapabilityTransition(
     runtimeCapabilitySignature: signTransitionPayload(envelope, deps.protocolSecret),
     runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath,
   }); } catch { await deps.receipts.markFailed(request.transitionId, "promoter_spawn_failed"); return { status: "failed" as const, failure: "promoter_spawn_failed" as const }; }
-  if (result.exitCode !== 0) {
-    await deps.receipts.markFailed(request.transitionId, "host_apply_failed");
-    return { status: "failed" as const, failure: "host_apply_failed" as const };
-  }
-  await deps.receipts.markHostApplied(request.transitionId);
   try {
     const receipt = await deps.readHostReceipt(request.transitionId);
     verifyTransitionReceipt(receipt, deps.protocolSecret, envelope, deps.now?.() ?? Date.now());
+    if (result.exitCode !== 0) throw new Error("host_apply_failed");
+    await deps.receipts.markHostApplied(request.transitionId);
     if (!(await deps.verifyRequiredHealth(desiredProjection.requiredServices, receipt.observedServices))) throw new Error("required_health_failed");
     if (!deps.receipts.commitSuccess) return { status: "host_applied_pending_verification" as const };
     await deps.receipts.commitSuccess(request.transitionId, receipt, request.desiredStates);
@@ -224,10 +224,14 @@ export async function coordinateRuntimeCapabilityTransition(
   } catch (error) {
     if (!deps.receipts.markCompensating || !deps.receipts.markRolledBack || !deps.receipts.markRollbackFailed) return { status: "host_applied_pending_verification" as const };
     const failure = error instanceof Error ? error.message : "post_host_verification_failed";
+    if (result.exitCode !== 0) {
+      await deps.receipts.markFailed(request.transitionId, failure);
+      return { status: "failed" as const, failure: "host_apply_failed" as const };
+    }
     await deps.receipts.markCompensating(request.transitionId, failure);
     const rollbackNow = deps.now?.() ?? Date.now();
     const rollbackTransitionId = `RCT-${createHash("sha256").update(request.transitionId).digest("hex").slice(0, 24)}-rb`;
-    const rollbackEnvelope: RuntimeTransitionEnvelope = { ...envelope, transitionId: rollbackTransitionId, issuedAt: new Date(rollbackNow).toISOString(), expiresAt: new Date(rollbackNow + 600_000).toISOString(), previousKeys: normalized.desiredKeys, desiredKeys: normalized.previousKeys, previousProfiles: desiredProjection.composeProfiles, desiredProfiles: previousProjection.composeProfiles, previousStateHash: normalized.desiredStateHash, desiredStateHash: normalized.previousStateHash };
+    const rollbackEnvelope: RuntimeTransitionEnvelope = { ...envelope, transitionId: rollbackTransitionId, issuedAt: new Date(rollbackNow).toISOString(), expiresAt: new Date(rollbackNow + 600_000).toISOString(), previousKeys: normalized.desiredKeys, desiredKeys: normalized.previousKeys, previousProfiles: desiredProjection.composeProfiles, desiredProfiles: previousProjection.composeProfiles, previousServices: desiredProjection.requiredServices, desiredServices: previousProjection.requiredServices, previousStateHash: normalized.desiredStateHash, desiredStateHash: normalized.previousStateHash };
     try {
       const rollback = await deps.runPromoter({ ...deps.promoterParams, runtimeCapabilityTransitionId: rollbackTransitionId, containerName: `dpf-promoter-${rollbackTransitionId}`, timeoutMs: 600_000, runtimeCapabilityEnvelope: Buffer.from(JSON.stringify(rollbackEnvelope)).toString("base64url"), runtimeCapabilitySignature: signTransitionPayload(rollbackEnvelope, deps.protocolSecret), runtimeCapabilitySecretFileHostPath: deps.protocolSecretFileHostPath });
       if (rollback.exitCode !== 0) throw new Error("rollback_host_apply_failed");

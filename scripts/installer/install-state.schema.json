@@ -8,7 +8,10 @@
     "schemaVersion",
     "installerVersion",
     "platform",
-    "arch"
+    "arch",
+    "enabledRuntimeCapabilities",
+    "capabilityCatalogHash",
+    "capabilityStateVersion"
   ],
   "properties": {
     "schemaVersion": {
@@ -40,12 +43,12 @@
       "description": "Sorted governed runtime capability closure used to resolve Compose profiles."
     },
     "capabilityCatalogHash": {
-      "type": "string",
+      "type": ["string", "null"],
       "pattern": "^[a-f0-9]{64}$",
       "description": "Hash of the canonical capability-to-service catalog used for this snapshot."
     },
     "capabilityStateVersion": {
-      "type": "string",
+      "type": ["string", "null"],
       "pattern": "^[a-f0-9]{64}$",
       "description": "Deterministic hash of the catalog and sorted runtime capability states."
     },

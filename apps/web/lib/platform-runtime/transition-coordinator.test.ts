@@ -25,7 +25,7 @@ function deps(overrides = {}) {
     verifyRequiredHealth: vi.fn(async () => true),
     now: () => 1_000_000,
     readHostReceipt: vi.fn(async () => {
-      const envelope = { version: 1 as const, transitionId: request.transitionId, issuedAt: new Date(1_000_000).toISOString(), expiresAt: new Date(1_600_000).toISOString(), catalogHash: request.catalogHash, previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates), desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates), previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys], previousProfiles: ["build"], desiredProfiles: [] };
+      const envelope = { version: 1 as const, transitionId: request.transitionId, issuedAt: new Date(1_000_000).toISOString(), expiresAt: new Date(1_600_000).toISOString(), catalogHash: request.catalogHash, previousStateHash: computeCapabilityStateVersion(request.catalogHash, request.previousStates), desiredStateHash: computeCapabilityStateVersion(request.catalogHash, request.desiredStates), previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys], previousProfiles: ["build"], desiredProfiles: [], previousServices: ["portal", "postgres"], desiredServices: ["portal", "postgres"] };
       const unsigned = { ...envelope, status: "applied" as const, observedServices: ["portal", "postgres"], completedAt: new Date(1_000_001).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash };
       return { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
     }),
@@ -102,7 +102,7 @@ describe("runtime capability transition coordinator", () => {
   it("records promoter unavailability before attempting host apply", async () => {
     const d = deps({ isPromoterAvailable: vi.fn(async () => false) });
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "failed", failure: "promoter_unavailable" });
-    expect(d.receipts.markFailed).not.toHaveBeenCalled();
+    expect(d.receipts.markFailed).toHaveBeenCalledWith("RCT-1", "promoter_unavailable");
     expect(d.runPromoter).not.toHaveBeenCalled();
   });
 
