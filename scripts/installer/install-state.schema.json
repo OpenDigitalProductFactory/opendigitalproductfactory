@@ -82,6 +82,19 @@
       "type": "string",
       "description": "Absolute path to the state directory (~/.dpf by default; XDG-aware on Linux when XDG_STATE_HOME is set)."
     },
+    "installMode": {
+      "type": ["string", "null"],
+      "description": "Installer-selected deployment mode. Null until the install workflow records its choice."
+    },
+    "edge": {
+      "type": "object",
+      "required": ["enabled", "mode"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
     "composeFiles": {
       "type": "array",
       "description": "Ordered list of compose -f files used at install time. The compose.sh helper assembles this dynamically; persisting it enables lifecycle scripts to use the same chain.",

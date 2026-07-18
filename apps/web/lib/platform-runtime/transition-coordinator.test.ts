@@ -168,4 +168,51 @@ describe("runtime capability transition coordinator", () => {
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "host_applied_pending_verification" });
     expect(d.receipts.markHostApplied).toHaveBeenCalledWith("RCT-1");
   });
+
+  it("commits desired capability state and audit receipt after host apply and health verification", async () => {
+    const d = deps({ receipts: {
+      createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
+      markFailed: vi.fn(), markHostApplied: vi.fn(), commitSuccess: vi.fn(),
+    } });
+    await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "succeeded" });
+    expect(d.receipts.markHostApplied).toHaveBeenCalledWith("RCT-1");
+    expect(d.receipts.commitSuccess).toHaveBeenCalledWith("RCT-1", expect.objectContaining({ status: "applied" }), request.desiredStates);
+  });
+
+  it("compensates a host apply when the transactional DB commit fails", async () => {
+    const secret = "x".repeat(32);
+    const d = deps({ receipts: {
+      createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
+      markFailed: vi.fn(), markHostApplied: vi.fn(),
+      commitSuccess: vi.fn(async () => { throw new Error("db_commit_failed"); }),
+      markCompensating: vi.fn(), markRolledBack: vi.fn(), markRollbackFailed: vi.fn(),
+    } });
+    d.readHostReceipt = vi.fn(async (transitionId: string) => {
+      const rollback = transitionId.endsWith("-rb");
+      const states = rollback ? [request.desiredStates, request.previousStates] : [request.previousStates, request.desiredStates];
+      const keys = rollback ? [request.desiredKeys, request.previousKeys] : [request.previousKeys, request.desiredKeys];
+      const envelope = { version: 1 as const, transitionId, issuedAt: new Date(1_000_000).toISOString(), expiresAt: new Date(1_600_000).toISOString(), catalogHash: request.catalogHash,
+        previousStateHash: computeCapabilityStateVersion(request.catalogHash, states[0]), desiredStateHash: computeCapabilityStateVersion(request.catalogHash, states[1]),
+        previousKeys: [...keys[0]], desiredKeys: [...keys[1]], previousProfiles: rollback ? [] : ["build"], desiredProfiles: rollback ? ["build"] : [], previousServices: ["portal", "postgres"], desiredServices: ["portal", "postgres"] };
+      const unsigned = { ...envelope, status: "applied" as const, observedServices: ["portal", "postgres"], completedAt: new Date(1_000_001).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash };
+      return { ...unsigned, signature: signTransitionPayload(unsigned, secret) };
+    });
+    await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "rolled_back", failure: "db_commit_failed" });
+    expect(d.receipts.markCompensating).toHaveBeenCalledWith("RCT-1", "db_commit_failed");
+    expect(d.receipts.markRolledBack).toHaveBeenCalledWith("RCT-1", expect.objectContaining({ status: "applied" }));
+  });
+
+  it("records rollback_failed when compensation cannot restore the previous projection", async () => {
+    const d = deps({ receipts: {
+      createPending: vi.fn(async (input: { envelope: unknown; envelopeSignature: string }) => ({ created: true as const, envelope: input.envelope, envelopeSignature: input.envelopeSignature })),
+      markFailed: vi.fn(), markHostApplied: vi.fn(),
+      commitSuccess: vi.fn(async () => { throw new Error("db_commit_failed"); }),
+      markCompensating: vi.fn(), markRolledBack: vi.fn(), markRollbackFailed: vi.fn(),
+    } });
+    d.runPromoter = vi.fn()
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 9, stdout: "", stderr: "rollback failed" });
+    await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "rollback_failed", failure: "db_commit_failed" });
+    expect(d.receipts.markRollbackFailed).toHaveBeenCalledWith("RCT-1", "rollback_host_apply_failed");
+  });
 });

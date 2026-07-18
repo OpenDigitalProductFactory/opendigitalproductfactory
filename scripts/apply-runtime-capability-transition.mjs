@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { validateInstallState } from "./installer/validate-install-state.mjs";
 
 const stable = (v) => Array.isArray(v) ? v.map(stable) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])])) : v;
 const canonical = (v) => JSON.stringify(v, Object.keys(v).sort());
@@ -11,6 +13,8 @@ const sha = (v) => createHash("sha256").update(v).digest("hex");
 const sign = (v, secret) => createHmac("sha256", secret).update(canonical(v)).digest("hex");
 const stateDir = process.env.DPF_STATE_DIR ?? "/dpf-state";
 const receiptDir = join(stateDir, "runtime-capability-transitions");
+const applyLock = join(stateDir, ".runtime-transition-apply.lock");
+const rotationLock = join(stateDir, ".runtime-transition-secret.lock");
 let secret = ""; let envelope;
 const writeReceipt = async (status, failure, observedServices = []) => {
   if (!envelope || secret.length < 32) return;
@@ -23,6 +27,19 @@ const writeReceipt = async (status, failure, observedServices = []) => {
 const fail = async (reason, status = "failed", code = 78) => { await writeReceipt(status, reason); process.stderr.write(JSON.stringify({ status, failure: reason }) + "\n"); process.exit(code); };
 const contend = (reason) => { process.stderr.write(JSON.stringify({ status: "contended", failure: reason }) + "\n"); process.exit(75); };
 
+const acquireApplyLock = () => {
+  try { mkdirSync(applyLock); }
+  catch {
+    const expiresAt = Date.parse(readFileSync(join(applyLock, "expires-at"), "utf8").trim());
+    if (!Number.isFinite(expiresAt) || expiresAt >= Date.now()) contend("transition_apply_in_progress");
+    rmSync(applyLock, { recursive: true, force: true });
+    try { mkdirSync(applyLock); } catch { contend("transition_apply_in_progress"); }
+  }
+  writeFileSync(join(applyLock, "expires-at"), new Date(Date.now() + 10 * 60_000).toISOString(), { flag: "wx", mode: 0o600 });
+};
+try { acquireApplyLock(); } catch { contend("invalid_transition_apply_lock"); }
+process.on("exit", () => { try { rmSync(applyLock, { recursive: true, force: true }); } catch {} });
+if (existsSync(rotationLock)) contend("transition_secret_rotation_in_progress");
 const argvId = process.argv[2] === "--runtime-capability-transition" ? process.argv[3] : "";
 try { secret = (await readFile(process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE ?? "/run/secrets/dpf-runtime-transition", "utf8")).trim(); } catch { await fail("transition_secret_unreadable"); }
 const encoded = process.env.DPF_RUNTIME_TRANSITION_ENVELOPE ?? "";
@@ -64,8 +81,11 @@ if (canonical(previous.enabledKeys) !== canonical(envelope.previousKeys) || cano
 
 const statePath = join(stateDir, "install-state.json"); let before;
 try { before = JSON.parse(await readFile(statePath, "utf8")); } catch { await fail("install_state_unreadable"); }
-const requiredState = ["schemaVersion", "installerVersion", "platform", "arch", "enabledRuntimeCapabilities", "capabilityCatalogHash", "capabilityStateVersion"];
-if (!before || typeof before !== "object" || Array.isArray(before) || requiredState.some((k) => before[k] === undefined) || !Number.isInteger(before.schemaVersion) || typeof before.installerVersion !== "string" || !["darwin", "linux", "win32"].includes(before.platform) || !["arm64", "amd64", "x86_64"].includes(before.arch) || before.capabilityCatalogHash !== envelope.catalogHash || before.capabilityStateVersion !== envelope.previousStateHash || canonical(before.enabledRuntimeCapabilities) !== canonical(envelope.previousKeys)) await fail("install_state_stale");
+const schemaPath = process.env.DPF_INSTALL_STATE_SCHEMA_PATH;
+let beforeValidation;
+try { beforeValidation = await validateInstallState(before, schemaPath); } catch { await fail("install_state_schema_unreadable"); }
+if (!beforeValidation.valid) await fail("install_state_schema_invalid");
+if (before.capabilityCatalogHash !== envelope.catalogHash || before.capabilityStateVersion !== envelope.previousStateHash || canonical(before.enabledRuntimeCapabilities) !== canonical(envelope.previousKeys)) await fail("install_state_stale");
 const files = String(process.env.PROMOTE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean); const composeProject = process.env.PROMOTE_COMPOSE_PROJECT;
 if (!composeProject || !/^[a-z0-9][a-z0-9_-]*$/.test(composeProject) || files.length === 0 || files.some((f) => !/^[A-Za-z0-9._-]+$/.test(f))) await fail("invalid_compose_configuration");
 const baseArgs = ["compose", "--project-name", composeProject]; for (const f of files) baseArgs.push("-f", join("/host-source", f)); if (process.env.PROMOTE_COMPOSE_ENV_FILE) baseArgs.push("--env-file", process.env.PROMOTE_COMPOSE_ENV_FILE);
@@ -80,6 +100,8 @@ const observe = () => { const ps = compose(["ps", "--services", "--status", "run
 const transitionServices = [...new Set([...envelope.previousServices, ...envelope.desiredServices])];
 const exact = (projection, observed) => projection.required.every((s) => observed.includes(s)) && transitionServices.filter((s) => !projection.required.includes(s)).every((s) => !observed.includes(s));
 const next = { ...before, enabledRuntimeCapabilities: desired.enabledKeys, capabilityCatalogHash: catalogHash, capabilityStateVersion: desired.stateHash };
+const nextValidation = await validateInstallState(next, schemaPath);
+if (!nextValidation.valid) await fail("install_state_schema_invalid");
 await writeFile(`${statePath}.${envelope.transitionId}.tmp`, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.${envelope.transitionId}.tmp`, statePath);
 const applied = reconcile(previous, desired);
 if (applied.status !== 0) { await writeFile(`${statePath}.restore.tmp`, JSON.stringify(before, null, 2) + "\n", { mode: 0o600 }); await rename(`${statePath}.restore.tmp`, statePath); const rolled = reconcile(desired, previous); const rollbackObserved = observe(); await rm(claim, { recursive: true, force: true }); await fail(rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "compose_reconcile_failed_rolled_back" : "compose_reconcile_failed_rollback_failed", rolled.status === 0 && rollbackObserved.ps.status === 0 && exact(previous, rollbackObserved.services) ? "rolled_back" : "rollback_failed"); }

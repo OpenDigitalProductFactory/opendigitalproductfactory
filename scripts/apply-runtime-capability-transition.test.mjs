@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 const script = new URL("./apply-runtime-capability-transition.mjs", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1");
@@ -13,9 +13,30 @@ function envelope(now = Date.now()) { return { version: 1, transitionId: "RCT-te
 function run(env, id = "RCT-test") { return spawnSync(process.execPath, [script, "--runtime-capability-transition", id], { env: { ...process.env, ...env }, encoding: "utf8" }); }
 async function secretFile(dir) { const path = join(dir, "secret"); await writeFile(path, secret, { mode: 0o600 }); return path; }
 
+test("rejects a schema-invalid install state before host mutation", async () => {
+  const catalogPath = new URL("./capability-service-catalog.generated.json", import.meta.url);
+  const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
+  const enabled = new Set();
+  const byId = new Map(catalog.capabilities.map((capability) => [capability.capabilityId, capability]));
+  const add = (id) => { if (enabled.has(id)) return; const capability = byId.get(id); for (const dependency of capability.dependencies) add(dependency); enabled.add(id); };
+  for (const capability of catalog.capabilities) if (capability.activationPolicy === "always") add(capability.capabilityId);
+  const keys = [...enabled].sort();
+  const services = catalog.capabilities.filter((capability) => enabled.has(capability.capabilityId)).flatMap((capability) => capability.services).filter((service) => service.targetClassification !== "ephemeral-lifecycle");
+  const profiles = [...new Set(services.flatMap((service) => service.profiles))].sort();
+  const required = [...new Set(services.map((service) => service.service))].sort();
+  const stateHash = createHash("sha256").update(`${catalog.catalogHash}\n${catalog.capabilities.map((capability) => `${capability.capabilityId}=${enabled.has(capability.capabilityId) ? "active" : "disabled"}`).sort().join("\n")}`).digest("hex");
+  const value = { ...envelope(), catalogHash: catalog.catalogHash, previousStateHash: stateHash, desiredStateHash: stateHash, previousKeys: keys, desiredKeys: keys, previousProfiles: profiles, desiredProfiles: profiles, previousServices: required, desiredServices: required };
+  const signature = createHmac("sha256", secret).update(canonical(value)).digest("hex");
+  const dir = await mkdtemp(join(tmpdir(), "dpf-transition-"));
+  await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: keys, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: stateHash, unexpected: true }));
+  const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf" });
+  assert.equal(result.status, 78);
+  assert.match(result.stderr, /install_state_schema_invalid/);
+});
+
 test("rejects a tampered transition envelope before reading state", async () => {
   const value = envelope();
-  const dir = await mkdtemp(join(tmpdir(), "dpf-secret-")); const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: "0".repeat(64), DPF_STATE_DIR: join(tmpdir(), "missing") });
+  const dir = await mkdtemp(join(tmpdir(), "dpf-secret-")); const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: "0".repeat(64), DPF_STATE_DIR: dir });
   assert.equal(result.status, 78); assert.match(result.stderr, /tampered_envelope/);
 });
 

@@ -9,6 +9,7 @@ import {
   attachBuildStudioWorkCapsule,
   type BuildStudioCapsuleDb,
 } from "@/lib/work-capsules/build-studio-attachment";
+import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 
 const ELIGIBLE_EFFORT_SIZES = new Set(["small", "medium", "large"]);
 const ACTIVE_EPIC_STATUSES = new Set(["open", "in-progress"]);
@@ -237,6 +238,9 @@ export async function promoteBacklogItemToBuildDraft(
   input: PromoteBacklogItemToBuildDraftInput,
 ): Promise<PromoteBacklogItemToBuildDraftResult> {
   const { tx, itemId, userId, governedBacklogEnabled, activity } = input;
+  if ("$queryRaw" in tx && "platformCapability" in tx && "runtimeCapabilityTransition" in tx) {
+    await admitRuntimeGuardedWork(tx as never, "build-studio-active");
+  }
   const item = await tx.backlogItem.findUnique({
     where: { itemId },
     include: { epic: { select: { epicId: true } } },

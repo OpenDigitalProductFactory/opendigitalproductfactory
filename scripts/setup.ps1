@@ -60,21 +60,8 @@ Write-Step "Setting up environment"
 # one-shot promoter gets a file-only read-only bind. ACL inheritance is disabled
 # so another local account cannot forge a host transition receipt.
 $dpfStateDir = if ($env:DPF_STATE_DIR) { $env:DPF_STATE_DIR } else { Join-Path $env:USERPROFILE ".dpf" }
-$transitionSecretPath = Join-Path $dpfStateDir "runtime-transition.secret"
-New-Item -ItemType Directory -Path $dpfStateDir -Force | Out-Null
-if (-not (Test-Path $transitionSecretPath) -or (Get-Item $transitionSecretPath).Length -eq 0) {
-    $transitionBytes = New-Object byte[] 32
-    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($transitionBytes)
-    $transitionSecret = ([System.BitConverter]::ToString($transitionBytes)).Replace("-", "").ToLowerInvariant()
-    [System.IO.File]::WriteAllText($transitionSecretPath, $transitionSecret)
-}
-$acl = New-Object System.Security.AccessControl.FileSecurity
-$acl.SetAccessRuleProtection($true, $false)
-$currentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-$ownerRule = New-Object System.Security.AccessControl.FileSystemAccessRule($currentIdentity, "FullControl", "Allow")
-$acl.SetOwner($currentIdentity)
-$acl.AddAccessRule($ownerRule)
-Set-Acl -LiteralPath $transitionSecretPath -AclObject $acl
+& node scripts/rotate-runtime-transition-secret.mjs --state-dir $dpfStateDir --initialize | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Runtime transition signing key initialization failed" }
 Write-Ok "Runtime transition signing key is present with owner-only permissions"
 
 if (-not (Test-Path "apps\web\.env.local")) {
