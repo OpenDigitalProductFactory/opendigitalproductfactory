@@ -19,7 +19,8 @@ _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [[ "${1:-}" == "--runtime-transition-authority" ]]; then
   _operation="${2:-}"
   _transition_id="${3:-}"
-  exec node "$_promoter_dir/runtime-transition-authority.mjs" "$_operation" "$_transition_id"
+  _ownership_token="${4:-}"
+  exec node "$_promoter_dir/runtime-transition-authority.mjs" "$_operation" "$_transition_id" "$_ownership_token"
 elif [[ "${1:-}" == "--runtime-capability-transition" ]]; then
   _transition_id="${2:-}"
   [[ "$_transition_id" =~ ^RCT-[A-Za-z0-9-]{1,48}$ ]] || {

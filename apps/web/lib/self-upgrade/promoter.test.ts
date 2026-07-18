@@ -24,6 +24,16 @@ describe("buildPromoterCommand", () => {
     expect(args).toContain("/state:/dpf-state");
     expect(args).not.toContain("--runtime-capability-transition");
   });
+  it("requires and forwards the opaque token when releasing authority", () => {
+    const token = "a".repeat(64);
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeTransitionAuthorityOperation: "release", runtimeTransitionAuthorityToken: token });
+    expect(args.slice(-4)).toEqual(["--runtime-transition-authority", "release", "RCT-123", token]);
+  });
+  it("passes DB-active ids to startup authority reconciliation", () => {
+    const { args } = buildPromoterCommand({ ...BASE, stateDirHostPath: "/state", runtimeTransitionAuthorityOperation: "reconcile", runtimeTransitionActiveIds: ["RCT-1"] });
+    expect(args).toContain("DPF_ACTIVE_RUNTIME_TRANSITION_IDS=RCT-1");
+    expect(args.slice(-2)).toEqual(["--runtime-transition-authority", "reconcile"]);
+  });
   it("selects the dedicated runtime capability transition mode without self-upgrade argv", () => {
     const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123", stateDirHostPath: "/state", runtimeCapabilityEnvelope: "encoded", runtimeCapabilitySignature: "a".repeat(64), runtimeCapabilitySecretFileHostPath: "/state/transition-secret" });
     expect(args).toContain("--runtime-capability-transition");

@@ -57,6 +57,8 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
   const promoterParams = { hostInstallPath, stateDirHostPath, runtimeCapabilitySecretFileHostPath: protocolSecretFileHostPath, targetSha: process.env.DEPLOYED_SHA ?? "runtime-capability-transition", backupPath: "/backups/runtime-capability-transition", healthUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/api/health`, composeFiles: (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES ?? "docker-compose.yml").split(/\s+/).filter(Boolean), composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf" };
   const reserve = await runPromoter({ ...promoterParams, runtimeCapabilityTransitionId: input.transitionId, runtimeTransitionAuthorityOperation: "reserve", containerName: `dpf-promoter-authority-${input.transitionId}`, timeoutMs: 60_000 });
   if (reserve.exitCode !== 0) return { status: "transition_in_progress" as const };
+  const authorityToken = (() => { try { const parsed = JSON.parse(reserve.stdout) as { ownershipToken?: unknown }; return typeof parsed.ownershipToken === "string" ? parsed.ownershipToken : null; } catch { return null; } })();
+  if (!authorityToken) throw new Error("runtime_transition_authority_token_missing");
   try {
     return await coordinateRuntimeCapabilityTransition({ transitionId: input.transitionId, catalogHash: catalog.catalogHash, previousKeys, desiredKeys: desiredProjection.enabledKeys, previousStates, desiredStates, requestedById: input.requestedById }, {
     receipts: createPrismaRuntimeTransitionReceipts(prisma as never), isPromoterAvailable, runPromoter, protocolSecret, protocolSecretFileHostPath, recheckAttributedWork, readHostReceipt: readReceipt,
@@ -68,7 +70,7 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
       promoterParams,
     });
   } finally {
-    const release = await runPromoter({ ...promoterParams, runtimeCapabilityTransitionId: input.transitionId, runtimeTransitionAuthorityOperation: "release", containerName: `dpf-promoter-authority-release-${input.transitionId}`, timeoutMs: 60_000 });
+    const release = await runPromoter({ ...promoterParams, runtimeCapabilityTransitionId: input.transitionId, runtimeTransitionAuthorityOperation: "release", runtimeTransitionAuthorityToken: authorityToken, containerName: `dpf-promoter-authority-release-${input.transitionId}`, timeoutMs: 60_000 });
     if (release.exitCode !== 0) throw new Error("runtime_transition_authority_release_failed");
   }
 }
