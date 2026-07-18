@@ -6,7 +6,7 @@ import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-at
 import { computeCapabilityStateVersion, coordinateRuntimeCapabilityTransition, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
 import type { RuntimeTransitionReceipt } from "./transition-protocol";
 
-type CatalogEntry = { capabilityId: string; dependencies: string[]; workGuards: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string }> };
+type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string }> };
 const catalog = catalogSeed as { catalogHash: string; capabilities: CatalogEntry[] };
 
 function resolveProjection(keys: readonly string[], states: Readonly<Record<string, string>>) {
