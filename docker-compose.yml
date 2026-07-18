@@ -143,6 +143,11 @@ services:
       # to be set in .env (done by the installer at setup time).
       - ${DPF_HOST_INSTALL_PATH:-.}:/host-dpf
       # Signed transition receipts are host-owned; portal verifies read-only.
+      # DPF_STATE_DIR MUST be an absolute, Docker-Desktop-shared host path (the
+      # installer writes ~/.dpf). The ${HOME} fallback is a dev-only last resort:
+      # the self-upgrade promoter runs as root, so ${HOME}=/root there and an unset
+      # DPF_STATE_DIR would resolve to the unshareable /root/.dpf and fail the
+      # migrate step with "mounts denied" (#3262). Guarded by check-compose-env-contract.
       - ${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}

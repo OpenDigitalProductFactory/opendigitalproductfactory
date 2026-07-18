@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 523,
+  "pageCount": 524,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -6179,6 +6179,18 @@
         "6-migration-from-the-in-memory-bus",
         "constraints-context-to-honor",
         "form-of-the-output"
+      ]
+    },
+    "docs/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir.md": {
+      "publicHref": "/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "self-upgrade-fails-at-stepmigrate-with-mounts-denied-dpfstatedir",
+        "root-cause-3262",
+        "fix-per-install-unblocks-now",
+        "fix-durable-this-pr"
       ]
     },
     "docs/runbooks/bet5-windows-self-upgrade.md": {

@@ -133,6 +133,36 @@ describe("classifyBuildFailure", () => {
     expect(c.failingTrace).toContain("Cannot find module");
   });
 
+  it("classifies the Docker Desktop /dpf-state mounts-denied blocker with a DPF_STATE_DIR fix (#3262)", () => {
+    // The real fleet symptom: image builds fine, then step=migrate's
+    // `docker compose run portal` fails because the /dpf-state mount resolved to
+    // /root/.dpf under the root-run promoter.
+    const log = [
+      "Successfully tagged dpf-portal:latest",
+      "step=ensure-pgvector target=9ca9ca2e",
+      "step=migrate target=9ca9ca2e",
+      "Error response from daemon: mounts denied: ",
+      "The path /root/.dpf is not shared from the host and is not known to Docker.",
+    ].join("\n");
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("docker-mount-denied");
+    expect(c.summary).toContain("DPF_STATE_DIR");
+    expect(c.summary).toContain("/root/.dpf");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.failingTrace).toContain("mounts denied");
+  });
+
+  it("keeps an unrelated mounts-denied path out of the state-dir advice", () => {
+    const log = "Error response from daemon: mounts denied: The path /some/other/vol is not shared from the host.";
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("docker-mount-denied");
+    // Generic File-Sharing advice, NOT the specific "state dir fell back to
+    // /root/.dpf, set it to /Users/<user>/.dpf" instruction.
+    expect(c.summary).not.toContain("fell back");
+    expect(c.summary).toContain("File Sharing");
+    expect(c.summary).toContain("/some/other/vol");
+  });
+
   it("classifies a generic Turbopack/NFT duplicate-asset cascade", () => {
     const c = classifyBuildFailure({ log: NFT_LOG });
     expect(c.class).toBe("turbopack-nft-duplicate-asset");
