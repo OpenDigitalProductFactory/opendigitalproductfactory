@@ -86,7 +86,7 @@
       "class": "ephemeral-lifecycle",
       "capability": "runtime:build",
       "boundaryReason": "Separate sandbox-postgres runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [],
       "volumes": [
@@ -108,7 +108,7 @@
       "class": "ephemeral-lifecycle",
       "capability": "runtime:build",
       "boundaryReason": "Separate sandbox-init runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [],
       "volumes": [
@@ -132,7 +132,7 @@
       "class": "ephemeral-lifecycle",
       "capability": "runtime:build",
       "boundaryReason": "Separate sandbox runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [
         "3035:3000"
@@ -186,7 +186,7 @@
       "class": "capability-activated",
       "capability": "runtime:browser-automation",
       "boundaryReason": "Separate browser-use runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [
         "8500:8500"
@@ -370,7 +370,7 @@
       "class": "capability-activated",
       "capability": "runtime:deep-observability",
       "boundaryReason": "Separate prometheus runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [
         "9090:9090"
@@ -426,7 +426,7 @@
       "class": "capability-activated",
       "capability": "runtime:deep-observability",
       "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [
         "127.0.0.1:3100:3100"
@@ -452,7 +452,7 @@
       "class": "capability-activated",
       "capability": "runtime:deep-observability",
       "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [],
       "volumes": [
@@ -530,7 +530,7 @@
       "class": "capability-activated",
       "capability": "runtime:deep-observability",
       "boundaryReason": "Separate postgres-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [
         "9187:9187"
@@ -556,7 +556,7 @@
       "class": "capability-activated",
       "capability": "runtime:durable-automation",
       "boundaryReason": "Separate redis runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [
         "6379:6379"
@@ -580,7 +580,7 @@
       "class": "capability-activated",
       "capability": "runtime:durable-automation",
       "boundaryReason": "Separate redis-exporter runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [],
       "volumes": [],
@@ -602,7 +602,7 @@
       "class": "capability-activated",
       "capability": "runtime:durable-automation",
       "boundaryReason": "Separate inngest runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [
         "8288:8288",
@@ -628,7 +628,7 @@
       "class": "capability-activated",
       "capability": "runtime:local-speech",
       "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
+      "defaultRequired": true,
       "profiles": [],
       "ports": [
         "127.0.0.1:8765:9000"

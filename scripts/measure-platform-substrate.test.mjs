@@ -58,6 +58,16 @@ test("capability service joins fail closed", () => {
   }), ["missing_capability:core"]);
 });
 
+test("defaultRequired must match current Compose profile activation", async () => fixture(async (repoRoot) => {
+  const manifestPath = join(repoRoot, "scripts/platform-substrate-manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.services[0].defaultRequired = false;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const result = await runSubstrateMeasurement({ repoRoot, baselinePath: join(repoRoot, "baseline.json"), update: true });
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr, /defaultRequired does not match Compose profile activation/);
+}));
+
 test("check fails closed for a missing baseline", async () => fixture(async (repoRoot) => {
   const result=await runSubstrateMeasurement({repoRoot,baselinePath:join(repoRoot,"missing.json")});
   assert.equal(result.exitCode,1); assert.match(result.stderr,/baseline/i);

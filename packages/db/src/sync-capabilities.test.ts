@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { RUNTIME_CAPABILITY_IDS, syncCapabilities } from "./sync-capabilities";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { RUNTIME_CAPABILITY_IDS, syncCapabilities, validateRuntimeCapabilitySeeds } from "./sync-capabilities";
+
+const canonicalSeed = JSON.parse(readFileSync(join(__dirname, "../data/platform-runtime-capabilities.json"), "utf8"));
 
 function prismaMock(existingState = "disabled") {
   const upsert = vi.fn();
-  return {
+  const client = {
     platformCapability: {
       findUnique: vi.fn(async ({ where }: { where: { capabilityId: string } }) =>
         where.capabilityId.startsWith("runtime:")
@@ -13,8 +17,11 @@ function prismaMock(existingState = "disabled") {
       findMany: vi.fn(async () => []),
       update: vi.fn(),
     },
+    $queryRaw: vi.fn(async () => []),
+    $transaction: vi.fn(async (operation: (tx: unknown) => unknown) => operation(client)),
     upsert,
   };
+  return client;
 }
 
 describe("runtime capability synchronization", () => {
@@ -47,6 +54,28 @@ describe("runtime capability synchronization", () => {
     const runtimeCalls = mock.upsert.mock.calls.filter(([call]) =>
       call.where.capabilityId.startsWith("runtime:"));
     expect(runtimeCalls.every(([call]) => !("state" in call.update))).toBe(true);
-    expect(runtimeCalls.every(([call]) => call.create.state === "active")).toBe(true);
+    expect(Object.fromEntries(runtimeCalls.map(([call]) => [call.where.capabilityId, call.create.state])))
+      .toEqual(Object.fromEntries(canonicalSeed.capabilities.map((capability: { capabilityId: string; state: string }) => [capability.capabilityId, capability.state])));
+    expect(runtimeCalls.every(([call]) => call.update.manifest.retained === true)).toBe(true);
+    expect(mock.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
+    expect(mock.$queryRaw).toHaveBeenCalledTimes(RUNTIME_CAPABILITY_IDS.length);
+  });
+
+  it("syncs runtime rows when the platform tool snapshot is unavailable", async () => {
+    const mock = prismaMock();
+    await syncCapabilities(mock as never, { tools: () => { throw new Error("missing tools"); } });
+    expect(mock.upsert).toHaveBeenCalledTimes(RUNTIME_CAPABILITY_IDS.length);
+  });
+
+  it("rejects invalid states, manifests, dependencies, and cycles", () => {
+    const mutate = (change: (seed: typeof canonicalSeed) => void) => {
+      const seed = structuredClone(canonicalSeed);
+      change(seed);
+      return () => validateRuntimeCapabilitySeeds(seed);
+    };
+    expect(mutate((seed) => { seed.capabilities[0].state = "enabled"; })).toThrow("invalid_runtime_state:runtime:core");
+    expect(mutate((seed) => { delete seed.capabilities[0].manifest.runtime.activation; })).toThrow("invalid_runtime_activation:runtime:core");
+    expect(mutate((seed) => { seed.capabilities[0].manifest.runtime.dependencies = ["runtime:missing"]; })).toThrow("unknown_runtime_dependency:runtime:missing");
+    expect(mutate((seed) => { seed.capabilities[0].manifest.runtime.dependencies = ["runtime:build"]; })).toThrow(/runtime_dependency_cycle:runtime:core -> runtime:build -> runtime:core/);
   });
 });

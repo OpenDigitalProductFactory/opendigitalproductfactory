@@ -430,6 +430,10 @@ export function validateSubstrateManifest(manifest, { composeText, providers = [
         errors.push(`${actual.service}: ${field} does not match Compose`);
       }
     }
+    const composeStartsByDefault = actual.profiles.length === 0;
+    if (expected.defaultRequired !== composeStartsByDefault) {
+      errors.push(`${actual.service}: defaultRequired does not match Compose profile activation`);
+    }
   }
   for (const record of records) {
     if (!composeServices.some(({ service }) => service === record.service)) errors.push(`Manifest service ${record.service} is absent from Compose`);
