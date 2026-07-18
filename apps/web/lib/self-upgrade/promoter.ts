@@ -74,6 +74,8 @@ export type PromoterParams = {
    * under the 30-min DB watchdog so the orchestrator fails cleanly first.
    */
   timeoutMs?: number;
+  /** Selects the fail-closed runtime capability transition entrypoint. */
+  runtimeCapabilityTransitionId?: string;
 };
 
 export type PromoterResult = {
@@ -163,10 +165,12 @@ export function buildPromoterCommand(
     args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject}`);
   }
 
-  args.push(
-    image,
-    "--self-upgrade",
-  );
+  args.push(image);
+  if (params.runtimeCapabilityTransitionId) {
+    args.push("--runtime-capability-transition", params.runtimeCapabilityTransitionId);
+  } else {
+    args.push("--self-upgrade");
+  }
 
   if (params.dryRun) args.push("--dry-run");
 

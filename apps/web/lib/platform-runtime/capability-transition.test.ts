@@ -21,4 +21,9 @@ describe("capability deactivation decision", () => {
     expect(assessCapabilityDeactivation({ capabilityId: "runtime:build", currentProjection, blockingCounts: { "build-studio-active": 0 } }))
       .toEqual({ status: "ready", capabilityId: "runtime:build", currentProjection });
   });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])("fails closed on invalid blocker count %s", (count) => {
+    expect(() => assessCapabilityDeactivation({ capabilityId: "runtime:build", currentProjection, blockingCounts: { guard: count } }))
+      .toThrow("invalid_blocking_count:guard");
+  });
 });

@@ -1760,6 +1760,28 @@ model PlatformCapability {
   updatedAt    DateTime @updatedAt
 }
 
+/// Durable receipt for the portal-to-host runtime capability transition saga.
+/// The partial unique index limiting active transitions is defined in SQL.
+model RuntimeCapabilityTransition {
+  id                String   @id @default(cuid())
+  transitionId      String   @unique
+  previousKeys      String[]
+  desiredKeys       String[]
+  previousStateHash String
+  desiredStateHash  String
+  catalogHash       String
+  status            String   @default("pending")
+  hostReceipt       Json?
+  failure           Json?
+  requestedById     String?
+  createdAt         DateTime @default(now())
+  hostAppliedAt     DateTime?
+  completedAt       DateTime?
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
 model McpServer {
   id                  String    @id @default(cuid())
   serverId            String    @unique

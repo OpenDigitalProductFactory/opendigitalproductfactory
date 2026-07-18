@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { countAttributedWork, createPrismaWorkAttributionStore, type WorkAttributionStore } from "./work-attribution";
+import { WORK_CAPSULE_STATUSES } from "@/lib/work-capsules";
 
 function store(counts: Partial<Record<keyof WorkAttributionStore, number>> = {}): WorkAttributionStore {
   return {
@@ -25,7 +26,7 @@ describe("runtime work attribution", () => {
     });
     expect(db.countActiveFeatureBuilds).toHaveBeenCalledOnce();
     expect(db.countActiveTaskRuns).toHaveBeenCalledWith("build", ["submitted", "working", "input-required", "auth-required", "quiescing"]);
-    expect(db.countActiveWorkCapsules).toHaveBeenCalledWith("build-studio", ["claimed", "working", "review", "blocked"]);
+    expect(db.countActiveWorkCapsules).toHaveBeenCalledWith("build-studio", ["ready", "working", "blocked", "verifying", "ready-for-review", "ready-for-promotion"]);
   });
 
   it("does not invent blockers for unrelated sources or terminal states", async () => {
@@ -39,6 +40,17 @@ describe("runtime work attribution", () => {
     const db = store();
     await expect(countAttributedWork(["task-run:build", "raw-prisma-filter"], db)).rejects.toThrow("invalid_runtime_work_guard:raw-prisma-filter");
     expect(db.countActiveTaskRuns).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate guards instead of double counting", async () => {
+    await expect(countAttributedWork(["task-run:build", "task-run:build"], store())).rejects.toThrow("duplicate_runtime_work_guard");
+  });
+
+  it("classifies every canonical capsule state explicitly", () => {
+    const blocked = new Set(["ready", "working", "blocked", "verifying", "ready-for-review", "ready-for-promotion"]);
+    expect(WORK_CAPSULE_STATUSES.filter((status) => blocked.has(status)))
+      .toEqual(["ready", "working", "blocked", "verifying", "ready-for-review", "ready-for-promotion"]);
+    expect(WORK_CAPSULE_STATUSES.filter((status) => !blocked.has(status))).toEqual(["draft", "complete", "abandoned", "archived"]);
   });
 
   it("binds guards to closed equality/state filters rather than caller-provided Prisma", async () => {

@@ -17,6 +17,12 @@ const BASE = {
 };
 
 describe("buildPromoterCommand", () => {
+  it("selects the dedicated runtime capability transition mode without self-upgrade argv", () => {
+    const { args } = buildPromoterCommand({ ...BASE, runtimeCapabilityTransitionId: "RCT-123" });
+    expect(args).toContain("--runtime-capability-transition");
+    expect(args).toContain("RCT-123");
+    expect(args).not.toContain("--self-upgrade");
+  });
   it("launches the promoter as a sibling container, not bash in-portal", () => {
     const { command, args } = buildPromoterCommand(BASE);
     const joined = args.join(" ");

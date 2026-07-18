@@ -9,6 +9,9 @@ export function assessCapabilityDeactivation<T extends CapabilityProjectionSnaps
   currentProjection: T;
   blockingCounts: Readonly<Record<string, number>>;
 }) {
+  for (const [guard, count] of Object.entries(input.blockingCounts)) {
+    if (!Number.isFinite(count) || !Number.isInteger(count) || count < 0) throw new Error(`invalid_blocking_count:${guard}`);
+  }
   const blockingCounts = Object.fromEntries(Object.entries(input.blockingCounts).filter(([, count]) => count > 0));
   if (Object.keys(blockingCounts).length > 0) return {
     status: "drain_required" as const,
