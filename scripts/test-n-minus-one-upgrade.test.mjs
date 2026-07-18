@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -158,9 +159,15 @@ test("baseline preparation uses the unique harness project and proves health aft
   const workspace = await createHarnessWorkspace("dpf-n1-prepare-");
   const events = [];
   try {
-    await prepareNMinusOneBaseline({ workspace, project: "dpf-n1-isolated", portalUrl: "http://127.0.0.1:3000" }, {
-      run: async (command, args, options) => { events.push({ kind: "run", command, args, env: options.env }); return { stdout: "" }; },
-      fetchImpl: async () => { events.push({ kind: "health" }); return new Response("ok", { status: 200 }); }, sleep: async () => {},
+    const baseline = await prepareNMinusOneBaseline({ workspace, project: "dpf-n1-isolated", portalUrl: "http://127.0.0.1:3000" }, {
+      run: async (command, args, options) => {
+        await assert.rejects(() => readFile(join(workspace.state, "install-state.json")), /ENOENT/, "legacy BOM fixture must not exist before baseline start");
+        events.push({ kind: "run", command, args, env: options.env }); return { stdout: "" };
+      },
+      fetchImpl: async () => {
+        await assert.rejects(() => readFile(join(workspace.state, "install-state.json")), /ENOENT/, "legacy BOM fixture must not exist before baseline health");
+        events.push({ kind: "health" }); return new Response("ok", { status: 200 });
+      }, sleep: async () => {},
     });
     assert.equal(events[0].kind, "run");
     assert.equal(events[0].command, "node");
@@ -182,6 +189,8 @@ test("baseline preparation uses the unique harness project and proves health aft
     const stateBytes = await readFile(join(workspace.state, "install-state.json"));
     assert.deepEqual([...stateBytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
     assert.equal(JSON.parse(stateBytes.subarray(3).toString("utf8")).schemaVersion, 1);
+    assert.equal(baseline.sourceV1Hash, createHash("sha256").update(stateBytes).digest("hex"));
+    assert.deepEqual((await (await import("node:fs/promises")).readdir(workspace.state)).filter((name) => name.startsWith(".install-state.json.n1-")), []);
     assert.equal(events.at(-1).kind, "health");
     let cleanupCall;
     await cleanupNMinusOneBaseline(workspace, async (command, args, options) => { cleanupCall = { command, args, options }; return { stdout: "" }; });

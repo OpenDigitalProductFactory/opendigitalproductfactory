@@ -1,7 +1,7 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, open, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -175,10 +175,11 @@ export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }
   const fetchImpl = deps.fetchImpl ?? fetch;
   const sleep = deps.sleep ?? ((ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)));
   const statePath = join(workspace.state, "install-state.json");
-  await access(statePath).catch(() => writeFile(statePath, Buffer.concat([
+  await access(statePath).then(() => { throw new Error("N-1 baseline state must be absent before startup"); }, () => {});
+  const observedLegacyBytes = Buffer.concat([
     Buffer.from([0xef, 0xbb, 0xbf]),
     Buffer.from(`${JSON.stringify({ schemaVersion: 1, installerVersion: "n-minus-one", platform: "linux", arch: "amd64", installPath: workspace.source, stateDir: workspace.state, composeProjectName: project })}\n`),
-  ])));
+  ]);
   const env = await ensureNMinusOneHostEnvironment(workspace, project);
   await run("node", [join(workspace.source, "scripts", "dpf-compose.mjs"), "--env-file", workspace.harnessEnvFile, "--project-name", project, "up", "-d", "--build", "postgres", "portal"], { cwd: workspace.source, env });
   let lastStatus = 0;
@@ -186,7 +187,21 @@ export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }
     try {
       const response = await fetchImpl(`${portalUrl}/api/health`);
       lastStatus = response.status;
-      if (response.ok) return { healthy: true, project, portalUrl };
+      if (response.ok) {
+        const tempPath = join(workspace.state, `.install-state.json.n1-${process.pid}-${randomBytes(6).toString("hex")}`);
+        let handle;
+        try {
+          handle = await open(tempPath, "wx", 0o600);
+          await handle.writeFile(observedLegacyBytes);
+          await handle.sync();
+          await handle.close(); handle = undefined;
+          await rename(tempPath, statePath);
+        } finally {
+          if (handle) await handle.close().catch(() => {});
+          await rm(tempPath, { force: true }).catch(() => {});
+        }
+        return { healthy: true, project, portalUrl, sourceV1Hash: createHash("sha256").update(observedLegacyBytes).digest("hex") };
+      }
     } catch { lastStatus = 0; }
     await sleep(2_000);
   }
@@ -259,7 +274,7 @@ function createRuntimeDependencies(options) {
       await execFile("git", ["checkout", "--detach", options.baseSha], { cwd: workspace.source });
       const transitionSecret = join(workspace.root, "transition.secret");
       await writeFile(transitionSecret, randomBytes(32).toString("hex"));
-      await prepareNMinusOneBaseline({ workspace, project: options.project, portalUrl });
+      const baseline = await prepareNMinusOneBaseline({ workspace, project: options.project, portalUrl });
       const contractDigest = createHash("sha256").update(await readFile(join(process.cwd(), "promoter-contract.json"))).digest("hex");
       const image = `${options.project}-promoter:${options.candidateSha}`;
       await execFile("docker", ["build", "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${options.candidateSha}`, "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=sha256:${contractDigest}`, "-f", "Dockerfile.promoter", "-t", image, "."], { cwd: process.cwd() });
@@ -268,7 +283,7 @@ function createRuntimeDependencies(options) {
       const candidateDigest = inspected.Id;
       const labels = inspected.Config?.Labels ?? {};
       if (labels["org.opencontainers.image.revision"] !== options.candidateSha || labels["org.opendpf.promoter.contract-digest"] !== `sha256:${contractDigest}`) throw new Error("candidate image labels do not bind source SHA and contract digest");
-      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, workspace, transitionSecret, candidateSource: process.cwd() };
+      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, workspace, transitionSecret, candidateSource: process.cwd(), baselineSourceV1Hash: baseline.sourceV1Hash };
     },
     readiness: async ({ candidateDigest, candidateSource, transitionSecret }) => {
       if (options.injectReadinessFailure) return { ok: false, owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest, quiescenceBegan: false };
