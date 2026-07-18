@@ -120,6 +120,20 @@ if [[ $_dry_run -eq 0 ]]; then
   trap '_rc=$?; if [[ $_rc -ne 0 ]]; then _restore_capability_snapshot; fi' EXIT
 fi
 
+# The promoter runs with DPF_STATE_DIR=/dpf-state so the steps above can read the
+# install snapshot from its own mount. That value must NOT leak into the compose
+# recreates below: the portal service binds `${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state`,
+# and Docker Compose lets the shell env override --env-file, so /dpf-state would be
+# used as the HOST source — which Docker Desktop cannot share (mounts denied at
+# step=migrate; BI-25FEB6BA, a #3272 regression). Re-point DPF_STATE_DIR to the
+# install's host state dir (from the compose env file) for every compose call below.
+# Do NOT `unset` it — an unset DPF_STATE_DIR falls back to ${HOME}/.dpf = /root/.dpf
+# under the root-run promoter, reintroducing the original mounts-denied bug (#3262).
+if [[ -n "${PROMOTE_COMPOSE_ENV_FILE:-}" && -f "$PROMOTE_COMPOSE_ENV_FILE" ]]; then
+  _host_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$PROMOTE_COMPOSE_ENV_FILE" | tail -1)"
+  if [[ -n "$_host_state_dir" ]]; then export DPF_STATE_DIR="$_host_state_dir"; fi
+fi
+
 # Compose chain used to rebuild/recreate the portal. The orchestrator passes
 # PROMOTE_COMPOSE_FILES (space-separated, relative to PROMOTE_SOURCE) carrying
 # the platform-correct chain the install was created with — base + the host
