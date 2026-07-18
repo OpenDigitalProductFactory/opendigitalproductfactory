@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -160,16 +160,13 @@ describe("runtime transition promoter entrypoint", () => {
     const script = resolve(process.cwd(), "../../scripts/promote.sh");
     const stateDir = await mkdtemp(join(tmpdir(), "dpf-promoter-test-"));
     try {
-      const result = await runProcessWithBudget("bash", [script, "--runtime-capability-transition", "RCT-123"], {
-        timeoutMs: 10_000,
-        env: {
-          DPF_STATE_DIR: stateDir,
-          DPF_RUNTIME_TRANSITION_SECRET_FILE: join(stateDir, "missing-secret"),
-        },
-      });
+      vi.stubEnv("DPF_STATE_DIR", stateDir);
+      vi.stubEnv("DPF_RUNTIME_TRANSITION_SECRET_FILE", join(stateDir, "missing-secret"));
+      const result = await runProcessWithBudget("bash", [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
       expect(result.exitCode).toBe(78);
       expect(result.stderr).toContain('"failure":"transition_secret_unreadable"');
     } finally {
+      vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
     }
   });
