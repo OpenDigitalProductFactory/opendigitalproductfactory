@@ -79,7 +79,7 @@ The non-negotiable boundary: a customer profile **must not** inherit platform-sp
 
 WWMD answers "what would the founder/platform do?" and WWWD answers "what would this organization do?" — but a coworker doing a specialist's job has no governed source for **what a competent professional in that role should do**. The data-architect coworker has no DAMA-DMBOK grounding; the finance coworker has no GAAP doctrine; the marketing specialist has no marketing body of knowledge. Without WSID, that professional judgment is whatever the underlying LLM happens to produce — ungoverned, unauditable, and inconsistent across model routings.
 
-WSID is the third scope, and it deliberately reuses the architecture the platform already proved twice: **a versioned profile + a source-traced corpus + weighted retrieval + an audited gate**, scoped to the profession instead of the founder or the org. No new vector DB, graph DB, or parallel table family — the corpus lives as `WikiPage` pages with `RawSource` provenance, `PerspectiveMaterial` rows for decision-bearing doctrine, and Qdrant embeddings for recall.
+WSID is the third scope, and it deliberately reuses the architecture the platform already proved twice: **a versioned profile + a source-traced corpus + weighted retrieval + an audited gate**, scoped to the profession instead of the founder or the org. No parallel storage family is introduced: the corpus lives as `WikiPage` pages with `RawSource` provenance, `PerspectiveMaterial` rows for decision-bearing doctrine, and PostgreSQL embeddings for recall.
 
 Key properties:
 

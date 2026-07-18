@@ -29,7 +29,7 @@ Login: `admin@dpf.local` / `changeme123`
 
 ### What the Dev Container Provides
 
-- Isolated PostgreSQL, Neo4j, and Qdrant databases (separate from production)
+- An isolated PostgreSQL database (separate from production), including vector and graph storage
 - Sanitized copy of production data (PII obfuscated, credentials replaced)
 - Shared LLM inference via Docker Model Runner (no duplication)
 - Pre-installed extensions: ESLint, Prisma, Tailwind CSS, Prettier

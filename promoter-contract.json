@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "entrypoint": "/promoter/promote.sh",
+  "requiredFiles": [
+    "/app/promoter-contract.json",
+    "/promoter/promote.sh",
+    "/promoter/portal.Dockerfile",
+    "/promoter/installer/validate-install-state.mjs",
+    "/promoter/installer/install-state.schema.json"
+  ],
+  "requiredMounts": [
+    { "path": "/var/run/docker.sock", "mode": "rw" },
+    { "path": "/host-source", "mode": "ro" },
+    { "path": "/dpf-state", "mode": "rw" }
+  ],
+  "requiredEnvironment": [
+    "DPF_STATE_DIR",
+    "PROMOTE_BACKUP_PATH",
+    "PROMOTE_COMPOSE_PROJECT",
+    "PROMOTE_HEALTH_URL",
+    "PROMOTE_SOURCE",
+    "PROMOTE_TARGET_SHA"
+  ],
+  "callerProtocol": { "min": 1, "max": 1 }
+}

@@ -38,12 +38,12 @@ Usage:
 
 This is a destructive operation. It runs:
 
-  1. bash uninstall-dpf.sh --purge          (wipes data, .env, ~/.dpf state)
+  1. bash uninstall-dpf.sh --purge --keep-state (wipes runtime data and .env)
   2. bash install-dpf.sh                    (full re-install)
 
 Flags forwarded to uninstall-dpf.sh:
   --keep-env      Preserve .env across the wipe.
-  --keep-state    Preserve ~/.dpf/install-state.json across the wipe.
+  --reset-state   Also delete lifecycle state (explicit destructive reset).
 
 Flags forwarded to install-dpf.sh:
   --release       Use pre-built GHCR images.
@@ -60,7 +60,7 @@ EOF
 }
 
 DPF_KEEP_ENV=0
-DPF_KEEP_STATE=0
+DPF_KEEP_STATE=1
 DPF_MODE=""           # forwarded to install-dpf.sh
 DPF_NO_AUTOSTART=0
 DPF_HEADLESS_FLAG=""
@@ -71,6 +71,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --keep-env)       DPF_KEEP_ENV=1 ;;
     --keep-state)     DPF_KEEP_STATE=1 ;;
+    --reset-state)    DPF_KEEP_STATE=0 ;;
     --release)        DPF_MODE="release" ;;
     --dev)            DPF_MODE="dev" ;;
     --no-autostart)   DPF_NO_AUTOSTART=1 ;;

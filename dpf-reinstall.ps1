@@ -9,7 +9,7 @@
 #   1. Checks for uncommitted changes (warns you before destroying anything)
 #   2. Closes VS Code if it has the directory locked
 #   3. Stops all DPF Docker containers
-#   4. Removes ALL DPF Docker volumes (including neo4j, qdrant, postgres)
+#   4. Removes all DPF Docker volumes (including PostgreSQL)
 #   5. Removes DPF Docker images
 #   6. Removes bind-mount data directories
 #   7. Migrates any legacy in-tree backups under $DPF_DIR\backups\ to the
@@ -70,7 +70,7 @@ Write-Host ""
 Write-Host "  Install directory: $DPF_DIR" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  This will DESTROY all local data:" -ForegroundColor Yellow
-Write-Host "    - Database (postgres, neo4j, qdrant)"
+Write-Host "    - PostgreSQL database"
 Write-Host "    - Redis cache"
 Write-Host "    - Sandbox workspace"
 Write-Host "    - All Docker images and volumes"

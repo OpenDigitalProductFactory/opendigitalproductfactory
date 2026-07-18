@@ -24,6 +24,8 @@ export type MaintenanceWindow = {
  *   labelled with an upstream SHA it does not contain.
  */
 export type UpgradeSourceMode = "upstream" | "local";
+export type SelfUpgradeReadinessOwner = "bridge" | "portal" | "unavailable";
+export type SelfUpgradeReadinessMode = "enforced" | "legacy-bootstrap";
 
 export const DEFAULT_INSTALL_BRANCH = "dpf/install";
 
@@ -97,6 +99,10 @@ export type SelfUpgradeConfig = {
    * The field is retained (not removed) for callers and forward-compat.
    */
   useIsolatedWorkspace: boolean;
+  /** Compatibility disclosure; legacy bootstrap must never claim portal validation. */
+  readinessMode?: SelfUpgradeReadinessMode;
+  readinessOwner?: SelfUpgradeReadinessOwner;
+  callerProtocolVersion?: number;
   /**
    * Override the in-container path of the upgrade workspace. Defaults to
    * `${hostSourceMountPath}/.upgrade-workspace`. Only consulted when
@@ -251,6 +257,15 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
       (f): f is string => typeof f === "string" && f.trim().length > 0,
     );
     if (files.length > 0) parsed.composeFiles = files;
+  }
+  if (cfg.readinessMode === "enforced" || cfg.readinessMode === "legacy-bootstrap") {
+    parsed.readinessMode = cfg.readinessMode;
+  }
+  if (cfg.readinessOwner === "bridge" || cfg.readinessOwner === "portal" || cfg.readinessOwner === "unavailable") {
+    parsed.readinessOwner = cfg.readinessOwner;
+  }
+  if (typeof cfg.callerProtocolVersion === "number" && Number.isInteger(cfg.callerProtocolVersion) && cfg.callerProtocolVersion > 0) {
+    parsed.callerProtocolVersion = cfg.callerProtocolVersion;
   }
   return parsed;
 }

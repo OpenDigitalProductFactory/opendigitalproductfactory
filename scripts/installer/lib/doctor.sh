@@ -12,7 +12,7 @@
 #   - Compose -f chain (via compose.sh helper) + rendered config sha256
 #   - install-state.json (redacted)
 #   - docker compose ps
-#   - tail -200 of core service logs (portal, postgres, neo4j, qdrant)
+#   - tail -200 of core service logs (portal and postgres)
 #   - Port-conflict scan
 #   - LLM provider reachability
 #   - Redacted env summary
@@ -58,7 +58,7 @@ _dpf_doctor_redact() {
 }
 
 # Common ports DPF binds. Used by the conflict scan.
-_DPF_DOCTOR_PORTS="3000 3001 3002 3035 5432 6333 7474 7687 8080 8500 8600 8700 9090 9100 9182 9187 11434 1455"
+_DPF_DOCTOR_PORTS="3000 3001 3002 3035 5432 8080 8500 8600 8700 9090 9100 9182 9187 11434 1455"
 
 dpf_doctor_collect() {
   # Diagnostic gathering is best-effort. Many shell-outs (docker info
@@ -172,7 +172,7 @@ dpf_doctor_collect() {
   # 9. Redacted env summary (snapshot of known DPF envvars)
   {
     echo "DPF-related environment variables (redacted):"
-    env | grep -iE '^(DPF_|LLM_|EMBEDDING_|BROWSER_USE_|GHCR_|POSTGRES_|NEO4J_|AUTH_|ADMIN_|MCP_|DOCKER_)' \
+    env | grep -iE '^(DPF_|LLM_|EMBEDDING_|BROWSER_USE_|GHCR_|POSTGRES_|AUTH_|ADMIN_|MCP_|DOCKER_)' \
       | _dpf_doctor_redact | sort
   } > "$bundle_dir/env.txt"
 

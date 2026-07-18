@@ -4,7 +4,7 @@
 # Companion to install-dpf.sh. Two destruction tiers:
 #
 #   (default)   Soft uninstall. Stops the stack and removes the autostart
-#               unit. Preserves volumes (Postgres / Neo4j / Qdrant data),
+#               unit. Preserves PostgreSQL volumes,
 #               the .env file, and ~/.dpf/install-state.json so a later
 #               re-install with `bash install-dpf.sh` resumes cleanly.
 #
@@ -130,7 +130,7 @@ if [ "$DPF_PURGE" = "1" ] && [ "$DPF_YES" != "1" ]; then
     fail "--purge under --headless requires --yes to confirm destructive intent."
   fi
   warn "This will permanently delete:"
-  warn "  - All docker volumes for project '$DPF_COMPOSE_PROJECT' (Postgres, Neo4j, Qdrant, etc.)"
+  warn "  - All Docker volumes for project '$DPF_COMPOSE_PROJECT' (including PostgreSQL)"
   warn "  - Networks and stopped containers labeled with the project"
   [ "$DPF_KEEP_ENV"   = "1" ] || warn "  - .env (operator secrets)"
   [ "$DPF_KEEP_STATE" = "1" ] || warn "  - ~/.dpf state directory (install history, logs, autostart launch script)"

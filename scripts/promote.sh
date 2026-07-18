@@ -14,6 +14,7 @@ set -euo pipefail
 
 _self_upgrade=0
 _dry_run=0
+_readiness=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 if [[ "${1:-}" == "--runtime-transition-secret-rotation" ]]; then
@@ -36,8 +37,50 @@ for arg in "$@"; do
   case "$arg" in
     --self-upgrade) _self_upgrade=1 ;;
     --dry-run)      _dry_run=1 ;;
+    --readiness)    _readiness=1 ;;
   esac
 done
+
+if [[ $_readiness -eq 1 ]]; then
+  _readiness_failures=()
+  _contract="${DPF_PROMOTER_CONTRACT:-/app/promoter-contract.json}"
+  [[ -r "$_contract" ]] || _readiness_failures+=(contract_unreadable)
+  if [[ -r "$_contract" ]]; then
+    while IFS= read -r _required_file; do
+      [[ -r "$_required_file" ]] || _readiness_failures+=(required_file_unreadable)
+    done < <(jq -r '.requiredFiles[]? // empty' "$_contract" 2>/dev/null)
+  fi
+  [[ -x "$_promoter_dir/promote.sh" ]] || _readiness_failures+=(entrypoint_unavailable)
+  docker version --format '{{.Server.APIVersion}}' >/dev/null 2>&1 || _readiness_failures+=(docker_unavailable)
+  [[ -d "${PROMOTE_SOURCE:-}" && -r "${PROMOTE_SOURCE:-}" ]] || _readiness_failures+=(source_mount_unreadable)
+  [[ -n "${PROMOTE_TARGET_SHA:-}" ]] || _readiness_failures+=(target_sha_missing)
+  [[ -n "${PROMOTE_HEALTH_URL:-}" ]] || _readiness_failures+=(health_url_missing)
+  _state_dir="${DPF_STATE_DIR:-/dpf-state}"
+  _state_file="$_state_dir/install-state.json"
+  [[ -d "$_state_dir" && -w "$_state_dir" ]] || _readiness_failures+=(state_mount_unwritable)
+  if [[ ! -r "$_state_file" ]] || ! jq -e 'type == "object"' "$_state_file" >/dev/null 2>&1; then
+    _readiness_failures+=(install_state_invalid)
+  fi
+  _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"
+  if [[ ! -f "$_profile_adapter" ]] || ! node "$_profile_adapter" --state "$_state_file" --overlay promote >/dev/null 2>&1; then
+    _readiness_failures+=(capability_projection_failed)
+  fi
+  [[ -n "${PROMOTE_COMPOSE_PROJECT:-}" ]] || _readiness_failures+=(compose_identity_missing)
+  [[ -n "${PROMOTE_BACKUP_PATH:-}" && -d "$(dirname "${PROMOTE_BACKUP_PATH:-/missing}")" ]] || _readiness_failures+=(recovery_parent_unavailable)
+  [[ -d "$_state_dir" ]] || _readiness_failures+=(transition_secret_parent_unavailable)
+  if [[ ${#_readiness_failures[@]} -gt 0 ]]; then
+    printf '{"stage":"preflight","result":"failed","quiescenceBegan":false,"failures":['
+    _sep=""
+    for _failure in "${_readiness_failures[@]}"; do
+      printf '%s{"code":"%s","message":"Promoter readiness check failed: %s"}' "$_sep" "$_failure" "$_failure"
+      _sep=,
+    done
+    printf ']}\n'
+    exit 78
+  fi
+  printf '{"stage":"preflight","result":"ready","quiescenceBegan":false,"failures":[]}\n'
+  exit 0
+fi
 
 [[ $_self_upgrade -eq 1 ]] || { printf 'error: --self-upgrade flag required\n' >&2; exit 1; }
 

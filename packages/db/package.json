@@ -60,9 +60,7 @@
     "skills:audit": "tsx src/skill-quality-audit.ts",
     "studio": "prisma studio",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit",
-    "neo4j:rebuild-ea": "tsx src/neo4j-rebuild-ea.ts",
-    "neo4j:rebuild-documents": "tsx src/neo4j-rebuild-documents.ts"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit"
   },
   "dependencies": {
     "@dpf/storefront-templates": "workspace:*",

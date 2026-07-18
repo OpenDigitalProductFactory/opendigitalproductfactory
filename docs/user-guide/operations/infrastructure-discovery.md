@@ -26,7 +26,7 @@ Each sweep runs through five stages:
 1. **Collection** -- Five collectors run in parallel, each examining a different data source
 2. **Cross-collector inference** -- Relationships between items from different collectors are inferred (e.g., linking the Docker host to its network interfaces)
 3. **Normalization and attribution** -- Raw discoveries are deduplicated, classified, and matched to taxonomy nodes
-4. **Persistence** -- Entities and relationships are upserted into PostgreSQL (authority) and projected to Neo4j (graph traversal)
+4. **Persistence** -- Entities and relationships are upserted into PostgreSQL, including the canonical graph tables
 5. **Promotion and inference** -- High-confidence entities become Digital Products; product-to-infrastructure dependency edges are created
 
 ### What Gets Discovered
@@ -41,25 +41,22 @@ Each sweep runs through five stages:
 
 ### The Dependency Graph
 
-All discovered entities are projected into Neo4j as `InfraCI` (Infrastructure Configuration Item) nodes, tagged with their OSI layer. Relationships between entities use typed edges that enable full-stack impact analysis:
+All discovered entities are persisted as infrastructure configuration items and typed graph edges in PostgreSQL, tagged with their OSI layer. Relationships enable full-stack impact analysis:
 
 ```
 Docker Host (Windows 11)            Layer 3 - Network
   |-- HOSTS --> Docker Runtime                Layer 7 - Application
   |     |-- HOSTS --> dpf-portal              Layer 7
   |     |-- HOSTS --> dpf-postgres            Layer 7
-  |     |-- HOSTS --> dpf-neo4j               Layer 7
   |     `-- HOSTS --> (all containers)
   `-- HOSTS --> Docker Network (172.18.0.0/16)   Layer 3
         |-- ROUTES_THROUGH --> Gateway 172.18.0.1
         |-- MEMBER_OF <-- dpf-portal (172.18.0.7)
-        |-- MEMBER_OF <-- dpf-postgres (172.18.0.2)
-        `-- MEMBER_OF <-- dpf-neo4j (172.18.0.5)
+        `-- MEMBER_OF <-- dpf-postgres (172.18.0.2)
 
 Prometheus
   |-- MONITORS --> dpf-portal
   |-- MONITORS --> dpf-postgres
-  |-- MONITORS --> qdrant
   `-- MONITORS --> model-runner
 
 Digital Product (DPF Portal)

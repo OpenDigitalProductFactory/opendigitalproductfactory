@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
 const schemaUrl = new URL("./install-state.schema.json", import.meta.url);
 
@@ -46,4 +47,26 @@ export async function validateInstallState(value, schemaPath = schemaUrl) {
   const errors = [];
   visit(schema, value, "$", errors);
   return { valid: errors.length === 0, errors };
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const statePath = process.argv[2];
+  if (!statePath) {
+    console.error("usage: node validate-install-state.mjs <install-state.json>");
+    process.exitCode = 64;
+  } else {
+    try {
+      const value = JSON.parse(await readFile(statePath, "utf8"));
+      const result = await validateInstallState(value);
+      if (!result.valid) {
+        console.error(`install-state invalid: ${result.errors.join(", ")}`);
+        process.exitCode = 1;
+      } else {
+        console.log(`install-state valid: ${statePath}`);
+      }
+    } catch (error) {
+      console.error(`install-state invalid: ${error instanceof Error ? error.message : String(error)}`);
+      process.exitCode = 1;
+    }
+  }
 }

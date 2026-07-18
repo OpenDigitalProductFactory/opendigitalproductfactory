@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { validateInstallState } from "./validate-install-state.mjs";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const valid = {
   schemaVersion: 1,
@@ -39,4 +44,13 @@ test("uses the repository schema rather than a duplicated field list", async () 
   const result = await validateInstallState(missing);
   assert.equal(result.valid, false);
   assert.match(result.errors.join("\n"), new RegExp(schema.required[0]));
+});
+
+test("command-line contract validates the installer-resolved state path", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-state-validator-"));
+  const path = join(dir, "install-state.json");
+  await writeFile(path, JSON.stringify(valid));
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL("./validate-install-state.mjs", import.meta.url)), path], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /install-state valid/);
 });

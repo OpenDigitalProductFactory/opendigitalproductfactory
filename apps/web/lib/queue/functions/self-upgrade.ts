@@ -29,6 +29,7 @@ import {
   skipRun,
   updateRunPlan,
   recordRunRecoveryPoint,
+  recordPromoterReadiness,
   getLatestRun,
   getLatestSucceededRun,
 } from "@/lib/self-upgrade/run-store";
@@ -59,7 +60,7 @@ export const SELF_UPGRADE_EVENT = "ops/self-upgrade.run";
 
 type PromoterRuntime = Pick<
   typeof import("@/lib/self-upgrade/promoter"),
-  "isPromoterAvailable" | "ensurePromoterImage" | "runPromoter"
+  "isPromoterAvailable" | "ensurePromoterImage" | "buildCandidatePromoterImage" | "resolvePromoterArtifact" | "runPromoterReadiness" | "runPromoter"
 >;
 
 async function loadPromoterRuntime(): Promise<PromoterRuntime> {
@@ -214,7 +215,7 @@ export async function runSelfUpgrade(
   // build it here — still BEFORE any drain — and only skip if the build itself
   // fails (or a custom/registry image is configured, which the operator pulls).
   // A skip here remains a clean no-op: no cooldown, and the next tick re-checks.
-  if (!params.dryRun) {
+  if (!params.dryRun && config.readinessMode === "legacy-bootstrap") {
     const { ensurePromoterImage } = await loadPromoterRuntime();
     // ALWAYS rebuild the promoter before a swap, not only when its image is absent.
     // The promoter bakes promote.sh into its image (Dockerfile.promoter ENTRYPOINT), so a
@@ -481,6 +482,82 @@ export async function runSelfUpgrade(
   await startRun(run.runId);
   await emitUpgradeEvent({ type: "upgrade.started", runId: run.runId });
 
+  // Candidate-owned preflight. Resolve once, validate the embedded contract,
+  // run readiness against that digest, persist evidence, and only then drain.
+  // Undefined mode is the post-floor default; legacy-bootstrap is explicit.
+  let resolvedPromoterDigest: string | undefined;
+  if (!params.dryRun && config.readinessMode !== "legacy-bootstrap") {
+    const runtime = await loadPromoterRuntime();
+    const startedAt = new Date().toISOString();
+    try {
+      const candidatePromoterImage = await runtime.buildCandidatePromoterImage({
+        sourcePath: upgradeWorkspaceMountPath ?? hostSourcePath,
+        targetSha: builtStamp,
+        promoterImage: config.promoterImage,
+      });
+      const artifact = await runtime.resolvePromoterArtifact({
+        promoterImage: candidatePromoterImage,
+        targetSha: builtStamp,
+        callerProtocol: config.callerProtocolVersion,
+      });
+      const readiness = await runtime.runPromoterReadiness({
+        hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
+        targetSha: builtStamp,
+        backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
+        backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
+        composeEnvFileHostPath: hostInstallPathResolved ? `${hostInstallPathResolved.replace(/\/$/, "")}/.env` : undefined,
+        composeFiles,
+        composeProject,
+        healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
+        promoterImage: artifact.digest,
+        stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
+        containerName: `dpf-promoter-readiness-${run.runId}`,
+        artifact,
+      });
+      let reportedFailures: Array<{ code: string; message: string; remediation?: string }> = [];
+      try {
+        const parsed = JSON.parse(readiness.stdout) as { failures?: Array<{ code: string; message: string; remediation?: string }> };
+        if (Array.isArray(parsed.failures)) reportedFailures = parsed.failures;
+      } catch {
+        if (readiness.exitCode !== 0) reportedFailures = [{ code: "readiness_report_invalid", message: "Promoter readiness returned an invalid report." }];
+      }
+      const ready = readiness.exitCode === 0;
+      await recordPromoterReadiness(run.runId, {
+        stage: "preflight", owner: "portal", mode: "enforced", result: ready ? "ready" : "failed",
+        baselineSha: deployedSha ?? undefined, targetSha: builtStamp, imageDigest: artifact.digest,
+        contractVersion: artifact.contractSchema, contractDigest: artifact.contractDigest,
+        startedAt, completedAt: new Date().toISOString(), quiescenceBegan: false,
+        failures: reportedFailures,
+      });
+      if (!ready) {
+        const reason = reportedFailures[0]?.message ?? "Promoter readiness failed.";
+        await failRun(run.runId, `promoter-readiness-failed: ${reason}`);
+        await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
+        return { ok: false, status: "failed", runId: run.runId, reason: "promoter-readiness-failed" };
+      }
+      resolvedPromoterDigest = artifact.digest;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await recordPromoterReadiness(run.runId, {
+        stage: "preflight", owner: "portal", mode: "enforced", result: "failed",
+        baselineSha: deployedSha ?? undefined, targetSha: builtStamp,
+        startedAt, completedAt: new Date().toISOString(), quiescenceBegan: false,
+        failures: [{ code: "artifact_resolution_failed", message }],
+      });
+      await failRun(run.runId, `promoter-readiness-failed: ${message}`);
+      await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
+      return { ok: false, status: "failed", runId: run.runId, reason: "promoter-readiness-failed" };
+    }
+  } else if (!params.dryRun) {
+    await recordPromoterReadiness(run.runId, {
+      stage: "preflight", owner: config.readinessOwner ?? "unavailable", mode: "legacy-bootstrap",
+      result: config.readinessOwner === "bridge" ? "ready" : "unavailable",
+      baselineSha: deployedSha ?? undefined, targetSha: builtStamp,
+      startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+      quiescenceBegan: false, failures: [],
+    });
+  }
+
   // BI-QUIESCE-010 keystone integration: replaces the single-signal
   // getPortalActivity check with the full Activity Quiescence Protocol
   // coordinator (BI-QUIESCE-002). The coordinator inventories all 30
@@ -601,7 +678,7 @@ export async function runSelfUpgrade(
       composeFiles,
       composeProject,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
-      promoterImage: config.promoterImage,
+      promoterImage: resolvedPromoterDigest ?? config.promoterImage,
       stateDirHostPath: process.env.DPF_STATE_DIR_HOST,
       dryRun: params.dryRun,
       // Deterministic name so a stalled build can be force-removed by name on

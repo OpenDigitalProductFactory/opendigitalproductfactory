@@ -1,0 +1,82 @@
+name: Self-upgrade N-1 acceptance
+
+on:
+  pull_request:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: read
+  packages: read
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sensitive: ${{ steps.paths.outputs.sensitive }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            paths=$(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
+            node scripts/self-upgrade-sensitive-paths.mjs $paths >> "$GITHUB_OUTPUT"
+          else
+            echo "sensitive=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  acceptance:
+    needs: classify
+    if: needs.classify.outputs.sensitive == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DPF_N1_PROJECT: dpf-n1-${{ github.run_id }}-${{ github.run_attempt }}
+      DPF_N1_EVIDENCE: ${{ runner.temp }}/dpf-n1-evidence
+      DPF_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+      DPF_PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fast harness invariants
+        run: node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs
+      - name: Resolve nightly base SHA
+        if: github.event_name != 'pull_request'
+        run: echo "DPF_BASE_SHA=$(git rev-parse "$GITHUB_SHA^")" >> "$GITHUB_ENV"
+      - name: Baseline upgrades to candidate
+        run: >-
+          node scripts/test-n-minus-one-upgrade.mjs
+          --base-sha "$DPF_BASE_SHA"
+          --candidate-sha "$GITHUB_SHA"
+          --repository "$GITHUB_REPOSITORY"
+          --pr-number "$DPF_PR_NUMBER"
+          --project "$DPF_N1_PROJECT"
+          --evidence-dir "$DPF_N1_EVIDENCE"
+      - name: Readiness refusal leaves baseline serving
+        run: >-
+          node scripts/test-n-minus-one-upgrade.mjs
+          --base-sha "$DPF_BASE_SHA"
+          --candidate-sha "$GITHUB_SHA"
+          --repository "$GITHUB_REPOSITORY"
+          --pr-number "$DPF_PR_NUMBER"
+          --project "${DPF_N1_PROJECT}-failure"
+          --evidence-dir "$DPF_N1_EVIDENCE/failure"
+          --inject-readiness-failure
+      - name: Safe cleanup
+        if: always()
+        run: node scripts/test-n-minus-one-upgrade.mjs --cleanup-project "$DPF_N1_PROJECT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: n-minus-one-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dpf-n1-evidence
+          retention-days: 30

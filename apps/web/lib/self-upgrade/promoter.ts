@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
@@ -31,6 +34,166 @@ const DEFAULT_PROMOTER_IMAGE = "dpf-promoter";
 // docker-compose.yml so promote.sh sees the same path either way.
 const PROMOTER_CONTAINER_SOURCE = "/host-source";
 const PROMOTER_COMPOSE_ENV_FILE = "/install-env/.env";
+
+export const SELF_UPGRADE_CALLER_PROTOCOL_VERSION = 1;
+export const PROMOTER_CONTRACT_SCHEMA_VERSION = 1;
+export type ReadinessOwner = "bridge" | "portal" | "unavailable";
+export type UpgradeReadinessMode = "enforced" | "legacy-bootstrap";
+
+export type ResolvedPromoterArtifact = Readonly<{
+  /** Content-addressed image identity. Mutable tags never cross this boundary. */
+  digest: `sha256:${string}`;
+  sourceSha: string;
+  contractSchema: 1;
+  contractDigest: `sha256:${string}`;
+  callerProtocol: Readonly<{ min: number; max: number }>;
+}>;
+
+type PromoterArtifactValidationInput = {
+  targetSha: string;
+  callerProtocol: number;
+  digest: string;
+  manifest: string;
+  labels: Record<string, string | undefined>;
+  computedContractDigest: string;
+};
+
+export type PromoterDockerRunner = (args: string[]) => Promise<PromoterResult>;
+
+function isLocalPromoterReference(image: string): boolean {
+  return image === DEFAULT_PROMOTER_IMAGE || /^dpf-promoter:[A-Za-z0-9._-]+$/.test(image);
+}
+
+async function defaultPromoterDockerRunner(args: string[]): Promise<PromoterResult> {
+  return runProcessWithBudget("docker", args, { timeoutMs: 5 * 60_000 });
+}
+
+/** Build the candidate-owned local promoter from the prepared source tree. */
+export async function buildCandidatePromoterImage(
+  params: { sourcePath: string; targetSha: string; promoterImage?: string },
+  runDocker: PromoterDockerRunner = defaultPromoterDockerRunner,
+): Promise<string> {
+  if (!isJitBuildablePromoterImage(params.promoterImage)) {
+    return params.promoterImage!.trim();
+  }
+  const manifest = await readFile(join(params.sourcePath, "promoter-contract.json"));
+  const contractDigest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
+  const targetImage = `${DEFAULT_PROMOTER_IMAGE}:${params.targetSha}`;
+  requireDockerSuccess(
+    await runDocker([
+      "build",
+      "-f",
+      join(params.sourcePath, "Dockerfile.promoter"),
+      "-t",
+      targetImage,
+      "--build-arg",
+      `DPF_PROMOTER_SOURCE_SHA=${params.targetSha}`,
+      "--build-arg",
+      `DPF_PROMOTER_CONTRACT_DIGEST=${contractDigest}`,
+      params.sourcePath,
+    ]),
+    "promoter_candidate_build",
+  );
+  return targetImage;
+}
+
+function requireDockerSuccess(result: PromoterResult, operation: string): string {
+  if (result.exitCode !== 0) {
+    throw new Error(`${operation}_failed: ${(result.stderr || result.stdout).trim().slice(-500)}`);
+  }
+  return result.stdout;
+}
+
+/** Pulls/inspects a target reference once and verifies its embedded contract. */
+export async function resolvePromoterArtifact(
+  params: { promoterImage?: string; targetSha: string; callerProtocol?: number },
+  runDocker: PromoterDockerRunner = defaultPromoterDockerRunner,
+): Promise<ResolvedPromoterArtifact> {
+  const configured = params.promoterImage?.trim() || DEFAULT_PROMOTER_IMAGE;
+  const reference = configured.includes("@sha256:") || configured.startsWith("sha256:")
+    ? configured
+    : `${configured.replace(/:[^/:]+$/, "")}:${params.targetSha}`;
+  // The default image is built locally from the prepared candidate source so
+  // offline installs remain self-upgradable. Registry/custom images are pulled.
+  if (!isLocalPromoterReference(configured)) {
+    requireDockerSuccess(await runDocker(["pull", reference]), "promoter_pull");
+  }
+  const inspectText = requireDockerSuccess(
+    await runDocker(["image", "inspect", reference, "--format", "{{json .}}"]),
+    "promoter_inspect",
+  ).trim();
+  let inspect: { Id?: string; RepoDigests?: string[]; Config?: { Labels?: Record<string, string> } };
+  try { inspect = JSON.parse(inspectText); } catch { throw new Error("promoter_inspect_invalid_json"); }
+  const repoDigest = inspect.RepoDigests?.map((value) => value.split("@")[1]).find(Boolean);
+  const digest = repoDigest ?? inspect.Id;
+  if (!digest) throw new Error("promoter_digest_missing");
+  const manifest = requireDockerSuccess(
+    await runDocker(["run", "--rm", "--entrypoint", "cat", digest, "/app/promoter-contract.json"]),
+    "promoter_contract_read",
+  );
+  const computedContractDigest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
+  return validateResolvedPromoterArtifact({
+    targetSha: params.targetSha,
+    callerProtocol: params.callerProtocol ?? SELF_UPGRADE_CALLER_PROTOCOL_VERSION,
+    digest,
+    manifest,
+    labels: inspect.Config?.Labels ?? {},
+    computedContractDigest,
+  });
+}
+
+export async function runPromoterReadiness(
+  params: PromoterParams & { artifact: ResolvedPromoterArtifact },
+): Promise<PromoterResult> {
+  const { command, args } = buildPromoterReadinessCommand(params);
+  return runProcessWithBudget(command, args, {
+    timeoutMs: Math.min(resolvePromoterTimeoutMs(params), 5 * 60_000),
+    containerName: params.containerName,
+  });
+}
+
+/** Fail-closed compatibility boundary used after Docker resolves a tag once. */
+export function validateResolvedPromoterArtifact(
+  input: PromoterArtifactValidationInput,
+): ResolvedPromoterArtifact {
+  if (!/^sha256:[a-f0-9]{64}$/.test(input.digest)) {
+    throw new Error("promoter_artifact_not_immutable");
+  }
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(input.manifest);
+  } catch {
+    throw new Error("promoter_contract_invalid_json");
+  }
+  if (!manifest || typeof manifest !== "object") throw new Error("promoter_contract_missing");
+  const contract = manifest as Record<string, unknown>;
+  if (contract.schemaVersion !== PROMOTER_CONTRACT_SCHEMA_VERSION) {
+    throw new Error("promoter_contract_schema_unsupported");
+  }
+  const range = contract.callerProtocol as { min?: unknown; max?: unknown } | undefined;
+  if (!range || typeof range.min !== "number" || typeof range.max !== "number" || range.min > range.max) {
+    throw new Error("promoter_contract_protocol_invalid");
+  }
+  if (input.callerProtocol < range.min || input.callerProtocol > range.max) {
+    throw new Error("promoter_caller_protocol_unsupported");
+  }
+  const sourceSha = input.labels["org.opencontainers.image.revision"];
+  if (!sourceSha || sourceSha !== input.targetSha) throw new Error("promoter_source_sha_mismatch");
+  if (input.labels["org.opendpf.promoter.contract-schema"] !== String(contract.schemaVersion)) {
+    throw new Error("promoter_contract_schema_label_mismatch");
+  }
+  const contractDigest = input.labels["org.opendpf.promoter.contract-digest"];
+  if (!contractDigest || contractDigest !== input.computedContractDigest || !/^sha256:[a-f0-9]{64}$/.test(contractDigest)) {
+    throw new Error("promoter_contract_digest_mismatch");
+  }
+  return Object.freeze({
+    digest: input.digest as `sha256:${string}`,
+    sourceSha,
+    contractSchema: PROMOTER_CONTRACT_SCHEMA_VERSION,
+    contractDigest: contractDigest as `sha256:${string}`,
+    callerProtocol: Object.freeze({ min: range.min, max: range.max }),
+  });
+}
 
 export type PromoterParams = {
   /** HOST path of the install tree; bind-mounted into the promoter. */
@@ -220,9 +383,7 @@ export function buildPromoterCommand(
     args.push("-e", `PROMOTE_COMPOSE_FILES=${params.composeFiles.join(" ")}`);
   }
 
-  if (params.composeProject && params.composeProject.length > 0) {
-    args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject}`);
-  }
+  args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject || "dpf"}`);
 
   if (params.runtimeTransitionAuthorityOperation) {
     if (!params.stateDirHostPath || (!["reconcile", "rotate-secret"].includes(params.runtimeTransitionAuthorityOperation) && !params.runtimeCapabilityTransitionId) ||
@@ -252,6 +413,17 @@ export function buildPromoterCommand(
   if (params.dryRun) args.push("--dry-run");
 
   return { command: "docker", args };
+}
+
+/** Readiness always launches the previously resolved immutable artifact. */
+export function buildPromoterReadinessCommand(
+  params: PromoterParams & { artifact: ResolvedPromoterArtifact },
+): { command: string; args: string[] } {
+  const command = buildPromoterCommand({ ...params, promoterImage: params.artifact.digest });
+  const modeIndex = command.args.lastIndexOf("--self-upgrade");
+  if (modeIndex < 0) throw new Error("promoter_readiness_mode_unavailable");
+  command.args[modeIndex] = "--readiness";
+  return command;
 }
 
 /**
@@ -306,6 +478,7 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "BDIR=$(mktemp -d) && trap 'rm -rf \"$BDIR\"' EXIT && " +
   "cp /promoter/Dockerfile \"$BDIR/Dockerfile\" && " +
   "cp /promoter/Dockerfile.promoter \"$BDIR/Dockerfile.promoter\" && " +
+  "cp /promoter/promoter-contract.json \"$BDIR/promoter-contract.json\" && " +
   "mkdir -p \"$BDIR/scripts\" && mkdir -p \"$BDIR/scripts/installer\" && " +
   "cp /promoter/scripts/promote.sh \"$BDIR/scripts/promote.sh\" && " +
   "cp /promoter/scripts/apply-runtime-capability-transition.mjs \"$BDIR/scripts/apply-runtime-capability-transition.mjs\" && " +

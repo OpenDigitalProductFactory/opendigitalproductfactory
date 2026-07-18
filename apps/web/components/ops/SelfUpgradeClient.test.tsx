@@ -358,6 +358,35 @@ describe("SelfUpgradeClient – succeeded", () => {
 // ─── Failed ───────────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeClient – failed", () => {
+  it("shows actionable portal-owned preflight failure without exposing secrets", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("failed", {
+        completionEvidence: { readiness: {
+          stage: "preflight", owner: "portal", mode: "enforced", result: "failed",
+          contractVersion: 1, contractDigest: `sha256:${"a".repeat(64)}`,
+          failures: [{ code: "state_mount_unwritable", message: "State mount is not writable", remediation: "Repair the lifecycle state mount" }],
+        } },
+      })} />,
+    );
+    expect(html).toContain("Pre-drain readiness: failed");
+    expect(html).toContain("Validation owner: portal");
+    expect(html).toContain("contract v1");
+    expect(html).toContain("Repair the lifecycle state mount");
+  });
+
+  it("discloses legacy bootstrap as readiness unavailable", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded", {
+        completionEvidence: { readiness: {
+          stage: "preflight", owner: "unavailable", mode: "legacy-bootstrap", result: "unavailable", failures: [],
+        } },
+      })} />,
+    );
+    expect(html).toContain("Legacy bootstrap — pre-drain readiness was unavailable");
+    expect(html).toContain("Validation owner: unavailable");
+    expect(html).not.toContain("Pre-drain readiness: ready");
+  });
+
   it("shows failed badge", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient

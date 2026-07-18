@@ -31,7 +31,7 @@ The script will:
 
 - Install pnpm dependencies (`node_modules`)
 - Create all `.env` files (Docker + app-level) with generated secrets
-- Start Docker containers with **ports exposed** to the host (5432, 7474, 7687, 6333)
+- Start PostgreSQL with port 5432 exposed to the host
 - Run database migrations and seed data (including all epic/backlog SQL scripts)
 
 Then start the dev server:
@@ -76,10 +76,10 @@ If you have an older install with `packages/db/.env`, Prisma still treats it as 
 If you are in a linked git worktree, run `scripts/seed-worktree-mcp.ps1` on Windows or `scripts/seed-worktree-mcp.sh` on macOS / Linux before any Compose command. The seeder writes an ignored `.env` value like `COMPOSE_PROJECT_NAME=dpf-<topic>` so worktree containers and volumes cannot join the root `dpf` project.
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres neo4j qdrant
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
 ```
 
-This exposes PostgreSQL (5432), Neo4j (7687, 7474), and Qdrant (6333) to your host machine.
+This exposes PostgreSQL on port 5432 to your host machine.
 
 **Run migrations and seed:**
 
