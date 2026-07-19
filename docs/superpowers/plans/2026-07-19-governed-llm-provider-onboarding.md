@@ -81,6 +81,7 @@ This work must extend the following sources of truth instead of creating paralle
 - Owning area: Platform, embedded contextually in setup.
 - Route family: `/platform/ai/providers` and its existing provider detail routes.
 - Primary persona: a founder/operator choosing AI services without technical, privacy, security, or procurement expertise.
+- Primary coworker persona: the COO—the owner’s enduring operational counterpart who has their back, owns the conversation, and coordinates specialist expertise on their behalf.
 - Navigation layer touched: setup workflow and local/contextual actions only; no global or section navigation change.
 - Reuse/convergence: existing setup overlay, coworker panel, provider detail form, routing-eligibility projection, shared status/loading primitives, and native progressive-disclosure patterns.
 - Source truth: the versioned provider-governance posture compiled from organization, workload, provider, account, and evidence facts.
@@ -92,6 +93,18 @@ This work must extend the following sources of truth instead of creating paralle
 ## Trust and confidence experience contract
 
 DPF should feel like a knowledgeable coworker keeping the operator out of avoidable trouble—not like a compliance questionnaire, a frightening warning wall, or a provider catalog that leaves the hard decision to them. Confidence must come from demonstrated competence and visible control, never from vague reassurance.
+
+The COO is the human-facing relationship throughout this experience. The owner should not need to know which specialist coworker, corpus, model, or policy engine to ask. They ask the COO; the COO recognizes when data-governance expertise is needed, consults AGT-902 through A2A, checks the substantiation, and returns one coherent answer in the existing conversation. The COO remains accountable for helping the owner understand the choice and complete the safe next step.
+
+“Has the owner’s back” has specific interaction meaning:
+
+- the COO notices material risk and missing evidence without waiting for the owner to use compliance vocabulary;
+- the COO raises concerns early, calmly, and in the context of the owner’s intended work;
+- the COO does the coordination and synthesis instead of handing the owner to another chatbot or exposing an agent directory;
+- the COO can say “I checked this with our data-governance specialist” and show the supporting references, while remaining the speaker and guide;
+- the COO remembers the confirmed company/provider posture within governed context and does not make the owner repeat it unnecessarily;
+- the COO follows a blocked or conditional answer with the next useful action and stays with the owner through resolution;
+- the COO is candid about uncertainty and brings in a qualified human when needed rather than protecting the appearance of competence by guessing.
 
 Every provider decision experience follows this sequence:
 
@@ -130,7 +143,7 @@ Run formative sessions with at least five representative participants. Passing m
 
 ## Grounded questions and answers contract
 
-The same Data Governance coworker remains available during onboarding and from the provider detail experience afterward. A non-technical operator can ask follow-up questions in ordinary language—“Can I use this for customer emails?”, “Why does a business account matter?”, “Does this stay in Europe?”, or “What do I need before payroll data is allowed?”—without knowing which regulation, provider document, or technical setting to inspect.
+The COO remains available during onboarding and from the provider detail experience afterward, using AGT-902 as the responsible data-governance specialist behind the existing A2A boundary. A non-technical operator can ask the COO follow-up questions in ordinary language—“Can I use this for customer emails?”, “Why does a business account matter?”, “Does this stay in Europe?”, or “What do I need before payroll data is allowed?”—without knowing which coworker, regulation, provider document, or technical setting to inspect.
 
 Reliability means evidence-grounded answers with a safe refusal boundary, not merely fluent prose. Every material answer must satisfy this contract:
 
@@ -147,7 +160,7 @@ Reliability means evidence-grounded answers with a safe refusal boundary, not me
 
 ### Structured answer contract
 
-The A2A response and deterministic fallback share one validated shape:
+The specialist A2A response and deterministic fallback share one validated shape, which the COO consumes and explains:
 
 - `answerState`: `substantiated | conditional | cannot_substantiate`;
 - `directAnswer` and `practicalMeaning` in plain language;
@@ -246,9 +259,9 @@ Each phase is one independently reviewable concern/PR. Build Studio should promo
 
 **Rollback:** evaluator remains dark/read-only until Phase 3. If a migration is needed, make it additive and preserve current provider state; disabling the feature flag restores current behavior without deleting evidence.
 
-### Phase 2 — Legal/compliance corpus and AGT-902 A2A advice
+### Phase 2 — COO-led legal/compliance advice through AGT-902 A2A
 
-**Deliverable:** The Data Governance coworker can return a small, cited, structured provider recommendation from company/workload context while the install is local-only.
+**Deliverable:** The COO can give the owner a small, cited, structured provider recommendation from company/workload context while the install is local-only, consulting AGT-902 behind the scenes without transferring ownership of the conversation.
 
 **Files likely affected:**
 
@@ -269,8 +282,10 @@ Each phase is one independently reviewable concern/PR. Build Studio should promo
 6. Implement the grounded questions-and-answers contract for onboarding and later provider-detail follow-ups, using the same AGT-902 A2A path rather than a second compliance chatbot.
 7. Resolve references at claim level and validate source authority, freshness, applicability, and claim support before rendering an answer.
 8. Add a compact inline-reference and “Review sources” projection to the existing coworker conversation; do not create a separate knowledge or compliance route.
+9. Preserve one human-facing thread and COO voice. The UI may show that the COO consulted the Data Governance specialist and what bounded context was shared, but it must not require the owner to open, summon, or manage AGT-902 directly.
+10. Ensure the COO owns follow-through: missing evidence, a required account change, or human review becomes a guided next action in the same conversation rather than a specialist handoff dead end.
 
-**Verification:** corpus-source and freshness tests; AGT-902 wiring test; A2A chain-of-custody test; local-only onboarding simulation with the cloud providers disabled; structured-output/fallback equivalence scenarios; golden-question and adversarial suites; claim-level citation presence/entailment/applicability checks; stale/conflicting/missing evidence abstention; first-viewport answer and source-disclosure browser verification.
+**Verification:** corpus-source and freshness tests; AGT-902 wiring test; A2A chain-of-custody test; local-only onboarding simulation with the cloud providers disabled; structured-output/fallback equivalence scenarios; golden-question and adversarial suites; claim-level citation presence/entailment/applicability checks; stale/conflicting/missing evidence abstention; first-viewport answer and source-disclosure browser verification; conversation-continuity test proving the owner asks and receives the answer from the COO while the specialist consultation remains visible evidence rather than a second user-managed persona.
 
 **Rollback:** corpus and prompt changes are reversible and do not activate providers. If the A2A call fails, the deterministic evaluator remains authoritative.
 
@@ -401,6 +416,8 @@ At minimum, the end-to-end suite must cover:
 17. The operator asks whether data “stays in Europe,” but the configured provider service/region or contract evidence is missing: the coworker asks the smallest clarifying question or returns `cannot_substantiate`, keeps the interim route restricted, and does not substitute a general GDPR explanation for the missing provider fact.
 18. Two current authoritative sources appear to conflict or a provider source changed after the corpus summary: the answer exposes the conflict/date, avoids a definitive claim, identifies which source controls or which reviewer must decide, and files the corpus freshness gap.
 19. A citation URL is valid but its text does not support the generated claim or applies to a different account class: validation removes the claim, downgrades the answer state, and prevents the unsupported advice from reaching the operator.
+20. The owner asks the COO a provider-compliance question: the COO recognizes the capability boundary, consults AGT-902 through A2A, validates and synthesizes the result, and answers in the same thread. The owner sees that specialist expertise was consulted but is never told to locate, summon, or continue with a different coworker.
+21. AGT-902 needs one more fact or qualified human review: the COO asks the clarifying question or guides the escalation, keeps the safe interim posture, and remains the owner’s point of contact through resolution.
 
 ## Research and standards grounding
 
@@ -458,3 +475,5 @@ The implementation should cite primary legal/regulatory texts in the profession 
 - Every material external claim in the governed evaluation suite has an authoritative, current, applicable, claim-level reference; unsupported claims are withheld rather than merely accompanied by a generic link.
 - AGT-902 clearly separates sourced facts, organization declarations, technical verification, recommendation, uncertainty, and required human review.
 - Missing, stale, conflicting, or inapplicable evidence produces a safe conditional/abstaining answer and cannot broaden routing posture.
+- The COO is the single human-facing owner of onboarding and follow-up provider guidance; AGT-902 supplies governed specialist evidence through A2A without becoming a separate journey the owner must manage.
+- Usability participants consistently identify the COO as the coworker looking out for the business and can explain that the COO consults specialists when needed.
