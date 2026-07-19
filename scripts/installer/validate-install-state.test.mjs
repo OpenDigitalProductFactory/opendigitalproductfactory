@@ -142,6 +142,24 @@ test("allows agentToolchain.antigravityWired (5th CLI) — BI-F7823007 schema dr
   assert.deepEqual(await validateInstallState(withAntigravity), { valid: true, errors: [] });
 });
 
+test("allows agentToolchain.antigravityWired on a legacy v1 state (the toolchain writes it; v1 must migrate cleanly)", async () => {
+  // #3282's v1 schema dropped antigravityWired that #3280 added, but the live
+  // toolchain (dpf-bootstrap-agent-toolchain.sh) still writes it — so real v1
+  // states carry it and must validate, or the governed migration throws on them.
+  const v1WithAntigravity = {
+    schemaVersion: 1,
+    installerVersion: "2026.07.17",
+    platform: "linux",
+    arch: "amd64",
+    composeProjectName: "dpf",
+    composeFiles: ["docker-compose.yml"],
+    resourceLabels: { dpf: "true" },
+    autostart: { enabled: true, kind: "systemd-user" },
+    agentToolchain: { ...legacyAgentToolchain, antigravityWired: true },
+  };
+  assert.deepEqual(await validateInstallState(v1WithAntigravity), { valid: true, errors: [] });
+});
+
 test("enforces nested, format, uniqueness, and additional-property constraints", async () => {
   const result = await validateInstallState({
     ...valid,
