@@ -49,7 +49,7 @@ it("verifies the signed install-state handoff before reading the promotion proje
 
 it("projects legacy install state through valid dynamic ESM before readiness", () => {
   const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
-  expect(source).toContain('--overlay promote --migrate');
+  expect(source.match(/--overlay promote --migrate/g)).toHaveLength(2);
   expect(source).toContain('await import(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs")');
   expect(source).not.toContain('from process.env.PROMOTER_DIR');
 });

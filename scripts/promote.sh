@@ -121,7 +121,7 @@ fi
 _install_state="${DPF_PROMOTER_STATE_DIR:-/dpf-state}/install-state.json"
 _profile_adapter="$PROMOTE_SOURCE/scripts/lib/resolve-capability-compose-profiles.mjs"
 [[ -f "$_install_state" && -f "$_profile_adapter" ]] || { printf 'error: capability_state_stale\n' >&2; exit 1; }
-_capability_projection="$(node "$_profile_adapter" --state "$_install_state" --overlay promote)" || exit $?
+_capability_projection="$(node "$_profile_adapter" --state "$_install_state" --overlay promote --migrate)" || exit $?
 export COMPOSE_PROFILES="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
 _capability_recovery="$PROMOTE_BACKUP_PATH/install-state.json"
 _restore_capability_snapshot() {
