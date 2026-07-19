@@ -4,6 +4,13 @@ import { access, readFile } from "node:fs/promises";
 import { dirname, join, posix, resolve } from "node:path";
 
 const root = resolve(dirname(new URL(import.meta.url).pathname.replace(/^\/(.:\/)/, "$1")), "..");
+const validatorAssets = [
+  "scripts/installer/validate-install-state.mjs",
+  "scripts/installer/install-state-schema-registry.mjs",
+  "scripts/installer/install-state.schema.json",
+  "scripts/installer/install-state.v1.schema.json",
+  "scripts/installer/install-state.v2.schema.json",
+];
 
 function parseSimpleLocalCopySources(dockerfile) {
   const instructions = dockerfile
@@ -35,11 +42,20 @@ test("promoter COPY parser fails closed on forms the contract does not support",
 
 test("promoter image contains the install-state validator at its import-resolved paths", async () => {
   const dockerfile = await readFile(join(root, "Dockerfile.promoter"), "utf8");
-  assert.match(dockerfile, /COPY scripts\/installer\/validate-install-state\.mjs \/promoter\/installer\/validate-install-state\.mjs/);
-  assert.match(dockerfile, /COPY scripts\/installer\/install-state\.schema\.json \/promoter\/installer\/install-state\.schema\.json/);
+  for (const asset of validatorAssets) {
+    assert.ok(dockerfile.includes(`COPY ${asset} /promoter/installer/${posix.basename(asset)}`), asset);
+    await access(join(root, asset));
+  }
   assert.match(dockerfile, /COPY scripts\/rotate-runtime-transition-secret\.mjs \/promoter\/rotate-runtime-transition-secret\.mjs/);
-  await access(join(root, "scripts", "installer", "validate-install-state.mjs"));
-  await access(join(root, "scripts", "installer", "install-state.schema.json"));
+});
+
+test("portal and release images retain the validator's complete transitive asset set", async () => {
+  const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
+  for (const asset of validatorAssets) {
+    assert.ok(dockerfile.includes(`COPY ${asset} ./scripts/installer/`), `portal build input missing ${asset}`);
+    assert.ok(dockerfile.includes(`cp ${asset} /dpf-release-assets/scripts/installer/`), `release asset missing ${asset}`);
+    assert.ok(dockerfile.includes(`COPY ${asset} /promoter/scripts/installer/${posix.basename(asset)}`), `JIT source missing ${asset}`);
+  }
 });
 
 test("portal-baked JIT context includes every local Dockerfile.promoter COPY source", async () => {

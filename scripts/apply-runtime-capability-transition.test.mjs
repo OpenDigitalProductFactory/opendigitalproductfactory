@@ -36,7 +36,7 @@ async function validTransition(dir, health = "healthy") {
   const fakeDocker = join(dir, "fake-docker.mjs");
   const psRows = desired.required.map((Service) => ({ Service, State: "running", Health: health }));
   await writeFile(fakeDocker, `const args = process.argv.slice(2).join(" ");\nif (args.includes("ps --format json")) process.stdout.write(${JSON.stringify(JSON.stringify(psRows))});\n`);
-  return { value, signature, catalogPath: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), desired, env: { DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf", DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]) } };
+  return { value, signature, catalogPath: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), desired, env: { DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf", DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify([fakeDocker]) } };
 }
 
 for (const [crashPoint, durablePhase] of [["prepared", "prepared"], ["install-state-renamed-before-journal", "prepared"], ["state-written", "state-written"], ["runtime-mutated", "state-written"], ["runtime-reconciled", "runtime-reconciled"]]) test(`recovers atomically from a crash after ${crashPoint}`, async () => {
@@ -84,14 +84,14 @@ test("rejects a schema-invalid install state before host mutation", async () => 
   const signature = createHmac("sha256", secret).update(canonical(value)).digest("hex");
   const dir = await mkdtemp(join(tmpdir(), "dpf-transition-"));
   await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, installerVersion: "test", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: keys, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: stateHash, unexpected: true }));
-  const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf" });
+  const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, DPF_CAPABILITY_CATALOG_PATH: catalogPath.pathname.replace(/^\/(.:\/)/, "$1"), PROMOTE_COMPOSE_PROJECT: "dpf" });
   assert.equal(result.status, 78);
   assert.match(result.stderr, /install_state_schema_invalid/);
 });
 
 test("rejects a tampered transition envelope before reading state", async () => {
   const value = envelope();
-  const dir = await mkdtemp(join(tmpdir(), "dpf-secret-")); const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: "0".repeat(64), DPF_STATE_DIR: dir });
+  const dir = await mkdtemp(join(tmpdir(), "dpf-secret-")); const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: "0".repeat(64), DPF_PROMOTER_STATE_DIR: dir });
   assert.equal(result.status, 78); assert.match(result.stderr, /tampered_envelope/);
 });
 
@@ -105,7 +105,7 @@ test("fails closed before mutation when the signed catalog projection is unavail
   const dir = await mkdtemp(join(tmpdir(), "dpf-transition-"));
   await writeFile(join(dir, "install-state.json"), JSON.stringify({ schemaVersion: 1, capabilityCatalogHash: "f".repeat(64), capabilityStateVersion: "b".repeat(64) }));
   const value = envelope(); const signature = createHmac("sha256", secret).update(canonical(value)).digest("hex");
-  const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_STATE_DIR: dir, PROMOTE_COMPOSE_PROJECT: "dpf" });
+  const result = run({ DPF_RUNTIME_TRANSITION_SECRET_FILE: await secretFile(dir), DPF_RUNTIME_TRANSITION_ENVELOPE: Buffer.from(JSON.stringify(value)).toString("base64url"), DPF_RUNTIME_TRANSITION_SIGNATURE: signature, DPF_PROMOTER_STATE_DIR: dir, PROMOTE_COMPOSE_PROJECT: "dpf" });
   assert.equal(result.status, 78); assert.match(result.stderr, /capability_catalog_unreadable/);
   assert.equal(JSON.parse(await readFile(join(dir, "install-state.json"), "utf8")).capabilityCatalogHash, "f".repeat(64));
 });

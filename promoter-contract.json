@@ -1,12 +1,25 @@
 {
   "schemaVersion": 1,
+  "readinessProtocolFloorSha": "21969d012ad8ab382d47a2c59ffc955530796bd2",
   "entrypoint": "/promoter/promote.sh",
   "requiredFiles": [
     "/app/promoter-contract.json",
     "/promoter/promote.sh",
     "/promoter/portal.Dockerfile",
     "/promoter/installer/validate-install-state.mjs",
-    "/promoter/installer/install-state.schema.json"
+    "/promoter/installer/migrate-install-state.mjs",
+    "/promoter/installer/resolve-host-identity.mjs",
+    "/promoter/installer/install-state-transaction.mjs",
+    "/promoter/installer/install-state-lock-contract.json",
+    "/promoter/installer/install-state.schema.json",
+    "/promoter/installer/install-state.v1.schema.json",
+    "/promoter/installer/install-state.v2.schema.json",
+    "/promoter/installer/install-state-schema-registry.mjs",
+    "/promoter/lib/transition-signing.mjs",
+    "/promoter/lib/resolve-capability-compose-profiles.mjs",
+    "/promoter/lib/govern-capability-compose-args.mjs",
+    "/promoter/lib/capability-state-hash.mjs",
+    "/promoter/capability-service-catalog.generated.json"
   ],
   "requiredMounts": [
     { "path": "/var/run/docker.sock", "mode": "rw" },
@@ -14,12 +27,17 @@
     { "path": "/dpf-state", "mode": "rw" }
   ],
   "requiredEnvironment": [
-    "DPF_STATE_DIR",
+    "DPF_PROMOTER_STATE_DIR",
     "PROMOTE_BACKUP_PATH",
     "PROMOTE_COMPOSE_PROJECT",
     "PROMOTE_HEALTH_URL",
     "PROMOTE_SOURCE",
     "PROMOTE_TARGET_SHA"
   ],
-  "callerProtocol": { "min": 1, "max": 1 }
+  "callerProtocol": { "min": 1, "max": 1 },
+  "installStateMigration": {
+    "envelopeVersion": 1,
+    "signingModule": "/promoter/lib/transition-signing.mjs",
+    "secretMount": "/run/secrets/dpf-runtime-transition"
+  }
 }

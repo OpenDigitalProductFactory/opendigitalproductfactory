@@ -41,6 +41,19 @@ function resolveBashPath(path: string) {
 const SCRIPT = resolveBashPath(resolve(__dirname, "../../../../scripts/promote.sh"));
 const REPO_ROOT = resolve(__dirname, "../../../..");
 
+it("verifies the signed install-state handoff before reading the promotion projection", () => {
+  const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+  expect(source.indexOf('lib/transition-signing.mjs')).toBeGreaterThan(0);
+  expect(source.indexOf('lib/transition-signing.mjs')).toBeLessThan(source.indexOf('_capability_projection='));
+});
+
+it("projects legacy install state through valid dynamic ESM before readiness", () => {
+  const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+  expect(source.match(/--overlay promote --migrate/g)).toHaveLength(2);
+  expect(source).toContain('await import(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs")');
+  expect(source).not.toContain('from process.env.PROMOTER_DIR');
+});
+
 const BASE_ENV: Record<string, string> = {
   PROMOTE_SOURCE: "/opt/app/release",
   PROMOTE_TARGET_SHA: "a1b2c3d4e5f6",
@@ -58,6 +71,7 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     mkdirSync(stateDir, { recursive: true });
     copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
     copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(source, "scripts", "lib", "govern-capability-compose-args.mjs"));
+    copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(source, "scripts", "lib", "capability-state-hash.mjs"));
     copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(source, "scripts", "capability-service-catalog.generated.json"));
     const catalog = JSON.parse(readFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), "utf8")) as { catalogHash: string; capabilities: Array<{ capabilityId: string }> };
     const enabledRuntimeCapabilities = ["runtime:core"];
@@ -68,7 +82,7 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     const mapped = { ...env };
     if (mapped.PROMOTE_SOURCE !== undefined) mapped.PROMOTE_SOURCE = resolveBashPath(source);
     if (mapped.PROMOTE_BACKUP_PATH !== undefined) mapped.PROMOTE_BACKUP_PATH = resolveBashPath(join(root, basename(mapped.PROMOTE_BACKUP_PATH)));
-    const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", DPF_STATE_DIR: resolveBashPath(stateDir), ...mapped };
+    const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", DPF_PROMOTER_STATE_DIR: resolveBashPath(stateDir), ...mapped };
     const envAssignments = Object.entries(envSource).flatMap(([key, value]) => value === undefined ? [] : [`${key}=${quoteForBash(value)}`]);
     const command = ["env", "-i", 'PATH="$PATH"', ...envAssignments, "bash", quoteForBash(SCRIPT), "--self-upgrade", ...extraArgs.map(quoteForBash)].join(" ");
     return spawnSync(BASH_COMMAND, ["-lc", command], { encoding: "utf8" });
@@ -155,6 +169,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
     const STEPS = [
       "step=prepare",
       "step=backup",
+      "step=install-state-migrate",
       "step=docker-build",
       "step=migrate",
       "step=docker-up",
@@ -181,6 +196,30 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
 
     it("emits backup step", () => {
       expect(dryRunResult.stdout).toContain("step=backup");
+    });
+
+    it("migrates install state only after the governed recovery copy and before swap work", () => {
+      const scriptSource = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+      expect(dryRunResult.stdout).toContain("step=install-state-migrate");
+      expect(scriptSource.indexOf('cp "$_install_state" "$_capability_recovery"')).toBeLessThan(
+        scriptSource.indexOf('emit_step install-state-migrate'),
+      );
+      expect(scriptSource.indexOf('emit_step install-state-migrate')).toBeLessThan(
+        scriptSource.indexOf('emit_step docker-build'),
+      );
+      expect(scriptSource).toContain('--expected-source-hash "$(_migration_field sourceHash)"');
+      expect(scriptSource).toContain('--expected-projection-hash "$(_migration_field projectionHash)"');
+      expect(scriptSource).toContain('--recovery-path "$_capability_recovery"');
+    });
+
+    it("keeps rollback fault injection outside the privileged production promoter", () => {
+      const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+      expect(source).toContain("_restore_capability_snapshot");
+      expect(source).not.toContain("DPF_PROMOTE_TEST_FAIL_AT");
+      expect(source).not.toContain("DPF_PROMOTE_TEST_EVENT_LOG");
+      const workflow = readFileSync(join(REPO_ROOT, ".github/workflows/self-upgrade-acceptance.yml"), "utf8");
+      expect(workflow).toContain("node --test scripts/promote-install-state-rollback.test.mjs");
+      expect(workflow).toContain("signed-promotion-rollback.tap");
     });
 
     it("emits docker-build step", () => {

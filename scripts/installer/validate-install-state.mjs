@@ -1,7 +1,65 @@
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { currentSchemaVersion, getInstallStateSchema } from "./install-state-schema-registry.mjs";
 
-const schemaUrl = new URL("./install-state.schema.json", import.meta.url);
+const MAX_VALIDATION_ERRORS = 20;
+
+function errorCollector() {
+  return {
+    items: [],
+    truncated: false,
+    add(message) {
+      if (this.items.length < MAX_VALIDATION_ERRORS) this.items.push(message);
+      else this.truncated = true;
+    },
+    get full() { return this.items.length >= MAX_VALIDATION_ERRORS; },
+  };
+}
+
+function isLeapYear(year) {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function monthLength(year, month) {
+  return [31, isLeapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+}
+
+function daysBeforeYear(year) {
+  if (year === 0) return 0;
+  const multiplesThroughPreviousYear = (divisor) => Math.floor((year - 1) / divisor) + 1;
+  return 365 * year + multiplesThroughPreviousYear(4) - multiplesThroughPreviousYear(100) + multiplesThroughPreviousYear(400);
+}
+
+function calendarOrdinal(year, month, day) {
+  let ordinal = daysBeforeYear(year) + day - 1;
+  for (let priorMonth = 1; priorMonth < month; priorMonth += 1) ordinal += monthLength(year, priorMonth);
+  return ordinal;
+}
+
+function isRfc3339DateTime(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, offsetSign, offsetHourText, offsetMinuteText] = match;
+  const [year, month, day, hour, minute, second] = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const offsetHour = offsetHourText === undefined ? 0 : Number(offsetHourText);
+  const offsetMinute = offsetMinuteText === undefined ? 0 : Number(offsetMinuteText);
+  if (hour > 23 || minute > 59 || second > 60 || offsetHour > 23 || offsetMinute > 59) return false;
+  if (month < 1 || month > 12 || day < 1) return false;
+  if (day > monthLength(year, month)) return false;
+  if (second !== 60) return true;
+
+  const signedOffsetMinutes = (offsetHour * 60 + offsetMinute) * (offsetSign === "-" ? -1 : 1);
+  const utcTotalMinutes = calendarOrdinal(year, month, day) * 1440 + hour * 60 + minute - signedOffsetMinutes;
+  const utcOrdinal = Math.floor(utcTotalMinutes / 1440);
+  const utcMinuteOfDay = ((utcTotalMinutes % 1440) + 1440) % 1440;
+  if (utcMinuteOfDay !== 23 * 60 + 59) return false;
+  for (let candidateYear = Math.max(0, year - 1); candidateYear <= Math.min(9999, year + 1); candidateYear += 1) {
+    for (let candidateMonth = 1; candidateMonth <= 12; candidateMonth += 1) {
+      if (calendarOrdinal(candidateYear, candidateMonth, monthLength(candidateYear, candidateMonth)) === utcOrdinal) return true;
+    }
+  }
+  return false;
+}
 
 function isType(value, type) {
   if (type === "null") return value === null;
@@ -12,41 +70,67 @@ function isType(value, type) {
 }
 
 function visit(schema, value, path, errors) {
-  if (schema.const !== undefined && !Object.is(value, schema.const)) errors.push(`${path}: const`);
-  if (schema.enum && !schema.enum.some((entry) => Object.is(entry, value))) errors.push(`${path}: enum`);
+  if (errors.full) { errors.truncated = true; return; }
+  if (schema.const !== undefined && !Object.is(value, schema.const)) errors.add(`${path}: const`);
+  if (schema.enum && !schema.enum.some((entry) => Object.is(entry, value))) errors.add(`${path}: enum`);
   if (schema.type) {
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
-    if (!types.some((type) => isType(value, type))) { errors.push(`${path}: type`); return; }
+    if (!types.some((type) => isType(value, type))) { errors.add(`${path}: type`); return; }
   }
-  if (typeof value === "number" && schema.minimum !== undefined && value < schema.minimum) errors.push(`${path}: minimum`);
+  if (typeof value === "number" && schema.minimum !== undefined && value < schema.minimum) errors.add(`${path}: minimum`);
   if (typeof value === "string") {
-    if (schema.pattern && !(new RegExp(schema.pattern)).test(value)) errors.push(`${path}: pattern`);
-    if (schema.format === "date-time" && !Number.isFinite(Date.parse(value))) errors.push(`${path}: date-time format`);
+    if (schema.pattern && !(new RegExp(schema.pattern)).test(value)) errors.add(`${path}: pattern`);
+    if (schema.format === "date-time" && !isRfc3339DateTime(value)) errors.add(`${path}: date-time format`);
   }
   if (Array.isArray(value)) {
-    if (schema.uniqueItems && new Set(value.map((entry) => JSON.stringify(entry))).size !== value.length) errors.push(`${path}: uniqueItems`);
-    if (schema.items) value.forEach((entry, index) => visit(schema.items, entry, `${path}[${index}]`, errors));
+    if (schema.uniqueItems && new Set(value.map((entry) => JSON.stringify(entry))).size !== value.length) errors.add(`${path}: uniqueItems`);
+    if (schema.items) {
+      let index = 0;
+      for (; index < value.length && !errors.full; index += 1) visit(schema.items, value[index], `${path}[${index}]`, errors);
+      if (index < value.length) errors.truncated = true;
+    }
   }
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-    for (const key of schema.required ?? []) if (!Object.hasOwn(value, key)) errors.push(`${path}.${key}: required`);
+    for (const key of schema.required ?? []) if (!Object.hasOwn(value, key)) errors.add(`${path}.${key}: required`);
     const properties = schema.properties ?? {};
     for (const [key, entry] of Object.entries(value)) {
+      if (errors.full) { errors.truncated = true; break; }
       if (properties[key]) visit(properties[key], entry, `${path}.${key}`, errors);
-      else if (schema.additionalProperties === false) errors.push(`${path}.${key}: additionalProperties`);
+      else if (schema.additionalProperties === false) errors.add(`${path}.${key}: additionalProperties`);
       else if (schema.additionalProperties && typeof schema.additionalProperties === "object") visit(schema.additionalProperties, entry, `${path}.${key}`, errors);
     }
   }
   if (schema.oneOf) {
-    const matches = schema.oneOf.filter((candidate) => { const nested = []; visit(candidate, value, path, nested); return nested.length === 0; }).length;
-    if (matches !== 1) errors.push(`${path}: oneOf`);
+    const matches = schema.oneOf.filter((candidate) => { const nested = errorCollector(); visit(candidate, value, path, nested); return nested.items.length === 0; }).length;
+    if (matches !== 1) errors.add(`${path}: oneOf`);
   }
 }
 
-export async function validateInstallState(value, schemaPath = schemaUrl) {
-  const schema = JSON.parse(await readFile(schemaPath, "utf8"));
-  const errors = [];
+export async function validateInstallState(value, schemaPath) {
+  const schema = schemaPath
+    ? JSON.parse(await readFile(schemaPath, "utf8"))
+    : getInstallStateSchema(value?.schemaVersion);
+  if (!Number.isInteger(value?.schemaVersion)) return { valid: false, errors: ["$.schemaVersion: required integer"] };
+  if (value.schemaVersion > currentSchemaVersion) return { valid: false, errors: ["$: install_state_newer_than_runtime"] };
+  if (!schema) return { valid: false, errors: ["$.schemaVersion: unsupported"] };
+  const errors = errorCollector();
   visit(schema, value, "$", errors);
-  return { valid: errors.length === 0, errors };
+  if (errors.truncated) errors.items.push("$: validation_errors_truncated");
+  return { valid: errors.items.length === 0, errors: errors.items };
+}
+
+export async function parseAndValidateInstallStateBytes(bytes) {
+  try {
+    const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+    const normalized = buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf
+      ? buffer.subarray(3)
+      : buffer;
+    const value = JSON.parse(normalized.toString("utf8"));
+    const result = await validateInstallState(value);
+    return { ...result, value: result.valid ? value : undefined, schemaVersion: value?.schemaVersion };
+  } catch {
+    return { valid: false, errors: ["$: malformed_json"], value: undefined, schemaVersion: undefined };
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -56,8 +140,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exitCode = 64;
   } else {
     try {
-      const value = JSON.parse(await readFile(statePath, "utf8"));
-      const result = await validateInstallState(value);
+      const result = await parseAndValidateInstallStateBytes(await readFile(statePath));
       if (!result.valid) {
         console.error(`install-state invalid: ${result.errors.join(", ")}`);
         process.exitCode = 1;

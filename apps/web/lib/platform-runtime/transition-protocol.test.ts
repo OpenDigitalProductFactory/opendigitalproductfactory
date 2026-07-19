@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { signTransitionPayload, verifyHistoricalTransitionReceipt, verifyTransitionReceipt, type RuntimeTransitionEnvelope } from "./transition-protocol";
+import { canonicalTransitionPayload, signTransitionPayload, verifyHistoricalTransitionReceipt, verifyTransitionReceipt, type RuntimeTransitionEnvelope } from "./transition-protocol";
 
 const secret = "s".repeat(32);
 const envelope: RuntimeTransitionEnvelope = {
@@ -9,6 +9,11 @@ const envelope: RuntimeTransitionEnvelope = {
 };
 
 describe("runtime transition receipt verification", () => {
+  it("delegates to the shared runtime-neutral signing bytes", async () => {
+    const shared = await import("../../../../scripts/lib/transition-signing.mjs");
+    expect(canonicalTransitionPayload(envelope)).toBe(shared.canonicalTransitionPayload(envelope));
+    expect(signTransitionPayload(envelope, secret)).toBe(shared.signTransitionPayload(envelope, secret));
+  });
   it.each(["failed", "rolled_back", "rollback_failed"] as const)("authenticates the exact %s host outcome", (status) => {
     const unsigned = { ...envelope, status, observedServices: ["portal"], completedAt: new Date(2_000).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.previousStateHash, failure: "host_failure" };
     expect(verifyTransitionReceipt({ ...unsigned, signature: signTransitionPayload(unsigned, secret) }, secret, envelope, 2_000)).toBe(status);

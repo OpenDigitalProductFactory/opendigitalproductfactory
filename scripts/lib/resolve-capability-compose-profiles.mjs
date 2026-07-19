@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { createHash } from "node:crypto";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { governCapabilityComposeEnvironment } from "./govern-capability-compose-args.mjs";
+import { computeCapabilityStateVersion } from "./capability-state-hash.mjs";
 
 const HOSTS = new Set(["windows", "macos", "linux"]);
 const OVERLAYS = new Set(["promote", "dev", "integration-test", "linux-monitoring"]);
@@ -24,18 +24,16 @@ export const PRE_PROFILE_COMPATIBILITY_CAPABILITIES = Object.freeze([
 ]);
 
 const sortedUnique = (values) => [...new Set(values)].sort();
-const stateHash = (catalog, enabled) => {
-  const active = new Set(enabled);
-  const lines = catalog.capabilities.map(({ capabilityId }) => `${capabilityId}=${active.has(capabilityId) ? "active" : "disabled"}`).sort().join("\n");
-  return createHash("sha256").update(`${catalog.catalogHash}\n${lines}`).digest("hex");
-};
-
 export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform, overlays = [], aliases = [], composeProfiles = "", migrate = false }) {
   if (!catalog || !Array.isArray(catalog.capabilities) || typeof catalog.catalogHash !== "string") throw new Error("invalid_capability_service_catalog");
   if (hostPlatform !== undefined && !HOSTS.has(hostPlatform)) throw new Error(`invalid_host_platform:${hostPlatform}`);
   const byId = new Map(catalog.capabilities.map((entry) => [entry.capabilityId, entry]));
   const legacy = !Array.isArray(state?.enabledRuntimeCapabilities);
-  const unversioned = legacy || !state.capabilityCatalogHash || !state.capabilityStateVersion;
+  const incompleteSnapshot = !legacy
+    && (state.enabledRuntimeCapabilities.length > 0 || state.capabilityCatalogHash || state.capabilityStateVersion)
+    && (!state.capabilityCatalogHash || !state.capabilityStateVersion);
+  if (incompleteSnapshot) throw new Error("capability_state_stale");
+  const unversioned = legacy || (!state.capabilityCatalogHash && !state.capabilityStateVersion);
   if (unversioned && !migrate) throw new Error("capability_state_stale");
   const requested = legacy ? [...PRE_PROFILE_COMPATIBILITY_CAPABILITIES] : [...state.enabledRuntimeCapabilities];
   for (const alias of aliases) {
@@ -54,7 +52,7 @@ export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform,
   for (const id of requested) visit(id);
   for (const entry of catalog.capabilities) if (entry.activationPolicy === "always") visit(entry.capabilityId);
   const enabledRuntimeCapabilities = sortedUnique(enabled);
-  const capabilityStateVersion = stateHash(catalog, enabledRuntimeCapabilities);
+  const capabilityStateVersion = computeCapabilityStateVersion(catalog.catalogHash, enabledRuntimeCapabilities, catalog.capabilities.map(({ capabilityId }) => capabilityId));
   if (!unversioned && (state.capabilityCatalogHash !== catalog.catalogHash || state.capabilityStateVersion !== capabilityStateVersion)) throw new Error("capability_state_stale");
   for (const overlay of overlays) if (!OVERLAYS.has(overlay)) throw new Error(`unknown_lifecycle_profile:${overlay}`);
 
@@ -112,17 +110,18 @@ async function main() {
     const statePath = resolve(args.statePath);
     const [catalog, state] = await Promise.all([
       readFile(catalogPath, "utf8").then(JSON.parse),
-      readFile(statePath, "utf8").then(JSON.parse),
+      readFile(statePath, "utf8").then((text) => JSON.parse(text.replace(/^\uFEFF/, ""))),
     ]);
     if (!args.hostPlatform) {
       args.hostPlatform = state.platform === "win32" ? "windows" : state.platform === "darwin" ? "macos" : state.platform;
     }
-    const projection = resolveCapabilityComposeProfiles({ catalog, state, ...args });
+    let projection = resolveCapabilityComposeProfiles({ catalog, state, ...args });
     if (args.write) {
-      const updated = { ...state, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, capabilityCatalogHash: projection.capabilityCatalogHash, capabilityStateVersion: projection.capabilityStateVersion };
-      const temporary = `${statePath}.tmp`;
-      await writeFile(temporary, `${JSON.stringify(updated, null, 2)}\n`, { mode: 0o600 });
-      await rename(temporary, statePath);
+      const { updateInstallState } = await import("../installer/install-state-transaction.mjs");
+      await updateInstallState(statePath, current => {
+        projection = resolveCapabilityComposeProfiles({ catalog, state: current, ...args });
+        return { ...current, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, capabilityCatalogHash: projection.capabilityCatalogHash, capabilityStateVersion: projection.capabilityStateVersion };
+      });
     }
     process.stdout.write(`${JSON.stringify(projection)}\n`);
   } catch (error) {

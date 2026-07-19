@@ -112,8 +112,14 @@ jobs:
           # but still writes the agentToolchain block. Re-running must be a
           # no-op (no errors, same state).
           set -euo pipefail
-          bash scripts/dpf-bootstrap-agent-toolchain.sh --headless > first.txt 2>&1
-          bash scripts/dpf-bootstrap-agent-toolchain.sh --headless > second.txt 2>&1
+          bash scripts/dpf-bootstrap-agent-toolchain.sh --headless > first.txt 2>&1 || {
+            cat first.txt
+            exit 1
+          }
+          bash scripts/dpf-bootstrap-agent-toolchain.sh --headless > second.txt 2>&1 || {
+            cat second.txt
+            exit 1
+          }
           test -f "$HOME/.dpf/install-state.json"
           # Validate the agentToolchain block exists and has readinessState.
           python3 -c "

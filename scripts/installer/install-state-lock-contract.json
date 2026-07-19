@@ -1,0 +1,17 @@
+{
+  "protocolVersion": 1,
+  "lockSuffix": ".lock",
+  "reclaimSuffix": ".reclaim-",
+  "reclaimTicketLifecycle": "immutable generation tombstone; never delete or reuse",
+  "reclaimTombstoneRetention": "retain for install lifetime; stale-owner recovery is rare and unsafe concurrent garbage collection is forbidden",
+  "ownerFile": null,
+  "exclusiveClaim": "adjacent lock file create-new",
+  "defaultLeaseMs": 30000,
+  "defaultTimeoutMs": 30000,
+  "retryDelayMs": 20,
+  "tempPrefix": ".install-state.json.tmp-",
+  "recoverySuffix": ".recovery",
+  "timestampFormat": "RFC3339 UTC",
+  "expiryAuthority": "expiresAtEpoch",
+  "ownerFields": ["protocolVersion", "ownerId", "runId", "pid", "hostname", "acquiredAt", "expiresAt", "expiresAtEpoch"]
+}

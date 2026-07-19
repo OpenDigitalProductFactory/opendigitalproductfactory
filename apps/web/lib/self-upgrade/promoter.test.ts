@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -29,6 +30,18 @@ const BASE = {
   backupPath: "/backups/self-upgrade/run-1",
   healthUrl: "http://localhost:3000/api/health",
 };
+
+it("mechanically closes every Dockerfile.promoter COPY input through portal baking and JIT staging", () => {
+  const root = resolve(__dirname, "../../../..");
+  const promoterDockerfile = readFileSync(join(root, "Dockerfile.promoter"), "utf8");
+  const portalDockerfile = readFileSync(join(root, "Dockerfile"), "utf8");
+  const sources = [...promoterDockerfile.matchAll(/^COPY\s+(\S+)\s+\S+/gm)].map((match) => match[1]);
+  for (const source of sources) {
+    const baked = source === "promoter-contract.json" ? "/promoter/promoter-contract.json" : `/promoter/${source}`;
+    expect(portalDockerfile, `portal image must bake ${source}`).toMatch(new RegExp(`^COPY\\s+${source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+${baked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));
+    expect(PROMOTER_JIT_BUILD_SCRIPT, `JIT recipe must stage ${source}`).toContain(`cp ${baked} \"$BDIR/${source}\"`);
+  }
+});
 
 describe("validateResolvedPromoterArtifact", () => {
   const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });
@@ -82,6 +95,25 @@ describe("buildPromoterReadinessCommand", () => {
     expect(args).toContain(`${readinessParams.stateDirHostPath}:/dpf-state:ro`);
     expect(args).toContain(`${readinessParams.backupHostPath}:/backups:ro`);
     expect(args).toContain("DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
+  });
+
+  it("passes verified host provenance while keeping install state read-only", () => {
+    const artifact = { digest: `sha256:${"a".repeat(64)}`, sourceSha: "abc1234", contractSchema: 1, contractDigest: `sha256:${"b".repeat(64)}`, callerProtocol: { min: 1, max: 1 } } as const;
+    const { args } = buildPromoterReadinessCommand({ ...BASE, stateDirHostPath: "/state", artifact, hostIdentity: { platform: "linux", arch: "arm64", provenance: "explicit" } });
+    expect(args).toContain("/state:/dpf-state:ro");
+    expect(args).toContain("DPF_HOST_PLATFORM=linux");
+    expect(args).toContain("DPF_HOST_IDENTITY_PROVENANCE=explicit");
+  });
+});
+
+describe("install-state migration promotion carrier", () => {
+  it("mounts the existing secret read-only and forwards the exact signed object", () => {
+    const encoded = Buffer.from(JSON.stringify({ runId: "SUR-1" })).toString("base64url");
+    const digest = `sha256:${"d".repeat(64)}`;
+    const { args } = buildPromoterCommand({ ...BASE, promoterImage: digest, stateDirHostPath: "/state", installStateMigrationEnvelope: encoded, installStateMigrationSignature: "a".repeat(64), installStateMigrationRunId: "SUR-1" });
+    expect(args).toContain("/state/runtime-transition.secret:/run/secrets/dpf-runtime-transition:ro");
+    expect(args).toContain(`DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${encoded}`);
+    expect(args).toContain(`DPF_PROMOTER_DIGEST=${digest}`);
   });
 });
 
@@ -181,7 +213,8 @@ describe("buildPromoterCommand", () => {
   it("mounts lifecycle state for an ordinary self-upgrade", () => {
     const { args } = buildPromoterCommand({ ...BASE, stateDirHostPath: "/host/.dpf" });
     expect(args).toContain("/host/.dpf:/dpf-state");
-    expect(args).toContain("DPF_STATE_DIR=/dpf-state");
+    expect(args).toContain("DPF_PROMOTER_STATE_DIR=/dpf-state");
+    expect(args).not.toContain("DPF_STATE_DIR=/dpf-state");
   });
 
   it("gives transition mode only the state mount as writable and signs fixed protocol env", () => {
@@ -190,7 +223,8 @@ describe("buildPromoterCommand", () => {
     expect(args.join(" ")).not.toContain("x".repeat(32));
     expect(args).toContain("/Users/me/dpf:/host-source:ro");
     expect(args).toContain("/host/.dpf:/dpf-state");
-    expect(args).toContain("DPF_STATE_DIR=/dpf-state");
+    expect(args).toContain("DPF_PROMOTER_STATE_DIR=/dpf-state");
+    expect(args).not.toContain("DPF_STATE_DIR=/dpf-state");
     expect(args).toContain(`DPF_RUNTIME_TRANSITION_ENVELOPE=${envelope}`);
     expect(args.filter((arg) => arg.includes(":/host-source") && !arg.endsWith(":ro"))).toEqual([]);
   });
@@ -332,7 +366,7 @@ describe("runtime transition promoter entrypoint", () => {
     const script = resolve(process.cwd(), "../../scripts/promote.sh");
     const stateDir = await mkdtemp(join(tmpdir(), "dpf-promoter-test-"));
     try {
-      vi.stubEnv("DPF_STATE_DIR", stateDir);
+      vi.stubEnv("DPF_PROMOTER_STATE_DIR", stateDir);
       vi.stubEnv("DPF_RUNTIME_TRANSITION_SECRET_FILE", join(stateDir, "missing-secret"));
       const result = await runProcessWithBudget(testBash, [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
       expect(result.exitCode).toBe(78);

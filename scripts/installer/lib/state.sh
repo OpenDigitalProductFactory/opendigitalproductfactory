@@ -21,11 +21,13 @@ fi
 
 # Current schema version this installer expects. Bump when adding
 # required fields or breaking-changing existing field semantics.
-DPF_STATE_SCHEMA_VERSION=1
+DPF_STATE_SCHEMA_VERSION=2
 
 # Resolve state directory honoring XDG_STATE_HOME on Linux.
 dpf_state_dir() {
-  if [ -n "${XDG_STATE_HOME:-}" ]; then
+  if [ -n "${DPF_STATE_DIR:-}" ]; then
+    echo "${DPF_STATE_DIR}"
+  elif [ -n "${XDG_STATE_HOME:-}" ]; then
     echo "${XDG_STATE_HOME}/dpf"
   else
     echo "${HOME}/.dpf"
@@ -34,6 +36,127 @@ dpf_state_dir() {
 
 dpf_state_path() {
   echo "$(dpf_state_dir)/install-state.json"
+}
+
+dpf_state_validator_path() {
+  local lib_dir
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  echo "$(dirname "$lib_dir")/validate-install-state.mjs"
+}
+
+dpf_state_migrator_path() {
+  local lib_dir
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  echo "$(dirname "$lib_dir")/migrate-install-state.mjs"
+}
+
+dpf_state_catalog_path() {
+  local lib_dir
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  echo "$(dirname "$(dirname "$lib_dir")")/lib/capability-service-catalog.generated.json"
+}
+
+dpf_state_owner_id() {
+  if command -v uuidgen >/dev/null 2>&1; then uuidgen | tr 'A-Z' 'a-z'; else echo "$$-$(date +%s)-${RANDOM:-0}"; fi
+}
+
+dpf_state_rfc3339_epoch() {
+  if date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ >/dev/null 2>&1; then date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ
+  else date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ; fi
+}
+
+dpf_state_active_reclaim_first() {
+  local lock="$1" now ticket expiry target current ticket_pid ticket_host local_host
+  now="$(date +%s)"
+  local_host="$(hostname)"
+  current="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"
+  for ticket in "${lock}.reclaim-"*; do
+    [ -f "$ticket" ] || continue
+    target="$(sed -n 's/.*"targetOwnerId":"\([^"]*\)".*/\1/p' "$ticket" 2>/dev/null)"
+    [ -n "$current" ] && [ "$target" = "$current" ] || continue
+    expiry="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$ticket" 2>/dev/null)"
+    ticket_pid="$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$ticket" 2>/dev/null)"; ticket_host="$(sed -n 's/.*"hostname":"\([^"]*\)".*/\1/p' "$ticket" 2>/dev/null)"
+    if { [ -n "$expiry" ] && [ "$expiry" -gt "$now" ]; } || { [ "$ticket_host" = "$local_host" ] && kill -0 "$ticket_pid" 2>/dev/null; }; then echo "$ticket"; return 0; fi
+  done
+  return 1
+}
+
+dpf_state_lock_acquire() {
+  local path="$1" lock="${1}.lock" owner_id run_id host now expires deadline
+  owner_id="$(dpf_state_owner_id)"; run_id="${DPF_RUN_ID:-$(dpf_state_owner_id)}"; host="$(hostname)"; deadline=$(( $(date +%s) + 30 ))
+  while :; do
+    if dpf_state_active_reclaim_first "$lock" >/dev/null; then now="$(date +%s)"; [ "$now" -ge "$deadline" ] && return 1; sleep 0.05; continue; fi
+    if ( set -C; : > "$lock" ) 2>/dev/null; then
+      if dpf_state_active_reclaim_first "$lock" >/dev/null; then rm -f "$lock"; sleep 0.05; continue; fi
+      break
+    fi
+    now="$(date +%s)"
+    local lock_expires lock_pid lock_host
+    lock_expires="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$lock" 2>/dev/null)"
+    lock_pid="$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$lock" 2>/dev/null)"
+    lock_host="$(sed -n 's/.*"hostname":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"
+    if [ -n "$lock_expires" ] && [ "$lock_expires" -le "$now" ] && { [ "$lock_host" != "$host" ] || ! kill -0 "$lock_pid" 2>/dev/null; }; then
+      local stale_owner generation reclaim
+      stale_owner="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"
+      generation="$(printf '%s' "$stale_owner" | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | awk '{print substr($1,1,24)}')"
+      local reclaim="${lock}.reclaim-${generation}"
+      local reclaim_elected=0
+      if ( set -C; : > "$reclaim" ) 2>/dev/null; then
+        printf '{"protocolVersion":1,"ownerId":"%s","runId":"%s","targetOwnerId":"%s","pid":%s,"hostname":"%s","acquiredAt":"%s","expiresAt":"%s","expiresAtEpoch":%s}\n' "$owner_id" "$run_id" "$stale_owner" "$$" "$host" "$(dpf_state_rfc3339_epoch "$now")" "$(dpf_state_rfc3339_epoch "$((now + 5))")" "$((now + 5))" > "$reclaim"
+        reclaim_elected=1
+      else
+        local reclaim_target reclaim_expiry reclaim_pid reclaim_host
+        reclaim_target="$(sed -n 's/.*"targetOwnerId":"\([^"]*\)".*/\1/p' "$reclaim" 2>/dev/null)"; reclaim_expiry="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$reclaim" 2>/dev/null)"
+        reclaim_pid="$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$reclaim" 2>/dev/null)"; reclaim_host="$(sed -n 's/.*"hostname":"\([^"]*\)".*/\1/p' "$reclaim" 2>/dev/null)"
+        if [ "$reclaim_target" = "$stale_owner" ] && [ -n "$reclaim_expiry" ] && [ "$reclaim_expiry" -le "$now" ] && { [ "$reclaim_host" != "$host" ] || ! kill -0 "$reclaim_pid" 2>/dev/null; }; then reclaim_elected=1; fi
+      fi
+      if [ "$reclaim_elected" = 1 ]; then
+        current="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"; lock_expires="$(sed -n 's/.*"expiresAtEpoch":\([0-9][0-9]*\).*/\1/p' "$lock" 2>/dev/null)"
+        if [ "$current" = "$stale_owner" ] && [ -n "$lock_expires" ] && [ "$lock_expires" -le "$now" ]; then mv "$lock" "${lock}.stale-${owner_id}" 2>/dev/null && rm -f "${lock}.stale-${owner_id}"; fi
+        continue
+      fi
+    fi
+    [ "$now" -ge "$deadline" ] && { echo "install_state_lock_timeout" >&2; return 1; }
+    sleep 0.05
+  done
+  now="$(date +%s)"; expires=$((now + 30))
+  printf '{"protocolVersion":1,"ownerId":"%s","runId":"%s","pid":%s,"hostname":"%s","acquiredAt":"%s","expiresAt":"%s","expiresAtEpoch":%s}\n' "$owner_id" "$run_id" "$$" "$host" "$(dpf_state_rfc3339_epoch "$now")" "$(dpf_state_rfc3339_epoch "$expires")" "$expires" > "$lock"
+  DPF_STATE_LOCK_OWNER_ID="$owner_id"; export DPF_STATE_LOCK_OWNER_ID
+}
+
+dpf_state_lock_release() {
+  local lock="${1}.lock" current
+  current="$(sed -n 's/.*"ownerId":"\([^"]*\)".*/\1/p' "$lock" 2>/dev/null)"
+  if [ -n "$current" ] && [ "$current" = "${DPF_STATE_LOCK_OWNER_ID:-}" ]; then rm -f "$lock"; fi
+}
+
+dpf_state_cleanup_temps() {
+  local path="$1" directory base temp
+  directory="$(dirname "$path")"; base="$(basename "$path")"
+  for temp in "$directory/.${base}.tmp-"*; do [ -f "$temp" ] && rm -f "$temp"; done
+}
+
+dpf_state_temp_path() { echo "$(dirname "$1")/.$(basename "$1").tmp-${DPF_STATE_LOCK_OWNER_ID}"; }
+
+dpf_state_validate_file() {
+  node "$(dpf_state_validator_path)" "$1" >/dev/null
+}
+
+dpf_state_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi
+}
+
+dpf_state_flush_file() {
+  if command -v python3 >/dev/null 2>&1; then python3 -c 'import os,sys; f=open(sys.argv[1],"r+b"); os.fsync(f.fileno()); f.close()' "$1"; else sync; fi
+}
+
+dpf_state_commit_candidate() {
+  local path="$1" temp="$2"
+  dpf_state_validate_file "$temp" || return 1
+  if [ -n "${DPF_STATE_SOURCE_SHA:-}" ] && [ "$(dpf_state_sha256 "$path")" != "$DPF_STATE_SOURCE_SHA" ]; then echo "install_state_cas_mismatch" >&2; return 1; fi
+  dpf_state_flush_file "$temp" || return 1
+  mv -f "$temp" "$path" || return 1
+  dpf_state_validate_file "$path"
 }
 
 # Initialize a fresh state file at the canonical path. Idempotent —
@@ -45,18 +168,21 @@ dpf_state_init() {
   local state_dir; state_dir="$(dpf_state_dir)"
   local path; path="$(dpf_state_path)"
 
-  if [ -f "$path" ]; then
-    return 0
-  fi
-
   mkdir -p "$state_dir"
   dpf_platform
   dpf_arch
+  case "$DPF_PLATFORM" in darwin|linux|win32) ;; *) echo "dpf_state_init: unsupported platform" >&2; return 1 ;; esac
+  case "$DPF_ARCH" in arm64|amd64) ;; *) echo "dpf_state_init: unsupported architecture" >&2; return 1 ;; esac
+  dpf_state_lock_acquire "$path" || return 1
+  dpf_state_cleanup_temps "$path"
+  if [ -f "$path" ]; then dpf_state_lock_release "$path"; return 0; fi
+  DPF_STATE_SOURCE_SHA=""
 
   # Build the initial JSON. Keep it shell-only for bash 3.2 portability;
   # don't reach for jq here so the install can bootstrap on hosts that
   # haven't installed jq yet.
-  cat > "$path" <<EOF
+  local initial_json
+  initial_json=$(cat <<EOF
 {
   "schemaVersion": ${DPF_STATE_SCHEMA_VERSION},
   "installerVersion": "${installer_version}",
@@ -84,7 +210,12 @@ dpf_state_init() {
   "lastDoctorBundlePath": null
 }
 EOF
-  chmod 600 "$path"
+)
+  local temp; temp="$(dpf_state_temp_path "$path")"
+  printf '%s\n' "$initial_json" > "$temp"
+  dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+  dpf_state_lock_release "$path"
+  chmod 600 "$path" 2>/dev/null || true
 }
 
 # Read a top-level key from the state file. Uses jq if available,
@@ -125,41 +256,41 @@ dpf_state_write() {
     echo "dpf_state_write: state file missing; call dpf_state_init first" >&2
     return 1
   fi
+  dpf_state_lock_acquire "$path" || return 1
+  dpf_state_cleanup_temps "$path"
+  DPF_STATE_SOURCE_SHA="$(dpf_state_sha256 "$path")"
+  local temp; temp="$(dpf_state_temp_path "$path")"
   if command -v jq >/dev/null 2>&1; then
-    local tmp; tmp="$(mktemp)"
+    local json_value
     if [ "$value" = "true" ] || [ "$value" = "false" ] || [ "$value" = "null" ]; then
-      jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$tmp"
+      json_value="$value"
     elif echo "$value" | grep -qE '^-?[0-9]+(\.[0-9]+)?$'; then
-      jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$tmp"
+      json_value="$value"
     else
-      jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$path" > "$tmp"
+      json_value="$(printf '%s' "$value" | jq -Rs .)"
     fi
-    mv "$tmp" "$path"
-    chmod 600 "$path"
+    jq --arg k "$key" --argjson v "$json_value" '.[$k] = $v' "$path" > "$temp" || { dpf_state_lock_release "$path"; return 1; }
+    dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+    dpf_state_lock_release "$path"
+    chmod 600 "$path" 2>/dev/null || true
   elif command -v python3 >/dev/null 2>&1; then
-    python3 - "$path" "$key" "$value" <<'PY'
-import json, sys
-path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path) as f:
-    d = json.load(f)
-# Try to coerce numerics; fall back to string.
-if value in ("true", "false"):
-    d[key] = (value == "true")
-elif value == "null":
-    d[key] = None
-else:
-    try:
-        d[key] = int(value)
-    except ValueError:
-        try:
-            d[key] = float(value)
-        except ValueError:
-            d[key] = value
-with open(path, "w") as f:
-    json.dump(d, f, indent=2)
+    local json_value
+    if [ "$value" = "true" ] || [ "$value" = "false" ] || [ "$value" = "null" ] || echo "$value" | grep -qE '^-?[0-9]+(\.[0-9]+)?$'; then
+      json_value="$value"
+    else
+      json_value="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$value")"
+    fi
+    python3 - "$path" "$temp" "$key" "$json_value" <<'PY'
+import json,sys
+with open(sys.argv[1]) as f: state=json.load(f)
+state[sys.argv[3]]=json.loads(sys.argv[4])
+with open(sys.argv[2],"w",encoding="utf-8") as f: json.dump(state,f,indent=2)
 PY
-    chmod 600 "$path"
+    dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+    dpf_state_lock_release "$path"
+    chmod 600 "$path" 2>/dev/null || true
   else
+    dpf_state_lock_release "$path"
     echo "dpf_state_write: needs jq or python3 to update JSON" >&2
     return 1
   fi
@@ -190,17 +321,15 @@ dpf_state_validate() {
   return 0
 }
 
-# Forward-migrate the state file. Currently a stub since
-# DPF_STATE_SCHEMA_VERSION=1; future versions add cases here.
+# Forward-migrate through the single Node schema owner. Bash transports verified
+# host identity and never stamps schemaVersion independently.
 # Args: none
 dpf_state_migrate() {
   local file_ver; file_ver="$(dpf_state_read schemaVersion)"
   echo "dpf_state_migrate: migrating state from schema $file_ver to $DPF_STATE_SCHEMA_VERSION"
-  # Future: per-version migration cases.
-  # case "$file_ver" in
-  #   1) <migrate from 1 to 2> ;;
-  # esac
-  dpf_state_write schemaVersion "$DPF_STATE_SCHEMA_VERSION"
+  dpf_platform || return 1
+  dpf_arch || return 1
+  node "$(dpf_state_migrator_path)" --state "$(dpf_state_path)" --catalog "$(dpf_state_catalog_path)" --host-platform "$DPF_PLATFORM" --host-arch "$DPF_ARCH" --write
 }
 
 # Write a top-level key whose value is a JSON object/array/literal. Used by
@@ -217,27 +346,33 @@ dpf_state_write_json() {
     echo "dpf_state_write_json: state file missing; call dpf_state_init first" >&2
     return 1
   fi
+  dpf_state_lock_acquire "$path" || return 1
+  dpf_state_cleanup_temps "$path"
+  DPF_STATE_SOURCE_SHA="$(dpf_state_sha256 "$path")"
+  local temp; temp="$(dpf_state_temp_path "$path")"
   if command -v jq >/dev/null 2>&1; then
-    local tmp; tmp="$(mktemp)"
-    jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$tmp"
-    mv "$tmp" "$path"
-    chmod 600 "$path"
+    printf '%s' "$value" | jq -e . >/dev/null
+    jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$temp" || { dpf_state_lock_release "$path"; return 1; }
+    dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+    dpf_state_lock_release "$path"
+    chmod 600 "$path" 2>/dev/null || true
     return 0
   fi
   if command -v python3 >/dev/null 2>&1; then
-    python3 - "$path" "$key" "$value" <<'PY'
-import json, sys
-path, key, value_text = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path) as f:
-    state = json.load(f)
-state[key] = json.loads(value_text)
-with open(path, "w") as f:
-    json.dump(state, f, indent=2)
+    python3 -c 'import json,sys; json.loads(sys.argv[1])' "$value"
+    python3 - "$path" "$temp" "$key" "$value" <<'PY'
+import json,sys
+with open(sys.argv[1]) as f: state=json.load(f)
+state[sys.argv[3]]=json.loads(sys.argv[4])
+with open(sys.argv[2],"w",encoding="utf-8") as f: json.dump(state,f,indent=2)
 PY
-    chmod 600 "$path"
+    dpf_state_commit_candidate "$path" "$temp" || { rm -f "$temp"; dpf_state_lock_release "$path"; return 1; }
+    dpf_state_lock_release "$path"
+    chmod 600 "$path" 2>/dev/null || true
     return 0
   fi
   echo "dpf_state_write_json: needs jq or python3 to update JSON object/array values" >&2
+  dpf_state_lock_release "$path"
   return 1
 }
 

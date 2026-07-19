@@ -18,7 +18,7 @@ _readiness=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 if [[ "${1:-}" == "--runtime-transition-secret-rotation" ]]; then
-  exec node "$_promoter_dir/rotate-runtime-transition-secret.mjs" --state-dir "${DPF_STATE_DIR:-/dpf-state}" --rotate
+  exec node "$_promoter_dir/rotate-runtime-transition-secret.mjs" --state-dir "${DPF_PROMOTER_STATE_DIR:-/dpf-state}" --rotate
 elif [[ "${1:-}" == "--runtime-transition-authority" ]]; then
   _operation="${2:-}"
   _transition_id="${3:-}"
@@ -57,7 +57,7 @@ if [[ $_readiness -eq 1 ]]; then
   [[ -d "${PROMOTE_SOURCE:-}" && -r "${PROMOTE_SOURCE:-}" ]] || _readiness_failures+=(source_mount_unreadable)
   [[ -n "${PROMOTE_TARGET_SHA:-}" ]] || _readiness_failures+=(target_sha_missing)
   [[ -n "${PROMOTE_HEALTH_URL:-}" ]] || _readiness_failures+=(health_url_missing)
-  _state_dir="${DPF_STATE_DIR:-/dpf-state}"
+  _state_dir="${DPF_PROMOTER_STATE_DIR:-/dpf-state}"
   _state_file="$_state_dir/install-state.json"
   [[ -d "$_state_dir" && -r "$_state_dir" ]] || _readiness_failures+=(state_mount_unreadable)
   _state_validator="$_promoter_dir/installer/validate-install-state.mjs"
@@ -65,8 +65,19 @@ if [[ $_readiness -eq 1 ]]; then
     _readiness_failures+=(install_state_invalid)
   fi
   _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"
-  if [[ ! -f "$_profile_adapter" ]] || ! node "$_profile_adapter" --state "$_state_file" --overlay promote >/dev/null 2>&1; then
+  if [[ ! -f "$_profile_adapter" ]] || ! node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate >/dev/null 2>&1; then
     _readiness_failures+=(capability_projection_failed)
+  fi
+  _migration_projection=""
+  if [[ -n "${DPF_HOST_PLATFORM:-}" && -n "${DPF_HOST_ARCH:-}" ]]; then
+    _migration_projection="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" node --input-type=module -e '
+      import { readFile } from "node:fs/promises"; const { projectInstallState } = await import(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs");
+      const bytes=await readFile(process.env.STATE_FILE); const source=JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,"")); const catalog=JSON.parse(await readFile(process.env.PROMOTER_DIR+"/capability-service-catalog.generated.json","utf8"));
+      const p=process.env.DPF_HOST_PLATFORM; const hostIdentity={platform:p,arch:process.env.DPF_HOST_ARCH,provenance:process.env.DPF_HOST_IDENTITY_PROVENANCE,capabilityHostPlatform:p==="win32"?"windows":p==="darwin"?"macos":p};
+      const r=await projectInstallState({bytes,hostIdentity,catalog}); process.stdout.write(JSON.stringify({sourceHash:r.sourceHash,projectionHash:r.projectionHash,migrationRequired:r.migrationRequired,fromSchemaVersion:source.schemaVersion??1,toSchemaVersion:r.projectedState.schemaVersion}));
+    ' 2>/dev/null)" || _readiness_failures+=(install_state_projection_failed)
+  else
+    _readiness_failures+=(host_identity_missing)
   fi
   [[ -n "${PROMOTE_COMPOSE_PROJECT:-}" ]] || _readiness_failures+=(compose_identity_missing)
   [[ -n "${PROMOTE_BACKUP_PATH:-}" && -d "$(dirname "${PROMOTE_BACKUP_PATH:-/missing}")" ]] || _readiness_failures+=(recovery_parent_unavailable)
@@ -81,7 +92,7 @@ if [[ $_readiness -eq 1 ]]; then
     printf ']}\n'
     exit 78
   fi
-  printf '{"stage":"preflight","result":"ready","quiescenceBegan":false,"failures":[]}\n'
+  printf '%s\n' "$_migration_projection" | jq -c '. + {stage:"preflight",result:"ready",quiescenceBegan:false,failures:[]}'
   exit 0
 fi
 
@@ -99,39 +110,30 @@ if [[ ${#_missing[@]} -gt 0 ]]; then
   exit 1
 fi
 
+if [[ $_dry_run -eq 0 ]]; then
+  [[ -n "${DPF_INSTALL_STATE_MIGRATION_ENVELOPE:-}" && -n "${DPF_INSTALL_STATE_MIGRATION_SIGNATURE:-}" ]] || { printf 'error: install_state_migration_handoff_missing\n' >&2; exit 78; }
+  node "$_promoter_dir/lib/transition-signing.mjs" >/dev/null || exit $?
+fi
+
 # Resolve the exact runtime profile closure from the governed install snapshot.
 # A stale catalog/state pair fails before Docker mutation. Copy the snapshot to
 # the recovery point and restore it atomically if any later promotion step fails.
-_install_state="${DPF_STATE_DIR:-/dpf-state}/install-state.json"
+_install_state="${DPF_PROMOTER_STATE_DIR:-/dpf-state}/install-state.json"
 _profile_adapter="$PROMOTE_SOURCE/scripts/lib/resolve-capability-compose-profiles.mjs"
 [[ -f "$_install_state" && -f "$_profile_adapter" ]] || { printf 'error: capability_state_stale\n' >&2; exit 1; }
-_capability_projection="$(node "$_profile_adapter" --state "$_install_state" --overlay promote)" || exit $?
+_capability_projection="$(node "$_profile_adapter" --state "$_install_state" --overlay promote --migrate)" || exit $?
 export COMPOSE_PROFILES="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
 _capability_recovery="$PROMOTE_BACKUP_PATH/install-state.json"
 _restore_capability_snapshot() {
   if [[ -f "$_capability_recovery" ]]; then
-    _tmp="${_install_state}.rollback.$$"
-    cp "$_capability_recovery" "$_tmp" && mv "$_tmp" "$_install_state"
+    node "$_promoter_dir/installer/install-state-transaction.mjs" restore \
+      --state "$_install_state" --recovery-path "$_capability_recovery"
   fi
 }
 if [[ $_dry_run -eq 0 ]]; then
   mkdir -p "$PROMOTE_BACKUP_PATH"
   cp "$_install_state" "$_capability_recovery"
   trap '_rc=$?; if [[ $_rc -ne 0 ]]; then _restore_capability_snapshot; fi' EXIT
-fi
-
-# The promoter runs with DPF_STATE_DIR=/dpf-state so the steps above can read the
-# install snapshot from its own mount. That value must NOT leak into the compose
-# recreates below: the portal service binds `${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state`,
-# and Docker Compose lets the shell env override --env-file, so /dpf-state would be
-# used as the HOST source — which Docker Desktop cannot share (mounts denied at
-# step=migrate; BI-25FEB6BA, a #3272 regression). Re-point DPF_STATE_DIR to the
-# install's host state dir (from the compose env file) for every compose call below.
-# Do NOT `unset` it — an unset DPF_STATE_DIR falls back to ${HOME}/.dpf = /root/.dpf
-# under the root-run promoter, reintroducing the original mounts-denied bug (#3262).
-if [[ -n "${PROMOTE_COMPOSE_ENV_FILE:-}" && -f "$PROMOTE_COMPOSE_ENV_FILE" ]]; then
-  _host_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$PROMOTE_COMPOSE_ENV_FILE" | tail -1)"
-  if [[ -n "$_host_state_dir" ]]; then export DPF_STATE_DIR="$_host_state_dir"; fi
 fi
 
 # Compose chain used to rebuild/recreate the portal. The orchestrator passes
@@ -233,6 +235,34 @@ if [[ $_dry_run -eq 0 ]]; then
   printf '%s\n' "${_prev_sha:-unknown}" > "$PROMOTE_BACKUP_PATH/previous-sha.txt" 2>/dev/null || true
 fi
 
+# Persist the exact projection approved during candidate readiness. The portal
+# has already quiesced before launching this promoter, and the byte-for-byte
+# recovery copy above is durable. Reverify the signed, run- and digest-bound
+# carrier against the current source bytes, then let the canonical migrator and
+# shared lock/CAS transaction perform the only write. Any later nonzero exit is
+# handled by the existing EXIT trap, which restores these exact legacy bytes
+# before the baseline is resumed.
+emit_step install-state-migrate
+if [[ $_dry_run -eq 0 ]]; then
+  _migration_envelope="$(node "$_promoter_dir/lib/transition-signing.mjs")" || exit $?
+  _migration_field() {
+    printf '%s' "$_migration_envelope" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);const p=process.argv[1].split(".");let x=v;for(const k of p)x=x?.[k];if(typeof x!=="string"&&typeof x!=="number")process.exit(2);process.stdout.write(String(x))})' "$1"
+  }
+  _migration_from="$(_migration_field fromSchemaVersion)"
+  _migration_to="$(_migration_field toSchemaVersion)"
+  if [[ "$_migration_from" != "$_migration_to" ]]; then
+    node "$_promoter_dir/installer/migrate-install-state.mjs" \
+      --state "$_install_state" \
+      --catalog "$_promoter_dir/capability-service-catalog.generated.json" \
+      --host-platform "$(_migration_field hostIdentity.platform)" \
+      --host-arch "$(_migration_field hostIdentity.arch)" \
+      --expected-source-hash "$(_migration_field sourceHash)" \
+      --expected-projection-hash "$(_migration_field projectionHash)" \
+      --recovery-path "$_capability_recovery" \
+      --write >/dev/null
+  fi
+fi
+
 # Real platform version from the source's git release tags, baked into the new
 # image so the portal keeps showing a real version (not version.json) after a
 # self-upgrade. safe.directory: the mounted source is owned by the host user,
@@ -285,13 +315,10 @@ if [[ $_dry_run -eq 0 ]]; then
     exit 1
   fi
   export DPF_VERSION="$_built_sha"
-  # Force the classic BuildKit build path (via the docker daemon) instead of
-  # Compose Bake. The promoter image's Compose can default to Bake, which
-  # requires the buildx CLI plugin — absent in the promoter — and fails every
-  # self-upgrade at docker-build with "Docker Compose is configured to build
-  # using Bake, but buildx isn't installed". This matches the working manual
-  # `docker compose build` path. (Self-upgrade docker-build failures, 2026-06-06.)
-  export COMPOSE_BAKE=false
+  # The promoter carries the Buildx plugin as part of its immutable toolchain.
+  # Use Compose Bake so current daemons never fall back to the legacy builder,
+  # whose image export can reference layers already absent from its store.
+  export COMPOSE_BAKE=true
   # Build portal AND postgres. postgres is now a first-party built image
   # (docker/postgres/Dockerfile — pgvector + baked init script, BI-4796D52B);
   # building it here guarantees the image exists before any recreate, and the

@@ -4,9 +4,10 @@
   "title": "DPF promoter contract",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "entrypoint", "requiredFiles", "requiredMounts", "requiredEnvironment", "callerProtocol"],
+  "required": ["schemaVersion", "readinessProtocolFloorSha", "entrypoint", "requiredFiles", "requiredMounts", "requiredEnvironment", "callerProtocol", "installStateMigration"],
   "properties": {
     "schemaVersion": { "const": 1 },
+    "readinessProtocolFloorSha": { "const": "21969d012ad8ab382d47a2c59ffc955530796bd2" },
     "entrypoint": { "const": "/promoter/promote.sh" },
     "requiredFiles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^/" } },
     "requiredMounts": {
@@ -20,6 +21,15 @@
     "callerProtocol": {
       "type": "object", "additionalProperties": false, "required": ["min", "max"],
       "properties": { "min": { "type": "integer", "minimum": 1 }, "max": { "type": "integer", "minimum": 1 } }
+    },
+    "installStateMigration": {
+      "type": "object", "additionalProperties": false,
+      "required": ["envelopeVersion", "signingModule", "secretMount"],
+      "properties": {
+        "envelopeVersion": { "const": 1 },
+        "signingModule": { "const": "/promoter/lib/transition-signing.mjs" },
+        "secretMount": { "const": "/run/secrets/dpf-runtime-transition" }
+      }
     }
   }
 }

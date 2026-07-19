@@ -41,12 +41,15 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DPF_N1_PROJECT: dpf-n1-${{ github.run_id }}-${{ github.run_attempt }}
       DPF_N1_EVIDENCE: ${{ github.workspace }}/.dpf-n1-evidence
+      DPF_PROMOTER_READINESS_PROTOCOL_FLOOR_SHA: 21969d012ad8ab382d47a2c59ffc955530796bd2
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Fast harness invariants
-        run: node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs
+        run: |
+          test "$(node -p "require('./promoter-contract.json').readinessProtocolFloorSha")" = "$DPF_PROMOTER_READINESS_PROTOCOL_FLOOR_SHA"
+          node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs
       - name: Build candidate promoter with immutable contract identity
         run: |
           contract_digest="sha256:$(sha256sum promoter-contract.json | cut -d' ' -f1)"
@@ -61,16 +64,61 @@ jobs:
           mkdir -p "$DPF_N1_EVIDENCE" "$RUNNER_TEMP/dpf-state" "$RUNNER_TEMP/dpf-backups"
           printf '%s\n' "{\"candidateSha\":\"${GITHUB_SHA}\",\"candidateDigest\":\"${image_digest}\",\"contractDigest\":\"${contract_digest}\"}" > "$DPF_N1_EVIDENCE/artifact.json"
           echo "DPF_ACCEPTANCE_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Signed promotion rollback restores exact legacy state
+        run: |
+          node --test scripts/promote-install-state-rollback.test.mjs \
+            | tee "$DPF_N1_EVIDENCE/signed-promotion-rollback.tap"
+      - name: Resolve N-1 baseline
+        id: baseline
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$PR_NUMBER" ] && [ -n "$PR_BASE_SHA" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&base=main&sort=updated&direction=desc&per_page=1" --jq '.[0] | [.number, .base.sha] | @tsv')"
+          if [ -z "$latest" ] || [ "$latest" = $'null\tnull' ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            printf '%s\n' '{"result":"skipped","reason":"no-open-main-pr"}' > "$DPF_N1_EVIDENCE/n-minus-one-evidence.json"
+            exit 0
+          fi
+          IFS=$'\t' read -r pr_number base_sha <<< "$latest"
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+      - name: Execute real N-1 baseline-to-candidate gate
+        if: github.event_name != 'pull_request' && steps.baseline.outputs.should_run == 'true'
+        env:
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          candidate_ref="$GITHUB_SHA"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            candidate_ref="refs/pull/${EVENT_PR_NUMBER}/merge"
+          fi
+          node scripts/test-n-minus-one-upgrade.mjs \
+            --base-sha "${{ steps.baseline.outputs.base_sha }}" \
+            --candidate-sha "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --pr-number "${{ steps.baseline.outputs.pr_number }}" \
+            --event-kind "${{ github.event_name }}" \
+            --candidate-ref "$candidate_ref" \
+            --project "$DPF_N1_PROJECT" \
+            --evidence-dir "$DPF_N1_EVIDENCE"
       - name: Candidate readiness succeeds without quiescence
         run: |
-          printf '%s\n' '{"schemaVersion":1,"installerVersion":"acceptance","platform":"linux","arch":"amd64","enabledRuntimeCapabilities":["runtime:core"],"capabilityCatalogHash":null,"capabilityStateVersion":null}' > "$RUNNER_TEMP/dpf-state/install-state.json"
-          node scripts/lib/resolve-capability-compose-profiles.mjs \
-            --state "$RUNNER_TEMP/dpf-state/install-state.json" --migrate --write
+          printf '\357\273\277%s\n' '{"schemaVersion":1,"installerVersion":"acceptance","platform":"linux","arch":"amd64","installPath":"/opt/dpf","stateDir":"/dpf-state","composeProjectName":"dpf"}' > "$RUNNER_TEMP/dpf-state/install-state.json"
           docker run --rm --read-only \
             -v "$PWD:/host-source:ro" \
             -v "$RUNNER_TEMP/dpf-state:/dpf-state:ro" \
             -v "$RUNNER_TEMP/dpf-backups:/backups:ro" \
-            -e DPF_STATE_DIR=/dpf-state \
+            -e DPF_PROMOTER_STATE_DIR=/dpf-state \
+            -e DPF_HOST_PLATFORM=linux \
+            -e DPF_HOST_ARCH=amd64 \
+            -e DPF_HOST_IDENTITY_PROVENANCE=explicit \
             -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
             -e PROMOTE_SOURCE=/host-source \
             -e PROMOTE_TARGET_SHA="$GITHUB_SHA" \
@@ -87,7 +135,10 @@ jobs:
             -v "$PWD:/host-source:ro" \
             -v "$RUNNER_TEMP/dpf-state:/dpf-state:ro" \
             -v "$RUNNER_TEMP/dpf-backups:/backups:ro" \
-            -e DPF_STATE_DIR=/dpf-state \
+            -e DPF_PROMOTER_STATE_DIR=/dpf-state \
+            -e DPF_HOST_PLATFORM=linux \
+            -e DPF_HOST_ARCH=amd64 \
+            -e DPF_HOST_IDENTITY_PROVENANCE=explicit \
             -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
             -e PROMOTE_SOURCE=/host-source \
             -e PROMOTE_TARGET_SHA="$GITHUB_SHA" \
@@ -99,6 +150,14 @@ jobs:
           set -e
           test "$status" -eq 78
           jq -e '.result == "failed" and .quiescenceBegan == false and (.failures | length > 0)' "$DPF_N1_EVIDENCE/readiness-refusal.json"
+      - name: Record bounded PR compatibility evidence
+        if: github.event_name == 'pull_request'
+        run: |
+          jq -n \
+            --arg candidate "$GITHUB_SHA" \
+            --arg decision "DI-FA01D947B1FA" \
+            '{result:"passed",scope:"bounded-pr-contract",candidateSha:$candidate,wwmdDecision:$decision,fullNMinusOne:"scheduled-canonical-runtime"}' \
+            > "$DPF_N1_EVIDENCE/n-minus-one-evidence.json"
       - name: Safe cleanup
         if: always()
         run: node scripts/test-n-minus-one-upgrade.mjs --cleanup-project "$DPF_N1_PROJECT"

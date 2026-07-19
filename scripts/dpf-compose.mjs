@@ -22,7 +22,7 @@ const statePath = resolveDpfStatePath({ env: process.env, home: homedir() });
 if (existsSync(statePath)) {
   let state;
   try {
-    state = JSON.parse(readFileSync(statePath, "utf8"));
+    state = JSON.parse(readFileSync(statePath, "utf8").replace(/^\uFEFF/, ""));
   } catch {
     console.error("capability_install_state_invalid");
     process.exit(2);

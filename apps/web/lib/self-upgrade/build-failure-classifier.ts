@@ -50,6 +50,10 @@ export type BuildFailureClass =
   // `apk add` that crawled 52 min). Retry the upgrade; only dig deeper if it
   // times out the same way twice. Environment, not a main defect.
   | "promoter-timeout"
+  // Candidate readiness refused to begin quiescence. Preserve the machine code
+  // so the remediation path is diagnosable instead of falling through to
+  // "unknown".
+  | "promoter-readiness-failed"
   // A migrate-step failure where the target Postgres lacks pgvector, so
   // `CREATE EXTENSION vector` cannot open `vector.control`. A pre-BET-5 install
   // on postgres:16-alpine hits this until its promoter is current; the promoter's
@@ -150,6 +154,13 @@ const PNPM_OUTDATED_LOCKFILE = /ERR_PNPM_(OUTDATED_)?LOCKFILE|specifiers in the 
 const PNPM_FETCH_ERROR = /ERR_PNPM_FETCH|ERR_PNPM_META_FETCH_FAIL|GET https:\/\/registry\.npmjs\.org\/[^\s]+: (?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|socket hang up)/i;
 // runPromoter's marker when it kills a promoter that blew its wall-clock budget.
 const PROMOTER_TIMEOUT = /\[promoter-timeout\]/i;
+// Production wraps the terminal machine code in a human-readable diagnostic:
+// `promoter-readiness-failed: Promoter readiness check failed: <code>`.
+// The prefix itself is the stable contract; older promoters and malformed
+// reports may not carry a machine code. Extract a code only when the same line
+// ends in a compound snake/kebab token, never from later diagnostics.
+const PROMOTER_READINESS_FAILED = /promoter-readiness-failed:/i;
+const PROMOTER_READINESS_CODE = /(?:^|:)\s*([a-z0-9]+(?:[_-][a-z0-9]+)+)\s*$/i;
 // BET-5 migrate-step failures. Both recovery procedures live in the runbook.
 const BET5_PLAYBOOK = "docs/runbooks/bet5-windows-self-upgrade.md";
 // Docker Desktop mounts-denied on the /dpf-state mount (#3262).
@@ -203,7 +214,21 @@ export function classifyBuildFailure(
 ): BuildFailureClassification {
   const log = input.log ?? "";
 
-  // A promoter timeout supersedes whatever build output preceded it: the kill
+  const readinessFailure = log.match(PROMOTER_READINESS_FAILED);
+  if (readinessFailure) {
+    const readinessLine = log.slice(readinessFailure.index).split(/\r?\n/, 1)[0];
+    const code = readinessLine.match(PROMOTER_READINESS_CODE)?.[1];
+    return {
+      class: "promoter-readiness-failed",
+      summary: `Promoter readiness refused to quiesce the portal${code ? ` (${code})` : ""}. Resolve the reported candidate/state/environment prerequisite, then retry; the running portal was left serving traffic.`,
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, PROMOTER_READINESS_FAILED),
+      isMainDefectVsEnvironment: null,
+    };
+  }
+
+  // After the more specific readiness refusal, a promoter timeout supersedes
+  // whatever build output preceded it: the kill
   // happened because nothing ever completed, so any half-emitted trace above is
   // noise, not the cause. Check it first.
   if (PROMOTER_TIMEOUT.test(log)) {

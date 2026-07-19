@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import type { SelfUpgradeHostIdentity } from "./config";
+import type { InstallStateMigrationHandoff } from "./preflight";
 import {
   buildCandidatePromoterArtifactImage,
   resolveCandidatePromoterArtifact,
@@ -134,6 +136,12 @@ export type PromoterParams = {
   runtimeTransitionAuthorityToken?: string;
   /** DB-active transition ids used only by startup reconciliation. */
   runtimeTransitionActiveIds?: string[];
+  hostIdentity?: SelfUpgradeHostIdentity;
+  installStateMigrationEnvelope?: string;
+  installStateMigrationSignature?: string;
+  installStateMigrationRunId?: string;
+  /** Exact portal-verified carrier retained for orchestration identity/audit. */
+  installStateMigrationHandoff?: InstallStateMigrationHandoff;
 };
 
 export type PromoterResult = {
@@ -179,6 +187,8 @@ function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
   if (params.runtimeCapabilitySignature && !RUNTIME_TRANSITION_TOKEN.test(params.runtimeCapabilitySignature)) {
     throw new Error("invalid_runtime_transition_signature");
   }
+  if (params.installStateMigrationEnvelope && !RUNTIME_TRANSITION_ENVELOPE.test(params.installStateMigrationEnvelope)) throw new Error("invalid_install_state_migration_envelope");
+  if (params.installStateMigrationSignature && !RUNTIME_TRANSITION_TOKEN.test(params.installStateMigrationSignature)) throw new Error("invalid_install_state_migration_signature");
 }
 
 /**
@@ -241,8 +251,9 @@ export function buildPromoterCommand(
   // every portal rebuild, including ordinary self-upgrades. Mount lifecycle
   // state for every mode rather than only transition-authority calls.
   if (params.stateDirHostPath) {
-    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_STATE_DIR=/dpf-state");
+    args.push("-v", `${params.stateDirHostPath}:/dpf-state`, "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state");
   }
+  if (params.hostIdentity) args.push("-e", `DPF_HOST_PLATFORM=${params.hostIdentity.platform}`, "-e", `DPF_HOST_ARCH=${params.hostIdentity.arch}`, "-e", `DPF_HOST_IDENTITY_PROVENANCE=${params.hostIdentity.provenance}`);
 
   args.push(
     "-e",
@@ -277,8 +288,12 @@ export function buildPromoterCommand(
       throw new Error("runtime_transition_protocol_incomplete");
     }
     args.push("-v", `${params.runtimeCapabilitySecretFileHostPath}:/run/secrets/dpf-runtime-transition:ro`);
-    args.push("-e", `DPF_STATE_DIR=/dpf-state`, "-e", `DPF_RUNTIME_TRANSITION_ENVELOPE=${params.runtimeCapabilityEnvelope}`,
+    args.push("-e", `DPF_RUNTIME_TRANSITION_ENVELOPE=${params.runtimeCapabilityEnvelope}`,
       "-e", `DPF_RUNTIME_TRANSITION_SIGNATURE=${params.runtimeCapabilitySignature}`);
+  }
+  if (params.installStateMigrationEnvelope || params.installStateMigrationSignature) {
+    if (!params.stateDirHostPath || !params.installStateMigrationEnvelope || !params.installStateMigrationSignature || !params.installStateMigrationRunId) throw new Error("install_state_migration_protocol_incomplete");
+    args.push("-v", `${params.stateDirHostPath}/runtime-transition.secret:/run/secrets/dpf-runtime-transition:ro`, "-e", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${params.installStateMigrationEnvelope}`, "-e", `DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${params.installStateMigrationSignature}`, "-e", `DPF_SELF_UPGRADE_RUN_ID=${params.installStateMigrationRunId}`, "-e", `DPF_PROMOTER_DIGEST=${image}`);
   }
 
   args.push(image);
@@ -373,13 +388,25 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/Dockerfile \"$BDIR/Dockerfile\" && " +
   "cp /promoter/Dockerfile.promoter \"$BDIR/Dockerfile.promoter\" && " +
   "cp /promoter/promoter-contract.json \"$BDIR/promoter-contract.json\" && " +
-  "mkdir -p \"$BDIR/scripts\" && mkdir -p \"$BDIR/scripts/installer\" && " +
+  "mkdir -p \"$BDIR/scripts\" && mkdir -p \"$BDIR/scripts/installer\" && mkdir -p \"$BDIR/scripts/lib\" && " +
   "cp /promoter/scripts/promote.sh \"$BDIR/scripts/promote.sh\" && " +
   "cp /promoter/scripts/apply-runtime-capability-transition.mjs \"$BDIR/scripts/apply-runtime-capability-transition.mjs\" && " +
   "cp /promoter/scripts/runtime-transition-authority.mjs \"$BDIR/scripts/runtime-transition-authority.mjs\" && " +
   "cp /promoter/scripts/rotate-runtime-transition-secret.mjs \"$BDIR/scripts/rotate-runtime-transition-secret.mjs\" && " +
+  "cp /promoter/scripts/lib/transition-signing.mjs \"$BDIR/scripts/lib/transition-signing.mjs\" && " +
   "cp /promoter/scripts/installer/validate-install-state.mjs \"$BDIR/scripts/installer/validate-install-state.mjs\" && " +
+  "cp /promoter/scripts/installer/migrate-install-state.mjs \"$BDIR/scripts/installer/migrate-install-state.mjs\" && " +
+  "cp /promoter/scripts/installer/resolve-host-identity.mjs \"$BDIR/scripts/installer/resolve-host-identity.mjs\" && " +
+  "cp /promoter/scripts/installer/install-state-transaction.mjs \"$BDIR/scripts/installer/install-state-transaction.mjs\" && " +
+  "cp /promoter/scripts/installer/install-state-lock-contract.json \"$BDIR/scripts/installer/install-state-lock-contract.json\" && " +
+  "cp /promoter/scripts/installer/install-state-schema-registry.mjs \"$BDIR/scripts/installer/install-state-schema-registry.mjs\" && " +
   "cp /promoter/scripts/installer/install-state.schema.json \"$BDIR/scripts/installer/install-state.schema.json\" && " +
+  "cp /promoter/scripts/installer/install-state.v1.schema.json \"$BDIR/scripts/installer/install-state.v1.schema.json\" && " +
+  "cp /promoter/scripts/installer/install-state.v2.schema.json \"$BDIR/scripts/installer/install-state.v2.schema.json\" && " +
+  "cp /promoter/scripts/lib/resolve-capability-compose-profiles.mjs \"$BDIR/scripts/lib/resolve-capability-compose-profiles.mjs\" && " +
+  "cp /promoter/scripts/lib/govern-capability-compose-args.mjs \"$BDIR/scripts/lib/govern-capability-compose-args.mjs\" && " +
+  "cp /promoter/scripts/lib/capability-state-hash.mjs \"$BDIR/scripts/lib/capability-state-hash.mjs\" && " +
+  "cp /promoter/scripts/capability-service-catalog.generated.json \"$BDIR/scripts/capability-service-catalog.generated.json\" && " +
   "tar -C \"$BDIR\" -c . | docker build -t dpf-promoter -f Dockerfile.promoter -";
 
 /**

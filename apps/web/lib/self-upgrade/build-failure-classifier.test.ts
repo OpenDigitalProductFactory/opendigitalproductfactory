@@ -123,6 +123,31 @@ Error querying the database: Can't reach database server at \`postgres\`:\`5432\
 Please make sure your database server is running at \`postgres\`:\`5432\`.`;
 
 describe("classifyBuildFailure", () => {
+  it("classifies promoter readiness failures and retains their machine code", () => {
+    const c = classifyBuildFailure({ log: "upgrade failed: promoter-readiness-failed:install_state_invalid" });
+    expect(c.class).toBe("promoter-readiness-failed");
+    expect(c.summary).toContain("install_state_invalid");
+    expect(c.summary).toContain("refused to quiesce");
+    expect(c.failingTrace).toContain("promoter-readiness-failed:install_state_invalid");
+  });
+
+  it.each([
+    "promoter-readiness-failed: Promoter readiness check failed: install_state_invalid",
+    "promoter-readiness-failed: install_state_invalid",
+    "prefix promoter-readiness-failed: Promoter readiness check failed: state_mount_unreadable\ntrailing diagnostics",
+  ])("extracts the terminal promoter readiness machine code from production output: %s", (log) => {
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("promoter-readiness-failed");
+    expect(c.summary).toContain(log.includes("state_mount") ? "state_mount_unreadable" : "install_state_invalid");
+  });
+
+  it("classifies a production readiness prefix even when the report has no machine code", () => {
+    const c = classifyBuildFailure({ log: "promoter-readiness-failed: Promoter readiness returned an invalid report." });
+    expect(c.class).toBe("promoter-readiness-failed");
+    expect(c.summary).toContain("refused to quiesce");
+    expect(c.failingTrace).toContain("invalid report");
+  });
+
   it("classifies the real @opentelemetry host-vs-Docker hoist divergence", () => {
     const c = classifyBuildFailure({ log: HOIST_LOG, hostBuildPassed: true });
     expect(c.class).toBe("host-docker-hoist-divergence");

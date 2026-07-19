@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createHash } from "node:crypto";
+import { registerInstallStateHandoffTests } from "./self-upgrade-handoff.test-support";
+
+const TEST_INSTALL_STATE = JSON.stringify({ platform: "linux", arch: "amd64" });
+const TEST_INSTALL_STATE_HASH = createHash("sha256").update(TEST_INSTALL_STATE).digest("hex");
 
 const mocks = vi.hoisted(() => ({
   getSelfUpgradeConfig: vi.fn(),
@@ -54,11 +59,16 @@ const mocks = vi.hoisted(() => ({
   // Operator blackout gate (BI-59591B14). Default null = no active blackout, so
   // every existing scheduled test proceeds exactly as before.
   getActiveSelfUpgradeBlackout: vi.fn().mockResolvedValue(null),
+  readFile: vi.fn(async (path: string) => path.endsWith("install-state.json") ? '{"platform":"linux","arch":"amd64"}' : "s".repeat(32)),
+  resolveSelfUpgradeHostIdentity: vi.fn(() => ({ platform: "linux", arch: "amd64", provenance: "explicit" })),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
+  resolveSelfUpgradeHostIdentity: mocks.resolveSelfUpgradeHostIdentity,
 }));
+
+vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
 
 vi.mock("@/lib/self-upgrade/window", () => ({
   isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
@@ -239,11 +249,13 @@ const OK_RECOVERY_POINT = {
 };
 
 beforeEach(() => {
+  mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? TEST_INSTALL_STATE : "s".repeat(32));
+  mocks.resolveSelfUpgradeHostIdentity.mockReturnValue({ platform: "linux", arch: "amd64", provenance: "explicit" });
   mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue(OK_RECOVERY_POINT);
   mocks.recordRunRecoveryPoint.mockResolvedValue({});
   const artifact = { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } };
   mocks.resolvePromoterArtifact.mockResolvedValue(artifact);
-  mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 0, stdout: '{"stage":"preflight","result":"ready","failures":[]}', stderr: "" });
+  mocks.runPromoterReadiness.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ stage: "preflight", result: "ready", failures: [], sourceHash: TEST_INSTALL_STATE_HASH, projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" });
   mocks.recordPromoterReadiness.mockResolvedValue({});
   mocks.summarizeRecoveryPointFailure.mockReturnValue(
     "recovery-point-failed: postgres BR-PG",
@@ -365,17 +377,6 @@ describe("success path", () => {
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
   });
 
-  it("resolves and validates readiness before quiescence, then promotes the same digest", async () => {
-    const order: string[] = [];
-    mocks.resolvePromoterArtifact.mockImplementation(async () => { order.push("resolve"); return { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } }; });
-    mocks.runPromoterReadiness.mockImplementation(async () => { order.push("readiness"); return { exitCode: 0, stdout: '{"failures":[]}', stderr: "" }; });
-    mocks.recordPromoterReadiness.mockImplementation(async () => { order.push("evidence"); return {}; });
-    mocks.startQuiescence.mockImplementation(async () => { order.push("quiescence"); return { runId: "QR-1", awaitReady: async () => ({ ok: true, outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }) }; });
-    mocks.runPromoter.mockImplementation(async (promoterParams: { promoterImage?: string }) => { order.push("promotion"); expect(promoterParams.promoterImage).toBe(`sha256:${"d".repeat(64)}`); return { exitCode: 0, stdout: "", stderr: "" }; });
-    await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(order).toEqual(["resolve", "readiness", "evidence", "quiescence", "promotion"]);
-  });
-
   it.each([
     ["artifact resolution", "resolve"],
     ["readiness dependency", "readiness"],
@@ -389,7 +390,7 @@ describe("success path", () => {
     expect(mocks.createSelfUpgradeRecoveryPoint).not.toHaveBeenCalled();
     expect(mocks.runPromoter).not.toHaveBeenCalled();
   });
-
+  registerInstallStateHandoffTests({ mocks, runSelfUpgrade, installState: TEST_INSTALL_STATE, installStateHash: TEST_INSTALL_STATE_HASH });
   it("claims a pre-created queued run instead of creating a second run", async () => {
     mocks.updateRunPlan.mockResolvedValue({ runId: "SUR-QUEUED1" });
 
@@ -404,7 +405,6 @@ describe("success path", () => {
     expect(mocks.startRun).toHaveBeenCalledWith("SUR-QUEUED1");
     expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-QUEUED1" });
   });
-
   it("creates and records a recovery point after quiescence and before swap starts", async () => {
     const order: string[] = [];
     mocks.createSelfUpgradeRecoveryPoint.mockImplementation(async () => {
@@ -1167,11 +1167,7 @@ describe("quiescence-defer path (BI-QUIESCE-010)", () => {
 describe("skip-before-drain guards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getSelfUpgradeConfig.mockResolvedValue({
-      ...ENABLED_CONFIG,
-      readinessMode: "legacy-bootstrap",
-      readinessOwner: "unavailable",
-    });
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isUpgradeWindowOpen.mockReturnValue(true);
     // clearAllMocks resets call history but NOT implementations, so re-assert
     // the gate defaults each test (a prior describe can leave them flipped).
@@ -1199,6 +1195,7 @@ describe("skip-before-drain guards", () => {
   });
 
   it("skips with promoter-unavailable BEFORE draining when the promoter cannot be built", async () => {
+    mocks.getSelfUpgradeConfig.mockResolvedValue({ ...ENABLED_CONFIG, readinessMode: "legacy-bootstrap", readinessOwner: "unavailable" });
     // The precheck always rebuilds the promoter; the skip survives only when that build fails
     // (or a custom/registry image is configured that we cannot synthesise locally).
     mocks.ensurePromoterImage.mockResolvedValue({
@@ -1220,26 +1217,17 @@ describe("skip-before-drain guards", () => {
     expect(mocks.recordCooldown).not.toHaveBeenCalled();
   });
 
-  it("auto-heals a missing promoter image (builds it) and proceeds without skipping", async () => {
-    // The image is absent but JIT-buildable — the precheck builds it in place,
-    // still before any drain, so the upgrade resumes instead of stranding the
-    // operator with a docker command (BI-F2C53237).
-    mocks.isPromoterAvailable.mockResolvedValue(false);
-    mocks.ensurePromoterImage.mockResolvedValue({
-      ok: true,
-      alreadyPresent: false,
-      built: true,
-    });
-
+  it("builds a candidate promoter and proceeds without skipping", async () => {
     const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
 
-    expect(mocks.ensurePromoterImage).toHaveBeenCalledWith("dpf-promoter");
+    expect(mocks.buildCandidatePromoterImage).toHaveBeenCalled();
     // Not a promoter-unavailable skip — the run advances past the precheck.
     expect(result).not.toMatchObject({ reason: "promoter-unavailable" });
     expect(mocks.startQuiescence).toHaveBeenCalled();
   });
 
   it("marks a pre-created queued run skipped when a pre-drain guard stops the attempt", async () => {
+    mocks.getSelfUpgradeConfig.mockResolvedValue({ ...ENABLED_CONFIG, readinessMode: "legacy-bootstrap", readinessOwner: "unavailable" });
     // The promoter rebuild fails → the pre-drain promoter-unavailable guard stops the attempt.
     mocks.ensurePromoterImage.mockResolvedValue({
       ok: false,
@@ -1268,7 +1256,7 @@ describe("skip-before-drain guards", () => {
 
   it("rebuilds the promoter against the configured image", async () => {
     await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
-    expect(mocks.ensurePromoterImage).toHaveBeenCalledWith("dpf-promoter");
+    expect(mocks.buildCandidatePromoterImage).toHaveBeenCalledWith(expect.objectContaining({ promoterImage: "dpf-promoter" }));
   });
 
   it("does NOT touch the promoter on a dryRun (it never swaps)", async () => {

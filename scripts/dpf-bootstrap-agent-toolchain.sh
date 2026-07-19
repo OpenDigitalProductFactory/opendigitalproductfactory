@@ -786,8 +786,8 @@ JSON
 )"
 
 if [ "$DRY_RUN" -eq 0 ]; then
-  dpf_state_init "agent-toolchain-bootstrap-phase-4" "$REPO_ROOT"
-  dpf_state_write_json "agentToolchain" "$AGENT_TOOLCHAIN_JSON"
+  dpf_state_init "agent-toolchain-bootstrap-phase-4" "$REPO_ROOT" || fail "Failed to initialize canonical install state."
+  dpf_state_write_json "agentToolchain" "$AGENT_TOOLCHAIN_JSON" || fail "Failed to persist agent toolchain readiness in canonical install state."
 fi
 
 # --- Readiness banner --------------------------------------------------------

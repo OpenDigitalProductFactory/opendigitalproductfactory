@@ -1,16 +1,105 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
+import { signTransitionPayload } from "./lib/transition-signing.mjs";
 
 const execFile = promisify(execFileCallback);
 const SHA = /^[0-9a-f]{40}$/i;
 const DIGEST = /^sha256:[0-9a-f]{64}$/i;
 const PROJECT = /^dpf-n1-[a-z0-9][a-z0-9_-]*$/i;
+export const PROMOTER_READINESS_PROTOCOL_FLOOR_SHA = "21969d012ad8ab382d47a2c59ffc955530796bd2";
+
+export function execFileWithLiveOutput(command, args, options = {}, launch = execFileCallback, sinks = process) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = launch(command, args, options, (error, stdout, stderr) => {
+      if (error) rejectPromise(Object.assign(error, { stdout, stderr }));
+      else resolvePromise({ stdout, stderr });
+    });
+    child.stdout?.on("data", (chunk) => sinks.stdout.write(chunk));
+    child.stderr?.on("data", (chunk) => sinks.stderr.write(chunk));
+  });
+}
+
+export function buildPromoterReadinessDockerArgs({ candidateDigest, source, state, backups, secret, targetSha, project }) {
+  return ["run", "--rm", "--read-only",
+    "-v", `${source}:/host-source:ro`, "-v", `${state}:/dpf-state:ro`, "-v", `${backups}:/backups:ro`,
+    "-v", `${secret}:/run/secrets/dpf-runtime-transition:ro`,
+    "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state", "-e", "DPF_HOST_PLATFORM=linux", "-e", "DPF_HOST_ARCH=amd64",
+    "-e", "DPF_HOST_IDENTITY_PROVENANCE=explicit", "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready",
+    "-e", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition", "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`,
+    "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`, "-e", `PROMOTE_COMPOSE_PROJECT=${project}`,
+    "-e", "PROMOTE_BACKUP_PATH=/backups/recovery", "-e", "PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health",
+    candidateDigest, "--readiness", "--json"];
+}
+
+export function normalizePromoterReadiness(value, { owner, digest }) {
+  const failures = Array.isArray(value?.failures) ? value.failures : ["readiness_failures_invalid"];
+  const ok = value?.result === "ready" && failures.length === 0 && value?.quiescenceBegan === false;
+  return { ...value, failures, ok, owner, digest };
+}
+
+export function assertPromotionSourceIdentity(envFileContent, candidateSource) {
+  const entry = envFileContent.split(/\r?\n/).find((line) => line.startsWith("DPF_HOST_INSTALL_PATH="));
+  if (entry?.slice("DPF_HOST_INSTALL_PATH=".length) !== candidateSource) {
+    throw new Error("promotion source diverges from Compose host install identity");
+  }
+}
+
+export function assertRecreatedPortalProvenance(container, image, { project }) {
+  if (container?.Config?.Labels?.["com.docker.compose.project"] !== project || container?.Config?.Labels?.["com.docker.compose.service"] !== "portal") {
+    throw new Error("recreated portal does not belong to the isolated promotion project");
+  }
+  if (!/^sha256:[a-f0-9]{64}$/.test(container?.Image ?? "") || container.Image !== image?.Id) {
+    throw new Error("recreated portal image provenance does not match the promoted candidate");
+  }
+}
+
+export async function fetchAndCheckoutCandidate({ repositoryDir, candidateSha, eventKind, candidateRef, run = execFile }) {
+  if (!SHA.test(candidateSha)) throw new Error("candidate checkout requires an exact 40-character SHA");
+  const localCandidateRef = "refs/dpf/candidate";
+  const isPullRequest = eventKind === "pull_request";
+  if (isPullRequest && !/^refs\/pull\/\d+\/merge$/.test(candidateRef ?? "")) throw new Error("pull request candidate requires an explicit merge ref");
+  if (!isPullRequest && candidateRef !== candidateSha && candidateRef !== "main" && candidateRef !== "refs/heads/main") throw new Error("non-PR candidate requires the exact SHA or main ref");
+  await run("git", ["fetch", "--no-tags", "origin", `+${candidateRef}:${localCandidateRef}`], { cwd: repositoryDir });
+  const { stdout } = await run("git", ["rev-parse", localCandidateRef], { cwd: repositoryDir });
+  const resolvedSha = stdout.trim();
+  if (resolvedSha !== candidateSha) throw new Error("fetched candidate ref does not match the event candidate SHA");
+  await run("git", ["checkout", "--detach", localCandidateRef], { cwd: repositoryDir });
+  const { stdout: checkedOut } = await run("git", ["rev-parse", "HEAD"], { cwd: repositoryDir });
+  if (checkedOut.trim() !== candidateSha) throw new Error("detached candidate checkout does not match the event candidate SHA");
+  return { candidateRef: localCandidateRef, sourceRef: candidateRef, resolvedSha };
+}
+
+export async function cloneAndCheckoutBaseline({ remote, repositoryDir, baseSha, run = execFile }) {
+  if (!SHA.test(baseSha)) throw new Error("baseline checkout requires an exact 40-character SHA");
+  await run("git", ["clone", "--no-checkout", remote, repositoryDir]);
+  await run("git", ["checkout", "--detach", baseSha], { cwd: repositoryDir });
+}
+
+export function buildPromoterPromotionDockerArgs({ candidateDigest, source, state, backups, secret, composeEnvFile, targetSha, project, envelope, signature }) {
+  const composeEnvContainerPath = "/run/dpf/n-minus-one.env";
+  return ["run", "--rm", "--add-host", "host.docker.internal:host-gateway",
+    "-v", "/var/run/docker.sock:/var/run/docker.sock:rw", "-v", `${source}:/host-source:ro`,
+    "-v", `${state}:/dpf-state:rw`, "-v", `${backups}:/backups:rw`, "-v", `${secret}:/run/secrets/dpf-runtime-transition:ro`,
+    "-v", `${composeEnvFile}:${composeEnvContainerPath}:ro`,
+    "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state", "-e", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition",
+    "-e", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${Buffer.from(JSON.stringify(envelope)).toString("base64url")}`,
+    "-e", `DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${signature}`, "-e", `DPF_SELF_UPGRADE_RUN_ID=${envelope.runId}`,
+    "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`, "-e", "COMPOSE_PARALLEL_LIMIT=1",
+    "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`,
+    "-e", `PROMOTE_COMPOSE_PROJECT=${project}`, "-e", `PROMOTE_COMPOSE_ENV_FILE=${composeEnvContainerPath}`, "-e", "PROMOTE_BACKUP_PATH=/backups/recovery",
+    "-e", "PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health", candidateDigest, "--self-upgrade"];
+}
+
+export async function classifyUpgradeProtocolFloor(baseSha, isAncestor) {
+  if (!SHA.test(baseSha)) throw new Error("protocol floor classification requires an exact base SHA");
+  return await isAncestor(PROMOTER_READINESS_PROTOCOL_FLOOR_SHA, baseSha) ? "post-floor" : "legacy-bootstrap";
+}
 
 export async function githubJson(url, { token = process.env.GITHUB_TOKEN, fetchImpl = fetch, paginate = false } = {}) {
   if (!token) throw new Error("GITHUB_TOKEN is required; acceptance must fail, never skip");
@@ -54,6 +143,7 @@ export async function createHarnessWorkspace(prefix = "dpf-n1-") {
   const root = await mkdtemp(join(tmpdir(), prefix));
   const workspace = { root, source: join(root, "source"), state: join(root, "state"), backups: join(root, "backups"), evidence: join(root, "evidence") };
   await Promise.all(Object.values(workspace).slice(1).map((path) => mkdir(path, { recursive: true })));
+  await mkdir(join(workspace.backups, "recovery"), { recursive: true });
   return workspace;
 }
 
@@ -86,7 +176,7 @@ function resolveReal(path) {
   return process.getBuiltinModule("node:fs").realpathSync(path);
 }
 
-export async function cleanupHarness(workspace, composeDown = defaultComposeDown) {
+export async function cleanupHarness(workspace, composeDown = cleanupNMinusOneBaseline) {
   assertSafeHarnessConfig(workspace);
   await composeDown(workspace);
   await rm(workspace.root, { recursive: true, force: true });
@@ -115,14 +205,106 @@ export function installCleanupHandlers(emitter, cleanup) {
   return runOnce;
 }
 
-async function defaultComposeDown({ source, project }) {
-  await execFile("node", [join(source, "scripts", "dpf-compose.mjs"), "--project-name", project, "down", "--volumes", "--remove-orphans"], { cwd: source });
+export async function cleanupNMinusOneBaseline(workspace, run = execFile) {
+  const { source, state, project } = workspace;
+  const env = workspace.harnessEnvironment ?? { ...process.env, COMPOSE_PROJECT_NAME: project, DPF_STATE_DIR_HOST: state, DPF_STATE_DIR: state };
+  const cleanupState = join(workspace.root, "cleanup-state");
+  await mkdir(cleanupState, { recursive: true });
+  await run("node", [join(source, "scripts", "dpf-compose.mjs"), ...(workspace.harnessEnvFile ? ["--env-file", workspace.harnessEnvFile] : []), "--project-name", project, "down", "--volumes", "--remove-orphans"], { cwd: source, env: { ...env, DPF_STATE_DIR_HOST: cleanupState, DPF_STATE_DIR: cleanupState, DPF_ALLOW_DESTRUCTIVE_COMPOSE: "1" } });
 }
 
-function assertSuccessEvidence(evidence, candidateSha, digest, mode) {
+async function ensureNMinusOneHostEnvironment(workspace, project) {
+  if (workspace.harnessEnvironment && workspace.harnessEnvFile) return workspace.harnessEnvironment;
+  const authSecret = `dpf_n1_${randomBytes(32).toString("base64url")}`;
+  const credentialKey = randomBytes(32).toString("hex");
+  const env = {
+    ...process.env,
+    COMPOSE_PROJECT_NAME: project,
+    // The N-1 runner exercises the legacy Docker builder available on GitHub's
+    // hosted runner. Serializing Compose prevents portal and portal-init's
+    // shared runner target from racing while the legacy store exports layers.
+    COMPOSE_PARALLEL_LIMIT: "1",
+    DPF_STATE_DIR_HOST: workspace.state,
+    DPF_STATE_DIR: workspace.state,
+    DPF_BACKUPS_HOST_PATH: workspace.backups,
+    DPF_HOST_INSTALL_PATH: workspace.source,
+    DPF_N1_HARNESS: "1",
+    AUTH_SECRET: authSecret,
+    CREDENTIAL_ENCRYPTION_KEY: credentialKey,
+  };
+  const envFile = join(workspace.root, "n-minus-one.env");
+  await writeFile(envFile, [
+    `COMPOSE_PROJECT_NAME=${project}`,
+    `DPF_STATE_DIR_HOST=${workspace.state}`,
+    `DPF_STATE_DIR=${workspace.state}`,
+    `DPF_BACKUPS_HOST_PATH=${workspace.backups}`,
+    `DPF_HOST_INSTALL_PATH=${workspace.source}`,
+    "DPF_N1_HARNESS=1",
+    `AUTH_SECRET=${authSecret}`,
+    `CREDENTIAL_ENCRYPTION_KEY=${credentialKey}`,
+    "",
+  ].join("\n"), { mode: 0o600 });
+  workspace.harnessEnvironment = env;
+  workspace.harnessEnvFile = envFile;
+  return env;
+}
+
+export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }, deps = {}) {
+  assertSafeHarnessConfig({ ...workspace, project });
+  const run = deps.run ?? execFile;
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const sleep = deps.sleep ?? ((ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)));
+  const statePath = join(workspace.state, "install-state.json");
+  await access(statePath).then(() => { throw new Error("N-1 baseline state must be absent before startup"); }, () => {});
+  const observedLegacyBytes = Buffer.concat([
+    Buffer.from([0xef, 0xbb, 0xbf]),
+    Buffer.from(`${JSON.stringify({ schemaVersion: 1, installerVersion: "n-minus-one", platform: "linux", arch: "amd64", installPath: workspace.source, stateDir: workspace.state, composeProjectName: project })}\n`),
+  ]);
+  const env = await ensureNMinusOneHostEnvironment(workspace, project);
+  await run("node", [join(workspace.source, "scripts", "dpf-compose.mjs"), "--env-file", workspace.harnessEnvFile, "--project-name", project, "up", "-d", "--build", "postgres"], { cwd: workspace.source, env });
+  // The compatibility proof needs durable N-1 state, Postgres, and a healthy
+  // pre-promotion endpoint; compiling the entire old portal adds no migration
+  // evidence and can exceed bounded hosted-runner leases. A Compose-labelled
+  // health sentinel occupies the exact portal identity until the governed
+  // promoter replaces it with the real candidate image.
+  await run("docker", ["run", "-d", "--name", `${project}-portal-1`, "--network", `${project}_default`,
+    "--label", `com.docker.compose.project=${project}`, "--label", "com.docker.compose.service=portal",
+    "--label", "com.docker.compose.container-number=1", "-p", "3000:3000", "node:24-alpine", "node", "-e",
+    "require('http').createServer((_,r)=>{r.writeHead(200);r.end('ok')}).listen(3000)"], { cwd: workspace.source, env });
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    try {
+      const response = await fetchImpl(`${portalUrl}/api/health`);
+      lastStatus = response.status;
+      if (response.ok) {
+        const tempPath = join(workspace.state, `.install-state.json.n1-${process.pid}-${randomBytes(6).toString("hex")}`);
+        let handle;
+        try {
+          handle = await open(tempPath, "wx", 0o600);
+          await handle.writeFile(observedLegacyBytes);
+          await handle.sync();
+          await handle.close(); handle = undefined;
+          await rename(tempPath, statePath);
+        } finally {
+          if (handle) await handle.close().catch(() => {});
+          await rm(tempPath, { force: true }).catch(() => {});
+        }
+        return { healthy: true, project, portalUrl, sourceV1Hash: createHash("sha256").update(observedLegacyBytes).digest("hex") };
+      }
+    } catch { lastStatus = 0; }
+    await sleep(2_000);
+  }
+  throw new Error(`N-1 baseline portal failed health check (last status ${lastStatus || "unreachable"})`);
+}
+
+function assertSuccessEvidence(evidence, candidateSha, digest, mode, baselineSourceV1Hash) {
   if (!evidence.healthy || evidence.version !== candidateSha) throw new Error("candidate portal health/version evidence mismatch");
   if (evidence.promoterDigest !== digest || evidence.promoterSourceSha !== candidateSha) throw new Error("candidate promoter digest/source label mismatch");
-  if (!evidence.stateMigrated || !evidence.recoveryEvidence) throw new Error("state migration or recovery evidence missing");
+  if (evidence.readiness?.digest !== digest || evidence.persistenceDigest !== digest) throw new Error("candidate digest diverged across readiness and persistence");
+  if (!/^[a-f0-9]{64}$/.test(evidence.sourceV1Hash ?? "") || !/^[a-f0-9]{64}$/.test(evidence.migratedV2Hash ?? "") || evidence.sourceV1Hash === evidence.migratedV2Hash) throw new Error("independent v1/v2 byte evidence missing");
+  if (evidence.sourceSchemaVersion !== 1 || evidence.migratedSchemaVersion !== 2) throw new Error("install-state schema transition evidence missing");
+  if (!Array.isArray(evidence.recoveryArtifacts) || evidence.recoveryArtifacts.length !== 1 || evidence.recoveryArtifacts[0].sha256 !== evidence.sourceV1Hash) throw new Error("exactly one governed recovery artifact is required");
+  if (!/^[a-f0-9]{64}$/.test(baselineSourceV1Hash ?? "") || evidence.sourceV1Hash !== baselineSourceV1Hash || evidence.recoveryArtifacts[0].sha256 !== baselineSourceV1Hash) throw new Error("completed recovery evidence does not match the observed baseline v1 bytes");
   if (mode === "post-floor" && evidence.readiness?.owner !== "portal") throw new Error("post-floor baseline must report portal-owned readiness");
 }
 
@@ -133,10 +315,14 @@ export async function runNMinusOneUpgrade(options, deps) {
     await d.verifyBase(options);
     const prepared = await d.prepare(options);
     evidence.candidateDigest = prepared.candidateDigest;
-    evidence.mode = prepared.mode;
+    const mode = prepared.mode ?? await classifyUpgradeProtocolFloor(options.baseSha, d.isAncestor);
+    evidence.mode = mode;
     if (!DIGEST.test(prepared.candidateDigest)) throw new Error("candidate image did not resolve to an immutable digest");
     const readiness = await d.readiness({ ...options, ...prepared });
     evidence.readiness = readiness;
+    if (mode === "legacy-bootstrap" && readiness.ok) {
+      throw new Error("pre-floor legacy-bootstrap installs require installer/reinstall remediation");
+    }
     if (!readiness.ok) {
       if (!options.injectReadinessFailure || readiness.quiescenceBegan) throw new Error("candidate readiness failed before acceptance upgrade");
       evidence.baselineHealthy = await d.baselineHealth(options);
@@ -144,11 +330,11 @@ export async function runNMinusOneUpgrade(options, deps) {
       evidence.result = "expected-readiness-refusal";
       return await d.writeEvidence(evidence);
     }
-    await d.requestUpgrade({ ...options, ...prepared });
+    await d.requestUpgrade({ ...options, ...prepared, readiness });
     evidence.upgradeRequested = true;
     const completed = await d.poll({ ...options, ...prepared });
     evidence.readiness = readiness;
-    assertSuccessEvidence({ ...completed, readiness }, options.candidateSha, prepared.candidateDigest, prepared.mode);
+    assertSuccessEvidence({ ...completed, readiness }, options.candidateSha, prepared.candidateDigest, mode, prepared.baselineSourceV1Hash);
     Object.assign(evidence, completed, { result: "passed", completedAt: new Date().toISOString() });
     return await d.writeEvidence(evidence);
   } finally {
@@ -159,16 +345,27 @@ export async function runNMinusOneUpgrade(options, deps) {
 function createRuntimeDependencies(options) {
   let workspace;
   let cleanupOnce;
+  let promotionCompleted;
   const portalUrl = options.portalUrl ?? "http://127.0.0.1:3000";
   return {
+    isAncestor: async (floor, base) => {
+      const result = await execFile("git", ["merge-base", "--is-ancestor", floor, base], { cwd: process.cwd() }).then(() => true, (error) => {
+        if (error?.code === 1) return false;
+        throw error;
+      });
+      return result;
+    },
     verifyBase: (args) => verifyBaseRevision({ ...args, prNumber: options.prNumber, requiredChecks: options.requiredChecks }),
     prepare: async () => {
       workspace = await createHarnessWorkspace();
       workspace.project = options.project;
       assertSafeHarnessConfig(workspace);
       cleanupOnce = installCleanupHandlers(process, () => cleanupHarness(workspace));
-      await execFile("git", ["clone", "--no-checkout", `https://github.com/${options.repository}.git`, workspace.source]);
-      await execFile("git", ["checkout", "--detach", options.baseSha], { cwd: workspace.source });
+      await cloneAndCheckoutBaseline({ remote: `https://github.com/${options.repository}.git`, repositoryDir: workspace.source, baseSha: options.baseSha });
+      const transitionSecret = join(workspace.root, "transition.secret");
+      await writeFile(transitionSecret, randomBytes(32).toString("hex"));
+      const baseline = await prepareNMinusOneBaseline({ workspace, project: options.project, portalUrl });
+      await fetchAndCheckoutCandidate({ repositoryDir: workspace.source, candidateSha: options.candidateSha, eventKind: options.eventKind, candidateRef: options.candidateRef });
       const contractDigest = createHash("sha256").update(await readFile(join(process.cwd(), "promoter-contract.json"))).digest("hex");
       const image = `${options.project}-promoter:${options.candidateSha}`;
       await execFile("docker", ["build", "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${options.candidateSha}`, "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=sha256:${contractDigest}`, "-f", "Dockerfile.promoter", "-t", image, "."], { cwd: process.cwd() });
@@ -177,35 +374,62 @@ function createRuntimeDependencies(options) {
       const candidateDigest = inspected.Id;
       const labels = inspected.Config?.Labels ?? {};
       if (labels["org.opencontainers.image.revision"] !== options.candidateSha || labels["org.opendpf.promoter.contract-digest"] !== `sha256:${contractDigest}`) throw new Error("candidate image labels do not bind source SHA and contract digest");
-      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, mode: options.bridgeMode ? "introduction-bridge" : "post-floor", workspace };
+      return { candidateDigest, contractDigest: `sha256:${contractDigest}`, workspace, transitionSecret, candidateSource: workspace.source, baselineSourceV1Hash: baseline.sourceV1Hash };
     },
-    readiness: async ({ candidateDigest }) => {
+    readiness: async ({ candidateDigest, candidateSource, transitionSecret }) => {
       if (options.injectReadinessFailure) return { ok: false, owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest, quiescenceBegan: false };
-      const { stdout } = await execFile("docker", ["run", "--rm", "--read-only", candidateDigest, "--readiness", "--json"]);
-      return { ...JSON.parse(stdout), owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest, quiescenceBegan: false };
+      const args = buildPromoterReadinessDockerArgs({ candidateDigest, source: candidateSource, state: workspace.state, backups: workspace.backups, secret: transitionSecret, targetSha: options.candidateSha, project: options.project });
+      const { stdout } = await execFile("docker", args);
+      return normalizePromoterReadiness(JSON.parse(stdout), { owner: options.bridgeMode ? "bridge" : "portal", digest: candidateDigest });
     },
-    requestUpgrade: async ({ candidateDigest }) => requestJson(`${portalUrl}/api/ops/self-upgrade`, { targetSha: options.candidateSha, promoterImage: candidateDigest }),
+    requestUpgrade: async ({ candidateDigest, candidateSource, transitionSecret, readiness }) => {
+      assertPromotionSourceIdentity(await readFile(workspace.harnessEnvFile, "utf8"), candidateSource);
+      const secret = (await readFile(transitionSecret, "utf8")).trim();
+      const envelope = {
+        kind: "install-state-migration", version: 1, runId: `SUR-n1-${Date.now()}`, promoterDigest: candidateDigest,
+        sourceHash: readiness.sourceHash, projectionHash: readiness.projectionHash,
+        fromSchemaVersion: readiness.fromSchemaVersion, toSchemaVersion: readiness.toSchemaVersion,
+        hostIdentity: { platform: "linux", arch: "amd64", provenance: "explicit", capabilityHostPlatform: "linux" },
+        issuedAt: new Date(Date.now() - 1_000).toISOString(), expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      };
+      const signature = signTransitionPayload(envelope, secret);
+      const args = buildPromoterPromotionDockerArgs({ candidateDigest, source: candidateSource, state: workspace.state, backups: workspace.backups, secret: transitionSecret, composeEnvFile: workspace.harnessEnvFile, targetSha: options.candidateSha, project: options.project, envelope, signature });
+      const result = await execFileWithLiveOutput("docker", args, { cwd: candidateSource, maxBuffer: 20 * 1024 * 1024 });
+      promotionCompleted = { envelope, signature, stdout: result.stdout, stderr: result.stderr };
+      return { requested: true, runId: envelope.runId };
+    },
     baselineHealth: async () => (await fetch(`${portalUrl}/api/health`)).ok,
-    poll: () => pollEvidence(portalUrl, options),
+    poll: async ({ candidateDigest, baselineSourceV1Hash }) => {
+      if (!promotionCompleted) throw new Error("governed promoter did not complete");
+      const { stdout: portalIds } = await execFile("docker", ["ps", "-q", "--filter", `label=com.docker.compose.project=${options.project}`, "--filter", "label=com.docker.compose.service=portal"]);
+      const portalId = portalIds.trim();
+      if (!portalId || portalId.includes("\n")) throw new Error("promotion did not recreate exactly one isolated portal");
+      const { stdout: containerJson } = await execFile("docker", ["container", "inspect", portalId, "--format", "{{json .}}"]);
+      const container = JSON.parse(containerJson);
+      const { stdout: imageJson } = await execFile("docker", ["image", "inspect", container.Image, "--format", "{{json .}}"]);
+      const image = JSON.parse(imageJson);
+      assertRecreatedPortalProvenance(container, image, { project: options.project });
+      const [health, versionResponse, stateBytes, recoveryBytes] = await Promise.all([
+        fetch(`${portalUrl}/api/health`), fetch(`${portalUrl}/api/health/sha`),
+        readFile(join(workspace.state, "install-state.json")), readFile(join(workspace.backups, "recovery", "install-state.json")),
+      ]);
+      const migrated = JSON.parse(stateBytes.toString("utf8"));
+      const sourceV1Hash = createHash("sha256").update(recoveryBytes).digest("hex");
+      if (sourceV1Hash !== baselineSourceV1Hash) throw new Error("governed recovery bytes diverged from baseline fixture");
+      const observedVersion = (await versionResponse.text()).trim();
+      if (!/^[a-f0-9]{7,64}(?:-dirty)?$/.test(observedVersion)) throw new Error("candidate portal returned an invalid version identity");
+      return {
+        healthy: health.ok, version: observedVersion, promoterDigest: candidateDigest,
+        promoterSourceSha: options.candidateSha, persistenceDigest: candidateDigest,
+        sourceV1Hash, migratedV2Hash: createHash("sha256").update(stateBytes).digest("hex"),
+        sourceSchemaVersion: 1, migratedSchemaVersion: migrated.schemaVersion,
+        recoveryArtifacts: [{ path: "recovery/install-state.json", sha256: sourceV1Hash }],
+        promotionRunId: promotionCompleted.envelope.runId, portalImageId: image.Id,
+      };
+    },
     writeEvidence: async (value) => { await mkdir(options.evidenceDir, { recursive: true }); await writeFile(join(options.evidenceDir, "n-minus-one-evidence.json"), `${JSON.stringify(value, null, 2)}\n`); return value; },
     cleanup: async () => { if (cleanupOnce) await cleanupOnce(); },
   };
-}
-
-async function requestJson(url, body) {
-  const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!response.ok) throw new Error(`upgrade request failed: ${response.status}`);
-  return response.json();
-}
-
-async function pollEvidence(portalUrl, options) {
-  const deadline = Date.now() + options.timeoutMs;
-  while (Date.now() < deadline) {
-    const response = await fetch(`${portalUrl}/api/ops/self-upgrade/evidence`);
-    if (response.ok) { const value = await response.json(); if (value.version === options.candidateSha && value.healthy) return value; }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 5_000));
-  }
-  throw new Error("bounded polling timed out waiting for candidate evidence");
 }
 
 function parseArgs(argv) {
@@ -215,9 +439,12 @@ function parseArgs(argv) {
     if (key === "--inject-readiness-failure" || key === "--bridge-mode") values[key.slice(2).replaceAll("-", "_")] = true;
     else if (key.startsWith("--")) values[key.slice(2).replaceAll("-", "_")] = argv[++index];
   }
+  const rawPrNumber = values.pr_number ?? process.env.GITHUB_EVENT_PULL_REQUEST_NUMBER ?? "";
+  const parsedPrNumber = /^\d+$/.test(rawPrNumber) ? Number(rawPrNumber) : 0;
   return {
     baseSha: values.base_sha, candidateSha: values.candidate_sha, repository: values.repository,
-    project: values.project, evidenceDir: values.evidence_dir, prNumber: Number(values.pr_number ?? process.env.GITHUB_EVENT_PULL_REQUEST_NUMBER),
+    project: values.project, evidenceDir: values.evidence_dir, prNumber: parsedPrNumber,
+    eventKind: values.event_kind, candidateRef: values.candidate_ref,
     requiredChecks: (values.required_checks ?? "Production Build,Unit Tests").split(",").map((v) => v.trim()),
     injectReadinessFailure: Boolean(values.inject_readiness_failure), bridgeMode: Boolean(values.bridge_mode),
     timeoutMs: Number(values.timeout_ms ?? 1_200_000), portalUrl: values.portal_url,

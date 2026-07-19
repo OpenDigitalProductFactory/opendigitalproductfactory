@@ -5,7 +5,20 @@ import {
   getSelfUpgradeConfig,
   isInMaintenanceWindow,
   nextMaintenanceWindowStart,
+  resolveSelfUpgradeHostIdentity,
 } from "./config";
+
+describe("resolveSelfUpgradeHostIdentity", () => {
+  it("uses explicit installer-owned canonical identity", () => {
+    expect(resolveSelfUpgradeHostIdentity({ DPF_HOST_PLATFORM: "linux", DPF_HOST_ARCH: "arm64" })).toEqual({ platform: "linux", arch: "arm64", provenance: "explicit" });
+  });
+
+  it("accepts only mutually consistent legacy Windows host paths", () => {
+    const state = { platform: "unsupported", arch: "amd64", installPath: "D:\\DPF", stateDir: "D:\\DPF\\.dpf" };
+    expect(resolveSelfUpgradeHostIdentity({ DPF_HOST_INSTALL_PATH: "D:\\DPF", DPF_STATE_DIR_HOST: "D:\\DPF\\.dpf" }, state)).toEqual({ platform: "win32", arch: "amd64", provenance: "legacy-windows-paths" });
+    expect(() => resolveSelfUpgradeHostIdentity({ DPF_HOST_INSTALL_PATH: "D:\\DPF", DPF_STATE_DIR_HOST: "C:\\state" }, state)).toThrow("host_identity_contradictory");
+  });
+});
 
 vi.mock("@dpf/db", () => ({
   prisma: {

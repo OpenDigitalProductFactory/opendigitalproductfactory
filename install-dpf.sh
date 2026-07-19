@@ -223,8 +223,12 @@ rc=0
 dpf_state_validate || rc=$?
 case "$rc" in
   0) ok "Install state at $(dpf_state_path) is current (schema $DPF_STATE_SCHEMA_VERSION)" ;;
-  2) info "No prior install state; initializing $(dpf_state_path)"
-     dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT" ;;
+  2) if [ "$DPF_DRY_RUN" = "1" ]; then
+       info "No prior install state; dry-run leaves $(dpf_state_path) unchanged"
+     else
+       info "No prior install state; initializing $(dpf_state_path)"
+       dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT"
+     fi ;;
   3) warn "Install state is from an older installer; running forward migration"
      dpf_state_migrate ;;
   *) fail "Install state validation failed (see message above)" ;;
@@ -654,6 +658,19 @@ else
     info "Added DPF_STATE_DIR=$HOME/.dpf to existing .env"
   fi
 fi
+
+# Persist the same canonical host identity written to install-state.json. These
+# installer-owned values are the portal/promoter authority; container OS is not.
+dpf_platform
+dpf_arch
+for _host_identity in "DPF_HOST_PLATFORM=$DPF_PLATFORM" "DPF_HOST_ARCH=$DPF_ARCH"; do
+  _host_key="${_host_identity%%=*}"
+  if grep -q "^${_host_key}=" .env 2>/dev/null; then
+    dpf_sed_inplace "s|^${_host_key}=.*|${_host_identity}|" .env
+  else
+    printf '%s\n' "$_host_identity" >> .env
+  fi
+done
 
 # Record the platform-correct compose chain for the self-upgrade promoter. The
 # orchestrator reads DPF_SELF_UPGRADE_COMPOSE_FILES and passes it to promote.sh as

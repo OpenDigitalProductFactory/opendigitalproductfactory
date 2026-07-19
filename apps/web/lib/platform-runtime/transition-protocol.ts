@@ -1,4 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
+import { signTransitionPayload } from "../../../../scripts/lib/transition-signing.mjs";
+export { canonicalTransitionPayload, signTransitionPayload } from "../../../../scripts/lib/transition-signing.mjs";
 
 export const RUNTIME_TRANSITION_MAX_AGE_MS = 10 * 60 * 1000;
 
@@ -17,15 +19,6 @@ export type RuntimeTransitionReceipt = RuntimeTransitionEnvelope & {
   observedHealth?: Record<string, "healthy" | "unhealthy" | "starting" | "none">;
   beforeHash: string; afterHash: string; failure?: string; signature: string;
 };
-
-export function canonicalTransitionPayload(value: Omit<RuntimeTransitionReceipt, "signature"> | RuntimeTransitionEnvelope): string {
-  return JSON.stringify(value, Object.keys(value).sort());
-}
-
-export function signTransitionPayload(value: Omit<RuntimeTransitionReceipt, "signature"> | RuntimeTransitionEnvelope, secret: string): string {
-  if (secret.length < 32) throw new Error("runtime_transition_secret_too_short");
-  return createHmac("sha256", secret).update(canonicalTransitionPayload(value)).digest("hex");
-}
 
 function verifySignedReceipt(receipt: RuntimeTransitionReceipt, secret: string, envelope: RuntimeTransitionEnvelope): void {
   const { signature, ...unsigned } = receipt;

@@ -1,14 +1,12 @@
-import { createHash } from "node:crypto";
 import type { PromoterParams, PromoterResult } from "@/lib/self-upgrade/promoter";
+import { createHash } from "node:crypto";
+import { computeCapabilityStateVersion as computeSharedCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 import { signTransitionPayload, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt, verifyHistoricalTransitionReceipt, verifyTransitionReceipt } from "./transition-protocol";
 
 export const ACTIVE_RUNTIME_TRANSITION_STATUSES = ["pending", "applying", "host_applied", "compensating"] as const;
 
 export function computeCapabilityStateVersion(catalogHash: string, states: Readonly<Record<string, string>>): string {
-  // Capability IDs/states are closed below, making the plan's newline/equal
-  // serialization canonical and unambiguous.
-  const stateLines = Object.entries(states).map(([id, state]) => `${id}=${state}`).sort().join("\n");
-  return createHash("sha256").update(`${catalogHash}\n${stateLines}`).digest("hex");
+  return computeSharedCapabilityStateVersion(catalogHash, states);
 }
 
 export type RuntimeCapabilityTransitionRequest = {
