@@ -1,6 +1,6 @@
 # Install-State Readiness Migration Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Use `dpf-tdd` and `dpf-local-merge-ci-before-push`, including the per-BI completion gate, to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make supported legacy install state safely projectable during read-only promoter readiness and atomically migratable after the governed recovery point, while fixing every canonical writer that can recreate invalid state.
 
