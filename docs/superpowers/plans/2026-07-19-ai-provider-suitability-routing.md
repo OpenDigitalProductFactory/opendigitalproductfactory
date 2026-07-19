@@ -1,6 +1,6 @@
 # AI Provider Suitability Routing Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Use the DPF-native `dpf-tdd`, `dpf-local-merge-ci-before-push`, and `dpf-pr-with-dco` skills plus the per-BI completion gate. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Route each AI activity to a capable provider that is permitted for the organization's work, data, jurisdiction, contracts, and risk posture, and guide operators to configure that posture during onboarding.
 
