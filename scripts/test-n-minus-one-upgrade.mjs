@@ -79,7 +79,7 @@ export function buildPromoterPromotionDockerArgs({ candidateDigest, source, stat
     "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state", "-e", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition",
     "-e", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${Buffer.from(JSON.stringify(envelope)).toString("base64url")}`,
     "-e", `DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${signature}`, "-e", `DPF_SELF_UPGRADE_RUN_ID=${envelope.runId}`,
-    "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`, "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`,
+    "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`, "-e", "COMPOSE_PARALLEL_LIMIT=1", "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`,
     "-e", `PROMOTE_COMPOSE_PROJECT=${project}`, "-e", `PROMOTE_COMPOSE_ENV_FILE=${composeEnvContainerPath}`, "-e", "PROMOTE_BACKUP_PATH=/backups/recovery",
     "-e", "PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health", candidateDigest, "--self-upgrade"];
 }
@@ -208,6 +208,10 @@ async function ensureNMinusOneHostEnvironment(workspace, project) {
   const env = {
     ...process.env,
     COMPOSE_PROJECT_NAME: project,
+    // The N-1 runner exercises the legacy Docker builder available on GitHub's
+    // hosted runner. Serializing Compose prevents portal and portal-init's
+    // shared runner target from racing while the legacy store exports layers.
+    COMPOSE_PARALLEL_LIMIT: "1",
     DPF_STATE_DIR_HOST: workspace.state,
     DPF_STATE_DIR: workspace.state,
     DPF_BACKUPS_HOST_PATH: workspace.backups,

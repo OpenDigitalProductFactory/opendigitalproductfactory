@@ -238,7 +238,7 @@ test("governed promotion invokes the signed promoter with writable state and rec
     "/var/run/docker.sock:/var/run/docker.sock:rw", "/candidate:/host-source:ro", "/state:/dpf-state:rw",
     "/backups:/backups:rw", "/secret:/run/secrets/dpf-runtime-transition:ro", "/workspace/n-minus-one.env:/run/dpf/n-minus-one.env:ro",
     "PROMOTE_COMPOSE_ENV_FILE=/run/dpf/n-minus-one.env", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${encodedEnvelope}`,
-    "DPF_INSTALL_STATE_MIGRATION_SIGNATURE=signed-value", `DPF_PROMOTER_DIGEST=${digest}`, "PROMOTE_SOURCE=/host-source",
+    "DPF_INSTALL_STATE_MIGRATION_SIGNATURE=signed-value", `DPF_PROMOTER_DIGEST=${digest}`, "COMPOSE_PARALLEL_LIMIT=1", "PROMOTE_SOURCE=/host-source",
     `PROMOTE_TARGET_SHA=${"a".repeat(40)}`, "PROMOTE_COMPOSE_PROJECT=dpf-n1-test", "PROMOTE_BACKUP_PATH=/backups/recovery", "--self-upgrade",
   ]) assert.ok(rendered.includes(required), required);
   const source = await readFile(new URL("./test-n-minus-one-upgrade.mjs", import.meta.url), "utf8");
@@ -305,6 +305,7 @@ test("baseline preparation uses the unique harness project and proves health aft
     assert.ok(events[0].args.includes("dpf-n1-isolated"));
     assert.deepEqual(events[0].args.slice(-5), ["up", "-d", "--build", "postgres", "portal"]);
     assert.equal(events[0].env.COMPOSE_PROJECT_NAME, "dpf-n1-isolated");
+    assert.equal(events[0].env.COMPOSE_PARALLEL_LIMIT, "1");
     assert.equal(events[0].env.DPF_STATE_DIR_HOST, workspace.state);
     assert.equal(events[0].env.DPF_STATE_DIR, workspace.state);
     assert.equal(events[0].env.DPF_BACKUPS_HOST_PATH, workspace.backups);
