@@ -454,6 +454,12 @@ The implementation should cite primary legal/regulatory texts in the profession 
 - **Retention conflict:** privacy deletion and regulated audit/incident retention can conflict. The existing policy registry, floors, and holds arbitrate; no universal short window.
 - **Related work:** coordinate healthcare-specific scenarios with BI-HEALTHCARE-053 and coworker authority work with EP-31815F97 rather than duplicating their controls.
 
+### Future extension — owner-chosen conversational name for the COO
+
+Tracked separately as **BI-ADEF2982**. A future setup step may let the owner keep “COO,” select a suggested form of address, or enter an organization-visible conversational name for the standing COO. This is intentionally not part of the provider-governance delivery phases and does not block them.
+
+The extension must layer presentation over the stable identity rather than rename the agent: `AGT-ORCH-000`, canonical `Agent.displayName = COO`, role, grants, A2A routing, and authenticated action attribution remain unchanged. A role-preserving presentation such as “<chosen name> · AI COO” keeps the relationship warm while remaining honest. The feature requires explicit reconsideration of the ratified role-only decision in `docs/superpowers/specs/2026-07-18-coo-persona-attribution-contract-design.md`, organization-scoped persistence review, setup-to-standing-COO handoff coverage, safe default/skip, later edit/clear, and usability evidence that owners do not mistake personalization for human identity or expanded authority.
+
 ## Definition of done
 
 - The plan’s six phases have shipped through separate reviewable PRs with the mandatory build gate appropriate to each phase.
