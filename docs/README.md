@@ -30,6 +30,7 @@ Domain-specific operating guides (admin, AI workforce, build studio, compliance,
 
 ## Market proof
 
+- [DPF Market Vision](marketing/dpf-market-vision.md) — public positioning for DPF as an AI-operated company platform: market, competitors, adapter-to-native strategy, and priority roadmap.
 - [Persona Library](personas/README.md) — evidence-backed archetype stories that double as marketing substrate and re-runnable dogfood scenarios.
 - [Dale HVAC](personas/dale-hvac.md), [Linda Clinic](personas/linda-clinic.md), and [Marisol Retail](personas/marisol-retail.md) are the current proof set for vertical workspace homes.
 
@@ -37,6 +38,7 @@ Domain-specific operating guides (admin, AI workforce, build studio, compliance,
 
 - [Repo README](../README.md) is the source-facing project overview and install posture.
 - [index.html](index.html) is the public pre-install website and marketing tour.
+- [marketing/dpf-market-vision.md](marketing/dpf-market-vision.md) is the product-positioning and competitor-framing narrative for the company operating platform vision.
 - [user-guide/market-archetypes.md](user-guide/market-archetypes.md) is the canonical archetype/coworker narrative for user-facing docs.
 - [user-guide/](user-guide/) is operational product help and contextual in-app documentation.
 - [architecture/](architecture/) is current architecture, standards, and conformance context.
