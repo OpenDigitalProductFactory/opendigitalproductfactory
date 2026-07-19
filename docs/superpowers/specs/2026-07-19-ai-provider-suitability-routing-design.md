@@ -54,6 +54,8 @@ DPF already has the right primitive families.
 - `apps/web/lib/routing/activity-contract.ts` and `apps/web/lib/routing/activity-compiler.ts` add activity-level routing hints for class, risk, token envelope, distribution shape, and success shape.
 - `apps/web/lib/routing/adapter-openrouter.ts` parses OpenRouter model discovery metadata, pricing, modalities, supported parameters, and model cards.
 - `packages/db/data/providers-registry.json` includes direct providers, local providers, OpenRouter, LiteLLM, and Z.ai/GLM provider entries.
+- `ModelProvider.authMethod`, `supportedAuthMethods`, `cliEngine`, and the structured execution-adapter selector distinguish API-key, OAuth/CLI, and local execution paths. Separate provider rows already distinguish direct API access from subscription-backed access for Anthropic and OpenAI.
+- `CredentialEntry` owns the connected credential/session, `AiProviderFinanceProfile` owns provider commercial setup, `SupplierContract` owns commitments and allowances, and `ProviderCapacityStatus`/`CliPoolStatus` own current quota and plan-limit observations.
 - `docs/user-guide/ai-workforce/model-routing-lifecycle.md` documents model discovery, tier floors, cost-per-success ranking, and local/basic model behavior.
 
 Design implication: this spec must not create a second router. It should add demand-side policy constraints and metadata that feed the existing router.
@@ -90,6 +92,7 @@ This design composes the following shipped programs. Implementers must re-check 
 | Jurisdiction capture and regulatory applicability | `BusinessContext.operatesIn/sellsTo/employsIn/dataResidency`; `packages/db/src/regulation-applicability.ts`; `apps/web/lib/compliance-library.ts` | [#2030](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2030), [#2095](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2095), [#2562](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2562) | Consume declared regional bases and applicable regulation results; do not add a competing location or regulation model. |
 | Cost/quality/time posture | `apps/web/lib/golden-triangle/*`; `EP-GOLDEN-TRIANGLE` | [#2284](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2284) | Apply hard suitability constraints before Golden Triangle preferences; preserve its precedence and fail-closed rules. |
 | Endpoint routing and capacity | `RequestContract`, `routeEndpointV2`, provider capacity and health loaders | [#3034](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3034), [#3145](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3145) | Add load-bearing allow/deny and trust constraints to the existing hard-filter/composition path. |
+| Provider connection, authentication, account economics, and contract | `ModelProvider`, `CredentialEntry`, `ExecutionAdapterSelector`, `AiProviderFinanceProfile`, `SupplierContract`, `ProviderCapacityStatus`, and `CliPoolStatus` | [#1147](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1147), [#2666](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2666), [#2745](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2745), [#3065](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3065), [#3072](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3072) | Derive an account-scoped access posture from these owners. Do not infer enterprise rights from vendor/model identity or create a parallel account, credential, billing, or capacity model. |
 | Task capability and specialist ownership | `ActivityContract`, planner capability broker, specialist router | [#3224](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3224), [#3227](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3227) | Consume task/activity facts as suitability inputs; do not confuse capability attachment or coworker delegation with provider selection. |
 | Archetype, occupation, and value-stream context | `StorefrontConfig.archetypeId`, `OccupationProfile`, `deriveOperationalValueStream()`, `deriveTwinValueStreamBinding()` | [#3114](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3114), [#3135](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3135), [#3194](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3194), [#3063](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3063), [#3067](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3067) | Derive a work-context overlay; do not create another vertical, persona, job, or stage taxonomy. |
 | Runtime capability and provider health | capability catalog, provider health projection, governed runtime resolver | [#3262](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3262), [#3266](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3266) | Reuse live availability/health as route facts; suitability never declares a provider operational by itself. |
@@ -274,7 +277,12 @@ Extend provider/model metadata with trust facts. These are facts or unknowns, no
 ```ts
 type ProviderTrustFacts = {
   providerId: string;
+  providerConnectionId: string;
   category: "direct" | "router" | "local" | "self-hosted";
+  executionChannel: "direct-api" | "subscription-cli" | "hosted-router" | "cloud-tenant" | "local-runtime";
+  accountClass: "regular" | "business-team" | "enterprise" | "unknown";
+  commercialBasis: "usage-metered" | "subscription-included" | "enterprise-contract" | "local-compute" | "unknown";
+  authMethod: "api-key" | "oauth" | "workload-identity" | "local" | "unknown";
   jurisdictions: string[];
   externalEgress: "none" | "provider-cloud" | "router-cloud" | "self-hosted-network" | "unknown";
   externalTrainingUse: "denied" | "allowed" | "configurable" | "not-applicable" | "unknown";
@@ -290,10 +298,16 @@ type ProviderTrustFacts = {
     enabledForAccount: boolean | null;
   }>;
   contractEvidence: {
+    supplierContractId?: string | null;
+    contractPlanName?: string | null;
+    dpaOnFile?: boolean | null;
     baaAvailable?: boolean | null;
     baaOnFile?: boolean | null;
     dpaAvailable?: boolean | null;
-    dpaOnFile?: boolean | null;
+    zeroRetentionEntitled?: boolean | null;
+    regionalProcessingEntitled?: boolean | null;
+    adminAuditControlsEntitled?: boolean | null;
+    enterpriseSupportOrSla?: boolean | null;
     serviceProviderOversightReviewedAt?: string | null;
     studentDataTermsReviewedAt?: string | null;
     financialCustomerInfoReviewedAt?: string | null;
@@ -314,6 +328,16 @@ type ProviderTrustFacts = {
 };
 ```
 
+These facts are resolved for a concrete configured connection, not globally for a vendor or model. The same model may be reachable through a regular pay-per-use API key, a consumer or team subscription session, an enterprise contract, a cloud tenant, OpenRouter, and a local runtime. Those routes can have different terms, retention, training/data-use treatment, regional controls, administrator visibility, quotas, support, and model/tool availability.
+
+DPF must therefore keep three layers separate:
+
+1. **Catalog capability:** what a provider, model, endpoint, or adapter can technically support.
+2. **Connected-account posture:** which execution channel and account class the installed credential actually represents.
+3. **Proven entitlement:** which contractual or account-level controls are enabled for that connection and remain within their review/expiry window.
+
+An API key does not prove an enterprise contract. An OAuth subscription does not prove API rights or enterprise controls. A vendor advertising ZDR, regional processing, a BAA, DPA, SSO, audit administration, or an SLA does not prove the connected account is entitled to it. Unknown account class or entitlement remains `review` or `deny` for restricted work.
+
 For local providers:
 
 - external egress = none for model execution when the endpoint is truly local
@@ -328,6 +352,7 @@ For OpenRouter:
 - default trust facts must describe the router and the unknown underlying provider
 - route eligibility for regulated data requires endpoint/provider constraints, not just `providerId = openrouter`
 - EU data residency requires both an EU regional endpoint (`https://eu.openrouter.ai`) and proof that the account has enterprise in-region routing enabled
+- regular OpenRouter API access and enterprise-enabled OpenRouter access are separate connection postures even when they use the same provider ID and API shape
 
 ## 8. Onboarding Recommendation Flow
 
@@ -361,6 +386,14 @@ Use plain language and progressive disclosure:
    - we can use standard hosted providers
    - we need approved vendors/contracts
    - we need local or self-hosted only for some data
+7. Provider access already available:
+   - direct pay-per-use API account
+   - provider subscription sign-in or host CLI
+   - business/team or enterprise account with a contract
+   - cloud tenant or self-hosted gateway
+   - not connected yet / not sure
+
+The setup flow should infer channel and authentication method from the connection process, then ask only for facts it cannot prove, such as whether the account is regular, business/team, or enterprise and whether a relevant contract or entitlement is on file. It must explain that a ChatGPT/Claude-style subscription and a metered API account are separate commercial surfaces unless provider evidence proves otherwise.
 
 Do not ask operators to understand VRAM, quantization, or endpoint slugs during setup. Those belong in advanced provider detail screens.
 
@@ -441,6 +474,10 @@ Initial deterministic rules:
 
 | Condition | Route policy |
 | --- | --- |
+| provider/model available through multiple connections | evaluate each connection independently; never transfer enterprise entitlements, contract evidence, or quota from one account/channel to another |
+| regular direct API account | allow general work when provider facts permit; require account-scoped evidence before restricted work uses enterprise-only retention, residency, BAA/DPA, audit, or SLA claims |
+| consumer/subscription or host-CLI account | treat as a distinct channel with its own terms, quotas, adapter capabilities, and session ownership; never assume API or enterprise rights |
+| enterprise-contracted API/cloud account | allow enterprise-only controls only when the connected account is linked to active contract/entitlement evidence and the required endpoint/configuration is in use |
 | workload profile includes `secrets-credentials` and governed fields remain restricted | `local_only` unless a specifically approved vault-safe provider exists |
 | healthcare + `health-phi` | local or approved cloud provider with contract evidence; OpenRouter only when bounded to eligible ZDR/no-training endpoints and contract posture permits |
 | education + `student-records` | local or approved provider; require disclosure/evidence review for hosted providers |
@@ -723,6 +760,10 @@ OpenRouter and LiteLLM are not single trust domains for regulated routing. DPF m
 
 Archetype, value-stream stage, and occupation already exist or are in-flight. AI policy should compose onto them instead of inventing another vertical model.
 
+### Decision 6: Suitability Is Connection-Scoped, Not Vendor-Scoped
+
+Provider/model identity supplies catalog capability only. Commercial tier, execution channel, terms, entitlements, contract evidence, quota, and account administration belong to the concrete connection used for a route. The compiler may derive this projection from existing provider/auth/finance/contract/capacity records, but it must not copy enterprise claims into provider-wide seed metadata.
+
 ## 14. Security And Privacy Risks
 
 | Risk | Mitigation |
@@ -733,6 +774,9 @@ Archetype, value-stream stage, and occupation already exist or are in-flight. AI
 | Local model selected for work it cannot do well | preserve quality tier and cost-per-success ranking inside local-only constraints; escalate to human when no capable local route exists |
 | Workload overlay conflicts with governed classification | governed asset/field classification and PDP always win; unknown or conflicting context fails to review/deny |
 | Occupation policy widens access | occupation focuses UI only; RBAC and tool grants remain security boundary |
+| Consumer or regular account is mistaken for enterprise access | bind trust facts and evidence to the concrete provider connection; unknown tier or entitlement fails closed for restricted work |
+| Subscription sign-in is treated as interchangeable with API access | keep execution channel, adapter capabilities, terms, quota, and commercial basis explicit in route policy and receipts |
+| Enterprise contract exists but the wrong endpoint/account is used | require connection-to-contract/entitlement linkage and record the connection posture in the route receipt |
 
 ## 15. Testing Strategy
 
@@ -746,6 +790,8 @@ Unit tests:
 - OpenRouter router metadata request and permissive parsing
 - explanation text snapshots for risky cases
 - unknown trust facts produce review/blocked outcomes
+- identical provider/model tests across regular API, subscription/OAuth, enterprise-contracted, router, and local connections
+- enterprise-only controls fail closed when account class, contract linkage, entitlement, or required endpoint is unproven
 
 Integration tests:
 
@@ -755,6 +801,8 @@ Integration tests:
 - `routeEndpointV2` excludes providers outside compiled allow policy
 - `routeEndpointV2` excludes providers inside compiled deny policy
 - provider evidence expiry changes eligibility
+- connection-scoped evidence never leaks across two accounts for the same provider
+- route receipts record execution channel and account posture without secrets or customer account identifiers
 - provider slug validation for OpenRouter `only`, `ignore`, and `order` settings
 - migration safety if provider evidence moves from JSON/registry metadata into a table
 
@@ -788,6 +836,7 @@ Docs:
 3. What is the minimum provider trust catalog seed for launch: local, OpenAI, Anthropic, Google, Azure, Bedrock, OpenRouter, LiteLLM, Z.ai?
 4. Should the first UI be in `/platform/ai/providers`, `/setup`, or the AI Operations Map?
 5. Which verticals get the first governed data bindings and workload hints: healthcare, finance, education, source-code/Build Studio, or all four?
+6. Can the current one-row-per-`providerId` `ModelProvider` shape represent multiple simultaneous accounts for the same vendor, or should the first implementation introduce a connection/profile identity while preserving provider catalog identity?
 
 ## 18. Recommended First Implementation Slice
 

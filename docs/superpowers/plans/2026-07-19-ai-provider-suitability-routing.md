@@ -42,6 +42,7 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 | Jurisdiction and compliance | `BusinessContext` regional fields; `regulationApplies()`; compliance library | #2030, #2095, #2562 |
 | Golden Triangle | `EP-GOLDEN-TRIANGLE`; `compileGoldenTrianglePolicy()` and route-context composition | #2284 |
 | Routing/capacity | `RequestContract`; `routeEndpointV2`; provider capacity/health | #3034, #3145 |
+| Provider access posture | `ModelProvider`; `CredentialEntry`; `ExecutionAdapterSelector`; `AiProviderFinanceProfile`; `SupplierContract`; provider/CLI capacity | #1147, #2666, #2745, #3065, #3072 |
 | Activity/coworker routing | `ActivityContract`; capability broker; specialist router | #3224, #3227 |
 | Work context | archetype, `OccupationProfile`, operational/twin value stream | #3114, #3135, #3194, #3063, #3067 |
 | Governed runtime | capability catalog and shared health projection | #3262, #3266 |
@@ -103,6 +104,9 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 - [ ] Import `DataAssetId`, `DataFieldId`, `DataSensitivity`, `DataCategory`, `ProcessingPurposeKey`, and `ResidencyClassKey` from `apps/web/lib/govern/data/taxonomy.ts`; do not redeclare them.
 - [ ] Write failing compiler tests for dental, retail, credit union, training, software, unknown-classification, conflicting-residency, and missing-contract cases.
 - [ ] Define provider facts in two layers: vendor/catalog facts in the existing provider registry; organization/account attestations remain separate inputs and default to unknown.
+- [ ] Derive a connection-scoped access posture from existing auth, credential, finance, contract, execution-adapter, and capacity owners: execution channel, account class, commercial basis, auth method, contract linkage, and proven entitlements.
+- [ ] Write failing tests for the same provider/model over regular metered API, subscription/OAuth or host CLI, enterprise-contracted API/cloud, router, and local connections. Prove evidence and enterprise rights never transfer between connections.
+- [ ] Audit whether one-row-per-`providerId` can support simultaneous accounts for one vendor. If not, introduce the smallest connection/profile identity that preserves `ModelProvider` as catalog ownership rather than encoding account tier in provider IDs.
 - [ ] Implement `compileAiProviderSuitabilityPolicy()` as a pure adapter over business context, `regulationApplies()` output, governed data/PDP output, activity/work context, provider facts, and Golden Triangle posture.
 - [ ] Return `allowedProviders`, `deniedProviders`, `residencyPolicy`, OpenRouter obligations, effect (`allow|review|deny`), and structured explanations. Never select an endpoint.
 - [ ] Pass the compiled route context into existing `inferContract()` composition.
@@ -126,6 +130,7 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 
 - [ ] Write failing recommendation tests for declared `operatesIn`, `sellsTo`, `employsIn`, and `dataResidency` bases plus archetype, risk posture, and active provider state.
 - [ ] Add plain-language setup questions only where existing `BusinessContext` or confirmed `DataProcessingActivity` cannot already answer them.
+- [ ] Infer API/OAuth/CLI/local channel from the connection flow, then ask whether the connected account is regular, business/team, enterprise, cloud-tenant, or unknown and whether a contract/entitlement is on file. Explain that consumer subscriptions and metered APIs are separate surfaces.
 - [ ] Persist regional answers through the existing business-context action. Persist processing confirmations through the data-governance path when available; otherwise retain an explicit unknown/review state rather than a temporary policy store.
 - [ ] Render one recommendation projection with `use now`, `use after review`, and `not for this work` groups; use the same projection on setup and provider overview.
 - [ ] Add evidence-needed follow-ups through the existing attention/backlog mechanism without automatically approving providers.
@@ -146,6 +151,7 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 
 - [ ] Write failing compiler tests for ZDR, data-collection denial, provider order/only/ignore, parameter requirements, bounded fallback, and public price/latency routes.
 - [ ] Write failing execution tests proving request body controls reach `/v1/chat/completions`, the metadata header is sent, and EU policy changes the base URL only with attested enterprise enablement.
+- [ ] Write account-posture tests proving regular OpenRouter API access cannot inherit enterprise EU/ZDR entitlements and enterprise controls apply only to the linked credential/account and required endpoint.
 - [ ] Write failing response tests for returned underlying-provider attempts, absent metadata, unknown fields, and malformed optional metadata.
 - [ ] Add typed OpenRouter policy to the existing execution plan; do not hide it in arbitrary metadata.
 - [ ] Consolidate OpenAI-compatible request construction if multiple paths could bypass policy injection.
@@ -192,9 +198,10 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 - Modify: existing route-decision/telemetry writer selected during Task 1 audit
 - Modify: `apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx`
 
-- [ ] Decide whether `SupplierContract` + `ComplianceEvidence` + existing provider metadata can express BAA/DPA, ZDR/no-training, regional entitlement, review status, and expiry. Add a new model only for facts those owners cannot represent.
+- [ ] Decide whether `SupplierContract` + `ComplianceEvidence` + existing provider, credential, and finance metadata can express connection identity, account class, BAA/DPA, ZDR/no-training, regional entitlement, admin/audit controls, SLA/support, review status, and expiry. Add a new model only for facts those owners cannot represent.
 - [ ] If a migration is required, write forward-safe migration tests and an inline backfill/attestation per AGENTS.md migration rules.
 - [ ] Write failing evidence resolution tests for valid, missing, expired, rejected, conflicting, and superseded evidence.
+- [ ] Write failing isolation tests proving an enterprise contract or entitlement linked to one account/connection never authorizes a regular API key, subscription session, or second tenant for the same vendor.
 - [ ] Write failing receipt tests that capture policy/input versions, provider/underlying-provider identity, exclusions, obligations, and explanation codes without sensitive content.
 - [ ] Make expired evidence downgrade restricted eligibility immediately while leaving general/public routing governed by its own policy.
 - [ ] Render contract/evidence status and next action on the existing provider detail page; do not create another admin workspace.
@@ -215,6 +222,7 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 
 - [ ] Write failing rollup tests partitioned by activity/workload class while preserving privacy thresholds and existing provider/model totals.
 - [ ] Add drift/expiry attention signals for provider catalog facts, account attestations, contract evidence, regional entitlement, and repeated route failure.
+- [ ] Add drift signals when the observed execution channel, account class, plan limit, endpoint, or credential no longer matches the attested contract/entitlement posture.
 - [ ] Keep telemetry advisory: it may promote/degrade recommendations inside hard policy but cannot override PDP, contract, residency, or operator denial.
 - [ ] Add rollout flags in this order: compiler shadow mode, admin preview, onboarding recommendation, selected vertical bindings, restricted OpenRouter, evidence enforcement, continuous tuning.
 - [ ] Exercise dental, retail, credit-union, training, and software-platform journeys against the running portal.
@@ -228,6 +236,8 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 - Data classification and action authority come from `govern/data`; jurisdiction comes from `BusinessContext`; regulation applicability comes from the generic evaluator.
 - Setup recommendations and runtime enforcement use the same pure suitability projection.
 - OpenRouter restricted routes prove provider controls, regional entitlement when required, and underlying-provider evidence or fail closed.
+- Every governed route evaluates the concrete provider connection; provider/model identity alone never supplies API, subscription, business/team, or enterprise rights.
+- Route receipts identify execution channel and account posture without storing credentials or external customer account identifiers.
 - Occupation and work context never widen authority.
 - Route receipts explain the decision without storing sensitive content.
 - The PR is current with `main`, mechanically healthy, and linked to `EP-AI-PROVIDER-SUITABILITY` plus all eight BIs.
