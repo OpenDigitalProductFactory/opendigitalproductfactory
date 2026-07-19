@@ -41,6 +41,10 @@ const GUIDANCE =
   "Junction-safe alternatives: remove a worktree with `git worktree remove <path>`; delete a junction with `rmdir <dir>` (non-recursive) or PowerShell `[IO.Directory]::Delete($p,$false)`; scope `git clean` with `-e` or run it only inside a non-junctioned dir. " +
   "If you truly mean to mutate the shared root, prefix the command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.";
 
+const ROOT_GIT_STATE_GUIDANCE =
+  "Root clone git state mutation blocked (BI-B6AF69E1). The install/root clone must stay on main and clean; active work belongs in a sibling worktree such as D:/DPF-worktrees/<topic>. Raw `git switch`, `git checkout`, `git reset`, `git pull`, `git merge`, or `git rebase` in the root clone moves the checkout before the pre-commit guard can help and is how sessions strand D:/DPF on feature branches with uncommitted work. " +
+  "Use scripts/new-dev-worktree.sh (or the surface worktree command) for feature work. If this is verified root-clone maintenance, prefix the command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.";
+
 // ── path helpers (forward-slash, drive-letter aware) ─────────────────────────
 
 function norm(p) {
@@ -181,6 +185,46 @@ export function isDestructiveGitClean(seg) {
   return hasDir && hasIgnored;
 }
 
+function gitSubcommandTargetCwd(seg, cwd) {
+  const tokens = tokenize(seg);
+  const lower = tokens.map((t) => t.toLowerCase());
+  const gitIndex = lower.indexOf("git");
+  if (gitIndex < 0) return null;
+
+  let i = gitIndex + 1;
+  let targetCwd = cwd;
+  while (i < tokens.length) {
+    const token = tokens[i];
+    if (token === "-C" && tokens[i + 1]) {
+      targetCwd = resolveAgainst(cwd, tokens[i + 1]);
+      i += 2;
+      continue;
+    }
+    if ((token === "-c" || token === "--config-env") && tokens[i + 1]) {
+      i += 2;
+      continue;
+    }
+    if (token.startsWith("-")) {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+
+  return { subcommand: lower[i] ?? "", targetCwd };
+}
+
+export function isRootCloneGitStateMutation(seg, cwd, isDir = () => false) {
+  const parsed = gitSubcommandTargetCwd(seg, cwd);
+  if (!parsed) return false;
+  if (!["switch", "checkout", "reset", "pull", "merge", "rebase"].includes(parsed.subcommand)) {
+    return false;
+  }
+  const target = norm(parsed.targetCwd);
+  const cloneRoot = deriveCloneRoot(target, isDir);
+  return cloneRoot !== null && target === cloneRoot;
+}
+
 // ── decision ─────────────────────────────────────────────────────────────────
 
 /**
@@ -204,6 +248,10 @@ export function decide({ command, cwd = "", env = {}, isSymlink = () => false, i
   const cloneRoot = () => (cloneRootMemo !== undefined ? cloneRootMemo : (cloneRootMemo = deriveCloneRoot(cwd, isDir)));
 
   for (const seg of segments(command)) {
+    if (isRootCloneGitStateMutation(seg, cwd, isDir)) {
+      return { block: true, reason: ROOT_GIT_STATE_GUIDANCE };
+    }
+
     // `git clean -fdx` follows junctioned/ignored dirs into the shared root.
     if (isDestructiveGitClean(seg)) {
       return { block: true, reason: GUIDANCE };

@@ -48,7 +48,7 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
 
 ## When NOT to use
 
-- Only one session is active and no concurrent work is planned — work in the root clone (`D:\DPF` on Windows, `~/dpf` on macOS/Linux).
+- The user asked only for read-only inspection in the root clone. Coding work, branch movement, and dirty-file experiments still go in a sibling worktree even when only one session is active.
 - The work is documentation-only and doesn't touch code or seed paths — the small risk of staleness isn't worth the worktree overhead.
 - Build Studio is the executor — BS sandboxes have their own isolation, not git worktrees.
 
@@ -142,7 +142,7 @@ Before editing or reviewing from an existing worktree:
 - **Never run `docker compose up`/`down`/`rm` from a worktree without `COMPOSE_PROJECT_NAME` set.** A `docker compose down --volumes` against the root `dpf` project from a worktree is the destructive operation that wiped the volume in the 2026-05-23 incident (`project_2026_05_23_volume_wipe_recovery`).
 - **Never base a topic branch on local `main`.** Always `origin/main` after `git fetch`.
 - **Never commit MCP config files.** `.mcp.json` and `.vscode/mcp.json` are gitignored for a reason — they carry bearer tokens.
-- **Never modify the root clone's working tree for active feature work.** The root clone is the merge/release worktree per `keep-root-clone-as-merge-worktree`.
+- **Never modify or move the root clone for active feature work.** The root clone is the merge/release/install worktree per `keep-root-clone-as-merge-worktree`; raw `git switch`, `git checkout`, `git reset`, `git pull`, `git merge`, and `git rebase` in that clone are root mutations, not setup.
 - Don't treat the worktree as a runtime by default. Commit from the worktree, verify against the canonical install. 'Make the worktree runnable' is a dedicated platform task, not a side-effect of every feature thread.
 - **Never claim unrun gates passed.** A `source-only` worktree can hold correct code, but its local typecheck/build/test status is unknown until proven in that worktree or in canonical runtime/local-CI.
 
