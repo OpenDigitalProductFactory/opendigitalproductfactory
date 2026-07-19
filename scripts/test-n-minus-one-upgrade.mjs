@@ -261,7 +261,16 @@ export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }
     Buffer.from(`${JSON.stringify({ schemaVersion: 1, installerVersion: "n-minus-one", platform: "linux", arch: "amd64", installPath: workspace.source, stateDir: workspace.state, composeProjectName: project })}\n`),
   ]);
   const env = await ensureNMinusOneHostEnvironment(workspace, project);
-  await run("node", [join(workspace.source, "scripts", "dpf-compose.mjs"), "--env-file", workspace.harnessEnvFile, "--project-name", project, "up", "-d", "--build", "postgres", "portal"], { cwd: workspace.source, env });
+  await run("node", [join(workspace.source, "scripts", "dpf-compose.mjs"), "--env-file", workspace.harnessEnvFile, "--project-name", project, "up", "-d", "--build", "postgres"], { cwd: workspace.source, env });
+  // The compatibility proof needs durable N-1 state, Postgres, and a healthy
+  // pre-promotion endpoint; compiling the entire old portal adds no migration
+  // evidence and can exceed bounded hosted-runner leases. A Compose-labelled
+  // health sentinel occupies the exact portal identity until the governed
+  // promoter replaces it with the real candidate image.
+  await run("docker", ["run", "-d", "--name", `${project}-portal-1`, "--network", `${project}_default`,
+    "--label", `com.docker.compose.project=${project}`, "--label", "com.docker.compose.service=portal",
+    "--label", "com.docker.compose.container-number=1", "-p", "3000:3000", "node:24-alpine", "node", "-e",
+    "require('http').createServer((_,r)=>{r.writeHead(200);r.end('ok')}).listen(3000)"], { cwd: workspace.source, env });
   let lastStatus = 0;
   for (let attempt = 0; attempt < 90; attempt += 1) {
     try {

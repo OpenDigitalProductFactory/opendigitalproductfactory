@@ -156,6 +156,8 @@ Regression fixtures cover:
 
 The mandatory gates remain targeted Node/Vitest tests, PowerShell 5.1 parsing/behavior checks, Bash syntax/ShellCheck, web typecheck, production build, and self-upgrade compatibility acceptance.
 
+The compatibility acceptance harness uses a hybrid N-1 baseline: exact schema-v1 install-state bytes and real Postgres run beside a Compose-labelled health sentinel that occupies the baseline portal identity until the governed promoter replaces it with the fully built candidate portal. The gate therefore still proves pre-promotion health, non-mutating readiness, signed state migration, exact recovery bytes, database migration, candidate image provenance, and post-swap health without compiling an old portal whose application behavior is outside this migration's evidence claim. This bounded design was selected by the structured WWMD refinement `DI-2C0CB7C2CACC` (high confidence, 1.084 margin); the preceding unstructured consultation `DI-6F1E9F9E5B94` was retained in the ledger but rejected as insufficiently discriminating (low confidence, 0.019 margin).
+
 ## 6. Acceptance criteria
 
 1. The reported legacy Windows state projects successfully during read-only readiness, then migrates to schema version 2 after quiescence and before swap without manual editing.

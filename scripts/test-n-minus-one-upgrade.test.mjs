@@ -324,7 +324,7 @@ test("baseline preparation uses the unique harness project and proves health aft
     assert.equal(events[0].command, "node");
     assert.ok(events[0].args.some((value) => value.replaceAll("\\", "/").endsWith("scripts/dpf-compose.mjs")));
     assert.ok(events[0].args.includes("dpf-n1-isolated"));
-    assert.deepEqual(events[0].args.slice(-5), ["up", "-d", "--build", "postgres", "portal"]);
+    assert.deepEqual(events[0].args.slice(-4), ["up", "-d", "--build", "postgres"]);
     assert.equal(events[0].env.COMPOSE_PROJECT_NAME, "dpf-n1-isolated");
     assert.equal(events[0].env.COMPOSE_PARALLEL_LIMIT, "1");
     assert.equal(events[0].env.DPF_STATE_DIR_HOST, workspace.state);
@@ -343,6 +343,10 @@ test("baseline preparation uses the unique harness project and proves health aft
     assert.ok(seeded.includes(`AUTH_SECRET=${events[0].env.AUTH_SECRET}\n`));
     assert.ok(seeded.includes(`CREDENTIAL_ENCRYPTION_KEY=${events[0].env.CREDENTIAL_ENCRYPTION_KEY}\n`));
     assert.match(seeded, /^DPF_N1_HARNESS=1$/m);
+    assert.equal(events[1].command, "docker");
+    assert.deepEqual(events[1].args.slice(0, 4), ["run", "-d", "--name", "dpf-n1-isolated-portal-1"]);
+    assert.ok(events[1].args.includes("com.docker.compose.project=dpf-n1-isolated"));
+    assert.ok(events[1].args.includes("com.docker.compose.service=portal"));
     assert.deepEqual(workspace.harnessEnvironment, events[0].env);
     const stateBytes = await readFile(join(workspace.state, "install-state.json"));
     assert.deepEqual([...stateBytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
