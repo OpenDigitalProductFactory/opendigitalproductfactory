@@ -194,6 +194,24 @@ describe("classifyBuildFailure", () => {
     expect(c.failingTrace).toContain("capability_state_stale");
   });
 
+  it("classifies the #3282 migration-handoff crossing block instead of leaving it unknown (BI-BE8BBDE9)", () => {
+    // Live symptom on a pre-#3282 install: readiness passes, promote.sh exits 78,
+    // and the wrapper reported it as "unknown (unclassified)" with the wrong playbook.
+    const log = [
+      "[build-failure-class] unknown (unclassified)",
+      "--- stderr (tail) ---",
+      "error: install_state_migration_handoff_missing",
+    ].join("\n");
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("install-state-migration-handoff-missing");
+    expect(c.class).not.toBe("unknown");
+    // Must steer to the out-of-band crossing bootstrap, not a retry/rebuild.
+    expect(c.summary).toContain("Do NOT retry");
+    expect(c.summary).toContain("runtime-transition.secret");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.failingTrace).toContain("install_state_migration_handoff_missing");
+  });
+
   it("keeps an unrelated mounts-denied path out of the state-dir advice", () => {
     const log = "Error response from daemon: mounts denied: The path /some/other/vol is not shared from the host.";
     const c = classifyBuildFailure({ log });
