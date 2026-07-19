@@ -12,6 +12,12 @@ The promise is not "AI for small business" in the abstract. The promise is:
 
 > Keep doing the work customers pay you for. Give the work around the work to governed AI coworkers.
 
+The broader market thesis is now:
+
+> Integrate at the edge. Simplify in the core. Generalize for the ecosystem.
+
+DPF should meet owners where they are: QuickBooks for accounting, Stripe or Square for payments, Gusto or ADP for payroll, HubSpot or Salesforce for CRM, Zendesk or Jira Service Management for tickets, Slack or Microsoft 365 for communication, Shopify or POS systems for commerce, and vertical tools where regulation or specialization demands them. Those systems are bridges and benchmarks, not the final architecture. When a workflow is broadly useful across companies, DPF should absorb it into native company primitives so the next owner does not inherit the same brittle software stack.
+
 The "work around the work" is the necessary-evil layer that steals owner time:
 
 - capturing enough information to quote, book, dispatch, or qualify the work
@@ -37,6 +43,7 @@ DPF should separate what can be marketed as available today from what belongs in
 | Owner cockpit | Workspace/twin surfaces can frame work by archetype and expose current portal/customer/finance/workflow state. | The daily board becomes the owner's command center for exceptions, capacity, next best actions, and work that needs judgment. | Do not imply every vertical cockpit is finished until workspace/twin routes are acceptance-tested. |
 | Marketing | Archetype-aware offers, proof prompts, campaign ideas, and strategy inputs are defined as the customer marketing workspace direction. | Marketing coworker becomes the owner's research/draft/sequence assistant for local campaigns, proof assets, funnel review, and periodic strategy refresh. | Do not imply channel integrations, attribution, or automatic posting are complete unless verified. |
 | Operations | Shared mechanics cover intake, scheduling, inbox, customer records, finance drafts, workbooks, and selected vertical modules. | Field dispatch, rental capacity, project milestones, membership, donations, account relationships, and regulated handoffs become first-class vertical loops. | Do not imply DPF replaces core EHR, core banking, ticketing seat maps, payment rails, payroll, or full accounting systems. |
+| Ecosystem absorption | DPF has native routes and adapters across finance, HR, CRM, customer, knowledge, inventory, integrations, and work tracking; connector scorecards benchmark the surrounding SaaS ecosystem. | Adapters become migration bridges and learning surfaces. Shared primitives for Party, Work, Money, Asset, Knowledge, and Authority absorb repeatable workflows into a coherent operating platform. | Do not sell every vendor integration as native, or native aspiration as delivered parity. State the bridge-vs-native boundary clearly. |
 
 ## 3. Owner Promise Diagram
 
