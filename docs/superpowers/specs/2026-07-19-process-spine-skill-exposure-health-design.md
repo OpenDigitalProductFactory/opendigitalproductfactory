@@ -5,6 +5,7 @@ date: 2026-07-19
 decision-ledger:
   - DI-DEB2623C6DAB
   - DI-84BA6E9B2318
+  - DI-15E908812733
 related:
   - packages/dpf-skill-pack/process-spine-replacements.json
   - packages/dpf-skill-pack/hooks/process-spine-health-check.mjs
@@ -119,6 +120,22 @@ client-specific active-state/remediation APIs are verified. They still consume
 the same replacement/cleanup contract and can warn at bootstrap or SessionStart
 when exposed skill evidence shows a retired generic process skill without its
 DPF replacement.
+
+## Native Client Boundary
+
+The process-spine cleanup/update policy composes with the agent-toolchain
+bootstrap spec's native-first rule. DPF must use each client in the way it
+supports: plugin manifests/marketplaces for skills/plugins, MCP descriptor
+shapes for MCP, and the client's hook plane for hooks. Direct user-config edits
+are fallback adapter work, not a back door.
+
+Codex is the current exception because it has no verified non-interactive native
+command for every DPF-required user-config state. The fallback is still
+schema-aware: the TypeScript planner parses and stringifies TOML with
+`smol-toml`, while the dependency-free Python fallback uses a tested table
+upsert/collapse helper. Both paths have regression coverage for the known
+failure where duplicate `[mcp_servers.dpf]` tables make Codex unable to read its
+config. Unknown invalid TOML remains fail-closed instead of guessed.
 
 ## Known Limit
 

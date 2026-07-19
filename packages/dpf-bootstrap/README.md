@@ -11,6 +11,22 @@ See:
 
 Installer scripts are orchestration adapters, not config parsers. If a script needs to decide whether a TOML / JSON / memory file changes, that decision belongs in this package and its tests. No regex edits of structured config in shell.
 
+## Client-native integration rule
+
+Agent clients are integrated through their supported surfaces first: plugin
+manifests and marketplaces for skills/plugins, MCP descriptor shapes for MCP,
+and the client's hook plane for hooks. Direct user-config writes are fallback
+adapter work only when the client has no non-interactive native command for the
+state DPF must converge.
+
+Fallback edits still go through this planning library, not shell string patches.
+For Codex, `planCodexConfig` parses and stringifies TOML with `smol-toml`. The
+only pre-parse text repair it may perform is the known invalid state where
+`~/.codex/config.toml` already has duplicate `[mcp_servers.dpf]` tables. That
+repair collapses DPF's own duplicate block so the file can parse again, then the
+normal schema-aware planner owns the write. It never appends blindly and never
+deletes user-owned config.
+
 ## Public surface
 
 ```ts
