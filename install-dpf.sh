@@ -223,8 +223,12 @@ rc=0
 dpf_state_validate || rc=$?
 case "$rc" in
   0) ok "Install state at $(dpf_state_path) is current (schema $DPF_STATE_SCHEMA_VERSION)" ;;
-  2) info "No prior install state; initializing $(dpf_state_path)"
-     dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT" ;;
+  2) if [ "$DPF_DRY_RUN" = "1" ]; then
+       info "No prior install state; dry-run leaves $(dpf_state_path) unchanged"
+     else
+       info "No prior install state; initializing $(dpf_state_path)"
+       dpf_state_init "$DPF_INSTALLER_VERSION" "$REPO_ROOT"
+     fi ;;
   3) warn "Install state is from an older installer; running forward migration"
      dpf_state_migrate ;;
   *) fail "Install state validation failed (see message above)" ;;

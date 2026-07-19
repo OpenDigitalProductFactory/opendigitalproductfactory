@@ -8,8 +8,8 @@
 
 **Tech Stack:** Node.js ESM and `node:test`, Bash 3.2, PowerShell 5.1, Next.js/TypeScript/Vitest, JSON Schema, Docker promoter image.
 
-**Design:** `docs/superpowers/specs/2026-07-18-install-state-readiness-migration-design.md`  
-**WWMD:** `DI-C75A78147109`, `DI-6D6D452E46D5`  
+**Design:** `docs/superpowers/specs/2026-07-18-install-state-readiness-migration-design.md`
+**WWMD:** `DI-C75A78147109`, `DI-6D6D452E46D5`
 **Capsule:** `WC-E6433BAD`
 
 **Mount-reachability prerequisite:** BI-91DAA63D / decision `DI-B0A41878742E` renames the promoter-internal state path to `DPF_PROMOTER_STATE_DIR`. It must land in this branch before the persistence phase: promoter-owned portal/sandbox recreates must leave `DPF_STATE_DIR` unset so Compose resolves the canonical host path from the install `.env`. Window-parked `[#3266,#3272)` installs remain on the explicit installer/reinstall route and are not auto-migrated.

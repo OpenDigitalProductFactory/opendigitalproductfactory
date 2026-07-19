@@ -133,6 +133,8 @@ After it finishes, **restart the client** (desktop app or CLI) so it reloads the
 
 Re-run with `--show-substrate` for plugin/config/memory detail, or `--dry-run` to preview writes. See [docs/operations/install.md](../../operations/install.md) for what each state means in depth.
 
+The readiness record is committed through the same locked, compare-and-swap install-state transaction used by the installer and self-upgrade promoter. A failed state write now stops the bootstrap with an explicit error instead of reporting a misleading ready banner.
+
 ---
 
 ### The plugin: skills, hooks, and MCP in one package

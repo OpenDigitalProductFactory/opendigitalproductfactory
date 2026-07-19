@@ -92,10 +92,12 @@ jobs:
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
       - name: Execute real N-1 baseline-to-candidate gate
         if: steps.baseline.outputs.should_run == 'true'
+        env:
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           candidate_ref="$GITHUB_SHA"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            candidate_ref="refs/pull/${{ github.event.pull_request.number }}/merge"
+            candidate_ref="refs/pull/${EVENT_PR_NUMBER}/merge"
           fi
           node scripts/test-n-minus-one-upgrade.mjs \
             --base-sha "${{ steps.baseline.outputs.base_sha }}" \

@@ -1,9 +1,9 @@
 # Install-State Readiness Migration Design
 
-**Date:** 2026-07-18  
-**Status:** Approved; document reviewed 2026-07-18 (architecture-review advisory folded in)  
-**Governing decision:** `DI-C75A78147109` (WWMD, high confidence)  
-**Substrate decision:** `DI-6D6D452E46D5` (WWMD, high confidence)  
+**Date:** 2026-07-18
+**Status:** Approved; document reviewed 2026-07-18 (architecture-review advisory folded in)
+**Governing decision:** `DI-C75A78147109` (WWMD, high confidence)
+**Substrate decision:** `DI-6D6D452E46D5` (WWMD, high confidence)
 **Parent design:** [`2026-07-18-install-upgrade-refactor-parity-design.md`](2026-07-18-install-upgrade-refactor-parity-design.md)
 
 ## 1. Incident and root cause
