@@ -40,6 +40,7 @@
         "claudeCodeWired": { "type": "boolean" },
         "codexWired": { "type": "boolean" },
         "grokWired": { "type": "boolean" },
+        "antigravityWired": { "type": "boolean" },
         "memorySeededAt": { "type": ["string", "null"], "format": "date-time" },
         "mcpReadiness": {
           "oneOf": [
