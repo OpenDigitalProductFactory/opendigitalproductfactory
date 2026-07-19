@@ -95,11 +95,46 @@ test("in the MAIN clone, blocks recursive deletes of its shared dirs but allows 
   );
 });
 
+test("in the MAIN clone, blocks git commands that move the checkout or branch tip", () => {
+  for (const command of [
+    "git switch fix/root-clone-drift",
+    "git checkout -b fix/root-clone-drift",
+    "git reset --hard origin/main",
+    "git pull --ff-only",
+  ]) {
+    const verdict = decide({ command, cwd: MAIN, isDir: mainGit });
+    assert.equal(verdict.block, true, command);
+    assert.match(verdict.reason, /root clone|worktree|BI-B6AF69E1/i);
+  }
+});
+
+test("allows root-clone git drift commands only with the explicit maintenance bypass", () => {
+  assert.equal(
+    decide({
+      command: "git switch fix/root-clone-drift",
+      cwd: MAIN,
+      isDir: mainGit,
+      env: { DPF_ALLOW_ROOT_CLONE_MUTATION: "1" },
+    }).block,
+    false,
+  );
+  assert.equal(
+    decide({
+      command: "DPF_ALLOW_ROOT_CLONE_MUTATION=1 git reset --hard origin/main",
+      cwd: MAIN,
+      isDir: mainGit,
+    }).block,
+    false,
+  );
+});
+
 test("in a SIBLING worktree, normal deletes are allowed; a junctioned delete is still caught", () => {
   // worktree .git is a FILE -> clone root unknown -> rule (b) skipped
   assert.equal(decide({ command: "rm -rf build", cwd: SIBLING, isDir: noGit, isSymlink: noSym }).block, false);
   // rule (a) still protects against following a junction into the shared root
   assert.equal(decide({ command: "rm -rf node_modules", cwd: SIBLING, isDir: noGit, isSymlink: yesSym }).block, true);
+  assert.equal(decide({ command: "git switch fix/real-work", cwd: SIBLING, isDir: noGit }).block, false);
+  assert.equal(decide({ command: "git reset --hard origin/main", cwd: SIBLING, isDir: noGit }).block, false);
 });
 
 // ── helper units ──────────────────────────────────────────────────────────────
