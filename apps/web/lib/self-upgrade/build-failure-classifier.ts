@@ -97,6 +97,12 @@ export type BuildFailureClass =
   // deployed in that window can't self-heal (BI-B132DF1D). Version-skew, not a
   // defect in this run's code.
   | "capability-state-preflight-unavailable"
+  // promote.sh (#3282) requires a SIGNED install-state migration handoff
+  // (DPF_INSTALL_STATE_MIGRATION_ENVELOPE + _SIGNATURE) that only a #3282+
+  // launcher constructs. A pre-#3282 portal cannot produce it, so a legacy
+  // install cannot self-upgrade INTO #3282 — the fix is the documented
+  // out-of-band crossing bootstrap, never a rebuild or a retry (BI-BE8BBDE9).
+  | "install-state-migration-handoff-missing"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -178,6 +184,11 @@ const MOUNTS_DENIED = /mounts denied:[\s\S]{0,120}?path\s+(\S+)\s+is not shared 
 // on the emitted string; the wrapper "unknown (unclassified)" was the live
 // symptom this rule replaces (BI-B132DF1D).
 const CAPABILITY_STATE_STALE = /^error: capability_state_stale$/im;
+// promote.sh (#3282) exits 78 with exactly this line when the signed install-state
+// migration handoff was not supplied by the launcher. Anchor on the emitted string;
+// like capability_state_stale above, the live symptom this rule replaces was the
+// misleading "unknown (unclassified)" wrapper pointing at the wrong playbook.
+const MIGRATION_HANDOFF_MISSING = /^error: install_state_migration_handoff_missing$/im;
 // `CREATE EXTENSION vector` on a Postgres image without pgvector: the canonical
 // Postgres errors are `extension "vector" is not available` and a `DETAIL: Could
 // not open extension control file ".../vector.control"`. Deliberately anchored on
@@ -272,6 +283,21 @@ export function classifyBuildFailure(
         "promote.sh's capability preflight aborted with `error: capability_state_stale` — a MISLABEL: it means the governed install snapshot (/dpf-state/install-state.json) or the compose-profile adapter was not available inside the promoter, not that capability state is genuinely stale. Root cause is a promoter launcher predating the /dpf-state self-upgrade mount (#3272) running a promote.sh that already requires it (#3266): an install deployed in that window cannot self-heal and must be bootstrapped out-of-band onto a portal >= #3272 (BI-B132DF1D). Version-skew / environment, not a defect in this run's code.",
       playbookLink: SPEC,
       failingTrace: traceAround(log, CAPABILITY_STATE_STALE),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
+  // promote.sh (#3282) refused to migrate because the launcher supplied no signed
+  // migration handoff. Decisive and precedes any build output, like the two cases
+  // above — classify it so a legacy install crossing into #3282 is sent to the
+  // bootstrap procedure instead of "unknown (unclassified)" (BI-BE8BBDE9).
+  if (MIGRATION_HANDOFF_MISSING.test(log)) {
+    return {
+      class: "install-state-migration-handoff-missing",
+      summary:
+        "promote.sh refused the governed install-state migration because the signed handoff (DPF_INSTALL_STATE_MIGRATION_ENVELOPE + DPF_INSTALL_STATE_MIGRATION_SIGNATURE) was not supplied. Only a #3282+ launcher builds and signs that envelope (signing also needs /dpf-state/runtime-transition.secret), so an install still running a PRE-#3282 portal cannot self-upgrade INTO #3282 — every fix ships into a version the install cannot reach. Do NOT retry or rebuild: the run will fail identically. Cross the boundary once, out-of-band (build the portal from current origin/main, initialize the transition secret via scripts/rotate-runtime-transition-secret.mjs --initialize, set DPF_HOST_PLATFORM/DPF_HOST_ARCH in the install .env to match install-state, then recreate portal+portal-init). After that the launcher can sign handoffs and self-upgrade resumes normally (BI-BE8BBDE9). Version-skew / environment, not a defect in this run's code.",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, MIGRATION_HANDOFF_MISSING),
       isMainDefectVsEnvironment: "environment",
     };
   }
