@@ -2152,10 +2152,12 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "consult-specs-first",
+        "ground-new-work-in-existing-platform",
         "why-this-exists",
+        "applies-to",
         "what-to-do",
         "anti-pattern",
+        "decision-dimensions",
         "related-principles"
       ]
     },
