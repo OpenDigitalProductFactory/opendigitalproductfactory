@@ -25,6 +25,16 @@ export function loadReplacementContract(skillPackRoot = defaultSkillPackRoot) {
   return parsed.replacements;
 }
 
+export function loadCleanupPolicy(skillPackRoot = defaultSkillPackRoot) {
+  const raw = readFileSync(join(skillPackRoot, "process-spine-replacements.json"), "utf8");
+  const parsed = JSON.parse(raw);
+  const policy = parsed.cleanupPolicy;
+  if (!policy || !Array.isArray(policy.clients)) {
+    throw new Error("process-spine-replacements.json must contain cleanupPolicy.clients[]");
+  }
+  return policy;
+}
+
 export const REQUIRED_REPLACEMENT_SLUGS = loadReplacementContract().map((entry) => entry.dpfSkill);
 
 function normalizeSkillId(value) {
@@ -183,6 +193,23 @@ export function renderProcessSpineSummary(verdict) {
   return lines;
 }
 
+export function renderCleanupPolicySummary(policy = loadCleanupPolicy()) {
+  const lines = ["Process spine cleanup/update:"];
+  lines.push(
+    `  Policy: ${policy.mode} - rerun bootstrap/updater after DPF skill-pack changes; safe adapters never delete user-owned skill files or plugin caches.`,
+  );
+  for (const client of policy.clients ?? []) {
+    const label = client.client.charAt(0).toUpperCase() + client.client.slice(1);
+    const ids = (client.competitivePluginIds ?? []).join(", ");
+    if (client.status === "reconciles-safe-config") {
+      lines.push(`  ${label}: disables known competitive plugins when found (${ids}).`);
+    } else {
+      lines.push(`  ${label}: ${client.status}; warns if competitive process skills are active (${ids}).`);
+    }
+  }
+  return lines;
+}
+
 function parseArgs(argv) {
   const args = { skillPackRoot: defaultSkillPackRoot, exposedSkills: undefined, hook: false };
   for (let i = 0; i < argv.length; i += 1) {
@@ -204,7 +231,10 @@ function main() {
     skillPackRoot: args.skillPackRoot,
     exposedSkills: args.exposedSkills,
   });
-  const lines = renderProcessSpineSummary(verdict);
+  const lines = [
+    ...renderProcessSpineSummary(verdict),
+    ...renderCleanupPolicySummary(loadCleanupPolicy(args.skillPackRoot)),
+  ];
 
   if (args.hook) {
     if (verdict.severity === "ok") process.exit(0);

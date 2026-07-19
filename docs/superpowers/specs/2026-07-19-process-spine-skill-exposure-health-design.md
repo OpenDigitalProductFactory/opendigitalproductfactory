@@ -4,6 +4,7 @@ status: implemented
 date: 2026-07-19
 decision-ledger:
   - DI-DEB2623C6DAB
+  - DI-84BA6E9B2318
 related:
   - packages/dpf-skill-pack/process-spine-replacements.json
   - packages/dpf-skill-pack/hooks/process-spine-health-check.mjs
@@ -44,10 +45,30 @@ Recommendation: `bootstrap-runtime-health`, composite `10.0567`, margin
 keeps blast radius low, travels across clients, and does not destructively edit a
 user's local generic tools.
 
+A follow-up lifecycle decision was run after the operator asked how changed DPF
+skills and proactive retirement should work across many client types. Ledger:
+`DI-84BA6E9B2318`.
+
+Options:
+
+- `docs-only-operator-process`: document manual cleanup.
+- `contract-backed-disable-not-delete-reconcile`: extend the shared replacement
+  contract with cleanup/update policy, reconcile only through safe client
+  adapters, and warn elsewhere.
+- `hard-delete-legacy-skills`: remove legacy skill/plugin caches directly.
+
+Recommendation: `contract-backed-disable-not-delete-reconcile`, composite
+`6.3536`, margin `3.7568`, high confidence. This keeps the policy portable and
+testable while honoring the destructive-action boundary: DPF can disable known
+competitive process plugins where a client adapter is proven, but it does not
+delete user-owned local skill state.
+
 ## Design
 
 The canonical replacement map is
-`packages/dpf-skill-pack/process-spine-replacements.json`. It currently covers:
+`packages/dpf-skill-pack/process-spine-replacements.json`. It also owns the
+cleanup/update lifecycle policy so future retired equivalents and client adapter
+behavior are added in one place. The replacement map currently covers:
 
 - `dpf-brainstorming` replaces retired upstream brainstorming.
 - `dpf-writing-plans` replaces retired upstream writing-plans.
@@ -75,6 +96,29 @@ bootstrap adapters run the Node checker directly on the normal planner path, so
 the fallback and full paths surface the same contract. The plugin `SessionStart`
 hook also runs the checker, allowing Claude/Codex/Grok/Antigravity-style hook
 consumers to flag verified conflicts at session start.
+
+## Cleanup / Update Lifecycle
+
+The policy mode is `disable-not-delete`. Rerunning bootstrap/updater after a
+DPF skill-pack change is the canonical agent-toolchain cleanup path. It:
+
+- replaces the managed `dpf-platform` plugin copy;
+- refreshes client marketplaces and MCP descriptors;
+- prints process-spine installed, exposed, and cleanup/update readiness
+  separately; and
+- applies only tested safe client remediations.
+
+Codex currently has a safe config adapter. The Python fallback now rewrites
+`~/.codex/config.toml` so `dpf-platform` remains enabled and contract-listed
+competitive process plugins (`superpowers`, `superpowers@openai-curated`,
+`superpowers@openai-bundled`) are disabled. This is idempotent and preserves
+unrelated plugin settings.
+
+Claude, Grok, and Antigravity are deliberately warn-only for cleanup until their
+client-specific active-state/remediation APIs are verified. They still consume
+the same replacement/cleanup contract and can warn at bootstrap or SessionStart
+when exposed skill evidence shows a retired generic process skill without its
+DPF replacement.
 
 ## Known Limit
 

@@ -109,6 +109,25 @@ def load_process_spine_contract(skill_pack: Optional[Path] = None) -> list[dict[
     return replacements
 
 
+def load_process_spine_cleanup_policy(skill_pack: Optional[Path] = None) -> dict[str, Any]:
+    root = skill_pack or default_skill_pack_path()
+    data = read_json(process_spine_contract_path(root), {})
+    policy = data.get("cleanupPolicy")
+    if not isinstance(policy, dict) or not isinstance(policy.get("clients"), list):
+        raise SystemExit(f"Missing cleanupPolicy.clients[] in {process_spine_contract_path(root)}")
+    return policy
+
+
+def codex_competitive_plugin_ids(skill_pack: Optional[Path] = None) -> list[str]:
+    policy = load_process_spine_cleanup_policy(skill_pack)
+    for client in policy.get("clients", []):
+        if client.get("client") == "codex":
+            ids = client.get("competitivePluginIds")
+            if isinstance(ids, list):
+                return [str(item) for item in ids if str(item)]
+    return []
+
+
 def _normalize_skill_id(value: object) -> str:
     return str(value or "").strip().lstrip("$@").lower()
 
@@ -255,6 +274,24 @@ def render_process_spine_health(verdict: dict[str, Any]) -> list[str]:
             "replacements are still absent, repair the dpf-platform plugin exposure "
             "before project work begins."
         )
+    return lines
+
+
+def render_process_spine_cleanup_policy(policy: dict[str, Any]) -> list[str]:
+    lines = ["Process spine cleanup/update:"]
+    mode = str(policy.get("mode", "unspecified"))
+    lines.append(
+        f"  Policy: {mode} - rerun bootstrap/updater after DPF skill-pack changes; "
+        "safe adapters never delete user-owned skill files or plugin caches."
+    )
+    for client in policy.get("clients", []):
+        name = str(client.get("client", "client")).capitalize()
+        ids = ", ".join(str(item) for item in client.get("competitivePluginIds", []))
+        status = str(client.get("status", "unknown"))
+        if status == "reconciles-safe-config":
+            lines.append(f"  {name}: disables known competitive plugins when found ({ids}).")
+        else:
+            lines.append(f"  {name}: {status}; warns if competitive process skills are active ({ids}).")
     return lines
 
 
@@ -419,7 +456,24 @@ def upsert_toml_table(text: str, header: str, body_lines: list[str]) -> str:
     return "\n".join(rebuilt).rstrip() + "\n"
 
 
-def ensure_codex_config(home: Path, mcp_url: str, dry_run: bool) -> bool:
+def disable_competitive_codex_plugins(text: str, plugin_ids: list[str]) -> str:
+    for plugin_id in dict.fromkeys(plugin_ids):
+        if not plugin_id or plugin_id == PLUGIN_NAME:
+            continue
+        text = upsert_toml_table(
+            text,
+            f'[plugins."{plugin_id}"]',
+            ["enabled = false"],
+        )
+    return text
+
+
+def ensure_codex_config(
+    home: Path,
+    mcp_url: str,
+    dry_run: bool,
+    skill_pack: Optional[Path] = None,
+) -> bool:
     path = codex_config_path(home)
     text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
     text = upsert_toml_table(
@@ -427,6 +481,7 @@ def ensure_codex_config(home: Path, mcp_url: str, dry_run: bool) -> bool:
         f'[plugins."{PLUGIN_NAME}"]',
         ["enabled = true"],
     )
+    text = disable_competitive_codex_plugins(text, codex_competitive_plugin_ids(skill_pack))
     text = upsert_toml_table(
         text,
         "[mcp_servers.dpf]",
@@ -981,12 +1036,14 @@ def main(argv: list[str]) -> int:
     )
     for line in render_process_spine_health(process_spine_verdict):
         print(line)
+    for line in render_process_spine_cleanup_policy(load_process_spine_cleanup_policy(process_spine_root)):
+        print(line)
 
     codex_present = resolve_codex_binary() is not None
 
     if not args.claude_only:
         ensure_codex_marketplace(home, version, args.dry_run)
-        ensure_codex_config(home, args.mcp_url, args.dry_run)
+        ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
         codex_hooks_status = install_codex_hooks(managed, home, args.dry_run)
         print(f"  Codex      : marketplace + config converged; hooks {codex_hooks_status}")
         grok_status = "skipped by flag"

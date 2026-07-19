@@ -193,6 +193,42 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
             self.assertEqual(data["mcp_servers"]["dpf"]["url"], "https://mcp.example.test/api/mcp/v1")
 
+    @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
+    def test_disables_competitive_codex_plugins_without_deleting_user_config(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config = home / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                'model = "gpt-5.5"\n'
+                '[plugins."superpowers@openai-curated"]\n'
+                "enabled = true\n"
+                '[plugins."custom-helper"]\n'
+                "enabled = true\n",
+                encoding="utf-8",
+            )
+
+            with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}, clear=False):
+                updater.main([
+                    "--skill-pack-path",
+                    str(skill_pack),
+                    "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
+                ])
+
+            data = tomllib.loads(config.read_text())
+            self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
+            self.assertFalse(data["plugins"]["superpowers@openai-curated"]["enabled"])
+            self.assertTrue(data["plugins"]["custom-helper"]["enabled"])
+
+    def test_cleanup_policy_names_safe_codex_reconciliation(self) -> None:
+        policy = updater.load_process_spine_cleanup_policy()
+        self.assertEqual(policy["mode"], "disable-not-delete")
+        codex = next(client for client in policy["clients"] if client["client"] == "codex")
+        self.assertIn("superpowers@openai-curated", codex["competitivePluginIds"])
+        self.assertEqual(codex["action"], "disable-plugin")
+
     def test_reuses_bare_codex_plugin_table_instead_of_appending_duplicate(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:

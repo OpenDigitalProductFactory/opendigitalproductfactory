@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import {
   REQUIRED_REPLACEMENT_SLUGS,
   assessProcessSpine,
+  loadCleanupPolicy,
+  renderCleanupPolicySummary,
   renderProcessSpineSummary,
 } from "./process-spine-health-check.mjs";
 
@@ -37,6 +39,19 @@ test("contract names the five DPF-native replacements for retired upstream proce
     "dpf-systematic-debugging",
     "dpf-finishing-a-development-branch",
   ]);
+});
+
+test("cleanup policy is contract-backed and never destructive", () => {
+  const policy = loadCleanupPolicy(packageRoot);
+
+  assert.equal(policy.mode, "disable-not-delete");
+  assert.ok(policy.clients.some((client) => client.client === "codex"));
+  assert.ok(policy.clients.every((client) => !String(client.action).includes("delete")));
+
+  const summary = renderCleanupPolicySummary(policy).join("\n");
+  assert.match(summary, /disable-not-delete/);
+  assert.match(summary, /Codex/);
+  assert.match(summary, /warn-only/);
 });
 
 test("distinguishes installed-on-disk from exposed-in-session evidence", () => {
