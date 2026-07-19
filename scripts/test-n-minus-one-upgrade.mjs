@@ -79,7 +79,7 @@ export function buildPromoterPromotionDockerArgs({ candidateDigest, source, stat
     "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state", "-e", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition",
     "-e", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${Buffer.from(JSON.stringify(envelope)).toString("base64url")}`,
     "-e", `DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${signature}`, "-e", `DPF_SELF_UPGRADE_RUN_ID=${envelope.runId}`,
-    "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`, "-e", "COMPOSE_PARALLEL_LIMIT=1", "-e", "PROMOTE_BUILD_NO_CACHE=1",
+    "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`, "-e", "COMPOSE_PARALLEL_LIMIT=1",
     "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`,
     "-e", `PROMOTE_COMPOSE_PROJECT=${project}`, "-e", `PROMOTE_COMPOSE_ENV_FILE=${composeEnvContainerPath}`, "-e", "PROMOTE_BACKUP_PATH=/backups/recovery",
     "-e", "PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health", candidateDigest, "--self-upgrade"];
