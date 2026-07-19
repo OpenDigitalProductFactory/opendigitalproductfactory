@@ -52,6 +52,7 @@ COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docs/professions/ ./docs/professions/

@@ -333,7 +333,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       expect(log).toContain("build sandbox");
       expect(log).toContain("up -d --no-deps --force-recreate sandbox");
       const recreates = log.split(/\r?\n/).filter((line) => line.startsWith("recreate service="));
-      expect(recreates.map((line) => line.match(/^recreate service=(\S+)/)?.[1]).sort()).toEqual(["portal", "sandbox"]);
+      expect(recreates.map((line) => line.match(/^recreate service=(\S+)/)?.[1]).sort()).toEqual(["portal", "sandbox", "sandbox-postgres"]);
       for (const recreate of recreates) {
         expect(recreate).toContain("DPF_STATE_DIR=<unset>");
         expect(recreate).toContain(`DPF_PROMOTER_STATE_DIR=${toBashPath(join(backup, "state"))}`);
