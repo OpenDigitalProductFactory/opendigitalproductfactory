@@ -132,6 +132,10 @@ function makeProjection(): BuildProgressVisibility {
       minutesQuiet: 7,
       lastObservableSignalAt: "2026-05-18T11:53:00.000Z",
     },
+    engineSelection: {
+      summary: "Build engine selection: codex. Reason: Claude credential expired; Codex is healthy.",
+      observedAt: "2026-05-18T11:52:00.000Z",
+    },
     phaseRuns: [],
   };
 }
@@ -150,6 +154,8 @@ describe("BuildProgressOperationalPanel", () => {
     expect(screen.getByText("Dispatch")).toBeInTheDocument();
     expect(screen.getByText("Verification")).toBeInTheDocument();
     expect(screen.getByText("Agent has been quiet for 7m")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Build engine selection" })).toHaveTextContent("codex");
+    expect(screen.getByRole("region", { name: "Build engine selection" })).toHaveTextContent("Claude credential expired");
     expect(screen.getByRole("link", { name: "view last action" })).toHaveAttribute("href", "#build-dispatch-history");
   });
 });

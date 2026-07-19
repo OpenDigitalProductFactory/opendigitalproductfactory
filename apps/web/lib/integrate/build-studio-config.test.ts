@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getBuildStudioConfig } from "./build-studio-config";
 
+const resolveSelection = vi.hoisted(() => vi.fn());
+vi.mock("./build-engine-selection-runtime", () => ({
+  resolveBuildEngineSelection: resolveSelection,
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     platformConfig: {
@@ -28,8 +33,36 @@ function providerRow(
   return { providerId, status, authMethod } as Awaited<ReturnType<typeof prisma.modelProvider.findMany>>[number];
 }
 
-function credentialRow(status: "ok" | "configured" | "pending"): NonNullable<Awaited<ReturnType<typeof prisma.credentialEntry.findUnique>>> {
+function credentialRow(status: "active" | "configured" | "pending"): NonNullable<Awaited<ReturnType<typeof prisma.credentialEntry.findUnique>>> {
   return { status } as NonNullable<Awaited<ReturnType<typeof prisma.credentialEntry.findUnique>>>;
+}
+
+function selection(engine: "claude" | "codex" | "grok" | "opencode" | "agentic", providerId: string = engine) {
+  return {
+    status: "selected" as const,
+    policy: { mode: "auto" as const, pinnedEngine: null },
+    selected: {
+      engine,
+      providerId,
+      modelId: null,
+      local: engine === "opencode",
+      registered: true,
+      present: true,
+      providerStatus: "active",
+      authMethod: engine === "opencode" ? "none" : "oauth",
+      credentialStatus: engine === "opencode" ? null : "active",
+      credentialExpiresAt: null,
+      providerCapacityState: "available",
+      providerRetryAt: null,
+      cliRetryAt: null,
+      providerHealth: "healthy" as const,
+    },
+    reason: `Selected ${engine} through routeEndpointV2.`,
+    rejected: [],
+    fallbackChain: [],
+    fallbackDisabled: false,
+    action: null,
+  };
 }
 
 describe("getBuildStudioConfig", () => {
@@ -47,13 +80,16 @@ describe("getBuildStudioConfig", () => {
     delete process.env.OPENCODE_MODEL;
     mockProviderFindMany.mockResolvedValue([]);
     mockCredentialFindUnique.mockResolvedValue(null);
+    resolveSelection.mockResolvedValue(selection("agentic"));
   });
 
   it("returns defaults when no DB config and no env vars", async () => {
     mockFindUnique.mockResolvedValue(null);
     const config = await getBuildStudioConfig();
-    expect(config).toEqual({
+    expect(config).toMatchObject({
       provider: "agentic",
+      enginePolicy: "auto",
+      pinnedEngine: null,
       claudeProviderId: "",
       codexProviderId: "",
       grokProviderId: "",
@@ -63,6 +99,7 @@ describe("getBuildStudioConfig", () => {
       grokModel: "",
       opencodeModel: "",
     });
+    expect(config.selection?.selected?.engine).toBe("agentic");
   });
 
   it("reads config from PlatformConfig DB row", async () => {
@@ -78,8 +115,10 @@ describe("getBuildStudioConfig", () => {
       },
       updatedAt: new Date(),
     });
+    resolveSelection.mockResolvedValue(selection("claude", "anthropic"));
     const config = await getBuildStudioConfig();
     expect(config.provider).toBe("claude");
+    expect(config.enginePolicy).toBe("auto");
     expect(config.claudeProviderId).toBe("anthropic");
     expect(config.claudeModel).toBe("opus");
   });
@@ -89,14 +128,15 @@ describe("getBuildStudioConfig", () => {
       .mockResolvedValueOnce([providerRow("anthropic-sub")])
       .mockResolvedValueOnce([providerRow("chatgpt")]);
     mockCredentialFindUnique
-      .mockResolvedValueOnce(credentialRow("ok"))
-      .mockResolvedValueOnce(credentialRow("ok"));
+      .mockResolvedValueOnce(credentialRow("active"))
+      .mockResolvedValueOnce(credentialRow("active"));
     mockFindUnique.mockResolvedValue({
       id: "1",
       key: "build-studio-dispatch",
       value: { provider: "claude" },
       updatedAt: new Date(),
     });
+    resolveSelection.mockResolvedValue(selection("claude", "anthropic-sub"));
     const config = await getBuildStudioConfig();
     expect(config.provider).toBe("claude");
     expect(config.claudeProviderId).toBe("anthropic-sub");
@@ -104,12 +144,24 @@ describe("getBuildStudioConfig", () => {
     expect(config.claudeModel).toBe("sonnet");
   });
 
-  it("stays on agentic when env vars request claude but no configured cli provider exists", async () => {
+  it("treats an env engine override as a deliberate hard pin", async () => {
     mockFindUnique.mockResolvedValue(null);
     process.env.CLI_DISPATCH_PROVIDER = "claude";
     process.env.CLAUDE_CODE_MODEL = "opus";
+    resolveSelection.mockResolvedValue({
+      status: "blocked",
+      policy: { mode: "pinned", pinnedEngine: "claude" },
+      selected: null,
+      reason: "Claude is not ready.",
+      rejected: [],
+      fallbackChain: [],
+      fallbackDisabled: true,
+      action: "Restore Claude; automatic fallback was disabled by the hard pin.",
+    });
     const config = await getBuildStudioConfig();
-    expect(config.provider).toBe("agentic");
+    expect(config.provider).toBe("claude");
+    expect(config.enginePolicy).toBe("pinned");
+    expect(config.pinnedEngine).toBe("claude");
     expect(config.claudeModel).toBe("opus");
   });
 
@@ -119,9 +171,10 @@ describe("getBuildStudioConfig", () => {
       .mockResolvedValueOnce([providerRow("anthropic-sub")])
       .mockResolvedValueOnce([providerRow("chatgpt")]);
     mockCredentialFindUnique
-      .mockResolvedValueOnce(credentialRow("ok"))
-      .mockResolvedValueOnce(credentialRow("ok"));
+      .mockResolvedValueOnce(credentialRow("active"))
+      .mockResolvedValueOnce(credentialRow("active"));
 
+    resolveSelection.mockResolvedValue(selection("claude", "anthropic-sub"));
     const config = await getBuildStudioConfig();
     expect(config.provider).toBe("claude");
     expect(config.claudeProviderId).toBe("anthropic-sub");
@@ -134,9 +187,10 @@ describe("getBuildStudioConfig", () => {
       .mockResolvedValueOnce([providerRow("anthropic-sub", "inactive")])
       .mockResolvedValueOnce([providerRow("chatgpt", "active")]);
     mockCredentialFindUnique
-      .mockResolvedValueOnce(credentialRow("ok"))
-      .mockResolvedValueOnce(credentialRow("ok"));
+      .mockResolvedValueOnce(credentialRow("active"))
+      .mockResolvedValueOnce(credentialRow("active"));
 
+    resolveSelection.mockResolvedValue(selection("codex", "chatgpt"));
     const config = await getBuildStudioConfig();
 
     expect(config.provider).toBe("codex");
@@ -147,6 +201,7 @@ describe("getBuildStudioConfig", () => {
   it("falls back to legacy CODEX_DISPATCH=false as agentic", async () => {
     mockFindUnique.mockResolvedValue(null);
     process.env.CODEX_DISPATCH = "false";
+    resolveSelection.mockResolvedValue({ ...selection("agentic"), policy: { mode: "pinned", pinnedEngine: "agentic" }, fallbackDisabled: true });
     const config = await getBuildStudioConfig();
     expect(config.provider).toBe("agentic");
   });
@@ -162,6 +217,7 @@ describe("getBuildStudioConfig", () => {
     // No credentialEntry exists for the no-auth provider — must still detect.
     mockCredentialFindUnique.mockResolvedValue(null);
 
+    resolveSelection.mockResolvedValue(selection("opencode", "local"));
     const config = await getBuildStudioConfig();
 
     expect(config.provider).toBe("opencode");
@@ -175,8 +231,9 @@ describe("getBuildStudioConfig", () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([providerRow("zai-coding", "active", "api_key")]);
-    mockCredentialFindUnique.mockResolvedValue(credentialRow("ok"));
+    mockCredentialFindUnique.mockResolvedValue(credentialRow("active"));
 
+    resolveSelection.mockResolvedValue(selection("opencode", "zai-coding"));
     const config = await getBuildStudioConfig();
 
     expect(config.provider).toBe("opencode");
@@ -190,8 +247,9 @@ describe("getBuildStudioConfig", () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([providerRow("local", "active", "none")]);
-    mockCredentialFindUnique.mockResolvedValueOnce(credentialRow("ok"));
+    mockCredentialFindUnique.mockResolvedValueOnce(credentialRow("active"));
 
+    resolveSelection.mockResolvedValue(selection("claude", "anthropic-sub"));
     const config = await getBuildStudioConfig();
 
     expect(config.provider).toBe("claude");
@@ -208,6 +266,7 @@ describe("getBuildStudioConfig", () => {
       .mockResolvedValueOnce([providerRow("local", "active", "none")]);
     mockCredentialFindUnique.mockResolvedValue(null);
 
+    resolveSelection.mockResolvedValue({ ...selection("opencode", "local"), policy: { mode: "pinned", pinnedEngine: "opencode" }, fallbackDisabled: true });
     const config = await getBuildStudioConfig();
 
     expect(config.provider).toBe("opencode");

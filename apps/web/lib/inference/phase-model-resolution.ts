@@ -136,21 +136,14 @@ export interface ModelSelectionOverview {
 
 // ─── Phase routing contracts (must mirror the real call sites exactly) ─────────
 //
-// These are the EXACT routeAndCall options each routed phase passes in code, so
-// previewRoute predicts the same winner. Keep in sync with:
+// These are the exact routeAndCall options for portal-routed reasoning phases.
+// Ideate and Build consume the shared Build Studio selector result directly.
+// Keep the remaining previews in sync with:
 //   plan            → plan-on-approval.ts   routeAndCall(..., "internal", { budgetClass: "quality_first" })
 //   design/plan-rev → build.ts              routeAndCall(..., "internal", { taskType: "analysis" })
-//   ideate(opencode)→ ideate-dispatch.ts    routeAndCall(..., "internal", { budgetClass: "quality_first" })
-//   build(agentic)  → build-pipeline.ts     runAgenticLoop({ taskType: "analysis", requireTools: true, tools })
 
 const REASONING_SAMPLE =
   "Produce a structured implementation plan for a small feature change.";
-/** A non-empty tools array makes inferContract set requiresTools=true (build agentic loop). */
-const BUILD_SENTINEL_TOOLS: Array<Record<string, unknown>> = [
-  { name: "edit_sandbox_file" },
-  { name: "run_sandbox_tests" },
-];
-
 export function buildEngineLabel(provider: BuildStudioDispatchConfig["provider"]): string {
   switch (provider) {
     case "claude":
@@ -269,69 +262,24 @@ async function resolveIdeatePhase(
   config: BuildStudioDispatchConfig,
 ): Promise<PhaseResolution> {
   const engine = buildEngineLabel(config.provider);
-
-  if (config.provider === "opencode") {
-    // Subtle: ideate-opencode does NOT use the local runner — it calls
-    // routeAndCall (conversation/quality_first), so it routes like any other
-    // reasoning phase and lands on cloud on a mixed install.
-    const res = await resolveRoutedPhase({
-      phase: "ideate",
-      label: "Ideate",
-      engine,
-      governedBy: "providers-routing",
-      sample: "Research and draft a design document for a small feature.",
-      opts: { budgetClass: "quality_first" },
-    });
-    res.flags.push({
-      severity: "info",
-      code: "ideate-opencode-routes",
-      message:
-        "Ideate runs through portal routing even though the build engine is Local (OpenCode); it does not invoke the local runner directly.",
-      remediation:
-        "Expect ideate to follow Providers & Routing, not the local model — the local engine only changes the build phase.",
-    });
-    return res;
-  }
-
-  if (config.provider === "claude" || config.provider === "codex" || config.provider === "grok") {
-    const providerId =
-      config.provider === "claude"
-        ? config.claudeProviderId
-        : config.provider === "codex"
-          ? config.codexProviderId
-          : config.grokProviderId;
-    const model =
-      config.provider === "claude"
-        ? config.claudeModel
-        : config.provider === "grok"
-          ? config.grokModel
-          : config.codexModel;
-    const flags: PhaseFlag[] = [];
-    if (!providerId) {
-      flags.push({
-        severity: "error",
-        code: "ideate-no-credential",
-        message: `Ideate engine is ${engine} but no ${config.provider} provider credential is configured.`,
-        remediation: `Connect a ${config.provider} provider in Providers & Routing, or change the Build Runtime engine.`,
-      });
-    }
+  const selection = config.selection;
+  if (selection?.status === "selected" && selection.selected) {
     return {
       phase: "ideate",
       label: "Ideate",
       governedBy: "build-runtime",
-      mechanism: "vendor-cli",
+      mechanism: selection.selected.engine === "agentic" ? "routed" : "vendor-cli",
       engine,
-      providerId: providerId || null,
-      modelId: model || "(provider default)",
-      isLocal: false,
-      providerTier: "user_configured",
+      providerId: selection.selected.providerId,
+      modelId: selection.selected.modelId || "(provider default)",
+      isLocal: selection.selected.local,
+      providerTier: selection.selected.local ? "bundled" : "user_configured",
       contextTokens: null,
-      rationale: `Build Runtime engine ${engine}: ideate dispatches the ${config.provider} CLI in the sandbox.`,
-      flags,
+      rationale: selection.reason,
+      flags: [],
     };
   }
 
-  // agentic — ideate has no agentic dispatch path (falls through to an auth error).
   return {
     phase: "ideate",
     label: "Ideate",
@@ -343,16 +291,13 @@ async function resolveIdeatePhase(
     isLocal: null,
     providerTier: null,
     contextTokens: null,
-    rationale:
-      "The Agentic Loop engine has no ideate dispatch path; ideate requires a CLI or the local engine.",
+    rationale: selection?.reason ?? "No Build Studio engine selection is available.",
     flags: [
       {
-        severity: "warning",
-        code: "ideate-agentic-unsupported",
-        message:
-          "Ideate cannot run under the Agentic Loop engine (it falls through to an auth error).",
-        remediation:
-          "Select Claude / Codex / Grok or Local (OpenCode) as the Build Runtime engine to run ideate.",
+        severity: "error",
+        code: "ideate-no-eligible-engine",
+        message: "No allowed healthy engine can run Ideate.",
+        remediation: selection?.action ?? "Restore one allowed engine in AI Readiness and retry.",
       },
     ],
   };
@@ -362,6 +307,28 @@ async function resolveBuildPhase(
   config: BuildStudioDispatchConfig,
 ): Promise<PhaseResolution> {
   const engine = buildEngineLabel(config.provider);
+  const selection = config.selection;
+  if (!selection || selection.status === "blocked" || !selection.selected) {
+    return {
+      phase: "build",
+      label: "Build (code generation)",
+      governedBy: "build-runtime",
+      mechanism: "unsupported",
+      engine,
+      providerId: null,
+      modelId: null,
+      isLocal: null,
+      providerTier: null,
+      contextTokens: null,
+      rationale: selection?.reason ?? "No Build Studio engine selection is available.",
+      flags: [{
+        severity: "error",
+        code: "build-no-eligible-engine",
+        message: "No allowed healthy engine can run the build phase.",
+        remediation: selection?.action ?? "Restore one allowed engine in AI Readiness and retry.",
+      }],
+    };
+  }
 
   if (config.provider === "opencode") {
     const flags: PhaseFlag[] = [];
@@ -435,31 +402,25 @@ async function resolveBuildPhase(
       isLocal: true,
       providerTier: "bundled",
       contextTokens,
-      rationale:
-        "Build Runtime engine Local (OpenCode): the build dispatches the opencode CLI against the install's local model endpoint.",
+      rationale: selection.reason,
       flags,
     };
   }
 
-  // claude / codex / grok / agentic → runAgenticLoop → routeAndCall(analysis, requireTools).
-  const res = await resolveRoutedPhase({
+  return {
     phase: "build",
     label: "Build (code generation)",
+    governedBy: "build-runtime",
+    mechanism: selection.selected.engine === "agentic" ? "routed" : "vendor-cli",
     engine,
-    governedBy: "providers-routing",
-    sample: REASONING_SAMPLE,
-    opts: { taskType: "analysis", requireTools: true, tools: BUILD_SENTINEL_TOOLS },
-  });
-  if (config.provider !== "agentic") {
-    res.flags.push({
-      severity: "info",
-      code: "build-engine-not-applied",
-      message: `Build Runtime engine is ${engine}, but the build phase runs through the agentic loop and routes via Providers & Routing — the selected CLI governs only the ideate phase, not the build.`,
-      remediation:
-        "To build with a local model, set the Build Runtime engine to Local (OpenCode).",
-    });
-  }
-  return res;
+    providerId: selection.selected.providerId,
+    modelId: selection.selected.modelId || "(provider default)",
+    isLocal: selection.selected.local,
+    providerTier: selection.selected.local ? "bundled" : "user_configured",
+    contextTokens: null,
+    rationale: selection.reason,
+    flags: [],
+  };
 }
 
 // ─── Top-level resolver ────────────────────────────────────────────────────────

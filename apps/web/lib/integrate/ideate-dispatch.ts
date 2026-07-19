@@ -449,13 +449,15 @@ export async function dispatchIdeateResearch(params: {
    *  path. "robust" lets routing prefer a frontier endpoint for large designs;
    *  "local"/undefined keeps it on the on-box model. */
   modelTier?: "local" | "robust";
+  sensitivity?: "public" | "internal" | "confidential" | "restricted";
   onProgress?: (message: string) => void;
 }): Promise<IdeateResult> {
   const dispatchEngine = params.dispatchEngine ?? "codex";
   const providerId = params.providerId || "";
   const model = params.model ?? "";
 
-  // Local-model engine (opencode): Ideate research runs through portal-side
+  // Routed engines (local OpenCode or the supported agentic fallback): Ideate
+  // research runs through portal-side
   // routing — the SAME routeAndCall path the Plan phase uses — not a vendor CLI.
   // The configured local model (e.g. qwen3-coder via Docker Model Runner)
   // generates the design doc with no credential and no egress. This is the last
@@ -463,7 +465,7 @@ export async function dispatchIdeateResearch(params: {
   // end-to-end off a local LLM: Plan already uses routeAndCall, Build dispatches
   // to the opencode runner, and now Ideate uses routing too instead of falling
   // through to the `codex exec` branch below. (BI-01D6A51B)
-  if (dispatchEngine === "opencode") {
+  if (dispatchEngine === "opencode" || dispatchEngine === "agentic") {
     const startMs = Date.now();
     try {
       // The frontier ideate path dispatches a CLI into the sandbox that actually
@@ -482,8 +484,9 @@ export async function dispatchIdeateResearch(params: {
         "You are a senior software architect producing a structured design document. Respond with the design document content only — no preamble.";
       const { designDoc, rawOutput } = await runLocalIdeateWithRetry(
         async (messages) => {
-          const response = await routeAndCall(messages, systemPrompt, "internal", {
+          const response = await routeAndCall(messages, systemPrompt, params.sensitivity ?? "internal", {
             budgetClass: "quality_first",
+            ...(providerId ? { allowedProviders: [providerId] } : {}),
             ...(params.modelTier ? { modelTier: params.modelTier } : {}),
           });
           return response.content ?? "";
@@ -501,7 +504,7 @@ export async function dispatchIdeateResearch(params: {
         durationMs: Date.now() - startMs,
         error: designDoc
           ? undefined
-          : "Local-model ideate output could not be parsed into a design document.",
+          : "Routed ideate output could not be parsed into a design document.",
       };
     } catch (err) {
       return {
@@ -509,7 +512,7 @@ export async function dispatchIdeateResearch(params: {
         rawOutput: "",
         success: false,
         durationMs: Date.now() - startMs,
-        error: `Local-model ideate failed: ${(err as Error).message}`,
+        error: `Routed ideate failed: ${(err as Error).message}`,
       };
     }
   }

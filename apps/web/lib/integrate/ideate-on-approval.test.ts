@@ -43,6 +43,39 @@ import {
   dispatchDesignReviewFixLoop,
 } from "./ideate-on-approval";
 
+function engineSelection(
+  engine: "claude" | "codex" | "grok" | "opencode" | "agentic",
+  providerId: string,
+  fallbacks: Array<{ engine: "claude" | "codex" | "grok" | "opencode" | "agentic"; providerId: string }> = [],
+  modelId?: string,
+) {
+  const make = (entry: { engine: typeof engine; providerId: string }) => ({
+    ...entry,
+    modelId: modelId ?? (entry.engine === "claude" ? "sonnet" : null),
+    local: entry.engine === "opencode",
+    registered: true,
+    present: true,
+    providerStatus: "active",
+    authMethod: entry.engine === "opencode" ? "none" : "oauth",
+    credentialStatus: entry.engine === "opencode" ? null : "active",
+    credentialExpiresAt: null,
+    providerCapacityState: "available",
+    providerRetryAt: null,
+    cliRetryAt: null,
+    providerHealth: "healthy" as const,
+  });
+  return {
+    status: "selected" as const,
+    policy: { mode: "auto" as const, pinnedEngine: null },
+    selected: make({ engine, providerId }),
+    reason: `Selected ${providerId} through routeEndpointV2.`,
+    rejected: [],
+    fallbackChain: fallbacks.map(make),
+    fallbackDisabled: false,
+    action: null,
+  };
+}
+
 describe("dispatchIdeateForApprovedBuild", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -53,6 +86,7 @@ describe("dispatchIdeateForApprovedBuild", () => {
       codexProviderId: "",
       claudeModel: "sonnet",
       codexModel: "",
+      selection: engineSelection("claude", "anthropic-sub"),
     });
   });
 
@@ -109,6 +143,16 @@ describe("dispatchIdeateForApprovedBuild", () => {
       codexProviderId: "",
       claudeModel: "sonnet",
       codexModel: "",
+      selection: {
+        status: "blocked",
+        policy: { mode: "auto", pinnedEngine: null },
+        selected: null,
+        reason: "No eligible engine.",
+        rejected: [],
+        fallbackChain: [],
+        fallbackDisabled: false,
+        action: "Connect, provision, or wait for one allowed Build Studio engine, then retry.",
+      },
     });
 
     const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
@@ -131,6 +175,7 @@ describe("dispatchIdeateForApprovedBuild", () => {
       codexProviderId: "chatgpt",
       codexModel: "gpt-5.3-codex",
       claudeProviderId: "", grokProviderId: "", claudeModel: "", grokModel: "",
+      selection: engineSelection("opencode", "local", [], "docker.io/ai/qwen3-coder:latest"),
     });
     mockDispatchIdeateResearch.mockResolvedValue({
       success: true,
@@ -152,6 +197,42 @@ describe("dispatchIdeateForApprovedBuild", () => {
     expect(mockDispatchIdeateResearch).not.toHaveBeenCalledWith(
       expect.objectContaining({ providerId: "chatgpt" }),
     );
+  });
+
+  it("falls from a retry-safe pre-dispatch Claude auth failure to Codex once", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({ originatingBacklogItemId: "cmpcuid1", designDoc: null, title: "T", description: "D" })
+      .mockResolvedValueOnce({ designDoc: { problemStatement: "P" } });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body.", effortSize: "medium", workType: "bug" });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "claude",
+      claudeProviderId: "anthropic-sub",
+      codexProviderId: "codex",
+      grokProviderId: "",
+      opencodeProviderId: "",
+      claudeModel: "sonnet",
+      codexModel: "",
+      grokModel: "",
+      opencodeModel: "",
+      selection: engineSelection("claude", "anthropic-sub", [{ engine: "codex", providerId: "codex" }]),
+    });
+    mockDispatchIdeateResearch
+      .mockResolvedValueOnce({ success: false, designDoc: null, rawOutput: "", durationMs: 0, error: "Auth error: OAuth token expired" })
+      .mockResolvedValueOnce({ success: true, designDoc: { problemStatement: "P" }, rawOutput: "{}", durationMs: 5 });
+    mockExecuteTool.mockResolvedValue({ success: true });
+
+    const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
+
+    expect(outcome.kind).toBe("dispatched-success");
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledTimes(2);
+    expect(mockDispatchIdeateResearch).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      dispatchEngine: "codex",
+      providerId: "codex",
+    }));
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ summary: expect.stringMatching(/falling back once to codex/i) }),
+    }));
+    expect(mockExecuteTool).toHaveBeenCalledTimes(2);
   });
 
   it("dispatches research and saves designDoc evidence on the happy path", async () => {
@@ -224,8 +305,8 @@ describe("dispatchIdeateForApprovedBuild", () => {
       "u-1",
       expect.any(Object),
     );
-    // Should write at least two activity rows: the "Dispatching..." log and the "Auto-dispatched..." success log.
-    expect(mockPrisma.buildActivity.create).toHaveBeenCalledTimes(2);
+    // Selection evidence, the dispatch log, and the saved success are visible.
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledTimes(3);
   });
 
   it("returns dispatched-failure when dispatchIdeateResearch reports failure", async () => {

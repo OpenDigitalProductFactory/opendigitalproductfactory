@@ -328,6 +328,7 @@ type AgentRouteConfig = {
   budgetClass?: "minimize_cost" | "balanced" | "quality_first";
   preferredProviderId?: string;
   preferredModelId?: string;
+  allowedProviders?: string[];
   effort?: "low" | "medium" | "high" | "max";
 };
 
@@ -376,6 +377,9 @@ function resolveEffectiveAgentRouteConfig(params: {
             : {}),
           ...("preferredModelId" in params.modelRequirements
             ? { preferredModelId: params.modelRequirements.preferredModelId as string }
+            : {}),
+          ...("allowedProviders" in params.modelRequirements
+            ? { allowedProviders: params.modelRequirements.allowedProviders as string[] }
             : {}),
           ...("defaultEffort" in params.modelRequirements
             ? {

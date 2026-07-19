@@ -77,6 +77,11 @@ export type BuildProgressVisibility = {
     kind: InferenceFailureKind | null;
     observedAt: string | null;
   };
+  /** Latest Build Studio engine decision, projected from BuildActivity. */
+  engineSelection?: {
+    summary: string;
+    observedAt: string;
+  } | null;
   /** Phase-level cost rollup; empty array when BuildPhaseRun rows don't exist yet */
   phaseRuns: PhaseRunSummary[];
   /**
@@ -104,6 +109,7 @@ export function buildProgressProjectionFromParts(args: {
   lastAssistant?: { content: string | null; createdAt: Date | string | null } | null;
   phaseRuns?: PhaseRunSummary[];
   evidenceTimeline?: UnifiedEvidenceTimelineEvent[];
+  engineSelection?: { summary: string; observedAt: Date | string } | null;
 }): BuildProgressVisibility {
   const now = args.now ?? new Date();
   const conflicts = getProgressConflicts(args.dbTasks.source, args.chatSnapshots);
@@ -154,6 +160,12 @@ export function buildProgressProjectionFromParts(args: {
       lastObservableSignalAt,
     },
     inferenceFailure,
+    engineSelection: args.engineSelection
+      ? {
+          summary: args.engineSelection.summary,
+          observedAt: new Date(args.engineSelection.observedAt).toISOString(),
+        }
+      : null,
     phaseRuns: args.phaseRuns ?? [],
     evidenceTimeline: args.evidenceTimeline ?? [],
   };
@@ -259,6 +271,11 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
 
   // chatMessages is ordered createdAt desc, so [0] is the newest assistant turn.
   const newestAssistant = chatMessages[0] ?? null;
+  const engineSelectionActivity = await prisma.buildActivity.findFirst({
+    where: { buildId, tool: "engine_selection" },
+    orderBy: { createdAt: "desc" },
+    select: { summary: true, createdAt: true },
+  });
 
   return buildProgressProjectionFromParts({
     buildId,
@@ -273,6 +290,9 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
       : null,
     phaseRuns,
     evidenceTimeline,
+    engineSelection: engineSelectionActivity
+      ? { summary: engineSelectionActivity.summary, observedAt: engineSelectionActivity.createdAt }
+      : null,
   });
 }
 

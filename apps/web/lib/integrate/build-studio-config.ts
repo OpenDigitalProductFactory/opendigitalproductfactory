@@ -7,10 +7,22 @@ import { prisma } from "@dpf/db";
 import type { BuildModelTier } from "@/lib/explore/build-process-matrix";
 import { DEFAULT_BUILD_POSTURE, coerceBuildPosture } from "@/lib/explore/build-rightsizing-dial";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
+import type { SensitivityLevel } from "@/lib/routing/types";
 import { resolveCredentialProviderId } from "@/lib/inference/ai-provider-internals";
+import type {
+  BuildEngineId,
+  BuildEnginePolicy,
+  BuildEngineSelection,
+} from "./build-engine-selection";
+import { resolveBuildEngineSelection } from "./build-engine-selection-runtime";
 
 export type BuildStudioDispatchConfig = {
-  provider: "claude" | "codex" | "grok" | "opencode" | "agentic";
+  provider: BuildEngineId;
+  /** Auto is the default. Pinned is an advanced, explicit no-fallback policy. */
+  enginePolicy?: BuildEnginePolicy["mode"];
+  pinnedEngine?: BuildEngineId | null;
+  /** Live derived evidence; never treated as stored operator configuration. */
+  selection?: BuildEngineSelection | null;
   claudeProviderId: string;
   codexProviderId: string;
   grokProviderId: string;
@@ -22,7 +34,10 @@ export type BuildStudioDispatchConfig = {
 };
 
 const DEFAULTS: BuildStudioDispatchConfig = {
-  provider: "agentic",   // safe default — no external provider needed
+  provider: "agentic",   // placeholder until the Auto selector resolves live state
+  enginePolicy: "auto",
+  pinnedEngine: null,
+  selection: null,
   claudeProviderId: "",
   codexProviderId: "",
   grokProviderId: "",
@@ -58,7 +73,7 @@ async function findConfiguredProvider(cliEngine: string): Promise<string> {
       where: { providerId: resolveCredentialProviderId(p.providerId) },
       select: { status: true },
     });
-    if (cred && (cred.status === "ok" || cred.status === "configured" || cred.status === "pending")) {
+    if (cred && (cred.status === "active" || cred.status === "pending" || cred.status === "configured")) {
       return p.providerId;
     }
   }
@@ -66,8 +81,8 @@ async function findConfiguredProvider(cliEngine: string): Promise<string> {
 }
 
 /**
- * Auto-detect the best dispatch provider based on what's configured.
- * Prefers active Claude over active Codex; falls back to agentic if nothing configured.
+ * Discover configured engine/provider identifiers. The canonical router—not
+ * discovery order—chooses the Auto winner.
  */
 async function autoDetectConfig(): Promise<BuildStudioDispatchConfig> {
   const claudeId = await findConfiguredProvider("claude");
@@ -75,25 +90,25 @@ async function autoDetectConfig(): Promise<BuildStudioDispatchConfig> {
   const grokId = await findConfiguredProvider("grok");
   const opencodeId = await findConfiguredProvider("opencode");
 
-  // Pick the first available CLI engine. Order: frontier CLIs first, then the
-  // local opencode runner — so a credential-free install with a healthy local
-  // provider lands on opencode rather than the legacy agentic fallback.
+  // Auto is the policy. The provider field is only a resolved-runtime
+  // projection, never an ordered static preference.
   let provider: BuildStudioDispatchConfig["provider"] = "agentic";
-  if (claudeId) provider = "claude";
-  else if (codexId) provider = "codex";
-  else if (grokId) provider = "grok";
-  else if (opencodeId) provider = "opencode";
+  let enginePolicy: BuildEnginePolicy["mode"] = "auto";
+  let pinnedEngine: BuildEngineId | null = null;
 
   // Env var override
   const envProvider = process.env.CLI_DISPATCH_PROVIDER ?? process.env.CODEX_DISPATCH;
-  if (envProvider === "claude" && claudeId) provider = "claude";
-  else if (envProvider === "codex" && codexId) provider = "codex";
-  else if (envProvider === "grok" && grokId) provider = "grok";
-  else if (envProvider === "opencode" && opencodeId) provider = "opencode";
-  else if (envProvider === "false" || envProvider === "agentic") provider = "agentic";
+  if (envProvider === "claude" || envProvider === "codex" || envProvider === "grok" || envProvider === "opencode" || envProvider === "agentic" || envProvider === "false") {
+    provider = envProvider === "false" ? "agentic" : envProvider;
+    enginePolicy = "pinned";
+    pinnedEngine = provider;
+  }
 
   return {
     provider,
+    enginePolicy,
+    pinnedEngine,
+    selection: null,
     claudeProviderId: process.env.CLAUDE_CODE_PROVIDER_ID ?? claudeId,
     codexProviderId: process.env.CODEX_PROVIDER_ID ?? codexId,
     grokProviderId: process.env.GROK_PROVIDER_ID ?? grokId,
@@ -120,6 +135,14 @@ async function resolveBaseBuildStudioConfig(): Promise<BuildStudioDispatchConfig
     return {
       ...DEFAULTS,
       ...saved,
+      // Legacy rows had only `provider`; they were ordinary setup choices, not
+      // an explicit no-fallback contract. They converge to Auto. Only the new
+      // enginePolicy="pinned" shape is a hard boundary.
+      enginePolicy: saved.enginePolicy === "pinned" ? "pinned" : "auto",
+      pinnedEngine: saved.enginePolicy === "pinned"
+        ? (saved.pinnedEngine ?? saved.provider ?? null)
+        : null,
+      selection: null,
       claudeProviderId: claudeId,
       codexProviderId: codexId,
       grokProviderId: grokId,
@@ -269,47 +292,26 @@ export async function getBuildGoldenTrianglePosture(): Promise<GoldenTrianglePre
 }
 
 /**
- * Resolve the first available robust (frontier) provider, preferring Claude >
- * Codex > Grok. Only active + credentialed providers qualify (the same
- * findConfiguredProvider gate the auto-detect uses). Returns null when no robust
- * engine is configured — the caller then falls back to the local/base config,
- * so a robust-tier build on a local-only install gracefully degrades to local.
- */
-async function resolveRobustProvider(): Promise<
-  { provider: "claude" | "codex" | "grok"; providerId: string } | null
-> {
-  const claudeId = await findConfiguredProvider("claude");
-  if (claudeId) return { provider: "claude", providerId: claudeId };
-  const codexId = await findConfiguredProvider("codex");
-  if (codexId) return { provider: "codex", providerId: codexId };
-  const grokId = await findConfiguredProvider("grok");
-  if (grokId) return { provider: "grok", providerId: grokId };
-  return null;
-}
-
-/**
- * Resolve the Build Studio dispatch config. With `opts.modelTier === "robust"`
- * AND tier routing enabled AND a robust provider configured, the config is
- * overridden to that frontier provider; otherwise the base (local/explicit)
- * config is returned unchanged. A default call (no opts) is byte-identical to
- * the pre-EP-MODEL-TIER-ROUTING behavior.
+ * Resolve Build Studio policy plus the live engine selected by the canonical
+ * router. Every preview and dispatch caller consumes this same result.
  */
 export async function getBuildStudioConfig(
-  opts?: { modelTier?: BuildModelTier },
+  opts?: { modelTier?: BuildModelTier; sensitivity?: SensitivityLevel },
 ): Promise<BuildStudioDispatchConfig> {
   const base = await resolveBaseBuildStudioConfig();
-  if (opts?.modelTier === "robust" && (await isModelTierRoutingEnabled())) {
-    const robust = await resolveRobustProvider();
-    if (robust) {
-      const idField =
-        robust.provider === "claude"
-          ? "claudeProviderId"
-          : robust.provider === "codex"
-            ? "codexProviderId"
-            : "grokProviderId";
-      return { ...base, provider: robust.provider, [idField]: robust.providerId };
-    }
-    // No robust engine configured — gracefully fall back to the base (local) config.
-  }
-  return base;
+  const policy: BuildEnginePolicy = base.enginePolicy === "pinned"
+    ? { mode: "pinned", pinnedEngine: base.pinnedEngine ?? base.provider }
+    : { mode: "auto", pinnedEngine: null };
+  const selection = await resolveBuildEngineSelection(base, {
+    policy,
+    ...(opts?.modelTier ? { modelTier: opts.modelTier } : {}),
+    ...(opts?.sensitivity ? { sensitivity: opts.sensitivity } : {}),
+  });
+  return {
+    ...base,
+    provider: selection.selected?.engine ?? policy.pinnedEngine ?? "agentic",
+    enginePolicy: policy.mode,
+    pinnedEngine: policy.pinnedEngine,
+    selection,
+  };
 }

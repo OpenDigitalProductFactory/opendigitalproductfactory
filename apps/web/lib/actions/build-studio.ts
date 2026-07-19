@@ -24,6 +24,11 @@ export async function saveBuildStudioConfig(
   if (!VALID_ENGINES.has(config.provider)) {
     throw new Error(`Invalid provider engine: ${config.provider}`);
   }
+  const enginePolicy = config.enginePolicy === "pinned" ? "pinned" : "auto";
+  const pinnedEngine = enginePolicy === "pinned" ? (config.pinnedEngine ?? config.provider) : null;
+  if (pinnedEngine !== null && !VALID_ENGINES.has(pinnedEngine)) {
+    throw new Error(`Invalid pinned build engine: ${pinnedEngine}`);
+  }
 
   // Validate provider IDs dynamically against what's in the DB
   if (config.claudeProviderId) {
@@ -63,10 +68,24 @@ export async function saveBuildStudioConfig(
     throw new Error(`Invalid Claude model: ${config.claudeModel}`);
   }
 
+  const storedConfig = {
+    provider: config.provider,
+    enginePolicy,
+    pinnedEngine,
+    claudeProviderId: config.claudeProviderId,
+    codexProviderId: config.codexProviderId,
+    grokProviderId: config.grokProviderId,
+    opencodeProviderId: config.opencodeProviderId,
+    claudeModel: config.claudeModel,
+    codexModel: config.codexModel,
+    grokModel: config.grokModel,
+    opencodeModel: config.opencodeModel,
+  } satisfies BuildStudioDispatchConfig;
+
   await prisma.platformConfig.upsert({
     where: { key: "build-studio-dispatch" },
-    update: { value: config as unknown as Prisma.InputJsonValue },
-    create: { key: "build-studio-dispatch", value: config as unknown as Prisma.InputJsonValue },
+    update: { value: storedConfig as unknown as Prisma.InputJsonValue },
+    create: { key: "build-studio-dispatch", value: storedConfig as unknown as Prisma.InputJsonValue },
   });
 
   return { ok: true };

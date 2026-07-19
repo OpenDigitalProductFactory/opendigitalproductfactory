@@ -101,6 +101,12 @@ export interface RouteAndCallOptions {
   requiresComputerUse?: boolean;
   /** Budget posture override. */
   budgetClass?: "minimize_cost" | "balanced" | "quality_first";
+  /** Hard provider boundary compiled by a caller-owned policy/readiness layer. */
+  allowedProviders?: string[];
+  /** Providers explicitly forbidden by caller-owned policy. */
+  deniedProviders?: string[];
+  /** Hard residency boundary. Never widened by fallback. */
+  residencyPolicy?: RequestContract["residencyPolicy"];
   /** EP-MODEL-TIER-ROUTING: capability tier for this call. "local" forces
    *  residencyPolicy=local_only (keeps small/simple work on the on-box model);
    *  "robust" leaves routing free to prefer a frontier endpoint. Unset = today's
@@ -267,14 +273,17 @@ async function prepareRoute(
       // per-dimension max-merge in inferContract, which the posture can raise but
       // not drop below. See docs/design/2026-06-25-coworker-work-orchestration.md.)
       budgetClass: posture?.routeContext.budgetClass ?? options?.budgetClass,
+      allowedProviders: options?.allowedProviders,
+      deniedProviders: options?.deniedProviders,
+      residencyPolicy:
+        options?.modelTier === "local" || localOnlyInference
+          ? "local_only"
+          : options?.residencyPolicy,
       requiredModelClass: options?.requiredModelClass,
       // EP-MODEL-TIER-ROUTING: a "local"-tier call forces local_only (keep
       // small/simple work on-box) even when the global switch is off; "robust"
       // leaves routing free to prefer a frontier endpoint. The global local-only
       // switch still wins for every call (the sovereign master toggle).
-      ...(options?.modelTier === "local" || localOnlyInference
-        ? { residencyPolicy: "local_only" as const }
-        : {}),
     },
   );
 
