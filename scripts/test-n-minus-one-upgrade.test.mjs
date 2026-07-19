@@ -329,7 +329,8 @@ test("baseline preparation uses the unique harness project and proves health aft
     assert.equal(events.at(-1).kind, "health");
     let cleanupCall;
     await cleanupNMinusOneBaseline(workspace, async (command, args, options) => { cleanupCall = { command, args, options }; return { stdout: "" }; });
-    assert.equal(cleanupCall.options.env.DPF_STATE_DIR, workspace.state);
+    assert.equal(cleanupCall.options.env.DPF_STATE_DIR, join(workspace.root, "cleanup-state"));
+    assert.equal(cleanupCall.options.env.DPF_STATE_DIR_HOST, join(workspace.root, "cleanup-state"));
     assert.equal(cleanupCall.options.env.AUTH_SECRET, events[0].env.AUTH_SECRET);
     assert.equal(cleanupCall.options.env.CREDENTIAL_ENCRYPTION_KEY, events[0].env.CREDENTIAL_ENCRYPTION_KEY);
     assert.equal(cleanupCall.args[cleanupCall.args.indexOf("--env-file") + 1], envFile);

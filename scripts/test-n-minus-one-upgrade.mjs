@@ -195,7 +195,9 @@ export function installCleanupHandlers(emitter, cleanup) {
 export async function cleanupNMinusOneBaseline(workspace, run = execFile) {
   const { source, state, project } = workspace;
   const env = workspace.harnessEnvironment ?? { ...process.env, COMPOSE_PROJECT_NAME: project, DPF_STATE_DIR_HOST: state, DPF_STATE_DIR: state };
-  await run("node", [join(source, "scripts", "dpf-compose.mjs"), ...(workspace.harnessEnvFile ? ["--env-file", workspace.harnessEnvFile] : []), "--project-name", project, "down", "--volumes", "--remove-orphans"], { cwd: source, env: { ...env, DPF_ALLOW_DESTRUCTIVE_COMPOSE: "1" } });
+  const cleanupState = join(workspace.root, "cleanup-state");
+  await mkdir(cleanupState, { recursive: true });
+  await run("node", [join(source, "scripts", "dpf-compose.mjs"), ...(workspace.harnessEnvFile ? ["--env-file", workspace.harnessEnvFile] : []), "--project-name", project, "down", "--volumes", "--remove-orphans"], { cwd: source, env: { ...env, DPF_STATE_DIR_HOST: cleanupState, DPF_STATE_DIR: cleanupState, DPF_ALLOW_DESTRUCTIVE_COMPOSE: "1" } });
 }
 
 async function ensureNMinusOneHostEnvironment(workspace, project) {
