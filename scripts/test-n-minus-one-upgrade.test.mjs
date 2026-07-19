@@ -301,6 +301,9 @@ test("acceptance workflow executes the real baseline-to-candidate N-1 runner", a
   assert.match(workflow, /--candidate-ref "\$candidate_ref"/);
   assert.match(workflow, /EVENT_PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \}\}/);
   assert.match(workflow, /candidate_ref="refs\/pull\/\$\{EVENT_PR_NUMBER\}\/merge"/);
+  assert.match(workflow, /if: github\.event_name != 'pull_request' && steps\.baseline\.outputs\.should_run == 'true'/);
+  assert.match(workflow, /scope:\"bounded-pr-contract\"/);
+  assert.match(workflow, /DI-FA01D947B1FA/);
   assert.match(workflow, /gh api .*pulls\?state=open/);
   assert.match(workflow, /should_run=false/);
   assert.match(workflow, /21969d012ad8ab382d47a2c59ffc955530796bd2/);
