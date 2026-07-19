@@ -37,6 +37,7 @@ test("promoter image embeds and labels the exact contract", async () => {
   assert.match(dockerfile, /org\.opencontainers\.image\.revision="\$\{DPF_PROMOTER_SOURCE_SHA\}"/);
   assert.match(dockerfile, /org\.opendpf\.promoter\.contract-schema="1"/);
   assert.match(dockerfile, /org\.opendpf\.promoter\.contract-digest="\$\{DPF_PROMOTER_CONTRACT_DIGEST\}"/);
+  assert.match(dockerfile, /apk add --no-cache .*docker-cli-buildx.*docker-cli-compose/);
   assert.match(digest, /^sha256:[a-f0-9]{64}$/);
 });
 

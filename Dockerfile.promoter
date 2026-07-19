@@ -6,7 +6,7 @@ LABEL org.opencontainers.image.description="One-shot container that executes san
 LABEL org.opencontainers.image.revision="${DPF_PROMOTER_SOURCE_SHA}"
 LABEL org.opendpf.promoter.contract-schema="1"
 LABEL org.opendpf.promoter.contract-digest="${DPF_PROMOTER_CONTRACT_DIGEST}"
-RUN apk add --no-cache bash docker-cli docker-cli-compose postgresql16-client git curl jq
+RUN apk add --no-cache bash docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git curl jq
 WORKDIR /promoter
 COPY promoter-contract.json /app/promoter-contract.json
 

@@ -315,13 +315,10 @@ if [[ $_dry_run -eq 0 ]]; then
     exit 1
   fi
   export DPF_VERSION="$_built_sha"
-  # Force the classic BuildKit build path (via the docker daemon) instead of
-  # Compose Bake. The promoter image's Compose can default to Bake, which
-  # requires the buildx CLI plugin — absent in the promoter — and fails every
-  # self-upgrade at docker-build with "Docker Compose is configured to build
-  # using Bake, but buildx isn't installed". This matches the working manual
-  # `docker compose build` path. (Self-upgrade docker-build failures, 2026-06-06.)
-  export COMPOSE_BAKE=false
+  # The promoter carries the Buildx plugin as part of its immutable toolchain.
+  # Use Compose Bake so current daemons never fall back to the legacy builder,
+  # whose image export can reference layers already absent from its store.
+  export COMPOSE_BAKE=true
   # Build portal AND postgres. postgres is now a first-party built image
   # (docker/postgres/Dockerfile — pgvector + baked init script, BI-4796D52B);
   # building it here guarantees the image exists before any recreate, and the
