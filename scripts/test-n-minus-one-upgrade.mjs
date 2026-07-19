@@ -29,8 +29,11 @@ export function buildPromoterReadinessDockerArgs({ candidateDigest, source, stat
   return ["run", "--rm", "--read-only",
     "-v", `${source}:/host-source:ro`, "-v", `${state}:/dpf-state:ro`, "-v", `${backups}:/backups:ro`,
     "-v", `${secret}:/run/secrets/dpf-runtime-transition:ro`,
-    "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state", "-e", "DPF_HOST_PLATFORM=linux", "-e", "DPF_HOST_ARCH=amd64",
-    "-e", "DPF_HOST_IDENTITY_PROVENANCE=explicit", "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready",
+    // BI-D47955AF: no DPF_HOST_* here, deliberately. The promoter is candidate-owned but
+    // launched by the DEPLOYED portal, so the genuine N-1 caller sends nothing and never
+    // can. Injecting the env simulated a post-fix caller and let a readiness gate that
+    // hard-required it ship green, wedging every pre-existing install.
+    "-e", "DPF_PROMOTER_STATE_DIR=/dpf-state", "-e", "DPF_PROMOTER_DOCKER_PREFLIGHT=ready",
     "-e", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition", "-e", `DPF_PROMOTER_DIGEST=${candidateDigest}`,
     "-e", "PROMOTE_SOURCE=/host-source", "-e", `PROMOTE_TARGET_SHA=${targetSha}`, "-e", `PROMOTE_COMPOSE_PROJECT=${project}`,
     "-e", "PROMOTE_BACKUP_PATH=/backups/recovery", "-e", "PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health",

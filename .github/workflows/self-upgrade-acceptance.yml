@@ -108,6 +108,10 @@ jobs:
             --candidate-ref "$candidate_ref" \
             --project "$DPF_N1_PROJECT" \
             --evidence-dir "$DPF_N1_EVIDENCE"
+      # BI-D47955AF: deliberately sends NO DPF_HOST_* env, because the real N-1 caller
+      # (a portal built before the host-identity contract) cannot send it. Readiness must
+      # derive identity from the mounted install-state or every existing install wedges.
+      # The refusal step below keeps the explicit-env path covered.
       - name: Candidate readiness succeeds without quiescence
         run: |
           printf '\357\273\277%s\n' '{"schemaVersion":1,"installerVersion":"acceptance","platform":"linux","arch":"amd64","installPath":"/opt/dpf","stateDir":"/dpf-state","composeProjectName":"dpf"}' > "$RUNNER_TEMP/dpf-state/install-state.json"
@@ -116,9 +120,6 @@ jobs:
             -v "$RUNNER_TEMP/dpf-state:/dpf-state:ro" \
             -v "$RUNNER_TEMP/dpf-backups:/backups:ro" \
             -e DPF_PROMOTER_STATE_DIR=/dpf-state \
-            -e DPF_HOST_PLATFORM=linux \
-            -e DPF_HOST_ARCH=amd64 \
-            -e DPF_HOST_IDENTITY_PROVENANCE=explicit \
             -e DPF_PROMOTER_DOCKER_PREFLIGHT=ready \
             -e PROMOTE_SOURCE=/host-source \
             -e PROMOTE_TARGET_SHA="$GITHUB_SHA" \

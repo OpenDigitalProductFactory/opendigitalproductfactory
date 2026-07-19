@@ -242,8 +242,13 @@ test("runtime readiness supplies the complete state, secret, digest, mount, and 
   for (const required of [
     "/candidate:/host-source:ro", "/state:/dpf-state:ro", "/backups:/backups:ro", "/secret:/run/secrets/dpf-runtime-transition:ro",
     "DPF_PROMOTER_STATE_DIR=/dpf-state", "DPF_RUNTIME_TRANSITION_SECRET_FILE=/run/secrets/dpf-runtime-transition",
-    `DPF_PROMOTER_DIGEST=${digest}`, "DPF_HOST_PLATFORM=linux", "DPF_HOST_ARCH=amd64", "--readiness --json",
+    `DPF_PROMOTER_DIGEST=${digest}`, "--readiness --json",
   ]) assert.ok(rendered.includes(required), required);
+  // The genuine N-1 caller cannot supply host identity; readiness must derive it from the
+  // mounted install-state. Injecting it here would re-blind this guard (BI-D47955AF).
+  for (const forbidden of ["DPF_HOST_PLATFORM", "DPF_HOST_ARCH", "DPF_HOST_IDENTITY_PROVENANCE"]) {
+    assert.ok(!rendered.includes(forbidden), forbidden);
+  }
 });
 
 test("governed promotion invokes the signed promoter with writable state and recovery mounts", async () => {

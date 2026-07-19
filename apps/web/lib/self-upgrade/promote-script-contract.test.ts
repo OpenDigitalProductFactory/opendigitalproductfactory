@@ -50,7 +50,9 @@ it("verifies the signed install-state handoff before reading the promotion proje
 it("projects legacy install state through valid dynamic ESM before readiness", () => {
   const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
   expect(source.match(/--overlay promote --migrate/g)).toHaveLength(2);
-  expect(source).toContain('await import(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs")');
+  // Dynamic import, and via a file:// URL — a bare absolute path is not a legal ESM
+  // specifier on Windows, which silently sank the whole readiness projection there.
+  expect(source).toContain('await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs").href)');
   expect(source).not.toContain('from process.env.PROMOTER_DIR');
 });
 
@@ -61,7 +63,7 @@ const BASE_ENV: Record<string, string> = {
   PROMOTE_HEALTH_URL: "http://localhost:3000/api/health",
 };
 
-function runScript(env: Record<string, string | undefined>, extraArgs: string[] = []) {
+function runScript(env: Record<string, string | undefined>, extraArgs: string[] = [], stateOverrides: Record<string, unknown> = {}) {
   const marker = basename(env.PROMOTE_SOURCE ?? "source").replace(/[^A-Za-z0-9-]/g, "-");
   const root = mkdtempSync(join(tmpdir(), `dpf-promote-contract-${marker}-`));
   try {
@@ -77,7 +79,7 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     const enabledRuntimeCapabilities = ["runtime:core"];
     const stateLines = catalog.capabilities.map(({ capabilityId }) => `${capabilityId}=${enabledRuntimeCapabilities.includes(capabilityId) ? "active" : "disabled"}`).sort().join("\n");
     const capabilityStateVersion = createHash("sha256").update(`${catalog.catalogHash}\n${stateLines}`).digest("hex");
-    writeFileSync(join(stateDir, "install-state.json"), JSON.stringify({ platform: "linux", enabledRuntimeCapabilities, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion }));
+    writeFileSync(join(stateDir, "install-state.json"), JSON.stringify({ platform: "linux", enabledRuntimeCapabilities, capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion, ...stateOverrides }));
 
     const mapped = { ...env };
     if (mapped.PROMOTE_SOURCE !== undefined) mapped.PROMOTE_SOURCE = resolveBashPath(source);
@@ -90,6 +92,24 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     rmSync(root, { recursive: true, force: true });
   }
 }
+
+// BI-D47955AF. The promoter is candidate-owned but launched by the DEPLOYED portal, so an
+// N-1 caller (any portal built before the host-identity contract landed) sends no DPF_HOST_*
+// env and never can. Readiness must derive identity from the install-state it already mounts
+// — demanding it from the caller wedges every pre-existing install, because the upgrade that
+// teaches the caller to send it IS the blocked upgrade.
+describe.skipIf(!BASH_AVAILABLE)("promote.sh --readiness host identity", () => {
+  it("resolves installer-owned identity when the N-1 caller sends no DPF_HOST_* env", () => {
+    const result = runScript(BASE_ENV, ["--readiness"], { platform: "linux", arch: "amd64" });
+    expect(result.stdout).toContain('"stage":"preflight"');
+    expect(result.stdout).not.toContain("host_identity_missing");
+  });
+
+  it("fails closed when install-state carries no resolvable identity", () => {
+    const result = runScript(BASE_ENV, ["--readiness"], { platform: "unsupported", arch: "unknown" });
+    expect(result.stdout).toContain("host_identity_missing");
+  });
+});
 
 describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
   describe("required variables", () => {
