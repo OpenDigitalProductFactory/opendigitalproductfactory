@@ -386,8 +386,10 @@ function createRuntimeDependencies(options) {
       const migrated = JSON.parse(stateBytes.toString("utf8"));
       const sourceV1Hash = createHash("sha256").update(recoveryBytes).digest("hex");
       if (sourceV1Hash !== baselineSourceV1Hash) throw new Error("governed recovery bytes diverged from baseline fixture");
+      const observedVersion = (await versionResponse.text()).trim();
+      if (!/^[a-f0-9]{7,64}(?:-dirty)?$/.test(observedVersion)) throw new Error("candidate portal returned an invalid version identity");
       return {
-        healthy: health.ok, version: (await versionResponse.text()).trim(), promoterDigest: candidateDigest,
+        healthy: health.ok, version: observedVersion, promoterDigest: candidateDigest,
         promoterSourceSha: options.candidateSha, persistenceDigest: candidateDigest,
         sourceV1Hash, migratedV2Hash: createHash("sha256").update(stateBytes).digest("hex"),
         sourceSchemaVersion: 1, migratedSchemaVersion: migrated.schemaVersion,

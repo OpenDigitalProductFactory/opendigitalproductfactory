@@ -84,7 +84,7 @@ test("installers persist canonical host identity and Compose passes it to the po
   for (const key of ["DPF_HOST_PLATFORM", "DPF_HOST_ARCH"]) {
     assert.match(bashInstaller, new RegExp(`${key}=`));
     assert.match(windowsInstaller, new RegExp(`${key}=`));
-    assert.match(compose, new RegExp(`${key}: \\` + `\${${key}:-`));
+    assert.match(compose, new RegExp(`${key}: \\$\\{${key}:-`));
     assert.match(envExample, new RegExp(`^${key}=`, "m"));
   }
   assert.match(bashInstaller, /DPF_HOST_PLATFORM=\$DPF_PLATFORM/);

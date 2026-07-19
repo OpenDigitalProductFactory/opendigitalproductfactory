@@ -105,7 +105,9 @@ curl() {
 sleep() { return 0; }
 seq() { printf '1\\n'; }
 `;
-  return { dir, source, stateDir, statePath, backup, bin, events, original, envelope, secretPath, sha, shellHarness };
+  const harnessPath = join(dir, "promote-harness.sh");
+  await writeFile(harnessPath, `${shellHarness}\nsource "$1" --self-upgrade\n`);
+  return { dir, source, stateDir, statePath, backup, bin, events, original, envelope, secretPath, sha, harnessPath };
 }
 
 for (const [stage, exitCode] of [["build", 91], ["swap", 92], ["health", 1]]) {
@@ -127,7 +129,7 @@ for (const [stage, exitCode] of [["build", 91], ["swap", 92], ["health", 1]]) {
         PROMOTE_HEALTH_URL: "http://acceptance.invalid/api/health",
         PROMOTE_COMPOSE_PROJECT: `dpf-rollback-${stage}`,
       };
-      const result = spawnSync(bash, ["-c", `${f.shellHarness}\nsource '${bashPath(join(root, "scripts/promote.sh"))}' --self-upgrade`], { cwd: root, env, encoding: "utf8" });
+      const result = spawnSync(bash, [bashPath(f.harnessPath), bashPath(join(root, "scripts/promote.sh"))], { cwd: root, env, encoding: "utf8" });
       assert.equal(result.status, exitCode, result.stderr);
       assert.deepEqual(await readFile(f.statePath), f.original, "rollback must restore the exact BOM-bearing v1 bytes");
       assert.deepEqual(await readFile(join(f.backup, "install-state.json")), f.original);
