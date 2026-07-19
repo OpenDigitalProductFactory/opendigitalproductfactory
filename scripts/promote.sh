@@ -124,8 +124,17 @@ if [[ ${#_missing[@]} -gt 0 ]]; then
 fi
 
 if [[ $_dry_run -eq 0 ]]; then
-  [[ -n "${DPF_INSTALL_STATE_MIGRATION_ENVELOPE:-}" && -n "${DPF_INSTALL_STATE_MIGRATION_SIGNATURE:-}" ]] || { printf 'error: install_state_migration_handoff_missing\n' >&2; exit 78; }
-  node "$_promoter_dir/lib/transition-signing.mjs" >/dev/null || exit $?
+  # An N-1 caller (a portal predating the signed handoff) sends NEITHER half and
+  # never can - refusing it wedges the install exactly as the readiness gate did
+  # (BI-76651B7B). promoter-migration-envelope.mjs self-issues from the candidate's own
+  # projection in that case. Exactly ONE half is a broken caller, not a legacy
+  # one, and still fails closed.
+  if [[ -n "${DPF_INSTALL_STATE_MIGRATION_ENVELOPE:-}" && -z "${DPF_INSTALL_STATE_MIGRATION_SIGNATURE:-}" ]] ||
+     [[ -z "${DPF_INSTALL_STATE_MIGRATION_ENVELOPE:-}" && -n "${DPF_INSTALL_STATE_MIGRATION_SIGNATURE:-}" ]]; then
+    printf 'error: install_state_migration_handoff_incomplete\n' >&2
+    exit 78
+  fi
+  node "$_promoter_dir/promoter-migration-envelope.mjs" >/dev/null || exit $?
 fi
 
 # Resolve the exact runtime profile closure from the governed install snapshot.
@@ -257,7 +266,7 @@ fi
 # before the baseline is resumed.
 emit_step install-state-migrate
 if [[ $_dry_run -eq 0 ]]; then
-  _migration_envelope="$(node "$_promoter_dir/lib/transition-signing.mjs")" || exit $?
+  _migration_envelope="$(node "$_promoter_dir/promoter-migration-envelope.mjs")" || exit $?
   _migration_field() {
     printf '%s' "$_migration_envelope" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);const p=process.argv[1].split(".");let x=v;for(const k of p)x=x?.[k];if(typeof x!=="string"&&typeof x!=="number")process.exit(2);process.stdout.write(String(x))})' "$1"
   }

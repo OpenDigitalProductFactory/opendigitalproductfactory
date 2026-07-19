@@ -19,6 +19,7 @@ COPY scripts/apply-runtime-capability-transition.mjs /promoter/apply-runtime-cap
 COPY scripts/runtime-transition-authority.mjs /promoter/runtime-transition-authority.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/rotate-runtime-transition-secret.mjs
 COPY scripts/lib/transition-signing.mjs /promoter/lib/transition-signing.mjs
+COPY scripts/promoter-migration-envelope.mjs /promoter/promoter-migration-envelope.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/installer/validate-install-state.mjs
 COPY scripts/installer/migrate-install-state.mjs /promoter/installer/migrate-install-state.mjs
 COPY scripts/installer/resolve-host-identity.mjs /promoter/installer/resolve-host-identity.mjs

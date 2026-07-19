@@ -118,9 +118,81 @@ function isServerBundleEntrypoint(rel) {
   );
 }
 
+// Check 4 (BI-76651B7B): apps/web statically imports a handful of scripts/*.mjs
+// helpers, so Next bundles them AND everything they reach. A promoter-only
+// import added to one of those shared helpers therefore breaks the production
+// build from outside apps/web, where checks 1-3 never look. Any scripts/ module
+// the web bundle reaches must stay bundle-safe: node: builtins and other
+// bundle-safe scripts/ modules only — no installer/, no generated catalogs, no
+// promoter CLI work. Put that behind its own promoter-only entrypoint instead.
+const PROMOTER_ONLY_SPECIFIER = [
+  /(^|\/)installer\//,
+  /capability-service-catalog\.generated\.json$/,
+  /(^|\/)promoter-[a-z-]+\.mjs$/,
+];
+
+function isBundleSafeSpecifier(specifier) {
+  return specifier.startsWith("node:") || (specifier.startsWith(".") && !PROMOTER_ONLY_SPECIFIER.some((re) => re.test(specifier)));
+}
+
+// Static `from "..."` is not enough: the break this check exists for used
+// `await import(new URL("../installer/...", here).href)`, which a static-import
+// scan reports as clean while the bundler still traces and fails on it. Collect
+// dynamic import() and new URL() module references too, over comment-stripped
+// source so a path named in prose is not mistaken for a reference.
+function stripComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
+function moduleReferences(body) {
+  const code = stripComments(body);
+  const refs = new Set(extractStaticImports(code));
+  for (const m of code.matchAll(/\bimport\s*\(\s*["']([^"']+)["']/g)) refs.add(m[1]);
+  for (const m of code.matchAll(/\bnew\s+URL\s*\(\s*["']([^"']+)["']/g)) refs.add(m[1]);
+  for (const m of code.matchAll(/\brequire\s*\(\s*["']([^"']+)["']/g)) refs.add(m[1]);
+  return [...refs];
+}
+
+function scriptsModulesReachedByWeb() {
+  const reached = new Set();
+  for (const baseDir of SCAN_DIRS) {
+    for (const file of walk(baseDir)) {
+      let body;
+      try {
+        body = readFileSync(file, "utf8");
+      } catch {
+        continue;
+      }
+      for (const specifier of extractStaticImports(body)) {
+        if (!/(^|\/)scripts\//.test(specifier)) continue;
+        const resolved = join(ROOT, "scripts", specifier.replace(/^.*?\/scripts\//, ""));
+        try {
+          if (statSync(resolved).isFile()) reached.add(relative(ROOT, resolved).replace(/\\/g, "/"));
+        } catch {
+          // Unresolvable specifier — the build itself will report it.
+        }
+      }
+    }
+  }
+  return reached;
+}
+
 const dynViolations = [];
 const clientViolations = [];
 const hostOnlyStaticViolations = [];
+const bundledScriptViolations = [];
+
+for (const rel of scriptsModulesReachedByWeb()) {
+  let body;
+  try {
+    body = readFileSync(join(ROOT, rel), "utf8");
+  } catch {
+    continue;
+  }
+  for (const specifier of moduleReferences(body)) {
+    if (!isBundleSafeSpecifier(specifier)) bundledScriptViolations.push(`${rel} -> ${specifier}`);
+  }
+}
 
 for (const baseDir of SCAN_DIRS) {
   for (const file of walk(baseDir)) {
@@ -188,6 +260,23 @@ if (hostOnlyStaticViolations.length > 0) {
   console.error("Next/Turbopack does not trace the host-only graph during page-load or route builds.");
   console.error("");
   for (const v of hostOnlyStaticViolations) console.error("  " + v);
+  console.error("");
+}
+
+if (bundledScriptViolations.length > 0) {
+  failed = true;
+  console.error("");
+  console.error("ERROR: BI-76651B7B — a scripts/ module the web bundle reaches imports promoter-only code.");
+  console.error("");
+  console.error("apps/web statically imports these scripts/ helpers, so Next bundles them AND");
+  console.error("everything they reach. Pulling installer modules or a generated catalog into one");
+  console.error("breaks the production build with module-not-found - from outside apps/web, where");
+  console.error("the other checks never look.");
+  console.error("");
+  for (const v of bundledScriptViolations) console.error("  " + v);
+  console.error("");
+  console.error("Keep the shared module pure (node: builtins only) and move the filesystem and");
+  console.error("projection work into a promoter-only entrypoint the portal never imports.");
   console.error("");
 }
 

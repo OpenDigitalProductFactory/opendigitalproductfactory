@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   canonicalTransitionPayload,
   signTransitionPayload,
+  issueSelfSignedMigrationEnvelope,
   verifyInstallStateMigrationEnvelope,
 } from "./transition-signing.mjs";
 
@@ -81,4 +82,63 @@ test("host identity is bound to the authoritative portal identity", () => {
     runId: envelope.runId, promoterDigest: envelope.promoterDigest, sourceHash: envelope.sourceHash,
     hostIdentity: { ...envelope.hostIdentity, arch: "arm64" }, now: Date.parse(envelope.issuedAt),
   }), /identity/);
+});
+
+// BI-D47955AF widened resolve-host-identity to derive an installer-owned identity
+// from install-state when the caller sends no DPF_HOST_* env. The verifier's
+// provenance whitelist did not follow, so a portal on an install whose .env
+// predates those keys would build a valid envelope the promoter then rejected.
+test("accepts the install-state provenance the resolver can now produce", () => {
+  const derived = { ...envelope, hostIdentity: { platform: "win32", arch: "amd64", provenance: "install-state" } };
+  assert.doesNotThrow(() => verifyInstallStateMigrationEnvelope(derived, signTransitionPayload(derived, secret), secret, {
+    runId: derived.runId, promoterDigest: derived.promoterDigest, sourceHash: derived.sourceHash,
+    hostIdentity: derived.hostIdentity, now: Date.parse(derived.issuedAt),
+  }));
+});
+
+test("still refuses a provenance outside the closed set", () => {
+  const bogus = { ...envelope, hostIdentity: { ...envelope.hostIdentity, provenance: "guessed" } };
+  assert.throws(() => verifyInstallStateMigrationEnvelope(bogus, signTransitionPayload(bogus, secret), secret, {
+    runId: bogus.runId, promoterDigest: bogus.promoterDigest, sourceHash: bogus.sourceHash, now: Date.parse(bogus.issuedAt),
+  }), /identity/);
+});
+
+// BI-76651B7B. promote.sh requires a signed migration handoff, but an N-1 caller
+// (a portal predating the protocol) cannot produce one — the same trapdoor that
+// wedged readiness, one gate later. The candidate self-issues from its own
+// projection so those installs can still be promoted.
+test("self-issued envelope verifies under the same validator", () => {
+  const now = Date.parse("2026-07-19T00:00:00.000Z");
+  const { envelope: issued, signature } = issueSelfSignedMigrationEnvelope({
+    secret, promoterDigest: `sha256:${"d".repeat(64)}`, now,
+    sourceHash: "e".repeat(64), projectionHash: "f".repeat(64),
+    fromSchemaVersion: 1, toSchemaVersion: 2,
+    hostIdentity: { platform: "win32", arch: "amd64", provenance: "install-state" },
+  });
+  assert.equal(issued.issuer, "candidate-self");
+  assert.doesNotThrow(() => verifyInstallStateMigrationEnvelope(issued, signature, secret, {
+    runId: issued.runId, promoterDigest: issued.promoterDigest, sourceHash: issued.sourceHash,
+    hostIdentity: issued.hostIdentity, now,
+  }));
+});
+
+test("self-issued envelope is still tamper-evident", () => {
+  const now = Date.parse("2026-07-19T00:00:00.000Z");
+  const { envelope: issued, signature } = issueSelfSignedMigrationEnvelope({
+    secret, promoterDigest: `sha256:${"d".repeat(64)}`, now,
+    sourceHash: "e".repeat(64), projectionHash: "f".repeat(64),
+    fromSchemaVersion: 1, toSchemaVersion: 2,
+    hostIdentity: { platform: "linux", arch: "amd64", provenance: "install-state" },
+  });
+  const tampered = { ...issued, projectionHash: "0".repeat(64) };
+  assert.throws(() => verifyInstallStateMigrationEnvelope(tampered, signature, secret, {
+    runId: issued.runId, promoterDigest: issued.promoterDigest, sourceHash: issued.sourceHash, now,
+  }), /tampered/);
+});
+
+test("a caller-issued envelope carries no issuer and stays accepted", () => {
+  assert.equal(envelope.issuer, undefined);
+  assert.doesNotThrow(() => verifyInstallStateMigrationEnvelope(envelope, signTransitionPayload(envelope, secret), secret, {
+    runId: envelope.runId, promoterDigest: envelope.promoterDigest, sourceHash: envelope.sourceHash, now: Date.parse(envelope.issuedAt),
+  }));
 });

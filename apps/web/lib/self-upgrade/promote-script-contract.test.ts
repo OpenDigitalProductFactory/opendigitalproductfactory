@@ -43,8 +43,11 @@ const REPO_ROOT = resolve(__dirname, "../../../..");
 
 it("verifies the signed install-state handoff before reading the promotion projection", () => {
   const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
-  expect(source.indexOf('lib/transition-signing.mjs')).toBeGreaterThan(0);
-  expect(source.indexOf('lib/transition-signing.mjs')).toBeLessThan(source.indexOf('_capability_projection='));
+  // The handoff is resolved by the promoter-only entrypoint (BI-76651B7B); the
+  // signing primitives stay in lib/transition-signing.mjs, which the portal
+  // bundles and therefore must not reach promoter-only code.
+  expect(source.indexOf('promoter-migration-envelope.mjs')).toBeGreaterThan(0);
+  expect(source.indexOf('promoter-migration-envelope.mjs')).toBeLessThan(source.indexOf('_capability_projection='));
 });
 
 it("projects legacy install state through valid dynamic ESM before readiness", () => {
