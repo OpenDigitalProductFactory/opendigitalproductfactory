@@ -18,9 +18,9 @@ The network uses three connection paths behind one protocol:
 
 1. **Nearby internal installations** announce themselves with DNS-Based Service Discovery (DNS-SD) on the local network. Discovery produces a setup suggestion, never trust. One operator-approved pairing establishes a `same-organization` relationship; a standing projection policy then keeps approved platform intent synchronized automatically.
 2. **Reseller and customer installations** establish an invitation-based, dual-approved relationship. The customer remains authoritative for its backlog and chooses what the reseller may see. The reseller can curate, combine, respond to, and selectively forward demand.
-3. **Reseller and Arcamanus installations** use the same relationship protocol with a different policy. Arcamanus owns the master **shared** portfolio, clusters related demand, measures reach, and publishes upstream dispositions and releases. It does not become the database master for private customer work.
+3. **Reseller and Arcamanus installations** use the same relationship protocol with a different policy. Arcamanus is the commercial/channel hub for reseller relationships and the governance authority for the shared code base. Its master **shared** portfolio contains Arcamanus-owned work and demand that another party separately elects to share; it does not ingest reseller/customer backlogs through code contribution.
 
-GitHub remains the public delivery and contribution mirror after shared demand is accepted for delivery. It is not the cross-install backlog database.
+Hive Mind carries governed contribution results into Git/GitHub: commits, specifications, tests, evidence, provenance, and review state. GitHub remains the public delivery and contribution mirror. Neither Hive Mind nor GitHub is the cross-install backlog database, and submitting code does not disclose the contributor's backlog.
 
 The architecture is a relationship graph rather than a fixed three-level tree. That supports the two Arcamanus development installations now, a reseller with many customers, a distributor with resellers, customers with more than one specialist partner, future community peers, and disconnected/offline operation without redesigning the transport.
 
@@ -30,7 +30,7 @@ Every DPF installation has a useful local PostgreSQL backlog. That sovereignty b
 
 The required outcome is:
 
-> A non-technical operator can connect the right DPF installations in a few guided actions; each installation remains authoritative for its local work; approved shared intent flows reliably with provenance, privacy, and revocation; and Arcamanus can see a trustworthy master shared portfolio without acquiring every customer's private backlog.
+> A non-technical operator can connect the right DPF installations in a few guided actions; each installation remains authoritative for its local work; approved shared intent flows reliably with provenance, privacy, and revocation; Arcamanus manages the reseller network and shared code governance; and code contributions reveal results rather than the contributor's backlog.
 
 ### 2.1 Success measures
 
@@ -40,6 +40,7 @@ The required outcome is:
 - A customer can share one item or enable a category policy with its reseller without exposing excluded fields or unrelated items.
 - A reseller can forward a sanitized demand envelope to Arcamanus while preserving the originating customer's chosen attribution or pseudonymity.
 - Arcamanus counts one underlying demand signal once even if it traverses customer → reseller → founder.
+- A reseller/customer can contribute a completed change through Hive Mind without sending its local backlog item, priority, estimate, discussion, or unselected roadmap.
 - Disconnecting a relationship stops new exchange immediately, invalidates credentials, and makes retention/deletion status visible on both sides.
 - Local work continues when every peer and relay is unavailable.
 
@@ -53,6 +54,7 @@ The required outcome is:
 6. **Provenance over copying.** Every envelope retains origin, route, version, and payload digest. Intermediaries add attestations; they do not impersonate the origin.
 7. **Network tolerant.** Outbox, idempotency, retry, acknowledgment, and periodic reconciliation are mandatory. Synchronous peer availability is never required to file local work.
 8. **GitHub after portfolio acceptance.** GitHub Issues/Projects may expose accepted public work and PR delivery, but must not become the write authority for installations or customer/reseller relationships.
+9. **Contribution is not backlog synchronization.** Hive Mind receives a governed result bundle. Any related demand signal requires a separate projection decision and remains independently revocable.
 
 ### 3.1 Explicit non-goals
 
@@ -78,10 +80,13 @@ The local role remains directional (`manages`, `managed-by`, `channel-upstream`,
 
 ### 4.1 Arcamanus authority
 
-Arcamanus is the **founder portfolio authority** for common DPF product demand:
+Arcamanus is the **founder business, portfolio, and code-governance authority**:
 
-- It owns cluster decisions, shared-portfolio disposition, public roadmap projection, and mapping accepted demand to GitHub delivery.
+- It is the business system of record for reseller enrollment, agreements, channel standing, shared offerings, contribution recognition, and founder/reseller coordination.
+- It governs the common code base: contribution policy, provenance, DCO, automated evidence, review, acceptance, release, and mapping accepted results to GitHub delivery.
+- It owns cluster decisions and shared-portfolio disposition only for Arcamanus-originated demand and demand envelopes another party explicitly shares through the demand channel.
 - It does not own a customer's or reseller's local backlog status, priority, private rationale, or implementation commitments.
+- A Hive Mind code contribution contains the submitted result and evidence, not the originating backlog record. Arcamanus may know the contributing organization/pseudonym and contribution purpose without seeing its internal planning context.
 - Exactly one installation is designated `founder-portfolio-authority` for an environment. Other Arcamanus installations mirror or adopt from it; they do not co-write its portfolio and there is no database leader election.
 - Every link declares an environment class (`production`, `development`, or `test`). Development/test demand is visually marked and does not enter the production master shared portfolio unless an authorized operator explicitly promotes it.
 - A future hosted Arcamanus directory/relay may improve reachability. Local operation and direct links must not depend on it.
@@ -92,7 +97,7 @@ The relationship model reinforces the reseller business rather than bypassing it
 
 - Customers obtain a nearby trusted advisor and can request help on a shared item.
 - Resellers see demand across only their authorized customer estate, identify reusable patterns, contribute expertise, and decide which signals merit upstream escalation.
-- Arcamanus receives higher-quality curated demand with measurable reach and provenance instead of an undifferentiated issue queue.
+- Arcamanus receives governed code results through Hive Mind and, separately, higher-quality curated demand when a reseller chooses to share it.
 - Downstream disposition and release-applicability notices let resellers proactively serve affected customers.
 - Future paid capabilities can include reseller fleet health, private solution catalogs, co-funding, delegated support workflows, contribution credit, and aggregated privacy-safe benchmarks. None require changing the federation protocol.
 
@@ -210,6 +215,18 @@ A received envelope can be:
 
 No remote party directly changes a local backlog item's status, priority, estimate, or build state.
 
+### 6.3 Three independent channels
+
+The Arcamanus relationship supports three independently authorized channels. Enabling one never enables another.
+
+| Channel | What Arcamanus receives | What remains local |
+| --- | --- | --- |
+| **Business/channel** | Reseller identity, relationship status, agreements/entitlements, shared catalog, support/escalation routing, contribution recognition | Reseller operations, customer commercial detail outside the agreement, internal planning |
+| **Demand sharing** | Only an explicitly projected `DemandEnvelopeV1`, normally curated or aggregated by the reseller | Raw backlog row, unshared roadmap, priority, estimates, discussions, attachments, customer identity beyond chosen attribution |
+| **Hive Mind contribution** | Git commit/patch or PR, specification as applicable, tests, verification evidence, dependency and security evidence, DCO/provenance, licenses/attribution, reviewer questions and disposition | Originating backlog/work capsule, competing options not submitted, local priority and estimate, customer context not required to evaluate the result |
+
+The contribution result may carry an opaque source receipt so the originating installation can reconcile acceptance or release status. That receipt is not a dereferenceable backlog identifier. If the contributor also wants Arcamanus to understand broader demand or affected-customer reach, it publishes a separate demand envelope under its demand projection contract.
+
 ## 7. System architecture
 
 ```text
@@ -230,6 +247,8 @@ No remote party directly changes a local backlog item's status, priority, estima
                                                            v
                                                   Local Delivery Flow
 ```
+
+The business/channel and Hive Mind contribution paths are parallel adapters on the approved relationship; they do not pass through the Demand Envelope pipeline. This prevents a code submission from implicitly creating a demand mirror.
 
 ### 7.1 Existing substrate to extend
 
@@ -282,6 +301,8 @@ Deduplication uses the immutable origin pair `(originInstallationId, envelopeId)
 
 Arcamanus can delegate curation to named resellers for their channel without delegating final founder-portfolio disposition.
 
+This view is populated only by Arcamanus-local demand and explicit demand-channel projections. Hive Mind contribution intake appears in the code-governance/contribution surface and does not create or reveal a remote backlog item. Arcamanus may create its own local follow-up item after reviewing a contribution, but that is a new Arcamanus-owned record linked to the contribution receipt—not a mirror of the contributor's backlog.
+
 ## 9. Privacy, security, and abuse controls
 
 - Bind every inbound request to a trusted, non-quarantined `FederationLink`, permitted activity, active projection contract, schema version, and replay window.
@@ -292,6 +313,7 @@ Arcamanus can delegate curation to named resellers for their channel without del
 - Record projection decisions, redactions, sends, receipts, forwards, adoptions, cluster changes, and revocations in auditable ledgers.
 - Prohibit transitive forwarding unless both the incoming envelope audience and the outgoing projection contract allow it.
 - Preserve pseudonymity end to end. A reseller cannot deanonymize a source for Arcamanus unless the source explicitly selected named attribution.
+- Enforce a contribution payload allow-list that rejects local backlog/work-capsule serialization and strips source-local database identifiers before Hive Mind egress.
 - Quarantine anomalous peers without deleting evidence. Local filing and viewing remain available while quarantined.
 - Run negative-egress tests for every preset and contract revision.
 
@@ -329,13 +351,16 @@ Arcamanus can delegate curation to named resellers for their channel without del
 ### Slice 3 — reseller/customer channel
 
 - Add customer/reseller invitation presets and customer-controlled policies.
+- Establish Arcamanus-owned reseller enrollment, agreement/entitlement, standing, and contribution-recognition views.
 - Add reseller portfolio aggregation, response, help offer, and selective forwarding.
 - Add pseudonymous attribution and transitive-forwarding enforcement.
 
-### Slice 4 — Arcamanus master shared portfolio
+### Slice 4 — Arcamanus business hub, shared portfolio, and Hive boundary
 
 - Add clustering, distinct-origin reach, founder disposition, and canonical local-item mapping.
 - Connect accepted public demand to the forge-neutral GitHub delivery mirror.
+- Connect Hive Mind result bundles to code-governance review with an allow-list that excludes source backlog/work-capsule state.
+- Keep business, demand, and contribution consents independently visible and revocable.
 - Return disposition and release-applicability notices downstream.
 
 ### Slice 5 — routed and hosted reachability
@@ -362,6 +387,7 @@ Arcamanus can delegate curation to named resellers for their channel without del
 | V-12 | GitHub separation | GitHub failure does not block federation intake; accepted shared demand retains local and network status separately from delivery status. |
 | V-13 | Route loop | A customer ↔ reseller ↔ Arcamanus plus direct customer ↔ Arcamanus topology delivers one logical event and rejects cyclic forwarding. |
 | V-14 | Environment boundary | Test/development demand is marked and cannot enter the production founder portfolio without explicit promotion. |
+| V-15 | Contribution isolation | A code contribution reaches Hive Mind/GitHub with result, evidence, DCO, and provenance while payload inspection confirms no backlog item, priority, estimate, discussion, or customer-private context crossed. |
 
 ## 13. Standards and precedents
 
@@ -394,6 +420,7 @@ The system of interest is the **DPF Federated Demand Network**, containing disco
 - R-FDN-08: allow either party to revoke.
 - R-FDN-09: require no IP address, GitHub credential, shell command, certificate management, or database expertise from normal operators.
 - R-FDN-10: prevent development/test demand from silently entering a production portfolio.
+- R-FDN-11: keep business, demand-sharing, and Hive Mind contribution channels independently authorized and prevent contribution payloads from exposing source backlog state.
 
 ### Interfaces and ports
 
@@ -405,7 +432,8 @@ The system of interest is the **DPF Federated Demand Network**, containing disco
 | Federation outbox | Installation → peer/relay | Projected activity, retry, acknowledgment, reconciliation |
 | Delivery Flow adapter | Local backlog ↔ federation | Eligibility projection; observe/follow/adopt with provenance |
 | Founder portfolio adapter | Federation mirror ↔ Arcamanus portfolio | Cluster, reach, disposition, canonical shared-item mapping |
-| Forge adapter | Accepted Arcamanus item ↔ GitHub | Delivery mirror and contribution state, never federation authority |
+| Hive contribution adapter | Contributor result ↔ Arcamanus Hive Mind | Result artifacts, verification, DCO, provenance, review/disposition; no source backlog |
+| Forge adapter | Accepted Arcamanus result/item ↔ GitHub | Delivery mirror and contribution state, never federation or backlog authority |
 
 ### Allocations
 
@@ -414,11 +442,12 @@ The system of interest is the **DPF Federated Demand Network**, containing disco
 - Reliable delivery allocates to the federation inbox/outbox and reconciliation worker.
 - Projected state allocates to `FederatedRecordMirror`; local execution state remains on local domain models.
 - Public contribution audit allocates to `HiveContributionLedger`.
+- Contribution payload minimization allocates to the Hive Mind egress serializer and contribution-policy gate, independently of demand projection.
 - Arcamanus clustering and shared disposition allocate to the founder portfolio application layer, not the transport.
 
 ### Verification mapping
 
-R-FDN-01 maps to V-08/V-12; R-FDN-02 to V-02/V-03; R-FDN-03 to V-04/V-05; R-FDN-04 to V-07/V-09/V-13; R-FDN-05 to V-01/V-06; R-FDN-06 to V-05/V-11/V-12; R-FDN-07 to V-07/V-08/V-13; R-FDN-08 to V-10; R-FDN-09 to V-01/V-03 plus moderated usability testing; and R-FDN-10 to V-14.
+R-FDN-01 maps to V-08/V-12; R-FDN-02 to V-02/V-03; R-FDN-03 to V-04/V-05; R-FDN-04 to V-07/V-09/V-13; R-FDN-05 to V-01/V-06; R-FDN-06 to V-05/V-11/V-12; R-FDN-07 to V-07/V-08/V-13; R-FDN-08 to V-10; R-FDN-09 to V-01/V-03 plus moderated usability testing; R-FDN-10 to V-14; and R-FDN-11 to V-15.
 
 ### Data authority
 
@@ -427,6 +456,8 @@ R-FDN-01 maps to V-08/V-12; R-FDN-02 to V-02/V-03; R-FDN-03 to V-04/V-05; R-FDN-
 - Receiving installation: its mirror, follow/adoption choice, local derivative work.
 - Reseller: its annotations, curation, help offers, and authorized aggregate.
 - Arcamanus: cluster membership, founder disposition, shared-portfolio item, and public delivery mapping.
+- Arcamanus business hub: reseller relationship, agreement/entitlement, channel governance, and contribution recognition.
+- Hive Mind contributor: submitted code result and its evidence/provenance; the source installation retains its backlog/work authority.
 - GitHub: public issue/PR/check state only.
 
 ### EA/parity catch-up
