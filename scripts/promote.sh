@@ -68,12 +68,25 @@ if [[ $_readiness -eq 1 ]]; then
   if [[ ! -f "$_profile_adapter" ]] || ! node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate >/dev/null 2>&1; then
     _readiness_failures+=(capability_projection_failed)
   fi
+  # Host identity is resolved by the shipped resolver, not read raw from the caller's env.
+  # The promoter is candidate-owned but launched by the DEPLOYED portal, so an N-1 caller
+  # sends no DPF_HOST_* and never can - demanding it wedges every pre-existing install,
+  # since the upgrade that teaches the caller to send it IS the blocked upgrade. The
+  # resolver still prefers explicit env, falls back to the installer-owned identity in the
+  # mounted install-state, and fails closed on contradictory or unverifiable evidence.
   _migration_projection=""
-  if [[ -n "${DPF_HOST_PLATFORM:-}" && -n "${DPF_HOST_ARCH:-}" ]]; then
-    _migration_projection="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" node --input-type=module -e '
-      import { readFile } from "node:fs/promises"; const { projectInstallState } = await import(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs");
+  _host_identity="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" node --input-type=module -e '
+    import { readFile } from "node:fs/promises"; import { pathToFileURL } from "node:url";
+    const { resolveHostIdentity } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/resolve-host-identity.mjs").href);
+    const state=JSON.parse((await readFile(process.env.STATE_FILE)).toString("utf8").replace(/^\uFEFF/,""));
+    process.stdout.write(JSON.stringify(resolveHostIdentity({state,env:process.env})));
+  ' 2>/dev/null)" || _host_identity=""
+  if [[ -n "$_host_identity" ]]; then
+    _migration_projection="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" DPF_HOST_IDENTITY="$_host_identity" node --input-type=module -e '
+      import { readFile } from "node:fs/promises"; import { pathToFileURL } from "node:url";
+      const { projectInstallState } = await import(pathToFileURL(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs").href);
       const bytes=await readFile(process.env.STATE_FILE); const source=JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,"")); const catalog=JSON.parse(await readFile(process.env.PROMOTER_DIR+"/capability-service-catalog.generated.json","utf8"));
-      const p=process.env.DPF_HOST_PLATFORM; const hostIdentity={platform:p,arch:process.env.DPF_HOST_ARCH,provenance:process.env.DPF_HOST_IDENTITY_PROVENANCE,capabilityHostPlatform:p==="win32"?"windows":p==="darwin"?"macos":p};
+      const hostIdentity=JSON.parse(process.env.DPF_HOST_IDENTITY);
       const r=await projectInstallState({bytes,hostIdentity,catalog}); process.stdout.write(JSON.stringify({sourceHash:r.sourceHash,projectionHash:r.projectionHash,migrationRequired:r.migrationRequired,fromSchemaVersion:source.schemaVersion??1,toSchemaVersion:r.projectedState.schemaVersion}));
     ' 2>/dev/null)" || _readiness_failures+=(install_state_projection_failed)
   else

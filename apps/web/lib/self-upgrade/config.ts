@@ -30,7 +30,7 @@ export type SelfUpgradeReadinessMode = "enforced" | "legacy-bootstrap";
 export type SelfUpgradeHostIdentity = {
   platform: "win32" | "darwin" | "linux";
   arch: "amd64" | "arm64" | "x86_64";
-  provenance: "explicit" | "legacy-windows-paths";
+  provenance: "explicit" | "install-state" | "legacy-windows-paths";
 };
 
 export function resolveSelfUpgradeHostIdentity(env: Record<string, string | undefined> = process.env, state: Record<string, unknown> = {}): SelfUpgradeHostIdentity {
