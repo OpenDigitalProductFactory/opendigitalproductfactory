@@ -19,7 +19,7 @@ import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepa
 // NOT be statically imported into this server bundle entrypoint (BI-98AF1066);
 // that is what the dynamic loadPromoterRuntime() below is for.
 import { PROMOTER_ALREADY_RUNNING_EXIT_CODE } from "@/lib/self-upgrade/promoter-exit-codes";
-import { runCandidatePreflight } from "@/lib/self-upgrade/preflight";
+import { resolveReadinessBackupHostPath, runCandidatePreflight } from "@/lib/self-upgrade/preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import {
   classifyBuildFailure,
@@ -647,7 +647,7 @@ export async function runSelfUpgrade(
       // tree's HEAD and cross-checks against it.
       targetSha: builtStamp,
       backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
-      backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
+      backupHostPath: resolveReadinessBackupHostPath(process.env.DPF_BACKUPS_HOST_PATH, hostInstallPathResolved ?? ""),
       composeEnvFileHostPath: hostInstallPathResolved
         ? `${hostInstallPathResolved.replace(/\/$/, "")}/.env`
         : undefined,
