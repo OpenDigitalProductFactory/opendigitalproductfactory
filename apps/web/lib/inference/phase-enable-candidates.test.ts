@@ -145,6 +145,22 @@ describe("selectEnableCandidatesForContract", () => {
     expect(selectEnableCandidatesForContract(contract, [cloud])).toHaveLength(0);
   });
 
+  it("uses the live router allowlist when projecting enable candidates", () => {
+    const contract = makeContract({ allowedProviders: ["anthropic"] });
+    const anthropic = makeProvider({ providerId: "anthropic" });
+    const openai = makeProvider({ providerId: "openai" });
+
+    expect(selectEnableCandidatesForContract(contract, [openai, anthropic]))
+      .toEqual([expect.objectContaining({ providerId: "anthropic" })]);
+  });
+
+  it("uses the live router denylist when projecting enable candidates", () => {
+    const contract = makeContract({ deniedProviders: ["openai"] });
+    const openai = makeProvider({ providerId: "openai" });
+
+    expect(selectEnableCandidatesForContract(contract, [openai])).toHaveLength(0);
+  });
+
   it("flags a disabled provider that still needs credentials instead of a one-click enable", () => {
     const contract = makeContract();
     const provider = makeProvider({

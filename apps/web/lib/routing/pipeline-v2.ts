@@ -45,6 +45,24 @@ import {
 
 // ── Stage 3: Hard filter (V2 — contract-based) ──────────────────────────────
 
+function getProviderConstraintExclusionReason(
+  ep: EndpointManifest,
+  contract: RequestContract,
+): string | null {
+  if (contract.deniedProviders?.includes(ep.providerId)) {
+    return `Provider '${ep.providerId}' is excluded by the request denylist`;
+  }
+
+  if (
+    contract.allowedProviders !== undefined &&
+    !contract.allowedProviders.includes(ep.providerId)
+  ) {
+    return `Provider '${ep.providerId}' is outside the request allowlist`;
+  }
+
+  return null;
+}
+
 /**
  * Determine why an endpoint should be excluded based on a RequestContract,
  * or null if the endpoint is eligible.
@@ -56,6 +74,11 @@ export function getExclusionReasonV2(
   ep: EndpointManifest,
   contract: RequestContract,
 ): string | null {
+  // Provider policy is a hard fence. Deny is evaluated before allow so an
+  // accidental overlap cannot broaden eligibility.
+  const providerConstraintReason = getProviderConstraintExclusionReason(ep, contract);
+  if (providerConstraintReason) return providerConstraintReason;
+
   // EP-AGENT-CAP-002: Agent capability floor — hard filter, non-negotiable.
   // Must run BEFORE status/graceful-degradation checks so a tool-incapable
   // endpoint is never selected even in degraded mode.
@@ -330,7 +353,11 @@ export async function routeEndpointV2(
 
   if (pinnedOverride) {
     const pinnedEp = endpoints.find((e) => e.id === pinnedOverride.endpointId);
-    if (pinnedEp) {
+    // A pin is a routing preference, not authority to bypass a provider fence.
+    // When the pinned provider is outside the effective set, continue through
+    // the normal pipeline so it is excluded with the canonical hard-filter
+    // reason and another eligible endpoint may be selected.
+    if (pinnedEp && getProviderConstraintExclusionReason(pinnedEp, contract) === null) {
       // Use legacy computeFitness for pin override scoring
       const dummyReq = {
         taskType: contract.taskType,
