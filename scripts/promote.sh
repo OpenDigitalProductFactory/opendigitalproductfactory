@@ -124,7 +124,16 @@ if [[ ${#_missing[@]} -gt 0 ]]; then
 fi
 
 if [[ $_dry_run -eq 0 ]]; then
-  [[ -n "${DPF_INSTALL_STATE_MIGRATION_ENVELOPE:-}" && -n "${DPF_INSTALL_STATE_MIGRATION_SIGNATURE:-}" ]] || { printf 'error: install_state_migration_handoff_missing\n' >&2; exit 78; }
+  # An N-1 caller (a portal predating the signed handoff) sends NEITHER half and
+  # never can - refusing it wedges the install exactly as the readiness gate did
+  # (BI-76651B7B). transition-signing.mjs self-issues from the candidate's own
+  # projection in that case. Exactly ONE half is a broken caller, not a legacy
+  # one, and still fails closed.
+  if [[ -n "${DPF_INSTALL_STATE_MIGRATION_ENVELOPE:-}" && -z "${DPF_INSTALL_STATE_MIGRATION_SIGNATURE:-}" ]] ||
+     [[ -z "${DPF_INSTALL_STATE_MIGRATION_ENVELOPE:-}" && -n "${DPF_INSTALL_STATE_MIGRATION_SIGNATURE:-}" ]]; then
+    printf 'error: install_state_migration_handoff_incomplete\n' >&2
+    exit 78
+  fi
   node "$_promoter_dir/lib/transition-signing.mjs" >/dev/null || exit $?
 fi
 
