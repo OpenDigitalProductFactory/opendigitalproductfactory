@@ -4,8 +4,12 @@ import {
   FEDERATION_BOOTSTRAP_TOKEN_PREFIX,
   FEDERATION_LINK_TOKEN_PREFIX,
   FEDERATION_PEER_PRINCIPAL_KIND,
+  FEDERATION_RELATIONSHIP_PRESETS,
+  FEDERATION_RELATIONSHIP_ROLE_PAIRS,
   FEDERATION_ROLES,
   inverseRole,
+  isFederationRelationshipPreset,
+  isRoleAllowedForRelationship,
   isFederationRole,
   linkStateFromRow,
 } from "./federation-link-types";
@@ -16,11 +20,43 @@ describe("federation roles (B1)", () => {
   it("inverts the role for the peer", () => {
     expect(inverseRole("manages")).toBe("managed-by");
     expect(inverseRole("managed-by")).toBe("manages");
+    expect(inverseRole("channel-upstream")).toBe("channel-downstream");
+    expect(inverseRole("channel-downstream")).toBe("channel-upstream");
+    expect(inverseRole("same-org-peer")).toBe("same-org-peer");
+    expect(inverseRole("community-peer")).toBe("community-peer");
   });
   it("validates role strings", () => {
     expect(isFederationRole("manages")).toBe(true);
+    expect(isFederationRole("same-org-peer")).toBe(true);
     expect(isFederationRole("admin")).toBe(false);
-    expect(FEDERATION_ROLES).toEqual(["manages", "managed-by"]);
+    expect(FEDERATION_ROLES).toEqual([
+      "manages",
+      "managed-by",
+      "channel-upstream",
+      "channel-downstream",
+      "same-org-peer",
+      "community-peer",
+    ]);
+  });
+  it("keeps the relationship preset separate from the directional role", () => {
+    expect(FEDERATION_RELATIONSHIP_PRESETS).toEqual([
+      "same-organization",
+      "service-provider",
+      "channel",
+      "community-peer",
+    ]);
+    expect(isFederationRelationshipPreset("channel")).toBe(true);
+    expect(isFederationRelationshipPreset("manages")).toBe(false);
+  });
+  it("constrains each preset to its valid directional role pair", () => {
+    expect(FEDERATION_RELATIONSHIP_ROLE_PAIRS).toEqual({
+      "same-organization": ["same-org-peer", "same-org-peer"],
+      "service-provider": ["manages", "managed-by"],
+      channel: ["channel-upstream", "channel-downstream"],
+      "community-peer": ["community-peer", "community-peer"],
+    });
+    expect(isRoleAllowedForRelationship("channel", "channel-upstream")).toBe(true);
+    expect(isRoleAllowedForRelationship("same-organization", "manages")).toBe(false);
   });
 });
 

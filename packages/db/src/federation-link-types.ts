@@ -11,17 +11,63 @@ import {
   type TrustState,
 } from "./trust-link-lifecycle";
 
-/** This deployment's role relative to the peer across a link. */
-export const FEDERATION_ROLES = ["manages", "managed-by"] as const;
+/** The approved business relationship that supplies a link's initial policy. */
+export const FEDERATION_RELATIONSHIP_PRESETS = [
+  "same-organization",
+  "service-provider",
+  "channel",
+  "community-peer",
+] as const;
+export type FederationRelationshipPreset = (typeof FEDERATION_RELATIONSHIP_PRESETS)[number];
+
+/** This deployment's directional role relative to the peer across a link. */
+export const FEDERATION_ROLES = [
+  "manages",
+  "managed-by",
+  "channel-upstream",
+  "channel-downstream",
+  "same-org-peer",
+  "community-peer",
+] as const;
 export type FederationRole = (typeof FEDERATION_ROLES)[number];
 
-/** The peer holds the inverse role: if we manage them, they are managed-by us. */
+export const FEDERATION_RELATIONSHIP_ROLE_PAIRS: Record<
+  FederationRelationshipPreset,
+  readonly [FederationRole, FederationRole]
+> = {
+  "same-organization": ["same-org-peer", "same-org-peer"],
+  "service-provider": ["manages", "managed-by"],
+  channel: ["channel-upstream", "channel-downstream"],
+  "community-peer": ["community-peer", "community-peer"],
+};
+
+const INVERSE_FEDERATION_ROLE: Record<FederationRole, FederationRole> = {
+  manages: "managed-by",
+  "managed-by": "manages",
+  "channel-upstream": "channel-downstream",
+  "channel-downstream": "channel-upstream",
+  "same-org-peer": "same-org-peer",
+  "community-peer": "community-peer",
+};
+
+/** The peer holds the inverse directional role; peer roles invert to themselves. */
 export function inverseRole(role: FederationRole): FederationRole {
-  return role === "manages" ? "managed-by" : "manages";
+  return INVERSE_FEDERATION_ROLE[role];
 }
 
 export function isFederationRole(value: string): value is FederationRole {
   return (FEDERATION_ROLES as readonly string[]).includes(value);
+}
+
+export function isFederationRelationshipPreset(value: string): value is FederationRelationshipPreset {
+  return (FEDERATION_RELATIONSHIP_PRESETS as readonly string[]).includes(value);
+}
+
+export function isRoleAllowedForRelationship(
+  preset: FederationRelationshipPreset,
+  role: FederationRole,
+): boolean {
+  return FEDERATION_RELATIONSHIP_ROLE_PAIRS[preset].includes(role);
 }
 
 // Principal convergence (AGENTS.md §11): peers/operators are aliases on a
