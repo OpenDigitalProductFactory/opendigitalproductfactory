@@ -48,3 +48,31 @@ test("tracked post-checkout chain invokes uncommitted-work guard", () => {
   const hook = readFileSync(join(repoRoot, ".githooks/lib/post-checkout-chained.sh"), "utf8");
   assert.match(hook, /uncommitted-work-guard\.mjs/);
 });
+
+test("Codex config planner stays native-first and repairs only duplicate DPF MCP tables", () => {
+  const planner = readFileSync(
+    join(repoRoot, "packages/dpf-bootstrap/src/agent-toolchain/codex-config.ts"),
+    "utf8",
+  );
+  const plannerTest = readFileSync(
+    join(repoRoot, "packages/dpf-bootstrap/src/agent-toolchain/__tests__/codex-config.test.ts"),
+    "utf8",
+  );
+  const readme = readFileSync(join(repoRoot, "packages/dpf-bootstrap/README.md"), "utf8");
+
+  assert.match(readme, /Client-native integration rule/);
+  assert.match(planner, /import \{ parse, stringify \} from "smol-toml";/);
+  assert.match(planner, /collapseDuplicateTomlTable\(normalizedTomlText, "mcp_servers\.dpf"\)/);
+  assert.match(planner, /TOML parse error; refusing to write/);
+  assert.match(plannerTest, /repairs a duplicate \[mcp_servers\.dpf\] table/);
+});
+
+test("typecheck gates include the bootstrap planning library", () => {
+  const hook = readFileSync(join(repoRoot, ".githooks/pre-commit"), "utf8");
+  const rootPackage = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+
+  assert.match(hook, /RUN_BOOTSTRAP=0/);
+  assert.match(hook, /packages\/dpf-bootstrap\/\*\)\s+RUN_BOOTSTRAP=1/);
+  assert.match(hook, /run_typecheck "@dpf\/bootstrap"\s+"packages\/dpf-bootstrap"/);
+  assert.match(rootPackage.scripts.typecheck, /--filter @dpf\/bootstrap typecheck/);
+});

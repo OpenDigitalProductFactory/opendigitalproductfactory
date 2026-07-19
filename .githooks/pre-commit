@@ -240,6 +240,7 @@ RUN_DB=0
 RUN_TYPES=0
 RUN_VALIDATORS=0
 RUN_API_CLIENT=0
+RUN_BOOTSTRAP=0
 RUN_MOBILE=0
 RUN_ADP_SERVICE=0
 
@@ -250,6 +251,7 @@ while IFS= read -r file; do
     packages/types/*)             RUN_TYPES=1 ;;
     packages/validators/*)        RUN_VALIDATORS=1 ;;
     packages/api-client/*)        RUN_API_CLIENT=1 ;;
+    packages/dpf-bootstrap/*)     RUN_BOOTSTRAP=1 ;;
     apps/mobile/*)                RUN_MOBILE=1 ;;
     services/adp/*)               RUN_ADP_SERVICE=1 ;;
   esac
@@ -284,6 +286,7 @@ run_typecheck() {
 [ "$RUN_TYPES" = "1" ]         && run_typecheck "@dpf/types"        "packages/types"
 [ "$RUN_VALIDATORS" = "1" ]    && run_typecheck "@dpf/validators"   "packages/validators"
 [ "$RUN_API_CLIENT" = "1" ]    && run_typecheck "@dpf/api-client"   "packages/api-client"
+[ "$RUN_BOOTSTRAP" = "1" ]     && run_typecheck "@dpf/bootstrap"    "packages/dpf-bootstrap"
 [ "$RUN_MOBILE" = "1" ]        && run_typecheck "mobile"            "apps/mobile"
 [ "$RUN_ADP_SERVICE" = "1" ]   && run_typecheck "dpf-adp-mcp"       "services/adp"
 
