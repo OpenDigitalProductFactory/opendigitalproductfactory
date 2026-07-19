@@ -306,6 +306,7 @@ test("baseline preparation uses the unique harness project and proves health aft
     assert.equal(events[0].env.COMPOSE_PROJECT_NAME, "dpf-n1-isolated");
     assert.equal(events[0].env.DPF_STATE_DIR_HOST, workspace.state);
     assert.equal(events[0].env.DPF_STATE_DIR, workspace.state);
+    assert.equal(events[0].env.DPF_BACKUPS_HOST_PATH, workspace.backups);
     assert.match(events[0].env.AUTH_SECRET, /^dpf_n1_[A-Za-z0-9_-]{43}$/);
     assert.match(events[0].env.CREDENTIAL_ENCRYPTION_KEY, /^[a-f0-9]{64}$/);
     assert.equal(events[0].env.DPF_N1_HARNESS, "1");
@@ -314,6 +315,7 @@ test("baseline preparation uses the unique harness project and proves health aft
     const seeded = await readFile(envFile, "utf8");
     assert.ok(seeded.includes(`DPF_STATE_DIR=${workspace.state}\n`));
     assert.ok(seeded.includes(`DPF_STATE_DIR_HOST=${workspace.state}\n`));
+    assert.ok(seeded.includes(`DPF_BACKUPS_HOST_PATH=${workspace.backups}\n`));
     assert.ok(seeded.includes(`DPF_HOST_INSTALL_PATH=${workspace.source}\n`));
     assert.ok(seeded.includes(`AUTH_SECRET=${events[0].env.AUTH_SECRET}\n`));
     assert.ok(seeded.includes(`CREDENTIAL_ENCRYPTION_KEY=${events[0].env.CREDENTIAL_ENCRYPTION_KEY}\n`));
