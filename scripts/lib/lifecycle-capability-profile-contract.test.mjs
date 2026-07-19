@@ -273,7 +273,7 @@ test("dpf-compose uses XDG state and effective roots outside the working directo
     }
     await copyFile(join(root, "scripts", "capability-service-catalog.generated.json"), join(install, "scripts", "capability-service-catalog.generated.json"));
     await writeFile(join(install, "docker-compose.yml"), "name: dpf-context\nservices: {}\n");
-    await writeFile(join(stateDir, "install-state.json"), `${JSON.stringify({ schemaVersion: 1, installerVersion: "test", installPath: install, platform: "win32", arch: "amd64", enabledRuntimeCapabilities: [] })}\n`);
+    await writeFile(join(stateDir, "install-state.json"), `\uFEFF${JSON.stringify({ schemaVersion: 1, installerVersion: "test", installPath: install, platform: "win32", arch: "amd64", enabledRuntimeCapabilities: [] })}\n`);
     const env = { ...process.env, XDG_STATE_HOME: xdg, COMPOSE_PROJECT_NAME: "dpf-context" };
     const byProjectDirectory = spawnSync(process.execPath, [join(root, "scripts", "dpf-compose.mjs"), "--project-directory", install, "-f", join(install, "docker-compose.yml"), "ps"], { cwd: elsewhere, env, encoding: "utf8" });
     assert.equal(byProjectDirectory.status, 0, byProjectDirectory.stderr);
