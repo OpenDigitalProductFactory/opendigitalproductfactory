@@ -4,6 +4,8 @@ import {
   classifyEgress,
   CANONICAL_UPSTREAM_OWNER,
   CANONICAL_UPSTREAM_REPO,
+  HIVE_RESULT_BUNDLE_SCHEMA_VERSION,
+  projectHiveResultBundle,
 } from "./contribution-egress";
 
 describe("parseRepoCoords", () => {
@@ -43,5 +45,63 @@ describe("classifyEgress", () => {
   it("is case-insensitive on owner/repo", () => {
     expect(classifyEgress({ owner: "opendigitalproductfactory", repo: "OpenDigitalProductFactory" }, null))
       .toBe("public-hive");
+  });
+});
+
+describe("projectHiveResultBundle", () => {
+  it("keeps reviewable results, evidence, provenance, attribution, and an opaque receipt", () => {
+    const result = projectHiveResultBundle({
+      schemaVersion: HIVE_RESULT_BUNDLE_SCHEMA_VERSION,
+      result: { commit: { sha: "abc123" }, pullRequest: { url: "https://github.com/acme/repo/pull/1" } },
+      evidence: { tests: [{ name: "unit", status: "passed" }], verification: [{ digest: "sha256:ok" }] },
+      provenance: { dcoSignoffs: ["Developer <dev@example.test>"], licenseRefs: ["Apache-2.0"] },
+      attribution: { mode: "organization", contributorRef: "org_opaque" },
+      review: { questions: ["Does this preserve compatibility?"] },
+      disposition: { status: "submitted" },
+      sourceReceipt: "receipt_opaque_random",
+    });
+
+    expect(result.violations).toEqual([]);
+    expect(result.projected).toMatchObject({
+      schemaVersion: "dpf.hive-result/1",
+      result: { commit: { sha: "abc123" } },
+      sourceReceipt: "receipt_opaque_random",
+    });
+  });
+
+  it("removes and reports local backlog, work-capsule, planning, and customer context at any depth", () => {
+    const result = projectHiveResultBundle({
+      schemaVersion: HIVE_RESULT_BUNDLE_SCHEMA_VERSION,
+      result: {
+        commit: { sha: "abc123", backlogItemId: "BI-PRIVATE" },
+        workCapsule: { id: "WC-PRIVATE" },
+      },
+      evidence: {
+        tests: [{ name: "unit", status: "passed", customerContext: "Private Customer" }],
+        buildPlan: "private plan",
+      },
+      provenance: { dcoSignoffs: [] },
+      priority: "urgent",
+      estimate: 13,
+      discussion: "private rationale",
+      roadmap: ["unsubmitted"],
+    });
+
+    const serialized = JSON.stringify(result.projected);
+    expect(serialized).toContain("abc123");
+    expect(serialized).not.toContain("BI-PRIVATE");
+    expect(serialized).not.toContain("WC-PRIVATE");
+    expect(serialized).not.toContain("Private Customer");
+    expect(serialized).not.toContain("private plan");
+    expect(result.violations).toEqual(expect.arrayContaining([
+      "forbidden-field:result.commit.backlogItemId",
+      "forbidden-field:result.workCapsule",
+      "forbidden-field:evidence.tests[0].customerContext",
+      "forbidden-field:evidence.buildPlan",
+      "non-allowed-field:priority",
+      "non-allowed-field:estimate",
+      "non-allowed-field:discussion",
+      "non-allowed-field:roadmap",
+    ]));
   });
 });
