@@ -156,6 +156,7 @@ test("workspace is mktemp-owned and cleanup refuses root, home, unresolved, and 
   const workspace = await createHarnessWorkspace();
   workspace.project = "dpf-n1-123";
   assert.ok((await realpath(workspace.root)).startsWith(await realpath(tmpdir())));
+  assert.equal(await realpath(join(workspace.backups, "recovery")), join(await realpath(workspace.backups), "recovery"));
   assertSafeHarnessConfig(workspace);
   assert.throws(() => assertSafeHarnessConfig({ ...workspace, project: "dpf" }), /project/);
   assert.throws(() => assertSafeHarnessConfig({ ...workspace, root: homedir(), project: "dpf-n1-x" }), /temporary/);

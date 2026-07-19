@@ -131,6 +131,7 @@ export async function createHarnessWorkspace(prefix = "dpf-n1-") {
   const root = await mkdtemp(join(tmpdir(), prefix));
   const workspace = { root, source: join(root, "source"), state: join(root, "state"), backups: join(root, "backups"), evidence: join(root, "evidence") };
   await Promise.all(Object.values(workspace).slice(1).map((path) => mkdir(path, { recursive: true })));
+  await mkdir(join(workspace.backups, "recovery"), { recursive: true });
   return workspace;
 }
 
