@@ -16,6 +16,7 @@
     "/promoter/installer/install-state.v2.schema.json",
     "/promoter/installer/install-state-schema-registry.mjs",
     "/promoter/lib/transition-signing.mjs",
+    "/promoter/promoter-migration-envelope.mjs",
     "/promoter/lib/resolve-capability-compose-profiles.mjs",
     "/promoter/lib/govern-capability-compose-args.mjs",
     "/promoter/lib/capability-state-hash.mjs",
@@ -38,6 +39,7 @@
   "installStateMigration": {
     "envelopeVersion": 1,
     "signingModule": "/promoter/lib/transition-signing.mjs",
+    "envelopeResolver": "/promoter/promoter-migration-envelope.mjs",
     "secretMount": "/run/secrets/dpf-runtime-transition"
   }
 }

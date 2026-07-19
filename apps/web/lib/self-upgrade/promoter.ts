@@ -394,6 +394,7 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/runtime-transition-authority.mjs \"$BDIR/scripts/runtime-transition-authority.mjs\" && " +
   "cp /promoter/scripts/rotate-runtime-transition-secret.mjs \"$BDIR/scripts/rotate-runtime-transition-secret.mjs\" && " +
   "cp /promoter/scripts/lib/transition-signing.mjs \"$BDIR/scripts/lib/transition-signing.mjs\" && " +
+  "cp /promoter/scripts/promoter-migration-envelope.mjs \"$BDIR/scripts/promoter-migration-envelope.mjs\" && " +
   "cp /promoter/scripts/installer/validate-install-state.mjs \"$BDIR/scripts/installer/validate-install-state.mjs\" && " +
   "cp /promoter/scripts/installer/migrate-install-state.mjs \"$BDIR/scripts/installer/migrate-install-state.mjs\" && " +
   "cp /promoter/scripts/installer/resolve-host-identity.mjs \"$BDIR/scripts/installer/resolve-host-identity.mjs\" && " +
