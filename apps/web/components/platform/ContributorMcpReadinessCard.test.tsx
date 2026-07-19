@@ -9,6 +9,12 @@ vi.mock("@/lib/actions/mcp-tokens", () => ({
   rotateMyMcpTokenWithEdit: vi.fn(),
 }));
 
+vi.mock("@/components/ui/LocalTime", () => ({
+  LocalTime: ({ value }: { value: string | null }) => (
+    <span data-testid="local-time">{value ?? "never"}</span>
+  ),
+}));
+
 import {
   getMyContributorMcpReadiness,
   issueMyWriteMcpToken,
@@ -93,6 +99,15 @@ afterEach(() => {
 });
 
 describe("ContributorMcpReadinessCard", () => {
+  it("delegates token timestamps to the hydration-safe local time renderer", () => {
+    renderCard(readiness());
+
+    expect(screen.getAllByTestId("local-time").map((node) => node.textContent)).toEqual([
+      "2026-05-26T12:00:00.000Z",
+      "2026-08-24T12:00:00.000Z",
+    ]);
+  });
+
   it("shows a quiet ready state with a test connection action", () => {
     renderCard(readiness());
 

@@ -18,6 +18,7 @@ import {
   rotateMyMcpTokenWithEdit,
   type IssueTokenActionResult,
 } from "@/lib/actions/mcp-tokens";
+import { LocalTime } from "@/components/ui/LocalTime";
 import type {
   ContributorMcpProbe,
   ContributorMcpReadiness,
@@ -46,11 +47,6 @@ function secondaryButtonClass(): string {
 
 function iconClass(): string {
   return "h-4 w-4";
-}
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "never";
-  return new Date(value).toLocaleString();
 }
 
 function statusMessage(readiness: ContributorMcpReadiness): string {
@@ -200,8 +196,9 @@ export function ContributorMcpReadinessCard({
           </p>
           {readiness.token && (
             <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-              Last used: {formatDateTime(readiness.token.lastUsedAt)} · Expires:{" "}
-              {formatDateTime(readiness.token.expiresAt)}
+              Last used:{" "}
+              <LocalTime value={readiness.token.lastUsedAt} fallback="never" /> · Expires:{" "}
+              <LocalTime value={readiness.token.expiresAt} fallback="never" />
             </p>
           )}
           {probeCopy && (
