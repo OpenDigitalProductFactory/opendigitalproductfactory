@@ -128,6 +128,48 @@ Usability verification must demonstrate that representative non-technical partic
 
 Run formative sessions with at least five representative participants. Passing means at least 80% answer all five correctly and complete the safe path without opening technical evidence. Qualitative feedback must also confirm that the flow feels protective and competent rather than punitive, confusing, or falsely reassuring.
 
+## Grounded questions and answers contract
+
+The same Data Governance coworker remains available during onboarding and from the provider detail experience afterward. A non-technical operator can ask follow-up questions in ordinary language—“Can I use this for customer emails?”, “Why does a business account matter?”, “Does this stay in Europe?”, or “What do I need before payroll data is allowed?”—without knowing which regulation, provider document, or technical setting to inspect.
+
+Reliability means evidence-grounded answers with a safe refusal boundary, not merely fluent prose. Every material answer must satisfy this contract:
+
+1. **Answer the business question first.** Start with a direct `Yes`, `No`, `Only if`, or `DPF cannot confirm this yet`, followed by the practical consequence for the operator’s intended work.
+2. **Substantiate every material claim.** Link claims about law, regulation, provider behavior, account terms, regions, training, retention, or contractual controls to the exact supporting source. Show source title, publisher, effective/published date, last checked date, and applicable jurisdiction/provider/account class.
+3. **Prefer authoritative sources.** Use primary legislation, regulators, standards bodies, and current first-party provider contracts/policies. Profession-corpus pages organize and explain those sources; they are not allowed to turn an uncited summary into authority.
+4. **Separate evidence from advice.** Mark what the source states, what the organization declared, what DPF verified technically, and what AGT-902 recommends. Never present an inference or operator declaration as a verified provider fact.
+5. **Expose scope and uncertainty.** State which workload, data class, jurisdiction, account, provider service, region, and evidence date the answer covers. If facts are missing, stale, conflicting, or outside corpus coverage, say so and ask the smallest useful follow-up question.
+6. **Abstain safely.** When the evidence does not support a reliable answer, AGT-902 returns `cannot_substantiate` with the missing fact, safe interim behavior, and appropriate next reviewer. It must not fill gaps from general model memory.
+7. **Keep advice and enforcement aligned.** The answer may explain or recommend a narrower posture; it cannot silently broaden the compiled provider allowance. A change in advice becomes a proposed posture revision requiring explicit operator review.
+8. **Protect the question itself.** Build the smallest necessary A2A/retrieval packet, keep the cold-start consultation local, and apply the same pre-egress policy if a later eligible cloud model assists. Do not include secrets or unrelated company/customer data in retrieval queries or citations.
+9. **Make references usable.** Put compact inline references next to the claims they support and offer a “Review sources” disclosure with the relevant excerpt/context and direct link. Do not make the operator search a generic bibliography or read a regulation list to discover which claim a source supports.
+10. **Preserve an audit trail without sensitive prose.** Record question category, evidence/source ids and versions, answer state, posture version, citation validation result, and escalation—not the raw sensitive values that may appear in the question.
+
+### Structured answer contract
+
+The A2A response and deterministic fallback share one validated shape:
+
+- `answerState`: `substantiated | conditional | cannot_substantiate`;
+- `directAnswer` and `practicalMeaning` in plain language;
+- `appliesTo`: jurisdiction, provider/service, account class, region, workload, and data classes;
+- `evidenceClaims`: claim id, concise claim, source id, supporting location/excerpt bounds, publisher, effective date, last checked date, and evidence strength;
+- `organizationFactsUsed`, separated by declared versus technically verified;
+- `missingFacts` and one follow-up question when needed;
+- `recommendation`, `safeInterimBehavior`, and `requiredReviewer` where applicable;
+- `proposedPostureChange`, which defaults to none and never applies automatically;
+- `policyVersion`, `corpusVersion`, and answer timestamp.
+
+The user-facing answer is generated only from this validated structure. If a citation is missing, does not support its claim, is stale beyond policy, or applies to a different provider service/account class, the affected claim is removed and the answer becomes conditional or `cannot_substantiate`.
+
+### Reliability evidence
+
+- Maintain a versioned golden-question suite spanning ordinary small-business, EMEA/UK transfer, healthcare, financial, employment, public-sector, consumer-account, business/API-account, region, retention/training, stale-evidence, conflicting-source, and out-of-scope questions.
+- Require 100% citation presence for material external claims and zero known unsupported material claims in the golden suite. Citation validation checks entailment and applicability, not merely that a URL exists.
+- Score direct-answer correctness, source authority, source freshness, claim/citation alignment, scope accuracy, safe abstention, follow-up quality, plain-language readability, policy consistency, and sensitive-data leakage.
+- Include adversarial questions that invite overconfidence, ask about a similarly named provider product, rely on outdated terms, or omit the account class/jurisdiction.
+- Test both the bundled local model and deterministic fallback. A stronger approved model may improve explanation, but it must pass the same structure and evidence gates.
+- Route missing-topic, weak-retrieval, stale-source, and citation-mismatch findings through the existing `ProfessionCorpusUsageStat` / `ProfessionCorpusGap` learning loop for governed corpus repair.
+
 ## Governed decision contract
 
 Implement one pure, versioned evaluation contract shared by onboarding, provider activation, provider settings, and routing.
@@ -224,8 +266,11 @@ Each phase is one independently reviewable concern/PR. Build Studio should promo
 3. Define the A2A objective/result schema around the Phase 1 contract. The COO gathers facts and calls `request_coworker`; AGT-902 assesses and cites; the COO explains.
 4. Keep the initial response within the local served-model/tool budget. Retrieve only the relevant jurisdiction/industry pages and return a concise result.
 5. Add a deterministic no-LLM fallback that computes the same verdict from captured facts and clearly marks missing evidence.
+6. Implement the grounded questions-and-answers contract for onboarding and later provider-detail follow-ups, using the same AGT-902 A2A path rather than a second compliance chatbot.
+7. Resolve references at claim level and validate source authority, freshness, applicability, and claim support before rendering an answer.
+8. Add a compact inline-reference and “Review sources” projection to the existing coworker conversation; do not create a separate knowledge or compliance route.
 
-**Verification:** corpus-source and freshness tests; AGT-902 wiring test; A2A chain-of-custody test; local-only onboarding simulation with the cloud providers disabled; structured-output/fallback equivalence scenarios.
+**Verification:** corpus-source and freshness tests; AGT-902 wiring test; A2A chain-of-custody test; local-only onboarding simulation with the cloud providers disabled; structured-output/fallback equivalence scenarios; golden-question and adversarial suites; claim-level citation presence/entailment/applicability checks; stale/conflicting/missing evidence abstention; first-viewport answer and source-disclosure browser verification.
 
 **Rollback:** corpus and prompt changes are reversible and do not activate providers. If the A2A call fails, the deterministic evaluator remains authoritative.
 
@@ -352,6 +397,10 @@ At minimum, the end-to-end suite must cover:
 13. A first-time, non-technical operator chooses between a personal account, business-managed cloud account, and local inference: the flow recommends one path, explains the practical consequence without jargon, previews what DPF will enforce, and the operator correctly identifies the safe choice without opening technical evidence.
 14. DPF blocks a cloud request after setup because a tool result adds customer data: the explanation names what was protected, states what DPF did, and offers one useful recovery action without displaying the detected value or a raw policy code.
 15. Provider evidence is missing or stale: the product says what it could and could not verify, avoids a compliance claim, restricts the route, and directs the operator to the exact evidence or qualified review needed.
+16. A non-technical operator asks whether their personal provider account can process customer emails: AGT-902 gives a direct workload-specific answer, cites the applicable current provider terms and privacy basis beside the supported claims, distinguishes declared account ownership from verified facts, and explains the safe next action.
+17. The operator asks whether data “stays in Europe,” but the configured provider service/region or contract evidence is missing: the coworker asks the smallest clarifying question or returns `cannot_substantiate`, keeps the interim route restricted, and does not substitute a general GDPR explanation for the missing provider fact.
+18. Two current authoritative sources appear to conflict or a provider source changed after the corpus summary: the answer exposes the conflict/date, avoids a definitive claim, identifies which source controls or which reviewer must decide, and files the corpus freshness gap.
+19. A citation URL is valid but its text does not support the generated claim or applies to a different account class: validation removes the claim, downgrades the answer state, and prevents the unsupported advice from reaching the operator.
 
 ## Research and standards grounding
 
@@ -405,3 +454,7 @@ The implementation should cite primary legal/regulatory texts in the profession 
 - First-viewport business copy meets the platform readability target and does not expose unexplained provider, routing, privacy, or regulatory jargon.
 - Representative non-technical participants can state the recommendation, data movement, automatic safeguards, missing action, and later review location with at least the comprehension threshold defined above.
 - Operators experience restrictions as evidence that DPF is protecting their business: every block explains the protected concern, the action DPF took, and one safe recovery path.
+- Operators can ask natural-language follow-up questions during onboarding and later from the provider detail experience without navigating to a separate compliance tool.
+- Every material external claim in the governed evaluation suite has an authoritative, current, applicable, claim-level reference; unsupported claims are withheld rather than merely accompanied by a generic link.
+- AGT-902 clearly separates sourced facts, organization declarations, technical verification, recommendation, uncertainty, and required human review.
+- Missing, stale, conflicting, or inapplicable evidence produces a safe conditional/abstaining answer and cannot broaden routing posture.
