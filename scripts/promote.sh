@@ -65,13 +65,13 @@ if [[ $_readiness -eq 1 ]]; then
     _readiness_failures+=(install_state_invalid)
   fi
   _profile_adapter="${PROMOTE_SOURCE:-}/scripts/lib/resolve-capability-compose-profiles.mjs"
-  if [[ ! -f "$_profile_adapter" ]] || ! node "$_profile_adapter" --state "$_state_file" --overlay promote >/dev/null 2>&1; then
+  if [[ ! -f "$_profile_adapter" ]] || ! node "$_profile_adapter" --state "$_state_file" --overlay promote --migrate >/dev/null 2>&1; then
     _readiness_failures+=(capability_projection_failed)
   fi
   _migration_projection=""
   if [[ -n "${DPF_HOST_PLATFORM:-}" && -n "${DPF_HOST_ARCH:-}" ]]; then
     _migration_projection="$(STATE_FILE="$_state_file" PROMOTER_DIR="$_promoter_dir" node --input-type=module -e '
-      import { readFile } from "node:fs/promises"; import { projectInstallState } from process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs";
+      import { readFile } from "node:fs/promises"; const { projectInstallState } = await import(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs");
       const bytes=await readFile(process.env.STATE_FILE); const source=JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,"")); const catalog=JSON.parse(await readFile(process.env.PROMOTER_DIR+"/capability-service-catalog.generated.json","utf8"));
       const p=process.env.DPF_HOST_PLATFORM; const hostIdentity={platform:p,arch:process.env.DPF_HOST_ARCH,provenance:process.env.DPF_HOST_IDENTITY_PROVENANCE,capabilityHostPlatform:p==="win32"?"windows":p==="darwin"?"macos":p};
       const r=await projectInstallState({bytes,hostIdentity,catalog}); process.stdout.write(JSON.stringify({sourceHash:r.sourceHash,projectionHash:r.projectionHash,migrationRequired:r.migrationRequired,fromSchemaVersion:source.schemaVersion??1,toSchemaVersion:r.projectedState.schemaVersion}));

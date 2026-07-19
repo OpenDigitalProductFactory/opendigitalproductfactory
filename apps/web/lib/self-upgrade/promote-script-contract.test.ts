@@ -47,6 +47,13 @@ it("verifies the signed install-state handoff before reading the promotion proje
   expect(source.indexOf('lib/transition-signing.mjs')).toBeLessThan(source.indexOf('_capability_projection='));
 });
 
+it("projects legacy install state through valid dynamic ESM before readiness", () => {
+  const source = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+  expect(source).toContain('--overlay promote --migrate');
+  expect(source).toContain('await import(process.env.PROMOTER_DIR + "/installer/migrate-install-state.mjs")');
+  expect(source).not.toContain('from process.env.PROMOTER_DIR');
+});
+
 const BASE_ENV: Record<string, string> = {
   PROMOTE_SOURCE: "/opt/app/release",
   PROMOTE_TARGET_SHA: "a1b2c3d4e5f6",
