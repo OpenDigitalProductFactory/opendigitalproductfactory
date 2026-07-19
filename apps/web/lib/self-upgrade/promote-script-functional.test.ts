@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, rmSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, rmSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -89,7 +89,8 @@ done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
   *"up -d --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
-    service="\${*##* }"
+    service=
+    for service in "$@"; do :; done
     effective_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$env_file" | tail -n 1)"
     printf 'recreate service=%s DPF_STATE_DIR=%s DPF_PROMOTER_STATE_DIR=%s DPF_STATE_DIR_HOST=%s mount_source=%s\\n' \
       "$service" "\${DPF_STATE_DIR-<unset>}" "\${DPF_PROMOTER_STATE_DIR-<unset>}" "$effective_state_dir" "$effective_state_dir" >> "$DOCKER_LOG"
@@ -167,7 +168,10 @@ function runPromote(opts: {
 
 /** Scratch root with a clean git source dir (src/) + isolated bin/ and backup/. */
 function makeScratch(): { root: string; source: string; backup: string; fakeBin: string; head: string } {
-  const root = mkdtempSync(join(tmpdir(), "dpf-promote-"));
+  // macOS exposes /var as a symlink to /private/var. Use the canonical parent
+  // so the production state-path escape guard sees the same path before and
+  // after realpath resolution.
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "dpf-promote-"));
   const source = join(root, "src");
   mkdirSync(source, { recursive: true });
   const head = gitInit(source);
