@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +20,7 @@ import {
   installCleanupHandlers,
   runNMinusOneUpgrade,
   buildPromoterPromotionDockerArgs,
+  execFileWithLiveOutput,
   buildPromoterReadinessDockerArgs,
   normalizePromoterReadiness,
   prepareNMinusOneBaseline,
@@ -26,6 +28,25 @@ import {
   PROMOTER_READINESS_PROTOCOL_FLOOR_SHA,
   verifyBaseRevision,
 } from "./test-n-minus-one-upgrade.mjs";
+
+test("long promotion commands stream progress while retaining evidence", async () => {
+  const forwarded = { stdout: "", stderr: "" };
+  const launch = (_command, _args, _options, callback) => {
+    const child = { stdout: new EventEmitter(), stderr: new EventEmitter() };
+    queueMicrotask(() => {
+      child.stdout.emit("data", "step=docker-build\n");
+      child.stderr.emit("data", "build progress\n");
+      callback(null, "captured stdout", "captured stderr");
+    });
+    return child;
+  };
+  const result = await execFileWithLiveOutput("docker", ["run"], {}, launch, {
+    stdout: { write: (chunk) => { forwarded.stdout += chunk; } },
+    stderr: { write: (chunk) => { forwarded.stderr += chunk; } },
+  });
+  assert.deepEqual(result, { stdout: "captured stdout", stderr: "captured stderr" });
+  assert.deepEqual(forwarded, { stdout: "step=docker-build\n", stderr: "build progress\n" });
+});
 
 test("GitHub client authenticates and follows pagination", async () => {
   const calls = [];

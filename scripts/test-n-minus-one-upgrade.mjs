@@ -14,6 +14,17 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/i;
 const PROJECT = /^dpf-n1-[a-z0-9][a-z0-9_-]*$/i;
 export const PROMOTER_READINESS_PROTOCOL_FLOOR_SHA = "21969d012ad8ab382d47a2c59ffc955530796bd2";
 
+export function execFileWithLiveOutput(command, args, options = {}, launch = execFileCallback, sinks = process) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = launch(command, args, options, (error, stdout, stderr) => {
+      if (error) rejectPromise(Object.assign(error, { stdout, stderr }));
+      else resolvePromise({ stdout, stderr });
+    });
+    child.stdout?.on("data", (chunk) => sinks.stdout.write(chunk));
+    child.stderr?.on("data", (chunk) => sinks.stderr.write(chunk));
+  });
+}
+
 export function buildPromoterReadinessDockerArgs({ candidateDigest, source, state, backups, secret, targetSha, project }) {
   return ["run", "--rm", "--read-only",
     "-v", `${source}:/host-source:ro`, "-v", `${state}:/dpf-state:ro`, "-v", `${backups}:/backups:ro`,
@@ -374,7 +385,7 @@ function createRuntimeDependencies(options) {
       };
       const signature = signTransitionPayload(envelope, secret);
       const args = buildPromoterPromotionDockerArgs({ candidateDigest, source: candidateSource, state: workspace.state, backups: workspace.backups, secret: transitionSecret, composeEnvFile: workspace.harnessEnvFile, targetSha: options.candidateSha, project: options.project, envelope, signature });
-      const result = await execFile("docker", args, { cwd: candidateSource, maxBuffer: 20 * 1024 * 1024 });
+      const result = await execFileWithLiveOutput("docker", args, { cwd: candidateSource, maxBuffer: 20 * 1024 * 1024 });
       promotionCompleted = { envelope, signature, stdout: result.stdout, stderr: result.stderr };
       return { requested: true, runId: envelope.runId };
     },
