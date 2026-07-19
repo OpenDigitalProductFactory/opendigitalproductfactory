@@ -24,6 +24,29 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 - **Surface A (Claude Code / Codex) — DPF wins over non-DPF skills** when both could apply. DPF skill `description` fields begin with a DPF-context selector to make the agent's load decision unambiguous. Generic upstream packs are optional local/user-scope aids, not the project default.
 - **Surface B (coworker) — plugin wins over legacy `.skill.md`** when the same slug appears in both [skills/&lt;category&gt;/](../../skills/) and `packages/dpf-skill-pack/skills/<slug>/SKILL.md`. The loader emits a startup warning and writes a `SkillSeedWarning` row so the admin observatory lists pending migrations. No legacy file is deleted by the loader — migration is opportunistic per EP-SKILL-001 follow-up.
 
+## Process-spine health
+
+The DPF-native replacements for retired upstream process skills are listed once
+in [process-spine-replacements.json](process-spine-replacements.json). Bootstrap
+and the plugin `SessionStart` hook use
+[hooks/process-spine-health-check.mjs](hooks/process-spine-health-check.mjs) to
+report two separate facts:
+
+1. whether the replacement `SKILL.md` files are installed on disk; and
+2. whether the current client has provided active loaded/exposed skill evidence.
+
+When a client cannot expose active skill state, the check says `unknown` rather
+than treating installed files as loaded skills. When active evidence is
+available and a retired `superpowers:*` process skill is visible without the DPF
+replacement, the check warns in plain language before project work begins.
+
+The same JSON file also owns the cleanup/update lifecycle policy. The policy is
+`disable-not-delete`: rerunning bootstrap or the updater after a skill-pack
+change replaces the managed DPF copy and lets tested client adapters disable
+known competitive plugins. It does not remove user-owned skill files or plugin
+caches. Today Codex has a safe config adapter; Claude, Grok, and Antigravity
+report warn-only until their active-state cleanup adapters are verified.
+
 ## Skills shipped in v0.1.0
 
 | Slug | Composes with (Surface A) | Coworker `assignTo` (Surface B) | What it adds |
@@ -173,6 +196,12 @@ copy, refreshes both marketplaces, and updates the MCP/client configuration
 without touching the full DPF runtime. This is the agent-toolchain-only update
 path; `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}` falls back to it when the
 full Node planner is unavailable in a source-only checkout.
+
+The update run also prints process-spine cleanup/update readiness. For Codex it
+converges `~/.codex/config.toml` by keeping `dpf-platform` enabled and disabling
+contract-listed competitive process plugins such as `superpowers@openai-curated`.
+For clients without a tested disable adapter, the readiness output stays
+warn-only and names the missing adapter honestly.
 
 ### Version bumps propagate automatically
 

@@ -96,6 +96,99 @@ function mcpBlockConverged(
   );
 }
 
+type TomlRepairResult = {
+  text: string;
+  repairs: string[];
+};
+
+function splitTomlDottedKey(key: string): string[] | null {
+  const parts: string[] = [];
+  let current = "";
+  let quoted = false;
+  let escape = false;
+
+  for (const char of key.trim()) {
+    if (quoted) {
+      if (escape) {
+        current += char;
+        escape = false;
+      } else if (char === "\\") {
+        escape = true;
+      } else if (char === "\"") {
+        quoted = false;
+      } else {
+        current += char;
+      }
+    } else if (char === "\"") {
+      quoted = true;
+    } else if (char === ".") {
+      const part = current.trim();
+      if (!part) return null;
+      parts.push(part);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  if (quoted || escape) return null;
+  const part = current.trim();
+  if (!part) return null;
+  parts.push(part);
+  return parts;
+}
+
+function canonicalTomlTableHeader(line: string): string | null {
+  const stripped = line.trim();
+  if (!stripped.startsWith("[") || !stripped.endsWith("]") || stripped.startsWith("[[")) {
+    return null;
+  }
+  const parts = splitTomlDottedKey(stripped.slice(1, -1));
+  return parts?.join(".") ?? null;
+}
+
+function isTomlTableBoundary(line: string): boolean {
+  const stripped = line.trim();
+  return canonicalTomlTableHeader(stripped) !== null || (stripped.startsWith("[[") && stripped.endsWith("]]"));
+}
+
+function collapseDuplicateTomlTable(text: string, canonicalKey: string): TomlRepairResult {
+  const lines = text.split(/\r?\n/);
+  const ranges: Array<{ start: number; end: number }> = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (canonicalTomlTableHeader(lines[index]) === canonicalKey) {
+      let end = index + 1;
+      while (end < lines.length && !isTomlTableBoundary(lines[end])) end += 1;
+      ranges.push({ start: index, end });
+      index = end;
+    } else {
+      index += 1;
+    }
+  }
+
+  if (ranges.length <= 1) return { text, repairs: [] };
+
+  const first = ranges[0];
+  const block = lines.slice(first.start, first.end);
+  const removed = new Set<number>();
+  for (const range of ranges) {
+    for (let lineNo = range.start; lineNo < range.end; lineNo += 1) removed.add(lineNo);
+  }
+
+  const rebuilt: string[] = [];
+  for (let lineNo = 0; lineNo < lines.length; lineNo += 1) {
+    if (lineNo === first.start) rebuilt.push(...block);
+    if (!removed.has(lineNo)) rebuilt.push(lines[lineNo]);
+  }
+
+  const trailingNewline = text.endsWith("\n") ? "\n" : "";
+  return {
+    text: rebuilt.join("\n").replace(/\n+$/u, "") + trailingNewline,
+    repairs: [`repair duplicate [${canonicalKey}]`],
+  };
+}
+
 /** Does this plugin id (possibly `name@marketplace`) match a generic id? */
 function isGenericPlugin(pluginId: string): boolean {
   const bare = pluginId.split("@")[0];
@@ -135,7 +228,9 @@ export function planCodexConfig(
   configPath: string,
   mcpEndpoint?: string,
 ): CodexConfigPlan {
-  const normalizedTomlText = existingTomlText.replace(/^\uFEFF/, "");
+  let normalizedTomlText = existingTomlText.replace(/^\uFEFF/, "");
+  const repaired = collapseDuplicateTomlTable(normalizedTomlText, "mcp_servers.dpf");
+  normalizedTomlText = repaired.text;
   let parsed: Record<string, unknown>;
   try {
     parsed = (normalizedTomlText.length > 0 ? parse(normalizedTomlText) : {}) as Record<string, unknown>;
@@ -196,7 +291,7 @@ export function planCodexConfig(
     trustToAdd.length > 0;
 
   // Nothing to do anywhere -- baseline + convergence both already conform.
-  if (pluginConverged && mcpConverged && !needsConvergence) {
+  if (pluginConverged && mcpConverged && !needsConvergence && repaired.repairs.length === 0) {
     return {
       writes: [],
       deletes: [],
@@ -209,7 +304,7 @@ export function planCodexConfig(
   }
 
   const nextParsed: Record<string, unknown> = { ...parsed };
-  const rationaleParts: string[] = [];
+  const rationaleParts: string[] = [...repaired.repairs];
 
   // Plugin block: add/enable DPF unless the user explicitly disabled it.
   // We also disable the generic plugins in the same plugins map.

@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "cleanupPolicy": {
+    "schemaVersion": 1,
+    "mode": "disable-not-delete",
+    "plainLanguage": "Keep DPF process skills current by rerunning bootstrap/updater after skill-pack changes. Safe adapters disable known competitive plugins; they never delete user-owned skill files or plugin caches.",
+    "clients": [
+      {
+        "client": "codex",
+        "status": "reconciles-safe-config",
+        "competitivePluginIds": [
+          "superpowers",
+          "superpowers@openai-curated",
+          "superpowers@openai-bundled"
+        ],
+        "action": "disable-plugin"
+      },
+      {
+        "client": "claude",
+        "status": "warn-only",
+        "competitivePluginIds": [
+          "superpowers",
+          "superpowers@openai-curated",
+          "superpowers@openai-bundled"
+        ],
+        "action": "warn-until-adapter-verified"
+      },
+      {
+        "client": "grok",
+        "status": "warn-only",
+        "competitivePluginIds": [
+          "superpowers",
+          "superpowers@openai-curated",
+          "superpowers@openai-bundled"
+        ],
+        "action": "warn-until-adapter-verified"
+      },
+      {
+        "client": "antigravity",
+        "status": "warn-only",
+        "competitivePluginIds": [
+          "superpowers",
+          "superpowers@openai-curated",
+          "superpowers@openai-bundled"
+        ],
+        "action": "warn-until-adapter-verified"
+      }
+    ]
+  },
+  "replacements": [
+    {
+      "dpfSkill": "dpf-brainstorming",
+      "retiredSkill": "brainstorming",
+      "retiredSurfaceIds": ["brainstorming", "superpowers:brainstorming"]
+    },
+    {
+      "dpfSkill": "dpf-writing-plans",
+      "retiredSkill": "writing-plans",
+      "retiredSurfaceIds": ["writing-plans", "superpowers:writing-plans"]
+    },
+    {
+      "dpfSkill": "dpf-tdd",
+      "retiredSkill": "test-driven-development",
+      "retiredSurfaceIds": ["test-driven-development", "superpowers:test-driven-development"]
+    },
+    {
+      "dpfSkill": "dpf-systematic-debugging",
+      "retiredSkill": "systematic-debugging",
+      "retiredSurfaceIds": ["systematic-debugging", "superpowers:systematic-debugging"]
+    },
+    {
+      "dpfSkill": "dpf-finishing-a-development-branch",
+      "retiredSkill": "finishing-a-development-branch",
+      "retiredSurfaceIds": [
+        "finishing-a-development-branch",
+        "superpowers:finishing-a-development-branch"
+      ]
+    }
+  ]
+}

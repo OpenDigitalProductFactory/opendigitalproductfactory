@@ -282,6 +282,15 @@ Architectural rule: installer scripts are orchestration adapters, not config par
 
 - Every write is "read existing → compute desired → write only if different." No append-on-rerun.
 - TOML edits use a structured parser (`@iarna/toml` or equivalent) round-tripped, not regex. Preserves user comments and ordering.
+- Agent-client integration is native-first: use client-supported plugin
+  manifests/marketplaces, MCP descriptor shapes, and hook planes before touching
+  user config directly. A direct edit is a fallback adapter, not a shortcut, and
+  must live in the pure planning library with fixture coverage.
+- Invalid-client-config repair is allowed only for a narrowly identified DPF-owned
+  shape that blocks the native client from starting. Codex duplicate
+  `[mcp_servers.dpf]` tables are repaired before TOML parsing by collapsing the
+  duplicate DPF block, then the planner parses/stringifies once. Unknown invalid
+  TOML still fails closed with a human-readable reason.
 - `installed_plugins.json` upserts by `(plugin, projectPath)`; stale entries (`projectPath` no longer exists on disk) are removed with operator confirmation unless `--headless`.
 - Kernel memory files are diffed; user edits (file mtime > install-time write mtime) are preserved with an installer warning rather than clobbered. A future BI may add a merge UX.
 - Smoke test failure is a soft fail in `dev` mode (warn, continue), hard fail in `release` mode (exit non-zero with `Reason:` / `Next:` block matching `preflight.sh` convention).

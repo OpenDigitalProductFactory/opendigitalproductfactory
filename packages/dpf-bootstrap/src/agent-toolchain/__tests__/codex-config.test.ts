@@ -188,6 +188,41 @@ describe("planCodexConfig", () => {
     expect(plan.preservedUserIntent).toBe(false);
   });
 
+  it("repairs a duplicate [mcp_servers.dpf] table before parsing so Codex is functional again", () => {
+    const duplicatedDpfMcp = [
+      'model = "gpt-5.5"',
+      "",
+      "[mcp_servers.dpf]",
+      'url = "http://old.example.test/api/mcp/v1"',
+      'bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"',
+      "",
+      "[mcp_servers.node_repl]",
+      'command = "node"',
+      "",
+      "[mcp_servers.dpf]",
+      'url = "http://duplicate.example.test/api/mcp/v1"',
+      'bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"',
+      "",
+    ].join("\n");
+
+    expect(() => parse(duplicatedDpfMcp)).toThrow();
+
+    const plan = planCodexConfig(duplicatedDpfMcp, REPO, CONFIG_PATH, LOCAL_ENDPOINT);
+
+    expect(plan.writes).toHaveLength(1);
+    expect(plan.rationale).toMatch(/repair duplicate \[mcp_servers\.dpf\]/);
+    expect(plan.writes[0].content.match(/\[mcp_servers\.dpf\]/g)).toHaveLength(1);
+
+    const parsed = parse(plan.writes[0].content) as {
+      mcp_servers: Record<string, { url?: string; bearer_token_env_var?: string; command?: string }>;
+    };
+    expect(parsed.mcp_servers.dpf).toEqual({
+      url: LOCAL_ENDPOINT,
+      bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
+    });
+    expect(parsed.mcp_servers.node_repl.command).toBe("node");
+  });
+
   it("accepts a UTF-8 BOM at the start of a Windows-written config", () => {
     const plan = planCodexConfig(`\uFEFF${operatorRedacted}`, REPO, CONFIG_PATH);
 

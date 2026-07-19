@@ -193,6 +193,42 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
             self.assertEqual(data["mcp_servers"]["dpf"]["url"], "https://mcp.example.test/api/mcp/v1")
 
+    @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
+    def test_disables_competitive_codex_plugins_without_deleting_user_config(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config = home / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                'model = "gpt-5.5"\n'
+                '[plugins."superpowers@openai-curated"]\n'
+                "enabled = true\n"
+                '[plugins."custom-helper"]\n'
+                "enabled = true\n",
+                encoding="utf-8",
+            )
+
+            with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}, clear=False):
+                updater.main([
+                    "--skill-pack-path",
+                    str(skill_pack),
+                    "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
+                ])
+
+            data = tomllib.loads(config.read_text())
+            self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
+            self.assertFalse(data["plugins"]["superpowers@openai-curated"]["enabled"])
+            self.assertTrue(data["plugins"]["custom-helper"]["enabled"])
+
+    def test_cleanup_policy_names_safe_codex_reconciliation(self) -> None:
+        policy = updater.load_process_spine_cleanup_policy()
+        self.assertEqual(policy["mode"], "disable-not-delete")
+        codex = next(client for client in policy["clients"] if client["client"] == "codex")
+        self.assertIn("superpowers@openai-curated", codex["competitivePluginIds"])
+        self.assertEqual(codex["action"], "disable-plugin")
+
     def test_reuses_bare_codex_plugin_table_instead_of_appending_duplicate(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
@@ -318,7 +354,7 @@ class GrokInstallTest(unittest.TestCase):
         self.assertEqual(status, "installed")
         run.assert_called_once()
         argv = run.call_args[0][0]
-        self.assertEqual(argv, ["/fake/grok", "plugin", "install", "/tmp/managed", "--trust"])
+        self.assertEqual(argv, ["/fake/grok", "plugin", "install", str(Path("/tmp/managed")), "--trust"])
 
     def test_install_reports_failure_without_raising(self) -> None:
         class _Result:
@@ -393,6 +429,33 @@ class GuardLivenessAdvisoryTest(unittest.TestCase):
         # Grok: the blocking-hook-contract gap must be named, not hidden.
         self.assertIn("grok", text)
         self.assertIn("block", text)
+
+
+class ProcessSpineHealthTest(unittest.TestCase):
+    def test_replacement_contract_names_retired_process_equivalents(self) -> None:
+        slugs = [entry["dpfSkill"] for entry in updater.load_process_spine_contract()]
+        self.assertEqual(
+            slugs,
+            [
+                "dpf-brainstorming",
+                "dpf-writing-plans",
+                "dpf-tdd",
+                "dpf-systematic-debugging",
+                "dpf-finishing-a-development-branch",
+            ],
+        )
+
+    def test_reports_generic_brainstorming_exposed_without_dpf_replacement(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        verdict = updater.assess_process_spine_health(
+            skill_pack,
+            exposed_skills=["superpowers:brainstorming"],
+        )
+        self.assertTrue(verdict["installed"]["ok"])
+        self.assertEqual(verdict["exposed"]["state"], "verified")
+        self.assertEqual([c["dpfSkill"] for c in verdict["conflicts"]], ["dpf-brainstorming"])
+        text = "\n".join(updater.render_process_spine_health(verdict))
+        self.assertIn("DPF-native replacement skills are not active", text)
 
 
 class CodexHookTrustTest(unittest.TestCase):

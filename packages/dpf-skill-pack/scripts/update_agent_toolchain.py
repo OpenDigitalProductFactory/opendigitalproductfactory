@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 PLUGIN_NAME = "dpf-platform"
@@ -94,6 +94,205 @@ def codex_marketplace_path(home: Path) -> Path:
 
 def managed_plugin_path(home: Path) -> Path:
     return home / ".agents" / "plugins" / "plugins" / PLUGIN_NAME
+
+
+def process_spine_contract_path(skill_pack: Path) -> Path:
+    return skill_pack / "process-spine-replacements.json"
+
+
+def load_process_spine_contract(skill_pack: Optional[Path] = None) -> list[dict[str, Any]]:
+    root = skill_pack or default_skill_pack_path()
+    data = read_json(process_spine_contract_path(root), {})
+    replacements = data.get("replacements")
+    if not isinstance(replacements, list):
+        raise SystemExit(f"Missing replacements[] in {process_spine_contract_path(root)}")
+    return replacements
+
+
+def load_process_spine_cleanup_policy(skill_pack: Optional[Path] = None) -> dict[str, Any]:
+    root = skill_pack or default_skill_pack_path()
+    data = read_json(process_spine_contract_path(root), {})
+    policy = data.get("cleanupPolicy")
+    if not isinstance(policy, dict) or not isinstance(policy.get("clients"), list):
+        raise SystemExit(f"Missing cleanupPolicy.clients[] in {process_spine_contract_path(root)}")
+    return policy
+
+
+def codex_competitive_plugin_ids(skill_pack: Optional[Path] = None) -> list[str]:
+    policy = load_process_spine_cleanup_policy(skill_pack)
+    for client in policy.get("clients", []):
+        if client.get("client") == "codex":
+            ids = client.get("competitivePluginIds")
+            if isinstance(ids, list):
+                return [str(item) for item in ids if str(item)]
+    return []
+
+
+def _normalize_skill_id(value: object) -> str:
+    return str(value or "").strip().lstrip("$@").lower()
+
+
+def _dpf_aliases(entry: dict[str, Any]) -> set[str]:
+    slug = _normalize_skill_id(entry.get("dpfSkill"))
+    return {slug, f"dpf-platform:{slug}"}
+
+
+def _retired_aliases(entry: dict[str, Any]) -> set[str]:
+    aliases = {_normalize_skill_id(entry.get("retiredSkill"))}
+    for alias in entry.get("retiredSurfaceIds") or []:
+        aliases.add(_normalize_skill_id(alias))
+    return aliases
+
+
+def exposed_process_spine_skills_from_env() -> Optional[list[str]]:
+    raw_json = os.environ.get("DPF_PROCESS_SPINE_EXPOSED_SKILLS_JSON")
+    if raw_json:
+        parsed = json.loads(raw_json)
+        if not isinstance(parsed, list):
+            raise SystemExit("DPF_PROCESS_SPINE_EXPOSED_SKILLS_JSON must be a JSON array")
+        return [str(v) for v in parsed]
+    file_path = os.environ.get("DPF_PROCESS_SPINE_EXPOSED_SKILLS_FILE")
+    if file_path:
+        raw = Path(file_path).read_text(encoding="utf-8").strip()
+        if not raw:
+            return []
+        if raw.startswith("["):
+            parsed = json.loads(raw)
+            if not isinstance(parsed, list):
+                raise SystemExit("DPF_PROCESS_SPINE_EXPOSED_SKILLS_FILE JSON must be an array")
+            return [str(v) for v in parsed]
+        return [line.strip() for line in raw.splitlines() if line.strip()]
+    raw_list = os.environ.get("DPF_PROCESS_SPINE_EXPOSED_SKILLS")
+    if raw_list:
+        return [part.strip() for part in re.split(r"[,\r\n]+", raw_list) if part.strip()]
+    return None
+
+
+def assess_process_spine_health(
+    skill_pack: Path,
+    exposed_skills: Optional[list[str]] = None,
+) -> dict[str, Any]:
+    replacements = load_process_spine_contract(skill_pack)
+    exposed = None
+    if exposed_skills is not None:
+        exposed = {_normalize_skill_id(skill) for skill in exposed_skills if _normalize_skill_id(skill)}
+
+    rows = []
+    for entry in replacements:
+        dpf_skill = str(entry.get("dpfSkill"))
+        retired_skill = str(entry.get("retiredSkill"))
+        skill_path = skill_pack / "skills" / dpf_skill / "SKILL.md"
+        dpf_exposed = None if exposed is None else bool(exposed.intersection(_dpf_aliases(entry)))
+        generic_exposed = None if exposed is None else bool(exposed.intersection(_retired_aliases(entry)))
+        rows.append(
+            {
+                "dpfSkill": dpf_skill,
+                "retiredSkill": retired_skill,
+                "skillPath": str(skill_path),
+                "installed": skill_path.exists(),
+                "dpfExposed": dpf_exposed,
+                "genericExposed": generic_exposed,
+            }
+        )
+
+    missing_installed = [row["dpfSkill"] for row in rows if not row["installed"]]
+    missing_exposed = [row["dpfSkill"] for row in rows if exposed is not None and not row["dpfExposed"]]
+    conflicts = [
+        {"dpfSkill": row["dpfSkill"], "retiredSkill": row["retiredSkill"]}
+        for row in rows
+        if exposed is not None and row["genericExposed"] and not row["dpfExposed"]
+    ]
+    severity = "ok"
+    if missing_installed:
+        severity = "fail"
+    elif conflicts or missing_exposed:
+        severity = "warn"
+
+    return {
+        "severity": severity,
+        "replacements": rows,
+        "installed": {
+            "ok": not missing_installed,
+            "total": len(rows),
+            "present": len(rows) - len(missing_installed),
+            "missingDpfSkills": missing_installed,
+        },
+        "exposed": {
+            "state": "verified" if exposed is not None else "unknown",
+            "total": len(rows),
+            "present": (len(rows) - len(missing_exposed)) if exposed is not None else None,
+            "missingDpfSkills": missing_exposed,
+        },
+        "conflicts": conflicts,
+    }
+
+
+def render_process_spine_health(verdict: dict[str, Any]) -> list[str]:
+    lines = ["Process spine health:"]
+    installed = verdict["installed"]
+    if installed["ok"]:
+        lines.append(
+            f"  DPF-native replacement skills installed: OK ({installed['present']}/{installed['total']})."
+        )
+    else:
+        lines.append(
+            "  DPF-native replacement skills installed: MISSING "
+            + ", ".join(installed["missingDpfSkills"])
+            + "."
+        )
+
+    exposed = verdict["exposed"]
+    if exposed["state"] == "verified":
+        if exposed["missingDpfSkills"]:
+            lines.append(
+                "  DPF-native replacement skills loaded/exposed in this session: MISSING "
+                + ", ".join(exposed["missingDpfSkills"])
+                + "."
+            )
+        else:
+            lines.append(
+                f"  DPF-native replacement skills loaded/exposed in this session: OK ({exposed['present']}/{exposed['total']})."
+            )
+    else:
+        lines.append(
+            "  DPF-native replacement skills loaded/exposed in this session: unknown "
+            "(this client did not provide active skill evidence)."
+        )
+
+    if verdict["conflicts"]:
+        pairs = ", ".join(
+            f"superpowers:{item['retiredSkill']} without {item['dpfSkill']}"
+            for item in verdict["conflicts"]
+        )
+        lines.append(
+            "  WARNING: DPF-native replacement skills are not active for visible retired "
+            f"generic skills: {pairs}."
+        )
+    if verdict["severity"] != "ok":
+        lines.append(
+            "  Plain-language fix: restart the client after bootstrap; if the DPF "
+            "replacements are still absent, repair the dpf-platform plugin exposure "
+            "before project work begins."
+        )
+    return lines
+
+
+def render_process_spine_cleanup_policy(policy: dict[str, Any]) -> list[str]:
+    lines = ["Process spine cleanup/update:"]
+    mode = str(policy.get("mode", "unspecified"))
+    lines.append(
+        f"  Policy: {mode} - rerun bootstrap/updater after DPF skill-pack changes; "
+        "safe adapters never delete user-owned skill files or plugin caches."
+    )
+    for client in policy.get("clients", []):
+        name = str(client.get("client", "client")).capitalize()
+        ids = ", ".join(str(item) for item in client.get("competitivePluginIds", []))
+        status = str(client.get("status", "unknown"))
+        if status == "reconciles-safe-config":
+            lines.append(f"  {name}: disables known competitive plugins when found ({ids}).")
+        else:
+            lines.append(f"  {name}: {status}; warns if competitive process skills are active ({ids}).")
+    return lines
 
 
 def claude_marketplace_path(home: Path) -> Path:
@@ -257,7 +456,24 @@ def upsert_toml_table(text: str, header: str, body_lines: list[str]) -> str:
     return "\n".join(rebuilt).rstrip() + "\n"
 
 
-def ensure_codex_config(home: Path, mcp_url: str, dry_run: bool) -> bool:
+def disable_competitive_codex_plugins(text: str, plugin_ids: list[str]) -> str:
+    for plugin_id in dict.fromkeys(plugin_ids):
+        if not plugin_id or plugin_id == PLUGIN_NAME:
+            continue
+        text = upsert_toml_table(
+            text,
+            f'[plugins."{plugin_id}"]',
+            ["enabled = false"],
+        )
+    return text
+
+
+def ensure_codex_config(
+    home: Path,
+    mcp_url: str,
+    dry_run: bool,
+    skill_pack: Optional[Path] = None,
+) -> bool:
     path = codex_config_path(home)
     text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
     text = upsert_toml_table(
@@ -265,6 +481,7 @@ def ensure_codex_config(home: Path, mcp_url: str, dry_run: bool) -> bool:
         f'[plugins."{PLUGIN_NAME}"]',
         ["enabled = true"],
     )
+    text = disable_competitive_codex_plugins(text, codex_competitive_plugin_ids(skill_pack))
     text = upsert_toml_table(
         text,
         "[mcp_servers.dpf]",
@@ -303,7 +520,7 @@ def resolve_claude_binary() -> str | None:
     found = shutil.which("claude")
     if found:
         return found
-    home = Path.home()
+    home = home_dir()
     if platform.system() == "Windows":
         local = os.environ.get("LOCALAPPDATA")
         if local:
@@ -347,7 +564,7 @@ def resolve_codex_binary() -> str | None:
     found = shutil.which("codex")
     if found:
         return found
-    home = Path.home()
+    home = home_dir()
     candidates: list[str] = []
     if platform.system() == "Windows":
         local = os.environ.get("LOCALAPPDATA")
@@ -370,7 +587,7 @@ def resolve_grok_binary() -> str | None:
     found = shutil.which("grok")
     if found:
         return found
-    home = Path.home()
+    home = home_dir()
     candidates: list[str] = []
     if platform.system() == "Windows":
         candidates.append(str(home / ".grok" / "bin" / "grok.exe"))
@@ -398,7 +615,7 @@ def resolve_antigravity_binary() -> str | None:
     found = shutil.which("agy")
     if found:
         return found
-    home = Path.home()
+    home = home_dir()
     candidates: list[str] = []
     if platform.system() == "Windows":
         local = os.environ.get("LOCALAPPDATA")
@@ -698,6 +915,7 @@ HOOK_PURPOSES = {
     "design-grounding-precheck.mjs": "reminds to review specs and current code substrate before UX/workflow edits",
     "tool-economy-precheck.mjs": "reminds about tool-economy budget when adding tool surface",
     "worktree-create.mjs": "seeds a new worktree with MCP config on WorktreeCreate",
+    "process-spine-health-check.mjs": "SessionStart: warns when DPF-native replacement skills are missing or hidden by retired generic skills",
     "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
     "uncommitted-work-guard.mjs": "SessionEnd/Stop/post-checkout: warns before uncommitted spec/plan loss",
 }
@@ -809,12 +1027,23 @@ def main(argv: list[str]) -> int:
 
     copy_skill_pack(skill_pack, managed, args.dry_run)
     print(f"  managed copy: {managed}")
+    process_spine_root = skill_pack if args.dry_run else managed
+    if not process_spine_contract_path(process_spine_root).exists():
+        process_spine_root = skill_pack
+    process_spine_verdict = assess_process_spine_health(
+        process_spine_root,
+        exposed_skills=exposed_process_spine_skills_from_env(),
+    )
+    for line in render_process_spine_health(process_spine_verdict):
+        print(line)
+    for line in render_process_spine_cleanup_policy(load_process_spine_cleanup_policy(process_spine_root)):
+        print(line)
 
     codex_present = resolve_codex_binary() is not None
 
     if not args.claude_only:
         ensure_codex_marketplace(home, version, args.dry_run)
-        ensure_codex_config(home, args.mcp_url, args.dry_run)
+        ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
         codex_hooks_status = install_codex_hooks(managed, home, args.dry_run)
         print(f"  Codex      : marketplace + config converged; hooks {codex_hooks_status}")
         grok_status = "skipped by flag"

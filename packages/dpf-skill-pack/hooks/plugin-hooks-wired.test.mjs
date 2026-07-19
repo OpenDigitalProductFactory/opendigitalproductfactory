@@ -122,6 +122,26 @@ test("hooks.json wires the SessionStart governance-freshness self-check via CLAU
   );
 });
 
+test("hooks.json wires the SessionStart process-spine health check via CLAUDE_PLUGIN_ROOT", () => {
+  const cfg = loadHooksJson();
+  const ss = cfg?.hooks?.SessionStart ?? [];
+  assert.ok(Array.isArray(ss) && ss.length > 0, "expected a SessionStart event in plugin hooks.json");
+  const cmds = [];
+  for (const entry of ss) for (const h of entry?.hooks ?? []) if (typeof h?.command === "string") cmds.push(h.command);
+  assert.ok(
+    cmds.some((c) => c.includes("process-spine-health-check.mjs")),
+    "SessionStart must run process-spine-health-check.mjs so DPF replacement skill exposure drift is visible",
+  );
+  assert.ok(
+    cmds.filter((c) => c.includes("process-spine-health-check.mjs")).every((c) => c.includes("CLAUDE_PLUGIN_ROOT")),
+    "the process-spine SessionStart check must load from ${CLAUDE_PLUGIN_ROOT}, not a repo path",
+  );
+  assert.ok(
+    existsSync(join(here, "process-spine-health-check.mjs")),
+    "process-spine-health-check.mjs referenced by hooks.json is missing from packages/dpf-skill-pack/hooks/",
+  );
+});
+
 test("repo .claude/settings.json does NOT also define WorktreeCreate (anti double-create)", () => {
   const settingsPath = join(here, "..", "..", "..", ".claude", "settings.json");
   if (!existsSync(settingsPath)) return; // standalone plugin install
@@ -208,6 +228,7 @@ test("surface manifests wire the hooks file so guards ship on every surface", ()
   const declaring = [
     [".codex-plugin", "./hooks/hooks.json"],
     [".grok-plugin", "./hooks/hooks.json"],
+    [".antigravity-plugin", "./hooks/hooks.json"],
   ];
   for (const [dir, expected] of declaring) {
     const manifest = JSON.parse(readFileSync(join(here, "..", dir, "plugin.json"), "utf8"));

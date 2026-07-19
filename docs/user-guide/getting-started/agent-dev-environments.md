@@ -114,7 +114,7 @@ The bootstrap is **idempotent** (re-running on a converged install is a no-op) a
 3. **Connects the DPF MCP server** in each client (`.mcp.json` / `.vscode/mcp.json` for Claude, `[mcp_servers.dpf]` in Codex/Grok config), all referencing `${DPF_MCP_BEARER_TOKEN}`.
 4. **Installs the `dpf-platform` plugin** for each client from the repo-local marketplace — this is the single package that carries the **skill pack**, the **MCP connector contract**, and the **governance hooks** (see [The plugin](#the-plugin-skills-hooks-and-mcp-in-one-package) below).
 5. **Seeds kernel-tier memory** so the agent is kernel-aware from the first turn, before any MCP retrieval round-trip.
-6. **Runs read-only MCP + kernel smoke probes** and prints a single **readiness banner**.
+6. **Runs read-only MCP + kernel smoke probes**, checks whether the DPF-native process-spine replacement skills are installed and visible to the current session, and prints a single **readiness banner**.
 
 After it finishes, **restart the client** (desktop app or CLI) so it reloads the MCP connection and the plugin.
 
@@ -134,6 +134,8 @@ After it finishes, **restart the client** (desktop app or CLI) so it reloads the
 Re-run with `--show-substrate` for plugin/config/memory detail, or `--dry-run` to preview writes. See [docs/operations/install.md](../../operations/install.md) for what each state means in depth.
 
 The readiness record is committed through the same locked, compare-and-swap install-state transaction used by the installer and self-upgrade promoter. A failed state write now stops the bootstrap with an explicit error instead of reporting a misleading ready banner.
+
+The banner reports **DPF-native replacement skills installed** separately from **DPF-native replacement skills loaded/exposed in this session**. That distinction matters: a client can have the `dpf-platform` plugin on disk but still be running with stale skill exposure until restart. If a retired generic process skill such as `superpowers:brainstorming` is visible while its DPF replacement is absent, stop before project work, restart the client, and re-run the bootstrap. Codex may safely disable known competitive plugins through its native config adapter; other clients warn until their native plugin surfaces support the same reconciliation.
 
 ---
 
@@ -402,6 +404,7 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 | Banner shows `missing_token` | Issue a write token in Admin → Platform Development → MCP, then re-run the bootstrap |
 | Banner shows `needs_refresh` | Restart the client; if rotated, `POST /api/mcp/token/refresh` with the new token |
 | Skills / plugin not showing up | Confirm the `dpf-platform` plugin installed (re-run the bootstrap, `--show-substrate` for detail); restart the client |
+| Retired generic process skills are visible but DPF replacements are missing | Stop before project work, restart the client, and re-run the bootstrap; the readiness banner distinguishes plugin files installed from replacement skills loaded in the active session |
 | PRs keep opening as drafts | Disable the "create PRs as draft" default in your client's GitHub settings (DPF uses ready-for-review PRs only) |
 | Tool returns `insufficient_token_scope` | Issue a scoped token, refresh, retry — do **not** bypass with direct DB edits |
 | New worktree has no `dpf` connector | Run `scripts/dpf-bootstrap-agent-toolchain.sh` inside the worktree, then restart |

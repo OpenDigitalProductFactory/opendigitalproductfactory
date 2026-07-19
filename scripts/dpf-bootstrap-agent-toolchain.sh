@@ -300,6 +300,13 @@ info "Antigravity CLI  : $([ $AGY_PRESENT     -eq 1 ] && echo present || echo mi
 info "DPF MCP token    : $([ $HAS_TOKEN      -eq 1 ] && echo present || echo missing)"
 info "Skill pack ver.  : $EXPECTED_VERSION"
 
+PROCESS_SPINE_CHECK="$REPO_ROOT/packages/dpf-skill-pack/hooks/process-spine-health-check.mjs"
+if command -v node >/dev/null 2>&1 && [ -f "$PROCESS_SPINE_CHECK" ]; then
+  node "$PROCESS_SPINE_CHECK" --skill-pack-root "$REPO_ROOT/packages/dpf-skill-pack" || true
+else
+  warn "Process spine skill exposure check could not run (node or checker missing)."
+fi
+
 # --- Auto-mint + persist MCP token (POSIX) -----------------------------------
 #
 # The env-backed client config (.mcp.json, [mcp_servers.dpf]) references
