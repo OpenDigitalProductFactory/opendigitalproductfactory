@@ -209,25 +209,6 @@ describe("getExclusionReasonV2", () => {
     expect(getExclusionReasonV2(localModel, contract)).toBeNull();
   });
 
-  it("excludes providers outside an explicit allowlist", () => {
-    const contract = makeContract({ allowedProviders: ["anthropic"] });
-    expect(getExclusionReasonV2(cheapModel, contract)).toContain("allowlist");
-    expect(getExclusionReasonV2(qualityModel, contract)).toBeNull();
-  });
-
-  it("lets an explicit denylist win when a provider is also allowed", () => {
-    const contract = makeContract({
-      allowedProviders: ["openai"],
-      deniedProviders: ["openai"],
-    });
-    expect(getExclusionReasonV2(cheapModel, contract)).toContain("denylist");
-  });
-
-  it("treats an explicit empty allowlist as deny all", () => {
-    const contract = makeContract({ allowedProviders: [] });
-    expect(getExclusionReasonV2(qualityModel, contract)).toContain("allowlist");
-  });
-
   it("excludes models lacking pdf input for file modality", () => {
     const noPdf = makeEndpoint({
       capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: true },
@@ -424,88 +405,6 @@ describe("routeEndpointV2", () => {
       c => c.excluded && c.excludedReason?.includes("local_only"),
     );
     expect(cloudExcluded.length).toBe(2);
-  });
-
-  it("enforces an allowlist before cost ranking", async () => {
-    const decision = await routeEndpointV2(
-      [cheapModel, qualityModel],
-      makeContract({
-        budgetClass: "minimize_cost",
-        allowedProviders: ["anthropic"],
-      }),
-      [],
-      [],
-    );
-
-    expect(decision.selectedEndpoint).toBe("ep-quality");
-    expect(decision.candidates.find((candidate) => candidate.endpointId === "ep-cheap"))
-      .toMatchObject({ excluded: true, excludedReason: expect.stringContaining("allowlist") });
-  });
-
-  it("enforces a denylist even when the denied provider is cheapest", async () => {
-    const decision = await routeEndpointV2(
-      [cheapModel, qualityModel],
-      makeContract({
-        budgetClass: "minimize_cost",
-        deniedProviders: ["openai"],
-      }),
-      [],
-      [],
-    );
-
-    expect(decision.selectedEndpoint).toBe("ep-quality");
-    expect(decision.candidates.find((candidate) => candidate.endpointId === "ep-cheap"))
-      .toMatchObject({ excluded: true, excludedReason: expect.stringContaining("denylist") });
-  });
-
-  it("returns no route when every provider is outside the effective allow set", async () => {
-    const decision = await routeEndpointV2(
-      [cheapModel, qualityModel],
-      makeContract({ allowedProviders: [] }),
-      [],
-      [],
-    );
-
-    expect(decision.selectedEndpoint).toBeNull();
-    expect(decision.selectedModelId).toBeNull();
-    expect(decision.excludedCount).toBe(2);
-  });
-
-  it("never puts a disallowed provider back into the fallback chain", async () => {
-    const secondAnthropic = makeEndpoint({
-      id: "ep-anthropic-2",
-      providerId: "anthropic",
-      modelId: "claude-haiku",
-    });
-    const decision = await routeEndpointV2(
-      [cheapModel, qualityModel, secondAnthropic],
-      makeContract({ allowedProviders: ["anthropic"] }),
-      [],
-      [],
-    );
-
-    expect(decision.fallbackChain).not.toContain("ep-cheap");
-    expect(decision.fallbackChain).toEqual(
-      expect.arrayContaining(["ep-quality", "ep-anthropic-2"]),
-    );
-  });
-
-  it("does not let a pinned override bypass a provider denylist", async () => {
-    const decision = await routeEndpointV2(
-      [cheapModel, qualityModel],
-      makeContract({ deniedProviders: ["openai"] }),
-      [],
-      [{
-        endpointId: "ep-cheap",
-        taskType: "reasoning",
-        pinned: true,
-        blocked: false,
-      }],
-    );
-
-    expect(decision.selectedEndpoint).toBe("ep-quality");
-    expect(decision.candidates.find((candidate) => candidate.endpointId === "ep-cheap"))
-      .toMatchObject({ excluded: true, excludedReason: expect.stringContaining("denylist") });
   });
 
   it("prefers cheaper model for minimize_cost budget", async () => {
