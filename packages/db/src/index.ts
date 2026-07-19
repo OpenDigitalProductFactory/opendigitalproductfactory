@@ -1,5 +1,6 @@
 // packages/db/src/index.ts
 export { prisma } from "./client";
+export { ensureDefaultProviderConnection, refreshDefaultProviderConnectionOwners } from "./provider-connection";
 // Prisma is exported as both a value (for runtime helpers like Prisma.JsonNull,
 // Prisma.DbNull) and a type (for input/output type aliases).
 export { Prisma } from "../generated/client/client";

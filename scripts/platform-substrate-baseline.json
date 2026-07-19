@@ -1,11 +1,11 @@
 {
   "changeRationale": {
     "defaultRequiredServiceCount": "Capability-owned services moved behind deterministic Compose profiles; only PostgreSQL, portal initialization, and portal remain universal core.",
-    "prismaModelCount": "RuntimeCapabilityTransition plus its append-only event ledger provide one recoverable saga receipt and immutable terminal audit trail.",
+    "prismaModelCount": "AiProviderConnection separates provider catalog identity from organization-scoped account, credential, contract, entitlement, finance, and capacity evidence so suitability policy cannot infer business-safe use from a provider slug.",
     "serviceCount": "Linux Ollama is now explicitly catalogued as a host-specific runtime:external-ai service instead of remaining an ungoverned overlay-only container."
   },
-  "generatedAt": "2026-07-18T07:35:12.563Z",
-  "gitSha": "f8bf2816625e141badff37c0cf7a9372db31b186",
+  "generatedAt": "2026-07-20T00:12:00.000Z",
+  "gitSha": "c16edb843adf7d58b97e10ecbd60df8a1dfd67e1",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -22,11 +22,11 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 512
+      "value": 513
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 14010
+      "value": 14061
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
@@ -38,7 +38,7 @@
     },
     "seedCoordinatorLines": {
       "direction": "informational",
-      "value": 2689
+      "value": 2716
     },
     "serviceCount": {
       "direction": "non-increasing",

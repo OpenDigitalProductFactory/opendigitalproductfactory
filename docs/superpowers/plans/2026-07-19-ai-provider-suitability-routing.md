@@ -91,28 +91,42 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 ### Task 3: BI-AIPS-003 - Trust Facts And Pure Suitability Compiler
 
 **Files:**
+- Modify: `packages/db/prisma/schema.prisma`
+- Add: `packages/db/prisma/migrations/20260719233000_ai_provider_connection/migration.sql`
+- Create: `packages/db/src/provider-connection.ts`
+- Modify: `packages/db/src/seed.ts`
+- Create: `packages/db/src/provider-trust-registry.test.ts`
 - Create: `apps/web/lib/routing/provider-suitability/types.ts`
 - Create: `apps/web/lib/routing/provider-suitability/workload-profile.ts`
 - Create: `apps/web/lib/routing/provider-suitability/provider-trust.ts`
 - Create: `apps/web/lib/routing/provider-suitability/compile.ts`
 - Create: `apps/web/lib/routing/provider-suitability/compile.test.ts`
 - Modify: `apps/web/lib/ai-provider-route-context.ts`
+- Modify: `apps/web/lib/inference/ai-provider-types.ts`
+- Modify: `apps/web/lib/actions/ai-providers.ts`
+- Modify: `apps/web/lib/actions/ai-providers.test.ts`
+- Modify: `apps/web/lib/govern/data/assets.ts`
+- Create: `docs/data-impact/2026-07-19-ai-provider-connection.data-impact.json`
 - Modify: `packages/db/data/providers-registry.json`
 - Test: `apps/web/lib/ai-provider-route-context.test.ts`
 - Test: provider-registry validation tests discovered by `pnpm --filter @dpf/db exec vitest run`
 
-- [ ] Write failing type/derivation tests for public marketing, health PHI, student records, financial records, source code, and credentials.
-- [ ] Import `DataAssetId`, `DataFieldId`, `DataSensitivity`, `DataCategory`, `ProcessingPurposeKey`, and `ResidencyClassKey` from `apps/web/lib/govern/data/taxonomy.ts`; do not redeclare them.
-- [ ] Write failing compiler tests for dental, retail, credit union, training, software, unknown-classification, conflicting-residency, and missing-contract cases.
-- [ ] Define provider facts in two layers: vendor/catalog facts in the existing provider registry; organization/account attestations remain separate inputs and default to unknown.
-- [ ] Derive a connection-scoped access posture from existing auth, credential, finance, contract, execution-adapter, and capacity owners: execution channel, account class, commercial basis, auth method, contract linkage, and proven entitlements.
-- [ ] Write failing tests for the same provider/model over regular metered API, subscription/OAuth or host CLI, enterprise-contracted API/cloud, router, and local connections. Prove evidence and enterprise rights never transfer between connections.
-- [ ] Audit whether one-row-per-`providerId` can support simultaneous accounts for one vendor. If not, introduce the smallest connection/profile identity that preserves `ModelProvider` as catalog ownership rather than encoding account tier in provider IDs.
-- [ ] Implement `compileAiProviderSuitabilityPolicy()` as a pure adapter over business context, `regulationApplies()` output, governed data/PDP output, activity/work context, provider facts, and Golden Triangle posture.
-- [ ] Return `allowedProviders`, `deniedProviders`, `residencyPolicy`, OpenRouter obligations, effect (`allow|review|deny`), and structured explanations. Never select an endpoint.
-- [ ] Pass the compiled route context into existing `inferContract()` composition.
-- [ ] Run targeted tests, web typecheck, registry validation, and production build.
-- [ ] Commit with DCO: `feat(routing): compile provider suitability policy`.
+**Governed data-model decision:** `DI-8902B7A5BE49` selects a separate
+`AiProviderConnection` identity. Existing provider rows are backfilled as
+unreviewed connections; no account tier, contract, or entitlement is inferred.
+
+- [x] Write failing type/derivation tests for public marketing, health PHI, student records, financial records, source code, and credentials.
+- [x] Import `DataAssetId`, `DataFieldId`, `DataSensitivity`, `DataCategory`, `ProcessingPurposeKey`, and `ResidencyClassKey` from `apps/web/lib/govern/data/taxonomy.ts`; do not redeclare them.
+- [x] Write failing compiler tests for dental, retail, credit union, training, software, unknown-classification, conflicting-residency, and missing-contract cases.
+- [x] Define provider facts in two layers: vendor/catalog facts in the existing provider registry; organization/account attestations remain separate inputs and default to unknown.
+- [x] Derive a connection-scoped access posture from existing auth, credential, finance, contract, execution-adapter, and capacity owners: execution channel, account class, commercial basis, auth method, contract linkage, and proven entitlements.
+- [x] Write failing tests for the same provider/model over regular metered API, subscription/OAuth or host CLI, enterprise-contracted API/cloud, router, and local connections. Prove evidence and enterprise rights never transfer between connections.
+- [x] Audit whether one-row-per-`providerId` can support simultaneous accounts for one vendor. If not, introduce the smallest connection/profile identity that preserves `ModelProvider` as catalog ownership rather than encoding account tier in provider IDs.
+- [x] Implement `compileAiProviderSuitabilityPolicy()` as a pure adapter over business context, `regulationApplies()` output, governed data/PDP output, activity/work context, provider facts, and Golden Triangle posture.
+- [x] Return `allowedProviders`, `deniedProviders`, `residencyPolicy`, OpenRouter obligations, effect (`allow|review|deny`), and structured explanations. Never select an endpoint.
+- [x] Pass the compiled route context into existing `inferContract()` composition.
+- [x] Run targeted tests, web typecheck, registry validation, and production build.
+- [x] Commit with DCO: `feat(routing): compile provider suitability policy`.
 
 ## Chunk 2: Guide Setup And Bound Router Providers
 

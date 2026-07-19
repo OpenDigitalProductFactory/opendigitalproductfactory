@@ -179,6 +179,8 @@ export type ModelProfileRow = {
 
 export type RegistryProviderEntry = {
   providerId: string;
+  /** Stable vendor/catalog identity shared by channel-specific runtime aliases. */
+  catalogProviderId?: string;
   name: string;
   families: string[];
   category: "direct" | "router" | "agent" | "mcp-subscribed" | "mcp-internal";
@@ -205,12 +207,36 @@ export type RegistryProviderEntry = {
     pricingInfo?: string;
     enableUrl?: string;
   } | null;
+  /** Vendor/catalog capabilities only. Account evidence never belongs here. */
+  trustCatalog?: {
+    category: "direct" | "router" | "local" | "self-hosted";
+    jurisdictions: string[];
+    externalEgress: "none" | "provider-cloud" | "router-cloud" | "self-hosted-network" | "unknown";
+    supportsZdr: boolean | null;
+    supportsNoTraining: boolean | null;
+    supportsRegionalRouting: boolean | null;
+    supportedRegions: string[];
+    regionalEndpoints: Array<{
+      region: string;
+      baseUrl: string;
+      requiresEnterpriseEnablement: boolean;
+    }>;
+  };
   serviceKind?: "mcp" | "built_in" | null;
   authorizeUrl?: string | null;
   tokenUrl?: string | null;
   oauthClientId?: string | null;
   oauthRedirectUri?: string | null;
 };
+
+export function buildProviderCatalogEntry(entry: RegistryProviderEntry): Record<string, unknown> | undefined {
+  const value = {
+    ...(entry.catalogEntry ?? {}),
+    ...(entry.catalogProviderId ? { catalogProviderId: entry.catalogProviderId } : {}),
+    ...(entry.trustCatalog ? { trustCatalog: entry.trustCatalog } : {}),
+  };
+  return Object.keys(value).length > 0 ? value : undefined;
+}
 
 // ─── Model discovery ──────────────────────────────────────────────────────────
 

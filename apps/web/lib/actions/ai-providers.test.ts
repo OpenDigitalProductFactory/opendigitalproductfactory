@@ -40,6 +40,8 @@ const {
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
+  ensureDefaultProviderConnection: vi.fn(),
+  refreshDefaultProviderConnectionOwners: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({

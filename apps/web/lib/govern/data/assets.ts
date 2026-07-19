@@ -169,6 +169,25 @@ export function resolveField(
 
 const SEED_ASSETS: readonly DataAssetDefinition[] = [
   {
+    id: "data:ai-provider-connection",
+    physical: { prismaModel: "AiProviderConnection" },
+    domain: "ai-provider-governance",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["configuration", "authorization", "security-audit"],
+    sensitivity: "confidential",
+    criticality: "mission-critical",
+    subjectLocators: [
+      { role: "organization", fieldPath: "organization" },
+    ],
+    lifecycleClass: "legal-evidence",
+    purposeCapabilities: ["platform-operations", "compliance-and-legal", "coworker-assistance"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-19" },
+    fields: [],
+  },
+  {
     id: "data:runtime-capability-transition-event",
     physical: { prismaModel: "RuntimeCapabilityTransitionEvent" },
     domain: "platform-runtime",
