@@ -22,6 +22,7 @@ The implementation is complete only when guidance and enforcement agree:
 - failure is closed: use a cleared local route when it is capable, otherwise block and explain the recovery action;
 - audit evidence is useful without retaining unnecessary raw prompts, credentials, or personal data;
 - the same posture is visible and repairable after onboarding at `/platform/ai/providers`.
+- a non-technical operator can understand what DPF recommends, what it will prevent, and what decision still belongs to them without learning provider or regulatory jargon first.
 
 This is decision support and technical policy enforcement, not legal advice or a claim of “absolute compliance.” A regulated or ambiguous posture must say what is known, what evidence is missing, and when qualified human review is required.
 
@@ -73,6 +74,59 @@ This work must extend the following sources of truth instead of creating paralle
 - Recovery: unknown account class, missing evidence, unreachable local runtime, or inadequate local capability must produce a clear blocked/conditional state and a route to repair it.
 - Lifecycle: the provider page must show posture, evidence age, allowed data classes/workloads, and reassessment action after onboarding.
 - Theme/accessibility: use shared tokens and status components; convey status in text as well as color; keep keyboard and screen-reader behavior in the existing setup/provider interaction patterns.
+
+**UX fit review — governed provider onboarding**
+
+- Decision: `fits-with-guardrails`.
+- Owning area: Platform, embedded contextually in setup.
+- Route family: `/platform/ai/providers` and its existing provider detail routes.
+- Primary persona: a founder/operator choosing AI services without technical, privacy, security, or procurement expertise.
+- Navigation layer touched: setup workflow and local/contextual actions only; no global or section navigation change.
+- Reuse/convergence: existing setup overlay, coworker panel, provider detail form, routing-eligibility projection, shared status/loading primitives, and native progressive-disclosure patterns.
+- Source truth: the versioned provider-governance posture compiled from organization, workload, provider, account, and evidence facts.
+- Empty/failure behavior: safe restricted posture plus one honest recovery action; never an empty scorecard, raw `unknown`, or a green status inferred from connectivity alone.
+- AI boundary: consultation and explanation may start through visible A2A; provider activation and any broadened allowance require explicit operator action.
+- Evidence before merge: plain-language/readability checks, fresh-install and failure-state browser exercises, mobile/keyboard/screen-reader coverage, and comprehension/usability testing with non-technical participants.
+- Captured in: this plan’s trust contract, Phase 3 verification, cross-phase scenarios, and definition of done.
+
+## Trust and confidence experience contract
+
+DPF should feel like a knowledgeable coworker keeping the operator out of avoidable trouble—not like a compliance questionnaire, a frightening warning wall, or a provider catalog that leaves the hard decision to them. Confidence must come from demonstrated competence and visible control, never from vague reassurance.
+
+Every provider decision experience follows this sequence:
+
+1. **Translate the decision.** Start with the business question: “What kind of information will you use, and who could be affected?” Explain unfamiliar terms in place. Do not require the operator to know “DPA,” “controller,” “data residency,” or provider account taxonomy before proceeding.
+2. **Recommend a safe default.** DPF makes a clear recommendation based on the company and intended work. The operator should not have to compare technical specifications or interpret provider terms unaided.
+3. **Show the reason in human terms.** Lead with the practical consequence: what may leave the business, where it may go, who controls the account, and what DPF will allow or prevent. Put formal basis, source dates, and technical detail behind progressive disclosure.
+4. **Demonstrate the safeguard.** State the protection as an active behavior: “DPF will keep customer records on this device,” “DPF will block this provider for payroll work,” or “DPF will ask you before enabling cloud use.” Do not use a generic green shield or “compliant” badge as a substitute for the behavior.
+5. **Give one next action.** Offer the safest useful action first—use local, create/connect a business-managed account, provide missing evidence, or ask a qualified reviewer. Avoid multi-option warning dialogs that make the operator design the policy.
+6. **Keep protecting after setup.** Recheck every route and surface a calm, specific explanation when DPF prevents an unsafe action. The product should make the safe choice easy and the unsafe choice difficult or unavailable.
+7. **Be honest about the boundary.** Say when DPF lacks evidence, when a provider’s terms may have changed, or when legal/DPO/security review is appropriate. “We need one more fact before using this provider for customer data” builds more trust than an unsupported assurance.
+
+### Copy and interaction rules
+
+- Default business-facing copy targets Flesch–Kincaid grade 9 or lower and reading ease 55 or higher, following `docs/platform-usability-standards.md`.
+- Lead with familiar language. Show the formal term second when it helps: “A business data agreement (DPA).”
+- Avoid blame and alarmism. Prefer “This personal account is fine for public drafts, but DPF will not send customer or employee information to it” over “Compliance violation.”
+- Avoid legal conclusions and absolute claims such as “fully compliant,” “zero leak,” “risk-free,” or “DPF guarantees compliance.”
+- Distinguish four evidence levels in plain language: what the operator told DPF, what DPF verified technically, what provider/contract sources state, and what DPF inferred from policy.
+- Never expose confidence percentages, raw policy ids, model scores, regulation lists, or routing internals in the first viewport. They remain available in “Why?” / “Review evidence” for reviewers who need them.
+- During the A2A consultation, show a short, reassuring activity label such as “Checking this choice against your business and data needs,” then summarize what information was shared with the specialist.
+- A blocked state always names the protected business concern and gives one recovery action. It does not dead-end or suggest bypassing the safeguard.
+- Confirmation copy previews the effect before activation: permitted work, excluded work, destination/region, and how to change the decision later.
+- Persistent status language describes behavior (`Customer data stays local`, `Cloud allowed for public content only`) rather than abstract grades (`Low risk`, `Tier 2`, `Clearance 3`).
+
+### Confidence evidence
+
+Usability verification must demonstrate that representative non-technical participants can answer these questions after the flow without help:
+
+1. Which provider/account does DPF recommend, and why?
+2. What information may leave the installation?
+3. What will DPF automatically block or keep local?
+4. What fact or action is still missing?
+5. Where can the operator review or change the decision later?
+
+Run formative sessions with at least five representative participants. Passing means at least 80% answer all five correctly and complete the safe path without opening technical evidence. Qualitative feedback must also confirm that the flow feels protective and competent rather than punitive, confusing, or falsely reassuring.
 
 ## Governed decision contract
 
@@ -198,8 +252,10 @@ Each phase is one independently reviewable concern/PR. Build Studio should promo
 5. Change `activateProvider()` so cloud clearance is derived from approved posture, not merely from provider category. Eliminate the current blanket cloud default of public/internal/confidential.
 6. Allow a restricted evaluation mode for public/synthetic tests when company/account evidence is incomplete. Never infer general business clearance from a successful API call.
 7. Existing local bootstrap remains available, but its capability/clearance is evaluated rather than presumed.
+8. Implement the trust contract: plain-language question framing, active-safeguard statements, one recommended next action, evidence-level labels, activation-effect preview, and calm blocked/recovery states.
+9. Add a persistent behavioral summary on the provider detail surface so the operator can later see what DPF is protecting without reconstructing the onboarding conversation.
 
-**Verification:** step-order and migration-of-in-progress-setup tests; activation-path invariants; personal-account, business-account, unknown-account, EMEA, regulated, skip, and A2A-failure UI scenarios; keyboard/screen-reader checks; live UX verification in the governed nonprod environment.
+**Verification:** step-order and migration-of-in-progress-setup tests; activation-path invariants; personal-account, business-account, unknown-account, EMEA, regulated, skip, and A2A-failure UI scenarios; grade-9/readability checks for first-viewport business copy; comprehension testing against the five confidence questions; keyboard/screen-reader checks; mobile and live UX verification in the governed nonprod environment.
 
 **Rollback:** preserve captured posture while feature-flagging the activation gate. A rollback may restore the old setup order, but must not broaden a provider whose posture was explicitly restricted.
 
@@ -293,6 +349,9 @@ At minimum, the end-to-end suite must cover:
 10. Evidence expires or the company adds an EMEA customer market: posture is invalidated, attention appears, and cloud allowance narrows until reassessed.
 11. A coworker proposes a destructive external action during setup: the existing `CoworkerActionEnvelope` requires explicit approval and preserves chain of custody.
 12. Retention runs under a regulated industry floor or active hold: required evidence remains; eligible operational telemetry is purged without orphaning relations.
+13. A first-time, non-technical operator chooses between a personal account, business-managed cloud account, and local inference: the flow recommends one path, explains the practical consequence without jargon, previews what DPF will enforce, and the operator correctly identifies the safe choice without opening technical evidence.
+14. DPF blocks a cloud request after setup because a tool result adds customer data: the explanation names what was protected, states what DPF did, and offers one useful recovery action without displaying the detected value or a raw policy code.
+15. Provider evidence is missing or stale: the product says what it could and could not verify, avoids a compliance claim, restricts the route, and directs the operator to the exact evidence or qualified review needed.
 
 ## Research and standards grounding
 
@@ -343,3 +402,6 @@ The implementation should cite primary legal/regulatory texts in the profession 
 - Existing active providers are reassessed without fabricated facts, and operators have a clear repair path.
 - Legal/compliance corpus sources are primary, dated, and included in freshness/evidence tests.
 - Live UX verification confirms the first-viewport recommendation, details, skip/restriction behavior, A2A consultation, provider repair, and failure states.
+- First-viewport business copy meets the platform readability target and does not expose unexplained provider, routing, privacy, or regulatory jargon.
+- Representative non-technical participants can state the recommendation, data movement, automatic safeguards, missing action, and later review location with at least the comprehension threshold defined above.
+- Operators experience restrictions as evidence that DPF is protecting their business: every block explains the protected concern, the action DPF took, and one safe recovery path.
