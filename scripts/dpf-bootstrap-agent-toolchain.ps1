@@ -101,6 +101,16 @@ Write-Info "Antigravity CLI  : $(if ($AgyPresent)    { 'present' } else { 'missi
 Write-Info "DPF MCP token    : $(if ($HasToken)      { 'present' } else { 'missing' })"
 Write-Info "Skill pack ver.  : $expectedVersion"
 
+$ProcessSpineCheck = Join-Path $RepoRoot "packages\dpf-skill-pack\hooks\process-spine-health-check.mjs"
+if ((Test-Path -LiteralPath $ProcessSpineCheck) -and ($null -ne (Get-Command node -ErrorAction SilentlyContinue))) {
+    & node $ProcessSpineCheck --skill-pack-root (Join-Path $RepoRoot "packages\dpf-skill-pack")
+    if ($LASTEXITCODE -eq 2) {
+        Write-Warn2 "Process spine replacement skills are missing from the DPF skill pack."
+    }
+} else {
+    Write-Warn2 "Process spine skill exposure check could not run (node or checker missing)."
+}
+
 # --- Auto-mint + persist MCP token --------------------------------------------
 # The env-backed client config references $env:DPF_MCP_BEARER_TOKEN; without a
 # persisted token the clients cannot call /api/mcp/v1. We mint inside the portal

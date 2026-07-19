@@ -318,7 +318,7 @@ class GrokInstallTest(unittest.TestCase):
         self.assertEqual(status, "installed")
         run.assert_called_once()
         argv = run.call_args[0][0]
-        self.assertEqual(argv, ["/fake/grok", "plugin", "install", "/tmp/managed", "--trust"])
+        self.assertEqual(argv, ["/fake/grok", "plugin", "install", str(Path("/tmp/managed")), "--trust"])
 
     def test_install_reports_failure_without_raising(self) -> None:
         class _Result:
@@ -393,6 +393,33 @@ class GuardLivenessAdvisoryTest(unittest.TestCase):
         # Grok: the blocking-hook-contract gap must be named, not hidden.
         self.assertIn("grok", text)
         self.assertIn("block", text)
+
+
+class ProcessSpineHealthTest(unittest.TestCase):
+    def test_replacement_contract_names_retired_process_equivalents(self) -> None:
+        slugs = [entry["dpfSkill"] for entry in updater.load_process_spine_contract()]
+        self.assertEqual(
+            slugs,
+            [
+                "dpf-brainstorming",
+                "dpf-writing-plans",
+                "dpf-tdd",
+                "dpf-systematic-debugging",
+                "dpf-finishing-a-development-branch",
+            ],
+        )
+
+    def test_reports_generic_brainstorming_exposed_without_dpf_replacement(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        verdict = updater.assess_process_spine_health(
+            skill_pack,
+            exposed_skills=["superpowers:brainstorming"],
+        )
+        self.assertTrue(verdict["installed"]["ok"])
+        self.assertEqual(verdict["exposed"]["state"], "verified")
+        self.assertEqual([c["dpfSkill"] for c in verdict["conflicts"]], ["dpf-brainstorming"])
+        text = "\n".join(updater.render_process_spine_health(verdict))
+        self.assertIn("DPF-native replacement skills are not active", text)
 
 
 class CodexHookTrustTest(unittest.TestCase):

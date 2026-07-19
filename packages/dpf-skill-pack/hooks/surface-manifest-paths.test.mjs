@@ -1,8 +1,8 @@
 // packages/dpf-skill-pack/hooks/surface-manifest-paths.test.mjs
 //
 // Conformance test (BI-883FC2FC, EP-5560770F). The plane-1 governance guards
-// ship INSIDE the dpf-platform plugin and travel to three surface manifests:
-// .claude-plugin / .codex-plugin / .grok-plugin. Every harness resolves a
+// ship INSIDE the dpf-platform plugin and travel to external surface manifests:
+// .claude-plugin / .codex-plugin / .grok-plugin / .antigravity-plugin. Every harness resolves a
 // manifest's component paths (`skills`, `hooks`, `mcpServers`/`mcpConfig`)
 // relative to the PLUGIN ROOT — the package directory that CONTAINS the
 // `.<surface>-plugin/` folder — not relative to the manifest's own folder.
@@ -27,7 +27,7 @@ import { dirname, join, resolve } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(here, ".."); // hooks/ -> package root
 
-const SURFACES = [".claude-plugin", ".codex-plugin", ".grok-plugin"];
+const SURFACES = [".claude-plugin", ".codex-plugin", ".grok-plugin", ".antigravity-plugin"];
 // Manifest keys whose value is a path to a plugin component, resolved from the
 // plugin root. Not every surface uses every key; we only check the ones present.
 const PATH_KEYS = ["skills", "hooks", "mcpServers", "mcpConfig"];

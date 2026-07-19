@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "replacements": [
+    {
+      "dpfSkill": "dpf-brainstorming",
+      "retiredSkill": "brainstorming",
+      "retiredSurfaceIds": ["brainstorming", "superpowers:brainstorming"]
+    },
+    {
+      "dpfSkill": "dpf-writing-plans",
+      "retiredSkill": "writing-plans",
+      "retiredSurfaceIds": ["writing-plans", "superpowers:writing-plans"]
+    },
+    {
+      "dpfSkill": "dpf-tdd",
+      "retiredSkill": "test-driven-development",
+      "retiredSurfaceIds": ["test-driven-development", "superpowers:test-driven-development"]
+    },
+    {
+      "dpfSkill": "dpf-systematic-debugging",
+      "retiredSkill": "systematic-debugging",
+      "retiredSurfaceIds": ["systematic-debugging", "superpowers:systematic-debugging"]
+    },
+    {
+      "dpfSkill": "dpf-finishing-a-development-branch",
+      "retiredSkill": "finishing-a-development-branch",
+      "retiredSurfaceIds": [
+        "finishing-a-development-branch",
+        "superpowers:finishing-a-development-branch"
+      ]
+    }
+  ]
+}
