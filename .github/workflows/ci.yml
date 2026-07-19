@@ -271,6 +271,32 @@ jobs:
       - name: Run guard
         run: node scripts/check-compose-env-contract.mjs
 
+  n-minus-one-caller-honesty:
+    name: N-1 Caller Honesty
+    runs-on: ubuntu-latest
+    # BI-D47955AF. The promoter is CANDIDATE-owned but CALLER-launched, so a PR can
+    # add a requirement to the candidate AND the caller-side plumbing that satisfies
+    # it, and ship green — because the N-1 harness supplies the new environment by
+    # hand. #3282 did exactly that twice (readiness host identity, then the signed
+    # migration handoff) and wedged every pre-existing install: the deployed portal
+    # cannot send the keys, and the upgrade that would teach it to IS the blocked
+    # upgrade. This guard fails a PR whose compatibility harness passes the candidate
+    # promoter any env key the caller at the MERGE BASE does not itself send.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The baseline caller is read at the merge base; a shallow clone has no
+          # merge base to read, and the guard would exit 2 (cannot evaluate).
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Guard unit tests
+        run: node --test scripts/check-n-minus-one-caller-honesty.test.mjs
+      - name: Run guard
+        run: node scripts/check-n-minus-one-caller-honesty.mjs
+
   module-size-guard:
     name: Module Size Guard
     runs-on: ubuntu-latest
