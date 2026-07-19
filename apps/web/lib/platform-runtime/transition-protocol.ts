@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { canonicalTransitionPayload, signTransitionPayload } from "../../../../scripts/lib/transition-signing.mjs";
+import { signTransitionPayload } from "../../../../scripts/lib/transition-signing.mjs";
 export { canonicalTransitionPayload, signTransitionPayload } from "../../../../scripts/lib/transition-signing.mjs";
 
 export const RUNTIME_TRANSITION_MAX_AGE_MS = 10 * 60 * 1000;
