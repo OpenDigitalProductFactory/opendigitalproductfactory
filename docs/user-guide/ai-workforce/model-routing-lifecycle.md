@@ -95,14 +95,18 @@ When an agent needs to call an LLM, the routing pipeline runs in this order:
 2. **Convert tier to minimum dimensions.** For example, `frontier` becomes `{ codegen: 85, toolFidelity: 85, reasoning: 85 }`.
 3. **Load all endpoint manifests.** Query `ModelProfile` where `modelStatus` is `active` or `degraded`, joined with `ModelProvider` where `status` is `active` or `degraded`.
 4. **Hard filter (V2 pipeline).** Exclude models that fail any of:
+   - Provider is outside `RequestContract.allowedProviders`
+   - Provider is present in `RequestContract.deniedProviders` (deny wins if both lists contain it)
    - Status not active/degraded
    - Model class not `chat` or `reasoning`
    - Sensitivity clearance doesn't cover the request
    - Missing required capability (e.g., tool use)
    - Any dimension score below the minimum threshold
 5. **Rank by cost-per-success.** Estimate success probability for each remaining model. With `quality_first` budget, rank by success probability alone. With `minimize_cost`, rank by cost efficiency.
-6. **Apply provider pin override.** If the agent has a `pinnedProviderId`, swap the pinned provider to the front of the list (V2-selected model becomes first fallback).
-7. **Dispatch with fallback chain.** Try the selected model. If it fails with an inference error, try the next model in the chain.
+6. **Apply provider pin preference.** A pin may select its configured provider only when that provider remains inside the request's hard allow/deny policy. A pin cannot override a provider fence.
+7. **Dispatch with the eligible fallback chain.** Try the selected model, then the next eligible model after an inference error. A provider excluded by the request policy never reappears in fallback.
+
+Provider allow/deny constraints are request-level hard policy, distinct from the provider registry's `modelRestrictions` discovery allowlist. An explicitly empty `allowedProviders` list means no provider is eligible; routing returns no endpoint rather than treating the empty list as “allow any.” Cost, quality, provider health, capacity, and pin preferences only rank the providers that remain after the hard filter.
 
 ## How Routing Adapts Over Time
 
@@ -148,7 +152,7 @@ Local models are automatically discovered and profiled. They are assigned the `b
 
 **Agent uses wrong model:**
 - Check `AgentModelConfig` in the database
-- The `pinnedProviderId` / `pinnedModelId` override all other routing decisions
+- `pinnedProviderId` / `pinnedModelId` are preferences within the request's hard provider, residency, sensitivity, and capability constraints
 - If no pin is set, routing selects based on dimension scores and budget class
 
 **Models missing after connecting a provider:**

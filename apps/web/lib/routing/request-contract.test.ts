@@ -306,6 +306,34 @@ describe("inferContract – route context overrides", () => {
     expect(contract.allowedProviders).toEqual(["anthropic", "openai"]);
   });
 
+  it("normalizes provider allow and deny constraints deterministically", async () => {
+    const contract = await inferContract(
+      "greeting",
+      SIMPLE_MESSAGES,
+      undefined,
+      undefined,
+      {
+        allowedProviders: [" openai ", "anthropic", "openai", ""],
+        deniedProviders: ["zai", " anthropic ", "zai", "   "],
+      },
+    );
+
+    expect(contract.allowedProviders).toEqual(["anthropic", "openai"]);
+    expect(contract.deniedProviders).toEqual(["anthropic", "zai"]);
+  });
+
+  it("preserves an explicitly empty allowlist as a deny-all constraint", async () => {
+    const contract = await inferContract(
+      "greeting",
+      SIMPLE_MESSAGES,
+      undefined,
+      undefined,
+      { allowedProviders: ["", "   "] },
+    );
+
+    expect(contract.allowedProviders).toEqual([]);
+  });
+
   it("applies residencyPolicy from routeContext", async () => {
     const contract = await inferContract(
       "greeting",

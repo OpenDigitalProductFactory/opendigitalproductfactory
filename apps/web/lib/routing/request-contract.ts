@@ -52,6 +52,7 @@ export interface RequestContract {
   // ── Constraints ────────────────────────────────────────────────
   maxLatencyMs?: number;
   allowedProviders?: string[];
+  deniedProviders?: string[];
   residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
 
   // ── EP-INF-009c: Model class constraint ───────────────────────
@@ -111,6 +112,10 @@ const BLOCK_TYPE_TO_MODALITY: Record<string, "image" | "audio" | "file" | "video
   video: "video",
 };
 
+function normalizeProviderIds(providerIds: string[]): string[] {
+  return [...new Set(providerIds.map((providerId) => providerId.trim()).filter(Boolean))].sort();
+}
+
 // ── Contract inference ──────────────────────────────────────────────────────
 
 export async function inferContract(
@@ -125,6 +130,7 @@ export async function inferContract(
     budgetClass?: string;
     residencyPolicy?: string;
     allowedProviders?: string[];
+    deniedProviders?: string[];
     requiresCodeExecution?: boolean;
     requiresWebSearch?: boolean;
     requiresComputerUse?: boolean;
@@ -285,7 +291,10 @@ export async function inferContract(
     contract.maxLatencyMs = routeContext.maxLatencyMs;
   }
   if (routeContext?.allowedProviders !== undefined) {
-    contract.allowedProviders = routeContext.allowedProviders;
+    contract.allowedProviders = normalizeProviderIds(routeContext.allowedProviders);
+  }
+  if (routeContext?.deniedProviders !== undefined) {
+    contract.deniedProviders = normalizeProviderIds(routeContext.deniedProviders);
   }
   // residencyPolicy: caller override wins, else the task requirement's policy
   // (e.g. email triage hardened to "local_only" by an operator). Unset when
