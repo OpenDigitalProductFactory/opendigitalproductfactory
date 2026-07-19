@@ -7,6 +7,7 @@
 | Owner surface | Platform AI, onboarding, archetype operations, compliance |
 | Work capsule | WC-3851CAF8 |
 | Prompt source | User rant at `C:/Users/Mark Bodman/OneDrive/Desktop/rant.txt` plus follow-up direction |
+| Governing principle | [Ground New Work In Existing Platform](../../founder-kernel/wiki/principles/consult-specs-first.md) |
 | Scope | Provider suitability policy, onboarding recommendation flow, compliance-aware AI routing, and next-layer archetype/value-stream/job granularity |
 | Out of scope | Code implementation, provider legal review, definitive legal advice, replacing the existing router |
 
@@ -25,6 +26,8 @@ The strategic position:
 > DPF routes each AI task to the safest capable provider: local when privacy, residency, or contract posture demands it; hosted when quality, parallelism, or capability demands it; and always under the customer's business, location, industry, and compliance constraints.
 
 This preserves DPF's local-sovereign posture without overstating local inference. Local models are a privacy and offline floor. Hosted frontier, hosted open-weight, and router-backed endpoints remain necessary for long-context, tool-heavy, multimodal, high-quality, and parallel work.
+
+This design is an incremental layer over prior DPF routing, onboarding, archetype, occupation, compliance, and value-stream work. It supersedes only older assumptions that provider setup is mostly "connect provider plus route by quality/cost"; it does not supersede the existing router, archetype model, activity contract, compliance library, or occupation design.
 
 ## 2. Rant Distillation
 
