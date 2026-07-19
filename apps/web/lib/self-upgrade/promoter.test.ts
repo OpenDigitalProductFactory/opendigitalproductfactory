@@ -98,7 +98,7 @@ describe("buildPromoterReadinessCommand", () => {
   });
 
   it("passes verified host provenance while keeping install state read-only", () => {
-    const artifact = { digest: `sha256:${"a".repeat(64)}`, sourceSha: "abc1234", contractSchema: 1, contractDigest: `sha256:${"b".repeat(64)}`, callerProtocol: { min: 1, max: 1 } };
+    const artifact = { digest: `sha256:${"a".repeat(64)}`, sourceSha: "abc1234", contractSchema: 1, contractDigest: `sha256:${"b".repeat(64)}`, callerProtocol: { min: 1, max: 1 } } as const;
     const { args } = buildPromoterReadinessCommand({ ...BASE, stateDirHostPath: "/state", artifact, hostIdentity: { platform: "linux", arch: "arm64", provenance: "explicit" } });
     expect(args).toContain("/state:/dpf-state:ro");
     expect(args).toContain("DPF_HOST_PLATFORM=linux");

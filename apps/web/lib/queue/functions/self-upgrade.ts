@@ -3,7 +3,7 @@ import { inngest } from "../inngest-client";
 import { getSelfUpgradeConfig, resolveSelfUpgradeHostIdentity } from "@/lib/self-upgrade/config";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { verifyInstallStateMigrationEnvelope } from "../../../../scripts/lib/transition-signing.mjs";
+import { verifyInstallStateMigrationEnvelope } from "../../../../../scripts/lib/transition-signing.mjs";
 import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { resolveAutoUpgradeWindow } from "@/lib/self-upgrade/auto-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";

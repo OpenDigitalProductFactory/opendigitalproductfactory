@@ -10,9 +10,12 @@ describe("candidate signed install-state handoff", () => {
     const result = await runCandidatePreflight({ sourcePath: "/source", hostInstallPath: "/host", canonicalInstallPath: "/host", targetSha: "target", runId: "SUR-1", composeFiles: [], healthUrl: "http://health", hostIdentity: { platform: "linux", arch: "arm64", provenance: "explicit" }, runtimeTransitionSecret: secret, now: () => new Date("2026-07-18T00:00:00Z"), runtime: async () => runtime as never, recordReadiness: vi.fn(), failRun: vi.fn(), emitFailure: vi.fn() });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.migrationHandoff.envelope).toMatchObject({ runId: "SUR-1", promoterDigest: artifact.digest, hostIdentity: { platform: "linux", arch: "arm64", provenance: "explicit" } });
-    expect(result.migrationHandoff.signature).toBe(signTransitionPayload(result.migrationHandoff.envelope, secret));
-    expect(runtime.runPromoterReadiness).toHaveBeenCalledWith(expect.objectContaining({ hostIdentity: result.migrationHandoff.envelope.hostIdentity }));
+    const migrationHandoff = result.migrationHandoff;
+    expect(migrationHandoff).toBeDefined();
+    if (!migrationHandoff) throw new Error("expected signed install-state migration handoff");
+    expect(migrationHandoff.envelope).toMatchObject({ runId: "SUR-1", promoterDigest: `sha256:${"d".repeat(64)}`, hostIdentity: { platform: "linux", arch: "arm64", provenance: "explicit" } });
+    expect(migrationHandoff.signature).toBe(signTransitionPayload(migrationHandoff.envelope, secret));
+    expect(runtime.runPromoterReadiness).toHaveBeenCalledWith(expect.objectContaining({ hostIdentity: migrationHandoff.envelope.hostIdentity }));
   });
 
   it("refuses legacy bootstrap without a signed migration carrier", async () => {

@@ -1,4 +1,5 @@
 import type { PromoterParams, PromoterResult } from "@/lib/self-upgrade/promoter";
+import { createHash } from "node:crypto";
 import { computeCapabilityStateVersion as computeSharedCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 import { signTransitionPayload, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt, verifyHistoricalTransitionReceipt, verifyTransitionReceipt } from "./transition-protocol";
 
