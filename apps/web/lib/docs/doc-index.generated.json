@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 524,
+  "pageCount": 525,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3821,6 +3821,25 @@
         "category-contact-sheets",
         "visual-guardrails",
         "next-production-pass"
+      ]
+    },
+    "docs/marketing/dpf-market-vision.md": {
+      "publicHref": "/marketing/dpf-market-vision/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "dpf-market-vision",
+        "1-thesis",
+        "2-the-market-problem",
+        "3-product-positioning",
+        "4-competitor-and-ecosystem-map",
+        "5-absorb-combine-refactor",
+        "6-prioritization",
+        "7-current-state-guardrails",
+        "8-message-house",
+        "9-backlog-anchors",
+        "10-sources-and-market-signals"
       ]
     },
     "docs/operations/antigravity-cli-onboarding.md": {
