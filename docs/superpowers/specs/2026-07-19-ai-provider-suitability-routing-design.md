@@ -78,7 +78,23 @@ Design implication: onboarding should enrich `BusinessContext` and provider setu
 - `docs/architecture/archetype-business-value-streams.md` describes 95 seeded archetypes across 21 categories and explains load-bearing stages.
 - `docs/superpowers/specs/2026-07-16-employee-occupation-onboarding-and-role-tailored-workspace-design.md` defines occupation as a focus layer over RBAC.
 
-Design implication: the next granularity layer should be a matrix of `archetype + value-stream stage + occupation/job + data class + activity class`, compiled into AI route policy.
+Design implication: the next granularity layer should be a matrix of `archetype + value-stream stage + occupation/job + governed data profile + activity class`, compiled into AI route policy.
+
+### 3.4 Canonical Ownership And Predecessor Ledger
+
+This design composes the following shipped programs. Implementers must re-check their current state before each BI starts and must not create parallel registries, policy engines, setup flows, or routing passes.
+
+| Concern | Canonical owner to extend | Predecessor PRs | This design's responsibility |
+| --- | --- | --- | --- |
+| Data identity, classification, purpose, residency, and policy decision | `apps/web/lib/govern/data/*`; `EP-DATA-GOVERNANCE`, especially `BI-DG-002`, `BI-DG-003`, `BI-DG-011`, `BI-DG-012` | [#3185](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3185), [#3251](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3251), [#3255](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3255) | Bind AI work to governed assets/fields/purpose and translate the existing PDP result into routing constraints. |
+| Jurisdiction capture and regulatory applicability | `BusinessContext.operatesIn/sellsTo/employsIn/dataResidency`; `packages/db/src/regulation-applicability.ts`; `apps/web/lib/compliance-library.ts` | [#2030](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2030), [#2095](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2095), [#2562](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2562) | Consume declared regional bases and applicable regulation results; do not add a competing location or regulation model. |
+| Cost/quality/time posture | `apps/web/lib/golden-triangle/*`; `EP-GOLDEN-TRIANGLE` | [#2284](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/2284) | Apply hard suitability constraints before Golden Triangle preferences; preserve its precedence and fail-closed rules. |
+| Endpoint routing and capacity | `RequestContract`, `routeEndpointV2`, provider capacity and health loaders | [#3034](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3034), [#3145](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3145) | Add load-bearing allow/deny and trust constraints to the existing hard-filter/composition path. |
+| Task capability and specialist ownership | `ActivityContract`, planner capability broker, specialist router | [#3224](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3224), [#3227](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3227) | Consume task/activity facts as suitability inputs; do not confuse capability attachment or coworker delegation with provider selection. |
+| Archetype, occupation, and value-stream context | `StorefrontConfig.archetypeId`, `OccupationProfile`, `deriveOperationalValueStream()`, `deriveTwinValueStreamBinding()` | [#3114](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3114), [#3135](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3135), [#3194](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3194), [#3063](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3063), [#3067](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3067) | Derive a work-context overlay; do not create another vertical, persona, job, or stage taxonomy. |
+| Runtime capability and provider health | capability catalog, provider health projection, governed runtime resolver | [#3262](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3262), [#3266](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3266) | Reuse live availability/health as route facts; suitability never declares a provider operational by itself. |
+
+The live planning owner for this program is `EP-AI-PROVIDER-SUITABILITY`. The implementation plan is `docs/superpowers/plans/2026-07-19-ai-provider-suitability-routing.md`; its BI map is normative for delivery order and cross-program dependencies.
 
 ## 4. Research And Benchmarking
 
@@ -155,7 +171,7 @@ Adopt:
 3. Preserve dynamic routing and cost-per-success ranking inside policy bounds.
 4. Support task-specific routing, including local if available and sufficient.
 5. Treat OpenRouter coverage as a capability with trust constraints, not as a blanket approval.
-6. Add vertical granularity across archetype, value-stream stage, occupation/job, activity class, and data class.
+6. Add vertical granularity across archetype, value-stream stage, occupation/job, activity class, and governed data/workload profile.
 7. Produce user-facing explanations in business language.
 8. Persist evidence for regulated provider enablement and review.
 
@@ -191,7 +207,7 @@ type ProviderSuitabilityPolicy = {
     listingStatus: string | null;
     riskPosture: "conservative" | "balanced" | "progressive" | null;
   };
-  dataClasses: DataClassPolicy[];
+  workloadProfiles: AiWorkloadDataProfile[];
   providerTrustRequirements: ProviderTrustRequirement[];
   defaultRoutingPosture: RoutingPosture;
   evidenceRequirements: ProviderEvidenceRequirement[];
@@ -201,12 +217,14 @@ type ProviderSuitabilityPolicy = {
 
 This object can start as a pure read model derived from `BusinessContext`, `StorefrontConfig`, compliance applicability, and provider metadata. Persist it only when operator confirmation, audit history, or admin override needs a durable snapshot.
 
-### 7.1 Data Classes
+### 7.1 Governed Data Profiles And AI Workload Classes
 
-DPF needs a small canonical data-class vocabulary that can be attached to activity packages, value-stream stages, tools, and routes:
+DPF already has the canonical data-control vocabulary in `apps/web/lib/govern/data/taxonomy.ts`: `DataAssetId`, `DataFieldId`, `DataSensitivity`, `DataCategory`, `ProcessingPurposeKey`, `ResidencyClassKey`, and related policy types. Provider suitability must consume those types and the existing data policy decision point. It must not introduce another data-class registry.
+
+The business labels below remain useful as **AI workload classes**: compact derivation keys that map archetype/activity context to governed assets, fields, purpose, and regulatory posture. They are not authoritative classifications.
 
 ```ts
-type AiDataClass =
+type AiWorkloadClassKey =
   | "public-marketing"
   | "internal-operations"
   | "customer-records"
@@ -220,6 +238,19 @@ type AiDataClass =
   | "regulated-decisioning"
   | "source-code"
   | "secrets-credentials";
+
+type AiWorkloadDataProfile = {
+  workloadClass: AiWorkloadClassKey;
+  assetIds: DataAssetId[];
+  fieldIds?: DataFieldId[];
+  sensitivity: DataSensitivity;
+  categories: DataCategory[];
+  purpose: ProcessingPurposeKey;
+  residencyClass: ResidencyClassKey;
+  classificationKnown: boolean;
+  processingActivityId?: string;
+  applicableRegulationIds: string[];
+};
 ```
 
 Initial mapping examples:
@@ -234,7 +265,7 @@ Initial mapping examples:
 | professional-services legal/accounting variants | `legal-privileged`, `payments-finance`, `customer-records` |
 | software-platform / Build Studio | `source-code`, `secrets-credentials`, `customer-records` when tenant data is present |
 
-The class is an input to policy. The existing `RequestContract.sensitivity` remains the coarse routing clearance.
+The workload class helps choose defaults and explanations. The governed profile and PDP decision are authoritative. `RequestContract.sensitivity` remains the coarse routing clearance, while PDP obligations and provider trust requirements compile into hard route constraints. Unknown classification or missing processing authority must retain the data-governance evaluator's deny/review posture; provider suitability cannot downgrade it.
 
 ### 7.2 Provider Trust Facts
 
@@ -383,7 +414,8 @@ type CompileAiRoutePolicyInput = {
   occupationKey?: string | null;
   valueStreamStage?: OperationalValueStreamStageKey | null;
   activityContract?: ActivityContract | null;
-  dataClasses: AiDataClass[];
+  workloadProfiles: AiWorkloadDataProfile[];
+  dataPolicyDecision: DataPolicyDecision;
   taskType: string;
   routeContext?: Partial<RouteContextHints>;
 };
@@ -409,15 +441,15 @@ Initial deterministic rules:
 
 | Condition | Route policy |
 | --- | --- |
-| data class includes `secrets-credentials` | `local_only` unless a specifically approved vault-safe provider exists |
+| workload profile includes `secrets-credentials` and governed fields remain restricted | `local_only` unless a specifically approved vault-safe provider exists |
 | healthcare + `health-phi` | local or approved cloud provider with contract evidence; OpenRouter only when bounded to eligible ZDR/no-training endpoints and contract posture permits |
 | education + `student-records` | local or approved provider; require disclosure/evidence review for hosted providers |
 | finance + `payments-finance` or GLBA-like customer info | approved provider only; require service-provider oversight evidence |
 | EU data residency | local, self-hosted in-region, region-constrained approved direct provider, or enterprise-enabled OpenRouter EU base URL with bounded providers |
 | public marketing | any enabled capable provider; cost-first allowed |
 | activity risk high/critical | raise tier floor and require review/evaluator; do not relax privacy controls |
-| value-stream stage `trust-compliance` | raise sensitivity at least to confidential unless data class is explicitly public |
-| occupation includes front-desk/field roles | do not widen authority; inherit data classes from the tool/action being performed |
+| value-stream stage `trust-compliance` | raise sensitivity at least to confidential unless the governed profile is explicitly public |
+| occupation includes front-desk/field roles | do not widen authority; inherit governed data references and workload hints from the tool/action being performed |
 
 ### 9.2 OpenRouter Adapter Policy
 
@@ -456,7 +488,7 @@ archetype/category
   -> operational value-stream stage
     -> occupation/job
       -> activity class
-        -> data class
+        -> governed data profile / workload class
           -> AI provider suitability policy
 ```
 
@@ -468,7 +500,7 @@ This does three things:
 
 ### 10.1 Example Matrix Rows
 
-| Archetype | Stage | Occupation/job | Activity | Data class | Default provider posture |
+| Archetype | Stage | Occupation/job | Activity | AI workload class (mapped to governed data profile) | Default provider posture |
 | --- | --- | --- | --- | --- | --- |
 | dental-practice | deliver | dental-hygienist | summarize visit notes | health-phi | local or approved cloud with contract evidence |
 | dental-practice | attract | owner/marketing | draft website copy | public-marketing | any enabled capable provider, cost-balanced |
@@ -488,7 +520,8 @@ Use derivation first:
 - stage from `deriveOperationalValueStream()`
 - occupation from `OccupationProfile`
 - activity from `ActivityContract`
-- data class from tool/action metadata, route, stage, and archetype defaults
+- governed assets/fields/purpose from `apps/web/lib/govern/data/*` and activity/tool metadata
+- workload class from route, stage, archetype, and occupation defaults; it never overrides governed classification
 - regulation posture from `compliance-library` and `regulatory-autonomy-runtime`
 - provider facts from provider trust catalog
 
@@ -503,15 +536,16 @@ Only persist overrides when:
 
 This is the design sequence, not an implementation checklist.
 
-### Phase 0: Trust Catalog And Policy Compiler
+### Phase 0: Reconciliation, Route Enforcement, And Policy Compiler (`BI-AIPS-001` to `BI-AIPS-003`)
 
 Create the trust fact vocabulary and a pure policy compiler.
 
 Key work:
 
-- Add typed provider trust facts as metadata on provider/model profile rows or a sidecar JSON registry.
-- Add canonical data classes.
-- Compile provider suitability from business context, archetype, compliance context, data class, and activity.
+- Re-audit all predecessor programs in §3.4 and publish the canonical ownership/delta map (`BI-AIPS-001`).
+- Make `allowedProviders` and a typed `deniedProviders` load-bearing in the V2 routing hard filter (`BI-AIPS-002`).
+- Add typed provider trust facts without duplicating the provider registry, data-governance spine, or provider-health projection (`BI-AIPS-003`).
+- Compile provider suitability from business context, archetype, regulatory applicability, governed data profile/PDP result, and activity.
 - Emit route context hints for existing `inferContract()`.
 - Enforce provider allow/deny constraints in the V2 routing path. `allowedProviders` already exists on `RequestContract`; Phase 0 must make allowlists and denylists load-bearing through either `getExclusionReasonV2()` or policy-rule compilation.
 - Produce explanation objects for UI and audit.
@@ -524,7 +558,7 @@ Acceptance:
 - A compiled `deniedProviders` fence excludes a denied endpoint even when it is cheapest, fastest, or otherwise capable.
 - Unknown provider trust facts produce review/blocked posture for restricted data, not silent approval.
 
-### Phase 1: Onboarding Recommendations
+### Phase 1: Onboarding Recommendations (`BI-AIPS-004`)
 
 Extend setup around `ai-providers` and `business-context`.
 
@@ -542,7 +576,7 @@ Acceptance:
 - An EU/data-residency install receives region-aware warning copy.
 - The UI never says a provider is legally compliant; it says what evidence is needed.
 
-### Phase 2: OpenRouter Policy Pass-Through
+### Phase 2: OpenRouter Policy Pass-Through (`BI-AIPS-005`)
 
 Upgrade OpenRouter from "many models behind one key" to "bounded router under DPF policy."
 
@@ -564,16 +598,16 @@ Acceptance:
 - Route decision logs explain both DPF's provider and the underlying router selection.
 - If the adapter cannot prove provider-setting pass-through for a request, the route is not eligible for restricted data.
 
-### Phase 3: Vertical Matrix Integration
+### Phase 3: Vertical Matrix Integration (`BI-AIPS-006`)
 
 Connect provider policy to activity/value-stream/occupation granularity.
 
 Key work:
 
-- Add data-class metadata to high-risk tools/actions/routes.
-- Let `ActivityContract` carry data classes or route-policy hints.
+- Bind high-risk tools/actions/routes to governed assets, fields, purpose, and an optional workload class.
+- Let `ActivityContract` carry governed data references or route-policy hints without becoming a classification authority.
 - Derive stage-aware defaults from operational value stream and archetype category.
-- Teach occupation onboarding and coworker rosters which data classes their common tasks touch.
+- Teach occupation onboarding and coworker rosters which governed data profiles and workload classes their common tasks touch.
 
 Acceptance:
 
@@ -581,14 +615,14 @@ Acceptance:
 - Workbench explanations include stage and job context when available.
 - Occupation never widens RBAC or tool grants.
 
-### Phase 4: Evidence And Continuous Suitability
+### Phase 4: Evidence And Continuous Suitability (`BI-AIPS-007` and `BI-AIPS-008`)
 
 Make provider suitability an ongoing operational process.
 
 Key work:
 
 - Add provider evidence records: BAA/DPA, retention review, no-training/ZDR attestation, regional routing proof, review expiry.
-- Use telemetry to update cost-per-success by activity/data class, not only provider/model.
+- Use telemetry to update cost-per-success by activity/workload class, not only provider/model.
 - Surface expiring evidence and provider drift in AI Workforce and Finance.
 - Feed approved changes back into policy compiler.
 
@@ -597,6 +631,21 @@ Acceptance:
 - Enabling a provider for restricted classes requires evidence or an explicit admin attestation.
 - Expired evidence downgrades eligibility for restricted classes.
 - Activity outcomes can promote/degrade provider recommendations without rewriting rules.
+
+### 11.1 Delivery Dependency Graph
+
+```text
+BI-AIPS-001 substrate reconciliation
+  -> BI-AIPS-002 route allow/deny enforcement
+  -> BI-AIPS-003 trust facts + pure suitability compiler
+       -> BI-AIPS-004 onboarding recommendations
+       -> BI-AIPS-005 OpenRouter bounded pass-through
+       -> BI-AIPS-006 vertical/activity data bindings
+            -> BI-AIPS-007 evidence, expiry, and route receipts
+                 -> BI-AIPS-008 continuous suitability and rollout completion
+```
+
+`BI-AIPS-002` may proceed after the reconciliation BI because it repairs an already-declared routing contract. `BI-AIPS-004`, `BI-AIPS-005`, and `BI-AIPS-006` can then proceed in parallel over the compiler contract, but restricted OpenRouter recommendations stay disabled until `BI-AIPS-005` proves pass-through and evidence capture. `BI-AIPS-007` owns durable trust evidence and receipt integration; earlier phases use derived facts and explicit unknown/review states rather than creating temporary evidence stores.
 
 ## 12. UX Shape
 
@@ -625,8 +674,8 @@ Provider card states:
 
 Add a "What this provider may handle" panel:
 
-- allowed data classes
-- blocked data classes
+- allowed governed workload profiles
+- blocked governed workload profiles
 - evidence on file
 - last reviewed date
 - underlying router controls for router providers
@@ -637,7 +686,7 @@ Add a "What this provider may handle" panel:
 Extend the existing activity workbench:
 
 - show business context applied
-- show data class
+- show governed workload/data context
 - show stage/job when available
 - show selected provider/model
 - show excluded providers and why
@@ -650,7 +699,7 @@ Operator text example:
 
 Admin detail:
 
-> `dataClasses=["health-phi"]`, `residencyPolicy="local_only"`, `excluded=openrouter: contract evidence missing; anthropic: BAA not attested`
+> `workloadClasses=["health-phi"]`, `governedSensitivity="restricted"`, `residencyPolicy="local_only"`, `excluded=openrouter: contract evidence missing; anthropic: BAA not attested`
 
 ## 13. Data And Architecture Decisions
 
@@ -666,9 +715,9 @@ The policy itself starts as a derived read model. Evidence, operator overrides, 
 
 OpenRouter and LiteLLM are not single trust domains for regulated routing. DPF must account for the underlying provider or constrain the router to acceptable endpoints.
 
-### Decision 4: Data Class Is Distinct From Sensitivity
+### Decision 4: AI Workload Class Is An Overlay, Not Data Classification
 
-`restricted` is not enough. PHI, student records, financial customer information, source code, and public-sector records have different legal and contract implications.
+`restricted` is not enough, but PHI, student records, financial customer information, source code, and public-sector records must resolve through the canonical data-governance assets, fields, categories, purposes, residency classes, and PDP. `AiWorkloadClassKey` supplies business semantics and defaults only.
 
 ### Decision 5: Vertical Granularity Uses Existing Lenses
 
@@ -682,7 +731,7 @@ Archetype, value-stream stage, and occupation already exist or are in-flight. AI
 | Operator misunderstands recommendation as legal certification | use "recommended / requires review / evidence needed" language, not "compliant" |
 | Router fallback leaks regulated data to an unapproved underlying provider | bounded fallback, allowlists, ZDR/no-training filters, route logs |
 | Local model selected for work it cannot do well | preserve quality tier and cost-per-success ranking inside local-only constraints; escalate to human when no capable local route exists |
-| Data class misclassification | conservative defaults for regulated archetypes; allow operator/admin review and route logs |
+| Workload overlay conflicts with governed classification | governed asset/field classification and PDP always win; unknown or conflicting context fails to review/deny |
 | Occupation policy widens access | occupation focuses UI only; RBAC and tool grants remain security boundary |
 
 ## 15. Testing Strategy
@@ -690,7 +739,8 @@ Archetype, value-stream stage, and occupation already exist or are in-flight. AI
 Unit tests:
 
 - policy compiler for healthcare, education, finance, public-sector, EU, and general small-business cases
-- data-class to sensitivity mapping
+- workload-class to governed-profile derivation, including unknown/conflict cases
+- data PDP obligations to route-constraint compilation
 - OpenRouter provider settings compilation
 - OpenRouter regional endpoint/base URL selection
 - OpenRouter router metadata request and permissive parsing
@@ -711,7 +761,7 @@ Integration tests:
 UX tests:
 
 - setup flow shows recommendation cards in plain language
-- provider detail shows allowed/blocked data classes
+- provider detail shows allowed/blocked governed workload profiles
 - routing workbench shows route reason without raw jargon by default
 
 Docs:
@@ -727,31 +777,31 @@ Docs:
 2. Add admin-only preview of provider suitability for current install.
 3. Add onboarding recommendation cards.
 4. Add OpenRouter bounded routing support.
-5. Attach data classes to selected high-risk activities/tools.
+5. Attach governed data references and workload-class hints to selected high-risk activities/tools.
 6. Add evidence workflow and expiry.
 7. Expand vertical matrix from priority industries: healthcare, finance, education, public sector, software/MSP, then general SMB categories.
 
 ## 17. Open Questions
 
 1. Should provider evidence live on `ModelProvider` metadata first, or in a new `ProviderTrustEvidence` table from day one?
-2. Should sensitive-data onboarding answers be a simple array on `BusinessContext`, or do they need confirmation history and per-data-class provenance?
+2. Which existing `DataProcessingActivity` and provider evidence records can carry onboarding confirmation history without adding another policy store?
 3. What is the minimum provider trust catalog seed for launch: local, OpenAI, Anthropic, Google, Azure, Bedrock, OpenRouter, LiteLLM, Z.ai?
 4. Should the first UI be in `/platform/ai/providers`, `/setup`, or the AI Operations Map?
-5. Which verticals get the first hard data-class tool metadata: healthcare, finance, education, source-code/Build Studio, or all four?
+5. Which verticals get the first governed data bindings and workload hints: healthcare, finance, education, source-code/Build Studio, or all four?
 
 ## 18. Recommended First Implementation Slice
 
 Build the smallest safe loop:
 
-1. Add canonical `AiDataClass` and `ProviderTrustFacts` types.
-2. Seed trust facts for `local`, `ollama`, `openrouter`, and the major direct providers already in the registry.
-3. Add `compileAiProviderSuitabilityPolicy()` as a pure module.
-4. Add tests for five onboarding profiles: dental practice, retail store, credit union, training company, software platform.
-5. Make `allowedProviders` and `deniedProviders` enforceable in `routeEndpointV2` or policy-rule compilation.
+1. Complete `BI-AIPS-001` and verify current ownership against §3.4.
+2. Complete `BI-AIPS-002`: add typed `deniedProviders`, enforce allow/deny in `getExclusionReasonV2()`, and reuse the same filter in readiness previews.
+3. Add `AiWorkloadClassKey`, governed profile bindings, and `ProviderTrustFacts` only where existing canonical types do not already own the fact.
+4. Add `compileAiProviderSuitabilityPolicy()` as a pure adapter over `BusinessContext`, regulatory applicability, data PDP output, provider facts, and activity context.
+5. Add tests for five onboarding profiles: dental practice, retail store, credit union, training company, software platform.
 6. Add admin-only provider suitability preview to AI Workforce.
-7. Add OpenRouter settings compilation, but only use it after tests prove pass-through behavior, regional endpoint selection, and router metadata capture.
+7. Add OpenRouter settings compilation, but keep restricted use disabled until tests prove pass-through behavior, regional endpoint selection, router metadata capture, and evidence persistence.
 
-This gives DPF the strategic control plane without waiting for every vertical/job/data-class row to be perfect.
+This gives DPF the strategic control plane without waiting for every vertical/job/workload binding to be perfect.
 
 ## 19. Sources
 
