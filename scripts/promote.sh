@@ -328,8 +328,10 @@ if [[ $_dry_run -eq 0 ]]; then
   # build context is streamed to the daemon so it works from /host-source where
   # a host bind mount could not. The build is a single COPY over the cached
   # pgvector base — negligible cost.
+  _build_args=()
+  [[ "${PROMOTE_BUILD_NO_CACHE:-0}" == "1" ]] && _build_args+=(--no-cache)
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
-    "${_f_args[@]}" build portal postgres
+    "${_f_args[@]}" build "${_build_args[@]}" portal postgres
   # Capture the source content hash baked into the FRESHLY BUILT image. It is
   # computed from the actual bundled source bytes (Dockerfile) independent of
   # the DPF_VERSION label, so the content-verify step can prove the recreated
