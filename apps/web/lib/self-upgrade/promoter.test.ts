@@ -366,7 +366,7 @@ describe("runtime transition promoter entrypoint", () => {
     const script = resolve(process.cwd(), "../../scripts/promote.sh");
     const stateDir = await mkdtemp(join(tmpdir(), "dpf-promoter-test-"));
     try {
-      vi.stubEnv("DPF_STATE_DIR", stateDir);
+      vi.stubEnv("DPF_PROMOTER_STATE_DIR", stateDir);
       vi.stubEnv("DPF_RUNTIME_TRANSITION_SECRET_FILE", join(stateDir, "missing-secret"));
       const result = await runProcessWithBudget(testBash, [script, "--runtime-capability-transition", "RCT-123"], { timeoutMs: 10_000 });
       expect(result.exitCode).toBe(78);

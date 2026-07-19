@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -63,6 +63,7 @@ function gitInit(dir: string): string {
   mkdirSync(join(dir, "scripts", "lib"), { recursive: true });
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(dir, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(dir, "scripts", "lib", "govern-capability-compose-args.mjs"));
+  copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(dir, "scripts", "lib", "capability-state-hash.mjs"));
   copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(dir, "scripts", "capability-service-catalog.generated.json"));
   execFileSync("git", ["-C", dir, "add", "-A"], { env });
   execFileSync("git", ["-C", dir, "-c", "commit.gpgsign=false", "commit", "-m", "seed"], { env });
@@ -118,6 +119,27 @@ function runPromote(opts: {
   composeEnvFile?: string;
   dockerLog?: string;
 }): { status: number | null; stdout: string; stderr: string } {
+  const stateDir = join(opts.backup, "state");
+  const secret = "s".repeat(32);
+  const secretPath = join(stateDir, "runtime-transition.secret");
+  writeFileSync(secretPath, secret);
+  const stateBytes = readFileSync(join(stateDir, "install-state.json"));
+  const envelope = {
+    kind: "install-state-migration", version: 1, runId: "SUR-FUNCTIONAL",
+    promoterDigest: `sha256:${"d".repeat(64)}`,
+    sourceHash: createHash("sha256").update(stateBytes).digest("hex"),
+    projectionHash: createHash("sha256").update(stateBytes).digest("hex"),
+    fromSchemaVersion: 2, toSchemaVersion: 2,
+    hostIdentity: { platform: "linux", arch: "amd64", provenance: "explicit" },
+    issuedAt: new Date(Date.now() - 1_000).toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
+  const canonical = (value: unknown): string => Array.isArray(value)
+    ? `[${value.map(canonical).join(",")}]`
+    : value && typeof value === "object"
+      ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`
+      : JSON.stringify(value) ?? "null";
+  const signature = createHmac("sha256", secret).update(canonical(envelope)).digest("hex");
   const exports = [
     "unset DPF_STATE_DIR",
     `export PATH=${shellQuote(toBashPath(opts.fakeBin))}:"$PATH"`,
@@ -125,6 +147,11 @@ function runPromote(opts: {
     `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
     `export PROMOTE_BACKUP_PATH=${shellQuote(toBashPath(opts.backup))}`,
     `export DPF_PROMOTER_STATE_DIR=${shellQuote(toBashPath(join(opts.backup, "state")))}`,
+    `export DPF_RUNTIME_TRANSITION_SECRET_FILE=${shellQuote(toBashPath(secretPath))}`,
+    "export DPF_SELF_UPGRADE_RUN_ID='SUR-FUNCTIONAL'",
+    `export DPF_PROMOTER_DIGEST=${shellQuote(envelope.promoterDigest)}`,
+    `export DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${shellQuote(Buffer.from(JSON.stringify(envelope)).toString("base64url"))}`,
+    `export DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${shellQuote(signature)}`,
     "export PROMOTE_HEALTH_URL='http://127.0.0.1:9/api/health'",
     "export PROMOTE_COMPOSE_PROJECT='dpf-functest'",
     ...(opts.composeEnvFile

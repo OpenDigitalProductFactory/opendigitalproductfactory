@@ -4,7 +4,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { governCapabilityComposeEnvironment } from "./govern-capability-compose-args.mjs";
 import { computeCapabilityStateVersion } from "./capability-state-hash.mjs";
-import { updateInstallState } from "../installer/install-state-transaction.mjs";
 
 const HOSTS = new Set(["windows", "macos", "linux"]);
 const OVERLAYS = new Set(["promote", "dev", "integration-test", "linux-monitoring"]);
@@ -118,6 +117,7 @@ async function main() {
     }
     let projection = resolveCapabilityComposeProfiles({ catalog, state, ...args });
     if (args.write) {
+      const { updateInstallState } = await import("../installer/install-state-transaction.mjs");
       await updateInstallState(statePath, current => {
         projection = resolveCapabilityComposeProfiles({ catalog, state: current, ...args });
         return { ...current, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, capabilityCatalogHash: projection.capabilityCatalogHash, capabilityStateVersion: projection.capabilityStateVersion };

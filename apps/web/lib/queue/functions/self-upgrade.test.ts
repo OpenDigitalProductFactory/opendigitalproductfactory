@@ -1167,11 +1167,7 @@ describe("quiescence-defer path (BI-QUIESCE-010)", () => {
 describe("skip-before-drain guards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getSelfUpgradeConfig.mockResolvedValue({
-      ...ENABLED_CONFIG,
-      readinessMode: "legacy-bootstrap",
-      readinessOwner: "unavailable",
-    });
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isUpgradeWindowOpen.mockReturnValue(true);
     // clearAllMocks resets call history but NOT implementations, so re-assert
     // the gate defaults each test (a prior describe can leave them flipped).

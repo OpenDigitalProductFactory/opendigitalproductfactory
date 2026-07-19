@@ -64,6 +64,7 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     mkdirSync(stateDir, { recursive: true });
     copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(source, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
     copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(source, "scripts", "lib", "govern-capability-compose-args.mjs"));
+    copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(source, "scripts", "lib", "capability-state-hash.mjs"));
     copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(source, "scripts", "capability-service-catalog.generated.json"));
     const catalog = JSON.parse(readFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), "utf8")) as { catalogHash: string; capabilities: Array<{ capabilityId: string }> };
     const enabledRuntimeCapabilities = ["runtime:core"];
