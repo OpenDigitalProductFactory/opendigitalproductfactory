@@ -46,6 +46,7 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 | Activity/coworker routing | `ActivityContract`; capability broker; specialist router | #3224, #3227 |
 | Work context | archetype, `OccupationProfile`, operational/twin value stream | #3114, #3135, #3194, #3063, #3067 |
 | Governed runtime | capability catalog and shared health projection | #3262, #3266 |
+| Onboarding trust, COO/A2A, and grounded compliance Q&A | `BI-C98C6AB7`; `docs/superpowers/plans/2026-07-19-governed-llm-provider-onboarding.md`; role-only COO; AGT-902; profession corpus | #3252, #3264, #3295 |
 
 ## Chunk 1: Reconcile And Enforce The Existing Contract
 
@@ -133,6 +134,9 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 - [ ] Infer API/OAuth/CLI/local channel from the connection flow, then ask whether the connected account is regular, business/team, enterprise, cloud-tenant, or unknown and whether a contract/entitlement is on file. Explain that consumer subscriptions and metered APIs are separate surfaces.
 - [ ] Persist regional answers through the existing business-context action. Persist processing confirmations through the data-governance path when available; otherwise retain an explicit unknown/review state rather than a temporary policy store.
 - [ ] Render one recommendation projection with `use now`, `use after review`, and `not for this work` groups; use the same projection on setup and provider overview.
+- [ ] Satisfy the BI-C98C6AB7 companion plan's cold-start contract: the role-only COO remains the owner's single conversational counterpart, consults AGT-902 through visible A2A using a minimized packet, and falls back to deterministic cited guidance without unapproved cloud egress.
+- [ ] Support natural-language follow-up questions in the same COO conversation. Material legal/provider claims require current, authoritative, applicable claim-level citations; missing, stale, conflicting, or mismatched evidence must produce conditional/`cannot_substantiate` rather than model-memory guessing.
+- [ ] Preview the activation effect in business language—what may leave, what stays local, what DPF blocks, and one next action—and meet the companion plan's non-technical readability and comprehension evidence threshold.
 - [ ] Add evidence-needed follow-ups through the existing attention/backlog mechanism without automatically approving providers.
 - [ ] Verify keyboard navigation, mobile layout, long provider names, empty/no-local/no-cloud states, and non-technical copy in the running portal.
 - [ ] Update `docs/user-guide/getting-started/` and `docs/user-guide/ai-workforce/connecting-providers.md`.
@@ -235,6 +239,7 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 - Every new route constraint reaches `routeEndpointV2`; no direct provider call bypasses it for governed activities.
 - Data classification and action authority come from `govern/data`; jurisdiction comes from `BusinessContext`; regulation applicability comes from the generic evaluator.
 - Setup recommendations and runtime enforcement use the same pure suitability projection.
+- BI-C98C6AB7 onboarding/trust acceptance is evidenced through the mapped AIPS BIs: the role-only COO preserves one owner-facing conversation, AGT-902 supplies governed specialist evidence through A2A, explicit operator action retains decision authority, and no second compliance assistant or policy evaluator exists.
 - OpenRouter restricted routes prove provider controls, regional entitlement when required, and underlying-provider evidence or fail closed.
 - Every governed route evaluates the concrete provider connection; provider/model identity alone never supplies API, subscription, business/team, or enterprise rights.
 - Route receipts identify execution channel and account posture without storing credentials or external customer account identifiers.

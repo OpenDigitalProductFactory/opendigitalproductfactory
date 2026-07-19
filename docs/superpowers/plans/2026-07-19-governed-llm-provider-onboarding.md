@@ -2,11 +2,43 @@
 
 **Backlog item:** BI-C98C6AB7
 
-**Status:** Ready for Build Studio planning and phased delivery
+**Status:** Converged companion plan — onboarding, COO/A2A, trust, and compliance-answer requirements for the canonical AI Provider Suitability program
 
 **Date:** 2026-07-19
 
 **Scope:** Provider selection, account ownership, sovereignty, compliance-coworker advice, activation, routing enforcement, data-loss prevention, retention, and existing-install remediation
+
+**Canonical delivery owner:** `EP-AI-PROVIDER-SUITABILITY`, `BI-AIPS-001` through `BI-AIPS-008`, [AI Provider Suitability design](../specs/2026-07-19-ai-provider-suitability-routing-design.md), and [implementation plan](2026-07-19-ai-provider-suitability-routing.md)
+
+## Convergence decision after the 2026-07-19 incoming-work review
+
+PR [#3294](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3294) landed immediately before this plan and established the canonical provider-suitability program. This document does **not** authorize a second provider-policy compiler, evidence model, onboarding recommendation engine, router pass, or rollout sequence. It is the detailed experience and assurance profile that the AIPS work items must satisfy for BI-C98C6AB7.
+
+Implementation workers must use the AIPS plan for delivery order and use this plan for the provider-onboarding trust contract, cold-start COO → AGT-902 consultation, grounded compliance Q&A, activation semantics, pre-egress assurance, and non-technical usability evidence. If the two documents appear to disagree, first reconcile the AIPS ownership ledger; do not choose one silently or create parallel substrate.
+
+| This plan's concern | Canonical delivery owner | Convergence rule |
+| --- | --- | --- |
+| Substrate reconciliation and ownership | `BI-AIPS-001` | Repeat the main/backlog sweep and amend both plans when newer work lands. |
+| Provider allow/deny enforcement | `BI-AIPS-002` | Make `RequestContract` fences load-bearing in `routeEndpointV2`; onboarding must consume this, not add a second gate. |
+| Pure suitability policy and connection-scoped account posture | `BI-AIPS-003` | Reuse governed data, jurisdiction, activity, provider-access, contract, and Golden Triangle inputs. BI-C98C6AB7 supplies the personal-versus-business and cold-start acceptance cases. |
+| COO-led onboarding recommendation, AGT-902 A2A, corpus, and grounded Q&A | `BI-AIPS-004` with BI-C98C6AB7 acceptance evidence | One setup/provider projection and one owner-facing COO relationship. Extend AIPS-004 rather than shipping a separate compliance assistant. |
+| OpenRouter ZDR, regional endpoint, bounded fallback, and underlying-provider evidence | `BI-AIPS-005` | The router account and its underlying endpoint are separate trust facts; no blanket OpenRouter approval. |
+| Archetype, value-stream, occupation, activity, and governed-workload context | `BI-AIPS-006` | These lenses focus suitability but never create a new taxonomy or widen authority. |
+| Connection evidence, expiry, route receipts, and provider detail | `BI-AIPS-007` | Extend existing provider/credential/contract/compliance-evidence owners; no `EvidenceBlob` or onboarding-only policy store. |
+| Existing-install remediation, drift, continuous suitability, and completion journeys | `BI-AIPS-008` | Reassessment and attention are one lifecycle, including the trust/usability journeys in this plan. |
+
+### Incoming-work source ledger
+
+| Input | Contract incorporated here |
+| --- | --- |
+| PR #3294 — provider suitability design/program | One V2 router; hard policy before Golden Triangle preference; connection-scoped entitlements; exact AIPS ownership; OpenRouter and vertical-work-context coverage. |
+| PRs #3185/#3190, #3251, #3255 — Data Management Governance | `DataAssetId`/`DataFieldId`, independent sensitivity/category/purpose/residency axes, confirmed `DataProcessingActivity`, one PDP with reusable PEPs, fail-closed unknowns, and the Data-Impact Gate. |
+| PR #3052 — jurisdiction-policy/evidence schema audit | Compile jurisdiction into the existing policy runtime and extend append-only/revisioned evidence patterns; do not create per-country rule engines or one-off evidence blobs. |
+| PR #3158 — onboarding source-system capture | Add provider questions through the canonical `BusinessContext` setup persistence and progressive-disclosure form pattern; do not introduce a second intake record. |
+| PRs #3252/#3264 — COO persona and attribution | The owner-facing identity is role-only `COO`; the authenticated human × client × session triple remains the action/evidence byline. Specialist consultation is visible without attributing human accountability to the persona. Optional naming remains a separately governed reconsideration. |
+| PRs #3224/#3227 and #3262/#3266 — capability/specialist/runtime routing | AGT-902 delegation and provider choice consume existing capability and runtime-health facts; neither advice nor provider suitability declares a provider operational or expands grants. |
+
+Live-state caveat from this review: the updated source contains `EP-AI-PROVIDER-SUITABILITY` and its eight canonical BI references, but this install's MCP backlog and source-code graph had not yet indexed them. Treat that as synchronization evidence to resolve before promotion, not permission to file replacements.
 
 ## Outcome
 
@@ -34,7 +66,7 @@ The external review correctly identifies that education alone is too weak. Its u
 | --- | --- | --- |
 | Local “Zero Leak” regex/NER interceptor before network calls | **Adopt with guardrails** | Add one canonical pre-egress policy stage for every routed inference. Structured `RequestContract` sensitivity and onboarding-derived data classes are primary; local content inspection is defense in depth. Redact only when task semantics and policy permit it; otherwise route locally or block. Regex/NER alone never establishes safety. |
 | Verify keys with `/v1/models` and infer consumer/business tier | **Split** | Keep the reachability/authentication/model-discovery handshake. Do not infer account class, training terms, DPA, residency, or enterprise controls from that endpoint. Require an operator declaration plus dated provider/contract evidence; use provider-specific account APIs only where they authoritatively expose a fact. Unknown evidence produces restricted or non-routable posture. |
-| Delete all raw payload histories after seven days | **Replace with policy-driven minimization** | Redact or avoid raw payloads at write time, then use the existing retention registry, industry floors, legal/incident holds, and dataset-specific windows. Do not put interceptor events into `DecisionInteraction` by default. Preserve compact policy-decision evidence in `RouteDecisionLog`/security audit surfaces without storing the sensitive value. |
+| Delete all raw payload histories after seven days | **Replace with policy-driven minimization** | Redact or avoid raw payloads at write time, then use the canonical lifecycle evaluator. Retention minima, deletion maxima, prohibited storage, legal/incident holds, and exceptions remain independent; conflicts produce governed review rather than “retain always wins.” Do not put interceptor events into `DecisionInteraction` by default. Preserve compact policy-decision evidence in `RouteDecisionLog`/security audit surfaces without storing the sensitive value. |
 | Hard risk floors and physical approval for destructive multi-step actions | **Reuse existing substrate** | Keep destructive/outbound action approval in `CoworkerActionEnvelope`; do not create a parallel action-envelope model. Provider activation is an explicit operator act. Ordinary approved inference does not require repeated approval, but it must pass policy on every route. |
 | Archetype-locked immutable system preambles | **Adopt as defense in depth** | Reuse the immutable platform preamble and onboarding risk-envelope substrate. Add company jurisdiction, market, product/customer, account, and workload posture as governed context. Prompts explain and steer; routing, activation, authorization, and tool layers enforce. Archetype alone is not a compliance decision. |
 
@@ -48,10 +80,11 @@ Two advisor assumptions are explicitly rejected:
 This work must extend the following sources of truth instead of creating parallel concepts:
 
 - setup sequence and routes: `apps/web/lib/actions/setup-constants.ts`, `apps/web/components/setup/SetupOverlay.tsx`;
-- company/market derivation: `apps/web/lib/onboarding/archetype-business-context.ts`, `apps/web/lib/onboarding/capture-market-context.ts`, `StorefrontConfig.archetypeId`, and business-context records;
-- provider configuration and the one activation entry point: `ModelProvider`, `apps/web/lib/actions/ai-providers.ts`, `apps/web/lib/govern/activate-provider.ts`;
+- company/market derivation and persistence: `apps/web/lib/onboarding/archetype-business-context.ts`, `apps/web/lib/onboarding/capture-market-context.ts`, the existing business-context setup API/form pattern, `StorefrontConfig.archetypeId`, and `BusinessContext.operatesIn`/`sellsTo`/`employsIn`/`dataResidency`/`sourceSystem`;
+- governed data and policy: `apps/web/lib/govern/data/taxonomy.ts`, `processing-activities.ts`, `policy-decision.ts`, and reusable PEP adapters in `policy-enforcement.ts`; provider onboarding must consume these identities and decisions rather than redeclare data classes, purpose, residency, or policy precedence;
+- provider configuration and concrete connection posture: `ModelProvider`, `CredentialEntry`, `ExecutionAdapterSelector`, `AiProviderFinanceProfile`, `SupplierContract`, `ProviderCapacityStatus`, `CliPoolStatus`, `apps/web/lib/actions/ai-providers.ts`, and `apps/web/lib/govern/activate-provider.ts`;
 - provider/operator UX: `apps/web/app/(shell)/platform/ai/providers/`, `apps/web/components/platform/ProviderDetailForm.tsx`, `apps/web/lib/routing/provider-routing-eligibility.ts`;
-- inference policy: `RequestContract.sensitivity`, `residencyPolicy`, `allowedProviders`, endpoint `sensitivityClearance`, and the canonical v2 routing pipeline;
+- inference policy: `RequestContract.sensitivity`, `residencyPolicy`, `allowedProviders`/`deniedProviders`, endpoint `sensitivityClearance`, `ActivityContract`, Golden Triangle composition, and the canonical v2 routing pipeline;
 - audit: `RouteDecisionLog`, `AuthorizationDecisionLog`, `SecurityEvent`, and `ToolExecution` summaries rather than raw secret-bearing payloads;
 - destructive/outbound approvals: `CoworkerActionEnvelope`;
 - retention: `apps/web/lib/operate/retention/policies.ts`, industry floors, retained-dataset guard tests, and the existing retention engine;
@@ -59,7 +92,7 @@ This work must extend the following sources of truth instead of creating paralle
 - profession knowledge: `docs/professions/legal-compliance/wiki/` and the generated/indexed profession corpus;
 - immutable prompt protection: the existing TAK platform preamble and onboarding risk-envelope/profile flow.
 
-`ModelProvider.catalogEntry` may hold typed, seeded vendor/service facts, but install-specific account declarations and evidence must remain distinguishable from catalog claims. The first delivery slice must complete a schema-impact check before choosing whether the install-specific posture fits typed fields on `ModelProvider` or needs a related evidence record. It must not create a second provider or credential aggregate.
+`ModelProvider.catalogEntry` may hold typed, seeded vendor/service facts, but install-specific account declarations and evidence must remain distinguishable from catalog claims. Suitability is evaluated for the concrete connection—not merely the vendor or model—so enterprise rights, DPA/BAA coverage, regional entitlement, ZDR, or subscription terms linked to one credential, session, router account, or tenant cannot authorize another. `BI-AIPS-003` must audit whether one-row-per-`providerId` can represent simultaneous connections before any schema decision; `BI-AIPS-007` must first test `SupplierContract`, `ComplianceEvidence`, and existing revision/audit owners. This work must not create a second provider, credential, evidence, or policy aggregate.
 
 ## Architecture and UX review
 
@@ -81,7 +114,7 @@ This work must extend the following sources of truth instead of creating paralle
 - Owning area: Platform, embedded contextually in setup.
 - Route family: `/platform/ai/providers` and its existing provider detail routes.
 - Primary persona: a founder/operator choosing AI services without technical, privacy, security, or procurement expertise.
-- Primary coworker persona: the COO—the owner’s enduring operational counterpart who has their back, owns the conversation, and coordinates specialist expertise on their behalf.
+- Primary coworker persona: the role-only COO—the owner’s enduring operational counterpart who has their back, keeps one conversational thread, and coordinates specialist expertise on their behalf. This interaction continuity does not make the persona an accountable human actor.
 - Navigation layer touched: setup workflow and local/contextual actions only; no global or section navigation change.
 - Reuse/convergence: existing setup overlay, coworker panel, provider detail form, routing-eligibility projection, shared status/loading primitives, and native progressive-disclosure patterns.
 - Source truth: the versioned provider-governance posture compiled from organization, workload, provider, account, and evidence facts.
@@ -94,7 +127,7 @@ This work must extend the following sources of truth instead of creating paralle
 
 DPF should feel like a knowledgeable coworker keeping the operator out of avoidable trouble—not like a compliance questionnaire, a frightening warning wall, or a provider catalog that leaves the hard decision to them. Confidence must come from demonstrated competence and visible control, never from vague reassurance.
 
-The COO is the human-facing relationship throughout this experience. The owner should not need to know which specialist coworker, corpus, model, or policy engine to ask. They ask the COO; the COO recognizes when data-governance expertise is needed, consults AGT-902 through A2A, checks the substantiation, and returns one coherent answer in the existing conversation. The COO remains accountable for helping the owner understand the choice and complete the safe next step.
+The role-only COO is the human-facing relationship throughout this experience. The owner should not need to know which specialist coworker, corpus, model, or policy engine to ask. They ask the COO; the COO recognizes when data-governance expertise is needed, consults AGT-902 through A2A, checks the substantiation, and returns one coherent answer in the existing conversation. The COO remains the visible guide through the safe next step, while the operator retains decision authority and durable evidence is attributed to the authenticated human × client × session triple—not to a fictional human executive.
 
 “Has the owner’s back” has specific interaction meaning:
 
@@ -192,10 +225,10 @@ Implement one pure, versioned evaluation contract shared by onboarding, provider
 - organization country and exact operating/customer jurisdictions;
 - industry/market and applicable regulated-business signals;
 - products/services and customer types (consumer, children, patient, employee, financial client, public sector, etc.);
-- intended AI workloads;
-- declared input/output data classes and sensitivity;
+- intended AI workloads plus canonical archetype, operational value-stream stage, occupation/job focus, and `ActivityContract` facts where known;
+- governed asset/field references, confirmed processing purpose, and declared input/output data classes and sensitivity;
 - required data residency/sovereignty posture;
-- provider/service/model and selected region;
+- concrete provider connection, execution channel, provider/service/model, selected region/endpoint, and live capability/health;
 - credential owner (`organization` versus `individual`) and declared account class (`business_api`, `enterprise`, `consumer_subscription`, `unknown`);
 - provider terms relevant to training, retention, subprocessors, residency, access, and DPA/BAA/contract coverage;
 - evidence source, captured date, last verified date, and review/expiry date;
@@ -211,7 +244,8 @@ Return a stable structured result suitable for both a small local model and dete
 - `allowedDataClasses` and `prohibitedDataClasses`;
 - `allowedWorkloadTags` and `prohibitedWorkloadTags`;
 - `residencyPolicy`: `local_only | approved_cloud` (do not generate `any_enabled` from onboarding);
-- `allowedProviders` and, where required, allowed regions/models;
+- `allowedProviders`, `deniedProviders`, and, where required, allowed regions/models;
+- connection/account obligations and, for router-backed execution, bounded underlying-provider, ZDR/data-collection, regional-endpoint, and fallback obligations;
 - `requiredActions` and missing evidence;
 - concise reason and user-facing explanation;
 - evidence citations and their dates;
@@ -229,37 +263,47 @@ The result must be deterministic for a fixed input/evidence set. The coworker ma
 5. Content inspection yields metadata only: categories, confidence, action, policy version, and salted/deterministic fingerprint where needed for correlation. It never logs the matched value.
 6. `redact` is allowed only when the policy identifies a safe transformation and the transformed payload still satisfies the task. Otherwise choose an eligible local route; if none exists, block with an operator-readable reason.
 7. Provider terms or organization facts changing invalidates/reassesses posture. Stale evidence cannot remain indefinitely “approved.”
+8. The same vendor/model is reevaluated for each concrete connection. Rights or evidence from one credential, subscription session, router account, or tenant never transfer by provider-name match.
+9. Data-governance/PDP and suitability constraints are hard fences. Golden Triangle, cost-per-success, provider health, and capacity rank only the eligible remainder.
 
 ## Delivery sequence
 
-Each phase is one independently reviewable concern/PR. Build Studio should promote the phases separately rather than attempt one x-large implementation PR.
+The six phases below are requirement groupings, not six replacement BIs or a competing PR stack. Delivery follows the AIPS plan's eight work items and dependencies. A phase may span more than one AIPS BI; evidence for BI-C98C6AB7 is complete only when all mapped owners have satisfied the requirement.
 
 ### Phase 1 — Policy contract, evidence model, and deterministic fixtures
 
-**Deliverable:** A typed, pure provider-governance evaluator and persistence decision grounded in the existing schema.
+**Canonical owners:** `BI-AIPS-001`, `BI-AIPS-002`, `BI-AIPS-003`, and `BI-AIPS-007`.
+
+**Deliverable:** The canonical AIPS suitability compiler, load-bearing provider fences, and connection-scoped evidence contract are sufficient for the onboarding and cold-start scenarios in this plan.
 
 **Files likely affected:**
 
-- `apps/web/lib/govern/provider-governance-types.ts` (new);
-- `apps/web/lib/govern/evaluate-provider-posture.ts` (new);
+- the focused suitability modules settled by `BI-AIPS-003`; do not create differently named onboarding-only evaluator/types;
+- `apps/web/lib/govern/data/taxonomy.ts`, `processing-activities.ts`, `policy-decision.ts`, and `policy-enforcement.ts` as imported canonical contracts, not copied vocabularies;
+- `apps/web/lib/routing/request-contract.ts`, `pipeline-v2.ts`, and shared eligibility tests from `BI-AIPS-002`;
 - colocated unit tests and scenario fixtures;
-- `packages/db/prisma/schema.prisma` and one new migration only if the schema-impact check proves existing typed fields/JSON cannot preserve install-specific evidence cleanly;
+- existing provider, credential, supplier-contract, compliance-evidence, and audit owners; `packages/db/prisma/schema.prisma` and one new migration only if the AIPS-003/AIPS-007 schema-impact checks prove those owners cannot preserve connection-scoped evidence cleanly;
 - `packages/db/src/seed.ts` or the canonical provider-catalog seed owner for vendor/service facts;
 - `docs/superpowers/specs/2026-06-20-onboarding-intake-derivation-design.md` for the settled contract and source-of-truth map.
 
 **Tasks:**
 
-1. Trace every `ModelProvider.status = active` path and every inference adapter entry point; add invariants so the centralized activation and pre-egress paths remain complete.
-2. Separate seeded vendor facts from organization/account declarations and evidence. Define closed enums before any data uses them.
-3. Implement jurisdiction/workload/account/evidence evaluation as a side-effect-free function.
-4. Add fixtures for EMEA, UK, healthcare, financial services, public-sector, consumer-account, unknown-evidence, local-incapable, and mixed-workload cases.
-5. Define evidence freshness and invalidation rules; unknown or expired evidence narrows access.
+1. Complete the `BI-AIPS-001` reconciliation ledger before editing schema or types; include every input listed in this plan's incoming-work ledger.
+2. Make allow/deny fences load-bearing through `BI-AIPS-002` before activation or UI calls a recommendation enforced.
+3. Import governed `DataAssetId`, `DataFieldId`, sensitivity, category, purpose, and residency facts; do not author an onboarding taxonomy. Confirmed organization purposes come from `DataProcessingActivity`, not corpus or archetype inference alone.
+4. Separate seeded vendor facts from organization/account declarations and evidence. Define closed enums before any data uses them.
+5. Compile jurisdiction/workload/account/evidence into the AIPS pure suitability result. Hard PDP/suitability constraints precede Golden Triangle cost, quality, speed, and capacity preferences.
+6. Prove connection isolation for the same provider/model across metered API, consumer subscription/OAuth or host CLI, business/team, enterprise-contracted API/cloud tenant, router, and local access.
+7. Add fixtures for exact EU-country, UK, healthcare, financial services, public-sector, consumer-account, unknown-evidence, local-incapable, mixed-workload, activity/value-stream, and same-provider/different-connection cases.
+8. Define evidence freshness and invalidation rules; unknown or expired evidence narrows access.
 
 **Verification:** targeted evaluator/schema tests; migration apply if added; seed idempotency; enum and activation-path invariant tests.
 
 **Rollback:** evaluator remains dark/read-only until Phase 3. If a migration is needed, make it additive and preserve current provider state; disabling the feature flag restores current behavior without deleting evidence.
 
 ### Phase 2 — COO-led legal/compliance advice through AGT-902 A2A
+
+**Canonical owner:** `BI-AIPS-004`, with BI-C98C6AB7 supplying the cold-start, corpus, grounded-answer, and owner-relationship acceptance contract.
 
 **Deliverable:** The COO can give the owner a small, cited, structured provider recommendation from company/workload context while the install is local-only, consulting AGT-902 behind the scenes without transferring ownership of the conversation.
 
@@ -283,13 +327,15 @@ Each phase is one independently reviewable concern/PR. Build Studio should promo
 7. Resolve references at claim level and validate source authority, freshness, applicability, and claim support before rendering an answer.
 8. Add a compact inline-reference and “Review sources” projection to the existing coworker conversation; do not create a separate knowledge or compliance route.
 9. Preserve one human-facing thread and COO voice. The UI may show that the COO consulted the Data Governance specialist and what bounded context was shared, but it must not require the owner to open, summon, or manage AGT-902 directly.
-10. Ensure the COO owns follow-through: missing evidence, a required account change, or human review becomes a guided next action in the same conversation rather than a specialist handoff dead end.
+10. Ensure the COO preserves follow-through in the interaction: missing evidence, a required account change, or human review becomes a guided next action in the same conversation rather than a specialist handoff dead end. The operator remains the accountable decision-maker.
 
 **Verification:** corpus-source and freshness tests; AGT-902 wiring test; A2A chain-of-custody test; local-only onboarding simulation with the cloud providers disabled; structured-output/fallback equivalence scenarios; golden-question and adversarial suites; claim-level citation presence/entailment/applicability checks; stale/conflicting/missing evidence abstention; first-viewport answer and source-disclosure browser verification; conversation-continuity test proving the owner asks and receives the answer from the COO while the specialist consultation remains visible evidence rather than a second user-managed persona.
 
 **Rollback:** corpus and prompt changes are reversible and do not activate providers. If the A2A call fails, the deterministic evaluator remains authoritative.
 
 ### Phase 3 — Reorder setup and gate provider activation
+
+**Canonical owner:** `BI-AIPS-004`, dependent on the load-bearing contracts from `BI-AIPS-002` and `BI-AIPS-003`.
 
 **Deliverable:** Setup captures enough company/workload context before provider selection, then prevents an unsuitable or unknown cloud account from becoming broadly routable.
 
@@ -321,6 +367,8 @@ Each phase is one independently reviewable concern/PR. Build Studio should promo
 
 ### Phase 4 — Runtime policy compilation and pre-egress guard
 
+**Canonical owners:** `BI-AIPS-002`, `BI-AIPS-003`, and `BI-AIPS-005`, composed with the Data Management Governance PDP/PEP rather than a second inference-policy engine.
+
 **Deliverable:** Every inference route enforces the onboarding decision, and the final external payload passes a local pre-egress classification/redaction/block decision.
 
 **Files likely affected:**
@@ -328,25 +376,29 @@ Each phase is one independently reviewable concern/PR. Build Studio should promo
 - `apps/web/lib/routing/request-contract.ts` and tests;
 - `apps/web/lib/routing/pipeline-v2.ts`, loader/eligibility modules, and scenario tests;
 - `apps/web/lib/inference/routed-inference.ts` and canonical adapter dispatch;
-- a new focused module such as `apps/web/lib/inference/pre-egress-policy.ts` plus tests;
+- a focused inference PEP adapter using `apps/web/lib/govern/data/policy-enforcement.ts`; a thin adapter-boundary wrapper is acceptable, but it cannot own a second evaluator or precedence lattice;
+- `apps/web/lib/routing/adapter-openrouter.ts` and its canonical OpenAI-compatible request construction for AIPS-005 controls;
 - `packages/integration-shared/src/redact.ts` only where its existing integration-input behavior can safely be generalized; do not overload it with provider-governance policy;
 - routing decision logging/telemetry writers.
 
 **Tasks:**
 
-1. Compile the active organization/provider/workload posture into `residencyPolicy`, `allowedProviders`, sensitivity clearance, region/model constraints, and workload tags.
+1. Consume the AIPS-003 result and compile the active organization/provider-connection/workload posture into `residencyPolicy`, provider allow/deny constraints, sensitivity, region/model obligations, and workload tags.
 2. Merge constraints monotonically: no caller, prompt, tool result, model choice, or fallback may loosen them.
 3. Add a final adapter-boundary guard after prompt/tool assembly and before network I/O. Cover chat, responses, image/audio/file payloads, and alternate provider adapters.
 4. Use structured data classification first; add configurable country/industry-aware recognizers for unstructured content. Treat automated detection as fallible and test false-positive/false-negative handling.
 5. Return one of `allow`, `transform`, `reroute`, or `block`. A transformation records which fields/categories changed, never their values.
 6. Route policy denials into `RouteDecisionLog.excludedTrace`/`policyRulesApplied` and security telemetry with compact, masked evidence. Do not create a `DecisionInteraction` for routine routing decisions.
 7. Guard every fallback. A provider rejected for policy cannot reappear later in the fallback chain.
+8. For OpenRouter, pass through required ZDR/data-collection/provider allow-deny/order/fallback controls, use the EU endpoint only with account-specific entitlement evidence, and capture the underlying provider/attempt evidence when returned. Missing required evidence fails closed.
 
 **Verification:** unit/property tests for monotonic constraint merging; adapter coverage invariant; adversarial payload tests; no-sensitive-value logging tests; local reroute and no-capable-local block scenarios; production build and governed runtime inference exercises.
 
 **Rollback:** ship in observe-only mode first, compare decisions without retaining raw payloads, then enforce by workload class. A kill switch may block all external egress; it must never mean bypass the guard.
 
 ### Phase 5 — Data minimization, retention, and audit evidence
+
+**Canonical owner:** `BI-AIPS-007`, composed with `EP-DATA-GOVERNANCE` and `EP-DATA-RETENTION` lifecycle and evidence owners.
 
 **Deliverable:** Provider-governance and DLP events are auditable while raw sensitive content is minimized and lifecycle-managed under existing policy.
 
@@ -361,7 +413,7 @@ Each phase is one independently reviewable concern/PR. Build Studio should promo
 
 1. Inventory fields where prompts, tool arguments/results, A2A context, or detected data can be persisted. Classify necessity and eliminate raw storage where not required.
 2. Redact/pseudonymize at write time. Store policy id/version, category, action, provider/route, actor, timestamps, and correlation ids; do not retain matches.
-3. Extend the central retention registry instead of adding a seven-day cleanup job. Dataset windows remain category-specific; industry floors only lengthen; regulated/incident/legal holds prevent purge.
+3. Extend the canonical lifecycle/retention owners instead of adding a seven-day cleanup job. Evaluate retention minima, deletion maxima, prohibited storage, holds, and exceptions independently. A hard-constraint conflict produces governed review; neither retention nor deletion silently wins.
 4. Define status-aware `DecisionInteraction` retention separately if this work touches those records; do not assume vector weights/confidence are sufficient audit evidence.
 5. Surface retention/evidence posture on provider and audit pages without exposing payloads.
 
@@ -370,6 +422,8 @@ Each phase is one independently reviewable concern/PR. Build Studio should promo
 **Rollback:** retention changes begin in report-only mode. A purge can be disabled through the existing scheduled-job control; raw-at-write minimization remains because rollback must not reintroduce sensitive logging.
 
 ### Phase 6 — Existing-install remediation and lifecycle reassessment
+
+**Canonical owner:** `BI-AIPS-008`, consuming AIPS-007 connection evidence and receipts.
 
 **Deliverable:** Existing active cloud providers are classified and repaired without surprise data egress, and posture remains current after onboarding.
 
@@ -406,7 +460,7 @@ At minimum, the end-to-end suite must cover:
 7. The approved provider fails: fallback considers only other providers allowed by the same posture; it never broadens to `any_enabled`.
 8. The local model is down or too weak: DPF blocks/escalates rather than claiming local fallback succeeded.
 9. AGT-902/A2A inference fails during onboarding: deterministic evaluation still produces the same enforcement result and a plainer explanation.
-10. Evidence expires or the company adds an EMEA customer market: posture is invalidated, attention appears, and cloud allowance narrows until reassessed.
+10. Evidence expires or the company adds customers in a newly declared exact country: posture is invalidated, attention appears, and cloud allowance narrows until reassessed. “EMEA” may summarize the footprint but never substitutes for jurisdiction facts.
 11. A coworker proposes a destructive external action during setup: the existing `CoworkerActionEnvelope` requires explicit approval and preserves chain of custody.
 12. Retention runs under a regulated industry floor or active hold: required evidence remains; eligible operational telemetry is purged without orphaning relations.
 13. A first-time, non-technical operator chooses between a personal account, business-managed cloud account, and local inference: the flow recommends one path, explains the practical consequence without jargon, previews what DPF will enforce, and the operator correctly identifies the safe choice without opening technical evidence.
@@ -418,6 +472,9 @@ At minimum, the end-to-end suite must cover:
 19. A citation URL is valid but its text does not support the generated claim or applies to a different account class: validation removes the claim, downgrades the answer state, and prevents the unsupported advice from reaching the operator.
 20. The owner asks the COO a provider-compliance question: the COO recognizes the capability boundary, consults AGT-902 through A2A, validates and synthesizes the result, and answers in the same thread. The owner sees that specialist expertise was consulted but is never told to locate, summon, or continue with a different coworker.
 21. AGT-902 needs one more fact or qualified human review: the COO asks the clarifying question or guides the escalation, keeps the safe interim posture, and remains the owner’s point of contact through resolution.
+22. The same vendor/model is configured through a consumer subscription and an enterprise-contracted API connection: the enterprise contract/region evidence applies only to its linked connection; the consumer connection remains restricted.
+23. An OpenRouter restricted route requires ZDR, denied data collection, an EU endpoint, and bounded fallback: the request carries those controls only for an account with matching entitlement, the returned underlying provider is recorded when available, and missing entitlement or endpoint evidence blocks the route.
+24. Two activities in the same company use the same provider: public marketing work is eligible while payroll or patient work is denied because governed assets, purpose, value-stream/activity, and data class differ. Occupation focus never widens RBAC or coworker authority.
 
 ## Research and standards grounding
 
@@ -447,12 +504,16 @@ The implementation should cite primary legal/regulatory texts in the profession 
 - **AGT-902 corpus assignment:** the coworker cannot give defensible advice until legal/compliance pages are actually in its retrieval scope.
 - **Local model capacity:** structured contracts and tight retrieval budgets are mandatory; free-form legal synthesis is not the cold-start dependency.
 - **Activation blast radius:** `activateProvider()` is used by OAuth, API keys, tests, seed/bootstrap, and linked providers. Phase 1 must inventory all callers and provide safe treatment for bootstrap/system providers.
+- **Canonical program synchronization:** source includes EP-AI-PROVIDER-SUITABILITY and BI-AIPS-001..008, while this install's live backlog/index did not yet expose them during the review. Synchronize and re-query before promotion; do not create duplicates to work around lag.
+- **Connection identity:** provider/model identity and API reachability do not identify an account's commercial, contractual, regional, or privacy rights. AIPS-003 must settle simultaneous-connection identity before onboarding persists attestations.
+- **Policy precedence:** the Data Management Governance PDP/PEP owns data-purpose/residency hard constraints; AIPS suitability adapts those into routing fences; Golden Triangle and health/capacity optimize only after both. A second precedence lattice would make advice and enforcement drift.
+- **OpenRouter indirection:** a router label is not the processing endpoint. ZDR, data-collection, EU base URL, fallback, and underlying-provider evidence are account- and request-scoped obligations under AIPS-005.
 - **Alternate egress paths:** adapter coverage must be proven by an invariant test. A guard attached only to the chat UI is not sufficient.
 - **Existing installations:** immediately setting every active provider to unusable may disrupt operations; staged restriction must still prevent newly disallowed sensitive egress.
 - **False assurance:** the UI must distinguish declarations, provider-published facts, verified account facts, and inferred policy results.
 - **Detection quality:** false negatives demand structured classification and fail-closed rules; false positives require reviewable categories and safe recovery, never a bypass button that silently allows the same payload.
-- **Retention conflict:** privacy deletion and regulated audit/incident retention can conflict. The existing policy registry, floors, and holds arbitrate; no universal short window.
-- **Related work:** coordinate healthcare-specific scenarios with BI-HEALTHCARE-053 and coworker authority work with EP-31815F97 rather than duplicating their controls.
+- **Retention conflict:** privacy deletion, prohibited storage, regulated minima, deletion maxima, audit/incident holds, and exceptions can conflict. The canonical lifecycle evaluator produces dates/conflicts and governed review; no universal short window or “retention always wins” shortcut.
+- **Related work:** delivery is owned by EP-AI-PROVIDER-SUITABILITY; coordinate healthcare-specific scenarios with BI-HEALTHCARE-053, data controls with EP-DATA-GOVERNANCE/EP-DATA-RETENTION, and coworker authority with EP-31815F97 rather than duplicating their controls.
 
 ### Future extension — owner-chosen conversational name for the COO
 
@@ -462,11 +523,14 @@ The extension must layer presentation over the stable identity rather than renam
 
 ## Definition of done
 
-- The plan’s six phases have shipped through separate reviewable PRs with the mandatory build gate appropriate to each phase.
+- `BI-AIPS-001` through `BI-AIPS-008` have shipped in their governed dependency order, and their evidence collectively satisfies the six requirement groupings in this plan; no parallel BI-C98C6AB7 compiler or rollout stack was created.
 - A new install can complete the provider decision with only the local model and deterministic evaluator available.
 - Setup identifies the company, exact jurisdiction/market, product/customer posture, workloads, data classes, provider account ownership/class, region, and evidence before broad cloud activation.
 - COO → AGT-902 A2A advice is visible, cited, structured, and traceable to the human-originated setup session.
 - Provider posture is one source of truth consumed by activation, provider UX, and runtime routing.
+- Suitability is connection-scoped; enterprise, regional, contract, ZDR, or account evidence cannot transfer between credentials/sessions/tenants for the same vendor/model.
+- Governed data identity/purpose/residency and ActivityContract/work-context facts feed suitability without creating a second data or vertical taxonomy; occupation never widens authority.
+- OpenRouter restricted routes enforce account-specific regional/privacy/fallback controls and retain policy-safe underlying-provider evidence or fail closed.
 - Every external inference path has final pre-egress policy enforcement and masked audit evidence.
 - Personal/consumer and unknown accounts cannot silently receive business-confidential/restricted workloads.
 - Policy fallbacks never broaden provider, residency, sensitivity, region, or workload constraints.
@@ -481,5 +545,5 @@ The extension must layer presentation over the stable identity rather than renam
 - Every material external claim in the governed evaluation suite has an authoritative, current, applicable, claim-level reference; unsupported claims are withheld rather than merely accompanied by a generic link.
 - AGT-902 clearly separates sourced facts, organization declarations, technical verification, recommendation, uncertainty, and required human review.
 - Missing, stale, conflicting, or inapplicable evidence produces a safe conditional/abstaining answer and cannot broaden routing posture.
-- The COO is the single human-facing owner of onboarding and follow-up provider guidance; AGT-902 supplies governed specialist evidence through A2A without becoming a separate journey the owner must manage.
+- The role-only COO is the single human-facing conversational guide for onboarding and follow-up provider guidance; AGT-902 supplies governed specialist evidence through A2A without becoming a separate journey the owner must manage. Attribution remains bound to the authenticated triple and explicit operator action.
 - Usability participants consistently identify the COO as the coworker looking out for the business and can explain that the COO consults specialists when needed.
