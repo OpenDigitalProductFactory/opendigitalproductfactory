@@ -16,8 +16,6 @@ import type {
   EndpointOverride,
 } from "@/lib/routing/types";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
-import type { ModelClass } from "@/lib/routing/model-card-types";
-import type { ActivityContract } from "@/lib/routing/activity-contract";
 import { inferContract } from "@/lib/routing/request-contract";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import {
@@ -36,7 +34,8 @@ import { prisma } from "@dpf/db";
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
 import { logTokenUsage } from "@/lib/ai-inference";
-import type { RouteDecisionActor } from "@/lib/routing/route-decision-attribution";
+import type { RouteAndCallOptions } from "./routed-inference-options";
+export type { RouteAndCallOptions } from "./routed-inference-options";
 
 // ─── Result type ────────────────────────────────────────────────────────────
 
@@ -85,115 +84,6 @@ export class NoEligibleEndpointsError extends Error {
 }
 
 // ─── Options ────────────────────────────────────────────────────────────────
-
-export interface RouteAndCallOptions {
-  /** Tools to provide to the model. Also sets requiresTools on the contract. */
-  tools?: Array<Record<string, unknown>>;
-  /** Task type override. Defaults to "conversation". */
-  taskType?: string;
-  /** Prefer a specific provider (hard override when set by agent config). */
-  preferredProviderId?: string;
-  /** Prefer a specific model ID (swaps within provider candidates). */
-  preferredModelId?: string;
-  /** Specialized capability requirements. */
-  requiresCodeExecution?: boolean;
-  requiresWebSearch?: boolean;
-  requiresComputerUse?: boolean;
-  /** Budget posture override. */
-  budgetClass?: "minimize_cost" | "balanced" | "quality_first";
-  /** EP-MODEL-TIER-ROUTING: capability tier for this call. "local" forces
-   *  residencyPolicy=local_only (keeps small/simple work on the on-box model);
-   *  "robust" leaves routing free to prefer a frontier endpoint. Unset = today's
-   *  behavior (governed only by the global local-only switch). */
-  modelTier?: "local" | "robust";
-  /** Minimum dimension scores (0-100) models must meet. Models below any threshold are excluded. */
-  minimumDimensions?: Record<string, number>;
-  /** EP-INF-009c: Route to a specific model class (e.g., "image_gen", "embedding"). */
-  requiredModelClass?: ModelClass;
-  /** EP-INF-009d: "background" starts async operation, returns immediately with asyncOperationId. */
-  interactionMode?: "sync" | "background";
-  /** EP-INF-009d: Thread ID for SSE progress events (required for background mode). */
-  threadId?: string;
-  /** EP-INF-009d: Max duration for async operations (ms). Default: 15 minutes. */
-  maxDurationMs?: number;
-  /** Persist the route decision to the audit log. Default: true. */
-  persistDecision?: boolean;
-  /**
-   * When true, tool stripping is forbidden. If no tool-capable endpoint is
-   * available, throw NoEligibleEndpointsError instead of silently degrading
-   * to generic no-tool chat. Use for Build Studio and other tool-dependent
-   * workflows where removing tools changes the task semantics.
-   */
-  requireTools?: boolean;
-  /**
-   * EP-AGENT-CAP-002: Agent-level minimum capability floor.
-   * When set, endpoints that don't satisfy all declared capabilities are
-   * excluded BEFORE graceful tool-stripping. Use DEFAULT_MINIMUM_CAPABILITIES
-   * ({ toolUse: true }) for standard coworkers.
-   */
-  minimumCapabilities?: import("@/lib/routing/agent-capability-types").AgentMinimumCapabilities;
-  /**
-   * EP-AGENT-CAP-002: Minimum context window tokens required by the agent (for RAG).
-   * Merged with task-level minContextTokens — the stricter value wins.
-   * Null = system default (16000 tokens). Read from AgentModelConfig.minimumContextTokens.
-   */
-  agentMinimumContextTokens?: number;
-  /**
-   * EP-AGENT-CAP-002: Agent identifier for error correlation.
-   * Set from agentId in agentic-loop.ts so NoEligibleEndpointsError can surface
-   * which agent triggered the capability floor violation.
-   */
-  agentId?: string;
-  /**
-   * Pre-allocated AgentMessage id for the assistant turn this call belongs to.
-   * Threaded down to AdapterRunTelemetry rows so the badge/cost-rollup join
-   * (telemetry.agentMessageId → AgentMessage.id) can succeed even though the
-   * AgentMessage row is persisted only after the agentic loop returns. The
-   * caller (agent-coworker.sendMessage) allocates the id with `randomUUID()`
-   * before starting the loop and uses the same id when creating the row.
-   */
-  agentMessageId?: string;
-  /**
-   * Actor responsible for this routing decision. Agent calls normally set
-   * agentId; system utilities and schedulers should set this explicitly so
-   * RouteDecisionLog never lands as an unattributed audit event.
-   */
-  routingActor?: RouteDecisionActor;
-  /**
-   * EP-INF-013: Reasoning effort hint for the selected model.
-   *   low    — no extended thinking; fast and cheap (default when omitted)
-   *   medium — moderate thinking budget (~8k tokens for Anthropic)
-   *   high   — extended thinking (~32k tokens; recommended for code-gen / Build Studio)
-   *   max    — maximum budget (~64k tokens; Opus-only)
-   * Translated per-provider: Anthropic → thinking.budget_tokens, OpenAI → reasoning_effort.
-   * Ignored by providers that do not support extended reasoning.
-   */
-  effort?: "low" | "medium" | "high" | "max";
-  /** Responses API: chain to a previous response for conversation state. */
-  previousResponseId?: string;
-  /**
-   * Activity-level routing contract for task-aware harness binding. When set,
-   * the selected RouteDecision.executionPlan carries harness metadata for
-   * evidence, evaluation, and future activity-specific prompt/context assembly.
-   */
-  activityContract?: ActivityContract;
-  /**
-   * Display name of the coworker invoking this call (e.g. "AI Ops Engineer").
-   * When tools are stripped due to model capability limits, this name is
-   * preserved in the degraded system prompt so the model can identify itself
-   * and explain its limited state — rather than becoming a generic assistant.
-   */
-  agentDisplayName?: string;
-  /**
-   * Caller context for adapters that need to mint MCP credentials. When the
-   * Claude CLI execution adapter is the selected endpoint and `mcpSession` is
-   * present, the adapter mounts `/api/mcp/v1` via `--mcp-config` using a
-   * short-lived JWT issued for this user/agent/thread. Absent for non-coworker
-   * inference (eval runners, background jobs without an attributable owner) —
-   * the cli-adapter then falls back to the legacy text-described tool path.
-   */
-  mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession;
-}
 
 // ─── Route preparation (shared by routeAndCall + previewRoute) ───────────────
 
@@ -267,14 +157,17 @@ async function prepareRoute(
       // per-dimension max-merge in inferContract, which the posture can raise but
       // not drop below. See docs/design/2026-06-25-coworker-work-orchestration.md.)
       budgetClass: posture?.routeContext.budgetClass ?? options?.budgetClass,
+      allowedProviders: options?.allowedProviders,
+      deniedProviders: options?.deniedProviders,
+      residencyPolicy:
+        options?.modelTier === "local" || localOnlyInference
+          ? "local_only"
+          : options?.residencyPolicy,
       requiredModelClass: options?.requiredModelClass,
       // EP-MODEL-TIER-ROUTING: a "local"-tier call forces local_only (keep
       // small/simple work on-box) even when the global switch is off; "robust"
       // leaves routing free to prefer a frontier endpoint. The global local-only
       // switch still wins for every call (the sovereign master toggle).
-      ...(options?.modelTier === "local" || localOnlyInference
-        ? { residencyPolicy: "local_only" as const }
-        : {}),
     },
   );
 

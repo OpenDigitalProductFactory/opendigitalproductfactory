@@ -33,6 +33,8 @@
 
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { classifyRetrySafePreDispatchFailure } from "./build-engine-selection";
+import { formatBuildEngineSelectionEvidence } from "./build-engine-selection-runtime";
 
 type DispatchOutcome =
   | { kind: "skipped-no-bi"; reason: string }
@@ -145,39 +147,30 @@ export async function dispatchIdeateForApprovedBuild(params: {
       return outcome;
     }
 
-    // Resolve dispatch provider config. The "agentic" default has no external
-    // provider — dispatchIdeateResearch would return an "auth error" anyway.
-    // Short-circuit to a clean skip with a meaningful BuildActivity row.
-    const { getBuildStudioConfig } = await import("@/lib/integrate/build-studio-config");
-    const config = await getBuildStudioConfig();
-    // BI-0F291741/local-tuning: resolve per the configured engine. Without the
-    // `opencode` branch this fell through to codexProviderId (cloud chatgpt),
-    // so a fully-local install (provider="opencode", opencodeProviderId="local")
-    // silently ran Ideate research on the cloud instead of the local model.
-    const providerId = config.provider === "claude"
-      ? config.claudeProviderId
-      : config.provider === "grok"
-        ? config.grokProviderId
-        : config.provider === "opencode"
-          ? config.opencodeProviderId
-          : config.codexProviderId;
+    const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const { getBuildStudioConfig, isModelTierRoutingEnabled } = await import("@/lib/integrate/build-studio-config");
+    const modelTier = (await isModelTierRoutingEnabled())
+      ? getModelTier(null, bi.effortSize)
+      : undefined;
+    const deliverableSensitivity = deriveDeliverableSensitivity({
+      text: `${bi.title}\n${bi.body ?? ""}`,
+      workType: bi.workType,
+    });
+    const routingSensitivity = deliverableSensitivity === "high" ? "confidential" as const : "internal" as const;
 
-    if (config.provider === "agentic" || !providerId) {
+    // Resolve the same task-qualified selection used by model-selection preview
+    // and actual dispatch. A blocked result stops before phase work with one action.
+    const config = await getBuildStudioConfig({ modelTier, sensitivity: routingSensitivity });
+    const selection = config.selection;
+    if (!selection || selection.status === "blocked" || !selection.selected) {
       const outcome: DispatchOutcome = {
         kind: "skipped-no-provider",
-        reason: `No external CLI provider configured (provider=${config.provider}, providerId=${providerId || "(empty)"}). Configure Claude, Codex, or Grok in Admin > AI Providers to enable auto-dispatch.`,
+        reason: selection?.action ?? "No allowed healthy Build Studio engine remains. Review AI Readiness and retry.",
       };
       await logActivity(`Skipped auto-dispatch: ${outcome.reason}`);
       return outcome;
     }
-
-    const model = config.provider === "claude"
-      ? config.claudeModel
-      : config.provider === "grok"
-        ? config.grokModel
-        : config.provider === "opencode"
-          ? config.opencodeModel
-          : config.codexModel;
+    await logActivity(formatBuildEngineSelectionEvidence(selection));
 
     // The BI body is the canonical context for backlog-promoted drafts.
     // It typically contains problem statement, acceptance criteria, and
@@ -193,33 +186,43 @@ export async function dispatchIdeateForApprovedBuild(params: {
     ].filter((part) => part.trim().length > 0).join("\n\n");
 
     const startedAt = Date.now();
-    await logActivity(`Dispatching ideate research via ${config.provider} (provider=${providerId}, model=${model || "default"})`);
-
-    // EP-MODEL-TIER-ROUTING: route this build's ideate design generation to the
-    // model tier its size deserves — local for small/medium, robust/frontier for
-    // large/xlarge. Flag-gated; inert until DPF_BUILD_MODEL_TIER_ROUTING is on
-    // (and a robust endpoint + the global local-only switch off make robust route
-    // to cloud; otherwise it gracefully stays local).
-    const { getModelTier } = await import("@/lib/explore/build-process-matrix");
-    const { isModelTierRoutingEnabled } = await import("@/lib/integrate/build-studio-config");
-    const modelTier = (await isModelTierRoutingEnabled())
-      ? getModelTier(null, bi.effortSize) // tier is size-derived (P1); build.kind isn't in this select
-      : undefined;
 
     const { dispatchIdeateResearch } = await import("./ideate-dispatch");
-    const ideateResult = await dispatchIdeateResearch({
-      featureTitle,
-      featureDescription,
-      reusabilityScope: requestedReusabilityScope || "parameterizable",
-      userContext,
-      // businessContext: see select comment above — field does not exist on
-      // FeatureBuild. Passing undefined preserves the dispatch signature.
-      businessContext: undefined,
-      providerId,
-      model,
-      dispatchEngine: config.provider,
-      modelTier,
-    });
+    const attemptCandidates = [selection.selected, ...selection.fallbackChain.slice(0, 1)];
+    let ideateResult: Awaited<ReturnType<typeof dispatchIdeateResearch>> | null = null;
+    for (let attemptIndex = 0; attemptIndex < attemptCandidates.length; attemptIndex += 1) {
+      const attempt = attemptCandidates[attemptIndex]!;
+      await logActivity(
+        `${attemptIndex === 0 ? "Dispatching" : "Retrying"} ideate research via ${attempt.engine} `
+        + `(provider=${attempt.providerId}, model=${attempt.modelId || "default"})`,
+      );
+      ideateResult = await dispatchIdeateResearch({
+        featureTitle,
+        featureDescription,
+        reusabilityScope: requestedReusabilityScope || "parameterizable",
+        userContext,
+        businessContext: undefined,
+        providerId: attempt.providerId,
+        model: attempt.modelId ?? undefined,
+        dispatchEngine: attempt.engine,
+        modelTier,
+        sensitivity: routingSensitivity,
+      });
+      if (ideateResult.success) break;
+      const retryClass = classifyRetrySafePreDispatchFailure({
+        message: ideateResult.error ?? "",
+        durationMs: ideateResult.durationMs,
+      });
+      const next = attemptCandidates[attemptIndex + 1];
+      if (!retryClass || !next || selection.fallbackDisabled) break;
+      await logActivity(
+        `Ideate ${attempt.engine} ${retryClass} failure occurred before phase side effects; `
+        + `falling back once to ${next.engine} (provider=${next.providerId}).`,
+      );
+    }
+    if (!ideateResult) {
+      throw new Error("Build engine selection returned no Ideate dispatch attempt.");
+    }
 
     const durationMs = Date.now() - startedAt;
 

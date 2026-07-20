@@ -36,7 +36,9 @@ import type {
 import { mergeHappyPathStateIntoPlan } from "@/lib/explore/feature-build-types";
 import type { CodexResult } from "./codex-dispatch";
 import type { ClaudeResult } from "./claude-dispatch";
-import { getBuildStudioConfig } from "./build-studio-config";
+import { getBuildStudioConfig, type BuildStudioDispatchConfig } from "./build-studio-config";
+import { formatBuildEngineSelectionEvidence } from "./build-engine-selection-runtime";
+import { classifyRetrySafePreDispatchFailure, type BuildEngineCandidate } from "./build-engine-selection";
 import { assertAgentProviderCompatibility, type BuildAgentId } from "./sandbox/agent-runner-types";
 import { getBuildAgentRunner } from "./sandbox/agents";
 import { getBuildExecutionProvider } from "./sandbox/providers";
@@ -768,9 +770,11 @@ async function dispatchSpecialist(params: {
   parentThreadId: string;
   priorResults?: string;
   sessionId?: string;
+  dispatchConfig: BuildStudioDispatchConfig;
 }): Promise<SpecialistResult> {
-  const { task, userId, platformRole, isSuperuser, buildId, buildContext, parentThreadId, priorResults, sessionId } = params;
+  const { task, userId, platformRole, isSuperuser, buildId, buildContext, parentThreadId, priorResults, sessionId, dispatchConfig: config } = params;
   const role = task.specialist;
+  let agenticFallbackProviderId: string | null = null;
 
   // Emit dispatch event
   agentEventBus.emit(parentThreadId, {
@@ -781,8 +785,6 @@ async function dispatchSpecialist(params: {
   });
 
   // ─── CLI dispatch path: Codex or Claude Code running inside the sandbox ──
-  const config = await getBuildStudioConfig();
-
   if (config.provider === "codex" || config.provider === "claude" || config.provider === "grok" || config.provider === "opencode") {
     const onProgress = (message: string) => {
       agentEventBus.emit(parentThreadId, {
@@ -792,37 +794,65 @@ async function dispatchSpecialist(params: {
         message,
       });
     };
-    const { provider, runner } = resolveBuildProviderRunner({ agentId: config.provider });
     const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
-    const runResult = await runner.run(
-      provider,
-      {
-        id: containerId,
-        buildId,
-        providerId: provider.id,
-        containerId,
-      },
-      {
-        task,
-        buildId,
-        buildContext,
-        priorResults,
-        providerId: config.provider === "claude" ? config.claudeProviderId : config.provider === "grok" ? config.grokProviderId : config.provider === "opencode" ? config.opencodeProviderId : config.codexProviderId,
-        model: config.provider === "claude" ? config.claudeModel : config.provider === "grok" ? config.grokModel : config.provider === "opencode" ? config.opencodeModel : config.codexModel,
-        sessionId,
-        onProgress,
-      },
-    );
-    const cliResult: CodexResult | ClaudeResult = {
-      content: runResult.stdout || runResult.stderr,
-      success: runResult.exitCode === 0,
-      executedTools: [],
-      durationMs: runResult.durationMs,
-    };
+    const selectedCandidate = config.selection?.selected;
+    const cliAttempts: BuildEngineCandidate[] = selectedCandidate
+      ? [selectedCandidate, ...config.selection!.fallbackChain.slice(0, 1)]
+      : [];
+    let cliResult: CodexResult | ClaudeResult | null = null;
+    for (let attemptIndex = 0; attemptIndex < Math.max(1, cliAttempts.length); attemptIndex += 1) {
+      const candidate = cliAttempts[attemptIndex];
+      if (candidate?.engine === "agentic") {
+        agenticFallbackProviderId = candidate.providerId;
+        break;
+      }
+      const engine = candidate?.engine ?? config.provider;
+      const { provider, runner } = resolveBuildProviderRunner({ agentId: engine });
+      const runResult = await runner.run(
+        provider,
+        { id: containerId, buildId, providerId: provider.id, containerId },
+        {
+          task,
+          buildId,
+          buildContext,
+          priorResults,
+          providerId: candidate?.providerId
+            ?? (engine === "claude" ? config.claudeProviderId : engine === "grok" ? config.grokProviderId : engine === "opencode" ? config.opencodeProviderId : config.codexProviderId),
+          model: candidate?.modelId
+            ?? (engine === "claude" ? config.claudeModel : engine === "grok" ? config.grokModel : engine === "opencode" ? config.opencodeModel : config.codexModel),
+          sessionId,
+          onProgress,
+        },
+      );
+      cliResult = {
+        content: runResult.stdout || runResult.stderr,
+        success: runResult.exitCode === 0,
+        executedTools: [],
+        durationMs: runResult.durationMs,
+      };
+      if (cliResult.success) break;
+      const retryClass = classifyRetrySafePreDispatchFailure({
+        message: cliResult.content,
+        durationMs: cliResult.durationMs,
+      });
+      const next = cliAttempts[attemptIndex + 1];
+      if (!retryClass || !next || config.selection?.fallbackDisabled) break;
+      await prisma.buildActivity.create({
+        data: {
+          buildId,
+          tool: "engine_selection",
+          summary: `Build dispatch ${engine} ${retryClass} failure occurred before phase side effects; falling back once to ${next.engine} (provider=${next.providerId}).`,
+        },
+      }).catch(() => {});
+    }
 
-    const outcome = classifyOutcome(cliResult, role);
+    if (!cliResult && !agenticFallbackProviderId) {
+      throw new Error("Build engine selection returned no specialist dispatch attempt.");
+    }
 
-    if (isMissingSandboxToolSurfaceOutput(cliResult.content)) {
+    const outcome = cliResult ? classifyOutcome(cliResult, role) : "BLOCKED";
+
+    if (cliResult && isMissingSandboxToolSurfaceOutput(cliResult.content)) {
       agentEventBus.emit(parentThreadId, {
         type: "orchestrator:specialist_retry",
         buildId,
@@ -831,7 +861,7 @@ async function dispatchSpecialist(params: {
           "CLI session reported that the Build Studio sandbox tool set is not exposed; retrying through the platform agentic tool path.",
         attempt: 1,
       });
-    } else {
+    } else if (cliResult && !agenticFallbackProviderId) {
       agentEventBus.emit(parentThreadId, {
         type: "orchestrator:task_complete",
         buildId,
@@ -891,7 +921,9 @@ async function dispatchSpecialist(params: {
       routeContext: "/build",
       agentId,
       threadId: thread.id,
-      modelRequirements: modelReqs,
+      modelRequirements: agenticFallbackProviderId || config.selection?.selected?.engine === "agentic"
+        ? { ...modelReqs, allowedProviders: [agenticFallbackProviderId ?? config.selection!.selected!.providerId] }
+        : modelReqs,
       requireTools: true,
       onProgress: (event: AgentEvent) => agentEventBus.emit(parentThreadId, event),
     });
@@ -1063,10 +1095,40 @@ export async function runBuildOrchestrator(params: {
     console.warn("[orchestrator] Could not read prior task results, starting fresh:", err);
   }
 
-  // ─── Pre-flight check: verify CLI dispatch auth is available ─────────────
-  // Catch missing OAuth tokens BEFORE dispatching 14 tasks that all fail with
-  // the same auth error. One clear message is better than 14 cryptic ones.
-  const preflightConfig = await getBuildStudioConfig();
+  // ─── Pre-flight check: select one policy-qualified healthy engine ─────────
+  // The shared selector owns auth, health, capacity, residency, sensitivity,
+  // capability, and hard-pin gates before any specialist side effect begins.
+  const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+  const buildSensitivity = deriveDeliverableSensitivity({ text: buildContext });
+  const preflightConfig = await getBuildStudioConfig({
+    sensitivity: buildSensitivity === "high" ? "confidential" : "internal",
+  });
+
+  if (preflightConfig.selection) {
+    await prisma.buildActivity.create({
+      data: {
+        buildId,
+        tool: "engine_selection",
+        summary: formatBuildEngineSelectionEvidence(preflightConfig.selection),
+      },
+    }).catch((err) => console.warn("[orchestrator] Could not persist engine selection evidence:", err));
+  }
+  if (!preflightConfig.selection || preflightConfig.selection.status === "blocked" || !preflightConfig.selection.selected) {
+    return {
+      content: formatCoworkerOperationalCloseout({
+        status: "blocked before implementation",
+        evidence: preflightConfig.selection?.reason ?? "Build Studio could not resolve an allowed healthy execution engine.",
+        nextAction: preflightConfig.selection?.action ?? "Review AI Readiness, restore one allowed engine, and retry implementation.",
+        owner: "operator/admin",
+      }),
+      totalTasks: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+      specialistResults: [],
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+    };
+  }
 
   try {
     const buildRecord = await prisma.featureBuild.findUnique({
@@ -1094,91 +1156,6 @@ export async function runBuildOrchestrator(params: {
     }
   } catch (err) {
     console.warn("[orchestrator] Could not persist execution engine metadata:", err);
-  }
-
-  if (preflightConfig.provider === "codex" || preflightConfig.provider === "claude" || preflightConfig.provider === "grok") {
-    try {
-      const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
-      const providerId = preflightConfig.provider === "claude"
-        ? preflightConfig.claudeProviderId
-        : preflightConfig.provider === "grok"
-          ? preflightConfig.grokProviderId
-          : preflightConfig.codexProviderId;
-      const cred = await getDecryptedCredential(providerId);
-      const hasAuth = preflightConfig.provider === "claude"
-        ? !!(cred?.cachedToken || cred?.secretRef)
-        : preflightConfig.provider === "grok"
-          ? !!cred?.cachedToken
-          : !!cred?.cachedToken;
-      if (!hasAuth) {
-        const label = preflightConfig.provider === "claude" ? "Claude / Anthropic" : preflightConfig.provider === "grok" ? "xAI / Grok" : "OpenAI / Codex";
-        const buildRecord = await prisma.featureBuild.findUnique({
-          where: { buildId },
-          select: { plan: true },
-        });
-        if (buildRecord) {
-          await prisma.featureBuild.update({
-            where: { buildId },
-            data: {
-              plan: mergeHappyPathStateIntoPlan(
-                (buildRecord.plan as Record<string, unknown> | null) ?? null,
-                {
-                  execution: {
-                    engine: preflightConfig.provider,
-                    source: null,
-                    status: "failed",
-                    failureStage: "connect",
-                  },
-                },
-              ) as import("@dpf/db").Prisma.InputJsonValue,
-            },
-          }).catch(() => {});
-        }
-        return {
-          content: formatCoworkerOperationalCloseout({
-            status: "blocked before implementation",
-            evidence: `the ${label} provider "${providerId}" is not connected.`,
-            nextAction: "connect the provider in Admin > AI Workforce > External Services, or switch providers in Build Studio.",
-            owner: "operator/admin",
-          }),
-          totalTasks: 0, completedTasks: 0, failedTasks: 0,
-          specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
-        };
-      }
-    } catch {
-      const buildRecord = await prisma.featureBuild.findUnique({
-        where: { buildId },
-        select: { plan: true },
-      });
-      if (buildRecord) {
-        await prisma.featureBuild.update({
-          where: { buildId },
-          data: {
-            plan: mergeHappyPathStateIntoPlan(
-              (buildRecord.plan as Record<string, unknown> | null) ?? null,
-              {
-                execution: {
-                  engine: preflightConfig.provider,
-                  source: null,
-                  status: "failed",
-                  failureStage: "connect",
-                },
-              },
-            ) as import("@dpf/db").Prisma.InputJsonValue,
-          },
-        }).catch(() => {});
-      }
-      return {
-        content: formatCoworkerOperationalCloseout({
-          status: "blocked before implementation",
-          evidence: "Build Studio could not verify AI provider credentials.",
-          nextAction: "confirm at least one code generation provider is connected in Admin > AI Workforce, then retry implementation.",
-          owner: "operator/admin",
-        }),
-        totalTasks: 0, completedTasks: 0, failedTasks: 0,
-        specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
-      };
-    }
   }
 
   // ─── Pre-flight check: sandbox test toolchain is loadable ────────────────
@@ -1269,14 +1246,7 @@ export async function runBuildOrchestrator(params: {
   // failure, now in the build phase. Serialize specialist dispatch for a local
   // engine; cloud subscription CLIs keep concurrency 2 for throughput within
   // their per-minute caps.
-  let localBuildEngine = false;
-  try {
-    const { getBuildStudioConfig } = await import("@/lib/integrate/build-studio-config");
-    const bsCfg = await getBuildStudioConfig();
-    localBuildEngine = bsCfg.provider === "opencode";
-  } catch {
-    /* default to cloud concurrency if the config read fails */
-  }
+  const localBuildEngine = preflightConfig.selection.selected.local;
   for (const phase of phases) {
     // Timeout check
     if (Date.now() - startTime > MAX_DURATION_ORCHESTRATOR_MS) {
@@ -1335,6 +1305,7 @@ export async function runBuildOrchestrator(params: {
             buildContext: scopedTaskContext,
             parentThreadId,
             priorResults: artifactSummaryForBatch || undefined,
+            dispatchConfig: preflightConfig,
             // sessionId omitted — see Layer 1 comment above
           });
           const artifactEntry = buildTaskArtifactEntry({
@@ -1513,6 +1484,7 @@ export async function runBuildOrchestrator(params: {
             };
             const res = await dispatchSpecialist({
               task: repairTask, userId, platformRole, isSuperuser, buildId, buildContext, parentThreadId,
+              dispatchConfig: preflightConfig,
             });
             allResults.push(res);
             return res.success;

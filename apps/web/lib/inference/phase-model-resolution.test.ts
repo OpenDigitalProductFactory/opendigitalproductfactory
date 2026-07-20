@@ -7,7 +7,7 @@ const mockPreviewRoute = vi.fn();
 const mockPreflight = vi.fn();
 
 vi.mock("@/lib/integrate/build-studio-config", () => ({
-  getBuildStudioConfig: () => mockGetConfig(),
+  getBuildStudioConfig: async () => withSelection(await mockGetConfig()),
 }));
 vi.mock("@/lib/inference/routed-inference", () => ({
   previewRoute: (...args: unknown[]) => mockPreviewRoute(...args),
@@ -47,6 +47,55 @@ const OPENCODE_CONFIG = {
   grokModel: "",
   opencodeModel: "qwen3-coder",
 };
+
+function withSelection<T extends {
+  provider: "claude" | "codex" | "grok" | "opencode" | "agentic";
+  claudeProviderId: string;
+  codexProviderId: string;
+  grokProviderId: string;
+  opencodeProviderId: string;
+  claudeModel: string;
+  opencodeModel: string;
+}>(config: T) {
+  if ("selection" in config) return config;
+  const providerId = config.provider === "claude"
+    ? config.claudeProviderId
+    : config.provider === "codex"
+      ? config.codexProviderId
+      : config.provider === "grok"
+        ? config.grokProviderId
+        : config.opencodeProviderId || "chatgpt";
+  return {
+    ...config,
+    enginePolicy: "auto" as const,
+    pinnedEngine: null,
+    selection: {
+      status: "selected" as const,
+      policy: { mode: "auto" as const, pinnedEngine: null },
+      selected: {
+        engine: config.provider,
+        providerId,
+        modelId: config.provider === "opencode" ? config.opencodeModel : config.provider === "claude" ? config.claudeModel : null,
+        local: config.provider === "opencode",
+        registered: true,
+        present: true,
+        providerStatus: "active",
+        authMethod: config.provider === "opencode" ? "none" : "oauth",
+        credentialStatus: config.provider === "opencode" ? null : "active",
+        credentialExpiresAt: null,
+        providerCapacityState: "available",
+        providerRetryAt: null,
+        cliRetryAt: null,
+        providerHealth: "healthy" as const,
+      },
+      reason: `Selected ${providerId} through routeEndpointV2.`,
+      rejected: [],
+      fallbackChain: [],
+      fallbackDisabled: false,
+      action: null,
+    },
+  };
+}
 
 function cloudWinner() {
   return {
@@ -144,7 +193,7 @@ describe("resolveModelSelectionByPhase — the local-but-cloud blind spot", () =
 
   it("flags every reasoning phase that routes to cloud when the build engine is Local (OpenCode)", async () => {
     mockGetConfig.mockResolvedValue(OPENCODE_CONFIG);
-    mockPreviewRoute.mockResolvedValue(cloudWinner()); // ideate, plan, design-review, plan-review
+    mockPreviewRoute.mockResolvedValue(cloudWinner()); // plan, design-review, plan-review
     mockPreflight.mockResolvedValue(HEALTHY_PREFLIGHT); // build (local)
 
     const overview = await resolveModelSelectionByPhase();
@@ -156,7 +205,11 @@ describe("resolveModelSelectionByPhase — the local-but-cloud blind spot", () =
     expect(build.isLocal).toBe(true);
     expect(build.mechanism).toBe("local-opencode");
 
-    for (const phase of ["ideate", "plan", "design-review", "plan-review"] as const) {
+    const ideate = overview.phases.find((phase) => phase.phase === "ideate")!;
+    expect(ideate.isLocal).toBe(true);
+    expect(ideate.providerId).toBe("local");
+
+    for (const phase of ["plan", "design-review", "plan-review"] as const) {
       const p = overview.phases.find((x) => x.phase === phase)!;
       expect(p.isLocal).toBe(false);
       expect(p.flags.some((f) => f.code === "local-intent-cloud-reasoning")).toBe(true);
@@ -236,14 +289,14 @@ describe("resolveModelSelectionByPhase — non-local engines", () => {
     expect(ideate.providerId).toBe("anthropic");
 
     const build = overview.phases.find((p) => p.phase === "build")!;
-    expect(build.mechanism).toBe("routed");
-    expect(build.flags.some((f) => f.code === "build-engine-not-applied")).toBe(true);
+    expect(build.mechanism).toBe("vendor-cli");
+    expect(build.providerId).toBe("anthropic");
 
     // Not opencode → no local-intent mismatch flag anywhere.
     expect(overview.flags.some((f) => f.code === "local-intent-cloud-reasoning")).toBe(false);
   });
 
-  it("marks ideate unsupported under the Agentic Loop engine", async () => {
+  it("reports the selector's supported agentic fallback for Ideate", async () => {
     mockGetConfig.mockResolvedValue({
       ...OPENCODE_CONFIG,
       provider: "agentic" as const,
@@ -254,8 +307,9 @@ describe("resolveModelSelectionByPhase — non-local engines", () => {
 
     const overview = await resolveModelSelectionByPhase();
     const ideate = overview.phases.find((p) => p.phase === "ideate")!;
-    expect(ideate.mechanism).toBe("unsupported");
-    expect(ideate.flags.some((f) => f.code === "ideate-agentic-unsupported")).toBe(true);
+    expect(ideate.mechanism).toBe("routed");
+    expect(ideate.providerId).toBe("chatgpt");
+    expect(ideate.flags).toEqual([]);
   });
 
   it("surfaces a configuration gap when no providers are eligible", async () => {
@@ -264,6 +318,16 @@ describe("resolveModelSelectionByPhase — non-local engines", () => {
       provider: "agentic" as const,
       opencodeProviderId: "",
       opencodeModel: "",
+      selection: {
+        status: "blocked" as const,
+        policy: { mode: "auto" as const, pinnedEngine: null },
+        selected: null,
+        reason: "No endpoint satisfied the Build Studio contract.",
+        rejected: [],
+        fallbackChain: [],
+        fallbackDisabled: false,
+        action: "Connect one allowed provider and retry.",
+      },
     });
     mockPreviewRoute.mockRejectedValue(new Error("No active endpoint manifests found."));
 

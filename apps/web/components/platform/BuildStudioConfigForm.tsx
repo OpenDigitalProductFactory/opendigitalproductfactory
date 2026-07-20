@@ -4,9 +4,7 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { saveBuildStudioConfig, checkLocalEndpoint, applyLocalModelContext } from "@/lib/actions/build-studio";
 import { probeBuildEnginesAction } from "@/lib/actions/build-engine-actions";
-import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
 import type { LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
-import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 import { ContributorMcpReadinessCard } from "./ContributorMcpReadinessCard";
 import {
@@ -14,47 +12,8 @@ import {
   isConfigured,
   ProviderRadio,
   type EngineReadinessBadge,
-  type ProviderOption,
 } from "./BuildStudioProviderControls";
-
-type Props = {
-  config: BuildStudioDispatchConfig;
-  claudeProviders: ProviderOption[];
-  codexProviders: ProviderOption[];
-  grokProviders: ProviderOption[];
-  opencodeProviders: ProviderOption[];
-  contributorMcpReadiness: ContributorMcpReadiness;
-  /** Per-engine sandbox readiness (engineId → last probe), keyed "claude"|"codex"|"grok". */
-  engineReadiness?: Record<string, EngineReadinessBadge>;
-  baseUrl: string;
-  canWrite: boolean;
-};
-
-const CLAUDE_MODELS = [
-  { value: "haiku", label: "Haiku", desc: "fastest, cheapest" },
-  { value: "sonnet", label: "Sonnet", desc: "best balance", recommended: true },
-  { value: "opus", label: "Opus", desc: "most capable, slower" },
-];
-
-function describeOpenCodeProvider(providerId: string, providers: ProviderOption[]): {
-  label: string;
-  desc: string;
-  isLocal: boolean;
-  providerName: string;
-} {
-  const selected = providers.find((p) => p.providerId === providerId) ?? providers[0];
-  const selectedId = selected?.providerId ?? providerId;
-  const isLocal = selectedId === "local" || selectedId === "ollama" || selectedId === "";
-  const providerName = selected?.name ?? "OpenCode";
-  return {
-    label: isLocal ? "Local model (OpenCode) (Preview)" : `${providerName} (OpenCode) (Preview)`,
-    desc: isLocal
-      ? "Your own local LLM · no credential, runs offline"
-      : `${providerName} via OpenCode · uses inherited provider credentials`,
-    isLocal,
-    providerName,
-  };
-}
+import { CLAUDE_MODELS, describeOpenCodeProvider, shouldShowPinnedEngineMissingWarning, type BuildStudioConfigFormProps } from "./build-studio-config-form-model";
 
 export function BuildStudioConfigForm({
   config,
@@ -66,8 +25,11 @@ export function BuildStudioConfigForm({
   engineReadiness,
   baseUrl,
   canWrite,
-}: Props) {
+}: BuildStudioConfigFormProps) {
   const [provider, setProvider] = useState(config.provider);
+  const [enginePolicy, setEnginePolicy] = useState<"auto" | "pinned">(
+    config.enginePolicy === "pinned" ? "pinned" : "auto",
+  );
   const [claudeProviderId, setClaudeProviderId] = useState(config.claudeProviderId);
   const [codexProviderId, setCodexProviderId] = useState(config.codexProviderId);
   const [grokProviderId, setGrokProviderId] = useState(config.grokProviderId);
@@ -94,6 +56,7 @@ export function BuildStudioConfigForm({
   // BI-E06BB38A: technical knobs (raw context window, manual model, Apply/Test)
   // live behind this disclosure so the default view never asks for a token count.
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showModelAdvanced, setShowModelAdvanced] = useState(false);
   // Tracks the last opencode providerId we preflighted, so switching the
   // selected local provider (e.g. local → Ollama) re-probes the new endpoint
   // instead of showing the previous provider's stale readiness.
@@ -216,6 +179,8 @@ export function BuildStudioConfigForm({
       try {
         await saveBuildStudioConfig({
           provider,
+          enginePolicy,
+          pinnedEngine: enginePolicy === "pinned" ? provider : null,
           claudeProviderId,
           codexProviderId,
           grokProviderId,
@@ -319,7 +284,7 @@ export function BuildStudioConfigForm({
               Build Dispatch Engine
             </div>
             <p style={{ fontSize: 11, color: "var(--dpf-muted)", margin: 0 }}>
-              Choose which CLI agent executes build tasks in the sandbox.
+              Auto selects the best healthy engine for each task inside your policy boundaries.
             </p>
           </div>
           {canWrite && (
@@ -352,12 +317,45 @@ export function BuildStudioConfigForm({
           )}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", border: `1px solid ${enginePolicy === "auto" ? "var(--dpf-accent)" : "var(--dpf-border)"}`, borderRadius: 8, cursor: canWrite ? "pointer" : "default" }}>
+          <input
+            type="radio"
+            name="enginePolicy"
+            value="auto"
+            checked={enginePolicy === "auto"}
+            onChange={() => setEnginePolicy("auto")}
+            disabled={!canWrite}
+          />
+          <span>
+            <strong style={{ color: "var(--dpf-text)", fontSize: 12 }}>Auto (recommended)</strong>
+            <span style={{ display: "block", color: "var(--dpf-muted)", fontSize: 11, marginTop: 2 }}>
+              Selected now: {config.selection?.selected?.engine ?? config.provider}. {config.selection?.reason ?? "Selection updates from live readiness and routing evidence."}
+            </span>
+            {config.selection && config.selection.fallbackChain.length > 0 && (
+              <span style={{ display: "block", color: "var(--dpf-muted)", fontSize: 10, marginTop: 2 }}>
+                Fallback: {config.selection.fallbackChain.map((entry) => entry.engine).join(" → ")}
+              </span>
+            )}
+          </span>
+        </label>
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((shown) => !shown)}
+          aria-expanded={showAdvanced}
+          style={{ marginTop: 8, padding: 0, border: 0, background: "transparent", color: "var(--dpf-accent)", fontSize: 11, cursor: "pointer" }}
+        >
+          {showAdvanced ? "Hide advanced execution policy" : "Advanced execution policy"}
+        </button>
+
+        {showAdvanced && <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+          <p style={{ margin: 0, color: "var(--dpf-warning)", fontSize: 10 }}>
+            Hard pinning disables automatic fallback. Use it only for deliberate diagnostics or controlled tests.
+          </p>
           <ProviderRadio
             name="provider"
             value="claude"
             checked={provider === "claude"}
-            onChange={() => setProvider("claude")}
+            onChange={() => { setProvider("claude"); setEnginePolicy("pinned"); }}
             disabled={!canWrite || !hasClaudeCreds}
             label="Claude Code CLI"
             desc="Anthropic models"
@@ -369,7 +367,7 @@ export function BuildStudioConfigForm({
             name="provider"
             value="codex"
             checked={provider === "codex"}
-            onChange={() => setProvider("codex")}
+            onChange={() => { setProvider("codex"); setEnginePolicy("pinned"); }}
             disabled={!canWrite || !hasCodexCreds}
             label="Codex CLI"
             desc="OpenAI models"
@@ -381,7 +379,7 @@ export function BuildStudioConfigForm({
             name="provider"
             value="grok"
             checked={provider === "grok"}
-            onChange={() => setProvider("grok")}
+            onChange={() => { setProvider("grok"); setEnginePolicy("pinned"); }}
             disabled={!canWrite || !hasGrokCreds}
             label="Grok CLI (Preview)"
             desc="xAI models · headless grok -p"
@@ -393,7 +391,7 @@ export function BuildStudioConfigForm({
             name="provider"
             value="opencode"
             checked={provider === "opencode"}
-            onChange={() => setProvider("opencode")}
+            onChange={() => { setProvider("opencode"); setEnginePolicy("pinned"); }}
             disabled={!canWrite || !hasOpencodeProvider}
             label={openCodeDescription.label}
             desc={openCodeDescription.desc}
@@ -405,15 +403,18 @@ export function BuildStudioConfigForm({
             name="provider"
             value="agentic"
             checked={provider === "agentic"}
-            onChange={() => setProvider("agentic")}
+            onChange={() => { setProvider("agentic"); setEnginePolicy("pinned"); }}
             disabled={!canWrite}
             label="Agentic Loop (Legacy)"
             desc="Built-in tool-calling loop"
           />
-        </div>
-        {(provider === "claude" || provider === "codex" || provider === "grok" || provider === "opencode") &&
-          !probingIds.includes(provider) &&
-          readiness[provider]?.present === false && (
+        </div>}
+        {shouldShowPinnedEngineMissingWarning({
+          enginePolicy,
+          provider,
+          probing: probingIds.includes(provider),
+          present: readiness[provider]?.present,
+        }) && (
             <div role="status" style={{ marginTop: 10, fontSize: 11, color: "var(--dpf-warning)" }}>
               ⚠ {provider.charAt(0).toUpperCase() + provider.slice(1)} is selected but not installed in the sandbox —
               builds dispatched to it will fail until you provision it (use the “Provision … in sandbox” button above).
@@ -676,8 +677,8 @@ export function BuildStudioConfigForm({
                 <>
                   <button
                     type="button"
-                    onClick={() => setShowAdvanced(v => !v)}
-                    aria-expanded={showAdvanced}
+                    onClick={() => setShowModelAdvanced(v => !v)}
+                    aria-expanded={showModelAdvanced}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -688,12 +689,12 @@ export function BuildStudioConfigForm({
                       color: "var(--dpf-muted)",
                       fontSize: 11,
                       padding: 0,
-                      marginBottom: showAdvanced ? 8 : 0,
+                      marginBottom: showModelAdvanced ? 8 : 0,
                     }}
                   >
-                    <span>{showAdvanced ? "▾" : "▸"}</span> Advanced
+                    <span>{showModelAdvanced ? "▾" : "▸"}</span> Advanced
                   </button>
-                  {showAdvanced && (
+                  {showModelAdvanced && (
                     <div style={{ borderLeft: "2px solid var(--dpf-border)", paddingLeft: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
                         Model:

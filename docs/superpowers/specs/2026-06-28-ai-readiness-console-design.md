@@ -202,6 +202,14 @@ The default policy should be automatic:
 
 The Build Dispatch Engine radio group should move behind "Advanced execution policy" or become a segmented override with clear impact copy. The default row should say what will happen, not ask the operator to pick from engine names.
 
+The automatic policy is one capability- and policy-qualified selection, reused by `resolve_model_selection`, Ideate dispatch, and CLI-backed build dispatch. It is not a second load balancer: engine readiness and credentials narrow the provider set, then the existing `RequestContract` + `routeEndpointV2` pipeline supplies capability filtering, provider-policy fences, capacity scoring, the selected endpoint, and the ordered fallback chain.
+
+Before routing, Build Studio excludes an engine when its registered `BuildEngineState` is absent or not present, its credential is missing/expired/auth-failed, its CLI or provider retry window is active, or its provider is currently unhealthy. The route contract then enforces sensitivity, residency, tool, context, model-class, and cost posture. Hard policy always outranks score. Local-only work cannot cross to cloud; restricted/sensitive work cannot cross to an endpoint without clearance; an explicit operator hard pin cannot fall through to another engine.
+
+`Auto` is the default policy. A deliberate hard pin remains under Advanced execution policy for diagnostics and controlled tests. A pinned failure must name the failed engine and say that automatic fallback was disabled. In Auto mode, only a retry-safe failure before phase side effects (authentication, rate limit, or availability) may advance once to the next already-qualified engine. The retry uses the same phase idempotency guard and must not re-run a phase after evidence or source mutations begin.
+
+Every selection records the selected engine/provider/model, routing rationale, rejected candidates with reason codes, and the ordered fallback chain. BuildActivity and the progress projection expose the same evidence. If no allowed healthy candidate remains, the phase blocks before work with one actionable explanation; operator attention is not requested while an automatic candidate remains.
+
 ### 7.3 Tool access
 
 Tool Access should reuse `ContributorMcpReadiness`:
@@ -381,6 +389,7 @@ Required tests for implementation:
 - Unit tests proving Z.ai-style "model provider without tool support" is model supply, not a build engine.
 - Component tests that default provider setup does not render manual discover/profile/eval/probe/tier controls outside diagnostics.
 - Component tests that Build Studio default view renders the selected policy and one action, not five engine radios.
+- Selector tests for expired credentials, mid-pre-dispatch auth failure, active retry windows, shared capacity saturation, local-only policy, hard pins, no-candidate explanations, idempotent one-hop retry, and selection/evidence parity.
 - Existing `contributor-readiness` tests remain authoritative for MCP domain behavior.
 - `pnpm --filter web build` for TypeScript and Next build coverage.
 - UX verification on an authenticated install: visit `/platform/ai/readiness`, provider detail, Build Studio, and routing diagnostics.

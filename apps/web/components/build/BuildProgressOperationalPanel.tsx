@@ -102,6 +102,13 @@ export function BuildProgressOperationalPanel({ projection, engineerView = false
           )}
         </section>
 
+        {projection.engineSelection && (
+          <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3" aria-label="Build engine selection">
+            <p className="text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">Execution engine</p>
+            <p className="mt-1 text-sm text-[var(--dpf-text)]">{projection.engineSelection.summary}</p>
+          </section>
+        )}
+
         <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
           <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Task list</h3>
           <div className="mt-2 space-y-1">
