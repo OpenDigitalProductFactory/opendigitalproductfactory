@@ -3,6 +3,8 @@
 // Classification driven by table-classification.ts.
 
 import { getTableSensitivity } from "./table-classification";
+import { spawn, type ChildProcess } from "node:child_process";
+import { pipeline } from "node:stream/promises";
 
 // -- Obfuscation Helpers --
 
@@ -63,6 +65,11 @@ export function shouldSkipTable(tableName: string): boolean {
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
+type RawDatabaseClient = Pick<
+  PrismaClient,
+  "$queryRawUnsafe" | "$executeRawUnsafe"
+>;
+
 /** Tables that contain audit/log data — clone only the last N rows with obfuscation */
 const AUDIT_TABLES = new Set([
   "ComplianceAuditLog",
@@ -74,10 +81,112 @@ const AUDIT_TABLES = new Set([
 /** Maximum audit records to clone per table */
 const AUDIT_RECORD_LIMIT = 50;
 
-type ColumnTypeInfo = {
+export type ColumnTypeInfo = {
   dataType: string;
   udtName: string;
 };
+
+const OMITTED_NATIVE_TYPES = new Set(["tsvector", "vector"]);
+
+export function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Build a SELECT projection that never asks Prisma to deserialize native
+ * search/vector representations. Those values can encode source content, so
+ * they are intentionally omitted rather than copied as text.
+ */
+export function buildSanitizedSelectList(
+  columnTypes: ReadonlyMap<string, ColumnTypeInfo>,
+): string {
+  return [...columnTypes.entries()]
+    .map(([columnName, type]) => {
+      const quoted = quoteIdentifier(columnName);
+      return OMITTED_NATIVE_TYPES.has(type.udtName)
+        ? `NULL::text AS ${quoted}`
+        : quoted;
+    })
+    .join(", ");
+}
+
+export function buildDestinationResetSql(tableNames: readonly string[]): string | null {
+  const applicationTables = tableNames.filter((name) => name !== "_prisma_migrations");
+  if (applicationTables.length === 0) return null;
+  return `TRUNCATE TABLE ${applicationTables.map(quoteIdentifier).join(", ")} RESTART IDENTITY CASCADE`;
+}
+
+/**
+ * A clone cannot share one transaction with pg_dump/psql child processes.
+ * Make publication fail-safe by clearing the disposable destination first and
+ * clearing it again before propagating any clone failure.
+ */
+export async function runWithDestinationCleanup<T>(
+  resetDestination: () => Promise<void>,
+  clone: () => Promise<T>,
+): Promise<T> {
+  await resetDestination();
+  try {
+    return await clone();
+  } catch (cloneError) {
+    try {
+      await resetDestination();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [cloneError, cleanupError],
+        "Sanitized clone failed and destination cleanup also failed",
+      );
+    }
+    throw cloneError;
+  }
+}
+
+export function buildPgDumpArgs(prodUrl: string, tableName: string): string[] {
+  return [
+    `--dbname=${prodUrl}`,
+    "--data-only",
+    `--table=public.${quoteIdentifier(tableName)}`,
+    "--no-owner",
+    "--no-privileges",
+  ];
+}
+
+export function buildPsqlArgs(devUrl: string): string[] {
+  return [`--dbname=${devUrl}`, "--set=ON_ERROR_STOP=1"];
+}
+
+export function buildPsqlEnvironment(
+  base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const replicationOption = "-c session_replication_role=replica";
+  return {
+    ...base,
+    PGOPTIONS: base.PGOPTIONS
+      ? `${base.PGOPTIONS} ${replicationOption}`
+      : replicationOption,
+  };
+}
+
+export type DatabaseIdentity = {
+  databaseName: string;
+  serverAddress: string;
+  serverPort: number | null;
+};
+
+export function assertDistinctDatabaseIdentities(
+  production: DatabaseIdentity,
+  destination: DatabaseIdentity,
+): void {
+  if (
+    production.databaseName === destination.databaseName
+    && production.serverAddress === destination.serverAddress
+    && production.serverPort === destination.serverPort
+  ) {
+    throw new Error(
+      "PRODUCTION_DATABASE_URL and DATABASE_URL resolve to the same PostgreSQL database; refusing to clear the source",
+    );
+  }
+}
 
 export function prepareInsertParameter(
   value: unknown,
@@ -161,106 +270,159 @@ export async function runSanitizedClone(): Promise<void> {
     await prod.$connect();
     await dev.$connect();
 
-    // Get all table names from production
-    const tables: Array<{ tablename: string }> = await prod.$queryRaw`
-      SELECT tablename FROM pg_tables
-      WHERE schemaname = 'public'
-      AND tablename != '_prisma_migrations'
-      ORDER BY tablename
-    `;
+    const [productionIdentity, destinationIdentity] = await Promise.all([
+      readDatabaseIdentity(prod),
+      readDatabaseIdentity(dev),
+    ]);
+    assertDistinctDatabaseIdentities(productionIdentity, destinationIdentity);
 
-    console.log(`[sanitized-clone] Found ${tables.length} tables to process`);
+    const destinationTables = await listPublicTables(dev, true);
 
-    // Build a stable ID-to-index map from the User table for deterministic obfuscation
-    const userIdMap = new Map<string, number>();
-    const users: Array<{ id: string }> = await prod.$queryRaw`SELECT id FROM "User" ORDER BY id`;
-    users.forEach((u, i) => userIdMap.set(u.id, i + 1));
+    await runWithDestinationCleanup(
+      () => resetDestinationData(dev, destinationTables.map(({ tablename }) => tablename)),
+      async () => {
+        const tables = await listPublicTables(prod, false);
+        console.log(`[sanitized-clone] Found ${tables.length} tables to process`);
 
-    // Disable all FK constraints globally for the clone operation
-    await dev.$executeRawUnsafe(`SET session_replication_role = replica`);
+        // Build a stable ID-to-index map from the User table for deterministic obfuscation.
+        // This happens after the initial reset so even an early source-query failure
+        // cannot leave a previously partial preview dataset available.
+        const userIdMap = new Map<string, number>();
+        const users: Array<{ id: string }> = await prod.$queryRaw`SELECT id FROM "User" ORDER BY id`;
+        users.forEach((u, i) => userIdMap.set(u.id, i + 1));
 
-    let autoIndex = users.length; // Counter for rows without a user ID reference
+        let autoIndex = users.length;
 
-    for (const { tablename } of tables) {
-      const sensitivity = getTableSensitivity(tablename);
+        for (const { tablename } of tables) {
+          const sensitivity = getTableSensitivity(tablename);
 
-      // Audit tables: copy last N rows via SQL COPY (no PII in these tables).
-      // Uses a temp view to limit rows, then pg_dump copies it.
-      if (AUDIT_TABLES.has(tablename)) {
-        const countResult: Array<{ count: bigint }> = await prod.$queryRawUnsafe(
-          `SELECT count(*) as count FROM "${tablename}"`,
-        );
-        const total = Number(countResult[0]?.count ?? 0);
-        if (total === 0) {
-          console.log(`  AUDIT (empty): ${tablename}`);
-          continue;
-        }
-        const copyCount = Math.min(total, AUDIT_RECORD_LIMIT);
-        console.log(`  AUDIT (last ${copyCount} of ${total}): ${tablename}`);
-        // Use pg_dump with full table — audit tables are small by nature
-        try {
-          await copyTableVerbatim(tablename, prodUrl, devUrl);
-        } catch (err) {
-          console.log(`  AUDIT (copy failed, skipping): ${tablename} — ${err instanceof Error ? err.message : String(err)}`);
-        }
-        continue;
-      }
-
-      if (sensitivity === "restricted") {
-        console.log(`  SKIP (restricted): ${tablename}`);
-        continue;
-      }
-
-      // Count source rows
-      const countResult: Array<{ count: bigint }> = await prod.$queryRawUnsafe(
-        `SELECT count(*) as count FROM "${tablename}"`,
-      );
-      const rowCount = Number(countResult[0]?.count ?? 0);
-
-      if (rowCount === 0) {
-        console.log(`  EMPTY: ${tablename}`);
-        continue;
-      }
-
-      if (sensitivity === "public" || sensitivity === "internal") {
-        // Copy verbatim using pg_dump — handles all column types reliably
-        console.log(`  COPY (${sensitivity}): ${tablename} (${rowCount} rows)`);
-        await copyTableVerbatim(tablename, prodUrl, devUrl);
-      } else if (sensitivity === "confidential") {
-        console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
-        const rows: Array<Record<string, unknown>> = await prod.$queryRawUnsafe(
-          `SELECT * FROM "${tablename}"`,
-        );
-        const obfuscated = rows.map((row) => {
-          // Derive index from user ID if present, otherwise use auto-incrementing counter
-          const userId = (row.id ?? row.userId ?? row.createdById) as string | undefined;
-          const idx = userId && userIdMap.has(userId)
-            ? userIdMap.get(userId)!
-            : ++autoIndex;
-          const result: Record<string, unknown> = {};
-          for (const [key, value] of Object.entries(row)) {
-            if (typeof value === "string" && key in PII_FIELDS) {
-              result[key] = obfuscateField(value, key, idx);
-            } else if (key === "passwordHash") {
-              result[key] = "$2a$10$devhashplaceholdernotreal000000000000000000000";
-            } else {
-              result[key] = value;
-            }
+          if (sensitivity === "restricted") {
+            console.log(`  SKIP (restricted): ${tablename}`);
+            continue;
           }
-          return result;
-        });
-        await insertRows(dev, tablename, obfuscated);
-      }
-    }
 
-    // Re-enable FK constraints
-    await dev.$executeRawUnsafe(`SET session_replication_role = DEFAULT`);
+          const quotedTable = quoteIdentifier(tablename);
+          const countResult: Array<{ count: bigint }> = await prod.$queryRawUnsafe(
+            `SELECT count(*) as count FROM ${quotedTable}`,
+          );
+          const rowCount = Number(countResult[0]?.count ?? 0);
+
+          if (rowCount === 0) {
+            console.log(`  EMPTY: ${tablename}`);
+            continue;
+          }
+
+          if (AUDIT_TABLES.has(tablename)) {
+            const copyCount = Math.min(rowCount, AUDIT_RECORD_LIMIT);
+            console.log(`  AUDIT (last ${copyCount} of ${rowCount}): ${tablename}`);
+            const rows = await selectRowsForSanitization(prod, tablename, copyCount);
+            const obfuscated = obfuscateRows(rows, userIdMap, () => ++autoIndex);
+            await insertRowsWithReplicationDisabled(dev, tablename, obfuscated);
+            continue;
+          }
+
+          if (sensitivity === "public" || sensitivity === "internal") {
+            console.log(`  COPY (${sensitivity}): ${tablename} (${rowCount} rows)`);
+            await copyTableVerbatim(tablename, prodUrl, devUrl);
+          } else if (sensitivity === "confidential") {
+            console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
+            const rows = await selectRowsForSanitization(prod, tablename);
+            const obfuscated = obfuscateRows(rows, userIdMap, () => ++autoIndex);
+            await insertRowsWithReplicationDisabled(dev, tablename, obfuscated);
+          }
+        }
+      },
+    );
 
     console.log("[sanitized-clone] PostgreSQL clone complete");
   } finally {
     await prod.$disconnect();
     await dev.$disconnect();
   }
+}
+
+async function readDatabaseIdentity(client: RawDatabaseClient): Promise<DatabaseIdentity> {
+  const rows = await client.$queryRawUnsafe<DatabaseIdentity[]>(
+    `SELECT current_database()::text AS "databaseName",
+            COALESCE(inet_server_addr()::text, 'local') AS "serverAddress",
+            inet_server_port()::int AS "serverPort"`,
+  );
+  const identity = rows[0];
+  if (!identity) throw new Error("Unable to identify PostgreSQL clone endpoint");
+  return identity;
+}
+
+async function listPublicTables(
+  client: RawDatabaseClient,
+  includeMigrationTable: boolean,
+): Promise<Array<{ tablename: string }>> {
+  const migrationPredicate = includeMigrationTable
+    ? ""
+    : "AND tablename != '_prisma_migrations'";
+  return client.$queryRawUnsafe<Array<{ tablename: string }>>(
+    `SELECT tablename
+       FROM pg_tables
+      WHERE schemaname = 'public'
+        ${migrationPredicate}
+      ORDER BY tablename`,
+  );
+}
+
+async function resetDestinationData(
+  client: RawDatabaseClient,
+  tableNames: readonly string[],
+): Promise<void> {
+  const resetSql = buildDestinationResetSql(tableNames);
+  if (!resetSql) return;
+  console.log(`[sanitized-clone] Resetting ${tableNames.filter((name) => name !== "_prisma_migrations").length} destination tables`);
+  await client.$executeRawUnsafe(resetSql);
+}
+
+async function selectRowsForSanitization(
+  client: RawDatabaseClient,
+  tableName: string,
+  limit?: number,
+): Promise<Array<Record<string, unknown>>> {
+  const columnTypes = await getColumnTypes(client, tableName);
+  const selectList = buildSanitizedSelectList(columnTypes);
+  if (!selectList) return [];
+
+  const quotedTable = quoteIdentifier(tableName);
+  const orderColumn = columnTypes.has("createdAt")
+    ? quoteIdentifier("createdAt")
+    : columnTypes.has("id")
+      ? quoteIdentifier("id")
+      : null;
+  const orderClause = limit && orderColumn ? ` ORDER BY ${orderColumn} DESC` : "";
+  const limitClause = limit ? ` LIMIT ${Math.max(0, Math.trunc(limit))}` : "";
+
+  return client.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT ${selectList} FROM ${quotedTable}${orderClause}${limitClause}`,
+  );
+}
+
+function obfuscateRows(
+  rows: Array<Record<string, unknown>>,
+  userIdMap: ReadonlyMap<string, number>,
+  nextIndex: () => number,
+): Array<Record<string, unknown>> {
+  return rows.map((row) => {
+    const userId = (row.id ?? row.userId ?? row.createdById) as string | undefined;
+    const idx = userId && userIdMap.has(userId)
+      ? userIdMap.get(userId)!
+      : nextIndex();
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (typeof value === "string" && key in PII_FIELDS) {
+        result[key] = obfuscateField(value, key, idx);
+      } else if (key === "passwordHash") {
+        result[key] = "$2a$10$devhashplaceholdernotreal000000000000000000000";
+      } else {
+        result[key] = value;
+      }
+    }
+    return result;
+  });
 }
 
 /**
@@ -273,21 +435,70 @@ async function copyTableVerbatim(
   prodUrl: string,
   devUrl: string,
 ): Promise<void> {
-  const { exec: execCb } = await import("child_process");
-  const { promisify } = await import("util");
-  const exec = promisify(execCb);
-  await exec(
-    `pg_dump "${prodUrl}" --data-only --table='"${tableName}"' --no-owner --no-privileges | psql "${devUrl}"`,
-  );
+  const pgDump = spawn("pg_dump", buildPgDumpArgs(prodUrl, tableName), {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const psql = spawn("psql", buildPsqlArgs(devUrl), {
+    stdio: ["pipe", "ignore", "pipe"],
+    env: buildPsqlEnvironment(),
+  });
+
+  const pgDumpError = collectBoundedStderr(pgDump);
+  const psqlError = collectBoundedStderr(psql);
+
+  try {
+    await Promise.all([
+      pipeline(pgDump.stdout!, psql.stdin!),
+      waitForChild(pgDump, "pg_dump", pgDumpError),
+      waitForChild(psql, "psql", psqlError),
+    ]);
+  } catch (error) {
+    pgDump.kill();
+    psql.kill();
+    throw error;
+  }
+}
+
+function collectBoundedStderr(child: ChildProcess): () => string {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  child.stderr?.on("data", (chunk: Buffer | string) => {
+    if (size >= 8_192) return;
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    const remaining = 8_192 - size;
+    chunks.push(buffer.subarray(0, remaining));
+    size += Math.min(buffer.length, remaining);
+  });
+  return () => Buffer.concat(chunks).toString("utf8").trim();
+}
+
+function waitForChild(
+  child: ChildProcess,
+  label: string,
+  stderr: () => string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      const detail = stderr();
+      reject(new Error(
+        `${label} failed (${signal ? `signal ${signal}` : `exit ${String(code)}`})${detail ? `: ${detail}` : ""}`,
+      ));
+    });
+  });
 }
 
 /**
  * Insert rows into a table using raw SQL with proper type casting.
  * Used for obfuscated rows where we've modified values in JS.
- * FK constraints are disabled globally via session_replication_role=replica.
+ * The caller disables FK triggers in the same transaction used for the inserts.
  */
 async function insertRows(
-  client: PrismaClient,
+  client: RawDatabaseClient,
   tableName: string,
   rows: Array<Record<string, unknown>>,
 ): Promise<void> {
@@ -308,17 +519,33 @@ async function insertRows(
       paramIdx++;
     }
 
-    const columnList = columns.map((c) => `"${c}"`).join(", ");
+    const columnList = columns.map(quoteIdentifier).join(", ");
 
     await client.$executeRawUnsafe(
-      `INSERT INTO "${tableName}" (${columnList}) VALUES (${castPlaceholders.join(", ")}) ON CONFLICT DO NOTHING`,
+      `INSERT INTO ${quoteIdentifier(tableName)} (${columnList}) VALUES (${castPlaceholders.join(", ")}) ON CONFLICT DO NOTHING`,
       ...values,
     );
   }
 }
 
-async function getColumnTypes(
+async function insertRowsWithReplicationDisabled(
   client: PrismaClient,
+  tableName: string,
+  rows: Array<Record<string, unknown>>,
+): Promise<void> {
+  if (rows.length === 0) return;
+
+  await client.$transaction(async (transaction) => {
+    // PrismaPg uses a pool, so a SET issued before the transaction is not
+    // guaranteed to govern the connection used by the inserts. SET LOCAL pins
+    // the trigger posture to this transaction and restores it automatically.
+    await transaction.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
+    await insertRows(transaction, tableName, rows);
+  });
+}
+
+async function getColumnTypes(
+  client: RawDatabaseClient,
   tableName: string,
 ): Promise<Map<string, ColumnTypeInfo>> {
   const rows = await client.$queryRawUnsafe<Array<{
@@ -329,7 +556,8 @@ async function getColumnTypes(
     `SELECT column_name AS "columnName", data_type AS "dataType", udt_name AS "udtName"
        FROM information_schema.columns
       WHERE table_schema = 'public'
-        AND table_name = $1`,
+        AND table_name = $1
+      ORDER BY ordinal_position`,
     tableName,
   );
 
