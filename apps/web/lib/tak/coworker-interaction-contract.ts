@@ -36,6 +36,10 @@ export type CoworkerOperationalCloseout = {
   owner: string;
 };
 
+export type CoworkerOperationalMessage = CoworkerOperationalCloseout & {
+  summary: string;
+};
+
 export function withCoworkerInteractionContract(prompt: string): string {
   if (prompt.includes(COWORKER_INTERACTION_CONTRACT_HEADING)) {
     return prompt;
@@ -54,4 +58,8 @@ export function formatCoworkerOperationalCloseout(closeout: CoworkerOperationalC
     `Next action: ${closeout.nextAction}`,
     `Owner: ${closeout.owner}`,
   ].join("\n");
+}
+
+export function formatCoworkerOperationalMessage(message: CoworkerOperationalMessage): string {
+  return `${message.summary.trim()}\n\n${formatCoworkerOperationalCloseout(message)}`;
 }

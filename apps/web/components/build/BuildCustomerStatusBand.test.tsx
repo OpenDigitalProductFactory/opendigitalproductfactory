@@ -10,6 +10,9 @@ function status(over: Partial<BuildStudioCustomerStatus> = {}): BuildStudioCusto
     whatIsBeingBuilt: "Add invoicing",
     lifecyclePosition: "In progress",
     worker: "Work in progress",
+    evidence: "Work capsule is actively executing.",
+    nextAction: "continue implementation until verification evidence is ready.",
+    owner: "Build Studio build agent",
     needsYou: false,
     ...over,
   };
@@ -20,6 +23,16 @@ describe("BuildCustomerStatusBand", () => {
     const html = renderToStaticMarkup(<BuildCustomerStatusBand status={status()} />);
     expect(html).toContain("In progress");
     expect(html).toContain("Work in progress");
+  });
+
+  it("renders evidence, next action, and owner for operational closeout", () => {
+    const html = renderToStaticMarkup(<BuildCustomerStatusBand status={status()} />);
+    expect(html).toContain("Evidence:");
+    expect(html).toContain("Work capsule is actively executing.");
+    expect(html).toContain("Next action:");
+    expect(html).toContain("continue implementation until verification evidence is ready.");
+    expect(html).toContain("Owner:");
+    expect(html).toContain("Build Studio build agent");
   });
 
   it("shows the 'Needs you' pill only when the work needs the operator", () => {

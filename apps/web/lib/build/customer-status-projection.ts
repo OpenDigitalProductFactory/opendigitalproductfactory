@@ -21,6 +21,12 @@ export interface BuildStudioCustomerStatus {
   lifecyclePosition: string;
   /** Who/what is working, translated to business-safe language — never an executor name. */
   worker: string;
+  /** Plain evidence behind the status, safe for customer/operator display. */
+  evidence: string;
+  /** One concrete next action that moves the work forward. */
+  nextAction: string;
+  /** The accountable owner for the next action. */
+  owner: string;
   /** True when the work is waiting on the human (surfaces "Needs you"). */
   needsYou: boolean;
 }
@@ -79,21 +85,92 @@ function workerLabel(state: WorkCaseState): string {
   }
 }
 
+function nextActionForState(state: WorkCaseState): { nextAction: string; owner: string } {
+  switch (state) {
+    case "waiting-on-person":
+    case "awaiting-decision":
+      return {
+        nextAction: "answer the requested decision so the work can continue.",
+        owner: "human decision-maker",
+      };
+    case "waiting-on-system":
+      return {
+        nextAction: "clear the system or runtime blocker, then resume the build.",
+        owner: "Build Studio / operator",
+      };
+    case "verifying":
+      return {
+        nextAction: "finish verification and record the result.",
+        owner: "Build Studio review agent",
+      };
+    case "resolved":
+    case "closed":
+      return {
+        nextAction: "review the completed work and promote or merge it if accepted.",
+        owner: "reviewer",
+      };
+    case "cancelled":
+      return {
+        nextAction: "restart the work only if the business priority still stands.",
+        owner: "human decision-maker",
+      };
+    case "intake":
+    case "triage":
+      return {
+        nextAction: "finish scoping the request and confirm it is ready to build.",
+        owner: "Build Studio",
+      };
+    case "active":
+    default:
+      return {
+        nextAction: "continue implementation until verification evidence is ready.",
+        owner: "Build Studio build agent",
+      };
+  }
+}
+
+function nextActionForPhase(phase: BuildPhase): { nextAction: string; owner: string } {
+  switch (phase) {
+    case "ideate":
+      return { nextAction: "finish the design brief and review it.", owner: "Build Studio ideate agent" };
+    case "plan":
+      return { nextAction: "draft and review the implementation plan.", owner: "Build Studio planning agent" };
+    case "build":
+      return { nextAction: "continue implementation until verification evidence is ready.", owner: "Build Studio build agent" };
+    case "review":
+      return { nextAction: "finish tests, UX checks, and acceptance review.", owner: "Build Studio review agent" };
+    case "ship":
+      return { nextAction: "complete the PR or promotion handoff.", owner: "Build Studio ship agent" };
+    case "complete":
+      return { nextAction: "review the completed work and promote or merge it if accepted.", owner: "reviewer" };
+    case "failed":
+      return { nextAction: "resolve the failure and rerun the affected phase.", owner: "Build Studio / operator" };
+    case "abandoned":
+    default:
+      return { nextAction: "restart the work only if the business priority still stands.", owner: "human decision-maker" };
+  }
+}
+
 export function projectBuildStudioCustomerStatus(args: {
   build: { title: string; phase: BuildPhase };
   capsule: { capsuleId: string; status: string } | null;
 }): BuildStudioCustomerStatus {
   if (args.capsule) {
     const projection = projectWorkCaseState({ capsule: args.capsule });
+    const action = nextActionForState(projection.state);
     return {
       whatIsBeingBuilt: args.build.title,
       lifecyclePosition: STATE_PLAIN[projection.state],
       worker: workerLabel(projection.state),
+      evidence: projection.reason,
+      nextAction: action.nextAction,
+      owner: action.owner,
       needsYou: NEEDS_YOU_STATES.has(projection.state),
     };
   }
 
   // No capsule linked yet: degrade to a phase-only plain status.
+  const action = nextActionForPhase(args.build.phase);
   return {
     whatIsBeingBuilt: args.build.title,
     lifecyclePosition: PHASE_PLAIN[args.build.phase],
@@ -103,6 +180,9 @@ export function projectBuildStudioCustomerStatus(args: {
         : args.build.phase === "failed"
           ? "Hit a problem"
           : "Work in progress",
+    evidence: `Build Studio phase is ${args.build.phase}.`,
+    nextAction: action.nextAction,
+    owner: action.owner,
     needsYou: args.build.phase === "failed",
   };
 }

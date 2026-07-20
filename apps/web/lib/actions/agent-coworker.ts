@@ -43,6 +43,13 @@ import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
 import { formatCoworkerOperationalCloseout } from "@/lib/tak/coworker-interaction-contract";
 import {
+  formatIdeateResearchIssueMessage,
+  formatIdeateResearchResultMessage,
+  formatIncompleteIdeateDesignMessage,
+  formatProviderUnavailableMessage,
+  summariseIdeateOutcome,
+} from "@/lib/tak/coworker-operational-messages";
+import {
   extractInvokedSkillId,
   getSkillsForAgent,
   toSkillSummariesForPrompt,
@@ -220,46 +227,6 @@ async function persistCoworkerResponseArtifact(input: {
   } catch (error) {
     console.warn("[portal-context] Failed to persist coworker response artifact", error);
   }
-}
-
-/**
- * Build the coworker's chat summary of the ideate-research + design-review
- * outcome. Reads the build's CURRENT phase after the review tool finished
- * (the review tool auto-advances to plan when the gate is satisfied) so the
- * message reflects what ACTUALLY happened rather than a stale "Ready to
- * move to the planning phase?" question that sends users in circles.
- */
-async function summariseIdeateOutcome(
-  approach: string,
-  reviewPassed: boolean,
-  buildId: string,
-): Promise<string> {
-  let currentPhase: string | null = null;
-  try {
-    const refreshed = await prisma.featureBuild.findUnique({
-      where: { buildId },
-      select: { phase: true },
-    });
-    currentPhase = refreshed?.phase ?? null;
-  } catch {
-    // Non-fatal — fall through to a generic message below.
-  }
-
-  const head = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n`;
-
-  if (!reviewPassed) {
-    return `${head}Design review flagged some issues — I'll revise and re-run the review.`;
-  }
-
-  if (currentPhase === "plan") {
-    return `${head}Design review passed and we're now in the Plan phase. I'll draft the implementation plan next.`;
-  }
-  if (currentPhase === "ideate") {
-    // Review passed but auto-advance gate held us. Make the blocker visible
-    // instead of asking a rhetorical "ready?" question.
-    return `${head}Design review passed, but the phase gate is holding advance (usually missing intake anchors — taxonomy, backlog, epic, or a constrained goal). I'll complete the remaining anchors and retry.`;
-  }
-  return `${head}Design review passed. Current phase: ${currentPhase ?? "unknown"}.`;
 }
 
 // ─── Server Actions ─────────────────────────────────────────────────────────
@@ -2144,7 +2111,7 @@ export async function sendMessage(input: {
               if (approach.length < 30) {
                 // Design doc saved but approach is blank — research engine produced an empty doc.
                 console.log(`[coworker] Approach too short (${approach.length} chars) — treating as empty doc`);
-                responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
+                responseContent = formatIncompleteIdeateDesignMessage(resolvedBuildId);
               } else {
                 // Run the design doc review
                 console.log(`[coworker] Running reviewDesignDoc...`);
@@ -2184,7 +2151,7 @@ export async function sendMessage(input: {
                   // An empty approach means the research engine ran but produced a blank doc.
                   const approach = String(rawDoc.proposedApproach ?? "").trim();
                   if (approach.length < 30) {
-                    responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
+                    responseContent = formatIncompleteIdeateDesignMessage(resolvedBuildId);
                   } else {
                     agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
                     const reviewResult = await executeTool("reviewDesignDoc", { buildId: resolvedBuildId }, user.id!, { routeContext: input.routeContext });
@@ -2198,16 +2165,25 @@ export async function sendMessage(input: {
                     );
                   }
                 } else {
-                  responseContent = `Research completed. ${retryResult.message ?? "Please describe what you'd like me to focus on for this feature."}`;
+                  responseContent = formatIdeateResearchIssueMessage({
+                    summary: `Research completed, but the patched design evidence was not accepted.${retryResult.message ? ` ${retryResult.message}` : ""}`,
+                    evidence: `saveBuildEvidence rejected the patched design document for build ${resolvedBuildId}.`,
+                    nextAction: "revise the design evidence and rerun ideate review.",
+                  });
                 }
               } else {
-                responseContent = `Research completed but the design doc needs revision. ${saveResult.message ?? "Please provide more context about the feature."}`;
+                responseContent = formatIdeateResearchIssueMessage({
+                  summary: `Research completed, but the design document needs revision.${saveResult.message ? ` ${saveResult.message}` : ""}`,
+                  evidence: `saveBuildEvidence did not accept the design document for build ${resolvedBuildId}.`,
+                  nextAction: "revise the design document and rerun design review.",
+                });
               }
             }
           } else {
-            responseContent = ideateResult.error
-              ? `Research encountered an issue: ${ideateResult.error}`
-              : "Research completed but I couldn't generate a structured design. Let me try a different approach.";
+            responseContent = formatIdeateResearchResultMessage({
+              buildId: resolvedBuildId,
+              error: ideateResult.error,
+            });
           }
 
           // Clear the research request
@@ -2285,15 +2261,10 @@ export async function sendMessage(input: {
 
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
 
-      let sysContent: string;
-      if (e.attempts.length > 0) {
-        const failureDetails = e.attempts.map((a) => `${a.providerId}: ${a.error.slice(0, 200)}`).join("; ");
-        sysContent = `All AI providers failed: ${failureDetails}. Check configuration in Platform > AI Providers.`;
-      } else if (inactiveProviders.length > 0) {
-        sysContent = `AI co-workers are temporarily offline. Type "re-enable" to reactivate a provider, or visit Platform > AI Providers.`;
-      } else {
-        sysContent = "No AI providers are configured. An administrator can set them up from Platform > AI Providers.";
-      }
+      const sysContent = formatProviderUnavailableMessage({
+        attempts: e.attempts,
+        inactiveProviders,
+      });
 
       const sysMsg = await prisma.agentMessage.create({
         data: {

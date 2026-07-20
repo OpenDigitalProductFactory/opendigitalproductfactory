@@ -21,6 +21,15 @@ export function BuildCustomerStatusBand({ status }: { status: BuildStudioCustome
           <p className="m-0 text-[11px] font-medium uppercase tracking-wide text-[var(--dpf-muted)]">Status</p>
           <p className="m-0 mt-0.5 text-sm font-semibold text-[var(--dpf-text)]">{status.lifecyclePosition}</p>
           <p className="m-0 mt-0.5 text-xs text-[var(--dpf-muted)]">{status.worker}</p>
+          <p className="m-0 mt-1 text-[11px] leading-relaxed text-[var(--dpf-muted)]">
+            Evidence: {status.evidence}
+          </p>
+          <p className="m-0 mt-0.5 text-[11px] leading-relaxed text-[var(--dpf-text)]">
+            Next action: {status.nextAction}
+          </p>
+          <p className="m-0 mt-0.5 text-[11px] leading-relaxed text-[var(--dpf-muted)]">
+            Owner: {status.owner}
+          </p>
         </div>
         {status.needsYou && (
           <span className={NEEDS_YOU_PILL} data-testid="build-customer-status-needs-you">
