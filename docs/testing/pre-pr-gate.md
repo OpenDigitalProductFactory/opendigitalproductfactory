@@ -170,6 +170,21 @@ depending on a host `env` executable. This keeps the 8 GiB `NODE_OPTIONS`
 headroom on both POSIX and Windows typecheck paths; the production build may
 still use the host-specific strategy selected by the plan.
 
+The sandbox-freshness step checks the load-bearing runtime and gate packages,
+including the Vitest runner used by the next step. Vitest is checked for both
+locked version and runnable entrypoint imports, so an incomplete package cannot
+be recorded as a product test failure. If a stale top-level package link
+survives in the scratch worktree, the preflight removes only the stale package
+link inside the sandbox's own `node_modules` before its single governed
+`pnpm install --frozen-lockfile` convergence pass. If the re-check still sees
+dependency drift, it runs one bounded `pnpm install --force --frozen-lockfile`
+retry to refresh the sandbox store/link graph; a second red verdict remains
+`blocked_sandbox_drift`, never product evidence. The dedicated
+`.local-ci-runner` scratch checkout has one final native recovery path: reset
+that scratch checkout's own `node_modules` and reinstall from the lockfile. The
+convergence lock lives in git-private state, outside `node_modules`, so the
+reset cannot erase its own duplicate-install guard.
+
 The network-disconnect proof is encoded in
 `tests/release/local-ci-gate-contract.test.mjs`: the contract denies network
 Git verbs during `gate-worktree.sh`, records local-only evidence with

@@ -12,6 +12,8 @@
 // a red sandbox is reported as SANDBOX_DRIFT — never as product evidence.
 // Filesystem/process collection lives in scripts/sandbox-freshness-preflight.mjs.
 
+import path from "node:path";
+
 /**
  * Packages whose on-disk resolution must match the lockfile before any build
  * evidence is trustworthy. `importers` lists the workspace dirs (relative to
@@ -25,6 +27,11 @@ export const CRITICAL_PACKAGES = [
   { name: "react-dom", importers: ["apps/web"] },
   { name: "typescript", importers: ["apps/web", "."] },
   { name: "prisma", importers: ["packages/db", "."] },
+  {
+    name: "vitest",
+    importers: ["apps/web", "packages/db", "packages/dpf-bootstrap", "."],
+    entrypointImportChecks: ["dist/cli.js"],
+  },
 ];
 
 /** Strip a pnpm peer-dependency suffix: "16.2.9(@babel/core@7.29.7)(...)" -> "16.2.9". */
@@ -151,7 +158,7 @@ export function parseEtimeMinutes(etime) {
  *   nodeModulesPresent: boolean,
  *   installedLockPresent: boolean,
  *   lockfilesDiffer?: boolean,
- *   packages: [{ name, importer, lockedVersion, installedLockVersion, resolvedVersion, linkTarget, missing }],
+ *   packages: [{ name, importer, lockedVersion, installedLockVersion, resolvedVersion, linkTarget, missing, missingEntrypointImports }],
  *   installProcesses: [{ pid, etime, etimeMinutes, command }],
  * }
  *
@@ -228,6 +235,13 @@ export function evaluateFreshness(state) {
         message: `${pkg.importer}/node_modules/${pkg.name} resolves to ${pkg.resolvedVersion}${pkg.linkTarget ? ` (link -> ${pkg.linkTarget})` : ""} but pnpm-lock.yaml requires ${pkg.lockedVersion}`,
       });
     }
+    if (Array.isArray(pkg.missingEntrypointImports) && pkg.missingEntrypointImports.length > 0) {
+      failures.push({
+        kind: "package_broken",
+        package: pkg.name,
+        message: `${pkg.importer}/node_modules/${pkg.name} is incomplete: ${pkg.missingEntrypointImports.join(", ")} missing`,
+      });
+    }
   }
 
   let verdict = "green";
@@ -237,6 +251,47 @@ export function evaluateFreshness(state) {
     verdict = "sandbox_drift";
   }
   return { verdict, failures };
+}
+
+function isInsidePath(parent, child) {
+  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  return relative === "" || (relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function isNodeModulesPath(rootDir, candidate) {
+  const relative = path.relative(path.resolve(rootDir), path.resolve(candidate));
+  return relative.split(path.sep).includes("node_modules");
+}
+
+/**
+ * Return package link/dir paths that are safe for the preflight to remove
+ * before its single governed `pnpm install` convergence pass. This is only for
+ * stale resolved packages inside the sandbox's own node_modules tree; outside
+ * paths and unresolved/missing packages are intentionally ignored.
+ */
+export function stalePackagePathsForRelink(state, rootDir) {
+  const seen = new Set();
+  const paths = [];
+  for (const pkg of state.packages ?? []) {
+    const versionDrift = pkg.lockedVersion && pkg.resolvedVersion && pkg.resolvedVersion !== pkg.lockedVersion;
+    if (!versionDrift || !pkg.resolvedFrom) continue;
+    const candidate = path.resolve(rootDir, pkg.resolvedFrom);
+    if (!isInsidePath(rootDir, candidate) || !isNodeModulesPath(rootDir, candidate)) continue;
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    paths.push(candidate);
+  }
+  return paths;
+}
+
+export function shouldForceConvergenceAfterInstall(evaluation) {
+  if (!evaluation || evaluation.verdict === "green") return false;
+  return (evaluation.failures ?? []).some((failure) => [
+    "installed_lock_stale",
+    "package_broken",
+    "package_missing",
+    "version_drift",
+  ].includes(failure.kind));
 }
 
 /** Exit codes for the preflight CLI — deliberately distinct from a product build failure (1). */

@@ -518,6 +518,16 @@ class ProcessSpineHealthTest(unittest.TestCase):
         text = "\n".join(updater.render_process_spine_health(verdict))
         self.assertIn("DPF-native replacement skills are not active", text)
 
+    def test_unknown_active_skill_evidence_is_readiness_warning(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        verdict = updater.assess_process_spine_health(skill_pack, exposed_skills=None)
+        self.assertTrue(verdict["installed"]["ok"])
+        self.assertEqual(verdict["exposed"]["state"], "unknown")
+        self.assertEqual(verdict["severity"], "warn")
+        text = "\n".join(updater.render_process_spine_health(verdict))
+        self.assertIn("UNKNOWN", text)
+        self.assertIn("cannot prove replacements are loaded", text)
+
 
 class CodexHookTrustTest(unittest.TestCase):
     def test_trust_pending_when_no_state_file(self) -> None:

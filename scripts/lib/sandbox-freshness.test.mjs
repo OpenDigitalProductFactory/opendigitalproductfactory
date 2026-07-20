@@ -1,8 +1,10 @@
 // Unit tests for the sandbox freshness decision core (BI-ECDF9520).
 // node --test scripts/lib/sandbox-freshness.test.mjs — no docker/daemon needed.
 import assert from "node:assert/strict";
+import path from "node:path";
 import { test } from "node:test";
 import {
+  CRITICAL_PACKAGES,
   EXIT_GREEN,
   EXIT_SANDBOX_DRIFT,
   EXIT_SANDBOX_NOT_READY,
@@ -14,6 +16,8 @@ import {
   isPnpmInstallCommand,
   parseEtimeMinutes,
   parseLockedVersion,
+  shouldForceConvergenceAfterInstall,
+  stalePackagePathsForRelink,
 } from "./sandbox-freshness.mjs";
 
 const LOCKFILE = `lockfileVersion: '9.0'
@@ -40,6 +44,9 @@ importers:
       react-dom:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@26.1.1)(vite@8.1.4)
 
   packages/db:
     devDependencies:
@@ -63,6 +70,7 @@ test("parseLockedVersion reads importer-scoped resolved versions", () => {
   assert.equal(parseLockedVersion(LOCKFILE, "apps/web", "next"), "16.2.9");
   assert.equal(parseLockedVersion(LOCKFILE, "apps/web", "react"), "19.2.7");
   assert.equal(parseLockedVersion(LOCKFILE, "apps/web", "react-dom"), "19.2.7");
+  assert.equal(parseLockedVersion(LOCKFILE, "apps/web", "vitest"), "4.1.10");
   assert.equal(parseLockedVersion(LOCKFILE, ".", "typescript"), "5.9.3");
   assert.equal(parseLockedVersion(LOCKFILE, "packages/db", "prisma"), "6.19.1");
   // Not in that importer / not in the file at all.
@@ -70,6 +78,12 @@ test("parseLockedVersion reads importer-scoped resolved versions", () => {
   assert.equal(parseLockedVersion(LOCKFILE, "apps/web", "left-pad"), "");
   // Must not leak into the top-level packages: section.
   assert.equal(parseLockedVersion(LOCKFILE, "packages", "next"), "");
+});
+
+test("critical package sentinels include the unit-test runner used by local-CI", () => {
+  const vitest = CRITICAL_PACKAGES.find((pkg) => pkg.name === "vitest");
+  assert.ok(vitest, "vitest must be checked before recording local-CI test evidence");
+  assert.ok(vitest.importers.includes("apps/web"));
 });
 
 test("isPnpmInstallCommand is token-exact", () => {
@@ -144,6 +158,84 @@ test("evaluateFreshness flags the incident shape: stale next link vs newer lockf
   assert.match(failures[0].message, /16\.2\.7/);
   assert.match(failures[0].message, /16\.2\.9/);
   assert.match(failures[0].message, /next@16\.2\.7/);
+});
+
+test("evaluateFreshness flags stale vitest before a missing CLI chunk becomes product evidence", () => {
+  const state = baseState();
+  state.packages.push({
+    name: "vitest",
+    importer: "apps/web",
+    lockedVersion: "4.1.10",
+    installedLockVersion: "4.1.10",
+    resolvedVersion: "4.1.9",
+    linkTarget: "../../../node_modules/.pnpm/vitest@4.1.9_hash/node_modules/vitest",
+    resolvedFrom: "/sandbox/node_modules/vitest",
+    missing: false,
+  });
+  const { verdict, failures } = evaluateFreshness(state);
+  assert.equal(verdict, "sandbox_drift");
+  assert.ok(failures.some((failure) => failure.kind === "version_drift" && failure.package === "vitest"));
+});
+
+test("evaluateFreshness flags broken package entrypoints as sandbox drift", () => {
+  const state = baseState();
+  state.packages.push({
+    name: "vitest",
+    importer: "apps/web",
+    lockedVersion: "4.1.10",
+    installedLockVersion: "4.1.10",
+    resolvedVersion: "4.1.10",
+    missingEntrypointImports: ["dist/chunks/cac.missing.js"],
+    missing: false,
+  });
+  const { verdict, failures } = evaluateFreshness(state);
+  assert.equal(verdict, "sandbox_drift");
+  assert.ok(failures.some((failure) => failure.kind === "package_broken" && failure.package === "vitest"));
+});
+
+
+test("stalePackagePathsForRelink returns only stale package links inside sandbox node_modules", () => {
+  const root = path.resolve("tmp", "dpf-local-ci");
+  const insideVitest = path.join(root, "node_modules", "vitest");
+  const outsideNext = path.resolve(root, "..", "outside", "node_modules", "next");
+  const state = baseState({
+    packages: [
+      {
+        name: "vitest",
+        importer: "apps/web",
+        lockedVersion: "4.1.10",
+        resolvedVersion: "4.1.9",
+        resolvedFrom: insideVitest,
+      },
+      {
+        name: "next",
+        importer: "apps/web",
+        lockedVersion: "16.2.9",
+        resolvedVersion: "16.2.7",
+        resolvedFrom: outsideNext,
+      },
+      {
+        name: "react",
+        importer: "apps/web",
+        lockedVersion: "19.2.7",
+        resolvedVersion: "19.2.7",
+        resolvedFrom: path.join(root, "node_modules", "react"),
+      },
+    ],
+  });
+  assert.deepEqual(stalePackagePathsForRelink(state, root), [insideVitest]);
+});
+
+test("shouldForceConvergenceAfterInstall is limited to dependency drift after install", () => {
+  assert.equal(shouldForceConvergenceAfterInstall({ verdict: "green", failures: [] }), false);
+  assert.equal(shouldForceConvergenceAfterInstall({
+    verdict: "sandbox_drift",
+    failures: [{ kind: "version_drift", package: "vitest" }],
+  }), true);
+  assert.equal(shouldForceConvergenceAfterInstall({
+    verdict: "sandbox_not_ready",
+    failures: [{ kind: "install_in_progress" }],
+  }), false);
 });
 
 test("evaluateFreshness flags a whole-lockfile mismatch the sentinels can't see (new dep added)", () => {
