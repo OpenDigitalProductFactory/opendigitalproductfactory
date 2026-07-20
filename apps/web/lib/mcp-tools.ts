@@ -1,6 +1,7 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 // Static import: executeTool is a hot path; dynamic import per call would hurt throughput.
 import { evaluateExecution } from "@/lib/kernel/runtime-gate";
 import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-principles";
@@ -1097,7 +1098,7 @@ export async function executeTool(
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
-          "You are the Enterprise Architect (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.",
+          `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.`,
           "internal",
           { budgetClass: "minimize_cost" },
         ),
@@ -1607,7 +1608,7 @@ export async function executeTool(
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
-          "You are the Enterprise Architect (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete plan edits, never block the gate.",
+          `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete plan edits, never block the gate.`,
           "internal",
           { budgetClass: "minimize_cost" },
         ),

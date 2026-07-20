@@ -30,7 +30,17 @@ Tier attribution is by profile kind (`platform`→WWMD, `organization`→WWWD, `
 
 > **Amended 2026-07-20 (BI-1BE30A9A).** Profile-kind attribution is correct only while no gate falls back across kinds. It is not: `evaluateProfessionDecisionGate` resolves to `MARK_DPF_PLATFORM_PROFILE` whenever the craft corpus has no material for a decision class, so a WSID decision would persist with `profileId=mark-dpf-platform` and audit as **WWMD** — leaving the WSID tier reading "never used" however often the gate ran, and inviting exactly the wrong conclusion (§3 below assumed a silent tier means no writer; it can equally mean a misattributed one).
 >
-> Attribution is therefore by **the gate that produced the row**, recorded on `DecisionInteraction.gateKey` (`build-studio`→WWMD, `org-business`→WWWD, `profession`→WSID) with a companion `gateFallbackUsed` flag preserving the "was this the coworker's own doctrine or a fallback?" signal that profile kind used to carry implicitly. Profile kind remains the fallback for rows written before the column existed; that backfill is exact, because the profession gate had never run when they were written. See `tierForRow` in `apps/web/lib/wiki/decision-audit.ts`.
+> Attribution is therefore by **the gate that produced the row**, recorded on `DecisionInteraction.gateKey` (`build-studio`→WWMD, `backlog-triage`→WWMD, `org-business`→WWWD, `profession`→WSID) with a companion `gateFallbackUsed` flag preserving the "was this the coworker's own doctrine or a fallback?" signal that profile kind used to carry implicitly. Profile kind remains the fallback for rows written before the column existed; that backfill is exact, because the profession gate had never run when they were written. See `tierForRow` in `apps/web/lib/wiki/decision-audit.ts`.
+>
+> Recording the gate separately from the profile also lets two writers share a tier while staying distinguishable — which is why `backlog-triage` is its own key rather than reusing `build-studio`. An operator scanning WWMD needs to tell an unattended hourly cron mutation from a human-initiated Build Studio phase advance.
+
+### Writers (amended 2026-07-20)
+
+Two writers were added to close ungoverned paths found in the 2026-07-20 investigation:
+
+- **`backlog-triage` → WWMD (BI-BB2E585C).** The hourly `ops/backlog-triage-drain` cron auto-applies `BacklogItem` mutations (`status`→open, `triageOutcome`=build, `effortSize`) from a model decision. It wrote no ledger row at all, so the decision log understated the platform's most frequent autonomous writer — presenting as coverage rather than as a gap. Now ledgered **before** the mutation, **fail-closed**: no row, no mutation. That inverts the fail-open rule the kernel-consult recorder follows, and deliberately: there the ledger records a decision the caller already made, here it is the precondition for a state change.
+  - *Trap for the reader:* the drain's `routeAndCall` passes `persistDecision: false`. That is `RouteDecisionLog` (model-routing telemetry) and **not** a governance opt-out. Flipping it adds routing telemetry and leaves the governance ledger just as empty.
+- **`profession` → WSID (BI-D6CFE63A).** The architecture advisory behind `reviewDesignDoc` / `reviewBuildPlan` is an inline `routeAndCall` inside an MCP tool handler that impersonates the architect in a system prompt — no Agent, no TaskRun, no thread, no record. Operator-visible "Enterprise Architect" activity in Docker Desktop was therefore untraceable in the platform's own records. Now routed through `evaluateProfessionDecisionGate` under the EA identity, **fail-open**: the advisory is advisory by contract and must never be blocked by a ledger problem.
 
 ## 3. Explicitly out of scope
 

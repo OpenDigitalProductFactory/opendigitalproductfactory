@@ -76,6 +76,8 @@ export const backlogTriageDrain = inngest.createFunction(
           routeAndCall = undefined;
         }
 
+        const { recordTriageDecision } = await import("@/lib/operate/backlog-triage-ledger");
+
         return triageOneItem(item, {
           decide: async (it) => {
             if (!routeAndCall) throw new Error("no-llm");
@@ -83,9 +85,24 @@ export const backlogTriageDrain = inngest.createFunction(
               [{ role: "user" as const, content: buildTriageDrainPrompt(it) }],
               TRIAGE_DRAIN_SYSTEM_PROMPT,
               "internal",
+              // NB: `persistDecision: false` suppresses RouteDecisionLog — the
+              // model-ROUTING telemetry. It is not a governance opt-out and
+              // never was; governance is the DecisionInteraction row written by
+              // recordDecision below (BI-BB2E585C).
               { taskType: "triage", budgetClass: "balanced", effort: "medium", persistDecision: false },
             );
             return resp.content;
+          },
+          // Fail-closed governance gate: no ledger row, no mutation.
+          recordDecision: async (it, decision, appliedEffortSize) => {
+            const outcome = await recordTriageDecision({
+              db: prisma,
+              item: it,
+              decision,
+              appliedEffortSize,
+              effortSizeFromAuthor: it.effortSize === appliedEffortSize,
+            });
+            return outcome.recorded;
           },
           applyBuild: async (itemId, effortSize, rationale) => {
             await prisma.backlogItem.update({

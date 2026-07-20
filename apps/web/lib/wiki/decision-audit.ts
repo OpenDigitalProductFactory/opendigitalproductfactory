@@ -27,6 +27,7 @@ export function tierForProfileKind(kind: string | null | undefined): DecisionAud
 export function tierForGateKey(gateKey: string | null | undefined): DecisionAuditTierOrOther {
   switch (gateKey) {
     case "build-studio":
+    case "backlog-triage":
       return "wwmd";
     case "org-business":
       return "wwwd";
@@ -80,7 +81,7 @@ export function profileKindsForTier(tier: DecisionAuditTier): string[] {
 export function gateKeysForTier(tier: DecisionAuditTier): string[] {
   switch (tier) {
     case "wwmd":
-      return ["build-studio"];
+      return ["build-studio", "backlog-triage"];
     case "wwwd":
       return ["org-business"];
     case "wsid":

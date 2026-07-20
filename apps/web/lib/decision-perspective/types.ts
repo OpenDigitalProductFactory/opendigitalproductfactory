@@ -21,7 +21,12 @@ export type DecisionOutcomeType = typeof DECISION_OUTCOME_TYPES[number];
 // profession decision whose doctrine fell back to platform material is still a
 // WSID decision. Closed registry: adding a gate means adding a tier mapping in
 // lib/wiki/decision-audit.ts, which its round-trip test enforces.
-export const DECISION_GATE_KEYS = ["build-studio", "org-business", "profession"] as const;
+// `backlog-triage` tiers as WWMD alongside `build-studio`: triage is a
+// platform-doctrine call. It gets its own key rather than reusing build-studio
+// so an operator scanning WWMD can distinguish an unattended hourly cron
+// mutation from a human-initiated Build Studio phase advance — which is the
+// whole reason the gate is recorded separately from the profile (BI-BB2E585C).
+export const DECISION_GATE_KEYS = ["build-studio", "backlog-triage", "org-business", "profession"] as const;
 export type DecisionGateKey = typeof DECISION_GATE_KEYS[number];
 
 export const DECISION_DOMAIN_CLASSES = ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice", "kernel-consult"] as const;
