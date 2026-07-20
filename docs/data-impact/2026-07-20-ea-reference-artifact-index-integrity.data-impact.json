@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "EA reference-model artifact registry",
+    "EaReferenceProposal source-artifact relationships",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720143000_repair_ea_reference_artifact_index_integrity",
+    "backfill": "forced-heap exact-key convergence: oldest deterministic (modelId, path) survivor, collision-checked quarantine paths for losers, preservation of artifact ids and proposal relationships, then complete compound unique-index rebuild; no row is deleted"
+  },
+  "tests": [
+    "packages/db/src/ea-reference-artifact-index-integrity-migration.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:ea-reference-model-artifact#model-path-integrity-repair",
+      "prismaModel": "EaReferenceModelArtifact",
+      "lifecycleDisposition": "the oldest exact-key row remains canonical; every loser remains durable under a reserved quarantine path with its original id, attributes, and proposal relationships",
+      "fields": [
+        {
+          "fieldId": "data:ea-reference-model-artifact#modelId-path",
+          "resolution": "governed",
+          "reason": "restore trustworthy compound-key uniqueness without deleting source-artifact history or weakening sanitized-clone enforcement",
+          "provenance": "BI-FB6381E6 forced heap/index evidence, canonical artifact upsert contract, and migration fixture"
+        }
+      ]
+    }
+  ]
+}
