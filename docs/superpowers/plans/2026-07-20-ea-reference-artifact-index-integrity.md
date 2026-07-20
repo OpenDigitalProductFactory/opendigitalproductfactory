@@ -26,6 +26,17 @@ Every install has one canonical `EaReferenceModelArtifact` row per `(modelId, pa
 
 The migration, fixture, and live proof are one atomic correction under `BI-FB6381E6`; splitting them would leave either existing data or enforcement untrusted.
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-FB6381E6`
+- Fleet-safe quarantine migration, canonical unique-index rebuild, migration fixture, exact gate, governed live heap/index proof, and full Contributor preview acceptance -> `BI-FB6381E6`
+- Dependencies: blocks `BI-7430E579`; builds on completed `BI-CD96EDD2` and `BI-BCF8A8D5`
+- Receipt: `cmrtbt0vm00xe01nshop21gxh`
+- Rationale: the migration, enforcement rebuild, and functional proof are one indivisible data-integrity correction; shipping any phase alone would leave either existing data or enforcement untrusted.
+
+The live MCP surface does not expose `record_plan_backlog_coverage`, so the receipt was recorded through the governed `record_execution_evidence` path with the same atomic decision, mapping, dependency graph, and rationale.
+
 ## Risks and rollback
 
 - The index rebuild takes DDL locks, owned by the self-upgrade maintenance window.
