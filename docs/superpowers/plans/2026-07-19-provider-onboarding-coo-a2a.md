@@ -3,7 +3,7 @@
 **Backlog item:** BI-26684747
 **Parent acceptance:** BI-AIPS-004, BI-C98C6AB7
 **Epic:** EP-AI-PROVIDER-SUITABILITY
-**Status:** Governed A2A implemented; local cold-start fallback implemented with runtime verification pending
+**Status:** Governed A2A and local cold-start fallback implemented and runtime-verified
 
 ## Outcome
 
@@ -120,15 +120,13 @@ This is the first independently shippable phase.
 
 ## Phase 5 — guarantee local-only cold-start advice
 
-**Status:** Implemented in `BI-EDAAD429`; shared-runtime verification remains before completion.
+**Status:** Implemented and verified in the governed shared nonproduction runtime for `BI-EDAAD429`.
 
 **Deliverable:** the provider-compliance child run carries the canonical router's hard `residencyPolicy: local_only` constraint on every inference attempt. A missing local endpoint, malformed result, unsafe approval, or insufficient-evidence result without human review is replaced with a deterministic `provider-compliance-advisory.v1` non-approval grounded in `professions/legal-compliance/ai-provider-account-and-sovereignty-review`. No cloud route is attempted and no provider posture is changed.
 
 **Audit contract:** `TaskRun.progressPayload` records only the local-policy version, corpus version, advisory schema version, result source, bounded summary, and tool count. It does not copy the provider-review packet or organization reference into the audit metadata.
 
-**Verification completed:** packet round-trip and fail-closed parsing; canonical router propagation; valid conditional local result; unsafe local approval replacement; malformed result fallback; no-local-endpoint fallback; COO rendering; no raw-intake audit assertion; 124 focused Vitest assertions; web TypeScript check with an explicit 8 GB Node heap after the default 4 GB local limit was exhausted without a TypeScript diagnostic.
-
-**Verification remaining:** run the merged-code production build and drive the authenticated provider-onboarding consultation against the governed shared nonproduction runtime with cloud providers disabled. Do not mark `BI-EDAAD429` done until that evidence exists.
+**Verification completed:** packet round-trip and fail-closed parsing; canonical router propagation; valid conditional local result; unsafe local approval replacement; malformed result fallback; no-local-endpoint fallback; COO rendering; no raw-intake audit assertion; 128 focused Vitest assertions; web TypeScript check with an explicit 8 GB Node heap; and the merged-code production build through the local-CI convergence sandbox. An authenticated provider-page walkthrough then forced the pre-dispatch A2A-unavailable path and confirmed that the COO thread still received a cited `insufficient-evidence` recommendation, workload guardrails, explicit unknowns, one safest next action, and the corpus reference while leaving provider posture unchanged.
 
 ## Risks and rollback
 
