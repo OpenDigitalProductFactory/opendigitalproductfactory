@@ -18,7 +18,19 @@
 # The build context is the repo root (see docker-compose.yml `build.context`),
 # streamed to the daemon — so this COPY works even from the promoter, where the
 # source is only readable at /host-source and never a valid host bind path.
-FROM pgvector/pgvector:pg16
+# PINNED BY DIGEST, not by tag (BI-COLLATION-DRIFT). A floating `:pg16` lets the
+# base libc change underneath an existing pgdata volume, and libc *is* the text
+# collation provider: move a cluster between a musl base and a glibc base and
+# every text btree built under the old comparator silently starts resolving to
+# the wrong subtree. Unique indexes then stop rejecting duplicates — that is how
+# this install ended up with 17 duplicate AI coworkers behind a UNIQUE constraint
+# and 21 corrupted indexes overall.
+#
+# Re-pinning is a deliberate act: bump the digest ONLY together with a REINDEX
+# plan for every collatable index, and run
+# `node packages/db/scripts/index-integrity-guard.mjs` against an upgraded volume
+# before shipping the new digest to the fleet.
+FROM pgvector/pgvector@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
 
 # Runs only on first init (empty data dir); idempotent for existing volumes.
 COPY scripts/init-inngest-db.sh /docker-entrypoint-initdb.d/20-create-inngest-db.sh
