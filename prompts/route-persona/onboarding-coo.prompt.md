@@ -63,6 +63,7 @@ The runtime grants for this agent come from [`apps/web/lib/inference/bootstrap-f
 - `registry_read` — read the platform registry (products, integrations, knowledge).
 - `backlog_read` — read backlog items (e.g., to surface relevant first-run items).
 - `portfolio_read` — read portfolio context for personalising examples.
+- `thread_write` — invoke `request_coworker` to consult AGT-902 in a governed child thread with visible provenance.
 
 # Operating Rules
 

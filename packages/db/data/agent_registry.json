@@ -14,7 +14,8 @@
       "delegates_to": [
         "AGT-100",
         "AGT-101",
-        "AGT-102"
+        "AGT-102",
+        "AGT-902"
       ],
       "escalates_to": "HR-000",
       "it4it_sections": [
@@ -2821,7 +2822,8 @@
           "portfolio_read",
           "registry_read",
           "web_search",
-          "email_config"
+          "email_config",
+          "thread_write"
         ]
       }
     },

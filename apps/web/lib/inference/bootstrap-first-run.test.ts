@@ -80,6 +80,10 @@ describe("bootstrap-first-run", () => {
             name: "Onboarding COO",
             type: "onboarding",
             tier: 1,
+            delegatesTo: ["AGT-902"],
+          }),
+          update: expect.objectContaining({
+            delegatesTo: ["AGT-902"],
           }),
         }),
       );
@@ -114,6 +118,7 @@ describe("bootstrap-first-run", () => {
         expect.arrayContaining([
           { agentId: "cuid-coo", grantKey: "registry_write" },
           { agentId: "cuid-coo", grantKey: "email_config" },
+          { agentId: "cuid-coo", grantKey: "thread_write" },
         ]),
       );
       // Every row is scoped to the resolved agent PK (not the semantic agentId).

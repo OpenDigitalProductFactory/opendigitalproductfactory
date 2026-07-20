@@ -55,6 +55,12 @@ describe("provider onboarding recommendation", () => {
     expect(result.useNow).toEqual([expect.objectContaining({ scope: "public-only" })]);
     expect(result.whatDpfBlocks).toContain("company, customer, employee, source-code, or regulated data");
     expect(result.nextAction).toContain("business or enterprise");
+    expect(result.reviewPacket).toMatchObject({
+      schemaVersion: "provider-compliance-review.v1",
+      organizationRef: "org-1",
+      recommendation: { status: "review-needed" },
+      providerConnections: [{ providerConnectionId: "conn-1", providerId: "provider" }],
+    });
   });
 
   it("recommends a proven business connection for the derived company workloads", () => {

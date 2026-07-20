@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
-import { getOrCreateThreadSnapshot } from "@/lib/actions/agent-coworker";
+import { getOrCreateThreadSnapshot, getThreadSnapshotById } from "@/lib/actions/agent-coworker";
+import { startProviderComplianceConsultation } from "@/lib/actions/provider-compliance-consultation";
 import { startFeedbackSupport } from "@/lib/actions/feedback-support";
 import {
   isFeedbackEventDetail,
@@ -13,6 +14,7 @@ import {
 import { AgentFAB } from "./AgentFAB";
 import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
 import type { ThreadLoadState } from "./composer-state";
+import type { ProviderReviewPacket } from "@/lib/routing/provider-suitability/provider-review-packet";
 import {
   shouldDispatchAutoMessageImmediately,
   shouldSuppressAutoMessage,
@@ -55,6 +57,12 @@ type OpenAgentPanelDetail = {
   welcomeMessage?: string;
   targetBuildId?: string;
   routeContext?: string;
+  providerReviewPacket?: ProviderReviewPacket;
+};
+
+type PendingProviderConsultation = {
+  packet: ProviderReviewPacket;
+  routeContext: string;
 };
 
 type QueuedAutoMessage = {
@@ -155,6 +163,9 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
   const threadAutoRetryUsedRef = useRef(false);
   const prevThreadContextRef = useRef<string | null>(null);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
+  const [pendingProviderConsultation, setPendingProviderConsultation] =
+    useState<PendingProviderConsultation | null>(null);
+  const providerConsultationInFlightRef = useRef<string | null>(null);
   const [guidedRouteContext, setGuidedRouteContext] = useState<string | null>(null);
   const [dockedFrame, setDockedFrame] = useState<DockedPanelFrame | null>(null);
   const lastAutoMessageRef = useRef<{ signature: string; at: number } | null>(null);
@@ -334,6 +345,53 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
     };
   }, [threadContext, threadLoadRetryToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (
+      !pendingProviderConsultation
+      || !threadId
+      || threadLoadState !== "ready"
+      || pendingProviderConsultation.routeContext !== threadContext
+    ) {
+      return;
+    }
+
+    const signature = `${threadId}:${JSON.stringify(pendingProviderConsultation.packet)}`;
+    if (providerConsultationInFlightRef.current === signature) return;
+    providerConsultationInFlightRef.current = signature;
+    let active = true;
+
+    void startProviderComplianceConsultation({
+      parentThreadId: threadId,
+      routeContext: pendingProviderConsultation.routeContext,
+      packet: pendingProviderConsultation.packet,
+    }).then(async () => {
+      const snapshot = await getThreadSnapshotById({ threadId });
+      if (active && snapshot?.threadId === threadId) {
+        setInitialMessages(snapshot.messages ?? []);
+      }
+    }).catch((error) => {
+      console.warn("startProviderComplianceConsultation error:", error);
+      if (!active) return;
+      setInitialMessages((messages) => [
+        ...messages,
+        {
+          id: `provider-consultation-failed-${Date.now()}`,
+          role: "system",
+          content: "DPF could not start the compliance consultation. Provider posture was not changed; try again or request qualified review.",
+          createdAt: new Date().toISOString(),
+          agentId: null,
+          routeContext: pendingProviderConsultation.routeContext,
+        },
+      ]);
+    }).finally(() => {
+      if (active) setPendingProviderConsultation(null);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [pendingProviderConsultation, threadContext, threadId, threadLoadState]);
+
   function handleReloadToReconnect() {
     // A failed load that survives the bounded auto-retry is, in practice, a
     // stale tab after a portal self-upgrade: the redeploy rotated the Next.js
@@ -420,6 +478,15 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
           return;
         }
         lastAutoMessageRef.current = { signature, at: now };
+        if (detail.providerReviewPacket) {
+          setPendingAutoMessage(null);
+          setQueuedAutoMessage(null);
+          setPendingProviderConsultation({
+            packet: detail.providerReviewPacket,
+            routeContext: requestedRouteContext ?? threadContext,
+          });
+          return;
+        }
         // If the event targets a specific build, queue the message until the
         // Shell's threadContext advances to that build. Otherwise submit
         // immediately (legacy behaviour — route-level auto-messages, e.g.

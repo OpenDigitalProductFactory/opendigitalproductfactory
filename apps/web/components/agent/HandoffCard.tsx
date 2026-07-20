@@ -6,6 +6,7 @@
 // (AGENTS.md §12); lucide icon + text carry meaning, not color.
 
 import { Handshake, UserPlus, Undo2 } from "lucide-react";
+export { collaborationReturnMessage } from "./collaboration-return-message";
 
 export type CollaborationCard = {
   id: string;

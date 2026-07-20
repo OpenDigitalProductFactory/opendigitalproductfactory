@@ -1,5 +1,9 @@
 import { compileAiProviderSuitabilityPolicy } from "./compile";
 import { deriveAiWorkloadDataProfile } from "./workload-profile";
+import {
+  buildProviderReviewPacket,
+  type ProviderReviewPacket,
+} from "./provider-review-packet";
 import type {
   AiWorkloadClassKey,
   BusinessSuitabilityProfile,
@@ -26,6 +30,7 @@ export type ProviderOnboardingRecommendation = {
   nextAction: string;
   caveat: string;
   workloadClasses: AiWorkloadClassKey[];
+  reviewPacket: ProviderReviewPacket;
 };
 
 export function resolveRuntimeConnectionStatus(providerStatus: string, connectionStatus: string): string {
@@ -130,7 +135,7 @@ export function buildProviderOnboardingRecommendation(input: {
 
   const companyReady = useNow.some((item) => item.scope === "company-work");
   const status = companyReady ? "ready" : input.connections.length > 0 ? "review-needed" : "not-ready";
-  return {
+  const recommendation = {
     status,
     headline: companyReady
       ? "A connection is available for company work"
@@ -148,5 +153,21 @@ export function buildProviderOnboardingRecommendation(input: {
       : "Use the local connection for intake, or establish a business or enterprise account and record its contract, no-training, retention, and processing-region evidence.",
     caveat: "Local processing reduces external egress, but does not by itself prove compliance, security, or adequate model capability.",
     workloadClasses,
+  } satisfies Omit<ProviderOnboardingRecommendation, "reviewPacket">;
+
+  return {
+    ...recommendation,
+    reviewPacket: buildProviderReviewPacket({
+      businessProfile: input.businessProfile,
+      recommendation: {
+        status: recommendation.status,
+        workloadClasses: recommendation.workloadClasses,
+        items: [
+          ...recommendation.useNow,
+          ...recommendation.useAfterReview,
+          ...recommendation.notForThisWork,
+        ],
+      },
+    }),
   };
 }

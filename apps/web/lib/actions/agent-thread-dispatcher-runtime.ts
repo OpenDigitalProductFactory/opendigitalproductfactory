@@ -11,6 +11,11 @@ import {
   type AutonomousWorkUserContext,
 } from "@/lib/tak/autonomous-work-run";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import {
+  formatProviderComplianceAdvisoryForOwner,
+  parseProviderComplianceAdvisory,
+  PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY,
+} from "@/lib/routing/provider-suitability/provider-compliance-advisory";
 
 /**
  * EP-A2A: when a collaboration child thread reaches a terminal state, emit
@@ -22,6 +27,7 @@ async function emitCollaborationReturn(
   childThreadId: string,
   taskRunId: string,
   outcome: "completed" | "failed" | "canceled",
+  options?: { specialistReply?: string; routeContext?: string },
 ): Promise<void> {
   try {
     const child = await prisma.agentThread.findUnique({
@@ -35,6 +41,24 @@ async function emitCollaborationReturn(
     });
     const prov = readCollaborationProvenance(tr?.a2aMetadata);
     if (!prov) return; // only emit returns for governed collaboration spawns
+    let ownerMessage: string | undefined;
+    if (prov.summary === PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY) {
+      const advisory = outcome === "completed" && options?.specialistReply
+        ? parseProviderComplianceAdvisory(options.specialistReply)
+        : null;
+      ownerMessage = advisory?.success
+        ? formatProviderComplianceAdvisoryForOwner(advisory.value)
+        : "I could not substantiate a provider recommendation from the specialist's returned evidence. This is no provider approval, and DPF has not changed provider activation or routing eligibility. The safest next step is to retry the review or obtain qualified compliance advice.";
+      await prisma.agentMessage.create({
+        data: {
+          threadId: child.parentThreadId,
+          role: "assistant",
+          content: ownerMessage,
+          agentId: prov.fromAgentId,
+          routeContext: options?.routeContext ?? DEFAULT_ROUTE_CONTEXT,
+        },
+      });
+    }
     agentEventBus.emit(child.parentThreadId, {
       type: "collaboration:return",
       parentThreadId: child.parentThreadId,
@@ -43,6 +67,7 @@ async function emitCollaborationReturn(
       toAgentId: prov.fromAgentId ?? "",
       taskRunId,
       outcome,
+      ...(ownerMessage ? { ownerMessage } : {}),
     });
   } catch {
     // non-fatal — the panel's in-flight poll still flips the done indicator.
@@ -234,7 +259,10 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
         },
       },
     });
-    await emitCollaborationReturn(context.threadId, context.taskRunId, "completed");
+    await emitCollaborationReturn(context.threadId, context.taskRunId, "completed", {
+      specialistReply: replyText,
+      routeContext: context.routeContext,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Child thread execution failed";
     await markChildThreadFailed(context, message);

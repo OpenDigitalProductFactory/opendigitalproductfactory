@@ -73,6 +73,27 @@ vi.mock("@/lib/routing/provider-suitability/provider-onboarding-data", () => ({
     nextAction: "Choose a business account.",
     caveat: "Local is not automatically compliant.",
     workloadClasses: ["public-marketing"],
+    reviewPacket: {
+      schemaVersion: "provider-compliance-review.v1",
+      purpose: "provider-suitability-advice",
+      organizationRef: "org-test",
+      businessContext: {
+        archetypeId: null,
+        archetypeCategory: null,
+        jurisdictionBasis: { operatesIn: [], sellsTo: [], employsIn: [], dataResidency: [] },
+        riskPosture: null,
+      },
+      recommendation: { status: "review-needed", workloadClasses: ["public-marketing"] },
+      providerConnections: [],
+      requestedAdvisory: [
+        "regulatory-applicability",
+        "account-and-contract-evidence",
+        "retention-and-training-treatment",
+        "processing-region-and-sovereignty",
+        "workload-restrictions",
+        "safe-next-action",
+      ],
+    },
   }),
 }));
 

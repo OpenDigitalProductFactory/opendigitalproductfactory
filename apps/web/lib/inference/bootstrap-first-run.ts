@@ -32,9 +32,11 @@ export async function seedOnboardingAgent(): Promise<void> {
       type: "onboarding",
       description: "Guides new platform owners through initial setup.",
       status: "active",
+      delegatesTo: ["AGT-902"],
     },
     update: {
       status: "active",
+      delegatesTo: ["AGT-902"],
     },
   });
 
@@ -46,6 +48,8 @@ export async function seedOnboardingAgent(): Promise<void> {
   //   record_org_business_answer (BI-44526F3E Phase C) → registry_write, so the
   //     COO can capture the operator's confirmed answers about the business into
   //     the org WWWD corpus (draft-by-default)
+  //   request_coworker → thread_write, so the COO can consult AGT-902 through
+  //     the governed A2A interface instead of inventing compliance advice
   // Without grants, every tool call is silently denied — the COO then claims
   // success on operations that never happened.
   const grants = [
@@ -57,6 +61,7 @@ export async function seedOnboardingAgent(): Promise<void> {
     "backlog_read",
     "portfolio_read",
     "email_config",
+    "thread_write",
   ];
   // BI-4FA040D5: honor durable revocation tombstones so a re-run of first-run
   // bootstrap does not resurrect a grant the operator revoked.

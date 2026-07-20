@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AskCoworkerButton } from "./AskCoworkerButton";
+import { buildProviderReviewPacket } from "@/lib/routing/provider-suitability/provider-review-packet";
 
 afterEach(cleanup);
 
@@ -40,5 +41,40 @@ describe("AskCoworkerButton", () => {
     document.removeEventListener("open-agent-panel", handler);
     expect(events).toHaveLength(1);
     expect(events[0].detail).toEqual({ autoMessage: "p" });
+  });
+
+  it("carries an optional validated provider-review packet for deterministic dispatch", () => {
+    const events: CustomEvent[] = [];
+    const handler = (e: Event) => events.push(e as CustomEvent);
+    document.addEventListener("open-agent-panel", handler);
+    const packet = buildProviderReviewPacket({
+      businessProfile: {
+        organizationId: "org-1",
+        archetypeId: null,
+        archetypeCategory: null,
+        operatesIn: [],
+        sellsTo: [],
+        employsIn: [],
+        dataResidency: [],
+        riskPosture: null,
+      },
+      recommendation: { status: "not-ready", workloadClasses: [], items: [] },
+    });
+
+    render(
+      <AskCoworkerButton
+        prompt="Review provider setup"
+        routeContext="/workspace"
+        providerReviewPacket={packet}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ask coworker" }));
+
+    document.removeEventListener("open-agent-panel", handler);
+    expect(events[0]?.detail).toEqual({
+      autoMessage: "Review provider setup",
+      routeContext: "/workspace",
+      providerReviewPacket: packet,
+    });
   });
 });
