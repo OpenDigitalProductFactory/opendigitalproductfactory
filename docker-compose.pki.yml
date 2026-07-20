@@ -1,0 +1,61 @@
+# Organization private PKI overlay for certificate-valid DPF HTTPS.
+# Evaluated dependency: docs/security/tool-evaluations/2026-07-20-step-ca.md
+
+services:
+  step-ca:
+    image: smallstep/step-ca:0.30.2@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: ${DPF_LOG_MAX_SIZE:-20m}
+        max-file: ${DPF_LOG_MAX_FILE:-3}
+    ports:
+      # Loopback is the safe default. An organization authority that enrolls
+      # other LAN installations must deliberately set this to one private IP.
+      - "${DPF_PKI_BIND_ADDRESS:-127.0.0.1}:${DPF_PKI_PORT:-9000}:9000"
+    environment:
+      DOCKER_STEPCA_INIT_NAME: ${DPF_PKI_NAME:-DPF Organization CA}
+      DOCKER_STEPCA_INIT_DNS_NAMES: ${DPF_PKI_DNS_NAMES:-localhost,127.0.0.1}
+      DOCKER_STEPCA_INIT_PROVISIONER_NAME: dpf-installer
+      DOCKER_STEPCA_INIT_PASSWORD_FILE: /run/secrets/step-ca-password
+      DOCKER_STEPCA_INIT_REMOTE_MANAGEMENT: "false"
+      DOCKER_STEPCA_INIT_SSH: "false"
+      DOCKER_STEPCA_INIT_ACME: "false"
+    secrets:
+      - step-ca-password
+    volumes:
+      - step_ca_data:/home/step
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 384m
+    cpus: 1.0
+    healthcheck:
+      test:
+        - CMD
+        - step
+        - ca
+        - health
+        - --ca-url
+        - https://127.0.0.1:9000
+        - --root
+        - /home/step/certs/root_ca.crt
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  portal:
+    environment:
+      # Node reads this only at process start. It adds the organization root;
+      # public Web PKI roots remain available through the default trust store.
+      NODE_EXTRA_CA_CERTS: /etc/dpf/pki/root_ca.crt
+    volumes:
+      - ${DPF_PKI_TRUST_BUNDLE:?Set DPF_PKI_TRUST_BUNDLE to the organization root_ca.crt path}:/etc/dpf/pki/root_ca.crt:ro
+
+secrets:
+  step-ca-password:
+    file: ${DPF_PKI_PASSWORD_FILE:?Set DPF_PKI_PASSWORD_FILE to a mode-0600 file}
+
+volumes:
+  step_ca_data:
