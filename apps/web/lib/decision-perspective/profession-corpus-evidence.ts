@@ -29,6 +29,12 @@ export type ProfessionCorpusGapReason =
   | "empty-corpus"
   | "low-relevance"
   | "deferred"
+  // Provider-compliance answer validation failures. These are durable corpus
+  // repair signals, not transient inference errors.
+  | "missing-topic"
+  | "stale-source"
+  | "citation-mismatch"
+  | "conflicting-evidence"
   // A consolidation bet this profession worked has completed; its technique is
   // a learning the corpus does not yet capture (BI-5C01F920, EP-8DC217EB
   // BET-0f). Recorded by the self-optimization sweep, not a coworker turn.
@@ -156,6 +162,27 @@ export async function recordProfessionCorpusGap(
   } catch (err) {
     console.warn("[profession-corpus] gap write failed (fail-open):", err);
     return { recorded: false, fingerprint };
+  }
+}
+
+/** Record deduplicated repair signals emitted by the provider-answer evidence gate. */
+export async function recordProviderComplianceAnswerGaps(
+  input: {
+    reasons: ReadonlyArray<"missing-topic" | "stale-source" | "citation-mismatch" | "conflicting-evidence">;
+    query: string;
+    agentId?: string | null;
+    routeContext?: string | null;
+  },
+  deps: { db?: ProfessionCorpusEvidenceClient } = {},
+): Promise<void> {
+  for (const reason of new Set(input.reasons)) {
+    await recordProfessionCorpusGap({
+      professionKey: "legal-compliance",
+      reason,
+      query: input.query,
+      agentId: input.agentId,
+      routeContext: input.routeContext,
+    }, deps);
   }
 }
 

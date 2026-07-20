@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   formatProviderComplianceAdvisoryForOwner,
   parseProviderComplianceAdvisory,
+  validateProviderComplianceAdvisoryGrounding,
 } from "./provider-compliance-advisory";
+import { buildProviderReviewPacket } from "./provider-review-packet";
 
 const advisory = {
   schemaVersion: "provider-compliance-advisory.v1",
@@ -52,9 +54,104 @@ describe("provider compliance advisory", () => {
     const message = formatProviderComplianceAdvisoryForOwner(advisory as never);
 
     expect(message).toContain("My recommendation: conditional");
+    expect(message).toMatch(/^Only if/);
     expect(message).toContain("What we still need to verify");
     expect(message).toContain("Provider enterprise privacy terms");
     expect(message).toContain("This is decision support, not legal advice");
     expect(message).not.toContain("providerApproved");
+  });
+
+  it.each([
+    ["recommended", "Yes."],
+    ["conditional", "Only if"],
+    ["not-suitable", "No."],
+    ["insufficient-evidence", "Cannot confirm"],
+  ])("starts the %s owner answer with the direct-answer contract", (decision, prefix) => {
+    const message = formatProviderComplianceAdvisoryForOwner({ ...advisory, decision } as never);
+    expect(message.startsWith(prefix)).toBe(true);
+  });
+
+  it("accepts only a current canonical claim applicable to the minimized company packet", () => {
+    const packet = buildProviderReviewPacket({
+      businessProfile: {
+        organizationId: "org-1",
+        archetypeId: null,
+        archetypeCategory: null,
+        operatesIn: ["eu"],
+        sellsTo: [],
+        employsIn: [],
+        dataResidency: ["eu"],
+        riskPosture: "conservative",
+      },
+      recommendation: {
+        status: "review-needed",
+        workloadClasses: ["customer-records"],
+        items: [{ providerConnectionId: "conn-1", providerId: "openai", scope: "public-only" }],
+      },
+    });
+    const grounded = {
+      ...advisory,
+      citations: [{
+        title: "GDPR Article 28",
+        reference: "eu/gdpr-controller-processor-and-transfers",
+        sourceClaimId: "eu-controller-processor-contract-required",
+        supports: "A processor contract is required.",
+      }],
+    };
+
+    expect(validateProviderComplianceAdvisoryGrounding(grounded as never, packet, new Date("2026-07-20"))).toEqual({
+      success: true,
+      errors: [],
+    });
+    expect(validateProviderComplianceAdvisoryGrounding({
+      ...grounded,
+      citations: [{ ...grounded.citations[0], sourceClaimId: "invented-claim" }],
+    } as never, packet, new Date("2026-07-20"))).toMatchObject({ success: false });
+  });
+
+  it("uses the exact connection channel and account class for provider-term claims", () => {
+    const packet = buildProviderReviewPacket({
+      businessProfile: {
+        organizationId: "org-1",
+        archetypeId: null,
+        archetypeCategory: null,
+        operatesIn: ["eu"],
+        sellsTo: [],
+        employsIn: [],
+        dataResidency: ["eu"],
+        riskPosture: "conservative",
+      },
+      recommendation: {
+        status: "review-needed",
+        workloadClasses: ["customer-records"],
+        items: [{
+          providerConnectionId: "conn-1",
+          providerId: "openai",
+          scope: "public-only",
+          executionChannel: "direct-api",
+          accountClass: "business-team",
+        }],
+      },
+    });
+    const providerClaim = {
+      ...advisory,
+      citations: [{
+        title: "OpenAI business data",
+        reference: "openai/business-data-privacy",
+        sourceClaimId: "openai-business-no-training-default",
+        supports: "API inputs and outputs are not used for training by default.",
+      }],
+    };
+
+    expect(validateProviderComplianceAdvisoryGrounding(providerClaim as never, packet, new Date("2026-07-20"))).toMatchObject({ success: true });
+    const personalPacket = {
+      ...packet,
+      providerConnections: packet.providerConnections.map((connection) => ({
+        ...connection,
+        executionChannel: "subscription-cli",
+        accountClass: "regular",
+      })),
+    };
+    expect(validateProviderComplianceAdvisoryGrounding(providerClaim as never, personalPacket, new Date("2026-07-20"))).toMatchObject({ success: false });
   });
 });

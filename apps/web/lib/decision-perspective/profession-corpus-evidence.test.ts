@@ -6,6 +6,7 @@ import {
   corpusUsageDay,
   gapReasonForContext,
   recordProfessionCorpusEvidence,
+  recordProviderComplianceAnswerGaps,
   recordProfessionCorpusGap,
   recordProfessionCorpusUsage,
   UNMAPPED_PROFESSION_KEY,
@@ -174,6 +175,25 @@ describe("recordProfessionCorpusGap", () => {
     const result = await recordProfessionCorpusGap({ professionKey: "finance", reason: "deferred", query: "   " }, { db });
     expect(result.recorded).toBe(false);
     expect(gaps.size).toBe(0);
+  });
+});
+
+describe("recordProviderComplianceAnswerGaps", () => {
+  it("deduplicates repeated validation reasons into legal-compliance repair signals", async () => {
+    const { db, gaps } = fakeEvidenceDb();
+    await recordProviderComplianceAnswerGaps({
+      reasons: ["stale-source", "citation-mismatch", "stale-source"],
+      query: "Can this provider handle employee records?",
+      agentId: "AGT-902",
+      routeContext: "/setup",
+    }, { db });
+
+    expect(gaps.size).toBe(2);
+    expect([...gaps.values()].map((gap) => gap.reason).sort()).toEqual([
+      "citation-mismatch",
+      "stale-source",
+    ]);
+    expect([...gaps.values()].every((gap) => gap.professionKey === "legal-compliance")).toBe(true);
   });
 });
 

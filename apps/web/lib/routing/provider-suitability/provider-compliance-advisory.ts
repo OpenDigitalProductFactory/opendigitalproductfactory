@@ -1,4 +1,6 @@
 import { isRecord } from "@/lib/shared/coerce";
+import { PROVIDER_COMPLIANCE_SOURCE_REGISTRY } from "@dpf/db/provider-compliance-source-registry";
+import type { ProviderReviewPacket } from "./provider-review-packet";
 
 export const PROVIDER_COMPLIANCE_ADVISORY_VERSION = "provider-compliance-advisory.v1" as const;
 export const PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY = "Reviewing provider compliance and sovereignty" as const;
@@ -14,6 +16,7 @@ export type ProviderComplianceAdvisory = {
   citations: Array<{
     title: string;
     reference: string;
+    sourceClaimId?: string;
     supports: string;
   }>;
 };
@@ -70,13 +73,94 @@ export function validateProviderComplianceAdvisory(value: unknown): AdvisoryVali
   }
   for (const [index, citation] of value.citations.entries()) {
     if (!isRecord(citation)) return { success: false, error: `advisory_invalid:citations.${index}` };
-    const citationUnknown = unknownField(citation, ["title", "reference", "supports"], `citations.${index}.`);
+    const citationUnknown = unknownField(citation, ["title", "reference", "sourceClaimId", "supports"], `citations.${index}.`);
     if (citationUnknown) return { success: false, error: citationUnknown };
     if (!validText(citation.title, 200) || !validText(citation.reference, 500) || !validText(citation.supports, 500)) {
       return { success: false, error: `advisory_invalid:citations.${index}` };
     }
+    if (citation.sourceClaimId !== undefined && !validText(citation.sourceClaimId, 200)) {
+      return { success: false, error: `advisory_invalid:citations.${index}.sourceClaimId` };
+    }
   }
   return { success: true, value: value as ProviderComplianceAdvisory };
+}
+
+const WORKLOAD_TO_EVIDENCE_SCOPE: Record<string, string> = {
+  "payments-finance": "financial-records",
+  "health-phi": "health-records",
+};
+
+function serviceForConnection(connection: ProviderReviewPacket["providerConnections"][number]): string {
+  if (connection.executionChannel === "direct-api") {
+    if (connection.providerId === "openai") return "api-platform";
+    if (connection.providerId === "anthropic") return "anthropic-api";
+  }
+  if (connection.executionChannel === "local-runtime") return "local-model";
+  return `${connection.providerId}-${connection.executionChannel}`;
+}
+
+function allows(values: readonly string[], requested: string): boolean {
+  return values.includes("*") || values.includes(requested);
+}
+
+/**
+ * Evidence gate for specialist output. A citation is accepted only when it
+ * names a canonical claim, the source is current, and that claim applies to
+ * at least one provider/jurisdiction/workload tuple in the minimized packet.
+ * Unknown account/service facts deliberately do not satisfy provider-specific
+ * claims; the coworker must keep those as unknowns instead of guessing.
+ */
+export function validateProviderComplianceAdvisoryGrounding(
+  advisory: ProviderComplianceAdvisory,
+  packet: ProviderReviewPacket,
+  now = new Date(),
+): { success: boolean; errors: string[] } {
+  const errors: string[] = [];
+  const jurisdictions = [
+    ...packet.businessContext.jurisdictionBasis.operatesIn,
+    ...packet.businessContext.jurisdictionBasis.sellsTo,
+    ...packet.businessContext.jurisdictionBasis.employsIn,
+  ];
+  const workloads = packet.recommendation.workloadClasses.map(
+    (workload) => WORKLOAD_TO_EVIDENCE_SCOPE[workload] ?? workload,
+  );
+  const conflictPositions = new Map<string, Set<string>>();
+
+  for (const citation of advisory.citations) {
+    const source = PROVIDER_COMPLIANCE_SOURCE_REGISTRY[citation.reference as keyof typeof PROVIDER_COMPLIANCE_SOURCE_REGISTRY];
+    if (!source || !citation.sourceClaimId) {
+      errors.push(`ungoverned-citation:${citation.reference}`);
+      continue;
+    }
+    const ageDays = (now.getTime() - Date.parse(source.retrievedAt)) / 86_400_000;
+    if (ageDays > source.maxAgeDays) {
+      errors.push(`stale-source:${citation.reference}`);
+      continue;
+    }
+    const claim = source.claims.find((candidate) => candidate.claimId === citation.sourceClaimId);
+    if (!claim) {
+      errors.push(`citation-mismatch:${citation.reference}:${citation.sourceClaimId}`);
+      continue;
+    }
+    const applies = packet.providerConnections.some((connection) =>
+      allows(claim.appliesTo.providerIds, connection.providerId)
+      && allows(claim.appliesTo.services, serviceForConnection(connection))
+      && allows(claim.appliesTo.accountClasses, connection.accountClass)
+    )
+      && jurisdictions.some((jurisdiction) => allows(claim.appliesTo.jurisdictions, jurisdiction))
+      && workloads.some((workload) => allows(claim.appliesTo.workloads, workload))
+      ;
+    if (!applies) errors.push(`scope-mismatch:${citation.reference}:${citation.sourceClaimId}`);
+    if (applies && "conflictKey" in claim && "position" in claim && claim.conflictKey && claim.position) {
+      const positions = conflictPositions.get(claim.conflictKey) ?? new Set<string>();
+      positions.add(claim.position);
+      conflictPositions.set(claim.conflictKey, positions);
+    }
+  }
+  if ([...conflictPositions.values()].some((positions) => positions.size > 1)) {
+    errors.push("conflicting-evidence:current-authoritative-sources");
+  }
+  return { success: errors.length === 0, errors };
 }
 
 export function parseProviderComplianceAdvisory(content: string): AdvisoryValidation {
@@ -99,10 +183,20 @@ export function formatProviderComplianceAdvisoryForOwner(advisory: ProviderCompl
   const validation = validateProviderComplianceAdvisory(advisory);
   if (!validation.success) throw new Error(validation.error);
   const value = validation.value;
-  const references = value.citations.map((citation) =>
-    `- ${citation.title} — ${citation.reference}\n  Supports: ${citation.supports}`,
+  const references = value.citations.map((citation) => {
+    const governed = PROVIDER_COMPLIANCE_SOURCE_REGISTRY[citation.reference as keyof typeof PROVIDER_COMPLIANCE_SOURCE_REGISTRY];
+    const label = governed ? `[${governed.title}](${governed.url})`
+      : citation.reference.startsWith("/") ? `[${citation.title}](${citation.reference})`
+        : `${citation.title} — ${citation.reference}`;
+    return `- ${label}\n  Supports: ${citation.supports}`;
+  }
   ).join("\n");
+  const directAnswer = value.decision === "recommended" ? "Yes."
+    : value.decision === "not-suitable" ? "No."
+      : value.decision === "conditional" ? "Only if the stated conditions are verified."
+        : "Cannot confirm this yet.";
   return [
+    directAnswer,
     `My recommendation: ${value.decision}`,
     value.plainLanguageSummary,
     "Workload guardrails",

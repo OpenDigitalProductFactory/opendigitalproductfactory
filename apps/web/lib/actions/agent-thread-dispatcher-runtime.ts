@@ -23,6 +23,7 @@ import {
   resolveProviderComplianceColdStartReply,
   type ProviderComplianceResultSource,
 } from "@/lib/routing/provider-suitability/provider-compliance-cold-start";
+import { recordProviderComplianceAnswerGaps } from "@/lib/decision-perspective/profession-corpus-evidence";
 
 /**
  * EP-A2A: when a collaboration child thread reaches a terminal state, emit
@@ -326,6 +327,14 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
       ? resolveProviderComplianceColdStartReply({ specialistReply: replyText, chatHistory })
       : null;
     if (providerResolution) replyText = providerResolution.content;
+    if (providerResolution?.gapReasons.length) {
+      await recordProviderComplianceAnswerGaps({
+        reasons: providerResolution.gapReasons,
+        query: "provider compliance onboarding advisory",
+        agentId: resolvedAgentId,
+        routeContext: context.routeContext,
+      });
+    }
 
     await completeChildThreadExecution({
       context,

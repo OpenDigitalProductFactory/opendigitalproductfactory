@@ -23,6 +23,12 @@ const {
     user: {
       findUnique: vi.fn(),
     },
+    professionCorpusGap: {
+      upsert: vi.fn(),
+    },
+    professionCorpusUsageStat: {
+      upsert: vi.fn(),
+    },
   },
   mockResolveAgent: vi.fn(),
   mockResolveTools: vi.fn(),
@@ -291,7 +297,12 @@ describe("runChildThreadExecution", () => {
       workloadRestrictions: ["Do not send customer records."],
       unknowns: ["Retention terms are not evidenced."],
       humanReviewRequired: true,
-      citations: [{ title: "Provider terms", reference: "DOC-42", supports: "The account terms govern retention." }],
+      citations: [{
+        title: "GDPR Article 28",
+        reference: "eu/gdpr-controller-processor-and-transfers",
+        sourceClaimId: "eu-controller-processor-contract-required",
+        supports: "A processor contract is required for this customer-record workload.",
+      }],
     });
     mockExecuteLoop.mockResolvedValue({ content: specialistReply, executedTools: [] });
     mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
@@ -329,7 +340,7 @@ describe("runChildThreadExecution", () => {
       }),
     });
     expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ content: expect.stringContaining("Provider terms") }),
+      data: expect.objectContaining({ content: expect.stringContaining("EUR-Lex") }),
     });
   });
 

@@ -3,6 +3,7 @@ import {
   buildProviderReviewPacket,
   formatProviderReviewObjective,
   parseProviderReviewObjective,
+  PROVIDER_REVIEW_OBJECTIVE_MAX_BYTES,
   validateProviderReviewPacket,
 } from "./provider-review-packet";
 
@@ -22,6 +23,8 @@ const input = {
     workloadClasses: ["customer-records", "public-marketing"] as const,
     items: [
       {
+        accountClass: "business-team",
+        executionChannel: "direct-api",
         providerConnectionId: "conn-1",
         providerId: "openai",
         scope: "public-only" as const,
@@ -60,6 +63,8 @@ describe("provider compliance review packet", () => {
       },
       providerConnections: [
         {
+          accountClass: "business-team",
+          executionChannel: "direct-api",
           providerConnectionId: "conn-1",
           providerId: "openai",
           scopes: ["company-work", "public-only"],
@@ -130,8 +135,26 @@ describe("provider compliance review packet", () => {
     expect(objective).toContain("provider-compliance-advisory.v1");
     expect(objective).toContain("Return only one JSON object");
     expect(objective).toContain("do not change provider activation or routing eligibility");
-    expect(objective.length).toBeLessThan(8_000);
+    expect(objective.length).toBeLessThan(PROVIDER_REVIEW_OBJECTIVE_MAX_BYTES);
     expect(parseProviderReviewObjective(objective)).toEqual({ success: true, value: packet });
+  });
+
+  it("keeps a real-inventory-size set of connection posture facts inside the bounded objective", () => {
+    const packet = buildProviderReviewPacket({
+      ...input,
+      recommendation: {
+        ...input.recommendation,
+        items: Array.from({ length: 31 }, (_, index) => ({
+          providerConnectionId: `conn-${index}`,
+          providerId: `provider-${index}`,
+          scope: "public-only" as const,
+          executionChannel: "direct-api",
+          accountClass: "business-team",
+        })),
+      },
+    });
+    expect(packet.providerConnections).toHaveLength(31);
+    expect(formatProviderReviewObjective(packet).length).toBeLessThan(PROVIDER_REVIEW_OBJECTIVE_MAX_BYTES);
   });
 
   it("fails closed when a cold-start objective does not contain the bounded packet", () => {

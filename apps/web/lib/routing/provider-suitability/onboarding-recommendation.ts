@@ -16,6 +16,8 @@ export type ProviderRecommendationItem = {
   label: string;
   scope: "company-work" | "public-only" | "blocked";
   reason: string;
+  executionChannel: ProviderTrustFacts["executionChannel"];
+  accountClass: ProviderTrustFacts["accountClass"];
 };
 
 export type ProviderOnboardingRecommendation = {
@@ -105,6 +107,8 @@ export function buildProviderOnboardingRecommendation(input: {
       providerConnectionId: connection.facts.providerConnectionId,
       providerId: connection.facts.providerId,
       label: connection.label,
+      executionChannel: connection.facts.executionChannel,
+      accountClass: connection.facts.accountClass,
     };
     if (connection.status !== "active") {
       useAfterReview.push({ ...base, scope: "company-work", reason: "Connect and test this provider before DPF can route any work to it." });
