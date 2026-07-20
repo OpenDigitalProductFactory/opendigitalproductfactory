@@ -29,7 +29,6 @@ import { activateProvider } from "@/lib/govern/activate-provider";
 import { seedAiProviderFinanceBridge } from "@/lib/finance/ai-provider-finance";
 import { autoConfigureBuildStudio } from "@/lib/ai-provider-build-studio-config";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-export { updateProviderConnectionPosture } from "@/lib/actions/provider-connection-posture";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
 const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateProviderConnectionPosture } from "@/lib/actions/ai-providers";
+import { updateProviderConnectionPosture } from "@/lib/actions/provider-connection-posture";
 
 type AccountClass = "regular" | "business-team" | "enterprise" | "unknown";
 

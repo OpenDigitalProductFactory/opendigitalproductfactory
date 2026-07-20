@@ -82,8 +82,8 @@ import {
   discoverModels,
   runProviderCatalogReconciliationIfDue,
   testProviderAuth,
-  updateProviderConnectionPosture,
 } from "./ai-providers";
+import { updateProviderConnectionPosture } from "./provider-connection-posture";
 
 describe("updateProviderConnectionPosture", () => {
   beforeEach(() => {
