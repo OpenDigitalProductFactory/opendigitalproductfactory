@@ -2,7 +2,8 @@
 // Builds a fake pnpm-style workspace on disk — store dirs under
 // node_modules/.pnpm plus workspace symlinks — and asserts the CLI detects the
 // exact incident shape (apps/web/node_modules/next -> next@16.2.7 store path
-// while pnpm-lock.yaml requires 16.2.9) with the reserved exit codes.
+// while pnpm-lock.yaml requires 16.2.9, and the same shape for vitest) with the
+// reserved exit codes.
 // node --test scripts/sandbox-freshness-preflight.test.mjs — pure node, no docker.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -10,8 +11,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const cli = new URL("./sandbox-freshness-preflight.mjs", import.meta.url).pathname;
+const cli = fileURLToPath(new URL("./sandbox-freshness-preflight.mjs", import.meta.url));
 
 const PACKAGES = [
   { name: "next", importer: "apps/web", version: "16.2.9" },
@@ -19,6 +21,7 @@ const PACKAGES = [
   { name: "react-dom", importer: "apps/web", version: "19.2.7" },
   { name: "typescript", importer: ".", version: "5.9.3" },
   { name: "prisma", importer: "packages/db", version: "6.19.1" },
+  { name: "vitest", importer: "apps/web", version: "4.1.10" },
 ];
 
 function lockfileText(versions) {
@@ -55,9 +58,14 @@ function scaffold({ installedVersions = {}, lockedVersions = {}, installedLockVe
     const storeDir = join(root, "node_modules", ".pnpm", `${pkg.name}@${version}_fakehash`, "node_modules", pkg.name);
     mkdirSync(storeDir, { recursive: true });
     writeFileSync(join(storeDir, "package.json"), JSON.stringify({ name: pkg.name, version }));
+    if (pkg.name === "vitest") {
+      mkdirSync(join(storeDir, "dist", "chunks"), { recursive: true });
+      writeFileSync(join(storeDir, "dist", "cli.js"), "import './chunks/cac.ok.js';\n");
+      writeFileSync(join(storeDir, "dist", "chunks", "cac.ok.js"), "export default {};\n");
+    }
     const importerNodeModules = pkg.importer === "." ? join(root, "node_modules") : join(root, pkg.importer, "node_modules");
     mkdirSync(importerNodeModules, { recursive: true });
-    symlinkSync(storeDir, join(importerNodeModules, pkg.name), "dir");
+    symlinkSync(storeDir, join(importerNodeModules, pkg.name), process.platform === "win32" ? "junction" : "dir");
   }
   return root;
 }
@@ -106,6 +114,32 @@ test("detects the incident: stale next@16.2.7 store link while lockfile requires
   rmSync(root, { recursive: true, force: true });
 });
 
+test("detects stale vitest before the test runner fails on missing packaged chunks", () => {
+  const root = scaffold({
+    installedVersions: { vitest: "4.1.9" },
+    lockedVersions: { vitest: "4.1.10" },
+    installedLockVersions: { vitest: "4.1.9" },
+  });
+  const { result, report } = runPreflight(root);
+  assert.equal(result.status, 3, `expected SANDBOX_DRIFT exit 3, got ${result.status}\n${result.stderr}`);
+  assert.equal(report.verdict, "sandbox_drift");
+  assert.ok(report.failures.some((f) => f.kind === "version_drift" && f.package === "vitest"));
+  const vitest = report.packages.find((p) => p.name === "vitest");
+  assert.equal(vitest.lockedVersion, "4.1.10");
+  assert.equal(vitest.resolvedVersion, "4.1.9");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("detects a broken vitest entrypoint even when package.json reports the locked version", () => {
+  const root = scaffold();
+  rmSync(join(root, "node_modules", ".pnpm", "vitest@4.1.10_fakehash", "node_modules", "vitest", "dist", "chunks", "cac.ok.js"), { force: true });
+  const { result, report } = runPreflight(root);
+  assert.equal(result.status, 3, `expected SANDBOX_DRIFT exit 3, got ${result.status}\n${result.stderr}`);
+  assert.ok(report.failures.some((f) => f.kind === "package_broken" && f.package === "vitest"));
+  assert.match(result.stderr, /incomplete/);
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("resolves hoisted layouts (node-linker=hoisted) via Node-style walk-up", () => {
   // No per-importer links at all: packages live flat at the root node_modules,
   // as pnpm's hoisted linker (and npm) lay them out. The runtime resolves
@@ -120,13 +154,18 @@ test("resolves hoisted layouts (node-linker=hoisted) via Node-style walk-up", ()
     const dir = join(root, "node_modules", pkg.name);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: pkg.name, version: pkg.version }));
+    if (pkg.name === "vitest") {
+      mkdirSync(join(dir, "dist", "chunks"), { recursive: true });
+      writeFileSync(join(dir, "dist", "cli.js"), "import './chunks/cac.ok.js';\n");
+      writeFileSync(join(dir, "dist", "chunks", "cac.ok.js"), "export default {};\n");
+    }
   }
   const { result, report } = runPreflight(root);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(report.verdict, "green");
   const next = report.packages.find((p) => p.name === "next");
   assert.equal(next.resolvedVersion, "16.2.9");
-  assert.match(next.resolvedFrom, /node_modules\/next$/);
+  assert.match(next.resolvedFrom, /node_modules[\\/]next$/);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -161,7 +200,7 @@ test("--converge refuses a duplicate convergence while the lock is held", () => 
     installedVersions: { next: "16.2.7" },
     lockedVersions: { next: "16.2.9" },
   });
-  mkdirSync(join(root, "node_modules", ".dpf-freshness-converge.lock"), { recursive: true });
+  mkdirSync(join(root, ".dpf-freshness-converge.lock"), { recursive: true });
   const { result, report } = runPreflight(root, ["--converge"]);
   assert.equal(result.status, 4, `${result.stdout}\n${result.stderr}`);
   assert.equal(report.convergence.attempted, false);

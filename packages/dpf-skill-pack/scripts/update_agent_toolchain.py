@@ -202,10 +202,11 @@ def assess_process_spine_health(
         for row in rows
         if exposed is not None and row["genericExposed"] and not row["dpfExposed"]
     ]
+    exposure_unknown = exposed is None
     severity = "ok"
     if missing_installed:
         severity = "fail"
-    elif conflicts or missing_exposed:
+    elif exposure_unknown or conflicts or missing_exposed:
         severity = "warn"
 
     return {
@@ -222,6 +223,11 @@ def assess_process_spine_health(
             "total": len(rows),
             "present": (len(rows) - len(missing_exposed)) if exposed is not None else None,
             "missingDpfSkills": missing_exposed,
+            "message": (
+                None
+                if exposed is not None
+                else "client did not provide active skill evidence; DPF cannot prove replacements are loaded"
+            ),
         },
         "conflicts": conflicts,
     }
@@ -255,8 +261,9 @@ def render_process_spine_health(verdict: dict[str, Any]) -> list[str]:
             )
     else:
         lines.append(
-            "  DPF-native replacement skills loaded/exposed in this session: unknown "
-            "(this client did not provide active skill evidence)."
+            "  DPF-native replacement skills loaded/exposed in this session: UNKNOWN - "
+            "this client did not provide active skill evidence; DPF cannot prove "
+            "replacements are loaded."
         )
 
     if verdict["conflicts"]:

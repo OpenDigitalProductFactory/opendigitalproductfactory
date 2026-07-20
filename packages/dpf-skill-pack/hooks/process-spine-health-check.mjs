@@ -6,7 +6,7 @@
 //   2. exposed-in-session: the active client reports which skills are visible.
 //
 // Most clients do not expose active skill state to hooks yet. In that case the
-// check reports "unknown" rather than pretending install equals loaded.
+// check warns "unknown" rather than pretending install equals loaded.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -116,9 +116,10 @@ export function assessProcessSpine({
         }))
     : [];
 
+  const exposureUnknown = exposed === null;
   const severity = missingInstalled.length > 0
     ? "fail"
-    : conflicts.length > 0 || missingDpfExposed.length > 0
+    : exposureUnknown || conflicts.length > 0 || missingDpfExposed.length > 0
       ? "warn"
       : "ok";
 
@@ -143,6 +144,7 @@ export function assessProcessSpine({
           total: rows.length,
           present: null,
           missingDpfSkills: [],
+          message: "client did not provide active skill evidence; DPF cannot prove replacements are loaded",
         },
     conflicts,
   };
@@ -172,7 +174,7 @@ export function renderProcessSpineSummary(verdict) {
     }
   } else {
     lines.push(
-      "  DPF-native replacement skills loaded/exposed in this session: unknown (this client did not provide active skill evidence).",
+      "  DPF-native replacement skills loaded/exposed in this session: UNKNOWN - this client did not provide active skill evidence; DPF cannot prove replacements are loaded.",
     );
   }
 

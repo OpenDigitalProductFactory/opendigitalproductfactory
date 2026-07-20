@@ -5,7 +5,7 @@
 // Asserts, deterministically:
 //   1. the checkout matches the requested branch/SHA,
 //   2. node_modules/.pnpm/lock.yaml matches the checked-in pnpm-lock.yaml for
-//      the critical packages (next, react, react-dom, typescript, prisma),
+//      the critical packages (next, react, react-dom, typescript, prisma, vitest),
 //   3. the workspace links (e.g. apps/web/node_modules/next) resolve on disk
 //      to the locked versions — this is the check that catches a stale
 //      next@16.2.7 store link while the lockfile requires 16.2.9,
@@ -34,6 +34,8 @@ import {
   evaluateFreshness,
   exitCodeForVerdict,
   parseLockedVersion,
+  shouldForceConvergenceAfterInstall,
+  stalePackagePathsForRelink,
 } from "./lib/sandbox-freshness.mjs";
 
 const CONVERGE_LOCK_STALE_MS = 30 * 60_000;
@@ -113,6 +115,24 @@ function resolvePackageOnDisk(importerDir, name) {
   return { missing: true, resolvedVersion: "", linkTarget: lastLinkTarget, realPath: "", resolvedFrom: "" };
 }
 
+function missingEntrypointImports(packageDir, entrypoints = []) {
+  const missing = [];
+  for (const entrypoint of entrypoints) {
+    const entryPath = path.join(packageDir, entrypoint);
+    const source = readFileIfExists(entryPath);
+    if (!source) {
+      missing.push(entrypoint);
+      continue;
+    }
+    for (const match of source.matchAll(/(?:import|export)\s+(?:[^'"]*?\s+from\s+)?["'](\.[^"']+)["']/g)) {
+      const specifier = match[1];
+      const candidate = path.resolve(path.dirname(entryPath), specifier);
+      if (!fs.existsSync(candidate)) missing.push(path.relative(packageDir, candidate));
+    }
+  }
+  return [...new Set(missing)];
+}
+
 function collectState() {
   const lockfileText = readFileIfExists(path.join(rootDir, "pnpm-lock.yaml"));
   const installedLockPath = path.join(rootDir, "node_modules", ".pnpm", "lock.yaml");
@@ -141,6 +161,7 @@ function collectState() {
       resolvedVersion: onDisk.resolvedVersion,
       linkTarget: onDisk.linkTarget,
       resolvedFrom: onDisk.resolvedFrom,
+      missingEntrypointImports: onDisk.missing ? [] : missingEntrypointImports(onDisk.realPath, spec.entrypointImportChecks),
       missing: onDisk.missing,
     });
   }
@@ -214,7 +235,8 @@ if (state.installProcesses.length > 0) {
   finish(state, evaluation, { attempted: false, reason: "install_already_running" });
 }
 
-const lockDir = path.join(rootDir, "node_modules", ".dpf-freshness-converge.lock");
+const gitLockPath = git(rootDir, ["rev-parse", "--git-path", "dpf-freshness-converge.lock"]);
+const lockDir = gitLockPath ? path.resolve(rootDir, gitLockPath) : path.join(rootDir, ".dpf-freshness-converge.lock");
 try {
   fs.mkdirSync(lockDir, { recursive: false });
 } catch {
@@ -241,35 +263,103 @@ try {
 // apps/web/node_modules/next remained unresolvable). Removing pnpm's private
 // state forces a real link-reconciliation pass; the store stays warm, so this
 // costs seconds, not a re-download.
-for (const staleState of [
-  path.join(rootDir, "node_modules", ".pnpm", "lock.yaml"),
-  path.join(rootDir, "node_modules", ".modules.yaml"),
-]) {
-  try {
-    fs.rmSync(staleState, { force: true });
-  } catch (error) {
-    console.error(`[sandbox-freshness] could not clear ${staleState}: ${error.message}`);
+function clearPnpmInstallState() {
+  for (const staleState of [
+    path.join(rootDir, "node_modules", ".pnpm", "lock.yaml"),
+    path.join(rootDir, "node_modules", ".modules.yaml"),
+  ]) {
+    try {
+      fs.rmSync(staleState, { force: true });
+    } catch (error) {
+      console.error(`[sandbox-freshness] could not clear ${staleState}: ${error.message}`);
+    }
   }
 }
 
-const convergeCommand = ["pnpm", "install", "--frozen-lockfile", "--config.confirmModulesPurge=false"];
-log(`drift detected; converging with: ${convergeCommand.join(" ")}`);
-const startedAt = Date.now();
-const install = spawnSync(convergeCommand[0], convergeCommand.slice(1), {
-  cwd: rootDir,
-  stdio: quiet ? "ignore" : "inherit",
-  shell: process.platform === "win32",
-});
-fs.rmSync(lockDir, { recursive: true, force: true });
-convergence = {
-  attempted: true,
-  command: convergeCommand.join(" "),
-  exitCode: install.status ?? 1,
-  durationMs: Date.now() - startedAt,
-};
+function clearStalePackageLinks(packageState) {
+  for (const stalePackagePath of stalePackagePathsForRelink(packageState, rootDir)) {
+    try {
+      fs.rmSync(stalePackagePath, { recursive: true, force: true });
+      log(`removed stale package link before relink: ${path.relative(rootDir, stalePackagePath)}`);
+    } catch (error) {
+      console.error(`[sandbox-freshness] could not clear stale package link ${stalePackagePath}: ${error.message}`);
+    }
+  }
+}
 
-state = collectState();
-evaluation = evaluateFreshness(state);
+function canResetNodeModules() {
+  return path.basename(rootDir).toLowerCase() === ".local-ci-runner"
+    || process.env.DPF_ALLOW_SANDBOX_NODE_MODULES_RESET === "1";
+}
+
+function resetSandboxNodeModules() {
+  if (!canResetNodeModules()) return false;
+  const target = path.join(rootDir, "node_modules");
+  const resolved = path.resolve(target);
+  if (path.relative(rootDir, resolved) !== "node_modules") return false;
+  try {
+    const stat = fs.lstatSync(resolved);
+    if (stat.isSymbolicLink()) {
+      console.error(`[sandbox-freshness] refusing full node_modules reset because ${resolved} is a symlink/junction`);
+      return false;
+    }
+  } catch {
+    return true;
+  }
+  fs.rmSync(resolved, { recursive: true, force: true });
+  log("reset scratch sandbox node_modules after package-level convergence could not repair dependency drift");
+  return true;
+}
+
+function runConvergenceAttempt(packageState, { force = false, resetNodeModules = false } = {}) {
+  if (resetNodeModules) resetSandboxNodeModules();
+  clearPnpmInstallState();
+  clearStalePackageLinks(packageState);
+  const convergeCommand = ["pnpm", "install"];
+  if (force) convergeCommand.push("--force");
+  convergeCommand.push("--frozen-lockfile", "--config.confirmModulesPurge=false");
+  log(`drift detected; converging with: ${convergeCommand.join(" ")}`);
+  const startedAt = Date.now();
+  const install = spawnSync(convergeCommand[0], convergeCommand.slice(1), {
+    cwd: rootDir,
+    stdio: quiet ? "ignore" : "inherit",
+    shell: process.platform === "win32",
+  });
+  return {
+    attempted: true,
+    command: convergeCommand.join(" "),
+    exitCode: install.status ?? 1,
+    durationMs: Date.now() - startedAt,
+    resetNodeModules,
+  };
+}
+
+const attempts = [];
+try {
+  attempts.push(runConvergenceAttempt(state));
+  convergence = { ...attempts[attempts.length - 1], attempts };
+  state = collectState();
+  evaluation = evaluateFreshness(state);
+
+  if (shouldForceConvergenceAfterInstall(evaluation)) {
+    log("first convergence left dependency drift; retrying once with --force to refresh the sandbox store/link graph");
+    attempts.push(runConvergenceAttempt(state, { force: true }));
+    convergence = { ...attempts[attempts.length - 1], attempts };
+    state = collectState();
+    evaluation = evaluateFreshness(state);
+  }
+
+  if (shouldForceConvergenceAfterInstall(evaluation) && canResetNodeModules()) {
+    log("forced convergence left dependency drift; resetting scratch node_modules once and reinstalling from the lockfile");
+    attempts.push(runConvergenceAttempt(state, { resetNodeModules: true }));
+    convergence = { ...attempts[attempts.length - 1], attempts };
+    state = collectState();
+    evaluation = evaluateFreshness(state);
+  }
+} finally {
+  fs.rmSync(lockDir, { recursive: true, force: true });
+}
+
 if (convergence.exitCode !== 0 && evaluation.verdict === "green") {
   // Trust the re-check, but surface the installer's own failure.
   evaluation = {
