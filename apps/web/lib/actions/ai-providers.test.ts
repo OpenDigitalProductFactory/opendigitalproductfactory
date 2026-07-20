@@ -120,6 +120,40 @@ describe("updateProviderConnectionPosture", () => {
       skipDiscovery: true,
     });
   });
+
+  it("records OpenRouter controls on the exact connection without creating enterprise proof", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      entitlements: {},
+      evidenceStatus: "unreviewed",
+    });
+    mockPrisma.aiProviderConnection.update.mockResolvedValue({});
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "active" });
+
+    await updateProviderConnectionPosture({
+      providerId: "openrouter",
+      accountClass: "regular",
+      noTraining: true,
+      enabledRegions: ["eu"],
+      zeroRetention: true,
+      regionalProcessing: true,
+      approvedUnderlyingProviderSlugs: [" Anthropic ", "google-vertex/europe-west4", "bad slug!"],
+    });
+
+    expect(mockPrisma.aiProviderConnection.update).toHaveBeenCalledWith({
+      where: { connectionId: "provider-default-openrouter" },
+      data: expect.objectContaining({
+        accountClass: "regular",
+        evidenceStatus: "operator-attested",
+        entitlements: {
+          noTraining: true,
+          enabledRegions: ["eu"],
+          zeroRetention: true,
+          regionalProcessing: true,
+          approvedUnderlyingProviderSlugs: ["anthropic", "google-vertex/europe-west4"],
+        },
+      }),
+    });
+  });
 });
 
 describe("testProviderAuth", () => {

@@ -42,6 +42,17 @@ function catalogFacts(provider: {
           : [];
       })
     : [];
+  const routerPassThroughRaw = record(trust.routerPassThrough);
+  const routerPassThrough = category === "router" && Object.keys(routerPassThroughRaw).length > 0
+    ? {
+        exposesUnderlyingProvider: routerPassThroughRaw.exposesUnderlyingProvider === true,
+        supportsProviderAllowlist: routerPassThroughRaw.supportsProviderAllowlist === true,
+        supportsProviderBlocklist: routerPassThroughRaw.supportsProviderBlocklist === true,
+        supportsZdrFilter: routerPassThroughRaw.supportsZdrFilter === true,
+        supportsDataCollectionDeny: routerPassThroughRaw.supportsDataCollectionDeny === true,
+        supportsBoundedFallbacks: routerPassThroughRaw.supportsBoundedFallbacks === true,
+      }
+    : undefined;
   return {
     providerId: provider.providerId,
     catalogProviderId: typeof entry.catalogProviderId === "string" ? entry.catalogProviderId : provider.providerId,
@@ -53,6 +64,7 @@ function catalogFacts(provider: {
     supportsRegionalRouting: typeof trust.supportsRegionalRouting === "boolean" ? trust.supportsRegionalRouting : null,
     supportedRegions: strings(trust.supportedRegions),
     regionalEndpoints,
+    ...(routerPassThrough ? { routerPassThrough } : {}),
   };
 }
 

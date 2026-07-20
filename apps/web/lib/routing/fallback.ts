@@ -7,6 +7,7 @@ import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
+import { compileOpenRouterExecutionPolicy } from "./provider-suitability/openrouter-policy";
 import { resolveDefaultExecutionAdapter } from "./execution-plan";
 import {
   recordRequest,
@@ -45,7 +46,7 @@ function buildFallbackProviderSettings(
   return effort ? { effort } : {};
 }
 
-function buildFallbackPlan(
+export function buildFallbackPlan(
   entry: { providerId: string; modelId: string },
   decision: RouteDecision,
   tools?: Array<Record<string, unknown>>,
@@ -58,7 +59,7 @@ function buildFallbackPlan(
     toolPolicy.toolChoice = "auto";
   }
 
-  return {
+  const fallbackPlan: RoutedExecutionPlan = {
     providerId: entry.providerId,
     modelId: entry.modelId,
     recipeId: null,
@@ -69,7 +70,14 @@ function buildFallbackPlan(
     toolPolicy,
     responsePolicy: sourcePlan?.responsePolicy ?? {},
     ...(sourcePlan?.temperature !== undefined ? { temperature: sourcePlan.temperature } : {}),
+    ...(sourcePlan?.openRouterObligations
+      ? { openRouterObligations: sourcePlan.openRouterObligations }
+      : {}),
   };
+  if (entry.providerId === "openrouter" && sourcePlan?.openRouterObligations) {
+    fallbackPlan.openRouterPolicy = compileOpenRouterExecutionPolicy(sourcePlan.openRouterObligations);
+  }
+  return fallbackPlan;
 }
 
 export interface FallbackResult {
@@ -81,6 +89,8 @@ export interface FallbackResult {
   downgraded: boolean;
   downgradeMessage: string | null;
   responseId?: string;
+  /** Policy-safe router receipt; never includes prompts or model output. */
+  routingEvidence?: import("./provider-suitability/openrouter-policy").OpenRouterRoutingEvidence;
 }
 
 /**
@@ -299,6 +309,10 @@ export async function callWithFallbackChain(
 
       const pinnedMiss = decision.reason?.startsWith("WARNING: Pinned provider") ?? false;
       const downgraded = i > 0 || pinnedMiss;
+      const raw = result.raw && typeof result.raw === "object"
+        ? result.raw as Record<string, unknown>
+        : null;
+      const routingEvidence = raw?.openRouterRoutingEvidence;
       return {
         providerId: entry.providerId,
         modelId: entry.modelId,
@@ -315,6 +329,9 @@ export async function callWithFallbackChain(
             : `Switched to ${provider.name} after the preferred endpoint was unavailable.`
           : null,
         responseId: result.responseId,
+        ...(routingEvidence && typeof routingEvidence === "object"
+          ? { routingEvidence: routingEvidence as import("./provider-suitability/openrouter-policy").OpenRouterRoutingEvidence }
+          : {}),
       };
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);

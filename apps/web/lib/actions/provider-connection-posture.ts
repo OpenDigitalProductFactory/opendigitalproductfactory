@@ -17,6 +17,9 @@ export async function updateProviderConnectionPosture(input: {
   accountClass: (typeof PROVIDER_ACCOUNT_CLASSES)[number];
   noTraining: boolean | null;
   enabledRegions: string[];
+  zeroRetention?: boolean | null;
+  regionalProcessing?: boolean | null;
+  approvedUnderlyingProviderSlugs?: string[];
 }): Promise<{ error?: string }> {
   await requireCapability("manage_provider_connections");
   if (!PROVIDER_ACCOUNT_CLASSES.includes(input.accountClass)) {
@@ -41,6 +44,15 @@ export async function updateProviderConnectionPosture(input: {
         ...existingEntitlements,
         noTraining: input.noTraining,
         enabledRegions: [...new Set(input.enabledRegions.map((region) => region.trim().toLowerCase()).filter(Boolean))].sort(),
+        ...(input.providerId === "openrouter" ? {
+          zeroRetention: input.zeroRetention ?? null,
+          regionalProcessing: input.regionalProcessing ?? null,
+          approvedUnderlyingProviderSlugs: [...new Set(
+            (input.approvedUnderlyingProviderSlugs ?? [])
+              .map((slug) => slug.trim().toLowerCase())
+              .filter((slug) => /^[a-z0-9][a-z0-9._/-]*$/.test(slug)),
+          )].sort(),
+        } : {}),
       },
     },
   });

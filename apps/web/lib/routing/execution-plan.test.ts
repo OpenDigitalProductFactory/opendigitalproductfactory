@@ -252,6 +252,41 @@ describe("buildPlanFromRecipe", () => {
     const plan = buildPlanFromRecipe(recipe, makeContract());
     expect(plan.executionAdapter).toBe("claude-cli");
   });
+
+  it("compiles restricted OpenRouter obligations into a typed execution policy", () => {
+    const plan = buildPlanFromRecipe(
+      makeRecipe({ providerId: "openrouter", modelId: "anthropic/claude" }),
+      makeContract({
+        openRouterObligations: {
+          requireProviderAllowlist: true,
+          requireProviderBlocklist: true,
+          requireZdr: true,
+          denyDataCollection: true,
+          requireBoundedFallbacks: true,
+          requiredRegion: null,
+          approvedEndpointSlugs: ["anthropic"],
+          providerConnectionId: "conn-router",
+          accountClass: "enterprise",
+          evidenceStatus: "contract-uploaded",
+          regionalProcessingEntitled: false,
+          enabledRegions: [],
+          requiredBaseUrl: null,
+        },
+      }),
+    );
+    expect(plan.openRouterPolicy).toMatchObject({
+      posture: "restricted",
+      providerSettings: {
+        only: ["anthropic"],
+        allow_fallbacks: false,
+        require_parameters: true,
+        data_collection: "deny",
+        zdr: true,
+      },
+      requireUnderlyingProviderEvidence: true,
+      providerConnectionId: "conn-router",
+    });
+  });
 });
 
 // ── buildDefaultPlan ─────────────────────────────────────────────────────────

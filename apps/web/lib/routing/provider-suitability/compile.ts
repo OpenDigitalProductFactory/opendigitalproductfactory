@@ -179,15 +179,33 @@ function residencyPolicy(input: CompileProviderSuitabilityInput): ProviderSuitab
 }
 
 function openRouterObligations(input: CompileProviderSuitabilityInput): OpenRouterPolicyObligations | null {
-  if (!input.providerFacts.some((facts) => facts.category === "router")) return null;
+  const connections = input.providerFacts.filter(
+    (facts) => facts.providerId === "openrouter" || facts.catalogProviderId === "openrouter",
+  );
+  if (connections.length === 0) return null;
   const restricted = input.workloadProfiles.some((profile) => profile.sensitivity !== "public");
+  // One execution plan must describe one concrete account. Ambiguous connections
+  // intentionally compile without account claims or endpoint slugs and therefore
+  // fail closed if a restricted OpenRouter route somehow reaches dispatch.
+  const connection = connections.length === 1 ? connections[0]! : null;
+  const requiredRegion = input.businessProfile.dataResidency[0]?.toLowerCase() ?? null;
+  const regionalEndpoint = connection?.regionalEndpoints.find(
+    (endpoint) => endpoint.region === requiredRegion,
+  );
   return {
     requireProviderAllowlist: restricted,
     requireProviderBlocklist: restricted,
     requireZdr: restricted,
     denyDataCollection: restricted,
     requireBoundedFallbacks: restricted,
-    requiredRegion: input.businessProfile.dataResidency[0]?.toLowerCase() ?? null,
+    requiredRegion,
+    approvedEndpointSlugs: sortedUnique(connection?.entitlements.approvedUnderlyingProviderSlugs ?? []),
+    providerConnectionId: connection?.providerConnectionId ?? null,
+    accountClass: connection?.accountClass ?? "unknown",
+    evidenceStatus: connection?.evidenceStatus ?? "unreviewed",
+    regionalProcessingEntitled: connection?.entitlements.regionalProcessing === true,
+    enabledRegions: sortedUnique(connection?.entitlements.enabledRegions ?? []),
+    requiredBaseUrl: regionalEndpoint?.baseUrl ?? null,
   };
 }
 

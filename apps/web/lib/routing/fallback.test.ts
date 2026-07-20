@@ -73,7 +73,7 @@ vi.mock("./route-outcome", () => ({
 
 // ── Imports (after mocks) ────────────────────────────────────────────────────
 
-import { callWithFallbackChain } from "./fallback";
+import { buildFallbackPlan, callWithFallbackChain } from "./fallback";
 import { prisma } from "@dpf/db";
 import { callProvider, InferenceError } from "@/lib/ai-inference";
 import {
@@ -121,6 +121,45 @@ const makeCandidate = (
   dimensionScores: {},
   costPerOutputMToken: null,
   excluded: false,
+});
+
+it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fallback", () => {
+  const plan = buildFallbackPlan(
+    { providerId: "openrouter", modelId: "anthropic/claude" },
+    makeDecision("openai", "gpt-4o"),
+    undefined,
+    {
+      providerId: "openai",
+      modelId: "gpt-4o",
+      recipeId: null,
+      contractFamily: "sync.test",
+      executionAdapter: "chat",
+      maxTokens: 1024,
+      providerSettings: {},
+      toolPolicy: {},
+      responsePolicy: {},
+      openRouterObligations: {
+        requireProviderAllowlist: true,
+        requireProviderBlocklist: true,
+        requireZdr: true,
+        denyDataCollection: true,
+        requireBoundedFallbacks: true,
+        requiredRegion: null,
+        approvedEndpointSlugs: ["anthropic"],
+        providerConnectionId: "conn-router",
+        accountClass: "enterprise",
+        evidenceStatus: "contract-uploaded",
+        regionalProcessingEntitled: false,
+        enabledRegions: [],
+        requiredBaseUrl: null,
+      },
+    },
+  );
+  expect(plan.openRouterPolicy).toMatchObject({
+    posture: "restricted",
+    providerSettings: { only: ["anthropic"], allow_fallbacks: false, zdr: true },
+    requireUnderlyingProviderEvidence: true,
+  });
 });
 
 const mockPrisma = prisma as unknown as {

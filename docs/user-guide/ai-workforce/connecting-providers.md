@@ -78,6 +78,14 @@ DPF checks those references before returning the specialist's answer. A material
 
 Local processing reduces external egress but is not automatically compliant. Security, retention, lawful basis, access control, capability, and sector obligations still apply.
 
+### OpenRouter and other router accounts
+
+A router connection is two trust decisions: the OpenRouter account and the underlying provider that actually handles the request. For public work, DPF may use normal price or latency routing. For private or regulated work, DPF requires an explicit underlying-provider allowlist, disables unbounded fallback, requests parameter-compatible endpoints, enables Zero Data Retention, denies provider data collection, and requires returned router metadata before releasing the answer.
+
+EU in-region OpenRouter processing is an enterprise feature. DPF uses `eu.openrouter.ai` only when the exact connected account has current enterprise and regional-processing evidence; a regular API key cannot inherit that entitlement. If the account, approved endpoint list, regional entitlement, policy pass-through, or returned underlying-provider evidence is missing, the restricted request stops safely instead of silently using a broader route.
+
+Routing receipts retain only the selected provider/model, region, and bounded attempt statuses. They do not copy prompts, answers, or arbitrary router/plugin metadata into the receipt.
+
 ## Finance Bridge
 
 When a provider is configured successfully, the platform now seeds a Finance bridge for it automatically:

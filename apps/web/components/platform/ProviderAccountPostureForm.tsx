@@ -13,7 +13,14 @@ export function ProviderAccountPostureForm({
 }: {
   providerId: string;
   canWrite: boolean;
-  initial: { accountClass: string; noTraining: boolean | null; enabledRegions: string[] } | null;
+  initial: {
+    accountClass: string;
+    noTraining: boolean | null;
+    enabledRegions: string[];
+    zeroRetention?: boolean | null;
+    regionalProcessing?: boolean | null;
+    approvedUnderlyingProviderSlugs?: string[];
+  } | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -24,6 +31,9 @@ export function ProviderAccountPostureForm({
   );
   const [noTraining, setNoTraining] = useState(initial?.noTraining == null ? "unknown" : initial.noTraining ? "yes" : "no");
   const [regions, setRegions] = useState((initial?.enabledRegions ?? []).join(", "));
+  const [zeroRetention, setZeroRetention] = useState(initial?.zeroRetention == null ? "unknown" : initial.zeroRetention ? "yes" : "no");
+  const [regionalProcessing, setRegionalProcessing] = useState(initial?.regionalProcessing == null ? "unknown" : initial.regionalProcessing ? "yes" : "no");
+  const [approvedProviders, setApprovedProviders] = useState((initial?.approvedUnderlyingProviderSlugs ?? []).join(", "));
   const [message, setMessage] = useState<string | null>(null);
 
   return (
@@ -50,6 +60,34 @@ export function ProviderAccountPostureForm({
           <input className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={regions} disabled={!canWrite || pending} placeholder="eu, uk" onChange={(event) => setRegions(event.target.value)} />
         </label>
       </div>
+      {providerId === "openrouter" && (
+        <div className="mt-4 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+          <h3 className="m-0 text-xs font-semibold text-[var(--dpf-text)]">Bound the router before company data is used</h3>
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+            OpenRouter is one account in front of other providers. These declarations help DPF stop unsafe fallback, but do not prove an enterprise contract or EU entitlement.
+          </p>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <label className="text-xs text-[var(--dpf-muted)]">Zero Data Retention enabled
+              <select className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={zeroRetention} disabled={!canWrite || pending} onChange={(event) => setZeroRetention(event.target.value)}>
+                <option value="unknown">Not verified</option>
+                <option value="yes">Enabled for this account</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+            <label className="text-xs text-[var(--dpf-muted)]">Regional processing enabled
+              <select className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={regionalProcessing} disabled={!canWrite || pending} onChange={(event) => setRegionalProcessing(event.target.value)}>
+                <option value="unknown">Not verified</option>
+                <option value="yes">Enabled for this account</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+            <label className="text-xs text-[var(--dpf-muted)]">Approved underlying providers
+              <input className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[var(--dpf-text)]" value={approvedProviders} disabled={!canWrite || pending} placeholder="anthropic, mistral" onChange={(event) => setApprovedProviders(event.target.value)} />
+              <span className="mt-1 block">Use the provider endpoint slugs reviewed for this company.</span>
+            </label>
+          </div>
+        </div>
+      )}
       <div className="mt-3 flex items-center gap-3">
         <button type="button" disabled={!canWrite || pending} className="rounded bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-[var(--dpf-on-accent)] disabled:opacity-50" onClick={() => startTransition(async () => {
           const result = await updateProviderConnectionPosture({
@@ -57,6 +95,11 @@ export function ProviderAccountPostureForm({
             accountClass,
             noTraining: noTraining === "unknown" ? null : noTraining === "yes",
             enabledRegions: regions.split(","),
+            ...(providerId === "openrouter" ? {
+              zeroRetention: zeroRetention === "unknown" ? null : zeroRetention === "yes",
+              regionalProcessing: regionalProcessing === "unknown" ? null : regionalProcessing === "yes",
+              approvedUnderlyingProviderSlugs: approvedProviders.split(","),
+            } : {}),
           });
           setMessage(result.error ?? "Account declaration saved. DPF will keep unproven workloads blocked.");
           if (!result.error) router.refresh();
