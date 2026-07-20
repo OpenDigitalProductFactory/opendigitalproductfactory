@@ -31,13 +31,13 @@ import { randomUUID } from "crypto";
 import { prisma } from "@dpf/db";
 import {
   EDGE_NODE_ALIAS_KIND,
+  EDGE_NODE_ENROLLMENT_CAPABILITIES,
   EDGE_NODE_INSTALL_MODES,
   EDGE_NODE_PLATFORMS,
-  PHASE_0_CAPABILITIES,
   isBootstrapTokenUsable,
   type EdgeNodeInstallMode,
   type EdgeNodePlatform,
-  type Phase0Capability,
+  type EdgeNodeEnrollmentCapability,
 } from "@dpf/db/edge-node-types";
 
 import {
@@ -193,7 +193,7 @@ export type EnrollResult =
       /** Authority-decided discovery sweep interval (seconds). */
       sweepIntervalSec: number;
       /** Capabilities the Authority accepted from the agent's advertised set. */
-      acceptedCapabilities: Phase0Capability[];
+      acceptedCapabilities: EdgeNodeEnrollmentCapability[];
       /** trustState at enrollment ("trusted" if auto-approved else "pending"). */
       trustState: "trusted" | "pending";
       /** Customer-account scope copied from the consumed bootstrap token. */
@@ -253,14 +253,14 @@ export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> 
   }
 
   const acceptedCapabilities = input.advertisedCapabilities.filter(
-    (cap): cap is Phase0Capability =>
-      (PHASE_0_CAPABILITIES as readonly string[]).includes(cap),
+    (cap): cap is EdgeNodeEnrollmentCapability =>
+      (EDGE_NODE_ENROLLMENT_CAPABILITIES as readonly string[]).includes(cap),
   );
   if (acceptedCapabilities.length === 0) {
     return {
       ok: false,
       error: "no_acceptable_capabilities",
-      message: `Phase 0 accepts only: ${PHASE_0_CAPABILITIES.join(", ")}`,
+      message: `Enrollment accepts only: ${EDGE_NODE_ENROLLMENT_CAPABILITIES.join(", ")}`,
     };
   }
 

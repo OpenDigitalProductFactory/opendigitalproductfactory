@@ -1,11 +1,11 @@
 // dpf-edge-node — Mode 4 native binary for the DPF Edge Node.
 //
 // Mirrors the Phase 0 lifecycle of services/edge-node/src/index.ts:
-//   1. Load config from env (refuse to start on invalid config).
-//   2. Try to load existing state from disk.
-//   3a. State present  → skip enrollment, run heartbeat + sweep loops.
-//   3b. State missing  → require DPF_BOOTSTRAP_TOKEN, enroll, persist
-//                        state, then run loops.
+//  1. Load config from env (refuse to start on invalid config).
+//  2. Try to load existing state from disk.
+//     3a. State present  → skip enrollment, run heartbeat + sweep loops.
+//     3b. State missing  → require DPF_BOOTSTRAP_TOKEN, enroll, persist
+//     state, then run loops.
 //
 // Heartbeat + sweep loops run concurrently. If either returns (e.g.
 // node revoked), the process exits so the supervisor can restart.
@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/api"
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/collect"
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/config"
+	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/federation"
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/state"
 )
 
@@ -44,10 +46,19 @@ import (
 // Default is the dev fallback; production builds inject the release tag.
 var Version = "0.0.0-dev"
 
-// phase0Capabilities mirrors PHASE_0_CAPABILITIES in
-// services/edge-node/src/enroll.ts. Drift here is a wire-contract
-// regression caught by the Authority-side parity test.
-var phase0Capabilities = []string{"discovery.network"}
+// nativeCapabilities includes host-owned behavior that the Docker runtime
+// cannot provide on macOS/Windows. The Authority accepts only its closed
+// enrollment allow-list; wire shape parity does not require runtime parity.
+var nativeCapabilities = []string{"discovery.network", "federation.discovery"}
+
+const (
+	nearbyDiscoveryUnknown int32 = iota
+	nearbyDiscoveryHealthy
+	nearbyDiscoveryDegraded
+)
+
+var nearbyDiscoveryHealth atomic.Int32
+var nearbyDiscoveryAccepted atomic.Bool
 
 func main() {
 	printFixtureMode := flag.Bool("print-enroll-fixture", false,
@@ -112,6 +123,7 @@ func run() error {
 			slog.String("enrolledAt", st.EnrolledAt),
 		)
 	}
+	nearbyDiscoveryAccepted.Store(containsString(st.AcceptedCapabilities, "federation.discovery"))
 
 	slog.Info("Starting heartbeat + sweep loops",
 		slog.Int("heartbeatIntervalSec", st.HeartbeatIntervalSec),
@@ -121,9 +133,10 @@ func run() error {
 	// Race the two loops. Whichever returns first ends the process so
 	// the supervisor can restart with fresh state. Heartbeat exits on
 	// node_revoked; sweep currently runs until ctx is cancelled.
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 	go func() { errCh <- runHeartbeat(ctx, cfg, client, st) }()
 	go func() { errCh <- runSweep(ctx, cfg, client, st) }()
+	go func() { errCh <- runFederationDiscovery(ctx, cfg, client, st) }()
 
 	select {
 	case err := <-errCh:
@@ -131,6 +144,101 @@ func run() error {
 	case <-ctx.Done():
 		return nil
 	}
+}
+
+func runFederationDiscovery(ctx context.Context, cfg *config.Config, client *api.Client, st *state.EdgeNodeState) error {
+	if len(st.NodeToken) < 16 {
+		return errors.New("node token is too short to derive a discovery identifier")
+	}
+	for ctx.Err() == nil {
+		if !nearbyDiscoveryAccepted.Load() {
+			nearbyDiscoveryHealth.Store(nearbyDiscoveryUnknown)
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(5 * time.Second):
+				continue
+			}
+		}
+
+		discoveryCtx, cancelDiscovery := context.WithCancel(ctx)
+		monitorDone := make(chan struct{})
+		go func() {
+			defer close(monitorDone)
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-discoveryCtx.Done():
+					return
+				case <-ticker.C:
+					if !nearbyDiscoveryAccepted.Load() {
+						cancelDiscovery()
+						return
+					}
+				}
+			}
+		}()
+
+		err := federation.Run(discoveryCtx, federation.DiscoveryOptions{
+			AuthorityURL:      cfg.AuthorityURL,
+			Secret:            []byte(st.NodeToken),
+			CapabilityVersion: "dpf.demand/1",
+			OnReady: func() {
+				nearbyDiscoveryHealth.Store(nearbyDiscoveryHealthy)
+			},
+		}, func(ctx context.Context, candidates []federation.Candidate) error {
+			wireCandidates := make([]any, len(candidates))
+			for i := range candidates {
+				wireCandidates[i] = candidates[i]
+			}
+			err := client.SubmitFederationCandidates(ctx, st.NodeToken, api.FederationCandidateSnapshot{
+				ObservedAt: time.Now().UTC().Format(time.RFC3339Nano),
+				Candidates: wireCandidates,
+			})
+			if err != nil {
+				slog.Warn("Nearby DPF candidate submission failed", slog.String("err", err.Error()))
+				return err
+			}
+			slog.Info("Nearby DPF candidates submitted", slog.Int("candidates", len(candidates)))
+			return nil
+		})
+		cancelDiscovery()
+		<-monitorDone
+		if ctx.Err() != nil {
+			return nil
+		}
+		if !nearbyDiscoveryAccepted.Load() {
+			nearbyDiscoveryHealth.Store(nearbyDiscoveryUnknown)
+			continue
+		}
+		nearbyDiscoveryHealth.Store(nearbyDiscoveryDegraded)
+		slog.Warn("Nearby DPF discovery unavailable; retrying", slog.String("err", err.Error()))
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(30 * time.Second):
+		}
+	}
+	return nil
+}
+
+func federationCapabilityReports() []api.CapabilityReport {
+	status := "unknown"
+	switch nearbyDiscoveryHealth.Load() {
+	case nearbyDiscoveryHealthy:
+		status = "healthy"
+	case nearbyDiscoveryDegraded:
+		status = "degraded"
+	}
+	return []api.CapabilityReport{{
+		Capability: "federation.discovery",
+		Status:     status,
+		Evidence: map[string]any{
+			"serviceType": federation.ServiceType,
+			"transport":   "dns-sd-mdns",
+		},
+	}}
 }
 
 func enrollOnce(ctx context.Context, cfg *config.Config, client *api.Client) (*state.EdgeNodeState, error) {
@@ -159,7 +267,7 @@ func enrollOnce(ctx context.Context, cfg *config.Config, client *api.Client) (*s
 		Platform:               cfg.Platform,
 		InstallMode:            cfg.InstallMode,
 		Version:                cfg.Version,
-		AdvertisedCapabilities: phase0Capabilities,
+		AdvertisedCapabilities: nativeCapabilities,
 		Metadata: map[string]any{
 			"hostname": cfg.EdgeNodeName,
 			"host": map[string]any{
@@ -207,7 +315,9 @@ func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, s
 		case <-ticker.C:
 		}
 
-		resp, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{})
+		resp, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
+			CapabilityReports: federationCapabilityReports(),
+		})
 		if err != nil {
 			if api.IsRevoked(err) {
 				slog.Error("Heartbeat revoked — clearing state and exiting")
@@ -241,6 +351,7 @@ func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, s
 		}
 		if !equalStringSlices(resp.AcceptedCapabilities, st.AcceptedCapabilities) {
 			st.AcceptedCapabilities = resp.AcceptedCapabilities
+			nearbyDiscoveryAccepted.Store(containsString(resp.AcceptedCapabilities, "federation.discovery"))
 			changed = true
 		}
 		if resp.TrustState != st.TrustState {
@@ -303,11 +414,11 @@ func runSweep(ctx context.Context, cfg *config.Config, client *api.Client, st *s
 // constructing a ticker.
 //
 // Collector chain (matches services/edge-node/src/sweep.ts):
-//   1. HostInfo — local host facts; always present.
-//   2. ArpNeighbors — kernel/OS ARP cache. This is the collector
-//      that finally surfaces the OTHER devices on the LAN (Amazon
-//      Echo, Reolink cameras, Kasa switches, etc.) when the binary
-//      runs natively on Windows/macOS rather than inside Docker.
+//  1. HostInfo — local host facts; always present.
+//  2. ArpNeighbors — kernel/OS ARP cache. This is the collector
+//     that finally surfaces the OTHER devices on the LAN (Amazon
+//     Echo, Reolink cameras, Kasa switches, etc.) when the binary
+//     runs natively on Windows/macOS rather than inside Docker.
 func submitSweep(ctx context.Context, cfg *config.Config, client *api.Client, st *state.EdgeNodeState) error {
 	hostResult := collect.HostInfo()
 	arpResult := collect.ArpNeighbors()
@@ -341,7 +452,7 @@ func submitSweep(ctx context.Context, cfg *config.Config, client *api.Client, st
 		AgentMode:     cfg.InstallMode,
 		AgentVersion:  cfg.Version,
 		ObservedAt:    time.Now().UTC().Format(time.RFC3339Nano),
-		Capabilities:  phase0Capabilities,
+		Capabilities:  []string{"discovery.network"},
 		Items:         items,
 		Relationships: rels,
 		Warnings:      warnings,
@@ -370,7 +481,7 @@ func printEnrollFixture() {
 		Platform:               "linux",
 		InstallMode:            "native",
 		Version:                "0.1.0-fixture",
-		AdvertisedCapabilities: phase0Capabilities,
+		AdvertisedCapabilities: nativeCapabilities,
 		Metadata: map[string]any{
 			"hostname": "fixture-host",
 			"host": map[string]any{
@@ -403,4 +514,13 @@ func equalStringSlices(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

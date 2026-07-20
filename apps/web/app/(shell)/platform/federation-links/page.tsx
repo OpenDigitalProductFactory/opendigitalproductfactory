@@ -5,14 +5,16 @@ import { resolveIncidentProjectionSpec } from "@dpf/db/projection-egress";
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { listNearbyFederationCandidates } from "@/lib/federation/nearby-candidates";
 import {
   FederationLinksAdminClient,
   type FederationLinkRow,
+  type NearbyDiscoveryHealth,
 } from "@/components/platform/federation-links/FederationLinksAdminClient";
 
 export const dynamic = "force-dynamic";
 
-// EP-MSP-FEDERATION · B1 operator surface — Platform > Federation Links.
+// EP-MSP-FEDERATION · B1 operator surface — Platform > Connections.
 // Lists sovereign-peer trust channels and lets an operator issue invitations and
 // approve / quarantine / revoke links. Mirrors the Edge Nodes admin.
 export default async function FederationLinksPage() {
@@ -27,11 +29,61 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
-  const links = await prisma.federationLink.findMany({
-    include: { principal: { select: { displayName: true } } },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+  const [links, discoveryCapabilities] = await Promise.all([
+    prisma.federationLink.findMany({
+      include: { principal: { select: { displayName: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    prisma.edgeNodeCapability.findMany({
+      where: { capability: "federation.discovery" },
+      select: {
+        mode: true,
+        status: true,
+        reportedAt: true,
+        node: { select: { trustState: true, status: true } },
+      },
+      orderBy: { reportedAt: "desc" },
+    }),
+  ]);
+
+  const enabledDiscovery = discoveryCapabilities.filter(
+    (row) =>
+      (row.mode === "enabled" || row.mode === "reporting-only") &&
+      row.node.trustState === "trusted",
+  );
+  const nearbyDiscoveryHealth: NearbyDiscoveryHealth =
+    discoveryCapabilities.length === 0
+      ? {
+          status: "unavailable",
+          label: "Not set up",
+          detail: "The native Edge Node has not registered nearby discovery.",
+        }
+      : enabledDiscovery.length === 0
+        ? {
+            status: "disabled",
+            label: "Paused",
+            detail: "Nearby discovery is disabled by the Authority.",
+          }
+        : enabledDiscovery.some((row) => row.status === "healthy")
+          ? {
+              status: "healthy",
+              label: "Listening",
+              detail: "This installation is announcing and looking for nearby DPF installations.",
+            }
+          : enabledDiscovery.some(
+                (row) => row.status === "degraded" || row.status === "failing",
+              )
+            ? {
+                status: "degraded",
+                label: "Needs attention",
+                detail: "Nearby discovery is enabled but cannot advertise or browse. Check the endpoint configuration, multicast network, and host firewall.",
+              }
+            : {
+                status: "waiting",
+                label: "Starting",
+                detail: "Nearby discovery is enabled and waiting for its first health report.",
+              };
 
   const rows: FederationLinkRow[] = links.map((l) => {
     // What crosses this link to the peer: the minimum-necessary projection the
@@ -58,13 +110,17 @@ export default async function FederationLinksPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Federation Links</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Connections</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Consented, dual-approved trust channels to peer DPF deployments. A link is
-          trusted only when both sides approve; quarantine or revoke takes effect immediately.
+          Find nearby DPF installations or connect with an invitation. Nothing is shared until
+          both sides approve; either side can pause or revoke the connection.
         </p>
       </div>
-      <FederationLinksAdminClient rows={rows} />
+      <FederationLinksAdminClient
+        rows={rows}
+        nearbyCandidates={listNearbyFederationCandidates()}
+        nearbyDiscoveryHealth={nearbyDiscoveryHealth}
+      />
     </div>
   );
 }

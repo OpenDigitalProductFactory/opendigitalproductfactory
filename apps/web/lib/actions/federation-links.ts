@@ -9,7 +9,14 @@
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@dpf/db";
-import { isFederationRole, type FederationRole } from "@dpf/db/federation-link-types";
+import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
+import {
+  isFederationRelationshipPreset,
+  isFederationRole,
+  isRoleAllowedForRelationship,
+  type FederationRelationshipPreset,
+  type FederationRole,
+} from "@dpf/db/federation-link-types";
 
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import { auth } from "@/lib/auth";
@@ -71,13 +78,18 @@ export type IssueFederationBootstrapActionResult =
   | ActionFailure;
 
 export async function issueFederationBootstrapAction(input: {
+  relationshipPreset: string;
   offeredRole: string;
   ttlMs?: number;
 }): Promise<IssueFederationBootstrapActionResult> {
   const gate = await assertManagePlatform();
   if (!gate.ok) return gate;
-  if (!isFederationRole(input.offeredRole)) {
-    return { ok: false, error: "invalid_input", message: "offeredRole must be 'manages' or 'managed-by'" };
+  if (
+    !isFederationRelationshipPreset(input.relationshipPreset) ||
+    !isFederationRole(input.offeredRole) ||
+    !isRoleAllowedForRelationship(input.relationshipPreset, input.offeredRole)
+  ) {
+    return { ok: false, error: "invalid_input", message: "relationship preset and offered role do not match" };
   }
   const ttlMs = input.ttlMs;
   if (ttlMs !== undefined && (!Number.isFinite(ttlMs) || ttlMs <= 0)) {
@@ -87,6 +99,10 @@ export async function issueFederationBootstrapAction(input: {
     const result = await issueFederationBootstrap({
       issuedByPrincipalId: gate.principalId,
       offeredRole: input.offeredRole as FederationRole,
+      proposedProjection:
+        DEMAND_PROJECTION_TEMPLATES[
+          input.relationshipPreset as FederationRelationshipPreset
+        ] as unknown as Record<string, unknown>,
       ...(ttlMs !== undefined ? { ttlMs } : {}),
     });
     revalidatePath(ADMIN_PATH);
@@ -226,4 +242,39 @@ export async function enrollWithPeerAction(input: {
   } catch (err) {
     return { ok: false, error: "internal_error", message: err instanceof Error ? err.message : "enroll failed" };
   }
+}
+
+export type SetFederationDiscoveryActionResult =
+  | { ok: true; updated: number; enabled: boolean }
+  | ActionFailure;
+
+/** Authority-owned kill switch for native nearby discovery. Existing Edge
+ * nodes advertise support through heartbeat; this action decides whether the
+ * capability is accepted. */
+export async function setFederationDiscoveryEnabledAction(
+  enabled: boolean,
+): Promise<SetFederationDiscoveryActionResult> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  const rows = await prisma.edgeNodeCapability.findMany({
+    where: {
+      capability: "federation.discovery",
+      node: { installMode: "native", trustState: "trusted", revokedAt: null },
+    },
+    select: { id: true },
+  });
+  if (rows.length === 0) {
+    return {
+      ok: false,
+      error: "not_found",
+      message: "No trusted native Edge Node has registered nearby discovery yet",
+    };
+  }
+  const result = await prisma.edgeNodeCapability.updateMany({
+    where: { id: { in: rows.map((row) => row.id) } },
+    data: { mode: enabled ? "enabled" : "disabled" },
+  });
+  revalidatePath(ADMIN_PATH);
+  revalidatePath("/platform/edge-nodes");
+  return { ok: true, updated: result.count, enabled };
 }

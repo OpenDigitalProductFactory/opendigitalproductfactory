@@ -44,14 +44,79 @@
 - Extend the existing Connections surface under `apps/web/app/platform/federation-links/`
 - Add installer/host allocation in the deployment-contract owner selected after the cross-platform spike
 
-- [ ] Spike macOS and Windows/Docker Desktop service advertisement and browse allocation before selecting an mDNS/DNS-SD dependency; begin with the deployment doctrine's Edge ownership of LAN discovery, and amend that doctrine explicitly if evidence requires a different host helper. Record any host-coupled finding in `docs/install/platform-support-watchlist.md`.
-- [ ] Advertise `_dpf-federation._tcp.local.` with rotating, privacy-safe TXT data and no stable organization/customer identity.
-- [ ] Deduplicate and expire candidates; discovery creates candidates only and never creates trust.
-- [ ] Reuse `FederationBootstrapToken`, high-entropy invitations, matching human-readable codes, dual approval, and rotating link credentials for nearby and QR/deep-link pairing.
-- [ ] Add the `same-organization` preset summary and independent outbound contract review on both nodes.
-- [ ] Add feature-flag/kill-switch behavior and visible health without making portal startup depend on discovery.
+- [x] Allocate advertisement and browse to the native Go Edge Node under
+  deployment Contract 5. Docker Desktop cannot provide host-LAN fidelity;
+  use a pure-Go, CGO-free RFC 6762/6763 adapter and record the firewall/service
+  implications in `docs/install/platform-support-watchlist.md`.
+- [x] Advertise `_dpf-federation._tcp.local.` over HTTP or HTTPS with rotating service/host aliases, privacy-safe TXT data, and no stable organization/customer identity. Treat the advertised scheme as routing metadata only.
+- [x] Deduplicate and expire candidates; discovery creates candidates only and never creates trust.
+- [ ] Reuse `FederationBootstrapToken`, high-entropy invitations, matching human-readable codes, dual approval, and rotating link credentials for nearby and QR/deep-link pairing. Automatic nearby pairing must require a certificate-valid HTTPS endpoint; never send the invitation over HTTP or after a certificate failure. Keep manual out-of-band invitation as the fallback.
+- [x] Add the `same-organization` preset summary and independent outbound contract review on both nodes.
+- [x] Add feature-flag/kill-switch behavior and visible health without making portal startup depend on discovery.
 
 **Verification:** privacy fixture inspection; spoofed/expired candidate tests; invitation replay rejection; dual-approval transition tests; Windows/macOS two-node pairing evidence; Connections UX verification; production build.
+
+### Task 2 UX fit review — nearby Connections
+
+- **Decision:** fits-with-guardrails
+- **Owning area:** Platform
+- **Route family:** canonical `/platform/federation-links` route, presented to
+  operators as **Connections**; no new dashboard, global navigation item, or
+  duplicate setup route
+- **Primary persona:** founder/platform operator connecting two installations
+  without remembering IP addresses, federation vocabulary, or trust internals
+- **Navigation layer:** contextual setup actions inside the existing page
+- **Reuse/convergence:** existing federation lifecycle actions and report-kit
+  `StatusBadge`; the nearby list is setup workflow content, not a new reporting
+  component family
+- **Source truth:** expiring in-process candidate cache populated only by the
+  authenticated Edge route; `EdgeNodeCapability` owns enabled/health state;
+  `FederationLink` remains the only durable trust record
+- **Empty/failure behavior:** no candidates keeps the invitation path visible;
+  missing capability links to Edge Nodes; HTTP, certificate, multicast, and
+  firewall failures explain why automatic setup is unavailable
+- **AI boundary:** no coworker prompt or autonomous action
+- **Guardrails folded into implementation:** candidate always reads “not
+  connected”; first viewport distinguishes discovery from trust; theme tokens
+  only; enable/pause is an Authority-owned capability decision; TLS validation
+  precedes any bearer invitation
+- **Evidence before merge:** route and privacy tests, light/dark theme scan,
+  desktop/narrow browser exercise, no-candidate and insecure-candidate states,
+  macOS/Windows add/remove evidence, and the production build
+
+The DPF design-intelligence search returned no indexed recommendation for this
+specialized pairing flow, so the review is grounded in the ratified feature
+design, platform usability standards, the portal simplification spine, and the
+existing federation/Edge runtime rather than an invented external pattern.
+
+### Task 2 architecture review — advisory outcome
+
+- **Alignment:** aligned with concerns. The implementation extends the existing
+  native Edge capability, `FederationBootstrapToken`, `FederationLink`,
+  principal, and projection-template substrate; it adds no competing trust
+  model, table, or migration.
+- **Allocation:** DNS-SD stays in the native Go Edge Node because Docker Desktop
+  does not expose the Windows/macOS host multicast interfaces faithfully. The
+  portal receives only authenticated, bounded candidate snapshots.
+- **Trust boundary:** discovery works for both HTTP and HTTPS installations and
+  never transports a bearer secret. Automatic invitation exchange remains
+  blocked until the resolved peer uses certificate-valid HTTPS, per governed
+  decision `DI-E72BC42D5FFB`.
+- **Privacy boundary:** both DNS-SD service instance and mDNS hostname use the
+  rotating discovery alias. The closed TXT allow-list contains only protocol,
+  ephemeral install alias, capability digest, pair path, and routing scheme.
+- **Ingress boundary:** candidate endpoints must be origin-only HTTP(S) URLs on
+  `.local`, RFC 1918, IPv4 link-local, IPv6 link-local, loopback, or IPv6 ULA
+  space. Credentials, paths, queries, fragments, public hosts, unknown fields,
+  stale snapshots, oversize payloads, and excess candidate counts are rejected.
+- **Residual dependency risk:** `github.com/betamos/zeroconf` is pre-v1 and does
+  not provide dynamic TXT updates or conflict resolution. DPF pins the version,
+  keeps parsing dependency-neutral, uses rotating collision-resistant names,
+  and reopens the adapter each rotation window so it can be replaced without
+  changing the Authority contract.
+- **Evidence boundary:** CGO-disabled cross-compilation is source portability
+  evidence, not Windows/macOS two-node functional evidence. V-01 remains open
+  until both installed native services are exercised on the real LAN.
 
 ## Task 3: Implement reliable demand delivery and reconciliation
 

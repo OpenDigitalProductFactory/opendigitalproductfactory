@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
@@ -10,7 +11,9 @@ import {
   issueFederationBootstrapAction,
   quarantineFederationLinkAction,
   revokeFederationLinkAction,
+  setFederationDiscoveryEnabledAction,
 } from "@/lib/actions/federation-links";
+import type { NearbyFederationCandidate } from "@/lib/federation/nearby-candidates";
 
 export interface FederationLinkRow {
   linkId: string;
@@ -28,17 +31,63 @@ export interface FederationLinkRow {
   createdAtISO: string;
 }
 
+export interface NearbyDiscoveryHealth {
+  status: "healthy" | "degraded" | "waiting" | "disabled" | "unavailable";
+  label: string;
+  detail: string;
+}
+
 type Flash = { kind: "success" | "error"; text: string } | null;
 
-export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[] }) {
+export function FederationLinksAdminClient({
+  rows,
+  nearbyCandidates = [],
+  nearbyDiscoveryHealth = {
+    status: "unavailable",
+    label: "Not set up",
+    detail: "Enable the native Edge Node to find DPF installations on this network.",
+  },
+}: {
+  rows: FederationLinkRow[];
+  nearbyCandidates?: NearbyFederationCandidate[];
+  nearbyDiscoveryHealth?: NearbyDiscoveryHealth;
+}) {
   const [flash, setFlash] = useState<Flash>(null);
-  const [role, setRole] = useState<"manages" | "managed-by">("manages");
+  const [relationshipPreset, setRelationshipPreset] = useState<
+    "same-organization" | "service-provider"
+  >("service-provider");
+  const [role, setRole] = useState<"manages" | "managed-by" | "same-org-peer">("manages");
   const [ttlMinutes, setTtlMinutes] = useState(15);
   const [issued, setIssued] = useState<{ plaintext: string; expiresAt: string } | null>(null);
   const [peerUrl, setPeerUrl] = useState("");
   const [peerToken, setPeerToken] = useState("");
   const [peerName, setPeerName] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  function selectNearbyCandidate(candidate: NearbyFederationCandidate) {
+    if (candidate.automaticPairing === "blocked-insecure-transport") return;
+    setPeerUrl(candidate.endpoint);
+    setPeerName(`Nearby DPF ${candidate.discoveryId.slice(-4)}`);
+    setRelationshipPreset("same-organization");
+    setRole("same-org-peer");
+  }
+
+  function setNearbyDiscovery(enabled: boolean) {
+    setFlash(null);
+    startTransition(async () => {
+      const result = await setFederationDiscoveryEnabledAction(enabled);
+      setFlash(
+        result.ok
+          ? {
+              kind: "success",
+              text: enabled
+                ? "Nearby discovery enabled. The Edge Node will start listening shortly."
+                : "Nearby discovery paused.",
+            }
+          : { kind: "error", text: `Discovery update failed: ${result.message}` },
+      );
+    });
+  }
 
   function onConnect() {
     setFlash(null);
@@ -65,6 +114,7 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
     setIssued(null);
     startTransition(async () => {
       const result = await issueFederationBootstrapAction({
+        relationshipPreset,
         offeredRole: role,
         ttlMs: Math.max(60_000, ttlMinutes * 60_000),
       });
@@ -152,6 +202,103 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
         </div>
       )}
 
+      <section
+        className="rounded border p-4"
+        style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-1)" }}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
+              {nearbyCandidates.length > 0 ? "DPF found nearby" : "Nearby DPF installations"}
+            </h2>
+            <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">
+              Discovery is only a setup suggestion. A connection starts only after both
+              installations approve it.
+            </p>
+          </div>
+          <StatusBadge
+            label={nearbyDiscoveryHealth.label}
+            intent={
+              nearbyDiscoveryHealth.status === "healthy"
+                ? "success"
+                : nearbyDiscoveryHealth.status === "degraded"
+                  ? "warning"
+                  : "neutral"
+            }
+            variant="soft"
+          />
+          {nearbyDiscoveryHealth.status === "disabled" && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => setNearbyDiscovery(true)}
+              className="rounded px-3 py-1.5 text-xs font-medium text-[var(--dpf-bg)] disabled:opacity-50"
+              style={{ backgroundColor: "var(--dpf-accent)" }}
+            >
+              Enable nearby discovery
+            </button>
+          )}
+          {(nearbyDiscoveryHealth.status === "healthy" ||
+            nearbyDiscoveryHealth.status === "waiting" ||
+            nearbyDiscoveryHealth.status === "degraded") && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => setNearbyDiscovery(false)}
+              className="rounded border px-3 py-1.5 text-xs font-medium text-[var(--dpf-text)] disabled:opacity-50"
+              style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
+            >
+              Pause discovery
+            </button>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-[var(--dpf-muted)]">
+          {nearbyDiscoveryHealth.detail}{" "}
+          {(nearbyDiscoveryHealth.status === "disabled" ||
+            nearbyDiscoveryHealth.status === "unavailable") && (
+            <Link className="font-medium text-[var(--dpf-accent)]" href="/platform/edge-nodes">
+              Open Edge Nodes
+            </Link>
+          )}
+        </p>
+        {nearbyCandidates.length === 0 ? (
+          <p className="mt-3 rounded border p-3 text-sm text-[var(--dpf-muted)]" style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}>
+            No nearby DPF installations are visible right now. You can still use an invitation below.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {nearbyCandidates.map((candidate) => {
+              const secure = candidate.automaticPairing !== "blocked-insecure-transport";
+              return (
+                <div
+                  key={`${candidate.discoveryId}:${candidate.endpoint}`}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded border p-3"
+                  style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
+                >
+                  <div>
+                    <p className="font-mono text-xs text-[var(--dpf-text)]">{candidate.endpoint}</p>
+                    <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                      <span className="font-medium">Not connected</span> · {secure
+                        ? "TLS will be verified before any invitation is sent."
+                        : "Automatic pairing is blocked because this endpoint is not HTTPS."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!secure}
+                    onClick={() => selectNearbyCandidate(candidate)}
+                    className="rounded px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)] disabled:opacity-50"
+                    style={{ backgroundColor: secure ? "var(--dpf-accent)" : "var(--dpf-muted)" }}
+                  >
+                    {secure ? "Set up this DPF" : "Secure setup required"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       {/* Issue invitation */}
       <div
         className="rounded border p-4"
@@ -163,13 +310,33 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
         </p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <label className="text-xs text-[var(--dpf-muted)]">
+            Relationship preset
+            <select
+              value={relationshipPreset}
+              onChange={(e) => {
+                const preset = e.target.value as "same-organization" | "service-provider";
+                setRelationshipPreset(preset);
+                setRole(preset === "same-organization" ? "same-org-peer" : "manages");
+              }}
+              className="mt-1 block rounded border px-2 py-1 text-sm text-[var(--dpf-text)]"
+              style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
+            >
+              <option value="same-organization">same organization</option>
+              <option value="service-provider">service provider / customer</option>
+            </select>
+          </label>
+          <label className="text-xs text-[var(--dpf-muted)]">
             Our role
             <select
               value={role}
+              disabled={relationshipPreset === "same-organization"}
               onChange={(e) => setRole(e.target.value as "manages" | "managed-by")}
               className="mt-1 block rounded border px-2 py-1 text-sm text-[var(--dpf-text)]"
               style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
             >
+              {relationshipPreset === "same-organization" && (
+                <option value="same-org-peer">same-organization peer</option>
+              )}
               <option value="manages">manages (we are the MSP)</option>
               <option value="managed-by">managed-by (we are the customer)</option>
             </select>
@@ -189,12 +356,18 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
             type="button"
             onClick={onIssue}
             disabled={isPending}
-            className="rounded px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)] disabled:opacity-50"
             style={{ backgroundColor: "var(--dpf-accent)" }}
           >
             Issue invitation
           </button>
         </div>
+        {relationshipPreset === "same-organization" && (
+          <p className="mt-3 rounded border p-2 text-xs text-[var(--dpf-muted)]" style={{ borderColor: "var(--dpf-border)" }}>
+            Shared platform demand and dispositions are offered after both installations approve.
+            Local backlog details, work capsules, private planning, attachments, and customer context stay local.
+          </p>
+        )}
         {issued && (
           <div
             className="mt-3 rounded border p-2"
@@ -255,7 +428,7 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
             type="button"
             onClick={onConnect}
             disabled={isPending || !peerUrl.trim() || !peerToken.trim()}
-            className="rounded px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)] disabled:opacity-50"
             style={{ backgroundColor: "var(--dpf-accent)" }}
           >
             Connect
@@ -327,7 +500,7 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
                         type="button"
                         onClick={() => onApprove(row)}
                         disabled={isPending}
-                        className="rounded px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        className="rounded px-2 py-1 text-xs font-medium text-[var(--dpf-bg)] disabled:opacity-50"
                         style={{ backgroundColor: "var(--dpf-success)" }}
                       >
                         Approve
@@ -338,7 +511,7 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
                         type="button"
                         onClick={() => onQuarantine(row)}
                         disabled={isPending}
-                        className="rounded px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        className="rounded px-2 py-1 text-xs font-medium text-[var(--dpf-bg)] disabled:opacity-50"
                         style={{ backgroundColor: "var(--dpf-warning)" }}
                       >
                         Quarantine
@@ -349,7 +522,7 @@ export function FederationLinksAdminClient({ rows }: { rows: FederationLinkRow[]
                         type="button"
                         onClick={() => onRevoke(row)}
                         disabled={isPending}
-                        className="rounded px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        className="rounded px-2 py-1 text-xs font-medium text-[var(--dpf-bg)] disabled:opacity-50"
                         style={{ backgroundColor: "var(--dpf-error)" }}
                       >
                         Revoke

@@ -196,6 +196,21 @@ describe("enrollEdgeNode — validation", () => {
     if (!result.ok) expect(result.error).toBe("no_acceptable_capabilities");
   });
 
+  it("accepts native federation discovery without opening other reserved capabilities", async () => {
+    tokFindUnique.mockResolvedValueOnce(null);
+    const result = await enrollEdgeNode({
+      bootstrapToken: "dpfboot_GHOST",
+      displayName: "native-edge",
+      platform: "darwin",
+      installMode: "native",
+      version: "0.2.0",
+      advertisedCapabilities: ["federation.discovery"],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("token_not_found");
+    expect(tokFindUnique).toHaveBeenCalledOnce();
+  });
+
   it("rejects token not found", async () => {
     tokFindUnique.mockResolvedValueOnce(null);
     const result = await enrollEdgeNode({

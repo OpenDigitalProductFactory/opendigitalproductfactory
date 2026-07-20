@@ -109,17 +109,26 @@ The portal exposes one **Connections** experience with two entry paths.
 
 ### 5.1 Nearby discovery
 
-When the portal HTTP endpoint is healthy, an installation advertises:
+When the portal HTTP or HTTPS endpoint is healthy and the native Edge Node has the
+`federation.discovery` capability enabled, the Edge Node advertises:
 
 ```text
 Service type: _dpf-federation._tcp.local.
-Instance:     <friendly-install-name>._dpf-federation._tcp.local.
-Host:         <installation-uuid>.local.
-Port:         <portal HTTPS port>
-TXT:          protocol=1, install=<ephemeral-discovery-id>, caps=<digest>, pair=/connect/pair
+Instance:     dpf-<ephemeral-discovery-id>._dpf-federation._tcp.local.
+Host:         dpf-<ephemeral-discovery-id>.local.
+Port:         <portal port>
+TXT:          protocol=1, install=<ephemeral-discovery-id>, caps=<digest>, pair=/connect/pair, scheme=<http|https>
 ```
 
-TXT records contain no backlog, organization name or fingerprint, stable network identity, email, hostname-derived identifier, token, or customer data. The discovery ID rotates and is bound to the installation's stable identity only inside the authenticated pairing transcript. The portal continuously browses for candidates and shows “DPF found nearby.” An operator chooses a candidate and answers one plain-language question: **“Is this another DPF owned by your organization?”**
+TXT records contain no backlog, organization name or fingerprint, stable network identity, email, hostname-derived identifier, token, or customer data. The service instance and mDNS hostname are aliases derived from the rotating discovery ID, never from the operating-system hostname. `scheme` is routing metadata only: HTTP candidates can be shown, but cannot carry automatic pairing secrets. The discovery ID rotates and is bound to the installation's stable identity only inside the authenticated pairing transcript. The native Edge Node continuously browses and submits bounded, expiring candidates to its Authority Core over the existing authenticated Edge transport. The portal shows “DPF found nearby.” An operator chooses a candidate and answers one plain-language question: **“Is this another DPF owned by your organization?”**
+
+The cross-platform allocation is the deployment doctrine's native Go Edge Node
+(Contract 5), not the portal container: Docker Desktop hides the macOS and
+Windows host network from containers. The implementation uses RFC 6762/6763
+DNS-SD over UDP 5353 through a pure-Go, CGO-free adapter so the same binary can
+advertise and browse on Windows, macOS, and Linux. Candidate ingestion reuses
+the trusted Edge machine principal and remains optional; portal startup never
+depends on multicast availability.
 
 DNS-SD/mDNS is link-local. Routed enterprise networks may later expose the same service using a DNS-SD Discovery Proxy or authenticated Service Registration Protocol. Internet, reseller, and cross-VLAN setup always has an invitation/QR fallback.
 
@@ -134,7 +143,16 @@ The inviter selects a relationship preset and receives:
 
 The accepting operator signs in locally, confirms the parties, environment classes, and matching code, reviews both outbound summaries under “what each side shares,” and approves. Both Authority Cores record approval before the link becomes trusted. One person may complete both approvals when they are independently authorized on both internal installations; the two audit entries remain distinct. The UX follows the device-authorization precedent: QR for convenience, a human-readable code for device-binding confirmation, explicit approve/deny, short expiry, throttling, and one-time use.
 
-Do not treat the short code as a bearer secret. The implementation must either use the high-entropy bootstrap channel protected by TLS or a reviewed PAKE such as SPAKE2+ when a low-entropy code participates in key establishment. DPF must not invent pairing cryptography.
+Do not treat the short code as a bearer secret. Automatic nearby pairing uses
+the existing high-entropy bootstrap channel only when the resolved candidate
+endpoint is HTTPS and its certificate validates against the installation's
+trust store. Plain HTTP and certificate validation failures may still produce a
+nearby candidate, but the portal must explain that automatic pairing is blocked
+and must not send an invitation. The manual invitation path remains available
+as an out-of-band fallback. A future certificate-free flow would require a
+separately reviewed PAKE such as SPAKE2+; DPF must not invent pairing
+cryptography. This allocation was selected by governed decision
+`DI-E72BC42D5FFB` with high confidence.
 
 ### 5.3 Automatic after approval
 
@@ -337,9 +355,11 @@ This view is populated only by Founder Hub-local demand and explicit demand-chan
 
 ### Slice 1 — internal fleet discovery and pairing
 
-- Advertise and browse `_dpf-federation._tcp.local.` on supported hosts.
+- Advertise and browse `_dpf-federation._tcp.local.` from the native Go Edge
+  Node on supported hosts.
 - Implement candidate deduplication, expiry, and safe TXT records.
-- Add nearby-candidate and invitation pairing flows with dual approval.
+- Add TLS-gated nearby-candidate and invitation pairing flows with dual
+  approval; discovery never transports a bearer invitation.
 - Establish the `same-organization` contract and link health surface.
 
 ### Slice 2 — reliable demand exchange
@@ -470,6 +490,9 @@ These are intentionally deferred to the implementation plan after the contract i
 
 1. Whether the durable federation outbox generalizes the pending forge-operation outbox or composes with it behind a shared delivery kernel.
 2. Whether cross-source clustering needs dedicated normalized membership tables or can initially remain a read model over `FederatedRecordMirror` metadata.
-3. Which host process owns mDNS announcement across Docker Desktop networking on macOS and Windows. The product contract is mandatory; host allocation needs a cross-platform spike and watchlist entry.
-4. Whether direct HTTPS pairing can rely on an existing trusted portal certificate in all supported installs or needs a PAKE-assisted local bootstrap.
-5. The first default field allow-list for `same-organization`; founder approval is required because this determines what becomes automatic.
+3. The first default field allow-list for `same-organization`; founder approval is required because this determines what becomes automatic.
+
+Resolved for Slice 1: the native Go Edge Node owns DNS-SD on Windows, macOS,
+and Linux, and automatic pairing requires a trusted HTTPS candidate endpoint.
+Certificate-free PAKE bootstrap is not part of this slice. See governed
+decision `DI-E72BC42D5FFB` and the platform-support watch-list.

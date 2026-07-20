@@ -134,6 +134,7 @@ describe("edge-node-types — constants", () => {
     expect(RESERVED_CAPABILITIES.length).toBeGreaterThan(
       PHASE_0_CAPABILITIES.length,
     );
+    expect(RESERVED_CAPABILITIES).toContain("federation.discovery");
   });
 
   it("token prefixes follow the dpf*_ family convention", () => {

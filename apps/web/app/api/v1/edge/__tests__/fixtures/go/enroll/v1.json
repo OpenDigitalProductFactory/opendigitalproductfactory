@@ -4,7 +4,8 @@
   "installMode": "native",
   "version": "0.1.0-fixture",
   "advertisedCapabilities": [
-    "discovery.network"
+    "discovery.network",
+    "federation.discovery"
   ],
   "metadata": {
     "host": {
