@@ -1,0 +1,77 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "ModelProvider.catalogEntry: vendor capability and catalog identity only"
+  ],
+  "migration": {
+    "name": "20260719233000_ai_provider_connection",
+    "backfill": "one unreviewed default connection per existing non-transcription provider; no account class, contract, or entitlement is inferred"
+  },
+  "tests": [
+    "apps/web/lib/govern/data/coverage.live.test.ts",
+    "apps/web/lib/routing/provider-suitability/compile.test.ts",
+    "apps/web/lib/ai-provider-route-context.test.ts",
+    "packages/db/src/provider-trust-registry.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:ai-provider-connection",
+      "prismaModel": "AiProviderConnection",
+      "lifecycleDisposition": "legal-evidence retained with provider governance history",
+      "fields": [
+        {
+          "fieldId": "data:ai-provider-connection#connectionId",
+          "resolution": "governed",
+          "reason": "stable connection identity prevents account evidence from becoming provider-wide authorization",
+          "provenance": "provider setup and conservative seed projection"
+        },
+        {
+          "fieldId": "data:ai-provider-connection#organizationId",
+          "resolution": "governed",
+          "reason": "organization scope determines whose provider posture and contractual evidence may be used",
+          "provenance": "organization provider onboarding",
+          "flags": ["subject", "sensitive"],
+          "fieldPolicy": "local-only metadata; organization-scoped authorization required"
+        },
+        {
+          "fieldId": "data:ai-provider-connection#contractEvidence",
+          "resolution": "governed",
+          "reason": "contract review facts are connection-specific legal evidence and may not transfer across accounts",
+          "provenance": "operator attestation or reviewed supplier contract",
+          "flags": ["sensitive"],
+          "fieldPolicy": "fail closed unless current connection-scoped evidence is reviewed"
+        },
+        {
+          "fieldId": "data:ai-provider-connection#entitlements",
+          "resolution": "governed",
+          "reason": "zero-retention, no-training, regional-processing, and control entitlements must be proven for this connection",
+          "provenance": "operator attestation or reviewed provider account evidence",
+          "flags": ["sensitive"],
+          "fieldPolicy": "unknown by default; vendor capabilities never manufacture account entitlement"
+        },
+        {
+          "fieldId": "data:ai-provider-connection#accountClass",
+          "resolution": "governed",
+          "reason": "personal, team, and enterprise posture changes which workloads may be approved",
+          "provenance": "explicit account-class attestation",
+          "flags": ["sensitive"],
+          "fieldPolicy": "unknown by default; business or enterprise status requires current evidence"
+        }
+      ]
+    },
+    {
+      "kind": "policy",
+      "policyId": "ai-provider-suitability-compiler-v1",
+      "testVectors": {
+        "allow": true,
+        "deny": true,
+        "obligation": true,
+        "unknownContext": true,
+        "precedence": true,
+        "exceptionExpiry": true
+      }
+    }
+  ]
+}

@@ -1862,6 +1862,7 @@ model CredentialEntry {
   cachedToken    String?
   tokenExpiresAt DateTime?
   refreshToken   String?
+  providerConnection AiProviderConnection?
 }
 
 // Polymorphic credentials for enterprise integrations (ADP, QuickBooks, Plaid, Workday, …).
@@ -2100,6 +2101,46 @@ model ModelProvider {
   modelProfiles            ModelProfile[]
   financeProfile           AiProviderFinanceProfile?
   capacityStatus           ProviderCapacityStatus?
+  connections              AiProviderConnection[]
+}
+
+// A configured account/channel for a provider catalog entry. Contract and
+// entitlement facts belong here so two accounts for one provider can never
+// inherit each other's evidence. ModelProvider remains the catalog/runtime
+// provider owner; this row is the organization-scoped access posture.
+model AiProviderConnection {
+  id                     String    @id @default(cuid())
+  connectionId           String    @unique
+  organizationId         String?
+  providerId             String
+  credentialEntryId      String?   @unique
+  financeProfileId       String?
+  supplierContractId     String?
+  capacityStatusId       String?   @unique
+  label                  String?
+  status                 String    @default("unconfigured")
+  executionChannel       String
+  accountClass           String    @default("unknown")
+  commercialBasis        String    @default("unknown")
+  authMethod             String    @default("unknown")
+  contractEvidence       Json      @default("{}")
+  entitlements           Json      @default("{}")
+  evidenceStatus         String    @default("unreviewed")
+  lastReviewedAt         DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  organization           Organization?             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider               ModelProvider             @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  credentialEntry        CredentialEntry?           @relation(fields: [credentialEntryId], references: [id], onDelete: SetNull)
+  financeProfile         AiProviderFinanceProfile? @relation(fields: [financeProfileId], references: [id], onDelete: SetNull)
+  supplierContract       SupplierContract?         @relation(fields: [supplierContractId], references: [id], onDelete: SetNull)
+  capacityStatus         ProviderCapacityStatus?   @relation(fields: [capacityStatusId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([providerId, status])
+  @@index([financeProfileId])
+  @@index([supplierContractId])
 }
 
 model DiscoveredModel {
@@ -3796,6 +3837,7 @@ model Organization {
   careSchedulingPolicies        CareSchedulingPolicy[]
   careAppointments              CareAppointment[]
   careIntakePackets             CareIntakePacket[]
+  aiProviderConnections         AiProviderConnection[]
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -10255,6 +10297,7 @@ model AiProviderFinanceProfile {
   supplier          Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   supplierContracts SupplierContract[]
   financeWorkItems  FinanceWorkItem[]
+  providerConnections AiProviderConnection[]
 
   @@index([supplierId])
   @@index([status])
@@ -10298,6 +10341,7 @@ model SupplierContract {
   usageSnapshots      ContractUsageSnapshot[]
   financeWorkItems    FinanceWorkItem[]
   bills               Bill[]
+  providerConnections AiProviderConnection[]
 
   @@index([profileId])
   @@index([supplierId])
@@ -13048,6 +13092,7 @@ model ProviderCapacityStatus {
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
   provider              ModelProvider @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  providerConnection    AiProviderConnection?
 
   @@index([state, retryAt])
   @@index([isHumanActionRequired, updatedAt])

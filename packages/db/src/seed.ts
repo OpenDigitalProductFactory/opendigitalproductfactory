@@ -81,6 +81,7 @@ import { buildTaxonomyNodeEntries, type TaxonomySeedRow } from "./taxonomy-seed-
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
 import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
 import { deriveLocalModelCapabilityPrior, localInputModalities } from "./local-model-capabilities.js";
+import { ensureDefaultProviderConnection } from "./provider-connection.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -1414,10 +1415,27 @@ async function seedProviderRegistry(): Promise<void> {
     return "mcp";
   }
 
+  function buildCatalogEntry(entry: Record<string, unknown>): Prisma.InputJsonValue | undefined {
+    const existing = entry.catalogEntry;
+    const value = {
+      ...(existing && typeof existing === "object" && !Array.isArray(existing)
+        ? existing as Record<string, unknown>
+        : {}),
+      ...(typeof entry.catalogProviderId === "string"
+        ? { catalogProviderId: entry.catalogProviderId }
+        : {}),
+      ...(entry.trustCatalog && typeof entry.trustCatalog === "object" && !Array.isArray(entry.trustCatalog)
+        ? { trustCatalog: entry.trustCatalog }
+        : {}),
+    };
+    return Object.keys(value).length > 0 ? value as Prisma.InputJsonValue : undefined;
+  }
+
   for (const entry of entries) {
     const providerId = entry.providerId as string;
     if (!providerId) continue;
     const serviceKind = inferServiceKind(entry);
+    const catalogEntry = buildCatalogEntry(entry);
 
     const existing = await prisma.modelProvider.findUnique({ where: { providerId } });
     if (existing) {
@@ -1475,6 +1493,7 @@ async function seedProviderRegistry(): Promise<void> {
           ...(entry.billingLabel !== undefined && { billingLabel: entry.billingLabel as string }),
           ...(entry.costPerformanceNotes !== undefined && { costPerformanceNotes: entry.costPerformanceNotes as string }),
           ...(entry.catalogVisibility !== undefined && { catalogVisibility: entry.catalogVisibility as string }),
+          ...(catalogEntry !== undefined && { catalogEntry }),
           ...(entry.endpointType !== undefined && { endpointType: entry.endpointType as string }),
           ...(serviceKind !== undefined && { serviceKind }),
           ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse as boolean }),
@@ -1543,6 +1562,7 @@ async function seedProviderRegistry(): Promise<void> {
           billingLabel: (entry.billingLabel as string) ?? null,
           costPerformanceNotes: (entry.costPerformanceNotes as string) ?? null,
           catalogVisibility: (entry.catalogVisibility as string) ?? "visible",
+          ...(catalogEntry !== undefined && { catalogEntry }),
           ...(entry.endpointType !== undefined && { endpointType: entry.endpointType as string }),
           ...(serviceKind !== undefined && { serviceKind }),
           ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse as boolean }),
@@ -1555,6 +1575,13 @@ async function seedProviderRegistry(): Promise<void> {
       });
       added++;
     }
+    await ensureDefaultProviderConnection(prisma, {
+      providerId,
+      name: String(entry.name ?? providerId),
+      category: String(entry.category ?? "direct"),
+      authMethod: String(entry.authMethod ?? "none"),
+      ...(typeof entry.endpointType === "string" ? { endpointType: entry.endpointType } : {}),
+    }, existing?.status);
   }
 
   console.log(`[seed] Provider registry: ${added} added, ${updated} updated (${entries.length} total)`);

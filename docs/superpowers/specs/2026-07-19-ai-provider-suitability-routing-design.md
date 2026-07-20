@@ -339,6 +339,39 @@ DPF must therefore keep three layers separate:
 2. **Connected-account posture:** which execution channel and account class the installed credential actually represents.
 3. **Proven entitlement:** which contractual or account-level controls are enabled for that connection and remain within their review/expiry window.
 
+#### Connection Identity Decision (`BI-AIPS-003`)
+
+`ModelProvider.providerId` remains the catalog/runtime provider key. A separate
+`AiProviderConnection.connectionId` identifies the configured account or channel
+and owns its access posture. The connection references the canonical owners that
+already exist—`CredentialEntry`, `AiProviderFinanceProfile`, `SupplierContract`,
+and `ProviderCapacityStatus`—rather than copying their secrets, balances,
+contracts, or live capacity state.
+
+The provider registry may declare a `catalogProviderId` so channel aliases such
+as `anthropic` and `anthropic-sub`, or `openai`, `chatgpt`, and `codex`, share a
+vendor/catalog identity. Registry `trustCatalog` contains capabilities or
+unknowns only. It must never contain account class, contract evidence,
+entitlements, or evidence status.
+
+The migration creates one unreviewed default connection for each existing model
+provider channel other than transcription and links matching credential,
+finance, and capacity owners. The
+provider seed and registry sync create the same conservative default connection
+for fresh installs and newly added providers, then refresh links to those
+canonical owners without taking an owner already assigned to an explicit
+connection. Transcription services are excluded. No path infers a business or
+enterprise account, attaches a supplier contract, or grants an entitlement.
+This makes upgrades and cold starts fail closed.
+
+Until endpoint selection carries `connectionId`, a mixed provider slug—one
+approved connection and one unapproved connection—remains blocked at the
+provider fence. The compiler may explain which connection is approved, but it
+must not turn that connection's evidence into provider-wide authorization.
+
+This shape was selected by governed kernel decision `DI-8902B7A5BE49` with high
+confidence over provider-slug proliferation and a broad catalog-parent retrofit.
+
 An API key does not prove an enterprise contract. An OAuth subscription does not prove API rights or enterprise controls. A vendor advertising ZDR, regional processing, a BAA, DPA, SSO, audit administration, or an SLA does not prove the connected account is entitled to it. Unknown account class or entitlement remains `review` or `deny` for restricted work.
 
 For local providers:
@@ -839,7 +872,7 @@ Docs:
 3. What is the minimum provider trust catalog seed for launch: local, OpenAI, Anthropic, Google, Azure, Bedrock, OpenRouter, LiteLLM, Z.ai?
 4. Should the first UI be in `/platform/ai/providers`, `/setup`, or the AI Operations Map?
 5. Which verticals get the first governed data bindings and workload hints: healthcare, finance, education, source-code/Build Studio, or all four?
-6. Can the current one-row-per-`providerId` `ModelProvider` shape represent multiple simultaneous accounts for the same vendor, or should the first implementation introduce a connection/profile identity while preserving provider catalog identity?
+6. **Resolved by `BI-AIPS-003`:** one-row-per-`providerId` cannot safely carry simultaneous account evidence. Use `AiProviderConnection` for the configured account/channel while preserving `ModelProvider` and `catalogProviderId` as catalog/runtime identity.
 
 ## 18. Recommended First Implementation Slice
 

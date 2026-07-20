@@ -1,11 +1,10 @@
 "use server";
 
 import { lazyFs, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
-import { prisma } from "@dpf/db";
+import { ensureDefaultProviderConnection, prisma, refreshDefaultProviderConnectionOwners } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import {
-  computeNextRunAt,
-  getTestUrl,
+  buildProviderCatalogEntry, computeNextRunAt, getTestUrl,
   type RegistryProviderEntry,
 } from "@/lib/ai-provider-types";
 import { encryptSecret } from "@/lib/credential-crypto";
@@ -120,7 +119,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           ...(entry.catalogVisibility !== undefined && { catalogVisibility: entry.catalogVisibility }),
           ...(entry.endpointType !== undefined      && { endpointType:      entry.endpointType }),
           ...(serviceKind !== undefined             && { serviceKind }),
-          ...(entry.catalogEntry !== undefined      && { catalogEntry:      entry.catalogEntry ?? undefined }),
+          ...(buildProviderCatalogEntry(entry) !== undefined && { catalogEntry: buildProviderCatalogEntry(entry) as import("@dpf/db").Prisma.InputJsonValue }),
           ...(entry.authorizeUrl !== undefined      && { authorizeUrl:      entry.authorizeUrl ?? null }),
           ...(entry.tokenUrl !== undefined          && { tokenUrl:          entry.tokenUrl ?? null }),
           ...(entry.oauthClientId !== undefined     && { oauthClientId:     entry.oauthClientId ?? null }),
@@ -154,7 +153,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           catalogVisibility:    entry.catalogVisibility ?? "visible",
           ...(entry.endpointType !== undefined && { endpointType: entry.endpointType }),
           ...(serviceKind !== undefined && { serviceKind }),
-          ...(entry.catalogEntry !== undefined && entry.catalogEntry !== null && { catalogEntry: entry.catalogEntry }),
+          ...(buildProviderCatalogEntry(entry) !== undefined && { catalogEntry: buildProviderCatalogEntry(entry) as import("@dpf/db").Prisma.InputJsonValue }),
           authorizeUrl:         entry.authorizeUrl ?? null,
           tokenUrl:             entry.tokenUrl ?? null,
           oauthClientId:        entry.oauthClientId ?? null,
@@ -163,6 +162,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
       });
       added++;
     }
+    await ensureDefaultProviderConnection(prisma, entry, existing?.status);
   }
 
   const now = new Date();
@@ -309,7 +309,7 @@ export async function configureProvider(input: {
   // When a user configures a provider, the build system should automatically
   // pick it up without requiring manual Build Studio configuration.
   await autoConfigureBuildStudio(input.providerId);
-
+  await refreshDefaultProviderConnectionOwners(prisma, input.providerId);
   return {};
 }
 

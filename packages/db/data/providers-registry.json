@@ -33,7 +33,18 @@
       "setupDifficulty": "easy",
       "regulatoryNotes": "SOC 2 Type II certified. Suitable for most business data. Consult compliance team for healthcare/financial PII."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "anthropic",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "anthropic-sub",
@@ -61,8 +72,7 @@
     "tokenUrl": "https://platform.claude.com/v1/oauth/token",
     "oauthClientId": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
     "oauthRedirectUri": null,
-    "modelRestrictions": [
-    ],
+    "modelRestrictions": [],
     "catalogVisibility": "visible",
     "userFacing": {
       "plainDescription": "Anthropic's Claude models accessed through a subscription plan.",
@@ -75,7 +85,18 @@
       "setupDifficulty": "easy",
       "regulatoryNotes": "Same as Anthropic. SOC 2 Type II certified."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "anthropic",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "openai",
@@ -111,7 +132,18 @@
       "setupDifficulty": "easy",
       "regulatoryNotes": "SOC 2 Type II certified. Enterprise tier available for stricter data handling."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "openai",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "zai",
@@ -146,7 +178,18 @@
       "setupDifficulty": "easy",
       "regulatoryNotes": "Review Z.ai terms and compliance documentation before using sensitive or regulated data."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "zai",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "zai-coding",
@@ -182,7 +225,18 @@
       "setupDifficulty": "easy",
       "regulatoryNotes": "Review Z.ai terms and compliance documentation before using sensitive or regulated code or data."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "zai",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "azure-openai",
@@ -218,7 +272,18 @@
       "setupDifficulty": "moderate",
       "regulatoryNotes": "Inherits Azure compliance certifications (ISO 27001, SOC 2, HIPAA BAA available). Strong choice for regulated industries."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "microsoft",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "gemini",
@@ -253,7 +318,18 @@
       "setupDifficulty": "easy",
       "regulatoryNotes": "SOC 2 Type II certified. Google Workspace customers have additional data processing agreements. Verify terms for sensitive data."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "google",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "bedrock",
@@ -288,6 +364,17 @@
       "dataResidency": "Your chosen AWS region. Data stays within your AWS account boundary.",
       "setupDifficulty": "complex",
       "regulatoryNotes": "Inherits AWS compliance certifications (ISO 27001, SOC 2, HIPAA, FedRAMP). Best choice for organisations with strict data sovereignty requirements."
+    },
+    "catalogProviderId": "aws",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
     }
   },
   {
@@ -328,7 +415,20 @@
       "setupDifficulty": "automatic",
       "regulatoryNotes": "Maximum privacy. Suitable for all sensitivity levels including restricted/regulated data."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "local",
+    "trustCatalog": {
+      "category": "local",
+      "jurisdictions": [
+        "local"
+      ],
+      "externalEgress": "none",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "ollama",
@@ -337,10 +437,22 @@
     "cliEngine": "opencode",
     "baseUrl": "http://localhost:11434",
     "authMethod": "none",
-    "supportedAuthMethods": ["none"],
+    "supportedAuthMethods": [
+      "none"
+    ],
     "authHeader": null,
     "costModel": "compute",
-    "families": ["llama3", "llama3.2", "mistral", "phi3", "gemma2", "gemma4", "qwen2", "qwen3", "deepseek"],
+    "families": [
+      "llama3",
+      "llama3.2",
+      "mistral",
+      "phi3",
+      "gemma2",
+      "gemma4",
+      "qwen2",
+      "qwen3",
+      "deepseek"
+    ],
     "computeWatts": 150,
     "electricityRateKwh": 0.12,
     "docsUrl": "https://ollama.com/docs",
@@ -359,7 +471,20 @@
       "setupDifficulty": "easy",
       "regulatoryNotes": "All data stays on your hardware."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "ollama",
+    "trustCatalog": {
+      "category": "local",
+      "jurisdictions": [
+        "local"
+      ],
+      "externalEgress": "none",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "xai",
@@ -627,7 +752,18 @@
     "tokenUrl": "https://auth.openai.com/oauth/token",
     "oauthClientId": "app_EMoamEEZ73f0CkXaXp7hrann",
     "oauthRedirectUri": "http://localhost:1455/auth/callback",
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "openai",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "chatgpt",
@@ -667,7 +803,18 @@
       "setupDifficulty": "automatic",
       "regulatoryNotes": "SOC 2 Type II certified. Suitable for most business data."
     },
-    "supportsToolUse": true
+    "supportsToolUse": true,
+    "catalogProviderId": "openai",
+    "trustCatalog": {
+      "category": "direct",
+      "jurisdictions": [],
+      "externalEgress": "provider-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "openrouter",
@@ -698,6 +845,17 @@
       "dataResidency": "Depends on the underlying provider selected. OpenRouter routes requests but does not store content.",
       "setupDifficulty": "easy",
       "regulatoryNotes": "Review the terms of the specific underlying provider used. OpenRouter itself is a pass-through; compliance obligations rest with the provider."
+    },
+    "catalogProviderId": "openrouter",
+    "trustCatalog": {
+      "category": "router",
+      "jurisdictions": [],
+      "externalEgress": "router-cloud",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
     }
   },
   {
@@ -718,7 +876,18 @@
     "consoleUrl": null,
     "billingLabel": "Pay-per-use · rates vary by model",
     "costPerformanceNotes": null,
-    "catalogVisibility": "visible"
+    "catalogVisibility": "visible",
+    "catalogProviderId": "litellm",
+    "trustCatalog": {
+      "category": "router",
+      "jurisdictions": [],
+      "externalEgress": "unknown",
+      "supportsZdr": null,
+      "supportsNoTraining": null,
+      "supportsRegionalRouting": null,
+      "supportedRegions": [],
+      "regionalEndpoints": []
+    }
   },
   {
     "providerId": "portkey",
