@@ -149,6 +149,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "federated-demand-reconciliation",
+    inngestId: "federation/demand-reconciliation",
+    name: "Federated demand reconciliation",
+    purpose:
+      "Projects approved same-organization platform demand, retries durable peer delivery, and withdraws records that leave the approved scope.",
+    cron: "1,6,11,16,21,26,31,36,41,46,51,56 * * * *",
+    cadence: "Every 5 minutes, offset by 1 minute",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "agent-task-dispatch",
     inngestId: "agent/task-dispatch",
     name: "Agent task dispatch",

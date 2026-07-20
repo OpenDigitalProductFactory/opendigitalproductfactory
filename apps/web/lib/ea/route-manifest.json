@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 570,
+  "routeCount": 572,
   "routes": [
     {
       "routePath": "/",
@@ -2298,6 +2298,31 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/federation/approval-relay/route.ts"
+    },
+    {
+      "routePath": "/api/v1/federation/demand",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "demand"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/demand/route.ts"
+    },
+    {
+      "routePath": "/api/v1/federation/demand/reconcile",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "demand",
+        "reconcile"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/demand/reconcile/route.ts"
     },
     {
       "routePath": "/api/v1/federation/enroll",

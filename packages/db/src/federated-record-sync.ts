@@ -10,11 +10,12 @@ export const FEDERATED_RECORD_TYPES = [
   "incident",
   "service-ticket",
   "organization-crosswalk",
+  "demand-envelope",
 ] as const;
 export type FederatedRecordType = (typeof FEDERATED_RECORD_TYPES)[number];
 
 export type CanonicalSide = "local" | "peer";
-export type MirrorSyncStatus = "pending" | "synced" | "conflict" | "revoked";
+export type MirrorSyncStatus = "pending" | "synced" | "conflict" | "withdrawn" | "dead-letter" | "revoked";
 
 export interface MirrorState {
   version: number;

@@ -1,0 +1,93 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+import { prisma } from "@dpf/db";
+import type { DemandEnvelopeV1 } from "@dpf/db/federated-demand-contract";
+
+import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
+import { validateFederationCloudEvent } from "@/lib/federation/cloud-event-guard";
+import { resolveFederationIdentity, type FederationIdentityDb } from "@/lib/federation/demand-identity";
+import {
+  handleIncomingDemand,
+  type DemandExchangeDb,
+  type InboundDemandActivity,
+} from "@/lib/federation/demand-exchange";
+import { envFlagEnabled } from "@/lib/runtime/env-flags";
+
+const ERROR_STATUS: Record<string, number> = {
+  missing_authorization: 401,
+  invalid_scheme: 401,
+  invalid_token_format: 401,
+  token_not_found: 401,
+  link_not_trusted: 403,
+};
+
+const INBOUND_ACTIVITIES = new Set<InboundDemandActivity>([
+  "dpf.demand.proposed",
+  "dpf.demand.updated",
+  "dpf.demand.withdrawn",
+]);
+
+function isInboundActivity(value: unknown): value is InboundDemandActivity {
+  return typeof value === "string" && INBOUND_ACTIVITIES.has(value as InboundDemandActivity);
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  if (!envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
+    return NextResponse.json({ ok: false, error: "federation_exchange_disabled" }, { status: 404 });
+  }
+
+  const authz = await resolveFederationLinkAuth(request.headers.get("authorization"));
+  if (!authz.ok) {
+    return NextResponse.json(
+      { ok: false, error: authz.error, message: authz.message },
+      { status: ERROR_STATUS[authz.error] ?? 401 },
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 422 });
+  }
+
+  const eventViolations = validateFederationCloudEvent(body, { linkId: authz.linkId });
+  if (eventViolations.length > 0) {
+    return NextResponse.json(
+      { ok: false, error: "invalid_cloud_event", violations: eventViolations },
+      { status: 422 },
+    );
+  }
+
+  const event = body as { type?: unknown; data?: unknown };
+  if (!isInboundActivity(event.type) || !event.data || typeof event.data !== "object" || Array.isArray(event.data)) {
+    return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 422 });
+  }
+
+  const identity = await resolveFederationIdentity(prisma as unknown as FederationIdentityDb);
+  const result = await handleIncomingDemand(
+    prisma as unknown as DemandExchangeDb,
+    authz.linkId,
+    event.type,
+    event.data as DemandEnvelopeV1,
+    { receivingInstallationId: identity.installationId },
+  );
+
+  if (result.action === "rejected") {
+    return NextResponse.json(
+      { ok: false, error: "invalid_demand_envelope", violations: result.violations },
+      { status: 422 },
+    );
+  }
+  if (result.action === "conflict") {
+    return NextResponse.json({ ok: false, ...result }, { status: 409 });
+  }
+
+  return NextResponse.json(
+    { ok: true, ...result },
+    { status: result.action === "noop" ? 200 : 202 },
+  );
+}

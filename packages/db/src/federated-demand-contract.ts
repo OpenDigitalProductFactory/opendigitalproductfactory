@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { FederationRelationshipPreset } from "./federation-link-types";
 import type { ProjectionContractSpec } from "./projection-serialization";
 
@@ -52,6 +54,20 @@ export interface DemandEnvelopeV1 {
   createdAt: string;
   updatedAt: string;
   payloadDigest: string;
+}
+
+export interface DemandDigestRecordV1 {
+  originRecordRef: string;
+  originVersion: number;
+  payloadDigest: string;
+  withdrawn: boolean;
+}
+
+export interface DemandDigestV1 {
+  specVersion: "dpf.demand-digest/1";
+  originInstallationId: string;
+  generatedAt: string;
+  records: DemandDigestRecordV1[];
 }
 
 const REQUIRED_FIELDS = [
@@ -125,6 +141,22 @@ function isIsoTimestamp(value: unknown): boolean {
   return typeof value === "string" && value.length <= 64 && !Number.isNaN(Date.parse(value));
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** Canonical content digest; the digest field itself is excluded. */
+export function computeDemandPayloadDigest(value: Omit<DemandEnvelopeV1, "payloadDigest"> | DemandEnvelopeV1): string {
+  const content = { ...(value as DemandEnvelopeV1) } as Record<string, unknown>;
+  delete content.payloadDigest;
+  return `sha256:${createHash("sha256").update(stableJson(content)).digest("hex")}`;
+}
+
 /** Pure protocol conformance check used before persistence or semantic processing. */
 export function validateDemandEnvelopeV1(
   value: unknown,
@@ -158,7 +190,11 @@ export function validateDemandEnvelopeV1(
   if (!(DEMAND_ATTRIBUTIONS as readonly unknown[]).includes(value.attribution)) violations.push("attribution:unsupported");
   if (!isIsoTimestamp(value.createdAt)) violations.push("createdAt:invalid");
   if (!isIsoTimestamp(value.updatedAt)) violations.push("updatedAt:invalid");
-  if (!isNonEmptyString(value.payloadDigest, 256)) violations.push("payloadDigest:invalid");
+  if (typeof value.payloadDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.payloadDigest)) {
+    violations.push("payloadDigest:invalid");
+  } else if (computeDemandPayloadDigest(value as unknown as DemandEnvelopeV1) !== value.payloadDigest) {
+    violations.push("payloadDigest:mismatch");
+  }
 
   if (!isRecord(value.signal)) {
     violations.push("signal:invalid");
@@ -196,5 +232,29 @@ export function validateDemandEnvelopeV1(
   }
 
   if (Array.isArray(value.evidence) && value.evidence.length > 20) violations.push("evidence:too-many-items");
+  return violations;
+}
+
+/** Validate the bounded inventory used to repair lost deliveries/acknowledgments. */
+export function validateDemandDigestV1(value: unknown): string[] {
+  if (!isRecord(value)) return ["digest:invalid"];
+  const violations: string[] = [];
+  if (value.specVersion !== "dpf.demand-digest/1") violations.push("specVersion:unsupported");
+  if (!isNonEmptyString(value.originInstallationId, 160)) violations.push("originInstallationId:invalid");
+  if (!isIsoTimestamp(value.generatedAt)) violations.push("generatedAt:invalid");
+  if (!Array.isArray(value.records)) return [...violations, "records:invalid"];
+  if (value.records.length > 1_000) violations.push("records:too-many");
+  for (const [index, record] of value.records.slice(0, 1_000).entries()) {
+    if (!isRecord(record)) {
+      violations.push(`records.${index}:invalid`);
+      continue;
+    }
+    if (!isNonEmptyString(record.originRecordRef, 240)) violations.push(`records.${index}.originRecordRef:invalid`);
+    if (!Number.isSafeInteger(record.originVersion) || Number(record.originVersion) < 1) {
+      violations.push(`records.${index}.originVersion:invalid`);
+    }
+    if (!isNonEmptyString(record.payloadDigest, 256)) violations.push(`records.${index}.payloadDigest:invalid`);
+    if (typeof record.withdrawn !== "boolean") violations.push(`records.${index}.withdrawn:invalid`);
+  }
   return violations;
 }

@@ -1,0 +1,109 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { NextRequest } from "next/server";
+
+const { mockResolveAuth, mockHandleIncomingDemand, mockResolveIdentity } = vi.hoisted(() => ({
+  mockResolveAuth: vi.fn(),
+  mockHandleIncomingDemand: vi.fn(),
+  mockResolveIdentity: vi.fn(),
+}));
+
+vi.mock("@/lib/auth/federation-link-token", () => ({ resolveFederationLinkAuth: mockResolveAuth }));
+vi.mock("@/lib/federation/demand-exchange", () => ({ handleIncomingDemand: mockHandleIncomingDemand }));
+vi.mock("@/lib/federation/demand-identity", () => ({ resolveFederationIdentity: mockResolveIdentity }));
+
+import { POST } from "./route";
+
+const envelope = {
+  specVersion: "dpf.demand/1",
+  envelopeId: "dem_01",
+  originInstallationId: "inst_origin",
+  originRecordRef: "ref_01",
+  originVersion: 1,
+  route: [],
+  audience: "internal",
+  title: "Shared demand",
+  summary: "Minimized summary",
+  signal: { occurrenceCount: 1 },
+  attribution: "organization",
+  createdAt: "2026-07-20T05:00:00.000Z",
+  updatedAt: "2026-07-20T05:00:00.000Z",
+  payloadDigest: "sha256:v1",
+};
+
+function request(type = "dpf.demand.proposed", data: unknown = envelope): NextRequest {
+  return new Request("http://test/api/v1/federation/demand", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: "Bearer dpflink_test" },
+    body: JSON.stringify({
+      specversion: "1.0", id: "evt_1", source: "/dpf", type,
+      time: new Date().toISOString(), datacontenttype: "application/json", dpflinkid: "link_1", data,
+    }),
+  }) as NextRequest;
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  process.env.DPF_FEDERATION_EXCHANGE_ENABLED = "1";
+  mockResolveIdentity.mockResolvedValue({ installationId: "inst_receiver", projectionSecret: "secret" });
+  mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1" });
+  mockHandleIncomingDemand.mockResolvedValue({
+    action: "created",
+    mirrorId: "fdm_1",
+    originVersion: 1,
+    disposition: "observed",
+  });
+});
+
+describe("POST /api/v1/federation/demand", () => {
+  it("requires a trusted FederationLink", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: false, error: "link_not_trusted", message: "not trusted" });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(403);
+    expect(mockHandleIncomingDemand).not.toHaveBeenCalled();
+  });
+
+  it("accepts only inbound demand lifecycle activities", async () => {
+    const response = await POST(request("dpf.demand.adopted"));
+
+    expect(response.status).toBe(422);
+    expect(mockHandleIncomingDemand).not.toHaveBeenCalled();
+  });
+
+  it("persists a conforming envelope and returns its durable receipt identity", async () => {
+    const response = await POST(request());
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, action: "created", mirrorId: "fdm_1" });
+    expect(mockHandleIncomingDemand).toHaveBeenCalledWith(
+      expect.anything(),
+      "link_1",
+      "dpf.demand.proposed",
+      envelope,
+      { receivingInstallationId: "inst_receiver" },
+    );
+  });
+
+  it("returns validation violations without acknowledging receipt", async () => {
+    mockHandleIncomingDemand.mockResolvedValue({ action: "rejected", violations: ["route:receiver-loop"] });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({ ok: false, error: "invalid_demand_envelope" });
+  });
+
+  it("surfaces a non-advancing origin version as a conflict", async () => {
+    mockHandleIncomingDemand.mockResolvedValue({
+      action: "conflict",
+      mirrorId: "fdm_1",
+      originVersion: 3,
+      reason: "origin-version-not-advancing",
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+  });
+});

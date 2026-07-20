@@ -12682,26 +12682,38 @@ model FederatedRecordMirror {
   id               String    @id @default(cuid())
   mirrorId         String    @unique
   federationLinkId String
-  // "incident" | "service-ticket" | "organization-crosswalk"
+  // "incident" | "service-ticket" | "organization-crosswalk" | "demand-envelope"
   recordType       String
   // Which side holds the canonical record: "local" | "peer".
   canonicalSide    String
   localRecordRef   String?
   peerRecordRef    String?
-  // pending | synced | conflict | revoked
+  // pending | synced | conflict | withdrawn | dead-letter | revoked
   syncStatus       String    @default("pending")
   version          Int       @default(1)
   conflictReason   String?
   lastSyncedAt     DateTime?
+  // Durable delivery state for local-canonical outbox records. Peer-canonical
+  // inbox mirrors leave these null/zero.
+  deliveryAttempts    Int       @default(0)
+  nextDeliveryAt      DateTime?
+  lastDeliveryAt      DateTime?
+  lastDeliveryError   String?
+  acknowledgedVersion Int?
+  deadLetteredAt      DateTime?
   // Last projected (already minimized) payload that crossed — never raw data.
   payload          Json?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@unique([federationLinkId, recordType, localRecordRef], map: "FederatedRecordMirror_link_type_local_key")
+  // Peer-canonical records (including demand envelopes) need the inverse key so
+  // concurrent retries cannot create duplicate inbox mirrors before adoption.
+  @@unique([federationLinkId, recordType, peerRecordRef], map: "FederatedRecordMirror_link_type_peer_key")
   @@index([federationLinkId])
   @@index([recordType])
   @@index([syncStatus])
+  @@index([recordType, canonicalSide, syncStatus, nextDeliveryAt], map: "FederatedRecordMirror_delivery_due_idx")
 }
 
 // ── EP-MSP-FEDERATION · B4 — cross-org remediation proposal (BI-3C21D4E2) ──────
