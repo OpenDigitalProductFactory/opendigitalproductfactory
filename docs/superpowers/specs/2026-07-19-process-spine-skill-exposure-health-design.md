@@ -65,6 +65,12 @@ testable while honoring the destructive-action boundary: DPF can disable known
 competitive process plugins where a client adapter is proven, but it does not
 delete user-owned local skill state.
 
+Design-Grounding-Decision: reviewed this process-spine exposure spec, the
+pre-PR gate contract in `docs/testing/pre-pr-gate.md`, and code substrate
+`packages/dpf-skill-pack/hooks/process-spine-health-check.mjs` plus
+`scripts/sandbox-freshness-preflight.mjs`; this change repairs readiness and
+sandbox-evidence behavior without changing UI routes or coworker authority.
+
 ## Design
 
 The canonical replacement map is
