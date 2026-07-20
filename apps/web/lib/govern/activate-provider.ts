@@ -132,10 +132,14 @@ export async function activateProvider(
 
   // 1. Derive clearance from connection evidence. Working credentials alone
   // never manufacture business-account or contract posture.
-  const connections = await prisma.aiProviderConnection.findMany({
-    where: { providerId, status: { not: "disabled" } },
-    select: { accountClass: true, evidenceStatus: true, entitlements: true },
-  });
+  // A missing evidence reader (including older test doubles or a partially
+  // converged runtime) fails closed to public-only for hosted providers.
+  const connections = typeof prisma.aiProviderConnection?.findMany === "function"
+    ? await prisma.aiProviderConnection.findMany({
+        where: { providerId, status: { not: "disabled" } },
+        select: { accountClass: true, evidenceStatus: true, entitlements: true },
+      })
+    : [];
   const clearance = narrowClearance(
     deriveActivationClearance(provider, connections),
     opts.sensitivityClearance,
