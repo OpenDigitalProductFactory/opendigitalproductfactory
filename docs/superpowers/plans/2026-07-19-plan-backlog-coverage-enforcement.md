@@ -68,3 +68,12 @@ Run targeted tests and web typecheck in the compile-ready worktree. Lease `local
 ## Architecture review
 
 The DPF architecture-review pass is aligned. The correction reuses `BacklogItem`, `BacklogItemActivity`, Work Capsule branch claims, the existing decomposition transaction, MCP tool packs, and the versioned plugin installer; it adds no table, lifecycle enum, or competing plan registry. The review identified two atomicity/distribution risks that were folded into implementation: the Build Studio atomic override now writes its design update and coverage activity in one transaction, and the standalone updater explicitly installs the write guard into Codex and Grok hook planes rather than assuming bundled plugin hooks are live. The one-time bootstrap receipt uses governed manual evidence because the dedicated recorder cannot precede its own landing; the read tool validates that envelope with the same live invariant.
+
+## Post-merge acceptance correction
+
+The first real 0.2.3 refresh proved that copying the managed plugin and invoking each CLI's `install` command was insufficient: Claude retained an older cached plugin, while Grok rejected the duplicate install and retained 0.2.2. The updater must therefore exercise each client's replacement path, not merely report that the marketplace and managed copy converged.
+
+- Claude runs `plugin update` after marketplace registration and installation so an existing cache advances to the manifest version.
+- Grok detects an installed DPF plugin, preserves its data, uninstalls the stale cache, and reinstalls from the refreshed managed copy.
+- Plugin manifests advance to 0.2.4 and the process-spine version advances to 2026.07.20.1 so new sessions have explicit refresh boundaries.
+- Fixture tests cover both a fresh Grok install and stale-cache replacement, plus the Claude update command.

@@ -282,7 +282,8 @@ def render_process_spine_cleanup_policy(policy: dict[str, Any]) -> list[str]:
     mode = str(policy.get("mode", "unspecified"))
     lines.append(
         f"  Policy: {mode} - rerun bootstrap/updater after DPF skill-pack changes; "
-        "safe adapters never delete user-owned skill files or plugin caches."
+        "safe adapters preserve user-owned skills and unmanaged plugin data. A managed "
+        "DPF client cache may be replaced through that client's plugin CLI."
     )
     for client in policy.get("clients", []):
         name = str(client.get("client", "client")).capitalize()
@@ -552,12 +553,13 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
     commands = [
         [claude, "plugin", "marketplace", "add", str(marketplace_root), "--scope", "local"],
         [claude, "plugin", "install", f"{PLUGIN_NAME}@{MARKETPLACE_NAME}", "--scope", "local"],
+        [claude, "plugin", "update", f"{PLUGIN_NAME}@{MARKETPLACE_NAME}", "--scope", "local"],
     ]
     for command in commands:
         result = subprocess.run(command, cwd=str(marketplace_root), capture_output=True, text=True)
         if result.returncode != 0:
             return f"failed: {' '.join(command[:3])} exited {result.returncode}"
-    return "installed"
+    return "installed and refreshed"
 
 
 def resolve_codex_binary() -> str | None:
@@ -685,6 +687,31 @@ def install_grok_plugin(managed: Path, dry_run: bool) -> str:
         return "skipped: Grok CLI not found"
     if dry_run:
         return f"dry-run: would install {PLUGIN_NAME} from {managed}"
+
+    list_result = subprocess.run(
+        [grok, "plugin", "list", "--json"],
+        capture_output=True,
+        text=True,
+    )
+    if list_result.returncode != 0:
+        return f"failed: grok plugin list exited {list_result.returncode}"
+    try:
+        installed_plugins = json.loads(list_result.stdout or "[]")
+    except json.JSONDecodeError:
+        return "failed: grok plugin list returned invalid JSON"
+    already_installed = any(
+        isinstance(plugin, dict) and plugin.get("name") == PLUGIN_NAME
+        for plugin in installed_plugins
+    )
+    if already_installed:
+        uninstall_result = subprocess.run(
+            [grok, "plugin", "uninstall", PLUGIN_NAME, "--confirm", "--keep-data"],
+            capture_output=True,
+            text=True,
+        )
+        if uninstall_result.returncode != 0:
+            return f"failed: grok plugin uninstall exited {uninstall_result.returncode}"
+
     result = subprocess.run(
         [grok, "plugin", "install", str(managed), "--trust"],
         capture_output=True,
@@ -692,7 +719,7 @@ def install_grok_plugin(managed: Path, dry_run: bool) -> str:
     )
     if result.returncode != 0:
         return f"failed: grok plugin install exited {result.returncode}"
-    return "installed"
+    return "reinstalled" if already_installed else "installed"
 
 
 # PreToolUse guards to wire into Grok's hook plane. Blocking safety/decision
