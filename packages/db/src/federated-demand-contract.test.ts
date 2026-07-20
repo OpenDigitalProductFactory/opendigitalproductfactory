@@ -7,10 +7,13 @@ import {
   DEMAND_PROJECTION_TEMPLATES,
   DEMAND_SCHEMA_VERSIONS,
   computeDemandPayloadDigest,
+  computeDemandResponseDigest,
   validateDemandEnvelopeV1,
+  validateDemandResponseV1,
   validateDemandDigestV1,
   type DemandDigestV1,
   type DemandEnvelopeV1,
+  type DemandResponseV1,
 } from "./federated-demand-contract";
 import { FEDERATION_RELATIONSHIP_PRESETS } from "./federation-link-types";
 
@@ -163,5 +166,42 @@ describe("validateDemandDigestV1", () => {
         originRecordRef: "", originVersion: 0, payloadDigest: "", withdrawn: "no",
       })),
     })).toEqual(expect.arrayContaining(["records:too-many"]));
+  });
+});
+
+describe("validateDemandResponseV1", () => {
+  const response = (overrides: Partial<DemandResponseV1> = {}): DemandResponseV1 => {
+    const value: DemandResponseV1 = {
+      specVersion: "dpf.demand-response/1",
+      responseId: "rsp_opaque_1",
+      envelopeId: "dem_01",
+      originInstallationId: "inst_opaque_a",
+      originRecordRef: "ref_opaque_1",
+      responseKind: "help-offer",
+      message: "We can help reproduce and validate this need.",
+      responderAttribution: "organization",
+      createdAt: "2026-07-20T06:00:00.000Z",
+      payloadDigest: "sha256:pending",
+      ...overrides,
+    };
+    if (overrides.payloadDigest === undefined) value.payloadDigest = computeDemandResponseDigest(value);
+    return value;
+  };
+
+  it("accepts an opaque, bounded collaboration response", () => {
+    expect(validateDemandResponseV1(response())).toEqual([]);
+  });
+
+  it("rejects source-local planning context and oversized messages", () => {
+    expect(validateDemandResponseV1({
+      ...response(),
+      backlogItemId: "BI-PRIVATE",
+      workCapsuleId: "WC-PRIVATE",
+      message: "x".repeat(1_001),
+    })).toEqual(expect.arrayContaining([
+      "field:not-allowed:backlogItemId",
+      "field:not-allowed:workCapsuleId",
+      "message:invalid",
+    ]));
   });
 });

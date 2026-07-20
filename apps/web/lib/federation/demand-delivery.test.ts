@@ -4,6 +4,7 @@ import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
 
 import {
   dispatchDueDemand,
+  queueForwardedDemand,
   queueDemandProjection,
   queueDemandWithdrawal,
   retryDelayMs,
@@ -148,6 +149,56 @@ describe("queueDemandProjection", () => {
       syncStatus: "pending", deliveryAttempts: 0,
     }) }));
     expect(update.mock.calls[0][0].data.payload.envelope.originVersion).toBeGreaterThan(10);
+  });
+});
+
+describe("queueForwardedDemand", () => {
+  it("retains original provenance and uses only a local mirror as its outbox key", async () => {
+    const create = vi.fn().mockResolvedValue({});
+    const db = {
+      federationLink: { findMany: vi.fn() },
+      federatedRecordMirror: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        create,
+        update: vi.fn(),
+        findMany: vi.fn(),
+      },
+    } as unknown as DemandDeliveryDb;
+    const forwarded = {
+      specVersion: "dpf.demand/1" as const,
+      envelopeId: "dem_origin",
+      originInstallationId: "inst_customer",
+      originRecordRef: "ref_customer",
+      originVersion: 9,
+      route: [{
+        installationId: "inst_reseller",
+        relationshipKind: "channel",
+        receivedAt: "2026-07-20T06:00:00.000Z",
+        attestationDigest: `sha256:${"a".repeat(64)}`,
+      }],
+      audience: "founder" as const,
+      title: "Curated request",
+      summary: "Still source-owned",
+      signal: { occurrenceCount: 4 },
+      attribution: "pseudonymous" as const,
+      forwarding: { permitted: true, audiences: ["founder" as const] },
+      createdAt: "2026-07-20T05:00:00.000Z",
+      updatedAt: "2026-07-20T06:00:00.000Z",
+      payloadDigest: `sha256:${"b".repeat(64)}`,
+    };
+
+    await queueForwardedDemand(db, {
+      link,
+      localMirrorRef: "fdm_incoming_1",
+      envelope: forwarded,
+      now: new Date("2026-07-20T06:01:00.000Z"),
+    });
+
+    const data = create.mock.calls[0][0].data;
+    expect(data.localRecordRef).toBe("forward:fdm_incoming_1");
+    expect(data.payload.envelope.originInstallationId).toBe("inst_customer");
+    expect(data.payload.envelope.originRecordRef).toBe("ref_customer");
+    expect(data.payload.envelope.attribution).toBe("pseudonymous");
   });
 });
 

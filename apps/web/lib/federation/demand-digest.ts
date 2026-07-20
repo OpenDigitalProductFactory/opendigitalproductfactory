@@ -98,7 +98,9 @@ export async function reconcileDemandDigests(
     if (rows.length === 0) continue;
     const usable = rows.flatMap((row) => {
       const payload = decodeDemandOutboxPayload(row.payload);
-      return payload && row.mirrorId ? [{ row, payload }] : [];
+      return payload && payload.envelope.specVersion === "dpf.demand/1" && row.mirrorId
+        ? [{ row, payload: { ...payload, envelope: payload.envelope } }]
+        : [];
     });
     const records = usable.map(({ payload }) => ({
       originRecordRef: payload.envelope.originRecordRef,

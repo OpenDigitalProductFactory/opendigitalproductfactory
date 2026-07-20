@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@dpf/db";
-import type { DemandEnvelopeV1 } from "@dpf/db/federated-demand-contract";
+import type { DemandEnvelopeV1, DemandResponseV1 } from "@dpf/db/federated-demand-contract";
 
 import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
 import { validateFederationCloudEvent } from "@/lib/federation/cloud-event-guard";
@@ -11,6 +11,10 @@ import {
   type DemandExchangeDb,
   type InboundDemandActivity,
 } from "@/lib/federation/demand-exchange";
+import {
+  handleIncomingDemandResponse,
+  type DemandResponseDb,
+} from "@/lib/federation/demand-response";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const ERROR_STATUS: Record<string, number> = {
@@ -25,6 +29,10 @@ const INBOUND_ACTIVITIES = new Set<InboundDemandActivity>([
   "dpf.demand.proposed",
   "dpf.demand.updated",
   "dpf.demand.withdrawn",
+]);
+const RESPONSE_ACTIVITIES = new Set([
+  "dpf.demand.interest-recorded",
+  "dpf.demand.help-offered",
 ]);
 
 function isInboundActivity(value: unknown): value is InboundDemandActivity {
@@ -63,7 +71,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const event = body as { type?: unknown; data?: unknown };
-  if (!isInboundActivity(event.type) || !event.data || typeof event.data !== "object" || Array.isArray(event.data)) {
+  if (!event.data || typeof event.data !== "object" || Array.isArray(event.data)) {
+    return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 422 });
+  }
+
+  if (typeof event.type === "string" && RESPONSE_ACTIVITIES.has(event.type)) {
+    const response = await handleIncomingDemandResponse(
+      prisma as unknown as DemandResponseDb,
+      authz.linkId,
+      event.data as DemandResponseV1,
+    );
+    if (response.action === "rejected") {
+      return NextResponse.json({ ok: false, error: "invalid_demand_response", violations: response.violations }, { status: 422 });
+    }
+    return NextResponse.json({ ok: true, ...response }, { status: response.action === "noop" ? 200 : 202 });
+  }
+
+  if (!isInboundActivity(event.type)) {
     return NextResponse.json({ ok: false, error: "invalid_body" }, { status: 422 });
   }
 

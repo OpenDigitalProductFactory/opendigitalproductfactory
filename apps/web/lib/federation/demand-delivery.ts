@@ -5,6 +5,7 @@ import type {
   DemandAttribution,
   DemandAudience,
   DemandEnvelopeV1,
+  DemandResponseV1,
 } from "@dpf/db/federated-demand-contract";
 import { computeDemandPayloadDigest } from "@dpf/db/federated-demand-contract";
 import type { ProjectionContractSpec } from "@dpf/db/projection-serialization";
@@ -15,10 +16,11 @@ import type { FederationIdentity } from "./demand-identity";
 import { decryptPeerToken } from "./outbound";
 
 type OutboundDemandActivity = Extract<DemandActivity, "dpf.demand.proposed" | "dpf.demand.updated" | "dpf.demand.withdrawn">;
+type OutboundResponseActivity = Extract<DemandActivity, "dpf.demand.interest-recorded" | "dpf.demand.help-offered">;
 
 export interface DemandOutboxPayload {
-  envelope: DemandEnvelopeV1;
-  activity: OutboundDemandActivity;
+  envelope: DemandEnvelopeV1 | DemandResponseV1;
+  activity: OutboundDemandActivity | OutboundResponseActivity;
   eventId: string;
   queuedAt: string;
 }
@@ -26,6 +28,7 @@ export interface DemandOutboxPayload {
 interface DemandOutboxRow {
   mirrorId: string;
   federationLinkId: string;
+  canonicalSide?: string;
   version: number;
   syncStatus: string;
   deliveryAttempts: number;
@@ -72,7 +75,7 @@ export function decodeDemandOutboxPayload(value: unknown): DemandOutboxPayload |
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const payload = value as Partial<DemandOutboxPayload>;
   if (!payload.envelope || typeof payload.envelope !== "object" || typeof payload.eventId !== "string") return null;
-  if (!["dpf.demand.proposed", "dpf.demand.updated", "dpf.demand.withdrawn"].includes(payload.activity ?? "")) return null;
+  if (!["dpf.demand.proposed", "dpf.demand.updated", "dpf.demand.withdrawn", "dpf.demand.interest-recorded", "dpf.demand.help-offered"].includes(payload.activity ?? "")) return null;
   return payload as DemandOutboxPayload;
 }
 
@@ -83,6 +86,7 @@ export async function queueDemandProjection(db: DemandDeliveryDb, input: {
   contract: ProjectionContractSpec;
   audience: DemandAudience;
   attribution: DemandAttribution;
+  forwarding?: DemandEnvelopeV1["forwarding"];
   now?: Date;
 }): Promise<{ action: "queued" | "noop"; mirrorId: string; originVersion: number }> {
   const built = buildDemandEnvelope(input);
@@ -127,6 +131,54 @@ export async function queueDemandProjection(db: DemandDeliveryDb, input: {
   return { action: "queued", mirrorId, originVersion: built.envelope.originVersion };
 }
 
+/** Queue an already-minimized, consent-validated forwarded envelope without
+ * rewriting its origin. The local mirror ref is an internal routing key only. */
+export async function queueForwardedDemand(db: DemandDeliveryDb, input: {
+  link: DemandLinkTarget;
+  localMirrorRef: string;
+  envelope: DemandEnvelopeV1;
+  now?: Date;
+}): Promise<{ action: "queued" | "noop"; mirrorId: string; originVersion: number }> {
+  const localRecordRef = `forward:${input.localMirrorRef}`;
+  const where = localWhere(input.link.linkId, localRecordRef);
+  const existing = await db.federatedRecordMirror.findUnique({ where });
+  const prior = decodeDemandOutboxPayload(existing?.payload);
+  if (existing && prior?.envelope.payloadDigest === input.envelope.payloadDigest) {
+    return { action: "noop", mirrorId: existing.mirrorId, originVersion: existing.version };
+  }
+  const activity: OutboundDemandActivity = existing ? "dpf.demand.updated" : "dpf.demand.proposed";
+  const payload: DemandOutboxPayload = {
+    envelope: input.envelope,
+    activity,
+    eventId: eventId(input.link.linkId, input.envelope, activity),
+    queuedAt: (input.now ?? new Date()).toISOString(),
+  };
+  const data = {
+    syncStatus: "pending",
+    version: input.envelope.originVersion,
+    payload,
+    deliveryAttempts: 0,
+    nextDeliveryAt: input.now ?? new Date(),
+    lastDeliveryError: null,
+    deadLetteredAt: null,
+  };
+  if (existing) {
+    await db.federatedRecordMirror.update({ where: { mirrorId: existing.mirrorId }, data });
+    return { action: "queued", mirrorId: existing.mirrorId, originVersion: input.envelope.originVersion };
+  }
+  const mirrorId = outboxId(input.link.linkId, localRecordRef);
+  await db.federatedRecordMirror.create({ data: {
+    mirrorId,
+    federationLinkId: input.link.linkId,
+    recordType: "demand-envelope",
+    canonicalSide: "local",
+    localRecordRef,
+    peerRecordRef: null,
+    ...data,
+  } });
+  return { action: "queued", mirrorId, originVersion: input.envelope.originVersion };
+}
+
 export async function queueDemandWithdrawal(
   db: DemandDeliveryDb,
   linkId: string,
@@ -136,7 +188,7 @@ export async function queueDemandWithdrawal(
   const existing = await db.federatedRecordMirror.findUnique({ where: localWhere(linkId, localRecordRef) });
   if (!existing) return { action: "noop", activity: "dpf.demand.withdrawn", mirrorId: "" };
   const prior = decodeDemandOutboxPayload(existing.payload);
-  if (!prior) throw new Error("Stored demand outbox payload is invalid.");
+  if (!prior || prior.envelope.specVersion !== "dpf.demand/1") throw new Error("Stored demand outbox payload is invalid.");
   if (prior.activity === "dpf.demand.withdrawn" && existing.syncStatus === "synced") {
     return { action: "noop", activity: "dpf.demand.withdrawn", mirrorId: existing.mirrorId };
   }
@@ -180,7 +232,7 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   const now = options.now ?? new Date();
   const rows = await db.federatedRecordMirror.findMany({
     where: {
-      recordType: "demand-envelope", canonicalSide: "local", syncStatus: "pending",
+      recordType: { in: ["demand-envelope", "demand-response"] }, canonicalSide: "local", syncStatus: "pending",
       OR: [{ nextDeliveryAt: null }, { nextDeliveryAt: { lte: now } }],
     },
     orderBy: [{ nextDeliveryAt: "asc" }, { updatedAt: "asc" }],
@@ -212,9 +264,14 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
       { eventId: payload.eventId, now },
     );
 
+    const responseId = payload?.envelope.specVersion === "dpf.demand-response/1"
+      ? payload.envelope.responseId
+      : null;
     const acknowledged = result.ok
       && typeof result.body === "object" && result.body !== null
-      && Number((result.body as { originVersion?: unknown }).originVersion) === row.version;
+      && (responseId
+        ? (result.body as { responseId?: unknown }).responseId === responseId
+        : Number((result.body as { originVersion?: unknown }).originVersion) === row.version);
     if (acknowledged) {
       delivered++;
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {

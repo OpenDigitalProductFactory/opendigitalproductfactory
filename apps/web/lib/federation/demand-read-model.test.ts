@@ -47,6 +47,8 @@ describe("mapNetworkDemandRows", () => {
       originVersion: 2,
       updatedAt: "2026-07-20T05:10:00.000Z",
       localItemId: null,
+      forwardingToFounderPermitted: false,
+      forwardingExpiresAt: null,
     }]);
     expect(JSON.stringify(rows)).not.toContain("private-install-id");
     expect(JSON.stringify(rows)).not.toContain("private-record-ref");

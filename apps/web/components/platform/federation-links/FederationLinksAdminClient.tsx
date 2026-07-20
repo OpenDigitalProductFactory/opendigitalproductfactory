@@ -54,9 +54,11 @@ export function FederationLinksAdminClient({
 }) {
   const [flash, setFlash] = useState<Flash>(null);
   const [relationshipPreset, setRelationshipPreset] = useState<
-    "same-organization" | "service-provider"
+    "same-organization" | "service-provider" | "channel"
   >("service-provider");
-  const [role, setRole] = useState<"manages" | "managed-by" | "same-org-peer">("manages");
+  const [role, setRole] = useState<
+    "manages" | "managed-by" | "same-org-peer" | "channel-upstream" | "channel-downstream"
+  >("manages");
   const [ttlMinutes, setTtlMinutes] = useState(15);
   const [issued, setIssued] = useState<{ plaintext: string; expiresAt: string } | null>(null);
   const [peerUrl, setPeerUrl] = useState("");
@@ -314,15 +316,22 @@ export function FederationLinksAdminClient({
             <select
               value={relationshipPreset}
               onChange={(e) => {
-                const preset = e.target.value as "same-organization" | "service-provider";
+                const preset = e.target.value as "same-organization" | "service-provider" | "channel";
                 setRelationshipPreset(preset);
-                setRole(preset === "same-organization" ? "same-org-peer" : "manages");
+                setRole(
+                  preset === "same-organization"
+                    ? "same-org-peer"
+                    : preset === "channel"
+                      ? "channel-upstream"
+                      : "manages",
+                );
               }}
               className="mt-1 block rounded border px-2 py-1 text-sm text-[var(--dpf-text)]"
               style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
             >
               <option value="same-organization">same organization</option>
               <option value="service-provider">service provider / customer</option>
+              <option value="channel">reseller / founder channel</option>
             </select>
           </label>
           <label className="text-xs text-[var(--dpf-muted)]">
@@ -330,15 +339,25 @@ export function FederationLinksAdminClient({
             <select
               value={role}
               disabled={relationshipPreset === "same-organization"}
-              onChange={(e) => setRole(e.target.value as "manages" | "managed-by")}
+              onChange={(e) => setRole(e.target.value as typeof role)}
               className="mt-1 block rounded border px-2 py-1 text-sm text-[var(--dpf-text)]"
               style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
             >
               {relationshipPreset === "same-organization" && (
                 <option value="same-org-peer">same-organization peer</option>
               )}
-              <option value="manages">manages (we are the MSP)</option>
-              <option value="managed-by">managed-by (we are the customer)</option>
+              {relationshipPreset === "service-provider" && (
+                <>
+                  <option value="manages">manages (we are the service provider)</option>
+                  <option value="managed-by">managed-by (we are the customer)</option>
+                </>
+              )}
+              {relationshipPreset === "channel" && (
+                <>
+                  <option value="channel-upstream">channel-upstream (we receive curated demand)</option>
+                  <option value="channel-downstream">channel-downstream (we share curated demand)</option>
+                </>
+              )}
             </select>
           </label>
           <label className="text-xs text-[var(--dpf-muted)]">
@@ -366,6 +385,11 @@ export function FederationLinksAdminClient({
           <p className="mt-3 rounded border p-2 text-xs text-[var(--dpf-muted)]" style={{ borderColor: "var(--dpf-border)" }}>
             Shared platform demand and dispositions are offered after both installations approve.
             Local backlog details, work capsules, private planning, attachments, and customer context stay local.
+          </p>
+        )}
+        {relationshipPreset === "channel" && (
+          <p className="mt-3 rounded border p-2 text-xs text-[var(--dpf-muted)]" style={{ borderColor: "var(--dpf-border)" }}>
+            Each installation independently chooses what demand crosses this link and whether a reseller may forward it. This connection does not make this partner exclusive; other partners can have separate, non-overlapping scopes.
           </p>
         )}
         {issued && (

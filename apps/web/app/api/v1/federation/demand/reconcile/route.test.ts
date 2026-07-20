@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockResolveAuth, mockCompare } = vi.hoisted(() => ({
+const { mockResolveAuth, mockCompare, mockBindPeerIdentity } = vi.hoisted(() => ({
   mockResolveAuth: vi.fn(),
   mockCompare: vi.fn(),
+  mockBindPeerIdentity: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/federation-link-token", () => ({ resolveFederationLinkAuth: mockResolveAuth }));
 vi.mock("@/lib/federation/demand-digest", () => ({ compareIncomingDemandDigest: mockCompare }));
+vi.mock("@/lib/federation/channel-demand", () => ({ bindPeerInstallationIdentity: mockBindPeerIdentity }));
 
 import { POST } from "./route";
 
@@ -34,6 +36,7 @@ beforeEach(() => {
   process.env.DPF_FEDERATION_EXCHANGE_ENABLED = "1";
   mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1" });
   mockCompare.mockResolvedValue({ checked: 1, needs: [{ originRecordRef: "ref_1", reason: "missing" }] });
+  mockBindPeerIdentity.mockResolvedValue({ action: "bound", peerInstallationId: "inst_origin" });
 });
 
 describe("POST /api/v1/federation/demand/reconcile", () => {
@@ -54,6 +57,7 @@ describe("POST /api/v1/federation/demand/reconcile", () => {
       ok: true, checked: 1, needs: [{ originRecordRef: "ref_1", reason: "missing" }],
     });
     expect(mockCompare).toHaveBeenCalledWith(expect.anything(), "link_1", digest);
+    expect(mockBindPeerIdentity).toHaveBeenCalledWith(expect.anything(), "link_1", "inst_origin");
   });
 
   it("rejects a malformed or oversized inventory before querying mirrors", async () => {

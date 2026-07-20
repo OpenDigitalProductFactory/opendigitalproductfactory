@@ -11,6 +11,10 @@ import {
   type FederationLinkRow,
   type NearbyDiscoveryHealth,
 } from "@/components/platform/federation-links/FederationLinksAdminClient";
+import {
+  PartnerBusinessPanel,
+  type PartnerBusinessRow,
+} from "@/components/platform/federation-links/PartnerBusinessPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +33,7 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
-  const [links, discoveryCapabilities] = await Promise.all([
+  const [links, discoveryCapabilities, partnerAccounts] = await Promise.all([
     prisma.federationLink.findMany({
       include: { principal: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
@@ -44,6 +48,15 @@ export default async function FederationLinksPage() {
         node: { select: { trustState: true, status: true } },
       },
       orderBy: { reportedAt: "desc" },
+    }),
+    prisma.partnerAccount.findMany({
+      include: {
+        federationLink: { include: { principal: { select: { displayName: true } } } },
+        agreements: { orderBy: { createdAt: "desc" }, take: 1 },
+        _count: { select: { agreements: true, entitlements: true, supportRoutes: true, contributionRecognitions: true } },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 200,
     }),
   ]);
 
@@ -107,6 +120,23 @@ export default async function FederationLinksPage() {
     };
   });
 
+  const partners: PartnerBusinessRow[] = partnerAccounts.map((partner) => ({
+    partnerId: partner.partnerId,
+    displayName: partner.displayName,
+    standing: partner.standing,
+    tier: partner.tier,
+    linkName: partner.federationLink?.principal.displayName ?? null,
+    agreementReference: partner.agreements[0]?.externalReference ?? null,
+    agreementCount: partner._count.agreements,
+    entitlementCount: partner._count.entitlements,
+    supportRouteCount: partner._count.supportRoutes,
+    recognitionCount: partner._count.contributionRecognitions,
+  }));
+  const enrolledLinkIds = new Set(partnerAccounts.flatMap((partner) => partner.federationLinkId ? [partner.federationLinkId] : []));
+  const eligiblePartnerLinks = links
+    .filter((link) => link.role === "channel-upstream" && link.linkState === "trusted" && !enrolledLinkIds.has(link.linkId))
+    .map((link) => ({ linkId: link.linkId, displayName: link.principal.displayName }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -121,6 +151,7 @@ export default async function FederationLinksPage() {
         nearbyCandidates={listNearbyFederationCandidates()}
         nearbyDiscoveryHealth={nearbyDiscoveryHealth}
       />
+      <PartnerBusinessPanel partners={partners} eligibleLinks={eligiblePartnerLinks} />
     </div>
   );
 }
