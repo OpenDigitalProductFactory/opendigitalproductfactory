@@ -43,6 +43,19 @@ Substrate verification found no overlapping open PR and no existing provider-onb
 - **Evidence:** component/route tests, A2A authority tests, keyboard/screen-reader assertions for the collaboration card, authenticated desktop/mobile walkthrough.
 - **Implementation review (2026-07-19):** still `fits-with-guardrails`. The change reuses the existing provider guide, `AskCoworkerButton`, COO panel, and collaboration cards. It adds no route, navigation item, dashboard, or specialist launcher. The provider recommendation projection remains the visible source truth; the validated packet is the server-owned AI boundary. Unknown, unavailable, or malformed specialist output produces a COO-readable non-approval and cannot change provider policy. The remaining broad comprehension/mobile/accessibility study stays in BI-BF3DFDB8 rather than expanding this delivery concern.
 
+## Backlog coverage
+
+- Decision: decomposed
+- Parent: `BI-26684747`
+- Governed COO to AGT-902 authority, minimized request, validated advisory, and visible return -> `BI-26684747`
+- Local cold-start advice and deterministic no-egress fallback -> `BI-EDAAD429`
+- Citation authority, freshness, applicability, and safe abstention -> `BI-CA5B5AB9`
+- Accessibility and nontechnical comprehension completion evidence -> `BI-BF3DFDB8`
+- Dependencies: `BI-EDAAD429` and `BI-CA5B5AB9` depend on `BI-26684747`; `BI-BF3DFDB8` depends on `BI-26684747`, `BI-EDAAD429`, and `BI-CA5B5AB9`.
+- Receipt: `cmrsqgfi8056f01pg1ru7ucru`
+
+This pre-enforcement plan was retrofitted through the deployed governed `record_execution_evidence` path because the live MCP `tools/list` does not yet expose `record_plan_backlog_coverage`. The receipt records the same decomposition, mappings, and dependency graph after live `get_backlog_item` verification of all four items; no Markdown-only backlog placeholders remain.
+
 ## Phase 1 — make the existing authority contract truthful
 
 **Status:** Implemented in the first branch checkpoint.
