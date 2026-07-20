@@ -17,6 +17,22 @@ PR #1406 shipped the shared coworker interaction contract, and later work extend
 - Extend the Build Studio customer status projection with evidence, next action, and owner.
 - Render those operational fields in the status band and cover them with targeted tests.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-07-16-coworker-button-decision-interface.md`
+  - `docs/superpowers/plans/2026-07-11-p6-ambiguity-clarify-vs-proceed.md`
+- Current code substrate reviewed:
+  - `apps/web/lib/tak/coworker-interaction-contract.ts`
+  - `apps/web/lib/actions/agent-coworker.ts`
+  - `apps/web/lib/build/customer-status-projection.ts`
+  - `apps/web/components/build/BuildCustomerStatusBand.tsx`
+- Source of truth:
+  - The shared coworker interaction contract owns the required operational closeout fields.
+  - Build Studio customer status projection owns business-safe status evidence for the status band.
+- Decision:
+  - Keep the shared contract as the prompt/formatter choke point, move deterministic message builders into a focused TAK helper module, and render evidence/next action/owner through the existing status band rather than adding a parallel status surface.
+
 ## Verification Plan
 
 - Targeted unit/render tests for the closeout formatter, status projection, and status band.

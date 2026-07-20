@@ -41,10 +41,14 @@ import { resolveReadingLevelForRoute } from "@/lib/readability/policy";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
+import { formatCoworkerOperationalCloseout } from "@/lib/tak/coworker-interaction-contract";
 import {
-  formatCoworkerOperationalCloseout,
-  formatCoworkerOperationalMessage,
-} from "@/lib/tak/coworker-interaction-contract";
+  formatIdeateResearchIssueMessage,
+  formatIdeateResearchResultMessage,
+  formatIncompleteIdeateDesignMessage,
+  formatProviderUnavailableMessage,
+  summariseIdeateOutcome,
+} from "@/lib/tak/coworker-operational-messages";
 import {
   extractInvokedSkillId,
   getSkillsForAgent,
@@ -223,94 +227,6 @@ async function persistCoworkerResponseArtifact(input: {
   } catch (error) {
     console.warn("[portal-context] Failed to persist coworker response artifact", error);
   }
-}
-
-/**
- * Build the coworker's chat summary of the ideate-research + design-review
- * outcome. Reads the build's CURRENT phase after the review tool finished
- * (the review tool auto-advances to plan when the gate is satisfied) so the
- * message reflects what ACTUALLY happened rather than a stale "Ready to
- * move to the planning phase?" question that sends users in circles.
- */
-async function summariseIdeateOutcome(
-  approach: string,
-  reviewPassed: boolean,
-  buildId: string,
-): Promise<string> {
-  let currentPhase: string | null = null;
-  try {
-    const refreshed = await prisma.featureBuild.findUnique({
-      where: { buildId },
-      select: { phase: true },
-    });
-    currentPhase = refreshed?.phase ?? null;
-  } catch {
-    // Non-fatal — fall through to a generic message below.
-  }
-
-  const head = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n`;
-
-  if (!reviewPassed) {
-    return formatCoworkerOperationalMessage({
-      summary: `${head}Design review flagged issues in the draft.`,
-      status: "needs revision",
-      evidence: `design review did not pass for build ${buildId}.`,
-      nextAction: "revise the design evidence and rerun the design review.",
-      owner: "Build Studio ideate agent",
-    });
-  }
-
-  if (currentPhase === "plan") {
-    return formatCoworkerOperationalMessage({
-      summary: `${head}Design review passed and the build advanced to the Plan phase.`,
-      status: "ready for planning",
-      evidence: `design review passed for build ${buildId}; current phase is plan.`,
-      nextAction: "draft the implementation plan.",
-      owner: "Build Studio planning agent",
-    });
-  }
-  if (currentPhase === "ideate") {
-    // Review passed but auto-advance gate held us. Make the blocker visible
-    // instead of asking a rhetorical "ready?" question.
-    return formatCoworkerOperationalMessage({
-      summary: `${head}Design review passed, but the phase gate is holding advance.`,
-      status: "blocked before planning",
-      evidence: `build ${buildId} is still in ideate; an intake anchor such as taxonomy, backlog, epic, or constrained goal is missing.`,
-      nextAction: "complete the missing intake anchor and retry the phase advance.",
-      owner: "Build Studio ideate agent",
-    });
-  }
-  return formatCoworkerOperationalMessage({
-    summary: `${head}Design review passed, but the current phase could not be confirmed.`,
-    status: "needs review",
-    evidence: `build ${buildId} phase is ${currentPhase ?? "unknown"} after design review.`,
-    nextAction: "refresh the build phase state before proceeding.",
-    owner: "Build Studio",
-  });
-}
-
-function formatIncompleteIdeateDesignMessage(buildId: string): string {
-  return formatCoworkerOperationalMessage({
-    summary: "The codebase research ran but did not produce a complete design.",
-    status: "blocked before planning",
-    evidence: `research output for build ${buildId} was missing a usable proposed approach.`,
-    nextAction: "rerun ideate research with the existing build context and verify codebase access first.",
-    owner: "Build Studio ideate agent",
-  });
-}
-
-function formatIdeateResearchIssueMessage(args: {
-  summary: string;
-  evidence: string;
-  nextAction: string;
-}): string {
-  return formatCoworkerOperationalMessage({
-    summary: args.summary,
-    status: "needs revision",
-    evidence: args.evidence,
-    nextAction: args.nextAction,
-    owner: "Build Studio ideate agent",
-  });
 }
 
 // ─── Server Actions ─────────────────────────────────────────────────────────
@@ -2264,21 +2180,10 @@ export async function sendMessage(input: {
               }
             }
           } else {
-            responseContent = ideateResult.error
-              ? formatCoworkerOperationalMessage({
-                summary: `Research encountered an issue: ${ideateResult.error}`,
-                status: "blocked before planning",
-                evidence: `ideate research failed for build ${resolvedBuildId}: ${ideateResult.error}`,
-                nextAction: "rerun ideate research after confirming codebase access and provider availability.",
-                owner: "Build Studio ideate agent",
-              })
-              : formatCoworkerOperationalMessage({
-                summary: "Research completed but did not generate a structured design.",
-                status: "blocked before planning",
-                evidence: `ideate research for build ${resolvedBuildId} returned no structured design document.`,
-                nextAction: "rerun ideate research with a narrower feature goal and save the structured design evidence.",
-                owner: "Build Studio ideate agent",
-              });
+            responseContent = formatIdeateResearchResultMessage({
+              buildId: resolvedBuildId,
+              error: ideateResult.error,
+            });
           }
 
           // Clear the research request
@@ -2356,33 +2261,10 @@ export async function sendMessage(input: {
 
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
 
-      let sysContent: string;
-      if (e.attempts.length > 0) {
-        const failureDetails = e.attempts.map((a) => `${a.providerId}: ${a.error.slice(0, 200)}`).join("; ");
-        sysContent = formatCoworkerOperationalMessage({
-          summary: "All AI providers failed for this coworker turn.",
-          status: "blocked",
-          evidence: failureDetails,
-          nextAction: "restore or switch the configured AI provider in Platform > AI Providers, then retry the coworker turn.",
-          owner: "operator/admin",
-        });
-      } else if (inactiveProviders.length > 0) {
-        sysContent = formatCoworkerOperationalMessage({
-          summary: "AI coworkers are temporarily offline because configured providers are inactive.",
-          status: "blocked",
-          evidence: `${inactiveProviders.length} provider${inactiveProviders.length === 1 ? "" : "s"} are inactive: ${inactiveProviders.map((p) => p.name || p.providerId).join(", ")}.`,
-          nextAction: "reactivate a provider from Platform > AI Providers, then retry the coworker turn.",
-          owner: "operator/admin",
-        });
-      } else {
-        sysContent = formatCoworkerOperationalMessage({
-          summary: "No AI providers are configured for coworker responses.",
-          status: "blocked",
-          evidence: "provider lookup found no active or inactive model providers for this route.",
-          nextAction: "configure at least one AI provider in Platform > AI Providers.",
-          owner: "operator/admin",
-        });
-      }
+      const sysContent = formatProviderUnavailableMessage({
+        attempts: e.attempts,
+        inactiveProviders,
+      });
 
       const sysMsg = await prisma.agentMessage.create({
         data: {
