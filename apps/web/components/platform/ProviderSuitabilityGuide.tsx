@@ -26,7 +26,10 @@ export function ProviderSuitabilityGuide({ recommendation }: { recommendation: P
         </div>
         <AskCoworkerButton
           prompt={`Act as my COO. Review the current provider-suitability result (${recommendation.status}) for these workload classes: ${recommendation.workloadClasses.join(", ")}. Consult AGT-902 through the governed coworker interface for regulation and sovereignty questions. Use only the business context already stored in DPF, do not include customer records or secrets, cite every factual provider or regulatory claim, distinguish provider-published terms from evidence for our connected account, state unknowns, and give one safest next action.`}
-          routeContext="/platform/ai/providers"
+          // /workspace is the canonical route owned by the COO persona. The
+          // prompt carries the provider-page facts while the COO delegates
+          // specialist compliance questions through the governed interface.
+          routeContext="/workspace"
           label="Ask my COO to explain"
           className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-xs font-semibold text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
         />
