@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Portfolio quality issue registry",
+    "Discovery triage decision quality-issue references",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720170000_repair_portfolio_quality_issue_index_integrity",
+    "backfill": "forced-heap exact-key convergence: newest lastDetectedAt/firstDetectedAt/id survivor remains active, collision-checked quarantine keys preserve older observations and ids, then complete unique-index rebuild; no row is deleted"
+  },
+  "tests": [
+    "packages/db/src/portfolio-quality-issue-index-integrity-migration.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:portfolio-quality-issue#issue-key-integrity-repair",
+      "prismaModel": "PortfolioQualityIssue",
+      "lifecycleDisposition": "the newest observation remains canonical; each older duplicate remains durable under a reserved quarantine key with its original id, issue content, timestamps, and inbound references",
+      "fields": [
+        {
+          "fieldId": "data:portfolio-quality-issue#issueKey",
+          "resolution": "governed",
+          "reason": "restore trustworthy issue-key uniqueness without deleting quality history, breaking triage references, or weakening sanitized-clone enforcement",
+          "provenance": "BI-2296E46C forced heap/index evidence and migration fixture"
+        }
+      ]
+    }
+  ]
+}
