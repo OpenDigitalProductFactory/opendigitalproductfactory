@@ -131,6 +131,11 @@ describe("ProvidersPage", () => {
     expect(html).toContain("Providers &amp; Routing");
     expect(html).toContain("Business-safe provider guidance");
     expect(html).toContain("Keep company data out until account terms are confirmed");
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-label="Use now"');
+    expect(html).toContain("No connection is approved to use now.");
+    expect(html).toContain("Your COO coordinates the Data Governance specialist");
+    expect(html).toContain("Next action: Choose a business account.");
     expect(html).toContain("detected-services-banner");
     expect(html).toContain("token-spend-panel");
     expect(html).toContain("scheduled-jobs-table");

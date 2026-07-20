@@ -60,4 +60,90 @@ describe("ProviderSuitabilityGuide", () => {
       organizationRef: "org-1",
     }));
   });
+
+  it("exposes the recommendation, safeguards, next action, and COO coordination in plain language", () => {
+    const recommendation: Omit<ProviderOnboardingRecommendation, "reviewPacket"> = {
+      status: "not-ready",
+      headline: "Choose a connection before using AI with company data",
+      useNow: [],
+      useAfterReview: [],
+      notForThisWork: [],
+      whatMayLeave: "No company data may leave yet.",
+      whatStaysLocal: "Credentials and unknown data stay controlled.",
+      whatDpfBlocks: "DPF blocks customer and employee data.",
+      nextAction: "Add a local connection or document a business account.",
+      caveat: "Local is not automatically compliant.",
+      workloadClasses: ["customer-records"],
+    };
+
+    render(<ProviderSuitabilityGuide recommendation={{
+      ...recommendation,
+      reviewPacket: buildProviderReviewPacket({
+        businessProfile: {
+          organizationId: "org-1",
+          archetypeId: null,
+          archetypeCategory: null,
+          operatesIn: [],
+          sellsTo: [],
+          employsIn: [],
+          dataResidency: [],
+          riskPosture: null,
+        },
+        recommendation: { status: recommendation.status, workloadClasses: recommendation.workloadClasses, items: [] },
+      }),
+    }} />);
+
+    expect(screen.getByRole("status").textContent).toContain("Setup needed");
+    expect(screen.getByRole("region", { name: "Use now" }).textContent).toContain("No connection is approved to use now");
+    expect(screen.getByRole("region", { name: "Use after review" }).textContent).toContain("No connection is waiting for review");
+    expect(screen.getByRole("region", { name: "Not for this work" }).textContent).toContain("No connection is blocked for this work");
+    expect(screen.getByText(/Your COO coordinates the Data Governance specialist/)).toBeTruthy();
+    expect(screen.getByText(/Next action:/).textContent).toContain(recommendation.nextAction);
+  });
+
+  it("keeps a long provider name readable and associated with its allowed scope", () => {
+    const longName = "Contoso Sovereign Business AI Platform — European Economic Area Dedicated Processing Connection";
+    const recommendation: Omit<ProviderOnboardingRecommendation, "reviewPacket"> = {
+      status: "ready",
+      headline: "A connection is available for company work",
+      useNow: [{
+        providerConnectionId: "connection-long",
+        providerId: "contoso",
+        label: longName,
+        scope: "company-work",
+        reason: "Business terms and regional controls are recorded.",
+        executionChannel: "direct-api",
+        accountClass: "enterprise",
+      }],
+      useAfterReview: [],
+      notForThisWork: [],
+      whatMayLeave: "Allowed company prompts.",
+      whatStaysLocal: "Secrets.",
+      whatDpfBlocks: "Anything outside policy.",
+      nextAction: "Review evidence.",
+      caveat: "Review regularly.",
+      workloadClasses: ["internal-operations"],
+    };
+
+    render(<ProviderSuitabilityGuide recommendation={{
+      ...recommendation,
+      reviewPacket: buildProviderReviewPacket({
+        businessProfile: {
+          organizationId: "org-1",
+          archetypeId: null,
+          archetypeCategory: null,
+          operatesIn: ["eu"],
+          sellsTo: [],
+          employsIn: [],
+          dataResidency: ["eu"],
+          riskPosture: "conservative",
+        },
+        recommendation: { status: recommendation.status, workloadClasses: recommendation.workloadClasses, items: recommendation.useNow },
+      }),
+    }} />);
+
+    const item = screen.getByText(longName).closest("li");
+    expect(item?.className).toContain("break-words");
+    expect(item?.textContent).toContain("Business terms and regional controls are recorded");
+  });
 });

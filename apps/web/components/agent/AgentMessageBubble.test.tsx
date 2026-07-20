@@ -58,6 +58,27 @@ describe("formatProviderBadge", () => {
 });
 
 describe("AgentMessageBubble", () => {
+  it("announces system recovery messages as status updates", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "provider-consultation-failed",
+          role: "system",
+          content: "Provider posture was not changed; try again or request qualified review.",
+          agentId: null,
+          routeContext: "/workspace",
+          createdAt: "2026-07-20T00:00:00.000Z",
+        }}
+        showAgentLabel={false}
+        agentName={null}
+      />,
+    );
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain("Provider posture was not changed");
+  });
+
   it("renders assistant markdown as structured HTML", () => {
     const html = renderToStaticMarkup(
       <AgentMessageBubble

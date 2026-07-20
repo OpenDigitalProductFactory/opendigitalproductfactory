@@ -21,6 +21,7 @@ type Props = {
   label?: string;
   className?: string;
   title?: string;
+  ariaDescribedBy?: string;
   /** Custom content (e.g. a badge) instead of the text label. */
   children?: React.ReactNode;
 };
@@ -32,6 +33,7 @@ export function AskCoworkerButton({
   label = "Ask coworker",
   className = "text-[var(--dpf-accent)] hover:underline underline-offset-2",
   title,
+  ariaDescribedBy,
   children,
 }: Props) {
   return (
@@ -50,6 +52,7 @@ export function AskCoworkerButton({
       }
       className={className}
       title={title}
+      aria-describedby={ariaDescribedBy}
     >
       {children ?? label}
     </button>

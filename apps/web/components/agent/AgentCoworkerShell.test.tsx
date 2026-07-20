@@ -435,6 +435,52 @@ describe("AgentCoworkerShell support entry", () => {
     expect(startProviderComplianceConsultationMock).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps posture unchanged and offers retry or qualified review when consultation is denied", async () => {
+    pathname = "/workspace";
+    startProviderComplianceConsultationMock.mockRejectedValueOnce(new Error("delegation denied"));
+    renderShell();
+    await settleShellThread();
+    const packet = {
+      schemaVersion: "provider-compliance-review.v1",
+      purpose: "provider-suitability-advice",
+      organizationRef: "org-1",
+      businessContext: {
+        archetypeId: null,
+        archetypeCategory: null,
+        jurisdictionBasis: { operatesIn: ["eu"], sellsTo: [], employsIn: [], dataResidency: ["eu"] },
+        riskPosture: "conservative",
+      },
+      recommendation: { status: "review-needed", workloadClasses: ["customer-records"] },
+      providerConnections: [],
+      requestedAdvisory: [
+        "regulatory-applicability",
+        "account-and-contract-evidence",
+        "retention-and-training-treatment",
+        "processing-region-and-sovereignty",
+        "workload-restrictions",
+        "safe-next-action",
+      ],
+    };
+
+    act(() => {
+      document.dispatchEvent(new CustomEvent("open-agent-panel", {
+        detail: {
+          autoMessage: "Review provider setup",
+          routeContext: "/workspace",
+          providerReviewPacket: packet,
+        },
+      }));
+    });
+
+    await waitFor(() => {
+      const latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      const messages = latestProps.initialMessages as Array<{ content: string }>;
+      expect(messages.at(-1)?.content).toContain("Provider posture was not changed");
+      expect(messages.at(-1)?.content).toContain("try again or request qualified review");
+      expect(latestProps.pendingAutoMessage).toBeNull();
+    });
+  });
+
   it("surfaces a failed thread load and recovers via reload-to-reconnect (BI-D028B2A8)", async () => {
     vi.useFakeTimers();
     const originalLocation = window.location;

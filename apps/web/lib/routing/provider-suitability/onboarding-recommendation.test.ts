@@ -116,6 +116,46 @@ describe("provider onboarding recommendation", () => {
     expect(result.useAfterReview[0]?.reason).toContain("Connect and test");
   });
 
+  it("keeps a no-local, unknown-evidence cloud setup restricted to public or synthetic work", () => {
+    const result = buildProviderOnboardingRecommendation({
+      businessProfile: business,
+      connections: [{
+        label: "Cloud account with evidence still unknown",
+        status: "active",
+        facts: facts({ accountClass: "unknown", evidenceStatus: "unreviewed" }),
+      }],
+      handlesCardPayments: false,
+    });
+
+    expect(result.status).toBe("review-needed");
+    expect(result.useNow).toEqual([expect.objectContaining({ scope: "public-only" })]);
+    expect(result.useNow.some((item) => item.executionChannel === "local-runtime")).toBe(false);
+    expect(result.nextAction).toContain("local connection");
+  });
+
+  it("keeps a no-cloud setup useful through local intake without claiming cloud or compliance approval", () => {
+    const result = buildProviderOnboardingRecommendation({
+      businessProfile: business,
+      connections: [{
+        label: "Local intake model",
+        status: "active",
+        facts: facts({
+          providerId: "local",
+          catalogProviderId: "local",
+          providerConnectionId: "local-1",
+          externalEgress: "none",
+          executionChannel: "local-runtime",
+          authMethod: "local",
+        }),
+      }],
+      handlesCardPayments: false,
+    });
+
+    expect(result.useNow).toEqual([expect.objectContaining({ scope: "company-work", executionChannel: "local-runtime" })]);
+    expect(result.useNow.some((item) => item.executionChannel !== "local-runtime")).toBe(false);
+    expect(result.caveat).toContain("does not by itself prove compliance");
+  });
+
   it("derives regulated workloads from business archetype and payment context", () => {
     const result = buildProviderOnboardingRecommendation({
       businessProfile: { ...business, archetypeCategory: "healthcare" },
