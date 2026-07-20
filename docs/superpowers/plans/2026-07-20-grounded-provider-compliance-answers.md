@@ -21,6 +21,17 @@ The owner-facing COO may render a provider-compliance answer only after a pure v
 
 Create a focused, pure answer-validation contract beside the provider-suitability advisory. Move the five provider-review source definitions into a small shared `@dpf/db` registry so the seed path and runtime validator consume one source of truth. Use stable source-claim ids for deterministic entailment: a citation supports a claim only when the canonical registry explicitly maps that source to that claim id. Persist the structured source scope in the existing `RawSource.locator` JSON; do not add a table or migration.
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-CA5B5AB9`
+- Rationale: The source registry, exact claim-citation entailment, safe abstention, corpus-gap feedback, and owner-facing referenced answer form one independently shippable evidence boundary; separating them would either expose unvalidated guidance or leave the validator without an owner-visible governed answer path.
+- Grounded provider-compliance source registry, validator, advisory integration, repair feedback, owner rendering, tests, and documentation -> `BI-CA5B5AB9`
+- Dependencies: `BI-26684747` and `BI-EDAAD429`, both completed and runtime-verified.
+- Receipt: `cmrsuwp7e0alg01pgxaxkeulu`
+
+The deployed MCP `tools/list` does not expose `record_plan_backlog_coverage`, so this compatibility-state receipt was recorded through the governed `record_execution_evidence` path documented by the earlier provider-onboarding plan. The live BI and both dependencies were already verified before recording it; no Markdown-only backlog placeholder remains.
+
 ## TDD slices
 
 1. [x] Add red tests for direct-answer vocabulary and separation of sourced facts, operator declarations, technical verification, recommendations, and uncertainty.
