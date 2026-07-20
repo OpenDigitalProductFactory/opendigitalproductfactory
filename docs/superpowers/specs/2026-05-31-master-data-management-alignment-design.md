@@ -177,6 +177,20 @@ statuses, capability classifications, product categories, and supplier
 terms are MDM domains. They need versioning, deactivation, replacement,
 and usage impact reporting before change.
 
+**Exact-key integrity repair (resolved 2026-07-20).** A physical index/heap
+divergence can allow byte-equivalent Region or City keys to coexist even while
+PostgreSQL reports the unique btree as valid. This is not a fuzzy stewardship
+decision: the rows assert the same canonical key and a corrupt index can hide
+one from normal equality reads. Fleet repair therefore applies the same MDM
+merge semantics automatically in a forward migration: choose a deterministic
+survivor, repoint Address and lineage references, retain losers as uniquely
+labelled `superseded` tombstones, then recreate and rebuild the affected
+indexes from the repaired heap. Distinct raw City labels that share only a
+normalized spelling are preserved with explicit disambiguators. The repair
+must be transactional, idempotent, test referenced losers, and fail closed if
+any duplicate remains; clone-only filtering or manual deletion is not an
+acceptable substitute. See `BI-7C2B91EF` and decision `DI-AED2CD86A2B0`.
+
 ## 6. Proposed Foundation
 
 ### 6.1 Domain registry
