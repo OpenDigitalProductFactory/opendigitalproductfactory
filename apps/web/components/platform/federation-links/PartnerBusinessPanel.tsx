@@ -8,7 +8,7 @@ import {
   updateChannelPartnerStandingAction,
 } from "@/lib/actions/federation-links";
 import { InlineBusy } from "@/components/ui/InlineBusy";
-import { EmptyState, StatusBadge } from "@/components/ui/report-kit";
+import { DataTable, EmptyState, StatusBadge, type Column } from "@/components/ui/report-kit";
 
 export interface PartnerBusinessRow {
   partnerId: string;
@@ -65,6 +65,54 @@ export function PartnerBusinessPanel({
     });
   };
 
+  const columns: Column<PartnerBusinessRow>[] = [
+    {
+      key: "reseller",
+      header: "Reseller",
+      sortAccessor: (partner) => partner.displayName,
+      cell: (partner) => (
+        <div>
+          <p className="font-medium text-[var(--dpf-text)]">{partner.displayName}</p>
+          <p className="text-xs text-[var(--dpf-muted)]">{partner.tier} · {partner.linkName ?? "No active link"}</p>
+        </div>
+      ),
+    },
+    {
+      key: "standing",
+      header: "Standing",
+      sortAccessor: (partner) => partner.standing,
+      cell: (partner) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge label={partner.standing} intent={partner.standing === "active" ? "success" : partner.standing === "suspended" || partner.standing === "at-risk" ? "warning" : "neutral"} variant="soft" />
+          <select
+            aria-label={`Standing for ${partner.displayName}`}
+            value={partner.standing}
+            disabled={pending}
+            onChange={(event) => setStanding(partner.partnerId, event.target.value)}
+            className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-text)]"
+          >
+            {['pending', 'active', 'at-risk', 'suspended', 'terminated'].map((standing) => <option key={standing} value={standing}>{standing}</option>)}
+          </select>
+        </div>
+      ),
+    },
+    {
+      key: "agreement",
+      header: "Agreement",
+      cell: (partner) => <span className="text-xs text-[var(--dpf-muted)]">{partner.agreementReference ?? "No reference"}</span>,
+      sortAccessor: (partner) => partner.agreementReference ?? "",
+    },
+    {
+      key: "coverage",
+      header: "Business coverage",
+      cell: (partner) => (
+        <span className="text-xs text-[var(--dpf-muted)]">
+          {partner.agreementCount} agreement{partner.agreementCount === 1 ? "" : "s"} · {partner.entitlementCount} entitlement{partner.entitlementCount === 1 ? "" : "s"} · {partner.supportRouteCount} support route{partner.supportRouteCount === 1 ? "" : "s"} · {partner.recognitionCount} recognition{partner.recognitionCount === 1 ? "" : "s"}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <section className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4" aria-labelledby="partner-business-heading">
       <div>
@@ -119,47 +167,15 @@ export function PartnerBusinessPanel({
           />
         </div>
       ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--dpf-border)] text-left text-xs text-[var(--dpf-muted)]">
-                <th className="p-2">Reseller</th>
-                <th className="p-2">Standing</th>
-                <th className="p-2">Agreement</th>
-                <th className="p-2">Business coverage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {partners.map((partner) => (
-                <tr key={partner.partnerId} className="border-b border-[var(--dpf-border)] align-top">
-                  <td className="p-2">
-                    <p className="font-medium text-[var(--dpf-text)]">{partner.displayName}</p>
-                    <p className="text-xs text-[var(--dpf-muted)]">{partner.tier} · {partner.linkName ?? "No active link"}</p>
-                  </td>
-                  <td className="p-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StatusBadge label={partner.standing} intent={partner.standing === "active" ? "success" : partner.standing === "suspended" || partner.standing === "at-risk" ? "warning" : "neutral"} variant="soft" />
-                      <select
-                        aria-label={`Standing for ${partner.displayName}`}
-                        value={partner.standing}
-                        disabled={pending}
-                        onChange={(event) => setStanding(partner.partnerId, event.target.value)}
-                        className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-text)]"
-                      >
-                        {['pending', 'active', 'at-risk', 'suspended', 'terminated'].map((standing) => <option key={standing} value={standing}>{standing}</option>)}
-                      </select>
-                    </div>
-                  </td>
-                  <td className="p-2 text-xs text-[var(--dpf-muted)]">
-                    {partner.agreementReference ?? "No reference"}
-                  </td>
-                  <td className="p-2 text-xs text-[var(--dpf-muted)]">
-                    {partner.agreementCount} agreement{partner.agreementCount === 1 ? "" : "s"} · {partner.entitlementCount} entitlement{partner.entitlementCount === 1 ? "" : "s"} · {partner.supportRouteCount} support route{partner.supportRouteCount === 1 ? "" : "s"} · {partner.recognitionCount} recognition{partner.recognitionCount === 1 ? "" : "s"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-3 overflow-x-auto rounded border border-[var(--dpf-border)]">
+          <DataTable
+            columns={columns}
+            rows={partners}
+            getRowKey={(partner) => partner.partnerId}
+            initialSort={{ key: "reseller", dir: "asc" }}
+            pageSize={20}
+            dense
+          />
         </div>
       )}
     </section>

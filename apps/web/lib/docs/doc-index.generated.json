@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 526,
+  "pageCount": 527,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3944,6 +3944,18 @@
         "rules",
         "why-this-matters",
         "terminology-mapping"
+      ]
+    },
+    "docs/operations/federated-demand-channels.md": {
+      "publicHref": "/operations/federated-demand-channels/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "federated-demand-channels",
+        "customer-and-reseller-operation",
+        "founder-hub-business-management",
+        "privacy-and-recovery-behavior"
       ]
     },
     "docs/operations/install.md": {
