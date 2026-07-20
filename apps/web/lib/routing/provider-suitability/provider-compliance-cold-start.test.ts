@@ -40,7 +40,7 @@ describe("provider compliance cold start", () => {
       "Keep customer records on a governed non-egress path until the connected account is evidenced.",
     );
     expect(advisory.citations[0]?.reference).toBe(
-      "professions/legal-compliance/ai-provider-account-and-sovereignty-review",
+      "/wiki/professions/legal-compliance/ai-provider-account-and-sovereignty-review",
     );
   });
 
@@ -56,9 +56,10 @@ describe("provider compliance cold start", () => {
         unknowns: ["Regional entitlement is not proven."],
         humanReviewRequired: true,
         citations: [{
-          title: "Account review rule",
-          reference: "professions/legal-compliance/ai-provider-account-and-sovereignty-review",
-          supports: "Account evidence is required.",
+          title: "GDPR Article 28",
+          reference: "eu/gdpr-controller-processor-and-transfers",
+          sourceClaimId: "eu-controller-processor-contract-required",
+          supports: "A processor contract is required for this customer-record workload.",
         }],
       }),
     });

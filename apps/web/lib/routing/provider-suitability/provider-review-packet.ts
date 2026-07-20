@@ -5,6 +5,8 @@ import type {
 import { isRecord } from "@/lib/shared/coerce";
 
 export const PROVIDER_REVIEW_PACKET_VERSION = "provider-compliance-review.v1" as const;
+export const PROVIDER_REVIEW_PACKET_MAX_BYTES = 10_000;
+export const PROVIDER_REVIEW_OBJECTIVE_MAX_BYTES = 14_000;
 
 const REQUESTED_ADVISORY = [
   "regulatory-applicability",
@@ -57,6 +59,8 @@ export type ProviderReviewPacket = {
     providerConnectionId: string;
     providerId: string;
     scopes: RecommendationScope[];
+    executionChannel: string;
+    accountClass: string;
   }>;
   requestedAdvisory: [...typeof REQUESTED_ADVISORY];
 };
@@ -70,6 +74,8 @@ export type BuildProviderReviewPacketInput = {
       providerConnectionId: string;
       providerId: string;
       scope: RecommendationScope;
+      executionChannel?: string;
+      accountClass?: string;
     }>;
   };
 };
@@ -91,6 +97,8 @@ export function buildProviderReviewPacket(input: BuildProviderReviewPacketInput)
       providerConnectionId: item.providerConnectionId.trim(),
       providerId: item.providerId.trim(),
       scopes: [],
+      executionChannel: item.executionChannel ?? "unknown",
+      accountClass: item.accountClass ?? "unknown",
     };
     current.scopes = boundedUnique([...current.scopes, item.scope], 3) as RecommendationScope[];
     connections.set(key, current);
@@ -171,7 +179,7 @@ export function validateProviderReviewPacket(value: unknown): ValidationResult {
     "requestedAdvisory",
   ]);
   if (rootUnknown) return { success: false, error: rootUnknown };
-  if (JSON.stringify(value).length > 5_000) return { success: false, error: "packet_invalid:too_large" };
+  if (JSON.stringify(value).length > PROVIDER_REVIEW_PACKET_MAX_BYTES) return { success: false, error: "packet_invalid:too_large" };
   if (value.schemaVersion !== PROVIDER_REVIEW_PACKET_VERSION) return { success: false, error: "packet_invalid:schemaVersion" };
   if (value.purpose !== "provider-suitability-advice") return { success: false, error: "packet_invalid:purpose" };
   if (!validIdentifier(value.organizationRef)) return { success: false, error: "packet_invalid:organizationRef" };
@@ -214,10 +222,13 @@ export function validateProviderReviewPacket(value: unknown): ValidationResult {
   }
   for (const [index, connection] of value.providerConnections.entries()) {
     if (!isRecord(connection)) return { success: false, error: `packet_invalid:providerConnections.${index}` };
-    const connectionUnknown = unknownField(connection, ["providerConnectionId", "providerId", "scopes"], `providerConnections.${index}.`);
+    const connectionUnknown = unknownField(connection, ["providerConnectionId", "providerId", "scopes", "executionChannel", "accountClass"], `providerConnections.${index}.`);
     if (connectionUnknown) return { success: false, error: connectionUnknown };
     if (!validIdentifier(connection.providerConnectionId) || !validIdentifier(connection.providerId)) {
       return { success: false, error: `packet_invalid:providerConnections.${index}.id` };
+    }
+    if (!validIdentifier(connection.executionChannel, 40) || !validIdentifier(connection.accountClass, 40)) {
+      return { success: false, error: `packet_invalid:providerConnections.${index}.posture` };
     }
     if (!validStringArray(connection.scopes, {
       maxItems: 3,
@@ -237,18 +248,18 @@ export function formatProviderReviewObjective(packet: ProviderReviewPacket): str
   if (!validation.success) throw new Error(validation.error);
   const objective = [
     "Review this minimized provider-suitability packet. This consultation is advisory only.",
-    "Return only one JSON object using schemaVersion provider-compliance-advisory.v1 with exactly these fields: schemaVersion, decision (recommended|conditional|not-suitable|insufficient-evidence), plainLanguageSummary, safestNextAction, workloadRestrictions (string array), unknowns (string array), humanReviewRequired (boolean), citations (one or more objects with title, reference, supports). Do not wrap it in commentary.",
+    "Return only one JSON object using schemaVersion provider-compliance-advisory.v1 with exactly these fields: schemaVersion, decision (recommended|conditional|not-suitable|insufficient-evidence), plainLanguageSummary, safestNextAction, workloadRestrictions (string array), unknowns (string array), humanReviewRequired (boolean), citations (one or more objects with title, reference, sourceClaimId, supports). reference must be a governed source key and sourceClaimId must be the exact canonical claim id supplied by the corpus. Do not wrap it in commentary.",
     "Use claim-level citations with source authority and applicability. State unknowns. Do not infer connected-account entitlements from provider marketing.",
     "do not change provider activation or routing eligibility. Do not request customer records, prompts, credentials, secrets, attachments, or raw regulated values.",
     JSON.stringify(validation.value),
   ].join("\n\n");
-  if (objective.length >= 8_000) throw new Error("packet_invalid:objective_too_large");
+  if (objective.length >= PROVIDER_REVIEW_OBJECTIVE_MAX_BYTES) throw new Error("packet_invalid:objective_too_large");
   return objective;
 }
 
 /** Recover only the canonical packet appended by formatProviderReviewObjective. */
 export function parseProviderReviewObjective(objective: string): ValidationResult {
-  if (typeof objective !== "string" || objective.length === 0 || objective.length >= 8_000) {
+  if (typeof objective !== "string" || objective.length === 0 || objective.length >= PROVIDER_REVIEW_OBJECTIVE_MAX_BYTES) {
     return { success: false, error: "packet_invalid:objective" };
   }
   const candidate = objective.split("\n\n").at(-1)?.trim();

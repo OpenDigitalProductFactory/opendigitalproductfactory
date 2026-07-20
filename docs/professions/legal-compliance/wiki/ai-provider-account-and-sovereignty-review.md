@@ -19,7 +19,7 @@ professionCompetencyLevel: practitioner
 sources:
   - ico/controller-processor-contracts
   - ico/international-transfers
-  - openai/enterprise-privacy
+  - openai/business-data-privacy
   - anthropic/commercial-training
   - anthropic/consumer-training
 ---

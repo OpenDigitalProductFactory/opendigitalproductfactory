@@ -10,11 +10,12 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
-import type { PrismaClient } from "../generated/client/client";
+import type { Prisma, PrismaClient } from "../generated/client/client";
 import { deriveSlug, extractPrinciplePayload, parseFrontmatter } from "./seed-wiki-kernel";
 import { appendRevision, attachSource, linkPages, upsertWikiPage } from "./wiki-store";
 import { extractWikilinks } from "./wiki-frontmatter";
 import type { WikiPageFrontmatter } from "./wiki-frontmatter";
+import { PROVIDER_COMPLIANCE_SOURCE_REGISTRY } from "./provider-compliance-source-registry";
 import {
   PROFESSION_ARCHETYPES,
   PROFESSION_COMPETENCY_LEVELS,
@@ -41,7 +42,31 @@ type ExternalSourceEntry = {
   license: string;
   abstract?: string;
   retrievedAt: string;
+  locator?: Prisma.InputJsonValue;
 };
+
+const PROVIDER_COMPLIANCE_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> =
+  Object.fromEntries(
+    Object.values(PROVIDER_COMPLIANCE_SOURCE_REGISTRY).map((source) => [
+      source.sourceKey,
+      {
+        sourceType: source.sourceType,
+        title: source.title,
+        url: source.url,
+        license: source.license,
+        abstract: source.abstract,
+        retrievedAt: source.retrievedAt,
+        locator: {
+          schemaVersion: "provider-compliance-source.v1",
+          authority: source.authority,
+          publisher: source.publisher,
+          publishedAt: "publishedAt" in source ? source.publishedAt : null,
+          maxAgeDays: source.maxAgeDays,
+          claims: source.claims,
+        },
+      },
+    ]),
+  );
 
 const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
   "owasp/sql-injection-prevention": {
@@ -325,46 +350,6 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "Data-subject rights: access, rectification, erasure, restriction, " +
       "portability, objection, and automated-decision safeguards.",
     retrievedAt: "2026-06-13",
-  },
-  "ico/controller-processor-contracts": {
-    sourceType: "regulator-guidance",
-    title: "ICO — contracts and liabilities between controllers and processors",
-    url: "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/accountability-and-governance/contracts-and-liabilities-between-controllers-and-processors-multi/what-needs-to-be-included-in-the-contract/",
-    license: "UK-OGL-compatible-citation",
-    abstract: "UK regulator guidance on the terms required in controller-processor contracts under UK GDPR Article 28.",
-    retrievedAt: "2026-07-19",
-  },
-  "ico/international-transfers": {
-    sourceType: "regulator-guidance",
-    title: "ICO — a brief guide to international transfers",
-    url: "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/international-transfers/a-brief-guide-to-international-transfers/",
-    license: "UK-OGL-compatible-citation",
-    abstract: "UK regulator guidance for identifying restricted transfers and selecting a permitted transfer mechanism.",
-    retrievedAt: "2026-07-19",
-  },
-  "openai/enterprise-privacy": {
-    sourceType: "provider-terms",
-    title: "OpenAI enterprise privacy",
-    url: "https://openai.com/enterprise-privacy/",
-    license: "provider-published-cite-by-reference",
-    abstract: "Provider-published privacy and retention statements for OpenAI business products and API services; not evidence of a connected account's entitlement or configuration.",
-    retrievedAt: "2026-07-19",
-  },
-  "anthropic/commercial-training": {
-    sourceType: "provider-terms",
-    title: "Anthropic — commercial product training treatment",
-    url: "https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training",
-    license: "provider-published-cite-by-reference",
-    abstract: "Provider-published training treatment for Anthropic commercial products; distinct from consumer products and not connected-account evidence.",
-    retrievedAt: "2026-07-19",
-  },
-  "anthropic/consumer-training": {
-    sourceType: "provider-terms",
-    title: "Anthropic — consumer product training treatment",
-    url: "https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training",
-    license: "provider-published-cite-by-reference",
-    abstract: "Provider-published training treatment for Anthropic consumer products, illustrating why consumer and commercial channels must not be conflated.",
-    retrievedAt: "2026-07-19",
   },
   "eu/ai-act": {
     sourceType: "standard",
@@ -1598,6 +1583,7 @@ const PROFESSION_EXTERNAL_SOURCES_GATED: Record<string, ExternalSourceEntry> = {
 const ALL_PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
   ...PROFESSION_EXTERNAL_SOURCES,
   ...PROFESSION_EXTERNAL_SOURCES_GATED,
+  ...PROVIDER_COMPLIANCE_EXTERNAL_SOURCES,
 };
 
 // ─── Source seeding ──────────────────────────────────────────────────────────
@@ -1619,6 +1605,7 @@ async function seedProfessionExternalSources(
         license: meta.license,
         abstract: meta.abstract ?? null,
         retrievedAt: new Date(meta.retrievedAt),
+        locator: meta.locator ?? undefined,
         isKernel: false,
       },
       update: {
@@ -1628,6 +1615,7 @@ async function seedProfessionExternalSources(
         license: meta.license,
         abstract: meta.abstract ?? null,
         retrievedAt: new Date(meta.retrievedAt),
+        locator: meta.locator ?? undefined,
       },
     })) as { id: string };
 

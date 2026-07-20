@@ -70,6 +70,8 @@ This is recorded as an operator attestation, not contract proof. A DPA, BAA, sup
 
 For EEA, UK, public-sector, healthcare, education, financial-services, or other regulated use, ask the COO to consult the Data Governance Agent. The answer should cite applicable regulator guidance and provider terms, identify unknowns, and recommend qualified review when it cannot substantiate a claim.
 
+DPF checks those references before returning the specialist's answer. A material citation must match a current governed source claim and apply to the company location, workload, and named provider context. If the account class, service, jurisdiction, or evidence cannot be matched, the COO gives a conservative **cannot confirm** answer, preserves the current provider restrictions, and links the authoritative source that was actually accepted. It does not fill evidence gaps from model memory.
+
 Local processing reduces external egress but is not automatically compliant. Security, retention, lawful basis, access control, capability, and sector obligations still apply.
 
 ## Finance Bridge

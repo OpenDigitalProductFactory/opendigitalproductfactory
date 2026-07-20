@@ -1,6 +1,7 @@
 import {
   parseProviderComplianceAdvisory,
   PROVIDER_COMPLIANCE_ADVISORY_VERSION,
+  validateProviderComplianceAdvisoryGrounding,
   type ProviderComplianceAdvisory,
 } from "./provider-compliance-advisory";
 import {
@@ -14,10 +15,11 @@ export const PROVIDER_COMPLIANCE_FALLBACK_CORPUS_VERSION =
   "professions/legal-compliance/ai-provider-account-and-sovereignty-review@v1" as const;
 
 export type ProviderComplianceResultSource = "local-model" | "deterministic-fallback";
+export type ProviderComplianceGroundingGapReason = "missing-topic" | "stale-source" | "citation-mismatch" | "conflicting-evidence";
 
 const CORPUS_CITATION = {
   title: "AI provider review — assess the connected account, not just the vendor",
-  reference: "professions/legal-compliance/ai-provider-account-and-sovereignty-review",
+  reference: "/wiki/professions/legal-compliance/ai-provider-account-and-sovereignty-review",
   supports: "Connectivity does not prove business terms, retention, training treatment, processor contracts, or regional-processing entitlement.",
 } as const;
 
@@ -77,9 +79,15 @@ export function resolveProviderComplianceColdStartReply(input: {
   advisory: ProviderComplianceAdvisory;
   content: string;
   resultSource: ProviderComplianceResultSource;
+  gapReasons: ProviderComplianceGroundingGapReason[];
 } {
   const parsed = parseProviderComplianceAdvisory(input.specialistReply);
+  const packet = packetFromHistory(input.chatHistory);
+  const grounding = parsed.success && packet
+    ? validateProviderComplianceAdvisoryGrounding(parsed.value, packet)
+    : { success: false, errors: ["missing-topic:review-packet-or-advisory"] };
   const boundedLocalResult = parsed.success
+    && grounding.success
     && parsed.value.decision !== "recommended"
     && !(parsed.value.decision === "insufficient-evidence" && !parsed.value.humanReviewRequired);
   const resultSource: ProviderComplianceResultSource = boundedLocalResult
@@ -87,8 +95,16 @@ export function resolveProviderComplianceColdStartReply(input: {
     : "deterministic-fallback";
   const advisory = boundedLocalResult
     ? parsed.value
-    : buildDeterministicProviderComplianceFallback(packetFromHistory(input.chatHistory));
-  return { advisory, content: JSON.stringify(advisory), resultSource };
+    : buildDeterministicProviderComplianceFallback(packet);
+  const gapReasons = boundedLocalResult ? [] : [...new Set(
+    grounding.errors.map((error): ProviderComplianceGroundingGapReason =>
+      error.startsWith("stale-source:") ? "stale-source"
+        : error.startsWith("conflicting-evidence:") ? "conflicting-evidence"
+        : error.startsWith("ungoverned-citation:") || error.startsWith("missing-topic:") ? "missing-topic"
+          : "citation-mismatch",
+    ),
+  )];
+  return { advisory, content: JSON.stringify(advisory), resultSource, gapReasons };
 }
 
 export function deterministicProviderComplianceReplyFromHistory(
@@ -99,5 +115,6 @@ export function deterministicProviderComplianceReplyFromHistory(
     advisory,
     content: JSON.stringify(advisory),
     resultSource: "deterministic-fallback",
+    gapReasons: [] as ProviderComplianceGroundingGapReason[],
   };
 }
