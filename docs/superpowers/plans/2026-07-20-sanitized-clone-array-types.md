@@ -26,7 +26,7 @@ Confidential-table rows copied through the sanitized clone retain each PostgreSQ
 - Decision: atomic
 - Parent: `BI-A170C1EB`
 - Catalog-derived casts, regression tests, exact gate, and full preview proof -> `BI-A170C1EB`
-- Dependency: blocks `BI-7430E579`
+- Dependencies: blocks `BI-7430E579`
 - Receipt: `cmrtdowat006q01o20ae0d1ek`
 - Rationale: the code and end-to-end driver/catalog proof are one correctness repair; unit-only completion would leave the real clone path unproven.
 
