@@ -131,4 +131,36 @@ describe("startProviderComplianceConsultation", () => {
     expect(result).toEqual({ success: false, error: "provider_connection_reference_mismatch" });
     expect(requestCoworkerMock).not.toHaveBeenCalled();
   });
+
+  it("delivers cited deterministic guidance when governed A2A cannot start", async () => {
+    requestCoworkerMock.mockRejectedValue(new Error("specialist unavailable"));
+
+    const result = await startProviderComplianceConsultation({
+      parentThreadId: "thread-1",
+      routeContext: "/workspace",
+      packet,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "provider_consultation_fallback_delivered",
+    });
+    expect(prismaMock.agentMessage.create).toHaveBeenNthCalledWith(2, {
+      data: expect.objectContaining({
+        threadId: "thread-1",
+        role: "assistant",
+        agentId: "coo",
+        routeContext: "/workspace",
+        providerId: "deterministic-corpus",
+        modelId: "professions/legal-compliance/ai-provider-account-and-sovereignty-review@v1",
+        taskType: "provider-compliance-local-only.v1",
+        content: expect.stringMatching(/My recommendation: insufficient-evidence[\s\S]*References[\s\S]*ai-provider-account-and-sovereignty-review/),
+      }),
+    });
+    expect(prismaMock.agentMessage.create).not.toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        content: expect.stringContaining("could not start the compliance consultation"),
+      }),
+    });
+  });
 });

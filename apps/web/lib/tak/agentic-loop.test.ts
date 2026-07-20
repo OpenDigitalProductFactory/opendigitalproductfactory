@@ -1051,6 +1051,38 @@ describe("runAgenticLoop", () => {
     );
   });
 
+  it("keeps a hard local-only residency boundary in every agentic route call", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "Local provider review complete.",
+      inputTokens: 40,
+      outputTokens: 20,
+    }));
+
+    await runAgenticLoop({
+      ...baseParams,
+      agentId: "AGT-902",
+      taskType: "provider-compliance-onboarding",
+      modelRequirements: {
+        residencyPolicy: "local_only",
+        defaultBudgetClass: "minimize_cost",
+      },
+      tools: [],
+      toolsForProvider: undefined,
+    });
+
+    expect(mockRoute).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(String),
+      "internal",
+      expect.objectContaining({
+        residencyPolicy: "local_only",
+        budgetClass: "minimize_cost",
+        taskType: "provider-compliance-onboarding",
+      }),
+    );
+  });
+
   it("returns direct conversational provider-status answers without forcing diagnostics", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     const mockExecuteTool = vi.mocked(executeTool);

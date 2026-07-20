@@ -245,3 +245,19 @@ export function formatProviderReviewObjective(packet: ProviderReviewPacket): str
   if (objective.length >= 8_000) throw new Error("packet_invalid:objective_too_large");
   return objective;
 }
+
+/** Recover only the canonical packet appended by formatProviderReviewObjective. */
+export function parseProviderReviewObjective(objective: string): ValidationResult {
+  if (typeof objective !== "string" || objective.length === 0 || objective.length >= 8_000) {
+    return { success: false, error: "packet_invalid:objective" };
+  }
+  const candidate = objective.split("\n\n").at(-1)?.trim();
+  if (!candidate?.startsWith("{") || !candidate.endsWith("}")) {
+    return { success: false, error: "packet_invalid:objective" };
+  }
+  try {
+    return validateProviderReviewPacket(JSON.parse(candidate));
+  } catch {
+    return { success: false, error: "packet_invalid:objective" };
+  }
+}

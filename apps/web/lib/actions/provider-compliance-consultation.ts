@@ -9,7 +9,15 @@ import {
   validateProviderReviewPacket,
   type ProviderReviewPacket,
 } from "@/lib/routing/provider-suitability/provider-review-packet";
-import { PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY } from "@/lib/routing/provider-suitability/provider-compliance-advisory";
+import {
+  formatProviderComplianceAdvisoryForOwner,
+  PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY,
+} from "@/lib/routing/provider-suitability/provider-compliance-advisory";
+import {
+  buildDeterministicProviderComplianceFallback,
+  PROVIDER_COMPLIANCE_FALLBACK_CORPUS_VERSION,
+  PROVIDER_COMPLIANCE_LOCAL_POLICY_VERSION,
+} from "@/lib/routing/provider-suitability/provider-compliance-cold-start";
 import { requireUser } from "./shared/guards";
 
 const ALLOWED_ROUTES = new Set(["/setup", "/workspace"]);
@@ -115,15 +123,21 @@ export async function startProviderComplianceConsultation(input: {
       taskRunId: result.taskRunId,
     };
   } catch {
-    await prisma.agentMessage.create({
+    const fallback = buildDeterministicProviderComplianceFallback(validation.value);
+    const delivered = await prisma.agentMessage.create({
       data: {
         threadId: parent.id,
-        role: "system",
-        content: "DPF could not start the compliance consultation. Provider posture was not changed; try again or request qualified review.",
+        role: "assistant",
+        content: formatProviderComplianceAdvisoryForOwner(fallback),
         agentId: caller.agentId,
         routeContext: input.routeContext,
+        providerId: "deterministic-corpus",
+        modelId: PROVIDER_COMPLIANCE_FALLBACK_CORPUS_VERSION,
+        taskType: PROVIDER_COMPLIANCE_LOCAL_POLICY_VERSION,
       },
-    }).catch(() => undefined);
-    return { success: false, error: "provider_consultation_unavailable" };
+    }).then(() => true).catch(() => false);
+    return delivered
+      ? { success: false, error: "provider_consultation_fallback_delivered" }
+      : { success: false, error: "provider_consultation_unavailable" };
   }
 }

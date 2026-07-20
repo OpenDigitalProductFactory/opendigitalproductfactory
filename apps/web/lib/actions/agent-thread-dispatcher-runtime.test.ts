@@ -41,6 +41,32 @@ import {
   prepareChildExecution,
   runChildThreadExecution,
 } from "./agent-thread-dispatcher-runtime";
+import {
+  buildProviderReviewPacket,
+  formatProviderReviewObjective,
+} from "@/lib/routing/provider-suitability/provider-review-packet";
+
+const providerObjective = formatProviderReviewObjective(buildProviderReviewPacket({
+  businessProfile: {
+    organizationId: "org-1",
+    archetypeId: "arch-software",
+    archetypeCategory: "software",
+    operatesIn: ["de", "eu"],
+    sellsTo: ["eu"],
+    employsIn: [],
+    dataResidency: ["eu"],
+    riskPosture: "conservative",
+  },
+  recommendation: {
+    status: "review-needed",
+    workloadClasses: ["customer-records", "public-marketing"],
+    items: [{
+      providerConnectionId: "conn-1",
+      providerId: "openai",
+      scope: "public-only",
+    }],
+  },
+}));
 
 describe("prepareChildExecution", () => {
   beforeEach(() => {
@@ -281,8 +307,17 @@ describe("runChildThreadExecution", () => {
         },
       },
     });
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: providerObjective }]);
 
     await runChildThreadExecution({ ...ctx, agentId: "AGT-902", routeContext: "/workspace" });
+
+    expect(mockExecuteLoop).toHaveBeenCalledWith(expect.objectContaining({
+      taskType: "provider-compliance-onboarding",
+      modelRequirements: expect.objectContaining({
+        residencyPolicy: "local_only",
+        defaultBudgetClass: "minimize_cost",
+      }),
+    }));
 
     expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -313,6 +348,7 @@ describe("runChildThreadExecution", () => {
         },
       },
     });
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: providerObjective }]);
 
     await runChildThreadExecution({ ...ctx, agentId: "AGT-902", routeContext: "/workspace" });
 
@@ -321,7 +357,59 @@ describe("runChildThreadExecution", () => {
         threadId: "parent-1",
         role: "assistant",
         agentId: "coo",
-        content: expect.stringMatching(/could not substantiate.*no provider approval/i),
+        content: expect.stringMatching(/insufficient-evidence[\s\S]*connected account/i),
+      }),
+    });
+    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1" },
+      data: expect.objectContaining({
+        status: "completed",
+        progressPayload: expect.objectContaining({
+          providerCompliance: {
+            policyVersion: "provider-compliance-local-only.v1",
+            corpusVersion: "professions/legal-compliance/ai-provider-account-and-sovereignty-review@v1",
+            advisorySchemaVersion: "provider-compliance-advisory.v1",
+            resultSource: "deterministic-fallback",
+          },
+        }),
+      }),
+    });
+    expect(JSON.stringify(mockPrisma.taskRun.update.mock.calls)).not.toContain("org-1");
+  });
+
+  it("returns deterministic cited guidance when the local model is unavailable", async () => {
+    mockExecuteLoop.mockRejectedValue(new Error("No local endpoint can satisfy residency policy"));
+    mockPrisma.agentMessage.findMany.mockResolvedValue([{ role: "user", content: providerObjective }]);
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.taskRun.findUnique.mockResolvedValue({
+      a2aMetadata: {
+        collaboration: {
+          kind: "handoff",
+          fromAgentId: "coo",
+          toAgentId: "AGT-902",
+          enteredVia: "handoff",
+          tier: 2,
+          summary: "Reviewing provider compliance and sovereignty",
+        },
+      },
+    });
+
+    await runChildThreadExecution({ ...ctx, agentId: "AGT-902", routeContext: "/workspace" });
+
+    expect(mockPrisma.agentThread.update).not.toHaveBeenCalled();
+    expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
+      where: { taskRunId: "TR-CHILD-1" },
+      data: expect.objectContaining({
+        status: "completed",
+        progressPayload: expect.objectContaining({
+          providerCompliance: expect.objectContaining({ resultSource: "deterministic-fallback" }),
+        }),
+      }),
+    });
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        threadId: "parent-1",
+        content: expect.stringMatching(/insufficient-evidence.*References/s),
       }),
     });
   });
