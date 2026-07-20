@@ -65,6 +65,7 @@ const DOMAIN_LABELS: Record<ProjectionDomain, string> = {
   it4itCoverage: "IT4IT functional-criteria coverage",
   securityPosture: "security operations (SOC) surface",
   workPatternArchitecture: "governed adaptive playbooks",
+  federatedDemandArchitecture: "federated demand network",
 };
 
 function projectionEntries(result: SysmlProjectionsResult): Array<[ProjectionDomain, ProjectionStatus]> {

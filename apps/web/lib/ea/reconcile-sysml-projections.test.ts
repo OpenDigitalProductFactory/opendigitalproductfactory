@@ -36,11 +36,12 @@ describe("reconcileSysmlProjections", () => {
     expect(r.it4itCoverage.status).toBe("skipped"); // IT4IT reference model absent -> skips
     expect(r.securityPosture.status).toBe("skipped"); // notation null -> applySysmlModel skips
     expect(r.workPatternArchitecture.status).toBe("skipped"); // notation null -> applySysmlModel skips
+    expect(r.federatedDemandArchitecture.status).toBe("skipped");
     // mcp + coworker + routes + navigation + process + scheduling + security +
     // work-pattern architecture are notation-backed (all sysml2 except process=bpmn20); value-streams +
     // it4it-coverage check the reference model first; code-structure checks graph
     // freshness first.
-    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(8);
+    expect(db.eaNotation.findUnique).toHaveBeenCalledTimes(9);
     // value-streams and it4it-coverage both look up the IT4IT reference model.
     expect(db.eaReferenceModel.findUnique).toHaveBeenCalledTimes(2);
     expect(getFreshness).toHaveBeenCalledTimes(1);

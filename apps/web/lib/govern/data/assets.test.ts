@@ -105,4 +105,17 @@ describe("seeded registry", () => {
     expect(resolveField(DATA_ASSET_REGISTRY, "data:agent-conversation#content")?.projectionOverride)
       .toBe("masked-content");
   });
+
+  it("governs founder demand curation as confidential local business records", () => {
+    const cluster = lookupAsset(DATA_ASSET_REGISTRY, "data:founder-demand-cluster");
+    const member = lookupAsset(DATA_ASSET_REGISTRY, "data:founder-demand-cluster-member");
+    expect(cluster).toMatchObject({
+      physical: { prismaModel: "FounderDemandCluster" },
+      sensitivity: "confidential",
+      lifecycleClass: "business-record",
+      residencyClass: "local-only",
+      projectionClass: "masked-content",
+    });
+    expect(member?.physical.prismaModel).toBe("FounderDemandClusterMember");
+  });
 });

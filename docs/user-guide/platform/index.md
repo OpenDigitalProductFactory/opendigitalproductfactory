@@ -45,6 +45,12 @@ Choose the relationship preset that matches the connection:
 
 Only the minimum shared projection crosses an approved link. Local backlog detail, work capsules, private plans, attachments, and customer context remain on their originating installation. Either side can pause or revoke the connection.
 
+Classify every connection as **production**, **development**, or **test** in the
+Connections table. New or unclassified links fail safely to development.
+Founder Hub will not count development/test demand in its production shared
+portfolio until an authorized operator explicitly promotes that origin in
+Delivery Flow.
+
 For service-provider and channel relationships, the customer controls which
 outbound demand may be shared. A connection does not imply exclusivity, and
 multiple partners can coexist with different scopes. Founder Hub operators can

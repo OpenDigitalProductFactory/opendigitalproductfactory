@@ -397,3 +397,26 @@ export async function setFederationDiscoveryEnabledAction(
   revalidatePath("/platform/edge-nodes");
   return { ok: true, updated: result.count, enabled };
 }
+
+export async function setFederationLinkEnvironmentAction(
+  linkId: string,
+  environmentClass: "production" | "development" | "test",
+): Promise<{ ok: true; environmentClass: string } | ActionFailure> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  if (!linkId?.trim() || !["production", "development", "test"].includes(environmentClass)) {
+    return { ok: false, error: "invalid_input", message: "Choose production, development, or test." };
+  }
+  const link = await prisma.federationLink.findUnique({ where: { linkId: linkId.trim() }, select: { metadata: true } });
+  if (!link) return { ok: false, error: "not_found", message: "Connection not found." };
+  const metadata = link.metadata && typeof link.metadata === "object" && !Array.isArray(link.metadata)
+    ? link.metadata as Record<string, unknown>
+    : {};
+  await prisma.federationLink.update({
+    where: { linkId: linkId.trim() },
+    data: { metadata: { ...metadata, environmentClass } },
+  });
+  revalidatePath(ADMIN_PATH);
+  revalidatePath("/ops/demand");
+  return { ok: true, environmentClass };
+}

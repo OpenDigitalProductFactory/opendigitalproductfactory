@@ -3,9 +3,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockSetDiscovery, mockIssueInvitation } = vi.hoisted(() => ({
+const { mockSetDiscovery, mockIssueInvitation, mockSetEnvironment } = vi.hoisted(() => ({
   mockSetDiscovery: vi.fn(),
   mockIssueInvitation: vi.fn(),
+  mockSetEnvironment: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/federation-links", () => ({
@@ -15,6 +16,7 @@ vi.mock("@/lib/actions/federation-links", () => ({
   quarantineFederationLinkAction: vi.fn(),
   revokeFederationLinkAction: vi.fn(),
   setFederationDiscoveryEnabledAction: mockSetDiscovery,
+  setFederationLinkEnvironmentAction: mockSetEnvironment,
 }));
 
 import { FederationLinksAdminClient } from "./FederationLinksAdminClient";
@@ -104,5 +106,18 @@ describe("FederationLinksAdminClient channel setup", () => {
     expect(screen.getByRole("option", { name: "channel-downstream (we share curated demand)" })).toBeTruthy();
     expect(screen.getByText(/Each installation independently chooses what demand crosses this link/)).toBeTruthy();
     expect(screen.getByText(/does not make this partner exclusive/i)).toBeTruthy();
+  });
+
+  it("lets an operator classify each link environment explicitly", async () => {
+    mockSetEnvironment.mockResolvedValue({ ok: true, environmentClass: "production" });
+    render(<FederationLinksAdminClient rows={[{
+      linkId: "FL-1", displayName: "Founder development peer", role: "channel-upstream", linkState: "trusted",
+      peerAuthorityUrl: "https://peer.example", peerOrganizationRef: null, approvedLocal: true, approvedPeer: true,
+      sharedSlices: ["demand"], sharedRetention: "standard", environmentClass: "development",
+      createdAtISO: "2026-07-20T00:00:00.000Z",
+    }]} />);
+
+    fireEvent.change(screen.getByLabelText("Environment for Founder development peer"), { target: { value: "production" } });
+    await waitFor(() => expect(mockSetEnvironment).toHaveBeenCalledWith("FL-1", "production"));
   });
 });

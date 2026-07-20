@@ -6,6 +6,7 @@ import type {
   DemandAudience,
   DemandEnvelopeV1,
   DemandResponseV1,
+  DemandDispositionNoticeV1,
 } from "@dpf/db/federated-demand-contract";
 import { computeDemandPayloadDigest } from "@dpf/db/federated-demand-contract";
 import type { ProjectionContractSpec } from "@dpf/db/projection-serialization";
@@ -17,10 +18,11 @@ import { decryptPeerToken } from "./outbound";
 
 type OutboundDemandActivity = Extract<DemandActivity, "dpf.demand.proposed" | "dpf.demand.updated" | "dpf.demand.withdrawn">;
 type OutboundResponseActivity = Extract<DemandActivity, "dpf.demand.interest-recorded" | "dpf.demand.help-offered">;
+type OutboundDispositionActivity = Extract<DemandActivity, "dpf.demand.dispositioned" | "dpf.release.applicability-published">;
 
 export interface DemandOutboxPayload {
-  envelope: DemandEnvelopeV1 | DemandResponseV1;
-  activity: OutboundDemandActivity | OutboundResponseActivity;
+  envelope: DemandEnvelopeV1 | DemandResponseV1 | DemandDispositionNoticeV1;
+  activity: OutboundDemandActivity | OutboundResponseActivity | OutboundDispositionActivity;
   eventId: string;
   queuedAt: string;
 }
@@ -75,7 +77,7 @@ export function decodeDemandOutboxPayload(value: unknown): DemandOutboxPayload |
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const payload = value as Partial<DemandOutboxPayload>;
   if (!payload.envelope || typeof payload.envelope !== "object" || typeof payload.eventId !== "string") return null;
-  if (!["dpf.demand.proposed", "dpf.demand.updated", "dpf.demand.withdrawn", "dpf.demand.interest-recorded", "dpf.demand.help-offered"].includes(payload.activity ?? "")) return null;
+  if (!["dpf.demand.proposed", "dpf.demand.updated", "dpf.demand.withdrawn", "dpf.demand.interest-recorded", "dpf.demand.help-offered", "dpf.demand.dispositioned", "dpf.release.applicability-published"].includes(payload.activity ?? "")) return null;
   return payload as DemandOutboxPayload;
 }
 
@@ -232,7 +234,7 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   const now = options.now ?? new Date();
   const rows = await db.federatedRecordMirror.findMany({
     where: {
-      recordType: { in: ["demand-envelope", "demand-response"] }, canonicalSide: "local", syncStatus: "pending",
+      recordType: { in: ["demand-envelope", "demand-response", "demand-disposition"] }, canonicalSide: "local", syncStatus: "pending",
       OR: [{ nextDeliveryAt: null }, { nextDeliveryAt: { lte: now } }],
     },
     orderBy: [{ nextDeliveryAt: "asc" }, { updatedAt: "asc" }],
@@ -267,9 +269,14 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
     const responseId = payload?.envelope.specVersion === "dpf.demand-response/1"
       ? payload.envelope.responseId
       : null;
+    const noticeId = payload?.envelope.specVersion === "dpf.demand-disposition/1"
+      ? payload.envelope.noticeId
+      : null;
     const acknowledged = result.ok
       && typeof result.body === "object" && result.body !== null
-      && (responseId
+      && (noticeId
+        ? (result.body as { noticeId?: unknown }).noticeId === noticeId
+        : responseId
         ? (result.body as { responseId?: unknown }).responseId === responseId
         : Number((result.body as { originVersion?: unknown }).originVersion) === row.version);
     if (acknowledged) {

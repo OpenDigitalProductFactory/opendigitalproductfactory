@@ -15,6 +15,8 @@ import {
   type SeedDistributionScope,
 } from "@/lib/integrate/seed-contribution-fit";
 import { revalidatePath } from "next/cache";
+import { deliverHiveResultToConfiguredForge } from "@/lib/hive/result-store";
+import { resolvePrincipalIdForUser } from "@/lib/identity/principal-linking";
 
 async function requireManagePlatform(): Promise<string> {
   return (await requireCapability("manage_platform")).userId;
@@ -40,6 +42,10 @@ export type HiveContributionsView = {
     summary: string;
     status: string;
     redactionStatus: string | null;
+    deliveryStatus: string;
+    deliveryAttempts: number;
+    deliveryRemoteRef: string | null;
+    deliveryError: string | null;
     createdAt: string;
   }>;
   seedReviews: SeedContributionReviewRow[];
@@ -421,6 +427,10 @@ export async function getHiveContributionsView(): Promise<HiveContributionsView>
     summary: string;
     status: string;
     redactionStatus: string | null;
+    deliveryStatus: string;
+    deliveryAttempts: number;
+    deliveryRemoteRef: string | null;
+    deliveryError: string | null;
     createdAt: Date;
   };
 
@@ -432,6 +442,10 @@ export async function getHiveContributionsView(): Promise<HiveContributionsView>
     summary: r.summary,
     status: r.status,
     redactionStatus: r.redactionStatus,
+    deliveryStatus: r.deliveryStatus,
+    deliveryAttempts: r.deliveryAttempts,
+    deliveryRemoteRef: r.deliveryRemoteRef,
+    deliveryError: r.deliveryError,
     createdAt: r.createdAt.toISOString(),
   }));
 
@@ -469,4 +483,39 @@ export async function setHiveContributionsPaused(paused: boolean): Promise<void>
     create: { id: "singleton", hiveContributionsPaused: paused, configuredById: userId },
   });
   revalidatePath(HIVE_PATH);
+}
+
+export async function reviewHiveResultAction(input: {
+  id: string;
+  decision: "accepted" | "rejected";
+}): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  const userId = await requireManagePlatform();
+  const principalId = (await resolvePrincipalIdForUser(userId)) ?? userId;
+  const row = await prisma.hiveContributionLedger.findUnique({
+    where: { id: input.id },
+    select: { id: true, contributionType: true },
+  });
+  if (!row || row.contributionType !== "result") return { ok: false, error: "Hive result was not found." };
+  await prisma.hiveContributionLedger.update({
+    where: { id: row.id },
+    data: {
+      status: input.decision,
+      reviewedByPrincipalId: principalId,
+      deliveryStatus: input.decision === "accepted" ? "queued" : "not-requested",
+    },
+  });
+  if (input.decision === "accepted") await deliverHiveResultToConfiguredForge(row.id);
+  revalidatePath(HIVE_PATH);
+  return { ok: true, message: input.decision === "accepted" ? "Accepted; forge delivery was attempted independently." : "Result rejected." };
+}
+
+export async function retryHiveResultDeliveryAction(id: string): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  await requireManagePlatform();
+  try {
+    const result = await deliverHiveResultToConfiguredForge(id);
+    revalidatePath(HIVE_PATH);
+    return { ok: true, message: result.status === "delivered" ? "Delivered to the configured forge." : "Delivery remains queued for retry." };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Unable to retry delivery." };
+  }
 }

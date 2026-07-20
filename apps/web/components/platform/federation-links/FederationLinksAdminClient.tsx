@@ -12,6 +12,7 @@ import {
   quarantineFederationLinkAction,
   revokeFederationLinkAction,
   setFederationDiscoveryEnabledAction,
+  setFederationLinkEnvironmentAction,
 } from "@/lib/actions/federation-links";
 import type { NearbyFederationCandidate } from "@/lib/federation/nearby-candidates";
 
@@ -28,6 +29,7 @@ export interface FederationLinkRow {
   sharedSlices: string[];
   /** Retention class the peer applies to what we share. */
   sharedRetention: string;
+  environmentClass: "production" | "development" | "test";
   createdAtISO: string;
 }
 
@@ -186,6 +188,16 @@ export function FederationLinksAdminClient({
           ? { kind: "success", text: `Revoked ${row.displayName}.` }
           : { kind: "error", text: `Revoke failed: ${result.message}` },
       );
+    });
+  }
+
+  function onEnvironment(row: FederationLinkRow, environmentClass: FederationLinkRow["environmentClass"]) {
+    setFlash(null);
+    startTransition(async () => {
+      const result = await setFederationLinkEnvironmentAction(row.linkId, environmentClass);
+      setFlash(result.ok
+        ? { kind: "success", text: `${row.displayName} is classified as ${environmentClass}.` }
+        : { kind: "error", text: `Environment update failed: ${result.message}` });
     });
   }
 
@@ -475,6 +487,7 @@ export function FederationLinksAdminClient({
               <th className="p-2 text-left text-[var(--dpf-muted)]">State</th>
               <th className="p-2 text-left text-[var(--dpf-muted)]">Approvals</th>
               <th className="p-2 text-left text-[var(--dpf-muted)]">Shared scope</th>
+              <th className="p-2 text-left text-[var(--dpf-muted)]">Environment</th>
               <th className="p-2 text-left text-[var(--dpf-muted)]">Peer URL</th>
               <th className="p-2 text-left text-[var(--dpf-muted)]">Actions</th>
             </tr>
@@ -482,7 +495,7 @@ export function FederationLinksAdminClient({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-4 text-center text-[var(--dpf-muted)]">
+                <td colSpan={8} className="p-4 text-center text-[var(--dpf-muted)]">
                   No federation links yet. Invite a peer above, or accept an invitation from one.
                 </td>
               </tr>
@@ -515,6 +528,19 @@ export function FederationLinksAdminClient({
                     ))}
                   </div>
                   <span className="mt-0.5 block text-[var(--dpf-muted)]">retain: {row.sharedRetention}</span>
+                </td>
+                <td className="p-2">
+                  <select
+                    aria-label={`Environment for ${row.displayName}`}
+                    value={row.environmentClass}
+                    disabled={isPending || row.linkState === "revoked"}
+                    onChange={(event) => onEnvironment(row, event.target.value as FederationLinkRow["environmentClass"])}
+                    className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-text)] disabled:opacity-50"
+                  >
+                    <option value="production">production</option>
+                    <option value="development">development</option>
+                    <option value="test">test</option>
+                  </select>
                 </td>
                 <td className="p-2 font-mono text-xs text-[var(--dpf-muted)]">{row.peerAuthorityUrl}</td>
                 <td className="p-2">

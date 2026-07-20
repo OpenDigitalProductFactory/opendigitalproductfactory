@@ -1468,6 +1468,7 @@ model BacklogItem {
   activities              BacklogItemActivity[]
   coworkerNeeds           CoworkerCapabilityNeed[]      @relation("BacklogItemCoworkerCapabilityNeeds")
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
+  founderDemandClusters   FounderDemandCluster[]
 
   @@index([portfolioId])
   @@index([status])
@@ -3840,6 +3841,55 @@ model Organization {
   careIntakePackets             CareIntakePacket[]
   aiProviderConnections         AiProviderConnection[]
   partnerAccounts               PartnerAccount[]
+  founderDemandClusters         FounderDemandCluster[]
+}
+
+// Founder Hub's shared-portfolio curation layer. FederatedRecordMirror remains
+// the immutable inbox; BacklogItem remains the canonical work authority. These
+// rows only preserve clustering, reach, disposition, and environment promotion.
+model FounderDemandCluster {
+  id                       String                       @id @default(cuid())
+  clusterId                String                       @unique
+  organizationId           String
+  title                    String
+  status                   String                       @default("proposed")
+  confidence               Float?
+  founderDisposition       String?
+  canonicalBacklogItemId   String?
+  releaseApplicability     Json?
+  dispositionAt            DateTime?
+  dispositionByPrincipalId String?
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+  organization             Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  canonicalBacklogItem     BacklogItem?                 @relation(fields: [canonicalBacklogItemId], references: [id], onDelete: SetNull)
+  members                  FounderDemandClusterMember[]
+
+  @@index([organizationId, status])
+  @@index([canonicalBacklogItemId])
+}
+
+// One underlying installation-originated envelope counts once, even when the
+// same signal reaches the Founder Hub over both direct and reseller paths.
+model FounderDemandClusterMember {
+  id                     String               @id @default(cuid())
+  memberId               String               @unique
+  founderDemandClusterId String
+  originInstallationId   String
+  envelopeId             String
+  environmentClass       String               @default("development")
+  promotedAt             DateTime?
+  promotedByPrincipalId  String?
+  mirrorRefs             String[]
+  routeAttestations      Json
+  signalSnapshot         Json
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  cluster                FounderDemandCluster @relation(fields: [founderDemandClusterId], references: [id], onDelete: Cascade)
+
+  @@unique([originInstallationId, envelopeId])
+  @@index([founderDemandClusterId])
+  @@index([environmentClass, promotedAt])
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -7137,26 +7187,40 @@ model PlatformDevConfig {
 // One ledger for everything that flows to the hive — what was shared, when,
 // its type, and its curation status (spec §6.1: "one contribution ledger").
 model HiveContributionLedger {
-  id                  String                           @id @default(cuid())
+  id                    String                           @id @default(cuid())
   // "device_fingerprint" | "source" | "improvement" (extensible).
-  contributionType    String
+  contributionType      String
   // The stable obfuscated contributor pseudonym used across all types.
-  contributor         String
+  contributor           String
   // For device-fingerprint contributions: the rule key shared.
-  ruleKey             String?
-  summary             String
+  ruleKey               String?
+  summary               String
   // Hash of the contributed payload for dedup/audit without storing PII.
-  payloadHash         String?
+  payloadHash           String?
   // submitted | curating | accepted | rejected | withdrawn
-  status              String                           @default("submitted")
-  redactionStatus     String?
-  createdAt           DateTime                         @default(now())
-  updatedAt           DateTime                         @updatedAt
-  partnerRecognitions PartnerContributionRecognition[]
+  status                String                           @default("submitted")
+  redactionStatus       String?
+  // Result-only contribution body and opaque source receipt. Intake commits
+  // independently of downstream forge delivery so a provider outage cannot
+  // lose a contribution or expose the contributor's private backlog.
+  resultBundle          Json?
+  sourceReceipt         String?                          @unique
+  deliveryProvider      String?
+  deliveryStatus        String                           @default("not-requested")
+  deliveryAttempts      Int                              @default(0)
+  deliveryRemoteRef     String?
+  deliveryError         String?
+  nextDeliveryAt        DateTime?
+  deliveredAt           DateTime?
+  reviewedByPrincipalId String?
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
+  partnerRecognitions   PartnerContributionRecognition[]
 
   @@index([contributionType])
   @@index([status])
   @@index([contributor])
+  @@index([deliveryStatus, nextDeliveryAt])
 }
 
 model EaNotation {

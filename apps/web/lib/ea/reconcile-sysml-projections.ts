@@ -27,6 +27,7 @@ import { reconcileScheduledJobs } from "./reconcile-scheduled-jobs";
 import { reconcileIt4itCoverage } from "./reconcile-it4it-coverage";
 import { reconcileSecurityPosture } from "./reconcile-security-posture";
 import { reconcileWorkPatternArchitecture } from "./reconcile-work-pattern-architecture";
+import { reconcileFederatedDemandArchitecture } from "./reconcile-federated-demand-architecture";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
@@ -55,6 +56,7 @@ export interface SysmlProjectionsResult {
   // Governed Adaptive Playbooks — observed work patterns, proposal guardrails,
   // promotion ladder, and no-self-activation verification cases.
   workPatternArchitecture: SysmlSeedResult;
+  federatedDemandArchitecture: SysmlSeedResult;
 }
 
 const SKIPPED: SysmlSeedResult = { status: "skipped", created: 0, updated: 0, removed: 0 };
@@ -101,8 +103,14 @@ export async function reconcileSysmlProjections(
     () => reconcileWorkPatternArchitecture({ db: opts.db }),
     SKIPPED,
   );
+  const federatedDemandArchitecture = await runDomain(
+    "federatedDemandArchitecture",
+    () => reconcileFederatedDemandArchitecture({ db: opts.db }),
+    SKIPPED,
+  );
   return {
     mcpAuthority, coworkerAuthority, valueStreams, routes, navigation, codeStructure, processModels, skillToolchain,
     operationalGraph, networkTopology, integrations, scheduledJobs, it4itCoverage, securityPosture, workPatternArchitecture,
+    federatedDemandArchitecture,
   };
 }

@@ -6,6 +6,7 @@ import { resolveIncidentProjectionSpec } from "@dpf/db/projection-egress";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { listNearbyFederationCandidates } from "@/lib/federation/nearby-candidates";
+import { resolveFounderDemandEnvironment } from "@dpf/db/founder-shared-portfolio";
 import {
   FederationLinksAdminClient,
   type FederationLinkRow,
@@ -116,6 +117,7 @@ export default async function FederationLinksPage() {
       approvedPeer: l.approvedAtPeer != null,
       sharedSlices: spec.includeSlices,
       sharedRetention: spec.retentionClass ?? "short",
+      environmentClass: resolveFounderDemandEnvironment(meta),
       createdAtISO: l.createdAt.toISOString(),
     };
   });

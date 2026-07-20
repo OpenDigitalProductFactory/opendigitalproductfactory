@@ -93,6 +93,21 @@ export interface DemandResponseV1 {
   payloadDigest: string;
 }
 
+export const DEMAND_DISPOSITIONS = ["accepted", "rejected", "archived"] as const;
+export type DemandDispositionDecision = (typeof DEMAND_DISPOSITIONS)[number];
+
+export interface DemandDispositionNoticeV1 {
+  specVersion: "dpf.demand-disposition/1";
+  noticeId: string;
+  envelopeId: string;
+  originInstallationId: string;
+  decision: DemandDispositionDecision;
+  message?: string;
+  releaseApplicability?: { releaseRef?: string; applicability: string };
+  createdAt: string;
+  payloadDigest: string;
+}
+
 const REQUIRED_FIELDS = [
   "specVersion",
   "envelopeId",
@@ -188,6 +203,44 @@ export function computeDemandResponseDigest(
   const content = { ...(value as DemandResponseV1) } as Record<string, unknown>;
   delete content.payloadDigest;
   return `sha256:${createHash("sha256").update(stableJson(content)).digest("hex")}`;
+}
+
+export function computeDemandDispositionDigest(
+  value: Omit<DemandDispositionNoticeV1, "payloadDigest"> | DemandDispositionNoticeV1,
+): string {
+  const content = { ...(value as DemandDispositionNoticeV1) } as Record<string, unknown>;
+  delete content.payloadDigest;
+  return `sha256:${createHash("sha256").update(stableJson(content)).digest("hex")}`;
+}
+
+export function validateDemandDispositionNoticeV1(value: unknown): string[] {
+  if (!isRecord(value)) return ["notice:invalid"];
+  const allowed = new Set([
+    "specVersion", "noticeId", "envelopeId", "originInstallationId", "decision",
+    "message", "releaseApplicability", "createdAt", "payloadDigest",
+  ]);
+  const violations: string[] = [];
+  for (const key of Object.keys(value)) if (!allowed.has(key)) violations.push(`field:not-allowed:${key}`);
+  if (value.specVersion !== "dpf.demand-disposition/1") violations.push("specVersion:unsupported");
+  if (!isNonEmptyString(value.noticeId, 160)) violations.push("noticeId:invalid");
+  if (!isNonEmptyString(value.envelopeId, 160)) violations.push("envelopeId:invalid");
+  if (!isNonEmptyString(value.originInstallationId, 160)) violations.push("originInstallationId:invalid");
+  if (!(DEMAND_DISPOSITIONS as readonly unknown[]).includes(value.decision)) violations.push("decision:unsupported");
+  if (value.message !== undefined && (typeof value.message !== "string" || value.message.length > 1_000)) violations.push("message:invalid");
+  if (value.releaseApplicability !== undefined) {
+    if (!isRecord(value.releaseApplicability)
+      || !isNonEmptyString(value.releaseApplicability.applicability, 1_000)
+      || (value.releaseApplicability.releaseRef !== undefined && !isNonEmptyString(value.releaseApplicability.releaseRef, 200))) {
+      violations.push("releaseApplicability:invalid");
+    }
+  }
+  if (!isIsoTimestamp(value.createdAt)) violations.push("createdAt:invalid");
+  if (typeof value.payloadDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.payloadDigest)) {
+    violations.push("payloadDigest:invalid");
+  } else if (computeDemandDispositionDigest(value as unknown as DemandDispositionNoticeV1) !== value.payloadDigest) {
+    violations.push("payloadDigest:mismatch");
+  }
+  return violations;
 }
 
 export function validateDemandResponseV1(value: unknown): string[] {

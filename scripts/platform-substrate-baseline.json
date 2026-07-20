@@ -1,7 +1,7 @@
 {
   "changeRationale": {
     "defaultRequiredServiceCount": "Capability-owned services moved behind deterministic Compose profiles; only PostgreSQL, portal initialization, and portal remain universal core.",
-    "prismaModelCount": "Five Founder Hub partner-business models separate reseller account standing, agreements, offering entitlements, support routing, and contribution recognition while referencing the existing federation, catalog, and Hive authorities instead of duplicating them.",
+    "prismaModelCount": "Five Founder Hub partner-business models separate reseller account standing, agreements, offering entitlements, support routing, and contribution recognition; two shared-portfolio models preserve founder clustering and deduplicated origin membership while the existing mirror, backlog, and Hive records remain authoritative.",
     "serviceCount": "Linux Ollama is now explicitly catalogued as a host-specific runtime:external-ai service instead of remaining an ungoverned overlay-only container."
   },
   "generatedAt": "2026-07-20T07:25:00.000Z",
@@ -22,11 +22,11 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 518
+      "value": 520
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 14061
+      "value": 14269
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",

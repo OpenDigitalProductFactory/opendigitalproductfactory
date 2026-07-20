@@ -306,11 +306,21 @@ before the backlog item closes.
 - Extend `HiveContributionLedger` and forge-neutral contribution adapters
 - Wire the Task 1 result-only gate at every public-Hive serialization boundary
 
-- [ ] Add inbox, clustering, distinct-origin reach, founder disposition, canonical local-item mapping, and downstream release applicability.
-- [ ] Keep development/test demand visibly segregated from production; require explicit authorized promotion.
-- [ ] Accept Hive result bundles independently of demand sharing and reject any source backlog/work-capsule/private planning context before persistence or egress.
-- [ ] Map accepted code results to forge-neutral GitHub delivery; GitHub outage must not block local backlog or federation intake.
-- [ ] Count direct and reseller-routed copies of one origin once and preserve original route/attestations.
+- [x] Add inbox, clustering, distinct-origin reach, founder disposition, canonical local-item mapping, and downstream release applicability.
+- [x] Keep development/test demand visibly segregated from production; require explicit authorized promotion.
+- [x] Accept Hive result bundles independently of demand sharing and reject any source backlog/work-capsule/private planning context before persistence or egress.
+- [x] Map accepted code results to forge-neutral GitHub delivery; GitHub outage must not block local backlog or federation intake.
+- [x] Count direct and reseller-routed copies of one origin once and preserve original route/attestations.
+
+**Implementation receipt (2026-07-20, `BI-D25A0C31`):** the existing
+`FederatedRecordMirror` is the inbox authority; `FounderDemandCluster` and
+`FounderDemandClusterMember` add only founder-owned curation and deduplicated
+origin state; accepted clusters map through the shared backlog-ingest front
+door. `dpf.demand-disposition/1` returns decisions over the same trusted link.
+Hive result intake uses the existing `HiveContributionLedger`, rejects private
+planning/backlog fields before persistence, and tracks forge delivery/retry
+separately. The SysML parity projection records all 11 requirements, eight
+ports, 15 verification cases, and the authority break through forge delivery.
 
 **Verification:** environment-boundary tests; clustering reversal and distinct-origin reach tests; full Hive payload inspection; GitHub-outage recovery; founder shared-portfolio and contribution-governance UX; production build.
 

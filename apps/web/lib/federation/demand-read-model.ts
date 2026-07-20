@@ -4,6 +4,7 @@ import { prisma } from "@dpf/db";
 
 import { decodeDemandMirrorPayload, type DemandDisposition } from "./demand-exchange";
 import { decodeDemandResponseMirrorPayload } from "./demand-response";
+import { decodeDemandDispositionMirrorPayload } from "./demand-disposition";
 
 export interface NetworkDemandView {
   mirrorId: string;
@@ -44,6 +45,13 @@ export interface DemandShareContext {
     sourceName: string;
     responseKind: "interest" | "help-offer";
     message: string | null;
+    receivedAt: string;
+  }>;
+  dispositions: Array<{
+    noticeId: string;
+    decision: "accepted" | "rejected" | "archived";
+    message: string | null;
+    releaseApplicability: { releaseRef?: string; applicability: string } | null;
     receivedAt: string;
   }>;
 }
@@ -100,7 +108,7 @@ export const getNetworkDemandItems = cache(async (): Promise<NetworkDemandView[]
 });
 
 export const getDemandShareContext = cache(async (): Promise<DemandShareContext> => {
-  const [links, localItems, mirrors, responseMirrors] = await Promise.all([
+  const [links, localItems, mirrors, responseMirrors, dispositionMirrors] = await Promise.all([
     prisma.federationLink.findMany({
       where: {
         role: { in: ["manages", "managed-by", "channel-upstream", "channel-downstream"] },
@@ -143,6 +151,12 @@ export const getDemandShareContext = cache(async (): Promise<DemandShareContext>
       orderBy: { lastSyncedAt: "desc" },
       take: 200,
     }),
+    prisma.federatedRecordMirror.findMany({
+      where: { recordType: "demand-disposition", canonicalSide: "peer", syncStatus: "synced" },
+      select: { payload: true },
+      orderBy: { lastSyncedAt: "desc" },
+      take: 200,
+    }),
   ]);
   const sharedByLink = new Map<string, string[]>();
   for (const mirror of mirrors) {
@@ -171,6 +185,17 @@ export const getDemandShareContext = cache(async (): Promise<DemandShareContext>
         sourceName: source?.principal.displayName ?? "Connected installation",
         responseKind: payload.response.responseKind,
         message: payload.response.message ?? null,
+        receivedAt: payload.receivedAt,
+      }];
+    }),
+    dispositions: dispositionMirrors.flatMap((mirror) => {
+      const payload = decodeDemandDispositionMirrorPayload(mirror.payload);
+      if (!payload) return [];
+      return [{
+        noticeId: payload.notice.noticeId,
+        decision: payload.notice.decision,
+        message: payload.notice.message ?? null,
+        releaseApplicability: payload.notice.releaseApplicability ?? null,
         receivedAt: payload.receivedAt,
       }];
     }),

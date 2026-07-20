@@ -1,6 +1,7 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { ContributionProvenanceTable } from "@/components/admin/ContributionProvenanceTable";
 import { HiveContributionsPanel } from "@/components/admin/HiveContributionsPanel";
+import { HiveResultReviewActions } from "@/components/admin/HiveResultReviewActions";
 import { SeedContributionReviewTable } from "@/components/admin/SeedContributionReviewTable";
 import { StatusBadge, type Intent } from "@/components/ui/report-kit";
 import { getHiveContributionsView } from "@/lib/actions/hive-contributions";
@@ -87,6 +88,8 @@ export default async function AdminHiveContributionsPage() {
                     <th className="px-3 py-2 font-medium">Summary</th>
                     <th className="px-3 py-2 font-medium">Redaction</th>
                     <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">Delivery</th>
+                    <th className="px-3 py-2 font-medium">Review</th>
                     <th className="px-3 py-2 font-medium">When</th>
                   </tr>
                 </thead>
@@ -103,6 +106,16 @@ export default async function AdminHiveContributionsPage() {
                           uppercase={false}
                           variant="soft"
                         />
+                      </td>
+                      <td className="px-3 py-2 text-[var(--dpf-muted)]">
+                        {e.contributionType === "result" ? (
+                          <span>{e.deliveryStatus}{e.deliveryAttempts ? ` · ${e.deliveryAttempts} attempt${e.deliveryAttempts === 1 ? "" : "s"}` : ""}</span>
+                        ) : "—"}
+                        {e.deliveryRemoteRef ? <a href={e.deliveryRemoteRef} className="ml-2 text-[var(--dpf-accent)] hover:underline">Open</a> : null}
+                        {e.deliveryError ? <span className="mt-1 block max-w-xs text-xs text-[var(--dpf-warning)]">{e.deliveryError}</span> : null}
+                      </td>
+                      <td className="px-3 py-2">
+                        {e.contributionType === "result" ? <HiveResultReviewActions id={e.id} status={e.status} deliveryStatus={e.deliveryStatus} /> : "—"}
                       </td>
                       <td className="px-3 py-2 text-[var(--dpf-muted)] whitespace-nowrap">
                         {new Date(e.createdAt).toLocaleDateString()}

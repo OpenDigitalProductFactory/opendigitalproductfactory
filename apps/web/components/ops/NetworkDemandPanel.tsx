@@ -17,7 +17,7 @@ import { InlineBusy } from "@/components/ui/InlineBusy";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { CollapsibleList, EmptyState, StatusBadge } from "@/components/ui/report-kit";
 
-const EMPTY_SHARE_CONTEXT: DemandShareContext = { targets: [], founderTargets: [], localItems: [], responses: [] };
+const EMPTY_SHARE_CONTEXT: DemandShareContext = { targets: [], founderTargets: [], localItems: [], responses: [], dispositions: [] };
 
 export function NetworkDemandPanel({
   items,
@@ -126,6 +126,23 @@ export function NetworkDemandPanel({
                 {response.responseKind === "help-offer" ? "offered help" : "recorded interest"}
                 {response.message ? `: ${response.message}` : "."}{" "}
                 <span className="text-[var(--dpf-muted)]"><LocalTime value={response.receivedAt} mode="datetime" /></span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {shareContext.dispositions.length > 0 ? (
+        <div className="mb-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+          <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Founder decisions</h3>
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">Disposition and release-applicability notices returned for demand this installation shared.</p>
+          <ul className="mt-2 space-y-2">
+            {shareContext.dispositions.map((notice) => (
+              <li key={notice.noticeId} className="text-xs text-[var(--dpf-text)]">
+                <span className="font-medium capitalize">{notice.decision}</span>
+                {notice.message ? ` — ${notice.message}` : ""}
+                {notice.releaseApplicability ? ` Release: ${notice.releaseApplicability.applicability}` : ""}{" "}
+                <span className="text-[var(--dpf-muted)]"><LocalTime value={notice.receivedAt} mode="datetime" /></span>
               </li>
             ))}
           </ul>
