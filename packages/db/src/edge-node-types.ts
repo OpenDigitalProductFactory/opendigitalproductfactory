@@ -70,6 +70,9 @@ export type Phase0Capability = (typeof PHASE_0_CAPABILITIES)[number];
 // negotiation rejects anything outside this set.
 export const RESERVED_CAPABILITIES = [
   "discovery.network",
+  // Native host DNS-SD advertise/browse for nearby DPF setup suggestions.
+  // Discovery candidates are never identity or trust evidence.
+  "federation.discovery",
   "discovery.software",
   "metrics.host",
   // Network telemetry adapters — spec: 2026-05-19-edge-node-network-telemetry-adapters-design.md
@@ -90,6 +93,16 @@ export const RESERVED_CAPABILITIES = [
   "action.execute",
 ] as const;
 export type ReservedCapability = (typeof RESERVED_CAPABILITIES)[number];
+
+// Capabilities a runtime may request during enrollment. This is deliberately
+// narrower than RESERVED_CAPABILITIES: sensitive future capabilities remain
+// operator-configured rather than becoming enabled merely by advertisement.
+export const EDGE_NODE_ENROLLMENT_CAPABILITIES = [
+  ...PHASE_0_CAPABILITIES,
+  "federation.discovery",
+] as const;
+export type EdgeNodeEnrollmentCapability =
+  (typeof EDGE_NODE_ENROLLMENT_CAPABILITIES)[number];
 
 // Token namespace prefixes (mirrors the dpfmcp_/dpfedge_/dpfboot_ family).
 export const EDGE_NODE_TOKEN_PREFIX = "dpfedge_";

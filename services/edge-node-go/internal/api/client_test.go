@@ -187,10 +187,10 @@ func TestSubmitDiscoveryRun_passesEnvelopeThrough(t *testing.T) {
 	})
 
 	envelope := map[string]any{
-		"runKey":       "run_test_1",
-		"agentMode":    "native",
-		"agentVersion": "0.1.0-go",
-		"items":        []any{},
+		"runKey":        "run_test_1",
+		"agentMode":     "native",
+		"agentVersion":  "0.1.0-go",
+		"items":         []any{},
 		"relationships": []any{},
 	}
 	resp, err := c.SubmitDiscoveryRun(context.Background(), "dpfedge_NODE", envelope)
@@ -202,6 +202,32 @@ func TestSubmitDiscoveryRun_passesEnvelopeThrough(t *testing.T) {
 	}
 	if resp["ok"] != true {
 		t.Errorf("response decoded incorrectly: %v", resp)
+	}
+}
+
+func TestSubmitFederationCandidates_usesAuthenticatedCandidateRoute(t *testing.T) {
+	var received map[string]any
+	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/edge/federation-candidates" {
+			t.Errorf("path %q", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer dpfedge_NODE" {
+			t.Errorf("authorization %q", got)
+		}
+		_ = json.NewDecoder(r.Body).Decode(&received)
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+
+	err := c.SubmitFederationCandidates(context.Background(), "dpfedge_NODE", FederationCandidateSnapshot{
+		ObservedAt: "2026-07-20T03:00:00Z",
+		Candidates: []any{map[string]any{"discoveryId": "ephemeral-1"}},
+	})
+	if err != nil {
+		t.Fatalf("SubmitFederationCandidates: %v", err)
+	}
+	if received["observedAt"] != "2026-07-20T03:00:00Z" {
+		t.Fatalf("snapshot round-trip failed: %#v", received)
 	}
 }
 

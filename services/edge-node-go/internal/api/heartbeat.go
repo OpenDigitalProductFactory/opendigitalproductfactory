@@ -25,3 +25,9 @@ func (c *Client) SubmitDiscoveryRun(ctx context.Context, nodeToken string, envel
 	}
 	return resp, nil
 }
+
+// SubmitFederationCandidates reports expiring DNS-SD setup suggestions. The
+// endpoint never creates a FederationLink or changes trust state.
+func (c *Client) SubmitFederationCandidates(ctx context.Context, nodeToken string, snapshot FederationCandidateSnapshot) error {
+	return c.post(ctx, "/api/v1/edge/federation-candidates", nodeToken, snapshot, nil)
+}

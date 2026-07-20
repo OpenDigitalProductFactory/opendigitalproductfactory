@@ -12411,7 +12411,8 @@ model EdgeNodeCapability {
   // FK to EdgeNode.id (the cuid surrogate); distinct from EdgeNode.nodeId.
   edgeNodeId String
   // Capability identifier from the spec § Edge Node capability envelope.
-  // Phase 0 accepts only "discovery.network".
+  // Enrollment accepts a closed subset of the reserved registry. Native Edge
+  // Nodes may additionally advertise "federation.discovery" for host mDNS.
   capability String
   // Authority's per-node decision:
   //   enabled         - capability is active

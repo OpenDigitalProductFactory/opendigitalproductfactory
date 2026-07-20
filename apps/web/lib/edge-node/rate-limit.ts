@@ -21,6 +21,7 @@
 export type EdgeRateLimitedRoute =
   | "edge.heartbeat"
   | "edge.discovery_runs.submit"
+  | "edge.federation_candidates.submit"
   | "edge.adapters"
   | "edge.events.submit";
 
@@ -52,6 +53,13 @@ const ROUTE_CEILINGS: Record<EdgeRateLimitedRoute, WindowCeiling[]> = {
   "edge.discovery_runs.submit": [
     { limit: 4, windowMs: 60_000 },
     { limit: 60, windowMs: 60 * 60_000 },
+  ],
+  // DNS-SD candidate snapshots are small and normally arrive every 15s.
+  // The hourly ceiling absorbs ordinary retry jitter without allowing a
+  // compromised node to turn the ephemeral cache into a request stream.
+  "edge.federation_candidates.submit": [
+    { limit: 20, windowMs: 60_000 },
+    { limit: 300, windowMs: 60 * 60_000 },
   ],
   // Adapter polling — typically once per sweepIntervalSec (300s = ~0.2/min).
   // 12/min absorbs startup bursts + retry; same ceiling as heartbeat since

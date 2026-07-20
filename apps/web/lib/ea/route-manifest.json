@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 569,
+  "routeCount": 570,
   "routes": [
     {
       "routePath": "/",
@@ -2250,6 +2250,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/edge/events/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/federation-candidates",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "federation-candidates"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/federation-candidates/route.ts"
     },
     {
       "routePath": "/api/v1/edge/heartbeat",

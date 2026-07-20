@@ -5,7 +5,9 @@
 // Authority side keep both runtimes honest.
 //
 // Source of truth for the contract is the Zod schemas at:
-//   apps/web/app/api/v1/edge/{enroll,heartbeat,discovery-runs,metrics}/route.ts
+//
+//	apps/web/app/api/v1/edge/{enroll,heartbeat,discovery-runs,metrics}/route.ts
+//
 // and the TypeScript client at services/edge-node/src/api-client.ts.
 package api
 
@@ -85,4 +87,13 @@ type SubmissionEnvelope struct {
 	Items         []any    `json:"items"`
 	Relationships []any    `json:"relationships"`
 	Warnings      []string `json:"warnings,omitempty"`
+}
+
+// FederationCandidateSnapshot is the privacy-bounded nearby-installation
+// report sent by a trusted native Edge Node. Candidate is kept as `any` here
+// to avoid an api↔federation package cycle; the Authority validates every
+// member against its closed Zod contract.
+type FederationCandidateSnapshot struct {
+	ObservedAt string `json:"observedAt"`
+	Candidates []any  `json:"candidates"`
 }

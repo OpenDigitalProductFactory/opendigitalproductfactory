@@ -8837,7 +8837,8 @@
         "overview",
         "route-coverage",
         "use-the-specific-guides-when",
-        "specific-guides"
+        "specific-guides",
+        "connections"
       ]
     },
     "docs/user-guide/platform/tools-and-integrations.md": {

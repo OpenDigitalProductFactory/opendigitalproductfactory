@@ -11,7 +11,7 @@ This is the Go implementation of the DPF Edge Node, deployed as a native binary 
 
 ## Why a separate Go binary
 
-The container at `services/edge-node/` works perfectly on Linux hosts. On Windows + macOS Docker Desktop, Docker Engine isolates containers from the host's real LAN regardless of `network_mode: host` and `network_mode: host` and WSL mirrored networking — verified on 2026-05-20. This binary runs as a native Windows Service / macOS LaunchDaemon / Linux systemd unit so it sees the host's actual NICs and ARP cache directly.
+The container at `services/edge-node/` works perfectly on Linux hosts. On Windows + macOS Docker Desktop, Docker Engine isolates containers from the host's real LAN regardless of `network_mode: host` and WSL mirrored networking — verified on 2026-05-20. This binary runs as a native Windows Service / macOS LaunchDaemon / Linux systemd unit so it sees the host's actual NICs, ARP cache, and multicast interfaces directly.
 
 See the deployment matrix for the per-platform recommendation.
 
@@ -33,7 +33,7 @@ The binary is configured entirely via environment variables — the same set the
 
 | Variable | Required? | Default | Purpose |
 |---|---|---|---|
-| `DPF_AUTHORITY_URL` | yes | — | Base URL of the Authority Core. Example: `http://localhost:3000`. |
+| `DPF_AUTHORITY_URL` | yes | — | Base URL of the Authority Core. Example: `http://localhost:3000`. Nearby discovery works over HTTP or HTTPS; automatic invitation exchange requires certificate-valid HTTPS. |
 | `DPF_BOOTSTRAP_TOKEN` | first run only | — | Single-use token from the portal's Admin → Platform Development → Edge Nodes page. Consumed at enrollment; subsequent runs read the persisted node token from state.json. |
 | `DPF_EDGE_NODE_NAME` | no | host's hostname | Display name shown in the Admin UI. |
 | `DPF_EDGE_STATE_DIR` | no | per platform | Where state.json lives. `C:\ProgramData\dpf-edge-node` on Windows, `/Library/Application Support/dpf-edge-node` on macOS, `/var/lib/dpf-edge-node` on Linux. |
@@ -51,13 +51,17 @@ State persistence rules (mirrors `services/edge-node/src/state.ts`):
 
 1. Load config from env. Refuse to start on invalid config (reports all problems at once).
 2. Try to load `state.json`.
-3. If state present → resume. Run heartbeat + sweep loops.
+3. If state present → resume. Run heartbeat, sweep, and optional nearby-DPF discovery loops.
 4. If state missing → require `DPF_BOOTSTRAP_TOKEN`, run enrollment, persist state, run loops.
 
-Heartbeat and sweep run concurrently. If heartbeat returns `node_revoked`, the loop clears state and exits — the service-manager restart picks up the fresh state.
+The loops run concurrently. If heartbeat returns `node_revoked`, the process clears state and exits — the service-manager restart picks up the fresh state. When the Authority accepts `federation.discovery`, the binary advertises and browses `_dpf-federation._tcp.local.` with rotating privacy-safe service and hostname aliases. Candidate snapshots return over the authenticated Edge channel; discovery never creates trust. HTTP installations can discover each other, but the portal blocks automatic invitation exchange until the candidate has certificate-valid HTTPS.
 
 ## Slice status
 
-This is **W1**: the Go scaffold + the enroll/heartbeat HTTP client + wire-contract parity test fixtures. The sweep loop is a placeholder; W2 adds the host-info collector, W3 the ARP collector via `GetIpNetTable` (Windows) / `/proc/net/arp` (Linux) / `arp -an` (macOS).
+The native runtime includes enrollment/heartbeat, host and ARP collection, and
+the federated-demand Slice 1 DNS-SD adapter. The adapter is pure Go and CGO-free;
+the build gate cross-compiles it for Windows amd64, macOS arm64, and Linux amd64.
+Signed one-click installation/service registration remains owned by the Edge
+deployment roadmap rather than this runtime source directory.
 
 The full W1–W11 sequence lives in [`docs/superpowers/plans/2026-05-14-edge-node-t3-windows-native.md`](../../docs/superpowers/plans/2026-05-14-edge-node-t3-windows-native.md).

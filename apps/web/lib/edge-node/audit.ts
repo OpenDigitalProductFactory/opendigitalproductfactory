@@ -46,6 +46,7 @@ export type EdgeAuditRoute =
   | "edge.enroll"
   | "edge.heartbeat"
   | "edge.discovery_runs.submit"
+  | "edge.federation_candidates.submit"
   | "edge.adapters";
 
 export type EdgeAuditInput = {
