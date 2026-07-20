@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Platform configuration registry",
+    "Build Studio dispatch configuration",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720160000_repair_platform_config_index_integrity",
+    "backfill": "forced-heap exact-key convergence: newest updatedAt/id survivor remains active, collision-checked quarantine keys preserve older rows and JSON values, then complete unique-index rebuild; no row is deleted"
+  },
+  "tests": [
+    "packages/db/src/platform-config-index-integrity-migration.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:platform-config#key-integrity-repair",
+      "prismaModel": "PlatformConfig",
+      "lifecycleDisposition": "the newest exact-key row remains active; older rows remain durable under reserved quarantine keys with original ids, JSON values, and timestamps",
+      "fields": [
+        {
+          "fieldId": "data:platform-config#key",
+          "resolution": "governed",
+          "reason": "restore trustworthy singleton configuration without reverting the current operator choice or deleting configuration history",
+          "provenance": "BI-E07FEB3A forced heap/index evidence and migration fixture"
+        }
+      ]
+    }
+  ]
+}
