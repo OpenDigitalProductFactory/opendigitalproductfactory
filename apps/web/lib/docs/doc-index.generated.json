@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 529,
+  "pageCount": 530,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -6250,6 +6250,25 @@
         "root-cause-3262",
         "fix-per-install-unblocks-now",
         "fix-durable-this-pr"
+      ]
+    },
+    "docs/runbooks/2026-07-20-collation-drift-index-corruption.md": {
+      "publicHref": "/runbooks/2026-07-20-collation-drift-index-corruption/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "collation-drift-index-corruption",
+        "read-this-first-if-you-are-about-to-write-a-repair-table-index-integrity-migration",
+        "what-actually-happened",
+        "value-level-proof",
+        "why-it-is-silent-and-why-it-compounds",
+        "diagnosing",
+        "repairing",
+        "do-not-generalise-the-dedupe",
+        "beware-null-keys",
+        "preventing-recurrence",
+        "related"
       ]
     },
     "docs/runbooks/bet5-windows-self-upgrade.md": {

@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "All persistent Postgres tables carrying a collation-sensitive btree index",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720190000_repair_collation_drift_index_rebuild",
+    "backfill": "index rebuild only — no row is created, deleted, or modified. Every collation-sensitive btree index is REINDEXed so its ordering agrees with the comparator the database actually runs, after a musl-initdb cluster was moved onto a glibc base and the text comparator changed underneath existing indexes. Unique indexes that already hold duplicate rows cannot be rebuilt; they are caught per-index, left untouched, and reported by name in a WARNING for separate per-table dedupe"
+  },
+  "tests": [
+    "packages/db/scripts/index-integrity-guard.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:all-models#collation-drift-index-rebuild",
+      "prismaModel": "*",
+      "lifecycleDisposition": "no lifecycle change: row content, ids, timestamps, and inbound references are all preserved exactly. Only the physical btree ordering is rebuilt, restoring agreement between each index and the heap it indexes",
+      "fields": [
+        {
+          "fieldId": "data:all-models#collation-sensitive-index-ordering",
+          "resolution": "governed",
+          "reason": "restore trustworthy uniqueness enforcement and complete query results after a libc collation comparator flip silently mis-ordered every text btree built before the base-image change; a corrupted unique index cannot reject duplicates and a corrupted non-unique index silently returns incomplete filtered results",
+          "provenance": "BI-8CCF7F13 amcheck bt_index_parent_check(heapallindexed) sweep — 28 of 2318 btree indexes corrupted, with exact correlation to collatable keys (21 of 1031 collatable-key unique indexes corrupted, 0 of 3 non-collatable), plus value-level ordering proof on Principal_principalId_key"
+        }
+      ]
+    }
+  ]
+}

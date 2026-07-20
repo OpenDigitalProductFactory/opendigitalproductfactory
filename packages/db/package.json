@@ -62,6 +62,7 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/seed.ts",
+    "index-integrity": "node scripts/index-integrity-guard.mjs",
     "skills:audit": "tsx src/skill-quality-audit.ts",
     "studio": "prisma studio",
     "test": "vitest run",
