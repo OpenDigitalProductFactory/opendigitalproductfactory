@@ -24,6 +24,17 @@ The contributor-preview PostgreSQL clone either publishes one complete, privacy-
 - Important: cleanup must preserve `_prisma_migrations` so the destination remains schema-ready while containing no application rows.
 - Rollback: revert the source commit. The destination database is disposable; a retry repopulates it from the unchanged production source.
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-B7F28A2F`
+- Rationale: Native-column privacy, destination cleanup, provider/connection consistency, safe PostgreSQL subprocess execution, documentation, and verification form one independently deployable clone-publication boundary. Splitting them could still publish either partial relational data or source-derived search/vector content.
+- Privacy-safe native projection, self-cleaning publication, relational consistency, child-process hardening, documentation, and verification -> `BI-B7F28A2F`
+- Dependencies: none
+- Receipt: `cmrt5hwiy02mj01o997lh91rw`
+
+The deployed MCP `tools/list` does not expose `record_plan_backlog_coverage`, so this receipt uses the governed `record_execution_evidence` compatibility path already established by the provider-onboarding plans. The live BI was claimed and verified before the receipt was recorded; no Markdown-only backlog placeholder remains.
+
 ## Implementation
 
 ### 1. Define the privacy-safe native-column projection
