@@ -56,6 +56,22 @@ vi.mock("@/lib/actions/ai-providers", () => ({
   runProviderCatalogReconciliationIfDue: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/actions/route-decision-logs", () => ({
+  getProviderSuitabilityTelemetryRollup: vi.fn().mockResolvedValue({
+    totalRequests: 0,
+    selectedRoutes: 0,
+    successes: 0,
+    failures: 0,
+    exclusions: 0,
+    byProvider: {},
+    byModel: {},
+    byActivityClass: {},
+    byWorkloadClass: {},
+    suppressedWorkloadClasses: [],
+    minimumCohortSize: 5,
+  }),
+}));
+
 vi.mock("@/lib/ollama", () => ({
   checkBundledProviders: vi.fn().mockResolvedValue(undefined),
 }));

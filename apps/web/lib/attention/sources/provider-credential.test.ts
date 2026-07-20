@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   expiredCredentialToAttentionItem,
   selectExpiredCredentialProviders,
+  suitabilityDriftToAttentionItem,
   PROVIDER_RECONNECT_ROUTE,
 } from "./provider-credential";
+import type { ProviderSuitabilityDriftSignal } from "@/lib/routing/provider-suitability/telemetry";
 
 const NOW = new Date("2026-07-15T12:00:00.000Z");
 const PAST = "2026-07-14T00:00:00.000Z";
@@ -88,5 +90,29 @@ describe("expiredCredentialToAttentionItem", () => {
     expect(item.actions[0]).toMatchObject({ kind: "open-in-context", href: PROVIDER_RECONNECT_ROUTE });
     expect(item.audience.operator).toBe(true);
     expect(item.createdAtIso).toBe(new Date(PAST).toISOString());
+  });
+});
+
+describe("suitabilityDriftToAttentionItem", () => {
+  it("sends stale or mismatched provider evidence to the existing operator attention source", () => {
+    const signal: ProviderSuitabilityDriftSignal = {
+      providerConnectionId: "connection-1",
+      providerId: "openrouter",
+      providerName: "OpenRouter business",
+      kind: "account-class-mismatch",
+      severity: "block-restricted",
+      detectedAt: NOW.toISOString(),
+      summary: "Observed account class no longer matches the attested posture.",
+      nextAction: "Review the connected account.",
+    };
+
+    const item = suitabilityDriftToAttentionItem(signal);
+
+    expect(item.id).toBe("provider-suitability:connection-1:account-class-mismatch");
+    expect(item.source).toBe("provider-credential");
+    expect(item.title).toBe("Review OpenRouter business trust evidence");
+    expect(item.context).toContain("Restricted routing stays blocked");
+    expect(item.deepLink).toBe("/platform/ai/providers/openrouter");
+    expect(item.triage.decideEffort).toBe("review");
   });
 });

@@ -7,6 +7,7 @@ import type {
   ProviderEntitlements,
   ProviderSuitabilityPolicy,
 } from "./types";
+import type { OpenRouterRoutingEvidence } from "./openrouter-policy";
 
 export const PROVIDER_TRUST_CLAIM_KEYS = [
   "no-training",
@@ -254,6 +255,8 @@ export type ProviderSuitabilityRouteReceipt = {
   policyId: string;
   compilerVersion: string;
   inputVersion: string;
+  activityClass: string | null;
+  workloadClasses: string[];
   connectionRef: string;
   executionChannel: ProviderConnectionPosture["executionChannel"];
   accountClass: ProviderConnectionPosture["accountClass"];
@@ -288,6 +291,8 @@ export function buildProviderSuitabilityRouteReceipt(input: {
   selectedProviderId: string;
   selectedUnderlyingProviderId?: string | null;
   excludedProviderIds: string[];
+  activityClass?: string | null;
+  workloadClasses?: string[];
   createdAt?: Date;
 }): ProviderSuitabilityRouteReceipt {
   return {
@@ -295,6 +300,8 @@ export function buildProviderSuitabilityRouteReceipt(input: {
     policyId: input.policy.policyId,
     compilerVersion: input.policy.compilerVersion,
     inputVersion: input.inputVersion,
+    activityClass: input.activityClass ?? null,
+    workloadClasses: sortedUnique(input.workloadClasses ?? []),
     connectionRef: connectionRef(input.connection.providerConnectionId),
     executionChannel: input.connection.executionChannel,
     accountClass: input.connection.accountClass,
@@ -315,6 +322,24 @@ export function buildProviderSuitabilityRouteReceipt(input: {
     } : null,
     explanationCodes: sortedUnique(input.policy.explanations.map((explanation) => explanation.code)),
     createdAt: (input.createdAt ?? new Date()).toISOString(),
+  };
+}
+
+/** Add only the bounded provider identity returned by OpenRouter after dispatch. */
+export function completeProviderSuitabilityRouteReceipt(
+  receipt: ProviderSuitabilityRouteReceipt,
+  evidence: OpenRouterRoutingEvidence | null | undefined,
+): ProviderSuitabilityRouteReceipt {
+  if (!evidence || evidence.underlyingProviderEvidence !== "returned" || !evidence.selectedProvider) {
+    return receipt;
+  }
+  return {
+    ...receipt,
+    selectedUnderlyingProviderId: evidence.selectedProvider,
+    explanationCodes: sortedUnique([
+      ...receipt.explanationCodes,
+      "underlying-provider-evidence-returned",
+    ]),
   };
 }
 

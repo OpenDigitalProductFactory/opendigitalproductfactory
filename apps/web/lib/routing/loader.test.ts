@@ -366,6 +366,8 @@ function makeSuitabilityReceipt() {
     policyId: "policy-sha256",
     compilerVersion: "provider-suitability/v1",
     inputVersion: "work-context/v1",
+    activityClass: "code-edit",
+    workloadClasses: ["source-code"],
     connectionRef: "connection-sha256:1234567890abcdef12345678",
     executionChannel: "direct-api" as const,
     accountClass: "business-team" as const,

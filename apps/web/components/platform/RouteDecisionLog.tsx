@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ProviderSuitabilityRouteReceipt } from "@/lib/routing/provider-suitability/evidence";
 
 type RouteDecision = {
   id: string;
@@ -11,6 +12,7 @@ type RouteDecision = {
   fitnessScore: number | null;
   policyRulesApplied: string[];
   shadowMode: boolean;
+  suitabilityReceipt?: ProviderSuitabilityRouteReceipt | null;
   createdAt: string;
 };
 
@@ -166,6 +168,16 @@ function DecisionCard({ decision }: { decision: RouteDecision }) {
               {rule}
             </span>
           ))}
+        </div>
+      )}
+      {decision.suitabilityReceipt && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--dpf-border)", fontSize: 11, color: "var(--dpf-muted)", lineHeight: 1.55 }}>
+          <div style={{ color: "var(--dpf-text)", fontWeight: 600 }}>Why this connection was eligible</div>
+          <div>{decision.suitabilityReceipt.executionChannel} · {decision.suitabilityReceipt.accountClass} · policy {decision.suitabilityReceipt.policyId}</div>
+          {decision.suitabilityReceipt.explanationCodes.length > 0 && (
+            <div>{decision.suitabilityReceipt.explanationCodes.join(", ")}</div>
+          )}
+          <div>No prompt, credential, or external account identifier is stored in this receipt.</div>
         </div>
       )}
     </div>

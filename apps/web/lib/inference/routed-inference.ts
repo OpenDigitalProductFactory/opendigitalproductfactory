@@ -35,6 +35,12 @@ import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
 import { logTokenUsage } from "@/lib/ai-inference";
 import type { RouteAndCallOptions } from "./routed-inference-options";
+import {
+  applyObservedRouterEvidence,
+  attachProviderSuitabilityReceipt,
+  prepareProviderSuitabilityRuntime,
+  type ProviderSuitabilityRuntime,
+} from "@/lib/routing/provider-suitability/runtime";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 
 // ─── Result type ────────────────────────────────────────────────────────────
@@ -96,6 +102,7 @@ interface PreparedRoute {
   taskType: string;
   /** EP-GOLDEN-TRIANGLE: the resolved posture applied to this route (null = none/Balanced). */
   posture: DispatchPosture | null;
+  suitability: ProviderSuitabilityRuntime | null;
 }
 
 /**
@@ -134,7 +141,7 @@ async function prepareRoute(
   const posture = await resolveDispatchPosture(options?.agentId ?? null, taskType);
 
   // 1. Infer contract
-  const contract = await inferContract(
+  let contract = await inferContract(
     taskType,
     messages,
     options?.tools,
@@ -202,6 +209,17 @@ async function prepareRoute(
     );
   }
 
+  let suitability: PreparedRoute["suitability"] = null;
+  if (options?.activityContract) {
+    const preparedSuitability = await prepareProviderSuitabilityRuntime({
+      contract,
+      activity: options.activityContract,
+      goldenTrianglePosture: posture?.routeContext,
+    });
+    contract = preparedSuitability.contract;
+    suitability = preparedSuitability.suitability;
+  }
+
   const activityHarnessConfidenceOverrides =
     options?.activityContract && !prep?.skipRecipe
       ? activityHarnessOverridesFromProposalRows(
@@ -230,7 +248,7 @@ async function prepareRoute(
     activityHarnessConfidenceOverrides,
   });
 
-  return { contract, decision, manifests, policies, overrides, taskType, posture };
+  return { contract, decision, manifests, policies, overrides, taskType, posture, suitability };
 }
 
 /** Result of a side-effect-free routing dry-run. */
@@ -508,13 +526,19 @@ export async function routeAndCall(
     }
   }
 
+  if (prepared.suitability) {
+    attachProviderSuitabilityReceipt(decision, manifests, prepared.suitability);
+  }
+
   // 4. Persist route decision (fire-and-forget unless disabled)
+  let routeDecisionLogId: Promise<string | null> = Promise.resolve(null);
   if (options?.persistDecision !== false) {
-    persistRouteDecision(decision, {
+    routeDecisionLogId = persistRouteDecision(decision, {
       actor: options?.routingActor ?? (options?.agentId ? { kind: "agent", id: options.agentId } : { kind: "system", id: "routed-inference" }),
-    }).catch((err) =>
-      console.error("[routeAndCall] Failed to persist route decision:", err),
-    );
+    }).catch((err) => {
+      console.error("[routeAndCall] Failed to persist route decision:", err);
+      return null;
+    });
   }
 
   // 5. Dispatch — background (async) or foreground (sync)
@@ -530,6 +554,7 @@ export async function routeAndCall(
       options?.mcpSession,
       { agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null },
     );
+    applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
     // If the adapter returned an operation ID (async adapter), create tracking record
     const operationId = (result as any).raw?.operationId as string | undefined;
@@ -597,6 +622,7 @@ export async function routeAndCall(
     options?.mcpSession,
     { agentId: options?.agentId ?? null },
   );
+  applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
   // 5c. Local-fallback signal.
   //

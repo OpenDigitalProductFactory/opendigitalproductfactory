@@ -17,6 +17,7 @@ vi.mock("@dpf/db", () => ({
 import type { ProviderConnectionPosture, ProviderSuitabilityPolicy } from "./types";
 import {
   buildProviderSuitabilityRouteReceipt,
+  completeProviderSuitabilityRouteReceipt,
   recordProviderTrustEvidence,
   resolveProviderTrustEvidence,
   supersedeProviderTrustEvidenceClaim,
@@ -221,6 +222,28 @@ describe("buildProviderSuitabilityRouteReceipt", () => {
     expect(serialized).not.toContain("connection-personal");
     expect(serialized).not.toContain("Sensitive explanation");
     expect(serialized).not.toMatch(/api[-_]?key|credential|messages|prompt|payload/i);
+  });
+
+  it("adds only bounded underlying-provider evidence returned after router dispatch", () => {
+    const receipt = buildProviderSuitabilityRouteReceipt({
+      policy,
+      inputVersion: "work-context/v1",
+      connection: connection(),
+      selectedProviderId: "openrouter",
+      excludedProviderIds: [],
+      createdAt: NOW,
+    });
+    const completed = completeProviderSuitabilityRouteReceipt(receipt, {
+      underlyingProviderEvidence: "returned",
+      selectedProvider: "anthropic/eu",
+      selectedModel: "claude",
+      attempts: [{ provider: "anthropic/eu", model: "claude", status: 200 }],
+    });
+
+    expect(completed.selectedUnderlyingProviderId).toBe("anthropic/eu");
+    expect(completed.explanationCodes).toContain("underlying-provider-evidence-returned");
+    expect(JSON.stringify(completed)).not.toContain("claude");
+    expect(JSON.stringify(completed)).not.toContain("200");
   });
 });
 

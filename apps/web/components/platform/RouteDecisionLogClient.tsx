@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
 import type { CandidateTrace } from "@/lib/routing/types";
+import type { ProviderSuitabilityRouteReceipt } from "@/lib/routing/provider-suitability/evidence";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,6 +87,23 @@ function CandidateTable({ candidates }: { candidates: CandidateTrace[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function SuitabilityReceipt({ receipt }: { receipt: ProviderSuitabilityRouteReceipt }) {
+  return (
+    <div style={{ marginTop: 12, border: "1px solid var(--dpf-border)", borderRadius: 6, padding: 10, fontSize: 11 }}>
+      <div style={{ color: "var(--dpf-text)", fontWeight: 600, marginBottom: 6 }}>Provider suitability evidence</div>
+      <div style={{ color: "var(--dpf-muted)", lineHeight: 1.6 }}>
+        <div>Connection: <span style={{ fontFamily: "monospace", color: "var(--dpf-text)" }}>{receipt.connectionRef}</span></div>
+        <div>Channel/account: <span style={{ color: "var(--dpf-text)" }}>{receipt.executionChannel} · {receipt.accountClass}</span></div>
+        <div>Policy/compiler: <span style={{ fontFamily: "monospace", color: "var(--dpf-text)" }}>{receipt.policyId} · {receipt.compilerVersion}</span></div>
+        {receipt.selectedUnderlyingProviderId && <div>Underlying provider: <span style={{ color: "var(--dpf-text)" }}>{receipt.selectedUnderlyingProviderId}</span></div>}
+        {receipt.obligations?.requiredRegion && <div>Required processing region: <span style={{ color: "var(--dpf-text)" }}>{receipt.obligations.requiredRegion}</span></div>}
+        {receipt.explanationCodes.length > 0 && <div>Decision evidence: <span style={{ color: "var(--dpf-text)" }}>{receipt.explanationCodes.join(", ")}</span></div>}
+      </div>
+      <div style={{ marginTop: 6, color: "var(--dpf-muted)" }}>This receipt records policy facts only—never prompts, attachments, credentials, or external account IDs.</div>
     </div>
   );
 }
@@ -215,6 +233,7 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
               <CandidateTable candidates={row.excludedTrace} />
             </>
           )}
+          {row.suitabilityReceipt && <SuitabilityReceipt receipt={row.suitabilityReceipt} />}
         </div>
       )}
     </div>

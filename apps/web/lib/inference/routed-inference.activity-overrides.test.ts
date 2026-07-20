@@ -12,11 +12,13 @@ const mocks = vi.hoisted(() => ({
   loadPolicyRules: vi.fn(),
   loadOverrides: vi.fn(),
   persistRouteDecision: vi.fn(),
+  updateProviderSuitabilityReceipt: vi.fn(),
   inferContract: vi.fn(),
   getLocalOnlyInference: vi.fn(),
   resolveDispatchPosture: vi.fn(),
   logTokenUsage: vi.fn(),
   agentActionProposalFindMany: vi.fn(),
+  loadProviderSuitabilitySourceContext: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -32,6 +34,7 @@ vi.mock("@/lib/routing/loader", () => ({
   loadPolicyRules: mocks.loadPolicyRules,
   loadOverrides: mocks.loadOverrides,
   persistRouteDecision: mocks.persistRouteDecision,
+  updateProviderSuitabilityReceipt: mocks.updateProviderSuitabilityReceipt,
 }));
 
 vi.mock("@/lib/routing/request-contract", () => ({
@@ -58,6 +61,10 @@ vi.mock("@/lib/ai-inference", () => ({
   logTokenUsage: mocks.logTokenUsage,
 }));
 
+vi.mock("@/lib/routing/provider-suitability/provider-onboarding-data", () => ({
+  loadProviderSuitabilitySourceContext: mocks.loadProviderSuitabilitySourceContext,
+}));
+
 import { routeAndCall } from "./routed-inference";
 import { previewRoute } from "./routed-inference";
 
@@ -65,6 +72,8 @@ describe("routeAndCall activity harness overrides", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getLocalOnlyInference.mockResolvedValue(false);
+    mocks.persistRouteDecision.mockResolvedValue("route-log-1");
+    mocks.updateProviderSuitabilityReceipt.mockResolvedValue(undefined);
     mocks.resolveDispatchPosture.mockResolvedValue(null);
     mocks.inferContract.mockResolvedValue({
       contractId: "contract-1",
@@ -144,6 +153,45 @@ describe("routeAndCall activity harness overrides", () => {
         decidedAt: new Date("2026-06-28T21:00:00.000Z"),
       },
     ]);
+    mocks.loadProviderSuitabilitySourceContext.mockResolvedValue({
+      businessProfile: {
+        organizationId: "org-1",
+        archetypeId: "software-platform",
+        archetypeCategory: "software-platform",
+        operatesIn: ["us"],
+        sellsTo: [],
+        employsIn: [],
+        dataResidency: [],
+        riskPosture: "balanced",
+      },
+      handlesCardPayments: false,
+      regulationResults: [],
+      connections: [{
+        label: "OpenAI business",
+        status: "active",
+        facts: {
+          providerId: "openai",
+          catalogProviderId: "openai",
+          category: "direct",
+          jurisdictions: ["us"],
+          externalEgress: "provider-cloud",
+          supportsZdr: true,
+          supportsNoTraining: true,
+          supportsRegionalRouting: false,
+          supportedRegions: [],
+          regionalEndpoints: [],
+          providerConnectionId: "connection-openai-business",
+          executionChannel: "direct-api",
+          accountClass: "business-team",
+          commercialBasis: "usage-metered",
+          authMethod: "api-key",
+          contractEvidence: {},
+          entitlements: { noTraining: true },
+          evidenceStatus: "operator-attested",
+          lastReviewedAt: "2026-07-01T00:00:00.000Z",
+        },
+      }],
+    });
   });
 
   it("loads approved activity harness confidence overrides for live activity routing", async () => {
@@ -218,6 +266,37 @@ describe("routeAndCall activity harness overrides", () => {
         activityHarnessConfidenceOverrides: [],
       }),
     );
+  });
+
+  it("binds the compiled policy to routeEndpointV2 and emits an account-scoped receipt", async () => {
+    const result = await routeAndCall(
+      [{ role: "user", content: "Summarize this customer update." }],
+      "You summarize.",
+      "internal",
+      {
+        taskType: "summarization",
+        activityContract: makeActivity(),
+        persistDecision: false,
+      },
+    );
+
+    expect(mocks.routeEndpointV2).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        allowedProviders: ["openai"],
+        deniedProviders: [],
+      }),
+      [],
+      [],
+      expect.any(Object),
+    );
+    expect(result.routeDecision.providerSuitabilityReceipt).toMatchObject({
+      schemaVersion: "provider-suitability-route-receipt/v1",
+      executionChannel: "direct-api",
+      accountClass: "business-team",
+      selectedProviderId: "openai",
+    });
+    expect(JSON.stringify(result.routeDecision.providerSuitabilityReceipt)).not.toContain("customer update");
   });
 });
 

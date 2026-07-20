@@ -433,6 +433,16 @@ export async function persistRouteDecision(
   return record.id;
 }
 
+export async function updateProviderSuitabilityReceipt(
+  routeDecisionLogId: string,
+  receipt: import("./provider-suitability/evidence").ProviderSuitabilityRouteReceipt,
+): Promise<void> {
+  await prisma.routeDecisionLog.update({
+    where: { id: routeDecisionLogId },
+    data: { suitabilityReceipt: receipt as any },
+  });
+}
+
 function serializeCandidateTraceForAudit(
   decision: import("./types").RouteDecision,
 ): Array<import("./types").CandidateTrace & { activityHarness?: unknown }> {

@@ -19,6 +19,12 @@
 // provider-oauth flow.
 
 import { getProviders } from "@/lib/ai-provider-data";
+import type { prisma } from "@dpf/db";
+import {
+  detectProviderSuitabilityDrift,
+  type ObservedProviderPosture,
+  type ProviderSuitabilityDriftSignal,
+} from "@/lib/routing/provider-suitability/telemetry";
 import type { AttentionItem } from "../types";
 
 /** Reconnect surface — the same target the honest failure message points at. */
@@ -108,4 +114,173 @@ export function selectExpiredCredentialProviders(
 export async function loadProviderCredentialItems(): Promise<AttentionItem[]> {
   const rows = await getProviders();
   return selectExpiredCredentialProviders(rows).map(expiredCredentialToAttentionItem);
+}
+
+export function suitabilityDriftToAttentionItem(signal: ProviderSuitabilityDriftSignal): AttentionItem {
+  const restrictedBlock = signal.severity === "block-restricted"
+    ? " Restricted routing stays blocked until this is resolved."
+    : " Restricted routing may require review until this is resolved.";
+  const href = `/platform/ai/providers/${encodeURIComponent(signal.providerId)}`;
+  return {
+    id: `provider-suitability:${signal.providerConnectionId}:${signal.kind}`,
+    source: "provider-credential",
+    title: `Review ${signal.providerName} trust evidence`,
+    context: `${signal.summary} ${signal.nextAction}${restrictedBlock}`,
+    decisionClass: { scorability: "unscorable" },
+    riskClass: signal.severity === "block-restricted" ? "high-risk" : "bounded-write",
+    triage: {
+      timeToAct: "none",
+      residueReason: "coverage-gap",
+      blastRadius: signal.providerName,
+      decideEffort: "review",
+      irreversible: false,
+    },
+    createdAtIso: signal.detectedAt,
+    actions: [{ kind: "open-in-context", label: "Review provider", href }],
+    deepLink: href,
+    audience: { operator: true },
+  };
+}
+
+type Db = typeof prisma;
+
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function string(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function observedAuthMethod(value: string | null): string {
+  if (value === "api_key") return "api-key";
+  if (value === "oauth2_authorization_code") return "oauth";
+  if (value === "oauth2_client_credentials") return "workload-identity";
+  if (value === "none") return "local";
+  return "unknown";
+}
+
+function observedExecutionChannel(provider: {
+  category: string;
+  cliEngine: string | null;
+  authMethod: string | null;
+  catalogEntry: unknown;
+}): string {
+  const trust = object(object(provider.catalogEntry).trustCatalog);
+  if (trust.externalEgress === "none" || provider.category === "local") return "local-runtime";
+  if (provider.category === "router") return "hosted-router";
+  if (provider.cliEngine && provider.authMethod === "oauth2_authorization_code") return "subscription-cli";
+  return "direct-api";
+}
+
+function catalogReviewedAt(catalogEntry: unknown): string | null {
+  const trust = object(object(catalogEntry).trustCatalog);
+  return string(trust.reviewedAt) ?? string(trust.lastVerifiedAt);
+}
+
+function receiptPosture(value: unknown): (ObservedProviderPosture & { providerId?: string }) | null {
+  const receipt = object(value);
+  if (receipt.schemaVersion !== "provider-suitability-route-receipt/v1") return null;
+  return {
+    providerId: string(receipt.selectedProviderId) ?? undefined,
+    executionChannel: string(receipt.executionChannel) ?? undefined,
+    accountClass: string(receipt.accountClass) ?? undefined,
+    endpoint: string(object(receipt.obligations).requiredBaseUrl) ?? undefined,
+  };
+}
+
+/**
+ * Project account-scoped evidence and observed route receipts into the existing
+ * provider attention lane. This is advisory only; the compiler remains the
+ * enforcement owner and expired/rejected evidence already fails closed there.
+ */
+export async function loadProviderSuitabilityDriftItems(
+  db: Db,
+  now: Date = new Date(),
+): Promise<AttentionItem[]> {
+  const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const [connections, routes] = await Promise.all([
+    db.aiProviderConnection.findMany({
+      where: { status: { not: "disabled" } },
+      include: {
+        provider: {
+          select: {
+            name: true,
+            category: true,
+            cliEngine: true,
+            authMethod: true,
+            baseUrl: true,
+            credentialOwnerMode: true,
+            catalogEntry: true,
+          },
+        },
+        supplierContract: { select: { endDate: true } },
+        trustEvidence: {
+          where: { claimKey: { not: null } },
+          select: { claimKey: true, status: true, expiresAt: true },
+        },
+      },
+    }),
+    db.routeDecisionLog.findMany({
+      where: { createdAt: { gte: since } },
+      orderBy: { createdAt: "desc" },
+      select: { selectedEndpointId: true, excludedTrace: true, suitabilityReceipt: true },
+      take: 500,
+    }),
+  ]);
+
+  const latestReceipt = new Map<string, ObservedProviderPosture>();
+  const failures = new Map<string, number>();
+  for (const route of routes) {
+    const receipt = receiptPosture(route.suitabilityReceipt);
+    if (receipt?.providerId && !latestReceipt.has(receipt.providerId)) latestReceipt.set(receipt.providerId, receipt);
+    if (route.selectedEndpointId !== "none") continue;
+    const excluded = Array.isArray(route.excludedTrace) ? route.excludedTrace : [];
+    for (const candidate of excluded) {
+      const providerId = string(object(candidate).providerId);
+      if (providerId) failures.set(providerId, (failures.get(providerId) ?? 0) + 1);
+    }
+  }
+
+  return connections.flatMap((connection) => {
+    const contract = object(connection.contractEvidence);
+    const entitlements = object(connection.entitlements);
+    const regionalEvidence = connection.trustEvidence
+      .filter((evidence) => evidence.claimKey === "regional-processing" || evidence.claimKey === "enabled-regions")
+      .map((evidence) => evidence.expiresAt)
+      .filter((value): value is Date => Boolean(value))
+      .sort((left, right) => left.getTime() - right.getTime())[0] ?? null;
+    const signals = detectProviderSuitabilityDrift({
+      providerConnectionId: connection.connectionId,
+      providerId: connection.providerId,
+      providerName: connection.label || connection.provider.name,
+      catalogReviewedAt: catalogReviewedAt(connection.provider.catalogEntry),
+      attestedAt: connection.lastReviewedAt?.toISOString() ?? null,
+      contractExpiresAt: connection.supplierContract?.endDate?.toISOString() ?? null,
+      regionalEntitlementExpiresAt: regionalEvidence?.toISOString() ?? null,
+      evidenceClaims: connection.trustEvidence.map((evidence) => ({
+        claimKey: evidence.claimKey ?? "unknown",
+        status: evidence.status === "active" && evidence.expiresAt && evidence.expiresAt <= now ? "expired" : evidence.status,
+      })),
+      repeatedRouteFailures: failures.get(connection.providerId) ?? 0,
+      attested: {
+        executionChannel: connection.executionChannel,
+        accountClass: connection.accountClass,
+        planLimit: string(contract.contractPlanName) ?? undefined,
+        endpoint: string(entitlements.requiredBaseUrl) ?? undefined,
+        credentialKind: connection.authMethod,
+      },
+      observed: {
+        ...latestReceipt.get(connection.providerId),
+        executionChannel: observedExecutionChannel(connection.provider),
+        planLimit: connection.provider.credentialOwnerMode ?? undefined,
+        endpoint: connection.provider.baseUrl ?? undefined,
+        credentialKind: observedAuthMethod(connection.provider.authMethod),
+      },
+      now,
+    });
+    return signals.map(suitabilityDriftToAttentionItem);
+  });
 }

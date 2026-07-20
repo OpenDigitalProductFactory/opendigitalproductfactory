@@ -12,7 +12,7 @@ import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import { loadPlatformHealthItems } from "./sources/platform-health";
-import { loadProviderCredentialItems } from "./sources/provider-credential";
+import { loadProviderCredentialItems, loadProviderSuitabilityDriftItems } from "./sources/provider-credential";
 import {
   loadOutboundItems,
   loadBillItems,
@@ -90,7 +90,13 @@ export async function loadAttentionItems(
     { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
-    { source: "provider-credential", load: () => loadProviderCredentialItems() },
+    {
+      source: "provider-credential",
+      load: async () => [
+        ...(await loadProviderCredentialItems()),
+        ...(await loadProviderSuitabilityDriftItems(db)),
+      ],
+    },
   ];
   if (opts.aiReadinessUserId) {
     loaders.push({
