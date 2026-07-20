@@ -23,7 +23,7 @@ The isolated Contributor preview cannot start its migration/clone initializer ag
 - Parent: `BI-7430E579`
 - Rationale: the image selection, extension-aware readiness check, regression test, contributor contract update, and end-to-end preview evidence form one independently deployable runtime invariant. Splitting them could leave either an unguarded configuration or an unverified guard.
 - pgvector-capable contributor database, extension-aware readiness, documentation, and preview verification -> `BI-7430E579`
-- Dependencies: `BI-B7F28A2F` (complete); `BI-7C2B91EF` blocks the final healthy-preview acceptance after governed verification exposed a logically inconsistent live `City` unique index.
+- Dependencies: `BI-B7F28A2F`, `BI-7C2B91EF`, `BI-CD96EDD2`, and `BI-BCF8A8D5` are merged. Together they provide the atomic clone behavior, repaired City index, bounded clone transaction, and repaired DigitalProduct natural-key integrity needed for the final healthy-preview acceptance.
 - Receipt: `cmrt65kun03da01o9gpo880ld`
 
 The deployed MCP surface does not expose `record_plan_backlog_coverage`, so the receipt uses the governed `record_execution_evidence` compatibility path.
@@ -48,8 +48,8 @@ The deployed MCP surface does not expose `record_plan_backlog_coverage`, so the 
 - [x] Regression test observed failing for the missing extension-aware health check.
 - [x] Targeted and affected source tests pass (6/6 Compose-contract tests, 16/16 documentation-link tests, 5/5 lifecycle tests, capability catalog current).
 - [x] Contributor database reports `vector` available and installed at 0.8.5 after all 419 migrations applied.
-- [ ] `dev-init` sanitized clone completes and Contributor preview health succeeds.
-- [ ] Exact-SHA merged-code pregate passes.
+- [x] `dev-init` sanitized clone completes and Contributor preview health succeeds (governed lease `NPEL-6B3C06496D`; clean `dpf_dev_pgdata`; 428 migrations; `vector` 0.8.5; all 521 catalog tables processed; 182 `DecisionInteraction` rows copied despite additive source columns; `/api/health` HTTP 200 with database/event-loop checks `ok`).
+- [x] Exact-SHA merged-code pregate passes (first acceptance pass: candidate `64960fe488df3b980cb701953254c114bb12bf5c` merged with `origin/main` `51f329158e983689485ebf1f62f216da51d7c7f1` under lease `NPEL-265556FF7D`; the final evidence-only amendment is re-gated before publication).
 - [ ] PR health is terminal/passing with zero unresolved review threads.
 
-The governed end-to-end run reached the sanitized clone, then failed on a separate source-data integrity defect: 19 duplicate `lower(City.name), regionId` groups exist while `City_regionId_name_ci` still reports unique/valid/ready/live. The atomic clone cleanup reset all 521 destination application tables and correctly prevented the preview from starting. Remediation is tracked as `BI-7C2B91EF`; no live data was modified from this branch.
+The first governed end-to-end run reached the sanitized clone and correctly failed closed on separate source-data integrity defects rather than publishing a partial preview. Those defects and additive source-schema skew are repaired through merged dependency `51f329158e983689485ebf1f62f216da51d7c7f1` (PR #3341). The clean final run removed only the contributor database volume, rebuilt it from committed migrations, completed the fail-safe sanitized clone, and started a healthy Contributor preview. No live application data was modified from this branch.
