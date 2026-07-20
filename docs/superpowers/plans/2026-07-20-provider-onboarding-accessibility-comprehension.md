@@ -16,6 +16,19 @@ A nontechnical owner can complete or safely defer provider onboarding with a key
 - Reuse native buttons, details/summary, dialog semantics, delivery retry, and setup progress actions.
 - Add no route, navigation item, dashboard, compliance wizard, provider state, or activation authority.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/plans/2026-07-19-governed-llm-provider-onboarding.md`
+  - `docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md`
+- Current code substrate reviewed:
+  - `SetupOverlay`, `SetupProgressBar`, and `SetupActionButtons`
+  - `ProviderSuitabilityGuide`, `ProviderOnboardingRecommendation`, `AskCoworkerButton`, and the existing COO panel
+- Source of truth:
+  - The deterministic `ProviderOnboardingRecommendation` projection remains authoritative for recommendation and restriction status; setup lifecycle state remains authoritative for continue, skip, pause, and completion.
+- Decision:
+  - Extend the existing provider/setup components with semantic labels, live status, focus affordances, safe-defer explanation, responsive containment, and edge fixtures. Add no alternate recommendation logic, activation authority, route, or wizard.
+
 ## UX fit
 
 - Decision: `fits-with-guardrails`.
