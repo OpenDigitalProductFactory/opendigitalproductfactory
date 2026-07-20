@@ -329,6 +329,8 @@ type AgentRouteConfig = {
   preferredProviderId?: string;
   preferredModelId?: string;
   allowedProviders?: string[];
+  deniedProviders?: string[];
+  residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
   effort?: "low" | "medium" | "high" | "max";
 };
 
@@ -380,6 +382,17 @@ function resolveEffectiveAgentRouteConfig(params: {
             : {}),
           ...("allowedProviders" in params.modelRequirements
             ? { allowedProviders: params.modelRequirements.allowedProviders as string[] }
+            : {}),
+          ...("deniedProviders" in params.modelRequirements
+            ? { deniedProviders: params.modelRequirements.deniedProviders as string[] }
+            : {}),
+          ...("residencyPolicy" in params.modelRequirements
+            ? {
+                residencyPolicy: params.modelRequirements.residencyPolicy as
+                  | "local_only"
+                  | "approved_cloud"
+                  | "any_enabled",
+              }
             : {}),
           ...("defaultEffort" in params.modelRequirements
             ? {

@@ -3,7 +3,7 @@
 **Backlog item:** BI-26684747
 **Parent acceptance:** BI-AIPS-004, BI-C98C6AB7
 **Epic:** EP-AI-PROVIDER-SUITABILITY
-**Status:** Implemented; verification in progress
+**Status:** Governed A2A implemented; local cold-start fallback implemented with runtime verification pending
 
 ## Outcome
 
@@ -117,6 +117,18 @@ This is the first independently shippable phase.
 **Deliverable:** AGT-902's result is validated as `recommended | conditional | not-suitable` with concerns, citations, missing facts, human-review needs, workload restrictions, and one safe next action; the COO synthesizes it without changing provider eligibility.
 
 **Verification:** structured-result tests, conversation projection test, no-policy-mutation assertion, authenticated setup/provider walkthrough.
+
+## Phase 5 — guarantee local-only cold-start advice
+
+**Status:** Implemented in `BI-EDAAD429`; shared-runtime verification remains before completion.
+
+**Deliverable:** the provider-compliance child run carries the canonical router's hard `residencyPolicy: local_only` constraint on every inference attempt. A missing local endpoint, malformed result, unsafe approval, or insufficient-evidence result without human review is replaced with a deterministic `provider-compliance-advisory.v1` non-approval grounded in `professions/legal-compliance/ai-provider-account-and-sovereignty-review`. No cloud route is attempted and no provider posture is changed.
+
+**Audit contract:** `TaskRun.progressPayload` records only the local-policy version, corpus version, advisory schema version, result source, bounded summary, and tool count. It does not copy the provider-review packet or organization reference into the audit metadata.
+
+**Verification completed:** packet round-trip and fail-closed parsing; canonical router propagation; valid conditional local result; unsafe local approval replacement; malformed result fallback; no-local-endpoint fallback; COO rendering; no raw-intake audit assertion; 124 focused Vitest assertions; web TypeScript check with an explicit 8 GB Node heap after the default 4 GB local limit was exhausted without a TypeScript diagnostic.
+
+**Verification remaining:** run the merged-code production build and drive the authenticated provider-onboarding consultation against the governed shared nonproduction runtime with cloud providers disabled. Do not mark `BI-EDAAD429` done until that evidence exists.
 
 ## Risks and rollback
 

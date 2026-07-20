@@ -16,6 +16,13 @@ import {
   parseProviderComplianceAdvisory,
   PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY,
 } from "@/lib/routing/provider-suitability/provider-compliance-advisory";
+import {
+  deterministicProviderComplianceReplyFromHistory,
+  PROVIDER_COMPLIANCE_FALLBACK_CORPUS_VERSION,
+  PROVIDER_COMPLIANCE_LOCAL_POLICY_VERSION,
+  resolveProviderComplianceColdStartReply,
+  type ProviderComplianceResultSource,
+} from "@/lib/routing/provider-suitability/provider-compliance-cold-start";
 
 /**
  * EP-A2A: when a collaboration child thread reaches a terminal state, emit
@@ -95,6 +102,62 @@ export type ChildRuntimeContext = {
   routeContext: string;
 };
 
+async function isProviderComplianceCollaboration(taskRunId: string): Promise<boolean> {
+  const taskRun = await prisma.taskRun.findUnique({
+    where: { taskRunId },
+    select: { a2aMetadata: true },
+  });
+  const provenance = readCollaborationProvenance(taskRun?.a2aMetadata);
+  return provenance?.summary === PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY
+    && provenance.toAgentId === "AGT-902";
+}
+
+async function completeChildThreadExecution(input: {
+  context: ChildRuntimeContext;
+  resolvedAgentId: string;
+  replyText: string;
+  executedToolCount: number;
+  providerComplianceResultSource?: ProviderComplianceResultSource;
+}): Promise<void> {
+  await prisma.agentMessage.create({
+    data: {
+      threadId: input.context.threadId,
+      taskRunId: input.context.taskRunId,
+      role: "assistant",
+      content: input.replyText,
+      agentId: input.resolvedAgentId,
+      routeContext: input.context.routeContext,
+    },
+  });
+
+  await prisma.taskRun.update({
+    where: { taskRunId: input.context.taskRunId },
+    data: {
+      status: "completed",
+      completedAt: new Date(),
+      currentAgentId: input.resolvedAgentId,
+      progressPayload: {
+        summary: input.replyText.slice(0, SUMMARY_LIMIT),
+        executedToolCount: input.executedToolCount,
+        ...(input.providerComplianceResultSource
+          ? {
+              providerCompliance: {
+                policyVersion: PROVIDER_COMPLIANCE_LOCAL_POLICY_VERSION,
+                corpusVersion: PROVIDER_COMPLIANCE_FALLBACK_CORPUS_VERSION,
+                advisorySchemaVersion: "provider-compliance-advisory.v1",
+                resultSource: input.providerComplianceResultSource,
+              },
+            }
+          : {}),
+      },
+    },
+  });
+  await emitCollaborationReturn(input.context.threadId, input.context.taskRunId, "completed", {
+    specialistReply: input.replyText,
+    routeContext: input.context.routeContext,
+  });
+}
+
 export async function prepareChildExecution(
   childThreadId: string,
   userId: string,
@@ -170,6 +233,7 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
     }
 
     const userContext = await loadUserContext(context.userId);
+    const providerComplianceCollaboration = await isProviderComplianceCollaboration(context.taskRunId);
 
     const agentInfo = await resolveAutonomousWorkAgent({
       agentId: context.agentId,
@@ -219,49 +283,58 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
       return;
     }
 
-    const result = await executeAutonomousAgenticLoop({
-      systemPrompt: agentInfo.systemPrompt,
-      chatHistory,
-      sensitivity: agentInfo.sensitivity ?? "internal",
-      tools,
-      toolsForProvider,
-      userId: context.userId,
-      routeContext: context.routeContext,
-      agentId: resolvedAgentId,
-      threadId: context.threadId,
-      taskRunId: context.taskRunId,
-    });
-
-    const replyText = typeof result.content === "string" && result.content.trim().length > 0
-      ? result.content
-      : "(no response)";
-
-    await prisma.agentMessage.create({
-      data: {
+    let result: Awaited<ReturnType<typeof executeAutonomousAgenticLoop>>;
+    try {
+      result = await executeAutonomousAgenticLoop({
+        systemPrompt: agentInfo.systemPrompt,
+        chatHistory,
+        sensitivity: agentInfo.sensitivity ?? "internal",
+        tools,
+        toolsForProvider,
+        userId: context.userId,
+        routeContext: context.routeContext,
+        agentId: resolvedAgentId,
         threadId: context.threadId,
         taskRunId: context.taskRunId,
-        role: "assistant",
-        content: replyText,
-        agentId: resolvedAgentId,
-        routeContext: context.routeContext,
-      },
-    });
+        ...(providerComplianceCollaboration
+          ? {
+              taskType: "provider-compliance-onboarding",
+              modelRequirements: {
+                residencyPolicy: "local_only",
+                defaultBudgetClass: "minimize_cost",
+              },
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (!providerComplianceCollaboration) throw error;
+      const fallback = deterministicProviderComplianceReplyFromHistory(chatHistory);
+      await completeChildThreadExecution({
+        context,
+        resolvedAgentId,
+        replyText: fallback.content,
+        executedToolCount: 0,
+        providerComplianceResultSource: fallback.resultSource,
+      });
+      return;
+    }
 
-    await prisma.taskRun.update({
-      where: { taskRunId: context.taskRunId },
-      data: {
-        status: "completed",
-        completedAt: new Date(),
-        currentAgentId: resolvedAgentId,
-        progressPayload: {
-          summary: replyText.slice(0, SUMMARY_LIMIT),
-          executedToolCount: result.executedTools?.length ?? 0,
-        },
-      },
-    });
-    await emitCollaborationReturn(context.threadId, context.taskRunId, "completed", {
-      specialistReply: replyText,
-      routeContext: context.routeContext,
+    let replyText = typeof result.content === "string" && result.content.trim().length > 0
+      ? result.content
+      : "(no response)";
+    const providerResolution = providerComplianceCollaboration
+      ? resolveProviderComplianceColdStartReply({ specialistReply: replyText, chatHistory })
+      : null;
+    if (providerResolution) replyText = providerResolution.content;
+
+    await completeChildThreadExecution({
+      context,
+      resolvedAgentId,
+      replyText,
+      executedToolCount: result.executedTools?.length ?? 0,
+      ...(providerResolution
+        ? { providerComplianceResultSource: providerResolution.resultSource }
+        : {}),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Child thread execution failed";

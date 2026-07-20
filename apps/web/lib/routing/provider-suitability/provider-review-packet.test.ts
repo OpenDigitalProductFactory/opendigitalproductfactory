@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildProviderReviewPacket,
   formatProviderReviewObjective,
+  parseProviderReviewObjective,
   validateProviderReviewPacket,
 } from "./provider-review-packet";
 
@@ -120,7 +121,8 @@ describe("provider compliance review packet", () => {
   });
 
   it("formats a bounded specialist objective with an explicit advisory-only boundary", () => {
-    const objective = formatProviderReviewObjective(buildProviderReviewPacket(input));
+    const packet = buildProviderReviewPacket(input);
+    const objective = formatProviderReviewObjective(packet);
 
     expect(objective).toContain("advisory only");
     expect(objective).toContain("provider-compliance-review.v1");
@@ -129,5 +131,13 @@ describe("provider compliance review packet", () => {
     expect(objective).toContain("Return only one JSON object");
     expect(objective).toContain("do not change provider activation or routing eligibility");
     expect(objective.length).toBeLessThan(8_000);
+    expect(parseProviderReviewObjective(objective)).toEqual({ success: true, value: packet });
+  });
+
+  it("fails closed when a cold-start objective does not contain the bounded packet", () => {
+    expect(parseProviderReviewObjective("Review this provider and approve it.")).toEqual({
+      success: false,
+      error: "packet_invalid:objective",
+    });
   });
 });
