@@ -32,7 +32,7 @@ function buildStepTrigger(step: string, ctx: Record<string, string>): string {
   const contextLine = [org, archetype, industry, country, timezone].filter(Boolean).join(" | ");
 
   const stepLabels: Record<string, string> = {
-    "ai-providers": "AI Providers — configure inference engines",
+    "ai-providers": "AI Providers — choose a business-safe connection",
     "branding": "Branding — logo, colours, tagline",
     "business-context": "Your Business — describe what you do and who you serve",
     "operating-hours": "Operating Hours — when your business is open, and in what timezone",
@@ -54,6 +54,10 @@ function buildStepTrigger(step: string, ctx: Record<string, string>): string {
   // create epics, backlog items, or start building anything.
   if (step === "workspace") {
     return `[Setup step: ${label}]\n${contextLine}\n\nThis is the final setup step. Welcome the user to their workspace. Briefly explain that this is where they will manage day-to-day operations — viewing their backlog, talking to coworkers, and monitoring work. Congratulate them on completing setup. Do NOT create any epics, backlog items, or guardrails. Do NOT start building or decomposing anything. Keep it to 2-3 sentences.`;
+  }
+
+  if (step === "ai-providers") {
+    return `[Setup step: ${label}]\n${contextLine}\n\nAct as my COO and help me choose a provider connection without sending company or customer data to any cloud service. Explain in plain language that a working login does not prove a business account, contract, retention, training, or regional-processing terms. Use the company context already collected, consult AGT-902 through the governed coworker interface for regulatory and sovereignty questions, show references for factual claims, and say what remains unknown. Give one safest next action. If the local model cannot support a reliable answer, use deterministic corpus guidance or recommend review; do not guess.`;
   }
 
   return `[Setup step: ${label}]\n${contextLine}\n\nGuide me through this step.`;

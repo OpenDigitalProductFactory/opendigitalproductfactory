@@ -47,16 +47,17 @@ import {
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
 
-// SETUP_STEPS has 9 entries:
+// SETUP_STEPS has 10 entries:
 //   0: account-bootstrap
-//   1: ai-providers
-//   2: branding
-//   3: business-context
-//   4: operating-hours
-//   5: storefront
-//   6: platform-development
-//   7: build-studio
-//   8: workspace
+//   1: business-context
+//   2: ai-providers
+//   3: branding
+//   4: how-you-decide
+//   5: operating-hours
+//   6: storefront
+//   7: platform-development
+//   8: build-studio
+//   9: workspace
 
 describe("setup flow integration", () => {
   it("walks through the full step sequence", async () => {
@@ -69,15 +70,15 @@ describe("setup flow integration", () => {
 
     // Advance step 0 → step 1
     const step1 = await advanceStep(progress.id, { orgName: "Test Co" });
-    expect(step1.currentStep).toBe("ai-providers");
+    expect(step1.currentStep).toBe("business-context");
 
     // Skip step 1 → step 2
     const step2 = await skipStep(progress.id);
-    expect(step2.currentStep).toBe("branding");
+    expect(step2.currentStep).toBe("ai-providers");
 
     // Advance step 2 → step 3
     const step3 = await advanceStep(progress.id);
-    expect(step3.currentStep).toBe("business-context");
+    expect(step3.currentStep).toBe("branding");
 
     // Advance step 3 → step 4 (the stance-confirmation step, BI-D6DC2432)
     const step4 = await advanceStep(progress.id);

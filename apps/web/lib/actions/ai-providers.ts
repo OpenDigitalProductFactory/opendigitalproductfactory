@@ -313,8 +313,6 @@ export async function configureProvider(input: {
   return {};
 }
 
-// ─── Test provider auth ───────────────────────────────────────────────────────
-
 function buildResponsesProbeUrl(providerId: string, baseUrl: string): string {
   if (providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api")) {
     return `${baseUrl}/codex/responses`;
@@ -474,7 +472,8 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
 
     res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
     if (res.ok) {
-      // Clearance derived automatically: local/ollama → 4 levels, cloud → 3 levels
+      // Clearance is evidence-derived: local/non-egress can use all levels;
+      // hosted connections remain public-only until business terms are reviewed.
       await activateProvider(providerId, {
         trigger: "test_auth",
         ...getLinkedActivationOptions(providerId, provider.authMethod),

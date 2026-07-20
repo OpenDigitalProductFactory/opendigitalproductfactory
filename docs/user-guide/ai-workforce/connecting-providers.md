@@ -10,6 +10,8 @@ relatedCode:
 
 The platform connects to external AI providers to run inference for your AI workforce. Depending on the provider, you can authenticate using one of three methods: API Key, OAuth Sign-in, or None (for local providers). Each method is configured on the provider's detail page under External Services.
 
+Authentication proves only that a connection works. Before using company or customer data, also identify whether the connected account is personal/individual, business/team, enterprise, or unknown, and review its contract, retention, training, and processing-region terms. DPF keeps unreviewed hosted connections limited to public or synthetic work.
+
 ## Authentication Methods
 
 ### API Key
@@ -47,11 +49,28 @@ Supported providers: Docker Model Runner, Ollama.
 
 ## Choosing the Right Method
 
-- If you have a subscription (Claude Max, ChatGPT Plus/Pro) — use OAuth.
-- If you have an API account with billing — use API Key.
+- If you have a personal subscription — OAuth may connect it, but keep it to public or synthetic work unless the provider explicitly supplies suitable business terms for that exact account.
+- If you have a business/team or enterprise subscription — use its supported connection method, then record and review the connected account's terms.
+- If you have a metered API account — use an API key, then separately verify who owns the account and which data protections are actually enabled.
 - If you are running models locally — use None (auto-detected).
 
 Some providers support both OAuth and API Key. You can switch between methods on the provider detail page at any time. Disconnecting an OAuth connection clears the stored token immediately.
+
+## Business-safe review
+
+The Providers & Routing page gives one recommendation grouped as **Use now**, **Use after review**, and **Not for this work**. It also previews what may leave the installation, what remains controlled, and what DPF blocks.
+
+On each provider detail page, record:
+
+- the connected account type;
+- whether no-training treatment has been verified in the provider's current terms;
+- the processing regions enabled for that exact connection.
+
+This is recorded as an operator attestation, not contract proof. A DPA, BAA, supplier contract, special retention option, or regional entitlement still needs its own evidence. Provider-published privacy pages describe an offering; they do not prove what your account purchased or enabled.
+
+For EEA, UK, public-sector, healthcare, education, financial-services, or other regulated use, ask the COO to consult the Data Governance Agent. The answer should cite applicable regulator guidance and provider terms, identify unknowns, and recommend qualified review when it cannot substantiate a claim.
+
+Local processing reduces external egress but is not automatically compliant. Security, retention, lawful basis, access control, capability, and sector obligations still apply.
 
 ## Finance Bridge
 

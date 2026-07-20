@@ -19,6 +19,7 @@ import { OAuthPortMismatchBanner } from "@/components/admin/OAuthPortMismatchBan
 import { AiProviderFinancePanel } from "@/components/finance/AiProviderFinancePanel";
 import { getAiProviderFinanceDetail } from "@/lib/finance/ai-provider-finance";
 import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
+import { ProviderAccountPostureForm } from "@/components/platform/ProviderAccountPostureForm";
 
 type Props = { params: Promise<{ providerId: string }> };
 
@@ -53,7 +54,7 @@ export default async function ProviderDetailPage({ params }: Props) {
       await getProviderBearerToken(providerId).catch(() => null);
     }
   }
-  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts, financeDetail, tokenSpend] = await Promise.all([
+  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts, financeDetail, tokenSpend, providerConnection] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
     getModelProfiles(providerId),
@@ -65,6 +66,7 @@ export default async function ProviderDetailPage({ params }: Props) {
     getModelClassCounts(providerId),
     getAiProviderFinanceDetail(providerId),
     getTokenSpendByProvider(currentMonth),
+    prisma.aiProviderConnection.findUnique({ where: { connectionId: `provider-default-${providerId}` } }),
   ]);
   if (!pw) notFound();
   const costView = buildProviderCostView({
@@ -165,6 +167,23 @@ export default async function ProviderDetailPage({ params }: Props) {
         <McpServiceDetail provider={pw.provider} />
       ) : (
         <>
+          <ProviderAccountPostureForm
+            providerId={providerId}
+            canWrite={canWrite}
+            initial={providerConnection ? {
+              accountClass: providerConnection.accountClass,
+              noTraining: providerConnection.entitlements && typeof providerConnection.entitlements === "object" && !Array.isArray(providerConnection.entitlements)
+                ? (providerConnection.entitlements as Record<string, unknown>).noTraining === true
+                  ? true
+                  : (providerConnection.entitlements as Record<string, unknown>).noTraining === false
+                    ? false
+                    : null
+                : null,
+              enabledRegions: providerConnection.entitlements && typeof providerConnection.entitlements === "object" && !Array.isArray(providerConnection.entitlements) && Array.isArray((providerConnection.entitlements as Record<string, unknown>).enabledRegions)
+                ? ((providerConnection.entitlements as Record<string, unknown>).enabledRegions as unknown[]).filter((region): region is string => typeof region === "string")
+                : [],
+            } : null}
+          />
           {/* BI-87D93A71 (Minimum): surface OAuth callback port mismatch
               BEFORE the user clicks Connect — eliminates the silent
               :3000 → :1455 origin divergence that the shared OpenAI

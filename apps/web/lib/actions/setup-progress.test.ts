@@ -98,7 +98,7 @@ describe("setup-progress", () => {
       (prisma.platformSetupProgress.findUniqueOrThrow as any).mockResolvedValue(mockProgress);
       (prisma.platformSetupProgress.update as any).mockResolvedValue({
         ...mockProgress,
-        currentStep: "ai-providers",
+        currentStep: "business-context",
       });
 
       await advanceStep("test-id", { orgName: "Test Co" });
@@ -106,7 +106,7 @@ describe("setup-progress", () => {
       expect(prisma.platformSetupProgress.update).toHaveBeenCalledWith({
         where: { id: "test-id" },
         data: expect.objectContaining({
-          currentStep: "ai-providers",
+          currentStep: "business-context",
         }),
       });
     });

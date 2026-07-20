@@ -26,7 +26,7 @@ export interface ActivateProviderOpts {
   /** Override authMethod (set during OAuth exchange). */
   authMethod?: string;
 
-  /** Explicit clearance override.  When omitted, derived from provider category. */
+  /** Explicit clearance restriction. It can narrow, but never broaden, derived clearance. */
   sensitivityClearance?: SensitivityLevel[];
 
   /** Skip model discovery (MCP services, seeds that handle discovery separately). */
@@ -52,11 +52,27 @@ export interface ActivationResult {
  * Local / on-prem providers get all four levels including "restricted".
  * Cloud providers default to three levels (no "restricted").
  */
-function deriveClearance(provider: {
+type ConnectionClearanceFacts = {
+  accountClass: string;
+  evidenceStatus: string;
+  entitlements: unknown;
+};
+
+function entitlementIsTrue(value: unknown, key: string): boolean {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) &&
+    (value as Record<string, unknown>)[key] === true);
+}
+
+/**
+ * Authentication proves that a credential works; it does not prove that the
+ * connected account has commercial data protections. Hosted connections stay
+ * public-only until the account and its no-training treatment are reviewed.
+ */
+export function deriveActivationClearance(provider: {
   category: string;
   endpointType: string;
   providerId: string;
-}): SensitivityLevel[] {
+}, connections: ConnectionClearanceFacts[]): SensitivityLevel[] {
   if (
     provider.category === "local" ||
     provider.endpointType === "ollama" ||
@@ -65,7 +81,24 @@ function deriveClearance(provider: {
   ) {
     return ["public", "internal", "confidential", "restricted"];
   }
-  return ["public", "internal", "confidential"];
+
+  const everyConnectionReviewed = connections.length > 0 && connections.every((connection) => {
+    const businessAccount = connection.accountClass === "business-team" || connection.accountClass === "enterprise";
+    const currentEvidence = connection.evidenceStatus === "operator-attested" || connection.evidenceStatus === "contract-uploaded";
+    return businessAccount && currentEvidence && entitlementIsTrue(connection.entitlements, "noTraining");
+  });
+  return everyConnectionReviewed
+    ? ["public", "internal", "confidential"]
+    : ["public"];
+}
+
+function narrowClearance(
+  derived: SensitivityLevel[],
+  requested?: SensitivityLevel[],
+): SensitivityLevel[] {
+  if (!requested) return derived;
+  const allowed = new Set(derived);
+  return requested.filter((level) => allowed.has(level));
 }
 
 // ─── Core function ──────────────────────────────────────────────────────────────
@@ -97,9 +130,20 @@ export async function activateProvider(
     };
   }
 
-  // 1. Derive clearance if not explicitly provided
-  const clearance: SensitivityLevel[] =
-    opts.sensitivityClearance ?? deriveClearance(provider);
+  // 1. Derive clearance from connection evidence. Working credentials alone
+  // never manufacture business-account or contract posture.
+  // A missing evidence reader (including older test doubles or a partially
+  // converged runtime) fails closed to public-only for hosted providers.
+  const connections = typeof prisma.aiProviderConnection?.findMany === "function"
+    ? await prisma.aiProviderConnection.findMany({
+        where: { providerId, status: { not: "disabled" } },
+        select: { accountClass: true, evidenceStatus: true, entitlements: true },
+      })
+    : [];
+  const clearance = narrowClearance(
+    deriveActivationClearance(provider, connections),
+    opts.sensitivityClearance,
+  );
 
   // 2. Update provider state atomically
   await prisma.modelProvider.update({

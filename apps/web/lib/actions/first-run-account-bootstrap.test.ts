@@ -31,7 +31,7 @@ describe("bootstrapFirstRunOwner", () => {
       userId: "user-1",
       email: "owner@example.com",
     });
-    actionMocks.advanceStep.mockResolvedValue({ currentStep: "ai-providers" });
+    actionMocks.advanceStep.mockResolvedValue({ currentStep: "business-context" });
     actionMocks.signIn.mockResolvedValue(undefined);
   });
 
