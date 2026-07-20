@@ -55,6 +55,21 @@ describe("nearby federation pairing contract", () => {
         candidateDiscoveryId: "rotating-b-123456",
       }),
     ).toThrow(/nearby private or local endpoint/i);
+    for (const requesterAuthorityUrl of [
+      "https://dpf-a.local/connect/pair",
+      "https://operator:secret@dpf-a.local",
+      "https://dpf-a.local?mode=pair",
+      "https://dpf-a.local#pair",
+    ]) {
+      expect(() =>
+        parseNearbyPairingRequest({
+          requesterAuthorityUrl,
+          displayName: "Mac development installation",
+          requesterInstallationId: `inst_${"a".repeat(32)}`,
+          candidateDiscoveryId: "rotating-b-123456",
+        }),
+      ).toThrow(/authority URL must be an origin/i);
+    }
     expect(() =>
       parseNearbyPairingRequest({
         requesterAuthorityUrl: "https://dpf-a.local",

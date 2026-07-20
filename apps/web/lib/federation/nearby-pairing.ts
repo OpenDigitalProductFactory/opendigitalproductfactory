@@ -137,7 +137,16 @@ export function parseNearbyPairingRequest(value: unknown): NearbyPairingRequest 
   if (url.protocol !== "https:") {
     throw new Error("automatic pairing requires certificate-valid HTTPS");
   }
-  if (!isLinkLocalFederationEndpoint(requesterAuthorityUrl)) {
+  if (
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error("requester authority URL must be an origin");
+  }
+  if (!isLinkLocalFederationEndpoint(url.origin)) {
     throw new Error("automatic pairing requires a nearby private or local endpoint");
   }
 
@@ -159,7 +168,7 @@ export function parseNearbyPairingRequest(value: unknown): NearbyPairingRequest 
   }
 
   return {
-    requesterAuthorityUrl: requesterAuthorityUrl.replace(/\/+$/, ""),
+    requesterAuthorityUrl: url.origin,
     displayName: boundedString(input.displayName, "display name", MAX_DISPLAY_NAME_LENGTH),
     requesterInstallationId,
     candidateDiscoveryId,
