@@ -59,6 +59,8 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/autostart.sh"
 # shellcheck source=scripts/installer/lib/github-cli.sh
 . "$LIB_DIR/github-cli.sh"
+# shellcheck source=scripts/installer/native-edge-host.sh
+. "$REPO_ROOT/scripts/installer/native-edge-host.sh"
 
 # Installer version (semver-ish; bump per release).
 DPF_INSTALLER_VERSION="2026.05.11-phase10a"
@@ -1004,10 +1006,20 @@ if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
         printf 'DPF_EDGE_NODE_NAME=%s\n' "${HOSTNAME:-$(hostname 2>/dev/null || echo edge-node-local)}" >> .env
       fi
 
-      # Restart the edge-node service so it picks up the new env. The
-      # service was started in step 10 but enrolled with no token (or
-      # a stale one); recreate-without-deps avoids touching the portal.
-      if docker compose "${DPF_COMPOSE_FILES[@]}" up -d --no-deps --force-recreate edge-node >/dev/null 2>&1; then
+      # Docker Desktop does not expose macOS host multicast interfaces to the
+      # Linux VM. Install the Go Edge Node as a supervised host process there;
+      # Linux retains the container runtime.
+      if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ]; then
+        if dpf_native_edge_install "$REPO_ROOT" "$EDGE_TOKEN" "${HOSTNAME:-$(hostname -s 2>/dev/null || echo dpf-macos)}"; then
+          if [ -f "$REPO_ROOT/docker-compose.edge.yml" ]; then
+            docker compose -f docker-compose.yml -f docker-compose.edge.yml stop edge-node >/dev/null 2>&1 || true
+          fi
+          ok "Native Edge Node bootstrapped on the macOS host"
+          info "  The node enrolls within ~10s; check Platform > Connections."
+        else
+          warn "Native Edge Node installation failed; the portal remains healthy."
+        fi
+      elif docker compose "${DPF_COMPOSE_FILES[@]}" up -d --no-deps --force-recreate edge-node >/dev/null 2>&1; then
         ok "Edge Node bootstrapped — auto-approve token wired into .env"
         info "  The node enrolls within ~10s; check Admin > Platform Development > Edge Nodes."
       else

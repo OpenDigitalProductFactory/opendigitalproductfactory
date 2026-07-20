@@ -152,17 +152,14 @@ single-tree mode persists — current behavior, full back-compat.
 12. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
 13. **Edge Node bootstrap** (only with `--with-edge`) — mints a single-use
-    auto-approve bootstrap token, writes it to `.env` as
-    `DPF_BOOTSTRAP_TOKEN`, restarts the `edge-node` container so it
-    enrolls. The new EdgeNode lands directly in `trustState=trusted`
-    per spec § Approval policy. **macOS limitation:** the Edge Node
-    runs in bridge mode (Docker Desktop doesn't honor
-    `network_mode: host` the way Linux does), so its discovery output
-    sees the Docker Desktop VM's interfaces rather than your Mac's
-    real NICs. That's a known constraint resolved by the future
-    native macOS Edge Node binary (T3) — until then, the Edge Node
-    here demonstrates the enrollment + heartbeat + submission path
-    but not L2 host-network discovery.
+    auto-approve token and installs the checksum-verified Go Edge Node as
+    `local.dpf-edge-node`, a launchd-supervised host process. It enrolls as a
+    trusted `native` node and owns the Mac's physical multicast interfaces, so
+    nearby DPF discovery is no longer trapped inside Docker Desktop's Linux VM.
+    The installer uses the active private IPv4 portal address by default.
+    Discovery works over HTTP; automatic pairing remains blocked until
+    `DPF_LAN_AUTHORITY_URL` names a certificate-valid HTTPS origin trusted by
+    the other installation.
 14. **Voice / TTS sidecar** (Apple Silicon only) — runs
     `scripts/tts/setup-chatterbox-tts-macos.sh` to provision the
     native-host text-to-speech sidecar (port `8771`) and wire its

@@ -11,15 +11,27 @@ BeforeAll {
     $script:RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     $script:InstallerPath = Join-Path $script:RepoRoot 'install-dpf.ps1'
     . $script:InstallerPath -LibraryOnly
+    . (Resolve-DPFNativeEdgeModulePath -InstallDir $script:RepoRoot)
 }
 
 Describe "Windows installer Edge Node compose chain" {
+    It "loads as a standalone downloaded bootstrap before release companions exist" {
+        $standaloneRoot = Join-Path $TestDrive "standalone"
+        New-Item -ItemType Directory -Path $standaloneRoot | Out-Null
+        $standaloneInstaller = Join-Path $standaloneRoot "install-dpf.ps1"
+        Copy-Item -LiteralPath $script:InstallerPath -Destination $standaloneInstaller
+
+        { . $standaloneInstaller -LibraryOnly } | Should -Not -Throw
+        Get-Command Resolve-DPFNativeEdgeModulePath -ErrorAction Stop | Should -Not -BeNullOrEmpty
+    }
+
     It "loads installer Edge Node helper functions without running the installer flow" {
         Get-Command Get-DPFComposeArgs -ErrorAction Stop | Should -Not -BeNullOrEmpty
         Get-Command Get-DPFEdgeComposeContent -ErrorAction Stop | Should -Not -BeNullOrEmpty
         Get-Command Get-DPFStartScriptContent -ErrorAction Stop | Should -Not -BeNullOrEmpty
         Get-Command Get-DPFStopScriptContent -ErrorAction Stop | Should -Not -BeNullOrEmpty
         Get-Command Set-DPFEnvFileValue -ErrorAction Stop | Should -Not -BeNullOrEmpty
+        Get-Command Install-DPFNativeEdgeNode -ErrorAction Stop | Should -Not -BeNullOrEmpty
     }
 
     It "builds the base, override, and Edge Node compose chain in order when edge is opted in" {
@@ -57,10 +69,11 @@ Describe "Windows installer Edge Node compose chain" {
         ($composeArgs -join "|") | Should -Be "-f|docker-compose.yml"
     }
 
-    It "renders a generated start script that starts the Edge Node overlay" {
+    It "renders a generated start script that starts the host-native Edge task" {
         $script = Get-DPFStartScriptContent
 
-        $script | Should -Match "docker-compose\.edge\.yml"
+        $script | Should -Not -Match "docker-compose\.edge\.yml"
+        $script | Should -Match "DPF-Native-Edge-Node"
         $script | Should -Match "docker compose @composeArgs up -d"
         $script | Should -Not -Match "(?m)^docker compose up -d$"
     }

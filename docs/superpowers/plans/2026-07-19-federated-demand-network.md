@@ -64,11 +64,28 @@
   implications in `docs/install/platform-support-watchlist.md`.
 - [x] Advertise `_dpf-federation._tcp.local.` over HTTP or HTTPS with rotating service/host aliases, privacy-safe TXT data, and no stable organization/customer identity. Treat the advertised scheme as routing metadata only.
 - [x] Deduplicate and expire candidates; discovery creates candidates only and never creates trust.
-- [ ] Reuse `FederationBootstrapToken`, high-entropy invitations, matching human-readable codes, dual approval, and rotating link credentials for nearby and QR/deep-link pairing. Automatic nearby pairing must require a certificate-valid HTTPS endpoint; never send the invitation over HTTP or after a certificate failure. Keep manual out-of-band invitation as the fallback.
+- [x] Reuse `FederationBootstrapToken`, high-entropy invitations, matching human-readable codes, dual approval, and rotating link credentials for nearby and QR/deep-link pairing. Automatic nearby pairing must require a certificate-valid HTTPS endpoint; never send the invitation over HTTP or after a certificate failure. Keep manual out-of-band invitation as the fallback.
 - [x] Add the `same-organization` preset summary and independent outbound contract review on both nodes.
 - [x] Add feature-flag/kill-switch behavior and visible health without making portal startup depend on discovery.
 
 **Verification:** privacy fixture inspection; spoofed/expired candidate tests; invitation replay rejection; dual-approval transition tests; Windows/macOS two-node pairing evidence; Connections UX verification; production build.
+
+#### Task 2 installed-runtime closure
+
+- [x] Publish checksum-bound macOS arm64 and Windows amd64 native Edge assets
+  with stable releases.
+- [x] Replace the Docker Desktop Edge allocation with a supervised host-native
+  process when `--with-edge` / `-WithEdge` is selected; retain the container
+  allocation on native Linux.
+- [x] Derive a LAN-reachable private IPv4 Authority URL when no explicit
+  `DPF_LAN_AUTHORITY_URL` is configured and state honestly that HTTP enables
+  discovery but not automatic pairing.
+- [x] Exercise native enrollment and `federation.discovery` capability
+  registration on an installed internal macOS host.
+- [ ] Exercise install, service restart, candidate add/remove, and pairing on
+  the installed internal Windows host; V-01/V-03 remain open until recorded.
+- [ ] Configure a certificate-valid HTTPS Authority URL on both installed
+  hosts before claiming automatic nearby invitation exchange.
 
 ### Task 2 UX fit review — nearby Connections
 

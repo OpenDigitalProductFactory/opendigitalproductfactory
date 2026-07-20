@@ -90,6 +90,7 @@ COPY scripts/installer/install-state-schema-registry.mjs ./scripts/installer/
 COPY scripts/installer/install-state.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v1.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
+COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
@@ -144,6 +145,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/lib/state.ps1 /dpf-release-assets/scripts/installer/lib/ && \
     cp -R monitoring/. /dpf-release-assets/monitoring/ && \
     cd /dpf-release-assets && \

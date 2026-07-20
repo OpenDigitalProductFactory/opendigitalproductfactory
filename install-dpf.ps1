@@ -8,6 +8,21 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+function Resolve-DPFNativeEdgeModulePath {
+    param([Parameter(Mandatory)][string]$InstallDir)
+
+    $candidates = @(
+        (Join-Path $InstallDir "scripts\installer\native-edge-host.ps1"),
+        (Join-Path $PSScriptRoot "scripts\installer\native-edge-host.ps1")
+    )
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return $candidate
+        }
+    }
+    throw "native_edge_host_module_missing"
+}
+
 # --- Helpers ----------------------------------------------------------------
 
 function Write-Step($step, $total, $msg) {
@@ -524,11 +539,11 @@ if (Test-Path (Join-Path $DPF_DIR "docker-compose.release.yml")) {
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
     $composeArgs += @("-f", "docker-compose.override.yml")
 }
-if ($includeEdge -and (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml"))) {
-    $composeArgs += @("-f", "docker-compose.edge.yml")
-}
-
 docker compose @composeArgs up -d
+
+if ($includeEdge) {
+    Start-ScheduledTask -TaskName "DPF-Native-Edge-Node" -ErrorAction SilentlyContinue
+}
 
 Write-Host "Waiting for portal to be ready..." -ForegroundColor Cyan
 $attempts = 0
@@ -577,11 +592,8 @@ if (Test-Path (Join-Path $DPF_DIR "docker-compose.release.yml")) {
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
     $composeArgs += @("-f", "docker-compose.override.yml")
 }
-if (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml")) {
-    $composeArgs += @("-f", "docker-compose.edge.yml")
-}
-
 docker compose @composeArgs down
+Stop-ScheduledTask -TaskName "DPF-Native-Edge-Node" -ErrorAction SilentlyContinue
 Write-Host "Digital Product Factory stopped." -ForegroundColor Yellow
 '@
 }
@@ -616,11 +628,9 @@ function Set-DPFEnvFileValue {
 function Invoke-DPFEdgeNodeBootstrap {
     param([Parameter(Mandatory)][string]$InstallDir)
 
-    $edgeComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
-    if ($edgeComposeArgs -notcontains "docker-compose.edge.yml") {
-        Write-Warn "docker-compose.edge.yml was not found. Skipping bundled Edge Node bootstrap."
-        return $false
-    }
+    $edgeModule = Resolve-DPFNativeEdgeModulePath -InstallDir $InstallDir
+    . $edgeModule
+    $edgeComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$false
 
     Write-Action "Bootstrapping bundled Edge Node..."
     $portalReady = $false
@@ -665,30 +675,11 @@ function Invoke-DPFEdgeNodeBootstrap {
     Set-DPFEnvFileValue -Path $envPath -Key "DPF_BOOTSTRAP_TOKEN" -Value $edgeToken
     Set-DPFEnvFileValue -Path $envPath -Key "DPF_EDGE_NODE_NAME" -Value ([System.Net.Dns]::GetHostName())
     Write-OK "Bootstrap token wired into .env (auto-approve)"
-
-    $oldEAP = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    docker compose @edgeComposeArgs up -d --no-deps --force-recreate edge-node 2>&1 | Out-Null
-    $edgeUpExit = $LASTEXITCODE
-    $ErrorActionPreference = $oldEAP
-    if ($edgeUpExit -ne 0) {
-        Write-Warn "edge-node container start failed."
-        return $false
+    if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version) {
+        $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
+        docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
+        return $true
     }
-
-    for ($i = 0; $i -lt 12; $i++) {
-        $edgeContainer = (docker compose @edgeComposeArgs ps -q edge-node 2>$null) -split "`n" | Select-Object -First 1
-        if ($edgeContainer) {
-            $state = docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' $edgeContainer 2>$null
-            if ($state -match "^running (healthy|no-healthcheck)") {
-                Write-OK "Edge Node container is $state"
-                return $true
-            }
-        }
-        Start-Sleep -Seconds 5
-    }
-
-    Write-Warn "Edge Node container was started, but did not report healthy within 60 seconds."
     return $false
 }
 
