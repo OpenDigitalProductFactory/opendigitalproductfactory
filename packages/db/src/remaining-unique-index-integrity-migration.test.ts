@@ -129,7 +129,7 @@ describeDatabase("remaining unique-index integrity migration", () => {
   it("keeps canonical rows active, preserves every loser, and rebuilds all indexes", async () => {
     const migration = await readFile(
       new URL(
-        "../prisma/migrations/20260720190000_repair_remaining_unique_index_integrity/migration.sql",
+        "../prisma/migrations/20260720193000_repair_remaining_unique_index_integrity/migration.sql",
         import.meta.url,
       ),
       "utf8",

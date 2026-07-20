@@ -33,9 +33,13 @@ A forced-heap catalog sweep (`enable_indexscan`, `enable_indexonlyscan`, and `en
 4. Run the targeted fixture, the DB suite/typecheck, migration-safety/data-impact guards, and the exact-SHA merged-code pregate.
 5. Deploy through governed self-upgrade, prove zero forced-heap divergence and healthy index metadata, then rerun the leased contributor preview through clone completion and `:3001/api/health`.
 
-## Work mapping
+## Backlog coverage
 
+- Decision: atomic
+- Parent: `BI-63D490FD`
 - Fleet-safe repair, fixture, data-impact evidence, live heap/index proof, and full preview acceptance -> `BI-63D490FD`
+- Dependencies: builds on the earlier per-table repairs through `BI-69306ED7`; blocks contributor-preview acceptance `BI-7430E579`
+- Receipt: `cmrtihrio00fe01r0wkaly4g3`
 - Rationale: all nine findings are manifestations of the same source-heap/index divergence and jointly block the same clone pipeline. Shipping a subset would knowingly leave the clone broken at the next table.
 
 ## Data lifecycle and rollback
@@ -52,7 +56,3 @@ A forced-heap catalog sweep (`enable_indexscan`, `enable_indexonlyscan`, and `en
 - [ ] Exact-SHA merged-code pregate passes.
 - [ ] Governed live migration shows zero forced-heap divergence and all nine indexes valid/ready/live.
 - [ ] Contributor preview completes migrations, sanitized clone, and `GET :3001/api/health`.
-
-## Coverage receipt
-
-- Receipt: `cmrtihrio00fe01r0wkaly4g3`

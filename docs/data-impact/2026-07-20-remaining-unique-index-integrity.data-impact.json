@@ -13,7 +13,7 @@
     "Contributor sanitized-clone source and destination"
   ],
   "migration": {
-    "name": "20260720190000_repair_remaining_unique_index_integrity",
+    "name": "20260720193000_repair_remaining_unique_index_integrity",
     "backfill": "forced-heap convergence for nine canonical unique keys; table-specific deterministic survivors remain active, collision-checked reserved keys preserve every loser and its ID-based history, natural-key foreign keys remain on the canonical business key, and all nine indexes are rebuilt; no row is deleted"
   },
   "tests": [
