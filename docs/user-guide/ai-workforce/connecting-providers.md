@@ -60,6 +60,10 @@ Some providers support both OAuth and API Key. You can switch between methods on
 
 The Providers & Routing page gives one recommendation grouped as **Use now**, **Use after review**, and **Not for this work**. It also previews what may leave the installation, what remains controlled, and what DPF blocks.
 
+You can complete this review with the keyboard and a screen reader. The recommendation status, each connection group, the next action, consultation failures, and setup progress are announced in text rather than by color alone. Long connection names wrap on small screens.
+
+If you choose **Skip safely** or **Review later**, DPF does not treat the provider as approved. Company and customer data stay restricted until the missing account, contract, region, or other evidence is reviewed. You can return to Providers & Routing and ask the COO again; a denied or unavailable consultation does not change provider posture.
+
 On each provider detail page, record:
 
 - the connected account type;

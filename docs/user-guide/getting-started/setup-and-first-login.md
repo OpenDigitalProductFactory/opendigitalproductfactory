@@ -13,8 +13,9 @@ order: 5
 1. Create the owner account and enter the company's business context, including location, markets, customers, risk posture, and data-residency needs.
 2. Review AI providers only after that context is captured. Personal, consumer, and unknown hosted connections remain limited to public or synthetic material until their business terms are reviewed.
 3. Use the COO's provider guidance when the decision is unclear. The COO consults the Data Governance Agent and returns validated source links, explicit unknowns, and one safest next action without sending customer data or secrets to obtain advice. If the available evidence is stale, mismatched, or incomplete, DPF says it cannot confirm the claim and keeps the safer provider posture.
-4. Confirm the first internal user can authenticate and reach the internal shell.
-5. Move into the relevant operational area only after setup and first-login checks succeed.
+4. If you are not ready to choose, select **Skip safely** or **Review later**. Skipping does not approve a hosted provider: company and customer data remain restricted until the missing review is complete.
+5. Confirm the first internal user can authenticate and reach the internal shell.
+6. Move into the relevant operational area only after setup and first-login checks succeed.
 
 ## Help Visibility Policy
 

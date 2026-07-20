@@ -347,6 +347,8 @@ export function AgentMessageBubble({
       <div
         data-testid="agent-message"
         data-message-role="system"
+        role="status"
+        aria-live="polite"
         style={{
           textAlign: "center",
           padding: "8px 0",
