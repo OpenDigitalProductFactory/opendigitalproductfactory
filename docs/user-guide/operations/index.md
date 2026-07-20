@@ -29,6 +29,26 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 - Review deployment logs and backup references for completed promotions
 - Track change requests and their lifecycle (draft, approved, in-progress, completed)
 
+## Shared Demand
+
+Open **Operations > Delivery Flow** (`/ops/demand`) to review demand shared by
+approved DPF connections. A shared item is an observation from another
+installation, not a local backlog item. You can follow it, offer help, or adopt
+it; adoption creates a new locally owned backlog item and never transfers
+control of the sender's work.
+
+For demand your installation owns, use the item-level connection controls to
+share only with eligible approved links. Service-provider and channel links are
+selected explicitly. Forwarding is available only when the original sender
+allowed the Founder Hub audience, and it preserves pseudonymous origin
+provenance. Withdrawal stops the shared copy from being actionable without
+deleting your local item.
+
+If a share or response action is unavailable, check the displayed connection
+state and consent explanation. Manage the relationship itself under **Platform
+> Connections**. See the [federated demand channel runbook](../../operations/federated-demand-channels.md)
+for enrollment, revocation, and recovery procedures.
+
 ## Promotions
 
 The Promotions tab in Operations shows all features that have been through the Build Studio ship phase. Each promotion has a status:

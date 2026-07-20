@@ -12,6 +12,20 @@
 
 **First independently shippable slice:** Task 1. It adds closed relationship/activity/schema registries, safe demand projection templates, runtime conformance helpers, and a Hive result-only negative-egress guard. It changes no schema, route, discovery behavior, or live data flow.
 
+## Backlog coverage
+
+- Decision: decomposed
+- Parent: `BI-E3A084ED`
+- Receipt: `cmrsw3hdn0000lbpg591ouv5s`
+- Rationale: The protocol, same-network fleet, delivery, reseller channel, founder portfolio, and future routed-reach layers are independently deployable business capabilities with explicit sequencing dependencies.
+- Dependencies: internal fleet and delivery depend on protocol; channel depends on delivery; founder portfolio depends on channel; routed reach depends on founder portfolio.
+- Federated demand protocol -> `BI-E3A084ED`
+- Automatic same-network internal fleet sync -> `BI-52D34506`
+- Reliable federated delivery -> `BI-44AA45BF`
+- Reseller and service-provider demand channels -> `BI-D964E2DA`
+- Founder Hub shared portfolio -> `BI-D25A0C31`
+- Future routed federation reach -> `BI-D43D3D76`
+
 ---
 
 ## Task 1: Establish protocol, relationship, projection, and Hive-boundary contracts
@@ -251,6 +265,39 @@ before the backlog item closes.
   browser verification.
 
 **Verification:** customer negative-egress fixtures; multi-partner authorization tests; revoked-link behavior; reseller/customer/founder happy paths; role-appropriate UX; migration deploy and production build.
+
+### Design grounding — Task 4 reseller channels
+
+- **Existing specs/plans reviewed:** the federated-demand network design and
+  this implementation plan, including the local-authority, projection,
+  reseller-channel, and Hive result-only boundaries.
+- **Current code substrate reviewed:** `packages/db/src/federated-demand-contract.ts`,
+  `apps/web/lib/federation/`, the existing Connections route under
+  `apps/web/app/platform/federation-links/`, and Delivery Flow under
+  `apps/web/app/ops/demand/`.
+- **Source of truth:** `FederationLink` owns trust and directional relationship;
+  projection contracts own shareable fields; local `BacklogItem` rows remain
+  authoritative; Founder Hub partner records own commercial standing.
+- **Decision:** extend those owners with explicit, independently revocable
+  channel permissions and bounded response envelopes. Do not create a global
+  backlog, a second partner identity, or a parallel navigation surface.
+
+### Task 4 UX fit review — reseller channels
+
+- **Decision:** progressive disclosure in the existing Connections and Delivery
+  Flow routes. Relationship setup stays in Connections; item-level share,
+  withdraw, forwarding, interest, and help actions appear only in the relevant
+  demand card or partner panel.
+- **Cognitive load:** use business-language role labels and contextual actions;
+  keep protocol versions, pseudonymous origin keys, route attestations, and
+  projection internals out of the operator workflow.
+- **Navigation:** no new global navigation, dashboard, or duplicate backlog.
+- **Authority cues:** sharing and forwarding are explicit; the customer controls
+  outbound scope; withdrawal and revocation remain visible; received demand is
+  never presented as locally owned work until adoption.
+- **Failure/empty states:** no eligible link, revoked consent, withdrawn demand,
+  and response-delivery failures explain the unavailable action without hiding
+  the local backlog or other partners.
 
 ## Task 5: Add Founder Hub shared portfolio and independent Hive result intake
 

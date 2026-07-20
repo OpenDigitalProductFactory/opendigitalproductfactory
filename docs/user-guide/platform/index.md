@@ -44,3 +44,16 @@ Choose the relationship preset that matches the connection:
 - **Service provider / customer** for a reseller or managed-service relationship, then select which side manages the other.
 
 Only the minimum shared projection crosses an approved link. Local backlog detail, work capsules, private plans, attachments, and customer context remain on their originating installation. Either side can pause or revoke the connection.
+
+For service-provider and channel relationships, the customer controls which
+outbound demand may be shared. A connection does not imply exclusivity, and
+multiple partners can coexist with different scopes. Founder Hub operators can
+use the reseller panel on this page to review partner standing, agreements,
+entitlements, support routing, and contribution recognition without creating a
+second customer identity or remote backlog.
+
+Connection revocation stops new demand and response exchange. Item-level
+withdrawal and forwarding controls live in **Operations > Delivery Flow** so
+relationship administration and delivery decisions remain separate. See the
+[federated demand channel runbook](../../operations/federated-demand-channels.md)
+for setup, consent, troubleshooting, and recovery procedures.
