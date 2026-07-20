@@ -12,6 +12,10 @@ import type { EndpointManifest } from "./types";
 import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
 import type { HarnessRecipe } from "./harness-recipe";
 import { usesResponsesApi, usesCliAdapter, usesCodexCli } from "./provider-utils";
+import {
+  compileOpenRouterExecutionPolicy,
+  type OpenRouterProviderSettings,
+} from "./provider-suitability/openrouter-policy";
 
 // EP-INF-009c: Model class → execution adapter mapping
 const MODEL_CLASS_ADAPTER: Record<string, string> = {
@@ -100,10 +104,20 @@ export function buildPlanFromRecipe(
     providerSettings: remainingSettings,
     toolPolicy,
     responsePolicy,
+    ...(contract.openRouterObligations
+      ? { openRouterObligations: contract.openRouterObligations }
+      : {}),
   };
 
   if (typeof temperature === "number") {
     plan.temperature = temperature;
+  }
+
+  if (recipe.providerId === "openrouter" && contract.openRouterObligations) {
+    plan.openRouterPolicy = compileOpenRouterExecutionPolicy(
+      contract.openRouterObligations,
+      (remainingSettings.openRouterProviderSettings ?? {}) as OpenRouterProviderSettings,
+    );
   }
 
   return plan;
@@ -142,7 +156,7 @@ export function buildDefaultPlan(
     contract.requiredModelClass,
   );
 
-  return {
+  const plan: RoutedExecutionPlan = {
     providerId: endpoint.providerId,
     modelId: endpoint.modelId,
     recipeId: null,
@@ -152,7 +166,14 @@ export function buildDefaultPlan(
     providerSettings: {},
     toolPolicy,
     responsePolicy,
+    ...(contract.openRouterObligations
+      ? { openRouterObligations: contract.openRouterObligations }
+      : {}),
   };
+  if (endpoint.providerId === "openrouter" && contract.openRouterObligations) {
+    plan.openRouterPolicy = compileOpenRouterExecutionPolicy(contract.openRouterObligations);
+  }
+  return plan;
 }
 
 // ── attachHarnessRecipeToPlan ───────────────────────────────────────────────

@@ -286,6 +286,40 @@ describe("compileAiProviderSuitabilityPolicy", () => {
     expect(result.residencyPolicy).toBe("any_enabled");
   });
 
+  it("keeps OpenRouter execution obligations bound to the one attested connection", () => {
+    const result = compile({
+      workloadClasses: ["customer-records"],
+      providers: [trust("openrouter", "conn-router", {
+        accountClass: "enterprise",
+        evidenceStatus: "contract-uploaded",
+        entitlements: {
+          zeroRetention: true,
+          noTraining: true,
+          approvedUnderlyingProviderSlugs: ["anthropic", "google-vertex/europe-west4"],
+        },
+      }, {
+        category: "router",
+        externalEgress: "router-cloud",
+        routerPassThrough: {
+          exposesUnderlyingProvider: true,
+          supportsProviderAllowlist: true,
+          supportsProviderBlocklist: true,
+          supportsZdrFilter: true,
+          supportsDataCollectionDeny: true,
+          supportsBoundedFallbacks: true,
+        },
+      })],
+    });
+    expect(result.openRouterObligations).toMatchObject({
+      providerConnectionId: "conn-router",
+      accountClass: "enterprise",
+      approvedEndpointSlugs: ["anthropic", "google-vertex/europe-west4"],
+      requireZdr: true,
+      denyDataCollection: true,
+      requireBoundedFallbacks: true,
+    });
+  });
+
   it("requires financial review evidence for a credit union cloud route", () => {
     const result = compile({
       workloadClasses: ["payments-finance"],

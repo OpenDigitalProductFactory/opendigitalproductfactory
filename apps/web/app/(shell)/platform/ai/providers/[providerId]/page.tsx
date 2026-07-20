@@ -182,6 +182,19 @@ export default async function ProviderDetailPage({ params }: Props) {
               enabledRegions: providerConnection.entitlements && typeof providerConnection.entitlements === "object" && !Array.isArray(providerConnection.entitlements) && Array.isArray((providerConnection.entitlements as Record<string, unknown>).enabledRegions)
                 ? ((providerConnection.entitlements as Record<string, unknown>).enabledRegions as unknown[]).filter((region): region is string => typeof region === "string")
                 : [],
+              zeroRetention: providerConnection.entitlements && typeof providerConnection.entitlements === "object" && !Array.isArray(providerConnection.entitlements)
+                ? typeof (providerConnection.entitlements as Record<string, unknown>).zeroRetention === "boolean"
+                  ? (providerConnection.entitlements as Record<string, unknown>).zeroRetention as boolean
+                  : null
+                : null,
+              regionalProcessing: providerConnection.entitlements && typeof providerConnection.entitlements === "object" && !Array.isArray(providerConnection.entitlements)
+                ? typeof (providerConnection.entitlements as Record<string, unknown>).regionalProcessing === "boolean"
+                  ? (providerConnection.entitlements as Record<string, unknown>).regionalProcessing as boolean
+                  : null
+                : null,
+              approvedUnderlyingProviderSlugs: providerConnection.entitlements && typeof providerConnection.entitlements === "object" && !Array.isArray(providerConnection.entitlements) && Array.isArray((providerConnection.entitlements as Record<string, unknown>).approvedUnderlyingProviderSlugs)
+                ? ((providerConnection.entitlements as Record<string, unknown>).approvedUnderlyingProviderSlugs as unknown[]).filter((slug): slug is string => typeof slug === "string")
+                : [],
             } : null}
           />
           {/* BI-87D93A71 (Minimum): surface OAuth callback port mismatch

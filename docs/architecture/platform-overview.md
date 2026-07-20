@@ -355,6 +355,8 @@ When an AI provider fails (credential expiry, rate limit exhaustion, network out
 
 Key design: degradation is **feature-specific, not platform-wide**. A missing deep-thinker provider degrades Build Studio (code generation) but has no impact on portfolio management or backlog tracking. The platform surfaces contextual warnings on the affected feature, not a global error banner.
 
+Router providers are also policy boundaries. The suitability compiler carries account-scoped OpenRouter obligations through the request contract and every execution/fallback plan. The chat adapter is the single request-construction point for the `provider` controls and router-metadata header. Restricted routes require bounded endpoint slugs, ZDR, data-collection denial, disabled unbounded fallback, parameter support, and returned underlying-provider evidence. EU base-URL selection additionally requires current enterprise regional entitlement on that specific connection. This prevents a router fallback or a second account for the same provider ID from bypassing the original route policy.
+
 ### Neo4j Sync Integrity
 
 Because Neo4j is a projection, it can fall out of sync with PostgreSQL. The current sync is fire-and-forget — failures are logged but not retried. This is a known operational risk that the monitoring system should track:

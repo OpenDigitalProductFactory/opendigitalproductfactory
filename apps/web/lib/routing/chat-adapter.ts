@@ -32,6 +32,7 @@ import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls"
 // (and tests) that import it from here.
 import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { buildAnthropicSystem } from "./anthropic-cache";
+import { parseOpenRouterRoutingEvidence } from "./provider-suitability/openrouter-policy";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // A hung local Docker Model Runner endpoint must fail fast so callWithFallbackChain
@@ -169,6 +170,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
   async execute(request: AdapterRequest): Promise<AdapterResult> {
     const { providerId, modelId, plan, provider, messages, systemPrompt, tools } = request;
     const { baseUrl, headers } = provider;
+    let requestHeaders = headers;
 
     // Build provider-specific request
     let chatUrl: string;
@@ -309,7 +311,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
     } else {
       // ── OpenAI-compatible ──────────────────────────────────────────────
-      const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+      const selectedBaseUrl = providerId === "openrouter" && plan.openRouterPolicy?.requiredBaseUrl
+        ? plan.openRouterPolicy.requiredBaseUrl
+        : baseUrl;
+      const apiBase = selectedBaseUrl.endsWith("/v1") ? selectedBaseUrl : `${selectedBaseUrl}/v1`;
       chatUrl = `${apiBase}/chat/completions`;
 
       const allMessages = [
@@ -323,6 +328,17 @@ export const chatAdapter: ExecutionAdapterHandler = {
         max_tokens: plan.maxTokens,
         keep_alive: -1,
       };
+
+      if (providerId === "openrouter" && plan.openRouterPolicy) {
+        // One construction point makes the typed policy load-bearing for every
+        // OpenRouter chat/completions call; callers cannot separately construct
+        // an unbounded body after suitability has compiled the plan.
+        body.provider = plan.openRouterPolicy.providerSettings;
+        requestHeaders = {
+          ...headers,
+          "X-OpenRouter-Metadata": "enabled",
+        };
+      }
 
       // Apply temperature
       if (plan.temperature !== undefined) {
@@ -364,7 +380,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // while it waits its turn in the local-inference lock.
       const doFetch = () => fetch(chatUrl, {
         method: "POST",
-        headers,
+        headers: requestHeaders,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(resolveInferenceTimeoutMs(providerId)),
       });
@@ -423,6 +439,20 @@ export const chatAdapter: ExecutionAdapterHandler = {
       data = lastCompleted ?? { output: [{ type: "message", content: [{ type: "output_text", text: lastDelta }] }] };
     } else {
       data = await res.json() as Record<string, unknown>;
+    }
+
+    const openRouterRoutingEvidence = providerId === "openrouter"
+      ? parseOpenRouterRoutingEvidence(data.openrouter_metadata)
+      : undefined;
+    if (
+      plan.openRouterPolicy?.requireUnderlyingProviderEvidence &&
+      openRouterRoutingEvidence?.underlyingProviderEvidence !== "returned"
+    ) {
+      throw new InferenceError(
+        "Restricted OpenRouter response did not return underlying-provider metadata; the result was withheld.",
+        "provider_error",
+        providerId,
+      );
     }
 
     // ── Extract text, tool calls, and usage ──────────────────────────────
@@ -546,6 +576,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
       toolCalls,
       usage: { inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens },
       inferenceMs,
+      ...(openRouterRoutingEvidence
+        ? { raw: { openRouterRoutingEvidence } }
+        : {}),
     };
   },
 };

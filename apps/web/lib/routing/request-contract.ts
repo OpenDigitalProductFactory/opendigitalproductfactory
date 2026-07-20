@@ -54,6 +54,8 @@ export interface RequestContract {
   allowedProviders?: string[];
   deniedProviders?: string[];
   residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
+  /** Account-scoped router obligations compiled by provider suitability. */
+  openRouterObligations?: import("./provider-suitability/types").OpenRouterPolicyObligations;
 
   // ── EP-INF-009c: Model class constraint ───────────────────────
   /** When set, only endpoints with this modelClass are eligible.
@@ -131,6 +133,7 @@ export async function inferContract(
     residencyPolicy?: string;
     allowedProviders?: string[];
     deniedProviders?: string[];
+    openRouterObligations?: import("./provider-suitability/types").OpenRouterPolicyObligations;
     requiresCodeExecution?: boolean;
     requiresWebSearch?: boolean;
     requiresComputerUse?: boolean;
@@ -295,6 +298,9 @@ export async function inferContract(
   }
   if (routeContext?.deniedProviders !== undefined) {
     contract.deniedProviders = normalizeProviderIds(routeContext.deniedProviders);
+  }
+  if (routeContext?.openRouterObligations !== undefined) {
+    contract.openRouterObligations = routeContext.openRouterObligations;
   }
   // residencyPolicy: caller override wins, else the task requirement's policy
   // (e.g. email triage hardened to "local_only" by an operator). Unset when

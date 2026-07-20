@@ -842,20 +842,36 @@
       "costExplained": "Charges vary by underlying model used. Pricing is transparent and shown per model. A small routing fee may apply.",
       "capabilitySummary": "Simplifies AI setup by consolidating many providers behind one key. Useful for testing models or switching between them without reconfiguring credentials.",
       "limitations": "Adds a routing layer between your data and the underlying provider. Not suitable where direct provider contracts are required.",
-      "dataResidency": "Depends on the underlying provider selected. OpenRouter routes requests but does not store content.",
+      "dataResidency": "Depends on the OpenRouter account settings, regional endpoint, and underlying provider selected. Do not assume a regular account provides EU in-region processing or disables optional logging.",
       "setupDifficulty": "easy",
-      "regulatoryNotes": "Review the terms of the specific underlying provider used. OpenRouter itself is a pass-through; compliance obligations rest with the provider."
+      "regulatoryNotes": "Review both the OpenRouter account and the specific underlying provider. Restricted work needs bounded provider routing, privacy controls, and account-scoped regional/contract evidence."
     },
     "catalogProviderId": "openrouter",
     "trustCatalog": {
       "category": "router",
       "jurisdictions": [],
       "externalEgress": "router-cloud",
-      "supportsZdr": null,
-      "supportsNoTraining": null,
-      "supportsRegionalRouting": null,
-      "supportedRegions": [],
-      "regionalEndpoints": []
+      "supportsZdr": true,
+      "supportsNoTraining": true,
+      "supportsRegionalRouting": true,
+      "supportedRegions": [
+        "eu"
+      ],
+      "regionalEndpoints": [
+        {
+          "region": "eu",
+          "baseUrl": "https://eu.openrouter.ai/api/v1",
+          "requiresEnterpriseEnablement": true
+        }
+      ],
+      "routerPassThrough": {
+        "exposesUnderlyingProvider": true,
+        "supportsProviderAllowlist": true,
+        "supportsProviderBlocklist": true,
+        "supportsZdrFilter": true,
+        "supportsDataCollectionDeny": true,
+        "supportsBoundedFallbacks": true
+      }
     }
   },
   {

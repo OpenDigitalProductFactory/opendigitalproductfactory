@@ -83,6 +83,22 @@ describe("provider trust registry", () => {
     expect(byId.get("openrouter")?.trustCatalog).toMatchObject({
       category: "router",
       externalEgress: "router-cloud",
+      supportsZdr: true,
+      supportsNoTraining: true,
+      supportsRegionalRouting: true,
+      regionalEndpoints: [{
+        region: "eu",
+        baseUrl: "https://eu.openrouter.ai/api/v1",
+        requiresEnterpriseEnablement: true,
+      }],
+      routerPassThrough: {
+        exposesUnderlyingProvider: true,
+        supportsProviderAllowlist: true,
+        supportsProviderBlocklist: true,
+        supportsZdrFilter: true,
+        supportsDataCollectionDeny: true,
+        supportsBoundedFallbacks: true,
+      },
     });
   });
 });
