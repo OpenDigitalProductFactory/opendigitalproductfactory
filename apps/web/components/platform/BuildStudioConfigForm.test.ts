@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldShowPinnedEngineMissingWarning } from "@/components/platform/BuildStudioConfigForm";
+import { shouldShowPinnedEngineMissingWarning } from "@/components/platform/build-studio-config-form-model";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "@/components/platform/build-studio-route-copy";
 
 describe("Build Studio runtime route copy", () => {

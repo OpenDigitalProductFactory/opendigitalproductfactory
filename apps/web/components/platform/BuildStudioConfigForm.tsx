@@ -4,9 +4,7 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { saveBuildStudioConfig, checkLocalEndpoint, applyLocalModelContext } from "@/lib/actions/build-studio";
 import { probeBuildEnginesAction } from "@/lib/actions/build-engine-actions";
-import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
 import type { LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
-import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 import { ContributorMcpReadinessCard } from "./ContributorMcpReadinessCard";
 import {
@@ -14,59 +12,8 @@ import {
   isConfigured,
   ProviderRadio,
   type EngineReadinessBadge,
-  type ProviderOption,
 } from "./BuildStudioProviderControls";
-
-type Props = {
-  config: BuildStudioDispatchConfig;
-  claudeProviders: ProviderOption[];
-  codexProviders: ProviderOption[];
-  grokProviders: ProviderOption[];
-  opencodeProviders: ProviderOption[];
-  contributorMcpReadiness: ContributorMcpReadiness;
-  /** Per-engine sandbox readiness (engineId → last probe), keyed "claude"|"codex"|"grok". */
-  engineReadiness?: Record<string, EngineReadinessBadge>;
-  baseUrl: string;
-  canWrite: boolean;
-};
-
-const CLAUDE_MODELS = [
-  { value: "haiku", label: "Haiku", desc: "fastest, cheapest" },
-  { value: "sonnet", label: "Sonnet", desc: "best balance", recommended: true },
-  { value: "opus", label: "Opus", desc: "most capable, slower" },
-];
-
-function describeOpenCodeProvider(providerId: string, providers: ProviderOption[]): {
-  label: string;
-  desc: string;
-  isLocal: boolean;
-  providerName: string;
-} {
-  const selected = providers.find((p) => p.providerId === providerId) ?? providers[0];
-  const selectedId = selected?.providerId ?? providerId;
-  const isLocal = selectedId === "local" || selectedId === "ollama" || selectedId === "";
-  const providerName = selected?.name ?? "OpenCode";
-  return {
-    label: isLocal ? "Local model (OpenCode) (Preview)" : `${providerName} (OpenCode) (Preview)`,
-    desc: isLocal
-      ? "Your own local LLM · no credential, runs offline"
-      : `${providerName} via OpenCode · uses inherited provider credentials`,
-    isLocal,
-    providerName,
-  };
-}
-
-export function shouldShowPinnedEngineMissingWarning(input: {
-  enginePolicy: "auto" | "pinned";
-  provider: string;
-  probing: boolean;
-  present: boolean | null | undefined;
-}): boolean {
-  return input.enginePolicy === "pinned"
-    && ["claude", "codex", "grok", "opencode"].includes(input.provider)
-    && !input.probing
-    && input.present === false;
-}
+import { CLAUDE_MODELS, describeOpenCodeProvider, shouldShowPinnedEngineMissingWarning, type BuildStudioConfigFormProps } from "./build-studio-config-form-model";
 
 export function BuildStudioConfigForm({
   config,
@@ -78,7 +25,7 @@ export function BuildStudioConfigForm({
   engineReadiness,
   baseUrl,
   canWrite,
-}: Props) {
+}: BuildStudioConfigFormProps) {
   const [provider, setProvider] = useState(config.provider);
   const [enginePolicy, setEnginePolicy] = useState<"auto" | "pinned">(
     config.enginePolicy === "pinned" ? "pinned" : "auto",
