@@ -40,6 +40,8 @@ Login: `admin@dpf.local` / `changeme123`
 - Build Studio and VS Code should be treated as complementary interfaces, not separate source trees
 - Production promotion still belongs to the portal's governed workflow
 - The sanitized clone runs on first startup — production must be running as the data source
+- The clone resets the disposable development application tables before copying. Restricted provider, credential, token, and connection records are not copied; production-derived search/vector values are omitted rather than carrying source terms or embeddings into the preview.
+- Clone publication is fail-safe: if any table cannot be copied or sanitized, the development application tables are cleared again while Prisma migration history is retained. The Contributor preview will not start against a partially copied relational dataset. Correct the reported source/tooling error and restart the development initialization step to retry.
 
 ### Related
 

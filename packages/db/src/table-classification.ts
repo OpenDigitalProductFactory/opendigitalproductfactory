@@ -193,6 +193,13 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   PushDeviceRegistration: "confidential",
   ExternalEvidenceRecord: "confidential",
   AsyncInferenceOp: "confidential",
+  // Connection posture can reference the restricted ModelProvider catalog and
+  // credential/contract records. Copying it without those parents creates an
+  // invalid preview and exposes organization-specific provider governance.
+  AiProviderConnection: "restricted",
+  // Embeddings are derived from source content and may retain semantic detail
+  // even when the source text is otherwise obfuscated.
+  VectorEmbedding: "restricted",
   TaskRun: "confidential",
   TaskNode: "confidential",
   TaskNodeEdge: "confidential",
