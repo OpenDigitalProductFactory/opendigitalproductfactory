@@ -15,6 +15,7 @@ import {
   shouldSkipTable,
   prepareInsertParameter,
   runWithDestinationCleanup,
+  insertRowsWithReplicationDisabled,
 } from "./sanitized-clone";
 
 describe("obfuscation", () => {
@@ -167,6 +168,45 @@ describe("destination cleanup", () => {
     )).rejects.toMatchObject({
       errors: [expect.objectContaining({ message: "clone failed" }), expect.objectContaining({ message: "cleanup failed" })],
     });
+  });
+});
+
+describe("bounded confidential inserts", () => {
+  it("uses explicit bounded transactions and disables triggers in every chunk", async () => {
+    const events: string[] = [];
+    const transactionOptions: Array<{ maxWait?: number; timeout?: number }> = [];
+    const transactionClient = {
+      $queryRawUnsafe: async () => [
+        { columnName: "id", dataType: "text", udtName: "text" },
+      ],
+      $executeRawUnsafe: async (sql: string) => {
+        events.push(sql);
+        return 1;
+      },
+    };
+    const client = {
+      $transaction: async (
+        callback: (transaction: typeof transactionClient) => Promise<void>,
+        options: { maxWait?: number; timeout?: number },
+      ) => {
+        transactionOptions.push(options);
+        await callback(transactionClient);
+      },
+    };
+
+    await insertRowsWithReplicationDisabled(
+      client as never,
+      "LargeConfidentialTable",
+      [{ id: "one" }, { id: "two" }, { id: "three" }],
+      { batchSize: 2, maxWaitMs: 10_000, timeoutMs: 30_000 },
+    );
+
+    expect(transactionOptions).toEqual([
+      { maxWait: 10_000, timeout: 30_000 },
+      { maxWait: 10_000, timeout: 30_000 },
+    ]);
+    expect(events.filter((sql) => sql === "SET LOCAL session_replication_role = replica")).toHaveLength(2);
+    expect(events.filter((sql) => sql.startsWith("INSERT INTO"))).toHaveLength(3);
   });
 });
 

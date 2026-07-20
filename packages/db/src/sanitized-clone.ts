@@ -528,20 +528,41 @@ async function insertRows(
   }
 }
 
-async function insertRowsWithReplicationDisabled(
+export type SanitizedCloneInsertTransactionPolicy = {
+  batchSize: number;
+  maxWaitMs: number;
+  timeoutMs: number;
+};
+
+export const SANITIZED_CLONE_INSERT_TRANSACTION_POLICY: Readonly<SanitizedCloneInsertTransactionPolicy> = Object.freeze({
+  batchSize: 500,
+  maxWaitMs: 10_000,
+  timeoutMs: 30_000,
+});
+
+export async function insertRowsWithReplicationDisabled(
   client: PrismaClient,
   tableName: string,
   rows: Array<Record<string, unknown>>,
+  policy: Readonly<SanitizedCloneInsertTransactionPolicy> = SANITIZED_CLONE_INSERT_TRANSACTION_POLICY,
 ): Promise<void> {
   if (rows.length === 0) return;
 
-  await client.$transaction(async (transaction) => {
-    // PrismaPg uses a pool, so a SET issued before the transaction is not
-    // guaranteed to govern the connection used by the inserts. SET LOCAL pins
-    // the trigger posture to this transaction and restores it automatically.
-    await transaction.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
-    await insertRows(transaction, tableName, rows);
-  });
+  const batchSize = Math.max(1, Math.trunc(policy.batchSize));
+  for (let offset = 0; offset < rows.length; offset += batchSize) {
+    const batch = rows.slice(offset, offset + batchSize);
+    await client.$transaction(async (transaction) => {
+      // PrismaPg uses a pool, so a SET issued before the transaction is not
+      // guaranteed to govern the connection used by the inserts. SET LOCAL
+      // pins the trigger posture to each bounded batch transaction and restores
+      // it automatically. Destination-wide cleanup owns clone atomicity.
+      await transaction.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
+      await insertRows(transaction, tableName, batch);
+    }, {
+      maxWait: policy.maxWaitMs,
+      timeout: policy.timeoutMs,
+    });
+  }
 }
 
 async function getColumnTypes(
