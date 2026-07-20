@@ -1,4 +1,10 @@
 import type { RequestContract } from "./request-contract";
+import type { AiWorkloadClassKey } from "./provider-suitability/types";
+import type {
+  DataAssetId,
+  DataFieldId,
+  ProcessingPurposeKey,
+} from "@/lib/govern/data/taxonomy";
 
 export type ActivityClass =
   | "classify"
@@ -61,6 +67,18 @@ export type ActivityRouteContextHints = {
   requiresComputerUse?: boolean;
 };
 
+/**
+ * References into the governed data substrate. These identify data and purpose;
+ * they do not assign sensitivity or authorize processing.
+ */
+export type ActivityGovernedDataHints = {
+  assetIds: DataAssetId[];
+  fieldIds?: DataFieldId[];
+  processingPurpose?: ProcessingPurposeKey;
+  processingActivityId?: string;
+  applicableRegulationIds?: string[];
+};
+
 export type ActivityContract = {
   activityId: string;
   parentRef: ActivityParentRef;
@@ -73,6 +91,9 @@ export type ActivityContract = {
   tokenEnvelope: ActivityTokenEnvelope;
   evaluationPolicy: ActivityEvaluationPolicy;
   requestContractHints: ActivityRouteContextHints;
+  /** Business-semantic hints only; governed data classification remains authoritative. */
+  workloadClassHints?: AiWorkloadClassKey[];
+  governedData?: ActivityGovernedDataHints;
 };
 
 export type ActivityRouteContext = ActivityRouteContextHints & {
@@ -85,4 +106,6 @@ export type ActivityRouteContext = ActivityRouteContextHints & {
   maxInputTokens: number;
   maxOutputTokens: number;
   compression: ActivityTokenEnvelope["compression"];
+  workloadClassHints?: AiWorkloadClassKey[];
+  governedData?: ActivityGovernedDataHints;
 };

@@ -440,6 +440,8 @@ function activityFromDefaults(input: {
   defaults: ActivityDefaults;
 }): ActivityContract {
   const { defaults } = input;
+  const sourceCodeActivity = defaults.activityClass === "code-edit" ||
+    (defaults.activityClass === "verify" && defaults.requestContractHints.requiresCodeExecution === true);
   return {
     activityId: input.activityId,
     parentRef: input.parentRef,
@@ -452,6 +454,15 @@ function activityFromDefaults(input: {
     tokenEnvelope: { ...defaults.tokenEnvelope },
     evaluationPolicy: { ...defaults.evaluationPolicy },
     requestContractHints: { ...defaults.requestContractHints },
+    ...(sourceCodeActivity
+      ? {
+          workloadClassHints: ["source-code" as const],
+          governedData: {
+            assetIds: ["data:source-code" as const],
+            processingPurpose: "platform-operations" as const,
+          },
+        }
+      : {}),
   };
 }
 
@@ -486,5 +497,22 @@ export function routeContextFromActivity(activity: ActivityContract): ActivityRo
     ...posture,
     reasoningDepth,
     ...activity.requestContractHints,
+    ...(activity.workloadClassHints
+      ? { workloadClassHints: [...activity.workloadClassHints] }
+      : {}),
+    ...(activity.governedData
+      ? {
+          governedData: {
+            ...activity.governedData,
+            assetIds: [...activity.governedData.assetIds],
+            ...(activity.governedData.fieldIds
+              ? { fieldIds: [...activity.governedData.fieldIds] }
+              : {}),
+            ...(activity.governedData.applicableRegulationIds
+              ? { applicableRegulationIds: [...activity.governedData.applicableRegulationIds] }
+              : {}),
+          },
+        }
+      : {}),
   };
 }

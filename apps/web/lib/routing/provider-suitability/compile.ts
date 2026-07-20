@@ -231,6 +231,11 @@ export function compileAiProviderSuitabilityPolicy(
         profile.classificationKnown,
         profile.sensitivity,
         profile.residencyClass,
+        sortedUnique(profile.assetIds),
+        sortedUnique(profile.fieldIds ?? []),
+        sortedUnique(profile.categories),
+        profile.purpose,
+        profile.processingActivityId ?? null,
         sortedUnique(profile.applicableRegulationIds),
       ])
       .sort(),

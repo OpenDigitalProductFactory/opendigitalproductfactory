@@ -605,6 +605,14 @@ This artefact is **business-context** substrate, and the platform keeps two deci
 
 The separation is the rule: **business-of-the-customer decisions → WWWD (seeded by this artefact); portal/platform/build/architecture decisions → WWMD.** A coworker must select the perspective by context, never blend them.
 
+### 8.9 Provider suitability consumes the value-stream lens
+
+AI provider policy composes onto this projection without creating a second vertical or process taxonomy. The canonical `StorefrontConfig` archetype and a real `OperationalValueStreamStageKey` provide conservative workload defaults when an activity does not already carry a governed data profile. For example, `attract` defaults to public marketing; `settle` defaults to payments/finance; healthcare delivery, banking delivery, education delivery, and public-sector delivery resolve to their bounded regulated workload classes.
+
+The activity contract may carry logical governed asset/field references, processing purpose, and workload hints. Those references identify the work but do not classify or authorize it: the `govern/data` profile and PDP remain authoritative and override every archetype default. Unknown or conflicting high-risk context fails to review/deny. Occupation is a recommendation-focus lens only and cannot widen RBAC, coworker grants, tool authority, or provider eligibility.
+
+This preserves one route-selection path: the work-context adapter produces workload profiles for the existing provider-suitability compiler, which produces hard constraints for the existing V2 router. Cost, quality, health, and capacity rank only inside that eligible set.
+
 ---
 
 ## 9. How the audit consumes this (and the back-reference)
