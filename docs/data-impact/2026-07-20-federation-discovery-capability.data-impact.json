@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Edge Node authority capability snapshot and heartbeat reporting"
+  ],
+  "migration": {
+    "name": "none",
+    "backfill": "none — the existing EdgeNodeCapability record shape is unchanged; federation.discovery is enrolled only when a native node reports the reserved capability"
+  },
+  "tests": [
+    "apps/web/lib/actions/edge-nodes.test.ts",
+    "apps/web/lib/edge-node-enrollment-capabilities.test.ts",
+    "services/edge-node-go/internal/agent/client_test.go"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:edge-node-capability",
+      "prismaModel": "EdgeNodeCapability",
+      "lifecycleDisposition": "operational authority state follows the owning EdgeNode lifecycle",
+      "fields": [
+        {
+          "fieldId": "data:edge-node-capability#capability",
+          "resolution": "governed",
+          "reason": "the closed native-enrollment subset now admits federation.discovery so Authority can enable, pause, and observe host mDNS discovery without granting unrelated capabilities",
+          "provenance": "federated demand network design and Edge Node enrollment contract"
+        }
+      ]
+    }
+  ]
+}
