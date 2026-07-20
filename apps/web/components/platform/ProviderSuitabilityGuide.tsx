@@ -3,6 +3,21 @@ import type { ProviderOnboardingRecommendation, ProviderRecommendationItem } fro
 import { formatProviderReviewObjective } from "@/lib/routing/provider-suitability/provider-review-packet";
 import type { ProviderRoutingTelemetryRollup } from "@/lib/inference/provider-routing-rollup";
 
+const WORKLOAD_LABELS: Record<string, string> = {
+  "public-marketing": "Public marketing",
+  "internal-operations": "Internal operations",
+  "customer-records": "Customer records",
+  "employee-records": "Employee records",
+  "payments-finance": "Payments and financial records",
+  "health-phi": "Health and patient information",
+  "student-records": "Student records",
+  "regulated-decisioning": "Regulated decisions",
+  "legal-privileged": "Legally privileged work",
+  "secrets-credentials": "Secrets and credentials",
+  "source-code": "Source code",
+  "unknown-restricted": "Unclassified restricted work",
+};
+
 function ConnectionList({ items, emptyMessage }: { items: ProviderRecommendationItem[]; emptyMessage: string }) {
   if (items.length === 0) return <p className="m-0 text-xs text-[var(--dpf-muted)]">{emptyMessage}</p>;
   return (
@@ -42,6 +57,18 @@ export function ProviderSuitabilityGuide({ recommendation, telemetry }: { recomm
           <p id="provider-coo-coordination" className="mt-1 text-[11px] text-[var(--dpf-muted)]">
             Your COO coordinates the Data Governance specialist. You stay in this conversation and keep the decision.
           </p>
+        </div>
+      </div>
+
+      <div role="region" aria-label="Work DPF is protecting" className="mt-4 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+        <p className="m-0 text-xs font-semibold text-[var(--dpf-text)]">Work DPF is protecting</p>
+        <p className="mt-1 text-[11px] text-[var(--dpf-muted)]">Derived from the company profile, markets, products, customers, and planned AI work. Correct these labels before relying on the recommendation.</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {recommendation.workloadClasses.map((workload) => (
+            <span key={workload} className="rounded-full border border-[var(--dpf-border)] px-2 py-1 text-[11px] text-[var(--dpf-text)]">
+              {WORKLOAD_LABELS[workload] ?? workload.replaceAll("-", " ")}
+            </span>
+          ))}
         </div>
       </div>
 

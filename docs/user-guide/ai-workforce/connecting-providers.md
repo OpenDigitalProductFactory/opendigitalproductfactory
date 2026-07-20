@@ -4,6 +4,8 @@ area: "ai-workforce"
 order: 2
 relatedCode:
   - apps/web/lib/ai-inference.ts
+  - apps/web/app/(shell)/platform/ai/providers/page.tsx
+  - apps/web/components/platform/ProviderSuitabilityGuide.tsx
 ---
 
 ## Overview
@@ -58,7 +60,7 @@ Some providers support both OAuth and API Key. You can switch between methods on
 
 ## Business-safe review
 
-The Providers & Routing page gives one recommendation grouped as **Use now**, **Use after review**, and **Not for this work**. It also previews what may leave the installation, what remains controlled, and what DPF blocks.
+The Providers & Routing page gives one recommendation grouped as **Use now**, **Use after review**, and **Not for this work**. It also previews what may leave the installation, what remains controlled, and what DPF blocks. The **Work DPF is protecting** labels show the workload classes derived from the company profile, markets, products, customers, and planned AI work. Correct those labels before relying on the recommendation; they are visible so a non-technical owner can spot a bad assumption.
 
 You can complete this review with the keyboard and a screen reader. The recommendation status, each connection group, the next action, consultation failures, and setup progress are announced in text rather than by color alone. Long connection names wrap on small screens.
 
@@ -84,7 +86,9 @@ A router connection is two trust decisions: the OpenRouter account and the under
 
 EU in-region OpenRouter processing is an enterprise feature. DPF uses `eu.openrouter.ai` only when the exact connected account has current enterprise and regional-processing evidence; a regular API key cannot inherit that entitlement. If the account, approved endpoint list, regional entitlement, policy pass-through, or returned underlying-provider evidence is missing, the restricted request stops safely instead of silently using a broader route.
 
-Routing receipts retain only the selected provider/model, region, and bounded attempt statuses. They do not copy prompts, answers, or arbitrary router/plugin metadata into the receipt.
+DPF continuously watches evidence expiry, account/channel drift, regional-entitlement changes, and repeated route failures. These observations can request review or lower a recommendation, but cannot override a contract, residency, PDP, or operator denial. The provider overview summarizes governed route decisions only when privacy thresholds are met; small workload cohorts remain hidden.
+
+Routing receipts retain only bounded policy facts: policy/input versions, the hashed connection reference, execution channel, account class, selected provider and returned underlying provider, exclusions, obligations, and explanation codes. They do not store model prompts, answers, attachments, credentials, external account identifiers, or arbitrary router/plugin metadata. You can inspect the explanation on the provider detail page and under **Governance & Audit > Routes**.
 
 ## Finance Bridge
 
