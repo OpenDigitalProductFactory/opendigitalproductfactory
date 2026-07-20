@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { isEeaState } from "@dpf/db/eu-jurisdictions";
 import { parseOrgAddress } from "@/lib/shared/org-address";
+import { resolveProviderTrustEvidence } from "./evidence";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -68,7 +69,7 @@ function catalogFacts(provider: {
   };
 }
 
-function connectionPosture(connection: {
+export function connectionPosture(connection: {
   connectionId: string;
   providerId: string;
   executionChannel: string;
@@ -101,7 +102,11 @@ export async function loadProviderOnboardingRecommendation() {
     prisma.storefrontConfig.findFirst({ select: { archetypeId: true, archetype: { select: { category: true } } } }),
     prisma.aiProviderConnection.findMany({
       where: organization ? { OR: [{ organizationId: organization.id }, { organizationId: null }] } : undefined,
-      include: { provider: { select: { providerId: true, name: true, category: true, endpointType: true, catalogEntry: true, status: true } } },
+      include: {
+        provider: { select: { providerId: true, name: true, category: true, endpointType: true, catalogEntry: true, status: true } },
+        trustEvidence: true,
+        supplierContract: { select: { contractId: true, status: true, startDate: true, endDate: true } },
+      },
       orderBy: [{ status: "asc" }, { label: "asc" }],
     }),
   ]);
@@ -126,16 +131,24 @@ export async function loadProviderOnboardingRecommendation() {
   return buildProviderOnboardingRecommendation({
     businessProfile: profile,
     handlesCardPayments: businessContext?.handlesCardPayments ?? false,
-    connections: connections.map((connection) => ({
-      label: connection.label || connection.provider.name,
-      // ModelProvider owns runtime activation. AiProviderConnection may retain its
-      // setup-state value after activation, so do not let that stale projection
-      // downgrade (or accidentally upgrade) the onboarding recommendation.
-      status: resolveRuntimeConnectionStatus(connection.provider.status, connection.status),
-      facts: resolveProviderTrustFacts({
-        catalog: catalogFacts(connection.provider),
+    connections: connections.map((connection) => {
+      const evidence = resolveProviderTrustEvidence({
         connection: connectionPosture(connection),
-      }),
-    })),
+        evidenceConnectionId: connection.id,
+        records: connection.trustEvidence,
+        supplierContract: connection.supplierContract ?? undefined,
+      });
+      return {
+        label: connection.label || connection.provider.name,
+        // ModelProvider owns runtime activation. AiProviderConnection may retain its
+        // setup-state value after activation, so do not let that stale projection
+        // downgrade (or accidentally upgrade) the onboarding recommendation.
+        status: resolveRuntimeConnectionStatus(connection.provider.status, connection.status),
+        facts: resolveProviderTrustFacts({
+          catalog: catalogFacts(connection.provider),
+          connection: evidence.posture,
+        }),
+      };
+    }),
   });
 }

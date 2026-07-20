@@ -427,6 +427,7 @@ export async function persistRouteDecision(
       policyRulesApplied: decision.policyRulesApplied,
       fallbackChain: decision.fallbackChain,
       shadowMode,
+      suitabilityReceipt: decision.providerSuitabilityReceipt ?? undefined,
     },
   });
   return record.id;

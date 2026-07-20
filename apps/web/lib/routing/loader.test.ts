@@ -87,6 +87,17 @@ describe("persistRouteDecision", () => {
       }),
     ]);
   });
+
+  it("persists the privacy-safe provider suitability receipt when supplied", async () => {
+    const decision = makeDecision();
+    decision.providerSuitabilityReceipt = makeSuitabilityReceipt();
+
+    await persistRouteDecision(decision, { actor: { kind: "agent", id: "build-specialist" } });
+
+    expect(mockPrisma.routeDecisionLog.create.mock.calls[0]?.[0].data.suitabilityReceipt).toEqual(
+      makeSuitabilityReceipt(),
+    );
+  });
 });
 
 describe("loadEndpointManifests", () => {
@@ -346,5 +357,23 @@ function makeDecisionWithHarness(): RouteDecision {
         providerFamily: "frontier",
       },
     },
+  };
+}
+
+function makeSuitabilityReceipt() {
+  return {
+    schemaVersion: "provider-suitability-route-receipt/v1" as const,
+    policyId: "policy-sha256",
+    compilerVersion: "provider-suitability/v1",
+    inputVersion: "work-context/v1",
+    connectionRef: "connection-sha256:1234567890abcdef12345678",
+    executionChannel: "direct-api" as const,
+    accountClass: "business-team" as const,
+    selectedProviderId: "anthropic",
+    selectedUnderlyingProviderId: null,
+    excludedProviderIds: ["personal-provider"],
+    obligations: null,
+    explanationCodes: ["provider-evidence-required"],
+    createdAt: "2026-07-20T09:00:00.000Z",
   };
 }

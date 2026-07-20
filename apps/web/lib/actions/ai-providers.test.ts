@@ -9,6 +9,8 @@ const {
   mockAuth,
   mockActivateProvider,
   mockSeedAiProviderFinanceBridge,
+  mockRecordProviderTrustEvidence,
+  mockSupersedeProviderTrustEvidenceClaim,
 } = vi.hoisted(() => ({
   mockPrisma: {
     modelProvider: {
@@ -40,6 +42,8 @@ const {
   mockAuth: vi.fn(),
   mockActivateProvider: vi.fn(),
   mockSeedAiProviderFinanceBridge: vi.fn(),
+  mockRecordProviderTrustEvidence: vi.fn().mockResolvedValue({ evidenceId: "evidence-1" }),
+  mockSupersedeProviderTrustEvidenceClaim: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -62,6 +66,11 @@ vi.mock("@/lib/govern/activate-provider", () => ({
 
 vi.mock("@/lib/finance/ai-provider-finance", () => ({
   seedAiProviderFinanceBridge: mockSeedAiProviderFinanceBridge,
+}));
+
+vi.mock("@/lib/routing/provider-suitability/evidence", () => ({
+  recordProviderTrustEvidence: mockRecordProviderTrustEvidence,
+  supersedeProviderTrustEvidenceClaim: mockSupersedeProviderTrustEvidenceClaim,
 }));
 
 vi.mock("@/lib/ai-provider-internals", () => ({
@@ -94,6 +103,7 @@ describe("updateProviderConnectionPosture", () => {
 
   it("records an operator attestation without promoting it to contract proof", async () => {
     mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      id: "connection-db-1",
       entitlements: { adminAuditControls: true },
       evidenceStatus: "unreviewed",
     });
@@ -118,6 +128,43 @@ describe("updateProviderConnectionPosture", () => {
     expect(mockActivateProvider).toHaveBeenCalledWith("anthropic", {
       trigger: "test_auth",
       skipDiscovery: true,
+    });
+    expect(mockRecordProviderTrustEvidence).toHaveBeenCalledWith(expect.objectContaining({
+      providerConnectionDbId: "connection-db-1",
+      claimKey: "no-training",
+      assertedValue: true,
+      evidenceType: "provider-operator-attestation",
+    }));
+    expect(mockRecordProviderTrustEvidence).toHaveBeenCalledWith(expect.objectContaining({
+      providerConnectionDbId: "connection-db-1",
+      claimKey: "enabled-regions",
+      assertedValue: ["eu", "uk"],
+    }));
+  });
+
+  it("supersedes prior operator evidence when the declaration returns to unknown", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      id: "connection-db-1",
+      entitlements: {},
+      evidenceStatus: "operator-attested",
+    });
+    mockPrisma.aiProviderConnection.update.mockResolvedValue({});
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "inactive" });
+
+    await updateProviderConnectionPosture({
+      providerId: "anthropic",
+      accountClass: "unknown",
+      noTraining: null,
+      enabledRegions: [],
+    });
+
+    expect(mockSupersedeProviderTrustEvidenceClaim).toHaveBeenCalledWith({
+      providerConnectionDbId: "connection-db-1",
+      claimKey: "no-training",
+    });
+    expect(mockSupersedeProviderTrustEvidenceClaim).toHaveBeenCalledWith({
+      providerConnectionDbId: "connection-db-1",
+      claimKey: "enabled-regions",
     });
   });
 

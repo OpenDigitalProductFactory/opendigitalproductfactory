@@ -20,6 +20,9 @@ import { AiProviderFinancePanel } from "@/components/finance/AiProviderFinancePa
 import { getAiProviderFinanceDetail } from "@/lib/finance/ai-provider-finance";
 import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
 import { ProviderAccountPostureForm } from "@/components/platform/ProviderAccountPostureForm";
+import { ProviderTrustEvidencePanel } from "@/components/platform/ProviderTrustEvidencePanel";
+import { resolveProviderTrustEvidence, type ProviderTrustClaimKey } from "@/lib/routing/provider-suitability/evidence";
+import { connectionPosture } from "@/lib/routing/provider-suitability/provider-onboarding-data";
 
 type Props = { params: Promise<{ providerId: string }> };
 
@@ -66,7 +69,13 @@ export default async function ProviderDetailPage({ params }: Props) {
     getModelClassCounts(providerId),
     getAiProviderFinanceDetail(providerId),
     getTokenSpendByProvider(currentMonth),
-    prisma.aiProviderConnection.findUnique({ where: { connectionId: `provider-default-${providerId}` } }),
+    prisma.aiProviderConnection.findUnique({
+      where: { connectionId: `provider-default-${providerId}` },
+      include: {
+        trustEvidence: true,
+        supplierContract: { select: { contractId: true, status: true, startDate: true, endDate: true } },
+      },
+    }),
   ]);
   if (!pw) notFound();
   const costView = buildProviderCostView({
@@ -74,6 +83,19 @@ export default async function ProviderDetailPage({ params }: Props) {
     financeProfile: financeDetail,
     internalUsage: tokenSpend.find((row) => row.providerId === providerId) ?? null,
   });
+  const requiredEvidenceClaims: ProviderTrustClaimKey[] = providerId === "openrouter"
+    ? ["no-training", "enabled-regions", "zero-retention", "regional-processing", "approved-underlying-providers", "dpa-on-file"]
+    : ["no-training", "enabled-regions", "dpa-on-file"];
+  const trustEvidenceResolution = providerConnection
+    ? resolveProviderTrustEvidence({
+      connection: connectionPosture(providerConnection),
+      evidenceConnectionId: providerConnection.id,
+      records: providerConnection.trustEvidence,
+      requiredClaims: requiredEvidenceClaims,
+      supplierContract: providerConnection.supplierContract ?? undefined,
+      now,
+    })
+    : null;
 
   const hasActiveProvider = allProviders.some((p) => p.provider.status === "active");
 
@@ -197,6 +219,13 @@ export default async function ProviderDetailPage({ params }: Props) {
                 : [],
             } : null}
           />
+          {trustEvidenceResolution && (
+            <ProviderTrustEvidencePanel
+              evidenceStatus={trustEvidenceResolution.posture.evidenceStatus}
+              lastReviewedAt={trustEvidenceResolution.posture.lastReviewedAt}
+              claims={trustEvidenceResolution.claims}
+            />
+          )}
           {/* BI-87D93A71 (Minimum): surface OAuth callback port mismatch
               BEFORE the user clicks Connect — eliminates the silent
               :3000 → :1455 origin divergence that the shared OpenAI
