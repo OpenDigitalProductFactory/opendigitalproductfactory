@@ -28,7 +28,7 @@ describe("PartnerBusinessPanel", () => {
     />);
 
     expect(html).toContain("Founder Hub reseller network");
-    expect(html).toContain("Arcamanus owns reseller enrollment");
+    expect(html).toContain("Founder Hub owns reseller enrollment");
     expect(html).toContain("separate from demand sharing and Hive result intake");
     expect(html).toContain("Enroll reseller");
     expect(html).toContain("2 entitlements");

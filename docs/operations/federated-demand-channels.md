@@ -27,7 +27,7 @@ partner never grants exclusivity or silently selects demand for another.
 
 ## Founder Hub business management
 
-The Arcamanus Founder Hub installation manages resellers from the Connections
+The central Founder Hub installation manages resellers from the Connections
 page. Enrolling a trusted channel connection creates a business-only partner
 account. Operators can maintain standing and safe agreement references while
 the following authorities stay separate:

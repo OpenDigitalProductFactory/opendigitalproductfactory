@@ -69,7 +69,7 @@ describe("NetworkDemandPanel", () => {
       shareContext={{
         localItems: [{ itemId: "BI-LOCAL", title: "Local improvement", status: "open" }],
         targets: [{ linkId: "FL-CUSTOMER", displayName: "Customer One", role: "manages", sharedItemIds: [] }],
-        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Arcamanus" }],
+        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Founder Hub" }],
         responses: [{
           responseId: "rsp_opaque",
           sourceName: "Reseller One",

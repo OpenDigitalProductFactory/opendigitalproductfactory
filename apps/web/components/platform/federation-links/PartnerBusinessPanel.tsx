@@ -118,7 +118,7 @@ export function PartnerBusinessPanel({
       <div>
         <h2 id="partner-business-heading" className="text-sm font-semibold text-[var(--dpf-text)]">Founder Hub reseller network</h2>
         <p className="mt-1 max-w-3xl text-xs text-[var(--dpf-muted)]">
-          Arcamanus owns reseller enrollment, standing, agreements, offering entitlements, support routing, and contribution recognition. These business records are separate from demand sharing and Hive result intake.
+          Founder Hub owns reseller enrollment, standing, agreements, offering entitlements, support routing, and contribution recognition. These business records are separate from demand sharing and Hive result intake.
         </p>
       </div>
 
