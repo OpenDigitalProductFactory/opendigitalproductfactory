@@ -1,0 +1,46 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Coworker registry and natural-key service references",
+    "Provider discovery and model-profile registry",
+    "Improvement-signal registry",
+    "Regulatory and standards source corpus",
+    "Skill definitions, assignments, metrics, revisions, and usage",
+    "Storefront archetype registry",
+    "Portfolio taxonomy",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720193000_repair_remaining_unique_index_integrity",
+    "backfill": "forced-heap convergence for nine canonical unique keys; table-specific deterministic survivors remain active, collision-checked reserved keys preserve every loser and its ID-based history, natural-key foreign keys remain on the canonical business key, and all nine indexes are rebuilt; no row is deleted"
+  },
+  "tests": [
+    "packages/db/src/remaining-unique-index-integrity-migration.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:platform-registries#remaining-unique-index-integrity-repair",
+      "prismaModel": "Agent",
+      "lifecycleDisposition": "one canonical row retains each business key; all duplicate Agent, DiscoveredModel, ImprovementSignal, ModelProfile, RawSource, SkillAssignment, SkillDefinition, StorefrontArchetype, and TaxonomyNode rows remain durable under reserved quarantine keys with their original ids and ID-based relationships",
+      "fields": [
+        {
+          "fieldId": "data:platform-registries#canonical-unique-keys",
+          "resolution": "governed",
+          "reason": "restore trustworthy platform identity and contributor cloning without deleting operational, evidence, corpus, skill, storefront, or taxonomy history",
+          "provenance": "BI-63D490FD forced-heap catalog sweep and migration fixture"
+        },
+        {
+          "fieldId": "data:platform-registries#natural-key-foreign-keys",
+          "resolution": "governed",
+          "reason": "prevent ON UPDATE CASCADE from retargeting canonical Agent and SkillDefinition references to quarantined losers",
+          "provenance": "BI-63D490FD foreign-key dependency audit"
+        }
+      ]
+    }
+  ]
+}
