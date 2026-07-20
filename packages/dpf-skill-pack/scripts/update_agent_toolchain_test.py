@@ -356,7 +356,7 @@ class GrokInstallTest(unittest.TestCase):
     def test_install_invokes_grok_plugin_install_trust_from_managed(self) -> None:
         class _Result:
             returncode = 0
-            stdout = ""
+            stdout = "[]"
             stderr = ""
 
         with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
@@ -364,9 +364,36 @@ class GrokInstallTest(unittest.TestCase):
         ) as run:
             status = updater.install_grok_plugin(Path("/tmp/managed"), dry_run=False)
         self.assertEqual(status, "installed")
-        run.assert_called_once()
-        argv = run.call_args[0][0]
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[0][0][0], ["/fake/grok", "plugin", "list", "--json"])
+        argv = run.call_args_list[1][0][0]
         self.assertEqual(argv, ["/fake/grok", "plugin", "install", str(Path("/tmp/managed")), "--trust"])
+
+    def test_existing_grok_plugin_is_reinstalled_from_refreshed_managed_copy(self) -> None:
+        class _Result:
+            def __init__(self, stdout: str = "") -> None:
+                self.returncode = 0
+                self.stdout = stdout
+                self.stderr = ""
+
+        results = [
+            _Result('[{"name":"dpf-platform","version":"0.2.2"}]'),
+            _Result(),
+            _Result(),
+        ]
+        with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
+            "subprocess.run", side_effect=results
+        ) as run:
+            status = updater.install_grok_plugin(Path("/tmp/managed"), dry_run=False)
+        self.assertEqual(status, "reinstalled")
+        self.assertEqual(
+            [call[0][0] for call in run.call_args_list],
+            [
+                ["/fake/grok", "plugin", "list", "--json"],
+                ["/fake/grok", "plugin", "uninstall", "dpf-platform", "--confirm", "--keep-data"],
+                ["/fake/grok", "plugin", "install", str(Path("/tmp/managed")), "--trust"],
+            ],
+        )
 
     def test_install_reports_failure_without_raising(self) -> None:
         class _Result:
@@ -379,6 +406,28 @@ class GrokInstallTest(unittest.TestCase):
         ):
             status = updater.install_grok_plugin(Path("/tmp/managed"), dry_run=False)
         self.assertIn("failed", status)
+
+
+class ClaudeInstallTest(unittest.TestCase):
+    def test_install_also_updates_an_existing_cached_plugin(self) -> None:
+        class _Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+            "subprocess.run", return_value=_Result()
+        ) as run:
+            status = updater.install_claude_plugin(Path("/tmp/home"), dry_run=False)
+        self.assertEqual(status, "installed and refreshed")
+        self.assertEqual(
+            [call[0][0] for call in run.call_args_list],
+            [
+                ["/fake/claude", "plugin", "marketplace", "add", "/tmp/home/.agents/plugins", "--scope", "local"],
+                ["/fake/claude", "plugin", "install", "dpf-platform@dpf-platform-local", "--scope", "local"],
+                ["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "local"],
+            ],
+        )
 
 
 class AntigravityMcpConfigTest(unittest.TestCase):
