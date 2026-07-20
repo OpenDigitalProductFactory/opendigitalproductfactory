@@ -39,15 +39,16 @@ func Run(ctx context.Context, opts DiscoveryOptions, submit SubmitCandidates) er
 	if err != nil || (authority.Scheme != "http" && authority.Scheme != "https") || authority.Hostname() == "" {
 		return errors.New("federation discovery requires an HTTP or HTTPS Authority URL")
 	}
-	port := 80
+	port := uint16(80)
 	if authority.Scheme == "https" {
 		port = 443
 	}
 	if authority.Port() != "" {
-		port, err = strconv.Atoi(authority.Port())
-		if err != nil || port < 1 || port > 65535 {
+		parsedPort, parseErr := strconv.ParseUint(authority.Port(), 10, 16)
+		if parseErr != nil || parsedPort == 0 {
 			return errors.New("Authority URL has an invalid port")
 		}
+		port = uint16(parsedPort)
 	}
 	if opts.RotationWindow <= 0 {
 		opts.RotationWindow = 15 * time.Minute
@@ -60,7 +61,7 @@ func Run(ctx context.Context, opts DiscoveryOptions, submit SubmitCandidates) er
 	for ctx.Err() == nil {
 		discoveryID := RotatingDiscoveryID(opts.Secret, time.Now(), opts.RotationWindow)
 		typeDef := zeroconf.NewType(ServiceType)
-		published := zeroconf.NewService(typeDef, "dpf-"+discoveryID, uint16(port))
+		published := zeroconf.NewService(typeDef, "dpf-"+discoveryID, port)
 		published.Hostname = "dpf-" + discoveryID + ".local"
 		published.Text = AdvertisementTXT(
 			discoveryID,

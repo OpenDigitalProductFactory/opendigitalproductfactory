@@ -1,6 +1,7 @@
 package federation
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -67,5 +68,17 @@ func TestParseServiceCarriesHTTPCandidateWithoutMakingItTrusted(t *testing.T) {
 	}
 	if candidate.Endpoint != "http://dpf-ephemeral.local:3000" {
 		t.Fatalf("endpoint = %q", candidate.Endpoint)
+	}
+}
+
+func TestRunRejectsAuthorityPortOutsideUint16(t *testing.T) {
+	for _, authorityURL := range []string{"http://peer.local:0", "http://peer.local:65536"} {
+		err := Run(context.Background(), DiscoveryOptions{
+			AuthorityURL: authorityURL,
+			Secret:       []byte("installation-local-secret"),
+		}, func(context.Context, []Candidate) error { return nil })
+		if err == nil {
+			t.Fatalf("Run(%q) accepted an out-of-range port", authorityURL)
+		}
 	}
 }

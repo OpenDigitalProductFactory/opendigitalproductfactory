@@ -70,7 +70,7 @@ describe("POST /api/v1/edge/federation-candidates", () => {
 
   it("rejects unknown TXT-derived fields at the Authority boundary", async () => {
     const payload = body();
-    (payload.candidates[0] as Record<string, unknown>).organization = "Arcamanus";
+    (payload.candidates[0] as Record<string, unknown>).organization = "Private Company";
 
     const response = await POST(request(payload));
 
