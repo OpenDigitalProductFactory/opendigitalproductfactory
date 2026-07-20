@@ -9,6 +9,7 @@ export type CoworkerAgentSeed = {
   description: string;
   valueStream: string;
   sensitivity: "internal" | "confidential" | "restricted";
+  delegatesTo?: readonly string[];
 };
 
 export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
@@ -173,6 +174,7 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     description: "Cross-cutting oversight, workforce orchestration, and strategic priorities",
     valueStream: "cross-cutting",
     sensitivity: "confidential",
+    delegatesTo: ["AGT-902"],
   },
   {
     agentId: "doc-specialist",
@@ -305,7 +307,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   ],
   "data-architect": ["file_read", "sandbox_execute", "architecture_read", "registry_read", "tool_script_exec"],
   "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
-  coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config"],
+  coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config", "thread_write"],
   "doc-specialist": ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
   "compliance-officer": [
     "policy_write",
@@ -337,6 +339,7 @@ export const ONBOARDING_AGENT_GRANTS: Record<string, readonly string[]> = {
     "backlog_read",
     "portfolio_read",
     "admin_write",
+    "thread_write",
   ],
 };
 

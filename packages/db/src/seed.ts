@@ -1058,7 +1058,7 @@ async function seedCoworkerAgents(): Promise<void> {
     // agent-model-defaults). Dual-seed AGT-* twins from seedAgents() remain;
     // AI Workforce roster display collapses them via dropDualSeedAliasAgents
     // (BI-74FD6420) until a full FK migration lands.
-    const { agentId, slugId, ...rest } = cw;
+    const { agentId, slugId, delegatesTo, ...rest } = cw;
     const identity = resolveAgentIdentity({ agentId, name: rest.name, slugId, displayName: rest.name });
     // BI-3073F13B: this upsert keys on agentId but its create branch writes the
     // @unique slugId, so a new agentId re-using an existing slugId throws P2002
@@ -1067,7 +1067,15 @@ async function seedCoworkerAgents(): Promise<void> {
     // coworker's fields to it instead of crashing.
     const agent = await upsertCoworkerAgentTolerant(prisma, slugId, {
       where: { agentId },
-      create: { agentId, slugId, displayName: identity.displayName, kind: identity.kind, ...rest, lifecycleStage: "production" },
+      create: {
+        agentId,
+        slugId,
+        displayName: identity.displayName,
+        kind: identity.kind,
+        ...rest,
+        ...(delegatesTo ? { delegatesTo: [...delegatesTo] } : {}),
+        lifecycleStage: "production",
+      },
       update: {
         slugId,
         name: rest.name,
@@ -1076,6 +1084,9 @@ async function seedCoworkerAgents(): Promise<void> {
         description: rest.description,
         valueStream: rest.valueStream,
         sensitivity: rest.sensitivity,
+        // Only a coworker that declares seed-owned delegation authority updates
+        // this field. Preserve operator-managed authority for every other slug.
+        ...(delegatesTo ? { delegatesTo: [...delegatesTo] } : {}),
         // Un-retire if a prior broken seed pass archived the slug twin.
         archived: false,
         status: "active",
