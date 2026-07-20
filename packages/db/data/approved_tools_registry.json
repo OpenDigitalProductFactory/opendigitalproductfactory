@@ -69,6 +69,86 @@
       "supersedes": null,
       "createdAt": "2026-06-13",
       "updatedAt": "2026-06-13"
+    },
+    {
+      "id": "tool-eval-step-ca-20260720",
+      "toolName": "Step CA (smallstep/certificates)",
+      "toolType": "docker_image",
+      "version": "0.30.2",
+      "sourceUrl": "https://github.com/smallstep/certificates",
+      "proposedBy": "BI-52D34506 (federated demand LAN trust bootstrap)",
+      "proposedAt": "2026-07-20",
+      "status": "conditional",
+      "verdict": {
+        "decision": "conditional",
+        "rationale": "Standards-based self-hosted X.509 CA selected by governed decision DI-236363AB3AA3. The pinned image passed an isolated health/fingerprint/rollback smoke test. Adoption is limited to organization HTTPS leaf issuance under the documented network, secret-custody, provisioner, and advisory-monitoring conditions.",
+        "riskLevel": "medium",
+        "threatCategories": [
+          "authentication",
+          "access_control",
+          "data_protection",
+          "network_isolation",
+          "trust_boundary",
+          "operational_security",
+          "supply_chain"
+        ],
+        "confidenceScore": 0.88
+      },
+      "conditions": [
+        "pin smallstep/step-ca:0.30.2 to sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270",
+        "do not enable SCEP; review ACME separately before enabling it",
+        "store the CA password in a file-backed secret and keys in the dedicated PKI volume",
+        "bind the CA only to an explicitly selected private address or private overlay network",
+        "retain federation candidate validation, dual approval, projection review, and revocation independently of PKI"
+      ],
+      "findings": [
+        {
+          "reviewerAgentId": "codex-desktop",
+          "category": "security",
+          "severity": "medium",
+          "title": "Recent critical provisioner advisories are patched in the approved version",
+          "description": "CVE-2025-44005 affected ACME/SCEP through 0.28.4 and CVE-2026-30836 affected SCEP before 0.30.0. The approved 0.30.2 image contains both fixes; DPF does not enable SCEP.",
+          "evidence": "docs/security/tool-evaluations/2026-07-20-step-ca.md",
+          "recommendation": "Pin the evaluated digest and re-evaluate on every security advisory or version bump.",
+          "mitigatable": true,
+          "mitigation": "Digest pin, unused-provisioner disablement, private network binding, advisory monitoring."
+        },
+        {
+          "reviewerAgentId": "codex-desktop",
+          "category": "compliance",
+          "severity": "info",
+          "title": "Apache-2.0 and self-hosted data path",
+          "description": "Step CA is Apache-2.0 licensed and the selected deployment sends no certificate or key data to Smallstep-hosted services.",
+          "evidence": "https://github.com/smallstep/certificates/blob/v0.30.2/LICENSE",
+          "recommendation": "Compatible with DPF distribution.",
+          "mitigatable": true,
+          "mitigation": null
+        },
+        {
+          "reviewerAgentId": "codex-desktop",
+          "category": "integration",
+          "severity": "info",
+          "title": "Pinned image health and rollback verified",
+          "description": "The evaluated image started with a disposable volume on a loopback-only random port, returned ok from step ca health, produced a SHA-256 root fingerprint, and was removed with its volume.",
+          "evidence": "Local isolated Docker integration test, 2026-07-20; digest sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270",
+          "recommendation": "Proceed under the listed conditions.",
+          "mitigatable": true,
+          "mitigation": null
+        }
+      ],
+      "reviewers": [
+        {
+          "reviewerId": "codex-desktop",
+          "role": "implementing-agent",
+          "reviewedAt": "2026-07-20"
+        }
+      ],
+      "approvedBy": "founder direction + governed decision DI-236363AB3AA3",
+      "approvedAt": "2026-07-20",
+      "reEvaluateAfter": "2027-01-20",
+      "supersedes": null,
+      "createdAt": "2026-07-20",
+      "updatedAt": "2026-07-20"
     }
   ]
 }

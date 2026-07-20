@@ -87,6 +87,53 @@
 - [ ] Configure a certificate-valid HTTPS Authority URL on both installed
   hosts before claiming automatic nearby invitation exchange.
 
+#### Task 2 organization-PKI closure
+
+**Decision:** governed consultation `DI-236363AB3AA3` selected an embedded
+organization Step CA with high confidence (composite 5.319, margin 0.932). It
+extends the existing Edge PKI roadmap and TLS overlay; it does not create a
+federation-only certificate authority. Step CA v0.30.2 is conditionally
+approved in
+`docs/security/tool-evaluations/2026-07-20-step-ca.md` and the approved-tools
+registry.
+
+**First independently shippable phase:** bootstrap the private CA and issue a
+certificate-valid portal HTTPS leaf without changing federation schema or
+authorization. This makes transport trust installable and testable before a
+guided organization join code is added.
+
+- [x] Add a digest-pinned `docker-compose.pki.yml` overlay with a dedicated
+  CA volume, file-backed password secret, private-interface binding,
+  healthcheck, bounded resources/logs, and no SCEP or remote administration.
+- [x] Add idempotent Bash 3.2 and PowerShell 5.1 bootstrap commands that
+  initialize or reuse the organization CA, issue/renew the local portal leaf
+  for explicit private SANs, export the public root/fingerprint, and generate
+  the existing Caddy TLS artifacts without printing secrets.
+- [x] Mount the organization root into the portal's outbound trust bundle so
+  same-organization peers validate one another; keep public/corporate PKI as
+  the cross-organization alternative.
+- [ ] Add source-contract tests, isolated CA initialize/issue/renew tests,
+  compose rendering on macOS/Windows/Linux, recovery/rollback evidence, and
+  documentation for root/intermediate/password custody.
+- [ ] Add a guided, expiring organization join package containing CA URL,
+  public root fingerprint, one-time enrollment authority, intended peer, and
+  expiry. Import must verify the fingerprint and still require federation
+  matching-code dual approval; no root private key crosses installations.
+- [ ] Wire install/repair flows to the join package so a normal operator never
+  copies certificates, edits environment variables, opens a shell, or manages
+  Caddy/Step CA directly.
+- [ ] Run installed macOS + Windows V-01/V-03: restart both services, observe
+  add/remove expiry, validate HTTPS from each portal, exchange a nearby
+  invitation, approve both sides, and record evidence before closing
+  `BI-52D34506`.
+
+**Risks and rollback:** CA key loss invalidates renewal and CA replacement
+invalidates peer trust. Back up the PKI volume and password secret as one
+recovery unit, refuse silent reinitialization, and make join/leaf reissue
+idempotent. Rollback stops the PKI/TLS overlays and restores the prior HTTP
+portal; discovery and manual out-of-band invitation remain available, but
+automatic nearby pairing must truthfully return to `tls_required`.
+
 ### Task 2 UX fit review — nearby Connections
 
 - **Decision:** fits-with-guardrails

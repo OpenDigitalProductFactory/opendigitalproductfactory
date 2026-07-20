@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 528,
+  "pageCount": 529,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -6358,6 +6358,20 @@
         "if-gitleaks-flags-a-real-secret",
         "expected-runtime",
         "workflow-guarantees"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-07-20-step-ca.md": {
+      "publicHref": "/security/tool-evaluations/2026-07-20-step-ca/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-step-ca-v0302",
+        "cosai-security-findings",
+        "compliance-and-architecture-fit",
+        "integration-evidence",
+        "conditions",
+        "sources"
       ]
     },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {

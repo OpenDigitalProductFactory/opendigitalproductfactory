@@ -538,3 +538,14 @@ Resolved for Slice 1: the native Go Edge Node owns DNS-SD on Windows, macOS,
 and Linux, and automatic pairing requires a trusted HTTPS candidate endpoint.
 Certificate-free PAKE bootstrap is not part of this slice. See governed
 decision `DI-E72BC42D5FFB` and the platform-support watch-list.
+
+Resolved for installed private-LAN HTTPS: governed decision
+`DI-236363AB3AA3` selects the existing Step CA direction from the Edge Node PKI
+roadmap as the organization trust authority. Each installation holds its own
+leaf private key; the organization CA issues short-lived HTTPS leaves and
+distributes only its public root plus fingerprint to joining installations.
+The root private key never crosses installations. Step CA is transport-trust
+plumbing, not federation authorization: nearby candidate validation, expiring
+invitation authority, matching-code dual approval, `FederationLink`, and
+projection review remain mandatory. Public or operator-provided corporate PKI
+remains valid for cross-organization reseller/customer/founder relationships.
