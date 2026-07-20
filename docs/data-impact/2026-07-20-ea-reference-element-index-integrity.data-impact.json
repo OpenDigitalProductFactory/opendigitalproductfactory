@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "EA reference-model element registry",
+    "EA reference-model element parent relationships",
+    "EA reference assessment element relationships",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720150000_repair_ea_reference_element_index_integrity",
+    "backfill": "forced-heap exact-key convergence: lexical-id deterministic (modelId, slug) survivor, collision-checked quarantine slugs for losers, preservation of element ids and all ID-based relationships, then complete compound unique-index rebuild; no row is deleted"
+  },
+  "tests": [
+    "packages/db/src/ea-reference-element-index-integrity-migration.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:ea-reference-model-element#model-slug-integrity-repair",
+      "prismaModel": "EaReferenceModelElement",
+      "lifecycleDisposition": "the lexical-first exact-key row remains canonical; each loser remains durable under a reserved quarantine slug with its original id, attributes, parent/child links, and assessment relationships",
+      "fields": [
+        {
+          "fieldId": "data:ea-reference-model-element#modelId-slug",
+          "resolution": "governed",
+          "reason": "restore trustworthy compound-key uniqueness without deleting reference-model history or weakening sanitized-clone enforcement",
+          "provenance": "BI-A794805F forced heap/index evidence, canonical element import contract, and migration fixture"
+        }
+      ]
+    }
+  ]
+}
