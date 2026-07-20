@@ -202,17 +202,18 @@ The operator picks a decomposition, edits it, or asks for a fresh proposal with 
 The platform performs the approval atomically in one Prisma transaction, wrapped by the same advisory-lock discipline used by `promoteBacklogItemToBuildDraft`:
 
 1. Create an execution-organizational Epic. Title defaults from the design doc title. `originatingBacklogItemId`, `designDoc`, and `designReview` are copied from the originating FeatureBuild. `decompositionState` stores the chosen partition, AC-to-child mapping, dependency edges, approver, timestamp, rationale, and superseded build id.
-2. For each child scope, create a FeatureBuild:
+2. For each child scope, create a live child BacklogItem linked to the execution Epic. It inherits the originating item's intake/work-type facets, records its sibling dependencies in the body, and becomes the durable queue identity for that independently shippable scope.
+3. For each child scope, create a FeatureBuild:
    - `parentEpicId` set to the new Epic.
-   - `originatingBacklogItemId` copied from the original FeatureBuild for audit and reporting.
+   - `originatingBacklogItemId` set to that scope's child BacklogItem; the Epic and coverage receipt retain the umbrella relationship for audit and reporting.
    - `childOrder` set per the chosen sequence.
    - `designDoc` set to a child-scoped projection of the parent doc.
    - `designReview` copied from the parent, with metadata showing transitive approval from the parent contract.
    - `phase` set to `plan` only when dependency edges are clear. Children with unmet sibling dependencies still use an existing phase, usually `plan`, but dispatch/review gates treat them as "waiting" until dependencies clear.
-3. Create `FeatureBuildDependency` rows for sibling dependencies.
-4. Mark the original FeatureBuild as superseded without inventing a new phase: set `supersededByEpicId`, `abandonedAt = now()`, and `abandonReason = "decomposed-into-epic:<epicId>"`. Preserve its original phase for audit.
-5. Update the BacklogItem to `activeEpicId = <epic.id>` and `activeBuildId = null`.
-6. Record `epic_decomposed` on the BacklogItem and `decomposition_created` on each child FeatureBuild.
+4. Create `FeatureBuildDependency` rows for sibling dependencies.
+5. Mark the original FeatureBuild as superseded without inventing a new phase: set `supersededByEpicId`, `abandonedAt = now()`, and `abandonReason = "decomposed-into-epic:<epicId>"`. Preserve its original phase for audit.
+6. Update the umbrella BacklogItem to `activeEpicId = <epic.id>` and `activeBuildId = null`; each child BacklogItem points to its child build.
+7. Record a `plan_backlog_coverage` activity on the umbrella with the child BI/build mapping and dependency graph, plus `decomposition_created` on each child FeatureBuild.
 
 `getFeatureBuilds` and the `/build` route then exclude superseded top-level builds from the main list and include Epic rollups for active execution-organizational Epics.
 
@@ -515,7 +516,7 @@ Phase 3 or 4 must add this scenario to [docs/personas/dale-hvac.md](../../person
 2. **Coworker role:** the existing **Software Engineer** coworker (slugId `build-specialist`) absorbs architect responsibilities, including design-time decomposition. The "Software Architect" role does not exist as a discrete coworker today; rather than introduce a new seed, extend the Software Engineer's description and prompt to claim architect scope, and reference a DPF-specific architecture-patterns doc (MVC mapping in Next.js app router, singleton/factory restraint rules, GearInterface emission points, WWMD consultation pattern, DPF anti-patterns from kernel memory). The architecture-patterns doc is filed as a follow-up BI; this spec's Phase 1 work proceeds against the Software Engineer prompt as-is, with the patterns reference added in parallel. Reconsider a dedicated Decomposition Architect only if production evidence shows the SE role becoming a grab-bag.
 3. **Epic auto-naming:** auto-name from the design doc, with inline edit before approval.
 4. **Recursive decomposition:** no for first rollout. Child oscillation routes to parent amendment or re-slice of non-started children.
-5. **Originating backlog placement:** add `Epic.originatingBacklogItemId` and keep child `originatingBacklogItemId` for audit/reporting compatibility.
+5. **Originating backlog placement:** `Epic.originatingBacklogItemId` retains the umbrella contract; each independently shippable child FeatureBuild points to its own live child BacklogItem. This does not make BIs the execution hierarchy — Epic remains the parent and FeatureBuilds remain its executable children — but it prevents future work from disappearing from the live backlog.
 6. **Phase value:** no new `blocked-on-sibling`, `superseded`, or `shipped` phase values in first rollout.
 7. **Threshold persistence:** use `PlatformConfig` key `build-studio-decomposition` first; graduate to a dedicated table only when operator-edited threshold history matters.
 
@@ -540,3 +541,13 @@ Three operator modifications (Q5, Q6, Q7) all moved in the same direction: defer
 Approved spec feeds `writing-plans`; implementation lands through topic branches and PRs against `main`, per AGENTS.md. Do not commit directly to `main`.
 
 The next smallest plan is Phase 1: schema substrate, invariants, and read-model preservation. The acceptance bar is that all existing builds still list/promote normally while the new data model can represent one active Epic with three child FeatureBuilds and normalized dependency edges.
+
+## 14. Addendum (2026-07-19) — backlog-visible decomposition
+
+The original implementation preserved the umbrella BI on every child build.
+That made the execution graph visible in Build Studio but left independently
+shippable child work absent from the canonical PostgreSQL backlog. BI-C24C83FA
+corrects the boundary without introducing a new hierarchy or schema: approval
+creates one child BI per child build in the same transaction and writes the
+shared `plan_backlog_coverage` receipt on the umbrella. The explicit atomic
+override path writes the same receipt shape with the operator rationale.

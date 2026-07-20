@@ -53,6 +53,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/plan-backlog-coverage-guard.mjs\""
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/ux-fit-precheck.mjs\""
           },
           {

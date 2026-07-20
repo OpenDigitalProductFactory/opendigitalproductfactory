@@ -6,6 +6,9 @@ const svc = vi.hoisted(() => ({
   proposeDecomposition: vi.fn(),
   approveDecomposition: vi.fn(),
   recordDecompositionOverride: vi.fn(),
+  recordPlanBacklogCoverage: vi.fn(),
+  checkPlanBacklogCoverage: vi.fn(),
+  checkBranchPlanBacklogGate: vi.fn(),
 }));
 vi.mock("@/lib/complexity-assessment", () => ({
   assessComplexity: (...a: unknown[]) => svc.assessComplexity(...a),
@@ -22,6 +25,11 @@ vi.mock("@/lib/build/approve-decomposition", () => ({
 vi.mock("@/lib/build/decomposition-override", () => ({
   recordDecompositionOverride: (...a: unknown[]) => svc.recordDecompositionOverride(...a),
 }));
+vi.mock("@/lib/planning/plan-backlog-coverage", () => ({
+  recordPlanBacklogCoverage: (...a: unknown[]) => svc.recordPlanBacklogCoverage(...a),
+  checkPlanBacklogCoverage: (...a: unknown[]) => svc.checkPlanBacklogCoverage(...a),
+  checkBranchPlanBacklogGate: (...a: unknown[]) => svc.checkBranchPlanBacklogGate(...a),
+}));
 
 import { decompositionPack } from "./decomposition-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -32,6 +40,9 @@ const EXPECTED_TOOLS = [
   "propose_build_decomposition",
   "approve_decomposition",
   "record_decomposition_override",
+  "record_plan_backlog_coverage",
+  "check_plan_backlog_coverage",
+  "check_branch_plan_backlog_gate",
 ];
 
 beforeEach(() => {
@@ -39,7 +50,7 @@ beforeEach(() => {
 });
 
 describe("decomposition pack — registration", () => {
-  it("exposes exactly the five decomposition tools with a handler each", () => {
+  it("exposes every decomposition and plan-coverage tool with a handler", () => {
     expect(decompositionPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(decompositionPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -56,12 +67,18 @@ describe("decomposition pack — registration", () => {
     expect(decompositionPack.grants.propose_build_decomposition).toEqual(["build_phase_advance"]);
     expect(decompositionPack.grants.approve_decomposition).toEqual(["build_phase_advance"]);
     expect(decompositionPack.grants.record_decomposition_override).toEqual(["build_phase_advance"]);
+    expect(decompositionPack.grants.record_plan_backlog_coverage).toEqual(["backlog_write"]);
+    expect(decompositionPack.grants.check_plan_backlog_coverage).toEqual(["backlog_read"]);
+    expect(decompositionPack.grants.check_branch_plan_backlog_gate).toEqual(["backlog_read"]);
 
     expect(isToolAllowedByGrants("assess_complexity", ["backlog_read"])).toBe(true);
     expect(isToolAllowedByGrants("propose_decomposition", ["backlog_write"])).toBe(true);
     expect(isToolAllowedByGrants("propose_build_decomposition", ["build_phase_advance"])).toBe(true);
     expect(isToolAllowedByGrants("approve_decomposition", ["build_phase_advance"])).toBe(true);
     expect(isToolAllowedByGrants("record_decomposition_override", ["build_phase_advance"])).toBe(true);
+    expect(isToolAllowedByGrants("record_plan_backlog_coverage", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("check_plan_backlog_coverage", ["backlog_read"])).toBe(true);
+    expect(isToolAllowedByGrants("check_branch_plan_backlog_gate", ["backlog_read"])).toBe(true);
   });
 });
 
@@ -130,5 +147,70 @@ describe("decomposition pack — handler behavior (delegation preserved)", () =>
     );
     expect(res.success).toBe(false);
     expect(res.error).toBe("not_required");
+  });
+
+  it("record_plan_backlog_coverage returns a governed receipt", async () => {
+    svc.recordPlanBacklogCoverage.mockResolvedValue({
+      ok: true,
+      receiptId: "receipt-1",
+      decision: "decomposed",
+      mappedItemIds: ["BI-1", "BI-2"],
+    });
+    const res = await decompositionPack.handlers.record_plan_backlog_coverage(
+      {
+        itemId: "BI-PARENT",
+        planPath: "docs/superpowers/plans/example.md",
+        decision: "decomposed",
+        deliverables: [
+          { key: "one", title: "One", independentlyShippable: true, backlogItemId: "BI-1", dependsOn: [] },
+        ],
+      },
+      "user-1",
+      { agentId: "agent-1" },
+    );
+
+    expect(res).toMatchObject({ success: true, entityId: "receipt-1" });
+    expect(svc.recordPlanBacklogCoverage).toHaveBeenCalledWith(
+      expect.objectContaining({ itemId: "BI-PARENT", userId: "user-1", agentId: "agent-1" }),
+    );
+  });
+
+  it("check_plan_backlog_coverage revalidates a receipt without writing", async () => {
+    svc.checkPlanBacklogCoverage.mockResolvedValue({
+      ok: true,
+      valid: true,
+      decision: "atomic",
+      mappedItemIds: [],
+    });
+    const res = await decompositionPack.handlers.check_plan_backlog_coverage(
+      {
+        itemId: "BI-PARENT",
+        planPath: "docs/superpowers/plans/example.md",
+        receiptId: "receipt-1",
+      },
+      "user-1",
+    );
+
+    expect(res).toMatchObject({ success: true, data: { valid: true, decision: "atomic" } });
+    expect(svc.checkPlanBacklogCoverage).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "BI-PARENT",
+      receiptId: "receipt-1",
+    }));
+  });
+
+  it("check_branch_plan_backlog_gate requires a decision for claimed xlarge work", async () => {
+    svc.checkBranchPlanBacklogGate.mockResolvedValue({
+      ok: false,
+      required: true,
+      code: "decomposition-decision-required",
+      error: "decision required",
+      itemId: "BI-PARENT",
+    });
+    const res = await decompositionPack.handlers.check_branch_plan_backlog_gate(
+      { branchName: "fix/xlarge-plan" },
+      "user-1",
+    );
+    expect(res).toMatchObject({ success: false, error: "decomposition-decision-required" });
+    expect(svc.checkBranchPlanBacklogGate).toHaveBeenCalledWith({ branchName: "fix/xlarge-plan" });
   });
 });

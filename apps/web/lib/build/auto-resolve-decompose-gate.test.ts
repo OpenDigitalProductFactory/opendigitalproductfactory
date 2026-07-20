@@ -39,6 +39,7 @@ function makeDeps(overrides: Partial<AutoResolveDecomposeDeps> = {}): AutoResolv
       ok: true as const,
       epicId: "EP-ABC123",
       childBuildIds: ["FB-CHILD1", "FB-CHILD2"],
+      childBacklogItemIds: ["BI-CHILD1", "BI-CHILD2"],
       unblockedChildBuildIds: ["FB-CHILD1"],
     })),
     recordDecompositionOverride: vi.fn(async () => ({

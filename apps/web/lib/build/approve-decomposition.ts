@@ -29,6 +29,7 @@
 
 import { prisma } from "@dpf/db";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
+import { generateBacklogItemId } from "@/lib/operate/backlog-ingest";
 import { generateBuildId, normalizeHappyPathState } from "@/lib/explore/feature-build-types";
 import type { BuildDesignDoc, ReviewResult } from "@/lib/explore/feature-build-types";
 import { isPlanReviewOscillating } from "@/lib/build/plan-oscillation-decomposition";
@@ -67,7 +68,7 @@ export type ApproveDecompositionInput = {
    *  enough for our needs). Defaults to the real `prisma` import. */
   db?: ApproveDecompositionDb;
   /** Test seam: override id generators so tests can assert deterministic ids. */
-  idGen?: { epicId: () => string; childBuildId: () => string };
+  idGen?: { epicId: () => string; childBuildId: () => string; childBacklogItemId: () => string };
   /**
    * Test seam / override: plan dispatch for children that have no unsatisfied
    * sibling deps (BI-E49DDE47). Default fire-and-forgets
@@ -84,6 +85,8 @@ export type ApproveDecompositionResult =
       ok: true;
       epicId: string;
       childBuildIds: string[];
+      /** Live backlog coverage created for the independently shippable children. */
+      childBacklogItemIds: string[];
       /** Children with empty dependsOn — plan_dispatch was (or will be) fired. */
       unblockedChildBuildIds: string[];
     }
@@ -142,7 +145,11 @@ export type TxShape = {
     create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
   };
   backlogItem: {
+    create: (args: { data: Record<string, unknown> }) => Promise<{ id: string; itemId: string }>;
     update: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => Promise<unknown>;
+  };
+  backlogItemActivity: {
+    create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>;
   };
   buildActivity: {
     create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
@@ -164,6 +171,7 @@ export async function approveDecomposition(
   const idGen = args.idGen ?? {
     epicId: () => `EP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
     childBuildId: () => generateBuildId(),
+    childBacklogItemId: () => generateBacklogItemId(),
   };
 
   // 1. Fetch the originating FB.
@@ -180,6 +188,9 @@ export async function approveDecomposition(
       plan: true,
       parentEpicId: true,
       originatingBacklogItemId: true,
+      originator: {
+        select: { itemId: true, type: true, workType: true, source: true },
+      },
       digitalProductId: true,
       portfolioId: true,
       accountableEmployeeId: true,
@@ -248,6 +259,7 @@ export async function approveDecomposition(
   const epicIdLogical = idGen.epicId();
   const childDocs = candidateToChildDesignDocs(args.candidate, designDoc);
   const childBuildLogicalIds = childDocs.map(() => idGen.childBuildId());
+  const childBacklogLogicalIds = childDocs.map(() => idGen.childBacklogItemId());
 
   // Invariant 1: parent will have featureBuilds → must carry designDoc.
   try {
@@ -320,12 +332,13 @@ export async function approveDecomposition(
     approvedAt: now().toISOString(),
     approvedByUserId: args.userId,
     approvedByAgentId: args.agentId ?? null,
-    partition: args.candidate.childScopes.map((s) => ({
+    partition: args.candidate.childScopes.map((s, index) => ({
       childOrder: s.childOrder,
       title: s.title,
       summary: s.summary,
       acceptanceCriteriaIndices: s.acceptanceCriteriaIndices.slice(),
       dependsOn: s.dependsOn.slice(),
+      backlogItemId: build.originatingBacklogItemId ? childBacklogLogicalIds[index] : null,
     })),
   };
 
@@ -361,16 +374,44 @@ export async function approveDecomposition(
     // Create children with real epic.id.
     const orderToRealBuildId = new Map<number, string>();
     const orderToRealRowId = new Map<number, string>();
+    const orderToBacklogItem = new Map<number, { id: string; itemId: string }>();
     for (let i = 0; i < childDocs.length; i++) {
       const child = childDocs[i]!;
       const childBuildLogical = childBuildLogicalIds[i]!;
+      let childBacklogItem: { id: string; itemId: string } | null = null;
+      if (build.originatingBacklogItemId && build.originator) {
+        const scope = args.candidate.childScopes[i]!;
+        const dependencyKeys = scope.dependsOn.map((order) => `child-${order}`);
+        childBacklogItem = await tx.backlogItem.create({
+          data: {
+            itemId: childBacklogLogicalIds[i]!,
+            title: child.title,
+            body: [
+              `Build Studio decomposition child of ${build.originator.itemId}.`,
+              child.designDoc.proposedApproach,
+              `Depends on: ${dependencyKeys.length > 0 ? dependencyKeys.join(", ") : "none"}.`,
+            ].filter(Boolean).join("\n\n"),
+            status: "open",
+            type: build.originator.type,
+            workType: build.originator.workType ?? "feature",
+            source: build.originator.source ?? "user-request",
+            triageOutcome: "build",
+            proposedOutcome: "build",
+            effortSize: "large",
+            epicId: createdEpic.id,
+            submittedById: args.userId,
+            agentId: args.agentId ?? null,
+          },
+        });
+        orderToBacklogItem.set(child.childOrder, childBacklogItem);
+      }
       const childPlan = applyChildIntakeToPlan(
         null,
         buildDecompositionChildIntakePatch({
           parentIntake,
           epicSemanticId: createdEpic.epicId,
           childTitle: child.title,
-          childOriginatingBacklogItemId: build.originatingBacklogItemId ?? null,
+          childOriginatingBacklogItemId: childBacklogItem?.id ?? null,
           childBuildId: childBuildLogical,
         }),
       );
@@ -385,8 +426,8 @@ export async function approveDecomposition(
           designReview: review as never,
           plan: childPlan as never,
           createdById: args.userId,
-          ...(build.originatingBacklogItemId
-            ? { originatingBacklogItemId: build.originatingBacklogItemId }
+          ...(childBacklogItem
+            ? { originatingBacklogItemId: childBacklogItem.id }
             : {}),
           ...(build.digitalProductId ? { digitalProductId: build.digitalProductId } : {}),
           ...(build.portfolioId ? { portfolioId: build.portfolioId } : {}),
@@ -434,6 +475,41 @@ export async function approveDecomposition(
           activeEpicId: createdEpic.id,
         },
       });
+      for (const child of childDocs) {
+        const childBacklogItem = orderToBacklogItem.get(child.childOrder);
+        const childBuildRowId = orderToRealRowId.get(child.childOrder);
+        if (!childBacklogItem || !childBuildRowId) continue;
+        await tx.backlogItem.update({
+          where: { id: childBacklogItem.id },
+          data: { activeBuildId: childBuildRowId },
+        });
+      }
+
+      const deliverables = args.candidate.childScopes.map((scope, index) => ({
+        key: `child-${scope.childOrder}`,
+        title: scope.title,
+        independentlyShippable: true,
+        backlogItemId: childBacklogLogicalIds[index]!,
+        dependsOn: scope.dependsOn.map((order) => `child-${order}`),
+      }));
+      await tx.backlogItemActivity.create({
+        data: {
+          backlogItemId: build.originatingBacklogItemId,
+          kind: "plan_backlog_coverage",
+          summary: `Build Studio decomposition mapped ${deliverables.length} independently shippable child deliverable(s) to live BacklogItems.`,
+          payload: {
+            decision: "decomposed",
+            planPath: null,
+            sourceBuildId: build.buildId,
+            epicId: createdEpic.epicId,
+            mappedItemIds: childBacklogLogicalIds,
+            deliverables,
+            recordedAt: now().toISOString(),
+          },
+          recordedById: args.userId,
+          recordedByAgentId: args.agentId ?? null,
+        },
+      });
     }
 
     // Log activity on the originating build.
@@ -465,6 +541,7 @@ export async function approveDecomposition(
     return {
       epicId: createdEpic.epicId,
       childBuildIds: Array.from(orderToRealBuildId.values()),
+      childBacklogItemIds: Array.from(orderToBacklogItem.values()).map((item) => item.itemId),
       unblockedChildBuildIds,
     };
   });
@@ -493,6 +570,7 @@ export async function approveDecomposition(
     ok: true,
     epicId: txResult.epicId,
     childBuildIds: txResult.childBuildIds,
+    childBacklogItemIds: txResult.childBacklogItemIds,
     unblockedChildBuildIds: txResult.unblockedChildBuildIds,
   };
 }

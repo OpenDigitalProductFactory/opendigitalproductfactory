@@ -42,7 +42,7 @@ When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap
 
 - The work is already tracked — find the existing BI with `mcp__dpf__query_backlog` and link to it instead.
 - The work is operator-scope only (read-only research, in-session question answer). Not all work needs a BI.
-- You're inside an active Build Studio build — the build's own backlog management handles its children.
+- You're inside an active Build Studio decomposition — `approve_decomposition` materializes child BIs transactionally; use this skill only when filing or mapping them before that gate.
 - Skill / coworker / capability work — those have their own substrate (`SkillDefinition`, `agent_registry.json`); see `add-skill.skill.md` for the Surface B coworker-skill path.
 
 ## Read first
@@ -68,13 +68,13 @@ When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap
    - `portfolio` = substrate / governance / cross-cutting work (this whole bundle's parent BI).
    - `product` = a discrete feature, defect fix, or capability that ships.
 
-3. **Choose the right `source`.** Enum: `feature-gap | bug | tool-gap | skill-gap | doc-gap | user-request | automated-detection`. Pick the one that names how the gap was discovered, not what the deliverable is.
+3. **Choose the right `workType` and `source`.** `workType` is what the work is (`bug | feature | chore | doc | tool | skill | refactor`). `source` is how it entered the queue (`user-request | automated-detection`). Keep these axes separate and match AGENTS.md §3 exactly.
 
 4. **Choose the right epic.** Run `mcp__dpf__list_epics({ status: "open" })` and pick the closest semantic fit. If two epics could fit, pick the higher-priority one. Only create a new epic via `mcp__dpf__create_epic` if no existing one is even adjacent — and document the rationale in the BI body.
 
 5. **Set `proposedOutcome` advisory.** Enum: `build | runbook | coworker-task | defer | duplicate | discard`. This is non-binding on triage but it tees the Scrum Master coworker up — pick `build` for code work, `coworker-task` for one-shot procedural work, `defer` if dependent on unblocking work, `duplicate` if you missed the overlap check (and supply `duplicateOfId`).
 
-6. **Set `effortSize` when proposedOutcome=build.** Enum: `small | medium | large | xlarge`. Required for `triageOutcome=build`. Rough mapping: small = under a day, medium = 1-3 days, large = 1-2 weeks, xlarge = larger (consider decomposition).
+6. **Set `effortSize` when proposedOutcome=build.** Enum: `small | medium | large | xlarge`. Required for `triageOutcome=build`. Rough mapping: small = under a day, medium = 1-3 days, large = 1-2 weeks, xlarge = larger. `xlarge` requires an explicit decomposition decision before implementation: independently shippable children become live BIs (or map to existing BIs); retaining one BI requires the governed atomic rationale and receipt from `dpf-writing-plans`.
 
 7. **Write the body.** Markdown. Include:
    - Problem statement (1-2 sentences naming the gap).
@@ -84,6 +84,8 @@ When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap
    - Link to full context (memo, spec, audit, or PR if available).
 
 8. **Call `mcp__dpf__create_backlog_item`** with the assembled fields. Capture the returned `entityId` (e.g. `BI-AD86EE4E`) for reference in subsequent BIs or in the operator response.
+
+   When a spec or plan produced several independent deliverables, repeat the overlap query and filing step for each uncovered deliverable, then pass all new and existing IDs plus dependencies to `record_plan_backlog_coverage`. Do not leave successors as unchecked Markdown.
 
 9. **Optionally call `mcp__dpf__triage_backlog_item`** in the same flow if you're skipping the default `triaging` status — supply `outcome` + `rationale` (+ `effortSize` if outcome=build).
 
@@ -96,7 +98,7 @@ When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap
 
 - Id: `<BI-XXXXXXXX>`
 - Epic: `<EP-XXX>` (<epic title>)
-- Type / source: <portfolio|product> / <source-enum>
+- Type / workType / source: <portfolio|product> / <work-type-enum> / <user-request|automated-detection>
 - ProposedOutcome / size: <outcome> / <size>
 - Body summary: <one sentence>
 - Dependencies: blocks <ids> | blocked by <ids> | independent
@@ -127,7 +129,7 @@ Filing this bundle's parent BI from [docs/superpowers/drafts/2026-05-24-dpf-skil
 
 1. `dpf-verify-substrate-first` confirmed no overlap with `EP-SKILL-001` (different surface scope) and named `EP-REDUCTION-GEAR-ARCH` as the right parent.
 2. Type: `portfolio` (substrate consolidation).
-3. Source: `skill-gap` (the gap is missing DPF-specific procedural skills on both surfaces).
+3. WorkType / source: `skill` / `user-request` (the requested work adds missing DPF-specific procedural skills).
 4. Epic: `EP-REDUCTION-GEAR-ARCH` (priority 2, substrate-consolidation framing).
 5. ProposedOutcome: `build`. EffortSize: `large` (7 child BIs, ~2 weeks elapsed).
 6. Body: verbatim from memo §2 (problem statement + scope + acceptance criteria + child enumeration + cross-refs + operator-ratified context).

@@ -362,6 +362,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   propose_build_decomposition: ["build_phase_advance"],
   approve_decomposition: ["build_phase_advance"],
   record_decomposition_override: ["build_phase_advance"],
+  record_plan_backlog_coverage: ["backlog_write"],
+  check_plan_backlog_coverage: ["backlog_read"],
+  check_branch_plan_backlog_gate: ["backlog_read"],
   register_tech_debt: ["backlog_write"],
   // Build-evidence persistence — refactored to the finer `build_evidence`
   // grant (BI-B2F7ABF5). Backwards-compat preserved by GRANT_IMPLICATIONS.

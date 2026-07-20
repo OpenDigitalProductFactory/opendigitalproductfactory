@@ -703,6 +703,7 @@ GROK_HOOK_GUARDS = (
     "lease-guard.mjs",
     "root-clone-guard.mjs",
     "compose-guard.mjs",
+    "plan-backlog-coverage-guard.mjs",
 )
 
 
@@ -750,6 +751,7 @@ CODEX_BASH_GUARDS = (
     "lease-punt-guard.mjs",
 )
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
+CODEX_WRITE_GUARDS = ("plan-backlog-coverage-guard.mjs",)
 
 
 def codex_hooks_file(home: Path) -> Path:
@@ -762,7 +764,7 @@ def _dpf_hook_command(command: str, managed_hooks_dir: Path) -> bool:
     managed_prefix = str(managed_hooks_dir)
     if managed_prefix in command and ".mjs" in command:
         return True
-    return any(name in command for name in (*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS))
+    return any(name in command for name in (*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS, *CODEX_WRITE_GUARDS))
 
 
 def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[dict[str, Any]]:
@@ -782,6 +784,13 @@ def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[di
     ]
     if ask_entries:
         groups.append({"matcher": "AskUserQuestion", "hooks": ask_entries})
+    write_entries = [
+        {"type": "command", "command": f'node "{hooks_dir / guard}"', "timeout": 15}
+        for guard in CODEX_WRITE_GUARDS
+        if dry_run or (hooks_dir / guard).exists()
+    ]
+    if write_entries:
+        groups.append({"matcher": "Write|Edit|MultiEdit", "hooks": write_entries})
     return groups
 
 
@@ -851,7 +860,8 @@ def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
     if dry_run:
         bash_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "Bash")
         ask_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "AskUserQuestion")
-        return f"dry-run: would merge {bash_count} Bash + {ask_count} AskUserQuestion guard(s) into {path}"
+        write_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "Write|Edit|MultiEdit")
+        return f"dry-run: would merge {bash_count} Bash + {ask_count} AskUserQuestion + {write_count} Write/Edit guard(s) into {path}"
     changed = write_json(path, payload)
     return f"merged guards into {path}" + ("" if changed else " (unchanged)")
 
@@ -910,6 +920,7 @@ HOOK_PURPOSES = {
     "compose-guard.mjs": "blocks docker compose commands that tear down shared services",
     "lease-punt-guard.mjs": "blocks a runtime-bound gate (prisma migrate / db push) in a source-only worktree",
     "decision-routing-guard.mjs": "blocks asking the operator a platform decision with no kernel consultation",
+    "plan-backlog-coverage-guard.mjs": "blocks production source edits until xlarge and independently shippable plan work has live BI coverage",
     "ux-fit-precheck.mjs": "reminds to run a UX-fit review when editing UI surfaces",
     "spec-plan-doc-precheck.mjs": "reminds to attach a spec/plan/doc when writing gated files",
     "design-grounding-precheck.mjs": "reminds to review specs and current code substrate before UX/workflow edits",
@@ -980,7 +991,7 @@ def guard_liveness_advisory() -> list[str]:
         "  Grok  : guards now DENY (live-probed, Grok 0.2.87). Grok DOES execute PreToolUse "
         + "blocking command-hooks, but its hook plane ignores plugin-bundled hooks — so the guards "
         + "are wired into ~/.grok/hooks/dpf-guards.json (always-trusted) instead, and self-scope to "
-        + "DPF checkouts. Restart Grok to load them; `/hooks` should list 5 PreToolUse guards."
+        + "DPF checkouts. Restart Grok to load them; `/hooks` should list 6 PreToolUse guards."
     )
     return [
         "Guard liveness (plane-1 PreToolUse enforcement is NOT implied by install):",

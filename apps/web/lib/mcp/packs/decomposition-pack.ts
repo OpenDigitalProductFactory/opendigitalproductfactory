@@ -79,7 +79,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "approve_decomposition",
-    description: "Atomically create an execution-organizational Epic + N child FeatureBuilds + sibling-dependency edges from a pre-validated DecompositionCandidate, and mark the originating FeatureBuild as superseded. The originating build must be in `ideate` phase with a passed designReview, or in `plan` with a failed oscillating planReview as the retroactive escape hatch, and must not itself be a child. Callers (typically the decomposition assistant flow) supply the candidate after the operator has chosen and optionally edited it; all invariants from epic-decomposition-invariants run before any DB writes.",
+    description: "Atomically create an execution-organizational Epic, one live child BacklogItem and FeatureBuild per scope, sibling-dependency edges, and a backlog-coverage receipt from a pre-validated DecompositionCandidate; then mark the originating FeatureBuild as superseded. The originating build must be in `ideate` phase with a passed designReview, or in `plan` with a failed oscillating planReview as the retroactive escape hatch, and must not itself be a child.",
     inputSchema: {
       type: "object",
       properties: {
@@ -115,7 +115,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "record_decomposition_override",
-    description: "Record the operator's 'keep as one build' override on a FeatureBuild whose size assessment is decompose-required. Writes designReview.decompositionOverride for audit and hive-contribution context. Only valid on decompose-required builds; recommended-tier builds proceed without recording an override (single-click path per spec §4.1). Does not enforce — the downstream decomposition gate is the consumer of this record.",
+    description: "Record the operator's 'keep as one build' override on a FeatureBuild whose size assessment is decompose-required. Writes the design-review override and an atomic backlog-coverage receipt with the operator rationale. Only valid on decompose-required builds; recommended-tier builds proceed without an override.",
     inputSchema: {
       type: "object",
       properties: {
@@ -126,6 +126,64 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
+  },
+  {
+    name: "record_plan_backlog_coverage",
+    description: "Validate that every independently shippable plan deliverable maps to a live BacklogItem, or record an auditable rationale that the phased plan is atomic. Writes a structured coverage receipt to the umbrella BacklogItem. Use before implementation starts and copy the returned receipt and dependency mapping into the plan. Missing mappings, missing items, and invalid atomic claims fail without writing a receipt.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "Umbrella BacklogItem ID (BI-*)." },
+        planPath: { type: "string", description: "Repository-relative implementation plan path." },
+        decision: { type: "string", enum: ["decomposed", "atomic"], description: "Whether independent work is mapped to BIs or the plan is deliberately atomic." },
+        rationale: { type: "string", description: "Required for atomic: why no phase is independently shippable." },
+        deliverables: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              key: { type: "string" },
+              title: { type: "string" },
+              independentlyShippable: { type: "boolean" },
+              backlogItemId: { type: "string", description: "Existing or newly filed BI for an independent deliverable." },
+              dependsOn: { type: "array", items: { type: "string" } },
+            },
+            required: ["key", "title", "independentlyShippable", "dependsOn"],
+          },
+        },
+      },
+      required: ["itemId", "planPath", "decision", "deliverables"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "check_plan_backlog_coverage",
+    description: "Revalidate a plan backlog-coverage receipt against the current umbrella item, plan path, deliverable graph, and live mapped BacklogItems. Use before implementation and when resuming a task. Returns an invalid result when the receipt is missing, mismatched, stale, or its mapped items no longer resolve.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "Umbrella BacklogItem ID (BI-*)." },
+        planPath: { type: "string", description: "Repository-relative implementation plan path." },
+        receiptId: { type: "string", description: "BacklogItemActivity receipt returned when coverage was recorded." },
+      },
+      required: ["itemId", "planPath", "receiptId"],
+    },
+    requiredCapability: "view_platform",
+    sideEffect: false,
+  },
+  {
+    name: "check_branch_plan_backlog_gate",
+    description: "Check whether the BacklogItem claimed by a branch is xlarge and, if so, whether it has a current decomposition or atomic coverage decision. Use before source implementation even when no plan file has been written yet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        branchName: { type: "string", description: "Current topic branch bound to a Work Capsule." },
+      },
+      required: ["branchName"],
+    },
+    requiredCapability: "view_platform",
+    sideEffect: false,
   },
 ];
 
@@ -217,7 +275,54 @@ async function approveDecompositionTool(
     data: {
       epicId: result.epicId,
       childBuildIds: result.childBuildIds,
+      childBacklogItemIds: result.childBacklogItemIds,
     },
+  };
+}
+
+async function checkPlanBacklogCoverageTool(params: Record<string, unknown>): Promise<ToolResult> {
+  const itemId = String(params["itemId"] ?? "");
+  const planPath = String(params["planPath"] ?? "");
+  const receiptId = String(params["receiptId"] ?? "");
+  if (!itemId.startsWith("BI-")) {
+    return { success: false, error: "invalid_itemId", message: "itemId must use the BI-* format." };
+  }
+  if (!planPath.startsWith("docs/superpowers/plans/") || !planPath.endsWith(".md")) {
+    return { success: false, error: "invalid_plan_path", message: "planPath must name a Markdown plan under docs/superpowers/plans/." };
+  }
+  if (!receiptId) {
+    return { success: false, error: "invalid_receipt", message: "receiptId is required." };
+  }
+  const { checkPlanBacklogCoverage } = await import("@/lib/planning/plan-backlog-coverage");
+  const result = await checkPlanBacklogCoverage({ itemId, planPath, receiptId });
+  if (!result.ok) {
+    return { success: false, error: result.code, message: result.error, data: result as unknown as Record<string, unknown> };
+  }
+  return {
+    success: true,
+    entityId: receiptId,
+    message: `Plan backlog coverage is current for ${itemId}.`,
+    data: result as unknown as Record<string, unknown>,
+  };
+}
+
+async function checkBranchPlanBacklogGateTool(params: Record<string, unknown>): Promise<ToolResult> {
+  const branchName = String(params["branchName"] ?? "").trim();
+  if (!branchName || branchName === "main") {
+    return { success: false, error: "invalid_branch", message: "A topic branchName is required." };
+  }
+  const { checkBranchPlanBacklogGate } = await import("@/lib/planning/plan-backlog-coverage");
+  const result = await checkBranchPlanBacklogGate({ branchName });
+  if (!result.ok) {
+    return { success: false, error: result.code, message: result.error, data: result as unknown as Record<string, unknown> };
+  }
+  return {
+    success: true,
+    entityId: result.itemId,
+    message: result.required
+      ? `xlarge planning coverage is current for ${result.itemId}.`
+      : "No xlarge planning coverage decision is required for this branch.",
+    data: result as unknown as Record<string, unknown>,
   };
 }
 
@@ -249,12 +354,73 @@ async function recordDecompositionOverrideTool(
   };
 }
 
+async function recordPlanBacklogCoverageTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
+  const itemId = String(params["itemId"] ?? "");
+  const planPath = String(params["planPath"] ?? "");
+  const decision = params["decision"];
+  const deliverables = params["deliverables"];
+  if (!itemId.startsWith("BI-")) {
+    return { success: false, error: "invalid_itemId", message: "itemId must use the BI-* format." };
+  }
+  if (!planPath.startsWith("docs/superpowers/plans/") || !planPath.endsWith(".md")) {
+    return {
+      success: false,
+      error: "invalid_plan_path",
+      message: "planPath must name a Markdown plan under docs/superpowers/plans/.",
+    };
+  }
+  if (decision !== "decomposed" && decision !== "atomic") {
+    return { success: false, error: "invalid_decision", message: "decision must be decomposed or atomic." };
+  }
+  if (!Array.isArray(deliverables)) {
+    return { success: false, error: "invalid_deliverables", message: "deliverables must be an array." };
+  }
+  const { recordPlanBacklogCoverage } = await import("@/lib/planning/plan-backlog-coverage");
+  const result = await recordPlanBacklogCoverage({
+    itemId,
+    planPath,
+    decision,
+    rationale: typeof params["rationale"] === "string" ? params["rationale"] : undefined,
+    deliverables: deliverables as Parameters<typeof recordPlanBacklogCoverage>[0]["deliverables"],
+    userId,
+    agentId: context?.agentId ?? null,
+  });
+  if (!result.ok) {
+    return {
+      success: false,
+      error: result.code,
+      message: result.error,
+      data: result as unknown as Record<string, unknown>,
+    };
+  }
+  return {
+    success: true,
+    entityId: result.receiptId,
+    message:
+      result.decision === "atomic"
+        ? `Recorded atomic plan coverage for ${itemId}.`
+        : `Validated ${result.mappedItemIds.length} live BacklogItem mapping(s) for ${itemId}.`,
+    data: {
+      receiptId: result.receiptId,
+      decision: result.decision,
+      mappedItemIds: result.mappedItemIds,
+    },
+  };
+}
+
 const handlers: Record<string, ToolPackHandler> = {
   assess_complexity: (params) => assessComplexityTool(params),
   propose_decomposition: (params) => proposeDecompositionTool(params),
   propose_build_decomposition: (params, userId, context) => proposeBuildDecomposition(params, userId, context),
   approve_decomposition: (params, userId, context) => approveDecompositionTool(params, userId, context),
   record_decomposition_override: (params, userId, context) => recordDecompositionOverrideTool(params, userId, context),
+  record_plan_backlog_coverage: (params, userId, context) => recordPlanBacklogCoverageTool(params, userId, context),
+  check_plan_backlog_coverage: (params) => checkPlanBacklogCoverageTool(params),
+  check_branch_plan_backlog_gate: (params) => checkBranchPlanBacklogGateTool(params),
 };
 
 export const decompositionPack: ToolPack = {
@@ -267,5 +433,8 @@ export const decompositionPack: ToolPack = {
     propose_build_decomposition: ["build_phase_advance"],
     approve_decomposition: ["build_phase_advance"],
     record_decomposition_override: ["build_phase_advance"],
+    record_plan_backlog_coverage: ["backlog_write"],
+    check_plan_backlog_coverage: ["backlog_read"],
+    check_branch_plan_backlog_gate: ["backlog_read"],
   },
 };

@@ -28,6 +28,12 @@ type FakeBuild = {
   planReview: unknown;
   parentEpicId: string | null;
   originatingBacklogItemId: string | null;
+  originator: {
+    itemId: string;
+    type: string;
+    workType: string | null;
+    source: string | null;
+  } | null;
   digitalProductId: string | null;
   portfolioId: string | null;
   accountableEmployeeId: string | null;
@@ -40,6 +46,8 @@ type RecordedWrites = {
   dependencyCreates: Array<Record<string, unknown>>;
   buildUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }>;
   backlogItemUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }>;
+  backlogItemCreates: Array<Record<string, unknown>>;
+  backlogActivities: Array<Record<string, unknown>>;
   activities: Array<Record<string, unknown>>;
 };
 
@@ -53,6 +61,8 @@ function makeFakeDb(build: FakeBuild | null): {
     dependencyCreates: [],
     buildUpdates: [],
     backlogItemUpdates: [],
+    backlogItemCreates: [],
+    backlogActivities: [],
     activities: [],
   };
 
@@ -83,9 +93,19 @@ function makeFakeDb(build: FakeBuild | null): {
       }),
     },
     backlogItem: {
+      create: vi.fn(async ({ data }) => {
+        writes.backlogItemCreates.push(data);
+        return { id: `bi-child-row-${writes.backlogItemCreates.length}`, itemId: data.itemId as string };
+      }),
       update: vi.fn(async (args) => {
         writes.backlogItemUpdates.push(args);
         return null;
+      }),
+    },
+    backlogItemActivity: {
+      create: vi.fn(async ({ data }) => {
+        writes.backlogActivities.push(data);
+        return { id: "coverage-receipt-1" };
       }),
     },
     buildActivity: {
@@ -122,6 +142,12 @@ function makeBuild(overrides: Partial<FakeBuild> = {}): FakeBuild {
     planReview: null,
     parentEpicId: null,
     originatingBacklogItemId: "bi-row-001",
+    originator: {
+      itemId: "BI-PARENT",
+      type: "portfolio",
+      workType: "feature",
+      source: "user-request",
+    },
     digitalProductId: null,
     portfolioId: null,
     accountableEmployeeId: null,
@@ -148,11 +174,13 @@ const fixedNow = () => new Date("2026-05-24T20:00:00.000Z");
 // counter — sharing a module-level idGen lets state leak between tests
 // (children get FB-CHILD22 in the third test if the prior tests already
 // burned 21 increments).
-function makeIdGen(): { epicId: () => string; childBuildId: () => string } {
+function makeIdGen(): { epicId: () => string; childBuildId: () => string; childBacklogItemId: () => string } {
   let n = 0;
+  let bi = 0;
   return {
     epicId: () => "EP-TESTEPIC",
     childBuildId: () => `FB-CHILD${++n}`,
+    childBacklogItemId: () => `BI-CHILD${++bi}`,
   };
 }
 
@@ -303,6 +331,10 @@ describe("approveDecomposition — happy path (Dale scenario)", () => {
           let n = 0;
           return () => `FB-CHILD${++n}`;
         })(),
+        childBacklogItemId: (() => {
+          let n = 0;
+          return () => `BI-CHILD${++n}`;
+        })(),
       },
     });
 
@@ -310,12 +342,15 @@ describe("approveDecomposition — happy path (Dale scenario)", () => {
     if (!result.ok) throw new Error("unreachable");
     expect(result.epicId).toBe("EP-TESTEPIC");
     expect(result.childBuildIds).toEqual(["FB-CHILD1", "FB-CHILD2", "FB-CHILD3"]);
+    expect(result.childBacklogItemIds).toEqual(["BI-CHILD1", "BI-CHILD2", "BI-CHILD3"]);
 
     expect(writes.epicCreates).toHaveLength(1);
     expect(writes.childBuildCreates).toHaveLength(3);
+    expect(writes.backlogItemCreates).toHaveLength(3);
     expect(writes.dependencyCreates).toHaveLength(3); // 1->none, 2->1, 3->{1,2}
     expect(writes.buildUpdates).toHaveLength(1); // supersession of parent
-    expect(writes.backlogItemUpdates).toHaveLength(1); // active swap
+    expect(writes.backlogItemUpdates).toHaveLength(4); // 3 child active links + parent active swap
+    expect(writes.backlogActivities).toHaveLength(1); // canonical plan-coverage receipt
   });
 
   it("copies parent designReview onto every child (transitive approval)", async () => {
@@ -416,8 +451,38 @@ describe("approveDecomposition — happy path (Dale scenario)", () => {
     });
     expect(writes.epicCreates[0]!.originatingBacklogItemId).toBe("bi-row-001");
     for (const c of writes.childBuildCreates) {
-      expect(c.originatingBacklogItemId).toBe("bi-row-001");
+      expect(c.originatingBacklogItemId).toMatch(/^bi-child-row-/);
     }
+  });
+
+  it("materializes one live child BI per independently shippable child and records dependencies", async () => {
+    const { db, writes } = makeFakeDb(makeBuild());
+    const result = await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: makeCandidate(),
+      userId: "user-1",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(writes.backlogItemCreates.map((row) => row.itemId)).toEqual([
+      "BI-CHILD1",
+      "BI-CHILD2",
+      "BI-CHILD3",
+    ]);
+    expect(writes.backlogItemCreates.every((row) => row.epicId === "epic-row-1")).toBe(true);
+    expect(writes.backlogActivities[0]).toMatchObject({
+      backlogItemId: "bi-row-001",
+      kind: "plan_backlog_coverage",
+      payload: {
+        decision: "decomposed",
+        mappedItemIds: ["BI-CHILD1", "BI-CHILD2", "BI-CHILD3"],
+      },
+    });
+    const deliverables = (writes.backlogActivities[0]!.payload as { deliverables: Array<{ dependsOn: string[] }> }).deliverables;
+    expect(deliverables[2]!.dependsOn).toEqual(["child-1", "child-2"]);
   });
 
   it("records decompositionState on the Epic with operator + agent + timestamp", async () => {
