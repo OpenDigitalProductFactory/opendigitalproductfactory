@@ -48,6 +48,11 @@ describe("compileBuildStudioPhaseActivity", () => {
         minimumTier: "frontier",
         requiresCodeExecution: true,
       },
+      workloadClassHints: ["source-code"],
+      governedData: {
+        assetIds: ["data:source-code"],
+        processingPurpose: "platform-operations",
+      },
     });
   });
 
@@ -114,6 +119,7 @@ describe("compileCompoundRequestActivities", () => {
         taskType: "code-gen",
         requiresCodeExecution: true,
       },
+      workloadClassHints: ["source-code"],
     });
     expect(activities[5].evaluationPolicy).toMatchObject({
       evaluator: "human-acceptance",
@@ -183,6 +189,27 @@ describe("routeContextFromActivity", () => {
       budgetClass: "quality_first",
       reasoningDepth: "medium",
       minimumTier: "strong",
+    });
+  });
+
+  it("carries governed data references and workload hints into the route context", () => {
+    const routeContext = routeContextFromActivity({
+      ...compileBuildStudioPhaseActivity({ phase: "build", parentRef: { buildId: "BUILD-4" } }),
+      workloadClassHints: ["source-code", "secrets-credentials"],
+      governedData: {
+        assetIds: ["data:source-code"],
+        fieldIds: ["data:source-code#contents"],
+        processingPurpose: "platform-operations",
+      },
+    });
+
+    expect(routeContext).toMatchObject({
+      workloadClassHints: ["source-code", "secrets-credentials"],
+      governedData: {
+        assetIds: ["data:source-code"],
+        fieldIds: ["data:source-code#contents"],
+        processingPurpose: "platform-operations",
+      },
     });
   });
 });

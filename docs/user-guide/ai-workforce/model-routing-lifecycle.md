@@ -108,6 +108,14 @@ When an agent needs to call an LLM, the routing pipeline runs in this order:
 
 Provider allow/deny constraints are request-level hard policy, distinct from the provider registry's `modelRestrictions` discovery allowlist. An explicitly empty `allowedProviders` list means no provider is eligible; routing returns no endpoint rather than treating the empty list as “allow any.” Cost, quality, provider health, capacity, and pin preferences only rank the providers that remain after the hard filter.
 
+### The work changes which providers are eligible
+
+DPF evaluates the work being done, not only the company and provider name. The activity contract can identify governed data assets and fields, the approved processing purpose, and a bounded workload class. The company archetype and its current value-stream stage supply conservative defaults only when governed activity detail is not already available.
+
+That means one connected provider can be available for public marketing copy and unavailable for patient, student, financial-customer, public-sector, source-code, or credential work in the same company. Governed data classification always wins over an archetype or activity default. Missing or conflicting classification on high-risk work requires review and cannot be relaxed by cost, model quality, occupation, or a provider pin.
+
+An employee's occupation focuses the explanations and recommendations they see. It does not grant data access, expand coworker or tool authority, or make a blocked provider eligible.
+
 ## How Routing Adapts Over Time
 
 | Event | What Happens |
