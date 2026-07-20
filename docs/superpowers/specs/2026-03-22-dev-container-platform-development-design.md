@@ -62,7 +62,7 @@ All dev services are gated behind `profiles: ["dev"]` so `docker compose up -d` 
 
 | Service | Image/Target | Purpose | Host Port |
 |---------|-------------|---------|-----------|
-| `dev-postgres` | `postgres:16-alpine` | Isolated dev database | 5433 |
+| `dev-postgres` | `pgvector/pgvector:pg16` | Isolated dev database with required vector support | 5433 |
 | `dev-neo4j` | `neo4j:5-community` | Isolated dev graph DB | 7475 (browser), 7688 (bolt) |
 | `dev-qdrant` | `qdrant/qdrant:latest` | Isolated dev vector store | 6334 |
 | `dev-portal` | Dockerfile `dev` target | Next.js dev server, source bind-mounted | 3001 |
@@ -136,8 +136,8 @@ Production stages (`deps`, `build`, `init`, `runner`) are untouched.
 
 ### Health Checks
 
-Dev database services mirror production health check configurations:
-- `dev-postgres`: `pg_isready -U dpf` (interval 5s, timeout 5s, retries 5)
+Dev database readiness includes the capabilities required by its migrations:
+- `dev-postgres`: `pg_isready` plus a `pg_available_extensions` check for `vector` (interval 5s, timeout 5s, retries 5). `dev-init` cannot begin migrations until both reachability and the required extension control file are proven.
 - `dev-neo4j`: `wget -qO /dev/null http://localhost:7474` (interval 10s, timeout 10s, retries 5, start_period 30s)
 - `dev-qdrant`: `curl -f http://localhost:6333/readyz` (interval 10s, timeout 5s, retries 3, start_period 10s)
 
@@ -157,7 +157,7 @@ Dev database services mirror production health check configurations:
 ### Trigger
 
 The `dev-init` service runs the clone as part of startup:
-1. Run Prisma migrations against dev-postgres (schema only)
+1. Wait for extension-aware `dev-postgres` readiness, then run Prisma migrations against dev-postgres (schema only)
 2. Connect to production postgres via `PRODUCTION_DATABASE_URL`
 3. Execute the sanitization pipeline
 4. Clone Neo4j graph structure with obfuscation

@@ -502,7 +502,9 @@ services:
     volumes:
       - dev_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dpf"]
+      # dev-init gates migrations on this verdict. Reachability alone is not
+      # enough: BET-5 migrations require the image to ship vector.control.
+      test: ["CMD-SHELL", "pg_isready -U dpf -d dpf && psql -U dpf -d dpf -Atqc \"SELECT 1 FROM pg_available_extensions WHERE name = 'vector'\" | grep -qx 1"]
       interval: 5s
       timeout: 5s
       retries: 5
