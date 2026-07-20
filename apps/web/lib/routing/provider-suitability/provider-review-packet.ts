@@ -2,6 +2,7 @@ import type {
   AiWorkloadClassKey,
   BusinessSuitabilityProfile,
 } from "./types";
+import { isRecord } from "@/lib/shared/coerce";
 
 export const PROVIDER_REVIEW_PACKET_VERSION = "provider-compliance-review.v1" as const;
 
@@ -128,10 +129,6 @@ export function buildProviderReviewPacket(input: BuildProviderReviewPacketInput)
 type ValidationResult =
   | { success: true; value: ProviderReviewPacket }
   | { success: false; error: string };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function unknownField(
   value: Record<string, unknown>,

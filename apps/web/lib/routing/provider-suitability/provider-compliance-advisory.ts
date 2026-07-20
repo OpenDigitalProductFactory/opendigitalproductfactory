@@ -1,3 +1,5 @@
+import { isRecord } from "@/lib/shared/coerce";
+
 export const PROVIDER_COMPLIANCE_ADVISORY_VERSION = "provider-compliance-advisory.v1" as const;
 export const PROVIDER_COMPLIANCE_COLLABORATION_SUMMARY = "Reviewing provider compliance and sovereignty" as const;
 
@@ -19,10 +21,6 @@ export type ProviderComplianceAdvisory = {
 type AdvisoryValidation =
   | { success: true; value: ProviderComplianceAdvisory }
   | { success: false; error: string };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function unknownField(value: Record<string, unknown>, allowed: readonly string[], path = ""): string | null {
   const field = Object.keys(value).find((key) => !allowed.includes(key));
