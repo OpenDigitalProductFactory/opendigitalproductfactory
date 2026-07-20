@@ -23,7 +23,7 @@ The isolated Contributor preview cannot start its migration/clone initializer ag
 - Parent: `BI-7430E579`
 - Rationale: the image selection, extension-aware readiness check, regression test, contributor contract update, and end-to-end preview evidence form one independently deployable runtime invariant. Splitting them could leave either an unguarded configuration or an unverified guard.
 - pgvector-capable contributor database, extension-aware readiness, documentation, and preview verification -> `BI-7430E579`
-- Dependencies: `BI-B7F28A2F` (complete)
+- Dependencies: `BI-B7F28A2F` (complete); `BI-7C2B91EF` blocks the final healthy-preview acceptance after governed verification exposed a logically inconsistent live `City` unique index.
 - Receipt: `cmrt65kun03da01o9gpo880ld`
 
 The deployed MCP surface does not expose `record_plan_backlog_coverage`, so the receipt uses the governed `record_execution_evidence` compatibility path.
@@ -45,9 +45,11 @@ The deployed MCP surface does not expose `record_plan_backlog_coverage`, so the 
 
 ## Completion evidence
 
-- [ ] Regression test observed failing for the missing extension-aware health check.
-- [ ] Targeted and affected source tests pass.
-- [ ] Contributor database reports `vector` available and installed after migrations.
+- [x] Regression test observed failing for the missing extension-aware health check.
+- [x] Targeted and affected source tests pass (6/6 Compose-contract tests, 16/16 documentation-link tests, 5/5 lifecycle tests, capability catalog current).
+- [x] Contributor database reports `vector` available and installed at 0.8.5 after all 419 migrations applied.
 - [ ] `dev-init` sanitized clone completes and Contributor preview health succeeds.
 - [ ] Exact-SHA merged-code pregate passes.
 - [ ] PR health is terminal/passing with zero unresolved review threads.
+
+The governed end-to-end run reached the sanitized clone, then failed on a separate source-data integrity defect: 19 duplicate `lower(City.name), regionId` groups exist while `City_regionId_name_ci` still reports unique/valid/ready/live. The atomic clone cleanup reset all 521 destination application tables and correctly prevented the preview from starting. Remediation is tracked as `BI-7C2B91EF`; no live data was modified from this branch.
