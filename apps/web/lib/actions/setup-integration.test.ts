@@ -47,7 +47,7 @@ import {
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
 
-// SETUP_STEPS has 10 entries:
+// SETUP_STEPS has 11 entries:
 //   0: account-bootstrap
 //   1: business-context
 //   2: ai-providers
@@ -57,7 +57,8 @@ import { SETUP_STEPS } from "./setup-constants";
 //   6: storefront
 //   7: platform-development
 //   8: build-studio
-//   9: workspace
+//   9: meet-your-coo
+//   10: workspace
 
 describe("setup flow integration", () => {
   it("walks through the full step sequence", async () => {
@@ -96,9 +97,13 @@ describe("setup flow integration", () => {
     const step7 = await advanceStep(progress.id);
     expect(step7.currentStep).toBe("build-studio");
 
-    // Advance into the final workspace step
+    // Advance into the optional standing-COO naming step
     const step8 = await advanceStep(progress.id);
-    expect(step8.currentStep).toBe("workspace");
+    expect(step8.currentStep).toBe("meet-your-coo");
+
+    // Advance into the final workspace step
+    const step9 = await advanceStep(progress.id, { cooConversationalName: "Number Two" });
+    expect(step9.currentStep).toBe("workspace");
 
     // Advance workspace — final, sets completedAt
     const final = await advanceStep(progress.id);

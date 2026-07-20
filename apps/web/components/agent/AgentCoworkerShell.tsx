@@ -45,6 +45,7 @@ import {
 type Props = {
   userContext: UserContext;
   useUnifiedCoworker: boolean;
+  cooConversationalName?: string | null;
 };
 
 type PendingSupportSession = {
@@ -147,7 +148,7 @@ function supportStartFailureMessage(error: unknown): AgentMessageRow {
   };
 }
 
-export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
+export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConversationalName = null }: Props) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState<PanelPosition>({ x: 0, y: 0 });
@@ -708,6 +709,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
             initialMessages={initialMessages}
             userContext={userContext}
             useUnifiedCoworker={useUnifiedCoworker}
+            cooConversationalName={cooConversationalName}
             onClose={handleClose}
             onDragStart={handleDragStart}
             pendingAutoMessage={pendingAutoMessage}

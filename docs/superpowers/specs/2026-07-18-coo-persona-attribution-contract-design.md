@@ -98,3 +98,9 @@ Synthesis confidence ≈ 0.7 (branches converge A > C > B; the reframe strengthe
 - Current code substrate reviewed: `apps/web/lib/tak/agent-routing.ts`, `packages/db/src/agent-identity.ts`, `packages/db/data/agent_registry.json`, `prompts/route-persona/coo.prompt.md`, `apps/web/lib/attention/types.ts`, `apps/web/lib/governance/action-proposal-presentation.ts`.
 - Source of truth: founder principles `never-fabricate` + `schema-honesty-over-aspirational-naming`, plus the persona-voice and attention-surface specs.
 - Decision: escalated to a formal deliberation (this artifact); no code/schema change yet.
+
+## Narrow addendum — owner-chosen conversational address (2026-07-20)
+
+BI-ADEF2982 and governed decision `DI-B0D8FBA2C56C` add one narrow, organization-scoped option without reopening the ratified identity or attribution contract. `COO` remains the canonical workforce identity, role label, routing target, permission subject, prompt identity, author, and audit identity. During setup, an owner may optionally choose a short conversational address for the standing COO; approved conversational surfaces render it only as `<name> · AI COO`. Null means the role-only default.
+
+The preference lives on `Organization`, not `Agent`, completed setup context, or a routing alias. It cannot change grants, authority, accountability, A2A references, stored message attribution, or the authenticated `(human × client × session)` spine. The distinct Onboarding COO may explain and hand off to the standing COO but never adopts the chosen name. Server-side validation rejects internal identifiers, accountable human titles, control characters, and exact collisions with employee display names. Authorized operators may later clear the preference from the canonical COO record.

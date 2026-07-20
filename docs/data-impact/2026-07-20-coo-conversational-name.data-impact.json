@@ -1,0 +1,37 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Organization.cooConversationalName: organization-visible presentation preference for the standing AI COO"
+  ],
+  "migration": {
+    "name": "20260720140000_add_coo_conversational_name",
+    "backfill": "none; null preserves the canonical role-only COO presentation for every existing organization"
+  },
+  "tests": [
+    "apps/web/lib/coworker-presentation/coo-name.test.ts",
+    "apps/web/lib/actions/coo-conversational-name.test.ts",
+    "apps/web/components/setup/CooNameSetupCard.test.tsx",
+    "apps/web/components/setup/SetupOverlay.test.tsx",
+    "apps/web/components/platform/coworker-record/CooConversationalNameCard.test.tsx",
+    "apps/web/lib/actions/setup-integration.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:organization",
+      "prismaModel": "Organization",
+      "lifecycleDisposition": "organization configuration; clearable by an authorized platform manager",
+      "fields": [
+        {
+          "fieldId": "data:organization#cooConversationalName",
+          "resolution": "governed",
+          "reason": "gives the owner an optional relationship-friendly address without changing the coworker's canonical identity or authority",
+          "provenance": "explicit owner choice during setup or later coworker-record editing",
+          "flags": ["subject"],
+          "fieldPolicy": "organization-visible presentation only; never a routing key, principal, author, permission subject, prompt identity, or accountable actor"
+        }
+      ]
+    }
+  ]
+}

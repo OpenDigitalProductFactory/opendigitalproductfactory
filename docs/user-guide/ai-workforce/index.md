@@ -28,6 +28,7 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 - Monitor token spend and usage patterns across all active providers
 - Hand off configured providers into Finance so supplier ownership and committed spend stay visible
 - Manage agent-to-provider assignments for specific platform capabilities
+- Optionally give the standing COO a conversational name from its coworker record; DPF always keeps the `AI COO` role visible and does not change the coworker's identity, authority, or audit attribution
 - View the **Authority** tab to understand agent tool grants, HITL tiers, and escalation paths
 - Review the **Action History** to see all agent proposals and their approval status
 - Inspect the **Tool Execution Log** to audit every tool call made by any agent (who, what, when, result)
@@ -38,6 +39,7 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 ## Related Routes
 
 - `/platform/ai/providers/[providerId]` — provider setup and the Finance Bridge panel
+- `/platform/ai/agent/AGT-ORCH-000` — standing COO record, including its optional organization-visible conversational name
 - `/platform/ai/runtime-health` — capability-aware local service and external-provider health
 - `/finance/spend/ai` — finance-owned view of AI supplier commitments and work items
 
