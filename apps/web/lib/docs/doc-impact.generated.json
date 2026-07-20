@@ -261,11 +261,17 @@
     "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
+    "apps/web/app/(shell)/platform/ai/providers/page.tsx": [
+      "docs/user-guide/ai-workforce/connecting-providers.md"
+    ],
     "apps/web/components/attention/AttentionInbox.tsx": [
       "docs/user-guide/workspace/attention-inbox.md"
     ],
     "apps/web/components/attention/OwnerDecisionCards.tsx": [
       "docs/user-guide/workspace/attention-inbox.md"
+    ],
+    "apps/web/components/platform/ProviderSuitabilityGuide.tsx": [
+      "docs/user-guide/ai-workforce/connecting-providers.md"
     ],
     "apps/web/components/proactivity/ProactivityRosterList.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
@@ -470,6 +476,8 @@
   },
   "docToCode": {
     "docs/user-guide/ai-workforce/connecting-providers.md": [
+      "apps/web/app/(shell)/platform/ai/providers/page.tsx",
+      "apps/web/components/platform/ProviderSuitabilityGuide.tsx",
       "apps/web/lib/ai-inference.ts"
     ],
     "docs/user-guide/ai-workforce/coworker-proactivity.md": [
