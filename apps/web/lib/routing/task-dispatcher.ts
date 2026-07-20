@@ -173,6 +173,7 @@ async function persistDecision(
       fallbacksUsed: JSON.stringify(fallbacksUsed),
       shadowMode: context.shadowMode ?? false,
       selectedModelId: selectedCandidate?.modelId ?? null,
+      suitabilityReceipt: decision.providerSuitabilityReceipt ?? undefined,
     },
   });
 }

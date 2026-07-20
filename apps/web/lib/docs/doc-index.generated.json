@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 527,
+  "pageCount": 528,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4075,6 +4075,19 @@
         "when-the-guard-fails-on-your-pr",
         "protecting-a-new-entity",
         "known-limits-defense-in-depth-not-a-wall"
+      ]
+    },
+    "docs/operations/provider-trust-evidence.md": {
+      "publicHref": "/operations/provider-trust-evidence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "provider-trust-evidence-and-route-receipts",
+        "authority-boundaries",
+        "review-and-remediation",
+        "receipt-privacy-check",
+        "existing-installs"
       ]
     },
     "docs/operations/runtime-glossary.md": {
@@ -8164,6 +8177,7 @@
         "default-agent-tiers",
         "how-routing-selects-a-model",
         "the-work-changes-which-providers-are-eligible",
+        "evidence-belongs-to-the-connected-account",
         "how-routing-adapts-over-time",
         "provider-specific-notes",
         "anthropic-oauth-subscription",

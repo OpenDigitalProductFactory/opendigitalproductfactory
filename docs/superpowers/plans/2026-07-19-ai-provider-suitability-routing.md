@@ -224,15 +224,15 @@ unreviewed connections; no account tier, contract, or entitlement is inferred.
 - Modify: existing route-decision/telemetry writer selected during Task 1 audit
 - Modify: `apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx`
 
-- [ ] Decide whether `SupplierContract` + `ComplianceEvidence` + existing provider, credential, and finance metadata can express connection identity, account class, BAA/DPA, ZDR/no-training, regional entitlement, admin/audit controls, SLA/support, review status, and expiry. Add a new model only for facts those owners cannot represent.
-- [ ] If a migration is required, write forward-safe migration tests and an inline backfill/attestation per AGENTS.md migration rules.
-- [ ] Write failing evidence resolution tests for valid, missing, expired, rejected, conflicting, and superseded evidence.
-- [ ] Write failing isolation tests proving an enterprise contract or entitlement linked to one account/connection never authorizes a regular API key, subscription session, or second tenant for the same vendor.
-- [ ] Write failing receipt tests that capture policy/input versions, provider/underlying-provider identity, exclusions, obligations, and explanation codes without sensitive content.
-- [ ] Make expired evidence downgrade restricted eligibility immediately while leaving general/public routing governed by its own policy.
-- [ ] Render contract/evidence status and next action on the existing provider detail page; do not create another admin workspace.
+- [x] Decide whether `SupplierContract` + `ComplianceEvidence` + existing provider, credential, and finance metadata can express connection identity, account class, BAA/DPA, ZDR/no-training, regional entitlement, admin/audit controls, SLA/support, review status, and expiry. Add a new model only for facts those owners cannot represent.
+- [x] If a migration is required, write forward-safe migration tests and an inline backfill/attestation per AGENTS.md migration rules.
+- [x] Write failing evidence resolution tests for valid, missing, expired, rejected, conflicting, and superseded evidence.
+- [x] Write failing isolation tests proving an enterprise contract or entitlement linked to one account/connection never authorizes a regular API key, subscription session, or second tenant for the same vendor.
+- [x] Write failing receipt tests that capture policy/input versions, provider/underlying-provider identity, exclusions, obligations, and explanation codes without sensitive content.
+- [x] Make expired evidence downgrade restricted eligibility immediately while leaving general/public routing governed by its own policy.
+- [x] Render contract/evidence status and next action on the existing provider detail page; do not create another admin workspace.
 - [ ] Run migration, unit, typecheck, build, UX, and route-receipt evidence gates.
-- [ ] Update operations and AI provider docs.
+- [x] Update operations and AI provider docs.
 - [ ] Commit with DCO: `feat(ai-providers): govern trust evidence and route receipts`.
 
 ### Task 8: BI-AIPS-008 - Continuous Suitability, Rollout, And Completion Gate

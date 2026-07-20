@@ -2138,6 +2138,7 @@ model AiProviderConnection {
   financeProfile   AiProviderFinanceProfile? @relation(fields: [financeProfileId], references: [id], onDelete: SetNull)
   supplierContract SupplierContract?         @relation(fields: [supplierContractId], references: [id], onDelete: SetNull)
   capacityStatus   ProviderCapacityStatus?   @relation(fields: [capacityStatusId], references: [id], onDelete: SetNull)
+  trustEvidence    ComplianceEvidence[]
 
   @@index([organizationId, status])
   @@index([providerId, status])
@@ -8211,6 +8212,11 @@ model ComplianceEvidence {
   fileRef                   String?
   retentionUntil            DateTime?
   supersededById            String?
+  providerConnectionId      String?
+  claimKey                  String?
+  assertedValue             Json?
+  validFrom                 DateTime?
+  expiresAt                 DateTime?
   agentId                   String?
   status                    String                     @default("active")
   createdAt                 DateTime                   @default(now())
@@ -8220,6 +8226,7 @@ model ComplianceEvidence {
   obligation                Obligation?                @relation(fields: [obligationId], references: [id])
   supersededBy              ComplianceEvidence?        @relation("EvidenceSupersession", fields: [supersededById], references: [id])
   supersedes                ComplianceEvidence[]       @relation("EvidenceSupersession")
+  providerConnection        AiProviderConnection?      @relation(fields: [providerConnectionId], references: [id], onDelete: SetNull)
   licenseDisplayObligations LicenseDisplayObligation[]
 
   @@index([obligationId])
@@ -8227,6 +8234,8 @@ model ComplianceEvidence {
   @@index([collectedByEmployeeId])
   @@index([status])
   @@index([evidenceType])
+  @@index([providerConnectionId, claimKey, status])
+  @@index([expiresAt, status])
 }
 
 model RiskAssessment {
@@ -8735,6 +8744,7 @@ model RouteDecisionLog {
   shadowMode         Boolean  @default(false)
   createdAt          DateTime @default(now())
   selectedModelId    String?
+  suitabilityReceipt Json?
 
   @@index([taskType])
   @@index([actorKind, actorId, createdAt])

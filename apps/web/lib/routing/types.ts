@@ -143,6 +143,8 @@ export interface RouteDecision {
   taskType: string;
   sensitivity: SensitivityLevel;
   timestamp: Date;
+  /** Policy-safe provider suitability audit receipt; never contains request content or raw account ids. */
+  providerSuitabilityReceipt?: import("./provider-suitability/evidence").ProviderSuitabilityRouteReceipt;
 
   // EP-INF-005b: Execution recipe fields
   selectedRecipeId?: string;

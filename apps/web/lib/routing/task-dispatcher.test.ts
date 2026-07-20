@@ -116,6 +116,36 @@ describe("callWithFallbackChain", () => {
     expect(mockObserve).not.toHaveBeenCalled();
   });
 
+  it("persists a supplied provider suitability receipt without request content", async () => {
+    mockCallProvider.mockResolvedValueOnce({
+      content: "success",
+      inputTokens: 10,
+      outputTokens: 20,
+      inferenceMs: 500,
+    });
+    const suitabilityReceipt = {
+      schemaVersion: "provider-suitability-route-receipt/v1" as const,
+      policyId: "policy-sha256",
+      compilerVersion: "provider-suitability/v1",
+      inputVersion: "work-context/v1",
+      connectionRef: "connection-sha256:1234567890abcdef12345678",
+      executionChannel: "direct-api" as const,
+      accountClass: "enterprise" as const,
+      selectedProviderId: "provider-1",
+      selectedUnderlyingProviderId: null,
+      excludedProviderIds: ["provider-unsafe"],
+      obligations: null,
+      explanationCodes: ["provider-evidence-required"],
+      createdAt: "2026-07-20T09:00:00.000Z",
+    };
+
+    await callWithFallbackChain({ ...mockDecision, providerSuitabilityReceipt: suitabilityReceipt }, mockPayload, mockContext);
+
+    const persisted = mockPrisma.routeDecisionLog.create.mock.calls[0][0].data;
+    expect(persisted.suitabilityReceipt).toEqual(suitabilityReceipt);
+    expect(JSON.stringify(persisted.suitabilityReceipt)).not.toContain("Hello");
+  });
+
   it("logs token usage with correct shape after success", async () => {
     mockCallProvider.mockResolvedValueOnce({
       content: "ok",

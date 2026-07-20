@@ -116,6 +116,14 @@ That means one connected provider can be available for public marketing copy and
 
 An employee's occupation focuses the explanations and recommendations they see. It does not grant data access, expand coworker or tool authority, or make a blocked provider eligible.
 
+### Evidence belongs to the connected account
+
+Provider claims are not vendor-wide. A business agreement, BAA, DPA, no-training term, regional entitlement, or router allowlist applies only to the connected account it was reviewed for. It does not make a personal API key, an individual subscription, or a second tenant for the same vendor suitable.
+
+Open **Platform → AI Operations → Providers & Routing**, choose a provider, and review **Provider trust evidence**. Each claim shows whether its evidence is current, missing, expired, rejected, conflicting, or replaced, along with its age, expiry, and safest next action. Operator declarations expire after 90 days unless stronger reviewed evidence replaces them. Expiry removes the claim from restricted-work eligibility immediately; it does not unnecessarily block separately governed public work.
+
+Every governed route may carry a privacy-safe suitability receipt. The receipt records policy and input versions, the selected provider and any router-selected underlying provider, the connection's channel/account posture, exclusions, obligations, and explanation codes. It deliberately excludes prompts, messages, credentials, vendor account identifiers, organization identifiers, evidence documents, and free-text explanations.
+
 ## How Routing Adapts Over Time
 
 | Event | What Happens |
@@ -128,6 +136,8 @@ An employee's occupation focuses the explanations and recommendations they see. 
 | Model disappears from provider API | After 2+ discovery cycles without seeing it, model is retired. |
 | Pre-evaluated profile re-profiled | Metadata is updated but dimension scores are NOT overwritten (`profileSource: "evaluated"` is protected). |
 | Admin overrides AgentModelConfig | Takes effect immediately. Seed will not overwrite admin-configured rows on next restart. |
+| Provider evidence expires or is rejected | The affected claim stops authorizing restricted work; the provider detail page shows the repair action. |
+| Provider evidence is replaced | The prior revision remains an audit record but no longer authorizes work. |
 
 ## Provider-Specific Notes
 
@@ -167,6 +177,12 @@ Local models are automatically discovered and profiled. They are assigned the `b
 - Discovery is manual for cloud providers. Go to AI Workforce > Providers > select the provider > click "Discover Models"
 - After discovery, click "Profile Models" to assign quality tiers and dimension scores
 - Models outside the provider's `modelRestrictions` allowlist will be automatically retired
+
+**A provider is active but restricted work is blocked:**
+- Open the provider detail page and review **Provider trust evidence**.
+- Confirm the evidence is attached to the same connected account that will execute the work.
+- Follow the displayed next action for missing, expired, rejected, conflicting, or replaced evidence.
+- Do not copy evidence from another key, subscription, tenant, or provider account; DPF will not transfer those rights.
 
 **Local model not appearing:**
 - Visit the AI Workforce providers page to trigger automatic discovery
