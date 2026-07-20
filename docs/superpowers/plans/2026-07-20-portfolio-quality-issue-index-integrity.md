@@ -28,6 +28,7 @@ Every install has one active `PortfolioQualityIssue` row per issue key, with the
 - Parent: `BI-2296E46C`
 - Fleet-safe migration, index rebuild, fixture, exact gate, live proof, and preview acceptance -> `BI-2296E46C`
 - Dependencies: blocks `BI-7430E579`; builds on `BI-E07FEB3A`
+- Receipt: `cmrtfvojb00fx01ljoh4vnpfs`
 - Rationale: source remediation and full preview acceptance are one indivisible integrity correction.
 
 ## Risks and rollback
@@ -39,6 +40,6 @@ Every install has one active `PortfolioQualityIssue` row per issue key, with the
 
 ## Completion evidence
 
-- [ ] Fixture, DB typecheck, migration safety, and exact-SHA pregate pass.
+- [x] Fixture, DB typecheck, migration safety, and exact-SHA pregate pass at `05cb0a72f8f2fd432149c7a677ddb60fce4658ed`.
 - [ ] Governed self-upgrade and forced heap/catalog proof pass.
 - [ ] Complete Contributor preview clone and `:3001/api/health` pass.
