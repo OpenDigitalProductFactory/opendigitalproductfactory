@@ -10,10 +10,9 @@
 // Spec §12 Q1: "allowed, but must require a one-line justification and must
 // be recorded in FeatureBuild.designReview.decompositionOverride".
 //
-// Phase 4a writes the override; nothing yet ENFORCES it (i.e. nothing blocks
-// proceeding to Plan without an override). Enforcement lands in Phase 4b
-// alongside the UI gate. For now, the data shape exists and can be queried
-// for audit + hive-contribution context.
+// The override also writes the canonical atomic plan-backlog-coverage receipt
+// on the originating BI, so Build Studio and external planning share one audit
+// shape rather than treating the design-review JSON as a private exception.
 //
 // Override is only meaningful at the `decompose-required` tier; the
 // `decompose-recommended` tier is single-click "keep as one build" per spec
@@ -51,7 +50,7 @@ export type RecordDecompositionOverrideErrorCode =
   | "no-size-assessment"
   | "override-not-applicable";
 
-export type RecordDecompositionOverrideDb = {
+export type RecordDecompositionOverrideTx = {
   featureBuild: {
     findUnique: typeof prisma.featureBuild.findUnique;
     update: typeof prisma.featureBuild.update;
@@ -59,6 +58,13 @@ export type RecordDecompositionOverrideDb = {
   buildActivity: {
     create: typeof prisma.buildActivity.create;
   };
+  backlogItemActivity: {
+    create: typeof prisma.backlogItemActivity.create;
+  };
+};
+
+export type RecordDecompositionOverrideDb = RecordDecompositionOverrideTx & {
+  $transaction: <T>(fn: (tx: RecordDecompositionOverrideTx) => Promise<T>) => Promise<T>;
 };
 
 export async function recordDecompositionOverride(
@@ -75,6 +81,7 @@ export async function recordDecompositionOverride(
 
   const now = args.now ?? (() => new Date());
   const db: RecordDecompositionOverrideDb = args.db ?? {
+    $transaction: (fn) => prisma.$transaction((tx) => fn(tx as unknown as RecordDecompositionOverrideTx)),
     featureBuild: {
       findUnique: prisma.featureBuild.findUnique.bind(prisma.featureBuild),
       update: prisma.featureBuild.update.bind(prisma.featureBuild),
@@ -82,11 +89,14 @@ export async function recordDecompositionOverride(
     buildActivity: {
       create: prisma.buildActivity.create.bind(prisma.buildActivity),
     },
+    backlogItemActivity: {
+      create: prisma.backlogItemActivity.create.bind(prisma.backlogItemActivity),
+    },
   };
 
   const build = await db.featureBuild.findUnique({
     where: { buildId: args.buildId },
-    select: { buildId: true, designReview: true },
+    select: { buildId: true, designReview: true, originatingBacklogItemId: true },
   });
   if (!build) {
     return {
@@ -126,17 +136,39 @@ export async function recordDecompositionOverride(
     decompositionOverride: override,
   };
 
-  await db.featureBuild.update({
-    where: { buildId: args.buildId },
-    data: { designReview: updatedReview as never },
-  });
+  await db.$transaction(async (tx) => {
+    await tx.featureBuild.update({
+      where: { buildId: args.buildId },
+      data: { designReview: updatedReview as never },
+    });
 
-  await db.buildActivity.create({
-    data: {
-      buildId: args.buildId,
-      tool: "recordDecompositionOverride",
-      summary: `Operator override recorded: keeping monolithic. Rationale: ${rationale}`,
-    },
+    await tx.buildActivity.create({
+      data: {
+        buildId: args.buildId,
+        tool: "recordDecompositionOverride",
+        summary: `Operator override recorded: keeping monolithic. Rationale: ${rationale}`,
+      },
+    });
+
+    if (build.originatingBacklogItemId) {
+      await tx.backlogItemActivity.create({
+        data: {
+          backlogItemId: build.originatingBacklogItemId,
+          kind: "plan_backlog_coverage",
+          summary: "Plan coverage accepted as atomic with operator rationale.",
+          payload: {
+            decision: "atomic",
+            rationale,
+            sourceBuildId: args.buildId,
+            mappedItemIds: [],
+            deliverables: [],
+            recordedAt: override.recordedAt,
+          },
+          recordedById: args.userId,
+          recordedByAgentId: args.agentId ?? null,
+        },
+      });
+    }
   });
 
   return { ok: true, override };

@@ -616,6 +616,8 @@ jobs:
           node-version: 24
       - name: Test spec/plan/doc pre-edit hook
         run: node --test packages/dpf-skill-pack/hooks/spec-plan-doc-precheck.test.mjs
+      - name: Test plan backlog coverage guard and repository checker
+        run: node --test packages/dpf-skill-pack/hooks/plan-backlog-coverage-guard.test.mjs scripts/check-plan-backlog-coverage.test.mjs
       - name: Test lease-guard hook
         run: node --test packages/dpf-skill-pack/hooks/lease-guard.test.mjs
       - name: Test lease-punt-guard hook + shared command-text helper
@@ -639,6 +641,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node scripts/check-spec-plan-doc.mjs
+      - name: Require live backlog coverage for changed delivery plans
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-plan-backlog-coverage.mjs
 
   data-impact-gate:
     name: Data-Impact Gate

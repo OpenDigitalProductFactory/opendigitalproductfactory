@@ -65,16 +65,17 @@ class InstallGrokHooksTest(unittest.TestCase):
             managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
             updater.copy_skill_pack(skill_pack, managed, dry_run=False)
             status = updater.install_grok_hooks(managed, home, dry_run=False)
-            self.assertIn("wired 5 guard", status)
+            self.assertIn("wired 6 guard", status)
             hook_file = updater.grok_hooks_file(home)
             self.assertTrue(hook_file.exists())
             data = json.loads(hook_file.read_text())
             entries = data["hooks"]["PreToolUse"]
-            self.assertEqual(len(entries), 5)
+            self.assertEqual(len(entries), 6)
             cmds = [h["command"] for e in entries for h in e["hooks"]]
             # Every command points at an existing managed guard script.
             self.assertTrue(any("lease-punt-guard.mjs" in c for c in cmds))
             self.assertTrue(any("decision-routing-guard.mjs" in c for c in cmds))
+            self.assertTrue(any("plan-backlog-coverage-guard.mjs" in c for c in cmds))
             for guard in updater.GROK_HOOK_GUARDS:
                 self.assertTrue((managed / "hooks" / guard).exists(), guard)
 
@@ -139,6 +140,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             self.assertTrue((managed / ".codex-plugin" / "plugin.json").exists())
             self.assertTrue((managed / ".claude-plugin" / "plugin.json").exists())
             self.assertTrue((managed / "skills").exists())
+            self.assertTrue((managed / "hooks" / "plan-backlog-coverage-guard.mjs").exists())
 
             codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text())
             self.assertTrue(codex_config["plugins"]["dpf-platform"]["enabled"])
@@ -146,6 +148,16 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 codex_config["mcp_servers"]["dpf"]["bearer_token_env_var"],
                 "DPF_MCP_BEARER_TOKEN",
             )
+            codex_hooks = json.loads((home / ".codex" / "hooks.json").read_text())
+            write_groups = [
+                group for group in codex_hooks["hooks"]["PreToolUse"]
+                if group.get("matcher") == "Write|Edit|MultiEdit"
+            ]
+            self.assertTrue(write_groups)
+            self.assertTrue(any(
+                "plan-backlog-coverage-guard.mjs" in hook.get("command", "")
+                for group in write_groups for hook in group.get("hooks", [])
+            ))
 
             codex_marketplace = json.loads(
                 (home / ".agents" / "plugins" / "marketplace.json").read_text(),

@@ -1,7 +1,7 @@
 {
   "name": "dpf-platform",
   "description": "DPF-native agent skills for Google Antigravity contributors. Single-source-of-truth contract: superset SKILL.md frontmatter feeds external Antigravity users (agy CLI + IDE) and in-portal coworkers alike. Hook consumption on the Antigravity surface is pending functional confirmation (EP-ANTIGRAVITY-001 evidence gate BI-47A81FEB) — until confirmed, comply with the lease/worktree contract by construction. See README.md.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "author": {
     "name": "Digital Product Factory",
     "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"

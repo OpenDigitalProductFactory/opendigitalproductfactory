@@ -45,16 +45,26 @@ function makeFakeDb(designReview: unknown, buildExists = true): {
   writes: {
     updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }>;
     activities: Array<Record<string, unknown>>;
+    backlogActivities: Array<Record<string, unknown>>;
+    transactions: number;
   };
 } {
   const writes = {
     updates: [] as Array<{ where: Record<string, unknown>; data: Record<string, unknown> }>,
     activities: [] as Array<Record<string, unknown>>,
+    backlogActivities: [] as Array<Record<string, unknown>>,
+    transactions: 0,
   };
   const db: RecordDecompositionOverrideDb = {
+    $transaction: vi.fn(async (fn) => {
+      writes.transactions += 1;
+      return fn(db);
+    }) as RecordDecompositionOverrideDb["$transaction"],
     featureBuild: {
       findUnique: vi.fn(async () =>
-        buildExists ? ({ buildId: "FB-DALE", designReview } as never) : null,
+        buildExists
+          ? ({ buildId: "FB-DALE", designReview, originatingBacklogItemId: "bi-parent-row" } as never)
+          : null,
       ) as unknown as RecordDecompositionOverrideDb["featureBuild"]["findUnique"],
       update: vi.fn(async (args) => {
         writes.updates.push(args as never);
@@ -66,6 +76,12 @@ function makeFakeDb(designReview: unknown, buildExists = true): {
         writes.activities.push(data as never);
         return null as never;
       }) as unknown as RecordDecompositionOverrideDb["buildActivity"]["create"],
+    },
+    backlogItemActivity: {
+      create: vi.fn(async ({ data }) => {
+        writes.backlogActivities.push(data as never);
+        return { id: "coverage-receipt-atomic" } as never;
+      }) as unknown as RecordDecompositionOverrideDb["backlogItemActivity"]["create"],
     },
   };
   return { db, writes };
@@ -100,7 +116,18 @@ describe("recordDecompositionOverride — success path", () => {
 
     // Activity row.
     expect(writes.activities).toHaveLength(1);
+    expect(writes.transactions).toBe(1);
     expect(writes.activities[0]!.tool).toBe("recordDecompositionOverride");
+    expect(writes.backlogActivities).toHaveLength(1);
+    expect(writes.backlogActivities[0]).toMatchObject({
+      backlogItemId: "bi-parent-row",
+      kind: "plan_backlog_coverage",
+      payload: {
+        decision: "atomic",
+        rationale: "Single tech ships this end-to-end; splitting adds coordination cost.",
+        sourceBuildId: "FB-DALE",
+      },
+    });
   });
 
   it("defaults recordedByAgentId to null when no agentId supplied", async () => {
