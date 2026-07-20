@@ -6,6 +6,7 @@
 // storage is a separate slice). Injected `fetchImpl` keeps it unit-testable.
 
 import { toCloudEvent } from "@dpf/db/projection-serialization";
+import type { InboundDemandActivity } from "./demand-exchange";
 
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
@@ -106,6 +107,51 @@ export async function sendProposalToPeer(target: PeerLinkTarget, proposal: unkno
     linkToken: target.linkToken,
     path: "/api/v1/federation/proposal",
     cloudEvent: envelope(target.linkId, "dpf.federation.proposal", proposal),
+    ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
+  });
+}
+
+/** Deliver one versioned, already-minimized demand envelope to a trusted peer. */
+export async function sendDemandToPeer(
+  target: PeerLinkTarget,
+  activity: InboundDemandActivity,
+  demandEnvelope: unknown,
+  options: { eventId?: string; now?: Date } = {},
+): Promise<PeerPostResult> {
+  return postToPeer({
+    peerAuthorityUrl: target.peerAuthorityUrl,
+    linkToken: target.linkToken,
+    path: "/api/v1/federation/demand",
+    cloudEvent: toCloudEvent({
+      id: options.eventId ?? `${target.linkId}:${activity}:${Date.now()}`,
+      source: "/dpf",
+      type: activity,
+      time: (options.now ?? new Date()).toISOString(),
+      linkId: target.linkId,
+      data: demandEnvelope,
+    }),
+    ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
+  });
+}
+
+/** Compare bounded demand inventories so a lost send or acknowledgment self-heals. */
+export async function sendDemandDigestToPeer(
+  target: PeerLinkTarget,
+  digest: unknown,
+  options: { eventId?: string; now?: Date } = {},
+): Promise<PeerPostResult> {
+  return postToPeer({
+    peerAuthorityUrl: target.peerAuthorityUrl,
+    linkToken: target.linkToken,
+    path: "/api/v1/federation/demand/reconcile",
+    cloudEvent: toCloudEvent({
+      id: options.eventId ?? `${target.linkId}:dpf.demand.reconcile:${Date.now()}`,
+      source: "/dpf",
+      type: "dpf.demand.reconcile",
+      time: (options.now ?? new Date()).toISOString(),
+      linkId: target.linkId,
+      data: digest,
+    }),
     ...(target.fetchImpl ? { fetchImpl: target.fetchImpl } : {}),
   });
 }

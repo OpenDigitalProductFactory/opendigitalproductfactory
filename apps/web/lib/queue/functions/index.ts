@@ -87,6 +87,7 @@ import {
   semanticMemoryReconcileRequested,
 } from "./semantic-memory-reconcile";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import { demandReconciliationScheduled } from "./demand-reconciliation";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -135,6 +136,7 @@ export const scheduledFunctions = [
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
+  demandReconciliationScheduled, // BI-44AA45BF: trusted-link demand projection, retry, and reconciliation every five minutes
   postmarkCallbackDispatchSweep,
 ];
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { postToPeer, sendIncidentToPeer } from "./client";
+import { postToPeer, sendDemandDigestToPeer, sendDemandToPeer, sendIncidentToPeer } from "./client";
 
 function mockFetch(res: { ok?: boolean; status?: number; json?: unknown } = {}) {
   return vi.fn().mockResolvedValue({
@@ -84,5 +84,44 @@ describe("sendIncidentToPeer", () => {
     expect(sent.type).toBe("dpf.federation.incident");
     expect(sent.dpflinkid).toBe("link_1");
     expect(sent.data.incidentKey).toBe("k");
+  });
+});
+
+describe("sendDemandToPeer", () => {
+  it("uses the demand inbox route and preserves the DPF demand activity", async () => {
+    const f = mockFetch({ status: 202, json: { ok: true, originVersion: 7 } });
+
+    const result = await sendDemandToPeer(
+      { peerAuthorityUrl: "https://peer.example", linkToken: "dpflink_x", linkId: "link_1", fetchImpl: f },
+      "dpf.demand.updated",
+      { envelopeId: "dem_1", originVersion: 7 },
+      { eventId: "evt_stable", now: new Date("2026-07-20T06:00:00.000Z") },
+    );
+
+    expect(result).toMatchObject({ ok: true, status: 202 });
+    const [url, init] = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
+    expect(url).toBe("https://peer.example/api/v1/federation/demand");
+    const sent = JSON.parse(init.body as string);
+    expect(sent).toMatchObject({
+      id: "evt_stable",
+      type: "dpf.demand.updated",
+      time: "2026-07-20T06:00:00.000Z",
+      dpflinkid: "link_1",
+      data: { envelopeId: "dem_1", originVersion: 7 },
+    });
+  });
+});
+
+describe("sendDemandDigestToPeer", () => {
+  it("uses the authenticated reconciliation endpoint", async () => {
+    const f = mockFetch({ status: 200, json: { ok: true, needs: [] } });
+    await sendDemandDigestToPeer(
+      { peerAuthorityUrl: "https://peer.example", linkToken: "dpflink_x", linkId: "link_1", fetchImpl: f },
+      { specVersion: "dpf.demand-digest/1", records: [] },
+      { eventId: "evt_digest", now: new Date("2026-07-20T06:00:00.000Z") },
+    );
+    const [url, init] = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
+    expect(url).toBe("https://peer.example/api/v1/federation/demand/reconcile");
+    expect(JSON.parse(init.body as string)).toMatchObject({ id: "evt_digest", type: "dpf.demand.reconcile" });
   });
 });

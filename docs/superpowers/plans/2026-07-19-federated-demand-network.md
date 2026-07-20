@@ -120,20 +120,92 @@ existing federation/Edge runtime rather than an invented external pattern.
 
 ## Task 3: Implement reliable demand delivery and reconciliation
 
+**Implementation status:** Source implementation complete on the Slice 2 branch;
+canonical migration/build/UX and two-node convergence evidence remain required
+before the backlog item closes.
+
 **Expected files:**
 - Add additive Prisma models/migration only after a `FederatedRecordMirror` query/integrity proof
 - Create demand ingress/egress routes under `apps/web/app/api/v1/federation/`
 - Create delivery/reconciliation modules under `apps/web/lib/federation/`
 - Extend `apps/web/lib/federation/client.ts`
 
-- [ ] Decide storage from measured query and integrity requirements: retain minimized demand payloads in `FederatedRecordMirror(recordType="demand-envelope")`; add narrow receipt/outbox rows only for durable delivery state that the mirror cannot represent.
-- [ ] Keep federation receipts distinct from GitHub operations while composing shared retry/idempotency primitives when `BI-C9EF928C` lands.
-- [ ] Persist inbound receipt before applying effects; deduplicate by origin, envelope, and version; acknowledge only committed receipt state.
-- [ ] Add bounded retry/jitter, dead-letter visibility, withdrawal, digest reconciliation, hop limits, and route-loop/replay protection.
-- [ ] Add observe/follow/adopt behavior; adoption creates a new local `BacklogItem` with immutable origin provenance and never permits remote mutation of local status, priority, estimate, or build state.
+- [x] Decide storage from measured query and integrity requirements: retain minimized demand payloads in `FederatedRecordMirror(recordType="demand-envelope")`; use local-canonical mirror rows as the protocol-specific durable outbox and peer-canonical rows as the inbox receipt, adding only narrow delivery columns and the missing peer-reference uniqueness constraint.
+- [x] Keep federation receipts distinct from GitHub operations while composing shared retry/idempotency primitives when `BI-C9EF928C` lands.
+- [x] Persist inbound receipt before applying effects; deduplicate by origin, envelope, and version; acknowledge only committed receipt state.
+- [x] Add bounded retry/jitter, dead-letter visibility, withdrawal, digest reconciliation, hop limits, and route-loop/replay protection.
+- [x] Add observe/follow/adopt behavior; adoption creates a new local `BacklogItem` through the canonical ingest front door with immutable federated-demand provenance and never permits remote mutation of local status, priority, estimate, or build state.
 - [ ] Record governed execution evidence for offline recovery and duplicate-free convergence.
 
 **Verification:** migration validation/deploy; duplicate/reordered/replayed fixture tests; offline sender recovery; withdrawal/retention tests; two-node convergence; local-authority mutation tests; production build and Delivery Flow UX verification.
+
+### Task 3 implementation allocation
+
+- `FederatedRecordMirror(canonicalSide="peer")` is the durable inbox mirror;
+  the inverse `(link, record type, peer reference)` unique key prevents a retry
+  race from creating duplicate demand.
+- `FederatedRecordMirror(canonicalSide="local")` is the federation outbox. Its
+  attempts, next-attempt, error, acknowledgment, and dead-letter fields are
+  protocol-specific and do not overload the GitHub/forge operation queue.
+- `PlatformConfig(key="federation.identity")` owns the stable pseudonymous
+  installation identity and local-only projection secret. HMAC-derived envelope
+  references are stable across links without exposing a `BI-*` identifier.
+- The five-minute `federation/demand-reconciliation` job projects only
+  `dpf-portal` demand over trusted `same-org-peer` links, withdraws records that
+  leave scope, exchanges bounded digests, repairs missing/divergent delivery,
+  and drains due outbox records. Service-provider/channel/community selection
+  stays explicit until Task 4 adds its governed controls.
+- The authenticated demand and digest routes validate CloudEvents binding,
+  replay window, envelope schema, route loop/hop limit, source version, and
+  payload digest before acknowledgment.
+
+### Task 3 UX fit review — network demand in Delivery Flow
+
+- **Decision:** fits-with-guardrails.
+- **Owning area:** Products / Delivery Flow at the existing `/ops/demand`
+  route; no new global navigation or dashboard.
+- **Primary persona:** founder/operator reviewing demand another approved DPF
+  installation elected to share.
+- **Reuse:** existing report-kit `CollapsibleList`, `EmptyState`, and
+  `StatusBadge`; adoption uses the canonical backlog ingest front door.
+- **Source truth:** peer-canonical minimized `FederatedRecordMirror` rows only;
+  local-canonical outbox rows never appear as inbound network demand.
+- **Empty/failure behavior:** an honest no-shared-demand state preserves local
+  Delivery Flow and links to Connections; malformed mirror payloads fail soft.
+- **Authority guardrails:** origin installation IDs, routes, and source backlog
+  references are never rendered; follow is local interest; adopt explicitly
+  creates a new locally owned item; withdrawn demand cannot be adopted.
+- **AI boundary:** no prompt, coworker launch, or autonomous local adoption.
+
+### Task 3 SysML architecture note
+
+- **Scope:** DPF Federated Demand Network delivery/reconciliation subsystem and
+  its Delivery Flow adapter.
+- **Changed requirements/constraints:** R-FDN-01 local authority, R-FDN-03
+  automatic reconciliation, R-FDN-05 allow-listed projection, bounded replay,
+  no raw backlog identifiers, and no GitHub-queue coupling.
+- **Changed interfaces/ports:** authenticated CloudEvent demand inbox
+  `/api/v1/federation/demand`, digest control port
+  `/api/v1/federation/demand/reconcile`, and the five-minute scheduled worker.
+- **Allocations:** `FederationLink` owns trust/routing; `ProjectionContract`
+  templates own allowed fields; `FederatedRecordMirror` owns inbox/outbox state;
+  `PlatformConfig` owns installation identity material; Delivery Flow owns
+  observe/follow/adopt; `BacklogItem` remains the sole local work authority.
+- **Verification cases:** protocol/negative-egress tests, duplicate/version/
+  replay/loop tests, retry/dead-letter/withdrawal/digest tests, migration apply,
+  production build, Delivery Flow browser exercise, and two-node outage recovery.
+- **Data authority impact:** source installation owns the envelope and version;
+  receiver owns only its mirror/disposition and any explicitly adopted local
+  item. Remote traffic never mutates local priority, estimate, status, or build.
+- **EA/current-state catch-up:** Prisma→EA mirror derives the added delivery
+  fields; the route-family extractor derives both ports; authority semantics
+  are pinned here and in schema/module comments rather than hand-maintained
+  `.sysml` data.
+- **Parity/extractor impact:** no new extractor is required; run
+  `check:architecture-parity` and route-manifest checks before publication.
+- **Open architecture risks:** Task 4 must supply explicit partner/channel item
+  selection and transitive-consent controls; real Mac↔Windows evidence remains
+  a cross-slice system verification dependency.
 
 ## Task 4: Add reseller/customer relationships and Founder Hub business management
 
