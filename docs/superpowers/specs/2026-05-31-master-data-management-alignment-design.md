@@ -191,6 +191,20 @@ must be transactional, idempotent, test referenced losers, and fail closed if
 any duplicate remains; clone-only filtering or manual deletion is not an
 acceptable substitute. See `BI-7C2B91EF` and decision `DI-AED2CD86A2B0`.
 
+**Digital-product exact-key repair (resolved 2026-07-20).** The same physical
+heap/index divergence can affect `DigitalProduct.productId`. The canonical row
+is the oldest `(createdAt, id)` member of the exact-key group. Each loser keeps
+its `id`, attributes, and all ID-based history, but receives a collision-checked
+`__dpf_quarantined__<id>__<original>` product key plus
+`lifecycleStatus="retired"` and `coverageStatus="quarantined"`. Natural-key
+`CoworkerService` and `CoworkerOffer` references remain on the original key and
+therefore resolve to the canonical survivor. Their cascading foreign keys are
+detached before loser renames and restored only after the unique index is
+rebuilt and validated. This is an automatic exact-key integrity repair, not a
+fuzzy match decision; it is transactional, idempotent, non-destructive, and
+fails closed on any remaining heap duplicate. See `BI-BCF8A8D5` and decision
+`DI-758B3879D418`.
+
 ## 6. Proposed Foundation
 
 ### 6.1 Domain registry

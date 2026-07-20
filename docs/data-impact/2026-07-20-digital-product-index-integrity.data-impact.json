@@ -1,0 +1,49 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "DigitalProduct portfolio master",
+    "CoworkerService and CoworkerOffer natural-key relationships",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720133000_repair_digital_product_index_integrity",
+    "backfill": "forced-heap exact-key convergence: oldest deterministic DigitalProduct survivor, collision-checked retired quarantine keys for losers, preservation of all ID-based history and canonical natural-key coworker references, then complete productId unique-index and foreign-key rebuild; no row is deleted"
+  },
+  "tests": [
+    "packages/db/src/digital-product-index-integrity-migration.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:digital-product#product-id-integrity-repair",
+      "prismaModel": "DigitalProduct",
+      "lifecycleDisposition": "the oldest exact-key row remains canonical; every loser remains durable as a retired quarantine row with its original id, attributes, and ID-based relationships",
+      "fields": [
+        {
+          "fieldId": "data:digital-product#productId-lifecycleStatus-coverageStatus",
+          "resolution": "governed",
+          "reason": "restore trustworthy productId uniqueness without deleting a portfolio master or silently moving its ID-based history",
+          "provenance": "BI-BCF8A8D5 forced heap/index evidence, MDM exact-key contract, and governed decision DI-758B3879D418"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:coworker-product-reference#canonical-natural-key-preservation",
+      "prismaModel": "CoworkerService,CoworkerOffer",
+      "lifecycleDisposition": "coworker service and offer lifecycles are unchanged; existing natural product keys continue to reference the deterministic canonical DigitalProduct row",
+      "fields": [
+        {
+          "fieldId": "data:coworker-product-reference#digitalProductId",
+          "resolution": "governed",
+          "reason": "prevent ON UPDATE CASCADE from retargeting canonical natural-key references to a quarantined loser during integrity repair",
+          "provenance": "live foreign-key definition inspection and migration fixture"
+        }
+      ]
+    }
+  ]
+}
