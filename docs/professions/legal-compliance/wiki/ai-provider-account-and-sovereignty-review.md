@@ -10,7 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
 principleRingScope:
   - ring-1-coworker
-principleDimensionVector: {"governance_compliance": 1.0, "data_privacy": 1.0, "user_trust": 0.8}
+principleDimensionVector: {"governance_compliance": 1.0, "data_privacy": 1.0, "evidence_confidence": 0.8}
 professionJurisdiction:
   - global
   - eu
