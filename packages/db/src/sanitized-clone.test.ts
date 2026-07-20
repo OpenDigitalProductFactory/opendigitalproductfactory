@@ -60,8 +60,26 @@ describe("insert parameter preparation", () => {
     const result = prepareInsertParameter(["a", "b"], { dataType: "ARRAY", udtName: "_text" }, 2);
 
     expect(result).toEqual({
-      placeholder: "$2::text[]",
+      placeholder: "$2::\"text\"[]",
       value: "{\"a\",\"b\"}",
+    });
+  });
+
+  it("casts integer arrays to their catalog element type instead of text[]", () => {
+    const result = prepareInsertParameter([3001, 5433], { dataType: "ARRAY", udtName: "_int4" }, 3);
+
+    expect(result).toEqual({
+      placeholder: "$3::\"int4\"[]",
+      value: "{\"3001\",\"5433\"}",
+    });
+  });
+
+  it("quotes custom array element type names from the catalog", () => {
+    const result = prepareInsertParameter(["open"], { dataType: "ARRAY", udtName: "_LifecycleStatus" }, 4);
+
+    expect(result).toEqual({
+      placeholder: "$4::\"LifecycleStatus\"[]",
+      value: "{\"open\"}",
     });
   });
 
