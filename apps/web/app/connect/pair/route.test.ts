@@ -36,7 +36,7 @@ describe("POST /connect/pair", () => {
     vi.clearAllMocks();
     _resetNearbyPairingRateLimits();
     mocks.identity.mockResolvedValue({ installationId: `inst_${"b".repeat(32)}`, projectionSecret: "c".repeat(64) });
-    mocks.organization.mockResolvedValue({ name: "Arcamanus Windows" });
+    mocks.organization.mockResolvedValue({ name: "Windows development installation" });
     mocks.create.mockResolvedValue({ ok: true, pairingId: "pair_123" });
     mocks.poll.mockResolvedValue({ ok: true, status: "pending" });
   });
@@ -45,7 +45,7 @@ describe("POST /connect/pair", () => {
     const response = await POST(request({
       operation: "request",
       requesterAuthorityUrl: "https://dpf-a.local:3443",
-      displayName: "Arcamanus Mac",
+      displayName: "Mac development installation",
       requesterInstallationId: `inst_${"a".repeat(32)}`,
       candidateDiscoveryId: "rotating-b-123456",
       relationshipPreset: "same-organization",
@@ -55,13 +55,13 @@ describe("POST /connect/pair", () => {
     expect(mocks.create).toHaveBeenCalledWith(
       {
         requesterAuthorityUrl: "https://dpf-a.local:3443",
-        displayName: "Arcamanus Mac",
+        displayName: "Mac development installation",
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
         relationshipPreset: "same-organization",
       },
       expect.objectContaining({
-        localDisplayName: "Arcamanus Windows",
+        localDisplayName: "Windows development installation",
         localInstallationId: `inst_${"b".repeat(32)}`,
       }),
     );

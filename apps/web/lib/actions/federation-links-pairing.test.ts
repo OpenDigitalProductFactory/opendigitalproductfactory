@@ -98,7 +98,7 @@ describe("nearby federation pairing actions", () => {
     mocks.listCandidates.mockReturnValue([candidate]);
     mocks.assertEncryption.mockResolvedValue(undefined);
     mocks.resolveIdentity.mockResolvedValue({ installationId: `inst_${"a".repeat(32)}` });
-    mocks.findOrganization.mockResolvedValue({ id: "org_1", name: "Arcamanus Mac" });
+    mocks.findOrganization.mockResolvedValue({ id: "org_1", name: "Mac development installation" });
     mocks.findPairing.mockResolvedValue(null);
     mocks.encryptSecret.mockReturnValue("encrypted-pairing-secret");
     mocks.createPairing.mockResolvedValue({ id: "session_1" });
@@ -110,7 +110,7 @@ describe("nearby federation pairing actions", () => {
       pairingId: "pair_123",
       pairingSecret: `dpffpair_${"a".repeat(43)}`,
       matchingCode: "ABCD-EFGH",
-      peerDisplayName: "Arcamanus Windows",
+      peerDisplayName: "Windows development installation",
       peerInstallationId: `inst_${"b".repeat(32)}`,
       expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       projectionSummary: {
@@ -150,7 +150,7 @@ describe("nearby federation pairing actions", () => {
       status: "pending",
       matchingCode: "ABCD-EFGH",
       pairingSecretEnc: "encrypted-pairing-secret",
-      peerDisplayName: "Arcamanus Windows",
+      peerDisplayName: "Windows development installation",
       peerAuthorityUrl: candidate.endpoint,
       peerInstallationId: `inst_${"b".repeat(32)}`,
       expiresAt,

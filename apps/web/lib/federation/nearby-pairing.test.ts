@@ -27,13 +27,13 @@ describe("nearby federation pairing contract", () => {
     expect(
       parseNearbyPairingRequest({
         requesterAuthorityUrl: "https://dpf-a.local",
-        displayName: "Arcamanus Mac",
+        displayName: "Mac development installation",
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
       }),
     ).toEqual({
       requesterAuthorityUrl: "https://dpf-a.local",
-      displayName: "Arcamanus Mac",
+      displayName: "Mac development installation",
       requesterInstallationId: `inst_${"a".repeat(32)}`,
       candidateDiscoveryId: "rotating-b-123456",
       relationshipPreset: "same-organization",
@@ -42,7 +42,7 @@ describe("nearby federation pairing contract", () => {
     expect(() =>
       parseNearbyPairingRequest({
         requesterAuthorityUrl: "http://dpf-a.local",
-        displayName: "Arcamanus Mac",
+        displayName: "Mac development installation",
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
       }),
@@ -50,7 +50,7 @@ describe("nearby federation pairing contract", () => {
     expect(() =>
       parseNearbyPairingRequest({
         requesterAuthorityUrl: "https://example.com",
-        displayName: "Arcamanus Mac",
+        displayName: "Mac development installation",
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
       }),
@@ -66,7 +66,7 @@ describe("nearby federation pairing contract", () => {
     expect(() =>
       parseNearbyPairingRequest({
         requesterAuthorityUrl: "https://dpf-a.local",
-        displayName: "Arcamanus Mac",
+        displayName: "Mac development installation",
         requesterInstallationId: "inst_not-valid",
         candidateDiscoveryId: "rotating-b-123456",
       }),
@@ -74,7 +74,7 @@ describe("nearby federation pairing contract", () => {
     expect(() =>
       parseNearbyPairingRequest({
         requesterAuthorityUrl: "https://dpf-a.local",
-        displayName: "Arcamanus Mac",
+        displayName: "Mac development installation",
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
         backlogItem: { title: "must never cross" },
@@ -105,7 +105,7 @@ describe("nearby federation pairing contract", () => {
           pairingId: "pair_123",
           pairingSecret: `dpffpair_${"a".repeat(43)}`,
           matchingCode: "ABCD-EFGH",
-          peerDisplayName: "Arcamanus Windows",
+          peerDisplayName: "Windows development installation",
           peerInstallationId: `inst_${"b".repeat(32)}`,
           expiresAt: "2026-07-20T12:15:00.000Z",
           projectionSummary: summarizeNearbyPairingProjection(),
@@ -118,7 +118,7 @@ describe("nearby federation pairing contract", () => {
       requestNearbyPairing({
         candidateEndpoint: "https://dpf-b.local:3443",
         requesterAuthorityUrl: "https://dpf-a.local:3443",
-        displayName: "Arcamanus Mac",
+        displayName: "Mac development installation",
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
         fetchImpl,
@@ -137,7 +137,7 @@ describe("nearby federation pairing contract", () => {
           pairingId: "pair_123",
           pairingSecret: `dpffpair_${"a".repeat(43)}`,
           matchingCode: "ABCD-EFGH",
-          peerDisplayName: "Arcamanus Windows",
+          peerDisplayName: "Windows development installation",
           peerInstallationId: `inst_${"b".repeat(32)}`,
           expiresAt: "2026-07-20T12:15:00.000Z",
           projectionSummary: {
@@ -152,7 +152,7 @@ describe("nearby federation pairing contract", () => {
       requestNearbyPairing({
         candidateEndpoint: "https://dpf-b.local:3443",
         requesterAuthorityUrl: "https://dpf-a.local:3443",
-        displayName: "Arcamanus Mac",
+        displayName: "Mac development installation",
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
         fetchImpl,
@@ -164,7 +164,7 @@ describe("nearby federation pairing contract", () => {
       requestNearbyPairing({
         candidateEndpoint: "http://dpf-b.local:3000",
         requesterAuthorityUrl: "https://dpf-a.local:3443",
-        displayName: "Arcamanus Mac",
+        displayName: "Mac development installation",
         requesterInstallationId: `inst_${"a".repeat(32)}`,
         candidateDiscoveryId: "rotating-b-123456",
         fetchImpl,

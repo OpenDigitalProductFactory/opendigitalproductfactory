@@ -1,11 +1,9 @@
 {
   "changeRationale": {
-    "defaultRequiredServiceCount": "Capability-owned services moved behind deterministic Compose profiles; only PostgreSQL, portal initialization, and portal remain universal core.",
-    "prismaModelCount": "Five Founder Hub partner-business models separate reseller account standing, agreements, offering entitlements, support routing, and contribution recognition; two shared-portfolio models preserve founder clustering and deduplicated origin membership while the existing mirror, backlog, and Hive records remain authoritative.",
-    "serviceCount": "Linux Ollama is now explicitly catalogued as a host-specific runtime:external-ai service instead of remaining an ungoverned overlay-only container."
+    "prismaModelCount": "One short-lived FederationPairingSession adds the durable, resumable same-LAN handshake selected by DI-CE359E1CA3FB while reusing FederationBootstrapToken, enrollment, projection, and FederationLink approval substrate."
   },
-  "generatedAt": "2026-07-20T07:25:00.000Z",
-  "gitSha": "b3bebf2cbdf44829da703f3217637c3c44ff1107",
+  "generatedAt": "2026-07-20T10:01:44.811Z",
+  "gitSha": "cbd3c56bf79902428b6dcfc83a93394feeff9185",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -22,11 +20,11 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 520
+      "value": 521
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 14269
+      "value": 14325
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
@@ -38,7 +36,7 @@
     },
     "seedCoordinatorLines": {
       "direction": "informational",
-      "value": 2716
+      "value": 2727
     },
     "serviceCount": {
       "direction": "non-increasing",

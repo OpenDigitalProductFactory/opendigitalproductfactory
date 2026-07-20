@@ -61,13 +61,13 @@ describe("FederationLinksAdminClient nearby setup", () => {
   it("shows an incoming request with the matching code and canonical projection summary", () => {
     render(<FederationLinksAdminClient rows={[]} nearbyPairings={[{
       pairingId: "pair_123", direction: "incoming", status: "pending", matchingCode: "ABCD-EFGH",
-      peerDisplayName: "Arcamanus Mac", peerAuthorityUrl: "https://peer-one.local",
+      peerDisplayName: "Mac development installation", peerAuthorityUrl: "https://peer-one.local",
       expiresAt: "2026-07-20T12:15:00.000Z", sharedSlices: ["demand"], retentionClass: "standard",
       staysLocal: ["local backlog details", "work capsules"],
     }]} />);
 
     expect(screen.getByText("ABCD-EFGH")).toBeTruthy();
-    expect(screen.getByText(/Arcamanus Mac is asking to connect/)).toBeTruthy();
+    expect(screen.getByText(/Mac development installation is asking to connect/)).toBeTruthy();
     expect(screen.getByText((_, element) => element?.tagName === "P" && element.textContent?.includes("Shares: demand") === true)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Approve this installation" })).toBeTruthy();
   });

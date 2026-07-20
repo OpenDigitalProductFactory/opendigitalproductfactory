@@ -10,7 +10,7 @@ import {
 const now = new Date("2026-07-20T12:00:00.000Z");
 const request = {
   requesterAuthorityUrl: "https://dpf-a.local:3443",
-  displayName: "Arcamanus Mac",
+  displayName: "Mac development installation",
   requesterInstallationId: `inst_${"a".repeat(32)}`,
   candidateDiscoveryId: "rotating-b-123456",
 };
@@ -26,7 +26,7 @@ describe("nearby pairing persistence service", () => {
       now,
       pairingId: "pair_test123",
       randomBytes: () => Buffer.alloc(32, 7),
-      localDisplayName: "Arcamanus Windows",
+      localDisplayName: "Windows development installation",
       localInstallationId: `inst_${"b".repeat(32)}`,
     });
 
@@ -45,7 +45,7 @@ describe("nearby pairing persistence service", () => {
       ok: true,
       pairingId: "pair_test123",
       pairingSecret: expect.stringMatching(/^dpffpair_/),
-      peerDisplayName: "Arcamanus Windows",
+      peerDisplayName: "Windows development installation",
       peerInstallationId: `inst_${"b".repeat(32)}`,
     });
   });
