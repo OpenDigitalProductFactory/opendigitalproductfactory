@@ -1,0 +1,85 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "provider onboarding suitability projection",
+    "RouteDecisionLog operator explanation surfaces"
+  ],
+  "migration": {
+    "name": "20260720100000_provider_suitability_evidence",
+    "backfill": "none — all evidence bindings and suitability receipts are nullable; existing declarations remain unknown until reviewed"
+  },
+  "tests": [
+    "packages/db/src/provider-suitability-evidence-schema.test.ts",
+    "apps/web/lib/routing/provider-suitability/evidence.test.ts",
+    "apps/web/lib/routing/loader.test.ts",
+    "apps/web/lib/routing/task-dispatcher.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:compliance-evidence#provider-connection-claim",
+      "prismaModel": "ComplianceEvidence",
+      "lifecycleDisposition": "retained as supersedable legal and operational evidence; replacement appends a revision rather than deleting history",
+      "fields": [
+        {
+          "fieldId": "data:compliance-evidence#providerConnectionId",
+          "resolution": "governed",
+          "reason": "binds each claim to the exact provider key, subscription, or tenant so evidence cannot become vendor-wide authority",
+          "provenance": "operator attestation or reviewed supplier evidence",
+          "flags": ["sensitive", "subject"],
+          "fieldPolicy": "organization-scoped authorization; fail closed on missing, conflicting, expired, or mismatched connection evidence"
+        },
+        {
+          "fieldId": "data:compliance-evidence#claimKey",
+          "resolution": "governed",
+          "reason": "typed claim identity permits deterministic current-revision and conflict resolution",
+          "provenance": "provider suitability claim registry"
+        },
+        {
+          "fieldId": "data:compliance-evidence#assertedValue",
+          "resolution": "governed",
+          "reason": "records the reviewed assertion without copying credentials or provider evidence documents into routing receipts",
+          "provenance": "operator attestation or reviewed supplier evidence",
+          "flags": ["sensitive"],
+          "fieldPolicy": "read only within provider-governance scope; never emit in privacy-safe route receipts"
+        },
+        {
+          "fieldId": "data:compliance-evidence#validFrom-expiresAt",
+          "resolution": "governed",
+          "reason": "dated validity prevents stale enterprise, regional, and data-handling rights from persisting indefinitely",
+          "provenance": "evidence review lifecycle"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:route-decision-log#suitability-receipt",
+      "prismaModel": "RouteDecisionLog",
+      "lifecycleDisposition": "retained with the existing route decision audit lifecycle and never used as a source of authorization",
+      "fields": [
+        {
+          "fieldId": "data:route-decision-log#suitabilityReceipt",
+          "resolution": "governed",
+          "reason": "explains provider suitability using versioned, allowlisted facts without storing request content or external account identifiers",
+          "provenance": "provider suitability compiler",
+          "flags": ["sensitive"],
+          "fieldPolicy": "allowlist only; exclude prompts, messages, payloads, credentials, evidence documents, organization IDs, raw connection IDs, and free text"
+        }
+      ]
+    },
+    {
+      "kind": "policy",
+      "policyId": "provider-trust-evidence-resolution-v1",
+      "testVectors": {
+        "allow": true,
+        "deny": true,
+        "obligation": true,
+        "unknownContext": true,
+        "precedence": true,
+        "exceptionExpiry": true
+      }
+    }
+  ]
+}
