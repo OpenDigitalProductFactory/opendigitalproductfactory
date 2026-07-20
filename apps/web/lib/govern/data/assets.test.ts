@@ -118,4 +118,29 @@ describe("seeded registry", () => {
     });
     expect(member?.physical.prismaModel).toBe("FounderDemandClusterMember");
   });
+
+  it("governs nearby pairing as restricted local-only setup authority", () => {
+    const pairing = lookupAsset(DATA_ASSET_REGISTRY, "data:federation-pairing-session");
+    expect(pairing).toMatchObject({
+      physical: { prismaModel: "FederationPairingSession" },
+      sensitivity: "restricted",
+      lifecycleClass: "security-audit",
+      residencyClass: "local-only",
+      projectionClass: "metadata",
+    });
+    expect(
+      resolveField(DATA_ASSET_REGISTRY, "data:federation-pairing-session#pairingSecretEnc"),
+    ).toMatchObject({
+      collectionRule: "minimize",
+      protection: "encrypt-and-mask",
+      projectionOverride: "structure",
+    });
+    expect(
+      resolveField(DATA_ASSET_REGISTRY, "data:federation-pairing-session#bootstrapTokenEnc"),
+    ).toMatchObject({
+      collectionRule: "minimize",
+      protection: "encrypt-and-mask",
+      projectionOverride: "structure",
+    });
+  });
 });

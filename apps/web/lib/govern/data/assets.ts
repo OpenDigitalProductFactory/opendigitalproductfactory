@@ -168,6 +168,60 @@ export function resolveField(
 // baseline (legacy-coverage-baseline.ts), never as a blanket "internal" default.
 
 const SEED_ASSETS: readonly DataAssetDefinition[] = [
+  {
+    id: "data:federation-pairing-session",
+    physical: { prismaModel: "FederationPairingSession" },
+    domain: "federated-demand",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["credential-secret", "authorization", "configuration", "security-audit"],
+    sensitivity: "restricted",
+    criticality: "high",
+    subjectLocators: [],
+    lifecycleClass: "security-audit",
+    purposeCapabilities: ["service-delivery", "security-and-fraud", "platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-20" },
+    fields: [
+      {
+        id: "data:federation-pairing-session#pairingSecretHash",
+        physicalName: "pairingSecretHash",
+        resolution: "governed",
+        resolutionReason:
+          "One-time incoming poll authenticator retained only as a hash and never disclosed after creation.",
+        categories: ["credential-secret", "authorization"],
+        sensitivity: "restricted",
+        collectionRule: "minimize",
+        protection: "mask-on-read",
+        projectionOverride: "structure",
+        provenance: {
+          source: "manual",
+          state: "confirmed",
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-20",
+        },
+      },
+      ...["pairingSecretEnc", "bootstrapTokenEnc"].map((physicalName) => ({
+        id: `data:federation-pairing-session#${physicalName}` as DataFieldId,
+        physicalName,
+        resolution: "governed" as const,
+        resolutionReason:
+          "Short-lived federation bearer material encrypted through the credential-crypto boundary and cleared at terminal disposition.",
+        categories: ["credential-secret", "authorization"] as DataCategory[],
+        sensitivity: "restricted" as DataSensitivity,
+        collectionRule: "minimize" as const,
+        protection: "encrypt-and-mask" as ProtectionProfileKey,
+        projectionOverride: "structure" as ProjectionClass,
+        provenance: {
+          source: "manual" as const,
+          state: "confirmed" as const,
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-20",
+        },
+      })),
+    ],
+  },
   ...[
     ["data:founder-demand-cluster", "FounderDemandCluster"],
     ["data:founder-demand-cluster-member", "FounderDemandClusterMember"],

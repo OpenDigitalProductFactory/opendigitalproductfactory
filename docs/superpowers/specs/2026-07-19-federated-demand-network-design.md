@@ -154,6 +154,40 @@ separately reviewed PAKE such as SPAKE2+; DPF must not invent pairing
 cryptography. This allocation was selected by governed decision
 `DI-E72BC42D5FFB` with high confidence.
 
+#### Durable nearby pairing session
+
+Automatic nearby pairing uses a federation-specific, expiring device-style
+session rather than overloading `FederationBootstrapToken` or the GitHub OAuth
+`DeviceCodeSession`. Governed decision `DI-CE359E1CA3FB` selected this shape
+with high confidence. The session is not a second trust model: it is a
+restart-safe delivery envelope around the existing bootstrap-token lifecycle.
+
+1. The requesting installation posts bounded identity and same-organization
+   intent to the discovered `/connect/pair` endpoint. The client accepts only a
+   link-local/private HTTPS origin, follows no redirects, and relies on the host
+   trust store for certificate validation.
+2. The receiving Authority Core creates a short-lived pending session, stores
+   only a hash of the 256-bit `dpffpair_*` request secret, and returns the
+   plaintext secret once with an eight-character matching code. The code is a
+   visual device-binding check, never authorization material.
+3. Both Connections views derive the same projection summary from
+   `DEMAND_PROJECTION_TEMPLATES["same-organization"]`. The receiving operator
+   approves or denies locally. Approval mints the existing single-use
+   `FederationBootstrapToken`; it does not create a trusted link.
+4. A poll authenticated by the request secret retrieves the bootstrap token
+   once. The requesting installation immediately redeems it through the
+   existing enrollment service, creating pending `FederationLink` rows on both
+   sides. Each installation still records an independent local approval before
+   either link becomes trusted.
+5. Expiry, denial, consumption, TLS failure, certificate failure, or a page
+   restart leaves no implicit trust. Manual out-of-band invitation remains
+   visible as the recovery path.
+
+Postgres is authoritative for session state. Inbound request secrets are
+hashed; replayable outbound/session credentials are encrypted at rest using the
+existing credential-crypto boundary and cleared on consumption. The route is
+bounded, throttled, one-time, and exposes no backlog data.
+
 ### 5.3 Automatic after approval
 
 For `same-organization`, the default contract offers continuous sync of share-safe platform demand and dispositions. Automatic means:
@@ -274,6 +308,7 @@ The business/channel and Hive Mind contribution paths are parallel adapters on t
 | --- | --- |
 | `FederationLink` | Peer identity, dual approval, token rotation, quarantine, revocation, relationship role |
 | `FederationBootstrapToken` | Single-use invitation and enrollment |
+| `FederationPairingSession` | Expiring pairing request, matching code, one-time bootstrap delivery, and auditable approve/deny state |
 | `ProjectionContract` | Allow-listed slices/fields, exclusions, retention, negative-egress evidence |
 | `FederatedRecordMirror` | Store minimized `recordType="demand-envelope"` projections and version/sync status |
 | `HiveContributionLedger` | Immutable audit of founder/community contribution and curation state |
@@ -286,6 +321,9 @@ Phase 1 should add no second federation identity or approval stack. Before addin
 
 The likely minimum additions are:
 
+- a durable, expiring `FederationPairingSession` tied to the existing
+  bootstrap lifecycle, with hashed inbound request secrets and encrypted
+  replayable credentials;
 - relationship preset and protocol/capability negotiation metadata on `FederationLink`;
 - a durable federation outbox/inbox receipt with idempotency, retry schedule, payload digest, acknowledgment, and dead-letter state;
 - projection-policy templates keyed by relationship preset;
@@ -458,6 +496,10 @@ The system of interest is the **DPF Federated Demand Network**, containing disco
 ### Allocations
 
 - Authority and consent allocate to `FederationLink`, `Principal`, `AuthorityBinding`, and local authenticated users.
+- Pairing transport and device-binding state allocate to
+  `FederationPairingSession`; invitation authority remains allocated to
+  `FederationBootstrapToken`, and trusted relationship state remains allocated
+  to `FederationLink`.
 - Data minimization allocates to `ProjectionContract` and the egress serializer/guard.
 - Reliable delivery allocates to the federation inbox/outbox and reconciliation worker.
 - Projected state allocates to `FederatedRecordMirror`; local execution state remains on local domain models.

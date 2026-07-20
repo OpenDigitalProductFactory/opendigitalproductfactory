@@ -3,10 +3,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockSetDiscovery, mockIssueInvitation, mockSetEnvironment } = vi.hoisted(() => ({
+const { mockSetDiscovery, mockIssueInvitation, mockSetEnvironment, mockStartPairing, mockPollPairing, mockApprovePairing, mockDenyPairing } = vi.hoisted(() => ({
   mockSetDiscovery: vi.fn(),
   mockIssueInvitation: vi.fn(),
   mockSetEnvironment: vi.fn(),
+  mockStartPairing: vi.fn(),
+  mockPollPairing: vi.fn(),
+  mockApprovePairing: vi.fn(),
+  mockDenyPairing: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/federation-links", () => ({
@@ -17,6 +21,14 @@ vi.mock("@/lib/actions/federation-links", () => ({
   revokeFederationLinkAction: vi.fn(),
   setFederationDiscoveryEnabledAction: mockSetDiscovery,
   setFederationLinkEnvironmentAction: mockSetEnvironment,
+  startNearbyPairingAction: mockStartPairing,
+  pollNearbyPairingAction: mockPollPairing,
+  approveNearbyPairingAction: mockApprovePairing,
+  denyNearbyPairingAction: mockDenyPairing,
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 import { FederationLinksAdminClient } from "./FederationLinksAdminClient";
@@ -46,14 +58,18 @@ describe("FederationLinksAdminClient nearby setup", () => {
     expect(screen.getByText(/TLS will be verified before any invitation is sent/)).toBeTruthy();
   });
 
-  it("prefills the peer endpoint and same-organization preset", () => {
-    render(<FederationLinksAdminClient rows={[]} nearbyCandidates={[secureCandidate]} />);
+  it("shows an incoming request with the matching code and canonical projection summary", () => {
+    render(<FederationLinksAdminClient rows={[]} nearbyPairings={[{
+      pairingId: "pair_123", direction: "incoming", status: "pending", matchingCode: "ABCD-EFGH",
+      peerDisplayName: "Mac development installation", peerAuthorityUrl: "https://peer-one.local",
+      expiresAt: "2026-07-20T12:15:00.000Z", sharedSlices: ["demand"], retentionClass: "standard",
+      staysLocal: ["local backlog details", "work capsules"],
+    }]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Set up this DPF" }));
-
-    expect((screen.getByLabelText("Peer URL") as HTMLInputElement).value).toBe("https://peer-one.local");
-    expect((screen.getByLabelText("Relationship preset") as HTMLSelectElement).value).toBe("same-organization");
-    expect(screen.getByText(/Shared platform demand and dispositions/)).toBeTruthy();
+    expect(screen.getByText("ABCD-EFGH")).toBeTruthy();
+    expect(screen.getByText(/Mac development installation is asking to connect/)).toBeTruthy();
+    expect(screen.getByText((_, element) => element?.tagName === "P" && element.textContent?.includes("Shares: demand") === true)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Approve this installation" })).toBeTruthy();
   });
 
   it("blocks automatic setup for an HTTP candidate", () => {

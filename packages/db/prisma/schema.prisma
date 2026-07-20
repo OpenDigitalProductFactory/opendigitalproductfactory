@@ -12848,10 +12848,55 @@ model FederationBootstrapToken {
   consumedByLinkId      String?
   revokedAt             DateTime?
 
-  link FederationLink? @relation("FederationBootstrapConsumer", fields: [consumedByLinkId], references: [id])
+  link           FederationLink?           @relation("FederationBootstrapConsumer", fields: [consumedByLinkId], references: [id])
+  pairingSession FederationPairingSession?
 
   @@index([consumedByLinkId])
   @@index([expiresAt])
+}
+
+// Expiring device-style delivery envelope for nearby same-organization setup.
+// This row never creates trust: FederationBootstrapToken remains invitation
+// authority and FederationLink remains the only relationship/trust authority.
+// Incoming request secrets are hashed; replayable local credentials use the
+// existing AES-256-GCM credential-crypto boundary and are cleared at terminal
+// lifecycle points.
+model FederationPairingSession {
+  id                    String    @id @default(cuid())
+  pairingId             String    @unique
+  direction             String
+  status                String    @default("pending")
+  relationshipPreset    String    @default("same-organization")
+  projectionTemplateKey String    @default("same-organization")
+  matchingCode          String
+  pairingSecretHash     String?   @unique
+  pairingSecretEnc      String?
+  peerAuthorityUrl      String
+  peerDisplayName       String
+  peerInstallationId    String?
+  candidateDiscoveryId  String?
+  bootstrapTokenId      String?   @unique
+  bootstrapTokenEnc     String?
+  requestedAt           DateTime  @default(now())
+  approvedAt            DateTime?
+  approvedByPrincipalId String?
+  deniedAt              DateTime?
+  deniedByPrincipalId   String?
+  denialReason          String?
+  deliveredAt           DateTime?
+  consumedAt            DateTime?
+  expiresAt             DateTime
+  lastPolledAt          DateTime?
+  pollCount             Int       @default(0)
+  failureReason         String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  bootstrapToken FederationBootstrapToken? @relation(fields: [bootstrapTokenId], references: [id], onDelete: SetNull)
+
+  @@index([status, expiresAt])
+  @@index([direction, status])
+  @@index([peerInstallationId])
 }
 
 // ── EP-MSP-FEDERATION · B2 — scoped estate projection contract (BI-4F8F50FD) ──

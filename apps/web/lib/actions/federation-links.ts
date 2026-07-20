@@ -23,6 +23,7 @@ import { isPartnerStanding, type PartnerStanding } from "@dpf/db/federated-chann
 
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import { auth } from "@/lib/auth";
+import { resolveFederationIdentity } from "@/lib/federation/demand-identity";
 import {
   approveFederationLinkLocal,
   issueFederationBootstrap,
@@ -30,6 +31,21 @@ import {
   revokeFederationLink,
 } from "@/lib/federation/enrollment";
 import { enrollWithPeer, relayApprovalToPeer } from "@/lib/federation/outbound";
+import {
+  pollNearbyPairingPeer,
+  requestNearbyPairing,
+  summarizeNearbyPairingProjection,
+} from "@/lib/federation/nearby-pairing";
+import {
+  approveIncomingNearbyPairing,
+  denyIncomingNearbyPairing,
+} from "@/lib/federation/nearby-pairing-service";
+import { listNearbyFederationCandidates } from "@/lib/federation/nearby-candidates";
+import {
+  assertEncryptionReadyForCredentialWrite,
+  decryptSecret,
+  encryptSecret,
+} from "@/lib/govern/credential-crypto";
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { can } from "@/lib/permissions";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
@@ -361,6 +377,238 @@ export async function enrollWithPeerAction(input: {
   } catch (err) {
     return { ok: false, error: "internal_error", message: err instanceof Error ? err.message : "enroll failed" };
   }
+}
+
+// ── Secure automatic nearby pairing ─────────────────────────────────────────
+
+export type NearbyPairingActionResult =
+  | {
+      ok: true;
+      pairingId: string;
+      status: string;
+      matchingCode: string;
+      peerDisplayName: string;
+      peerAuthorityUrl: string;
+      expiresAt: string;
+      projectionSummary: ReturnType<typeof summarizeNearbyPairingProjection>;
+      linkId?: string;
+    }
+  | ActionFailure;
+
+export async function startNearbyPairingAction(input: {
+  discoveryId: string;
+  endpoint: string;
+}): Promise<NearbyPairingActionResult> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  const candidate = listNearbyFederationCandidates().find(
+    (row) => row.discoveryId === input.discoveryId && row.endpoint === input.endpoint,
+  );
+  if (!candidate) {
+    return { ok: false, error: "not_found", message: "That nearby DPF is no longer visible. Wait for discovery to refresh." };
+  }
+  if (candidate.automaticPairing === "blocked-insecure-transport") {
+    return { ok: false, error: "invalid_input", message: "Automatic pairing requires HTTPS. Use a manual invitation until this installation has a trusted certificate." };
+  }
+  const localAuthorityUrl = resolveAppBaseUrl();
+  if (!localAuthorityUrl) {
+    return { ok: false, error: "internal_error", message: "This installation's base URL is not configured." };
+  }
+  try {
+    await assertEncryptionReadyForCredentialWrite();
+    const now = new Date();
+    const existing = await prisma.federationPairingSession.findFirst({
+      where: {
+        direction: "outgoing",
+        candidateDiscoveryId: candidate.discoveryId,
+        peerAuthorityUrl: candidate.endpoint,
+        status: { in: ["pending", "approved"] },
+        expiresAt: { gt: now },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing) {
+      return {
+        ok: true,
+        pairingId: existing.pairingId,
+        status: existing.status,
+        matchingCode: existing.matchingCode,
+        peerDisplayName: existing.peerDisplayName,
+        peerAuthorityUrl: existing.peerAuthorityUrl,
+        expiresAt: existing.expiresAt.toISOString(),
+        projectionSummary: summarizeNearbyPairingProjection(),
+      };
+    }
+    const [identity, organization] = await Promise.all([
+      resolveFederationIdentity(prisma),
+      prisma.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true, name: true } }),
+    ]);
+    const displayName = organization?.name?.trim() || "Nearby DPF installation";
+    const requested = await requestNearbyPairing({
+      candidateEndpoint: candidate.endpoint,
+      requesterAuthorityUrl: localAuthorityUrl,
+      displayName,
+      requesterInstallationId: identity.installationId,
+      candidateDiscoveryId: candidate.discoveryId,
+    });
+    if (!requested.ok) {
+      return { ok: false, error: "internal_error", message: requested.message };
+    }
+    const remoteExpiry = new Date(requested.expiresAt);
+    const expiresAt = new Date(Math.min(remoteExpiry.getTime(), now.getTime() + 15 * 60_000));
+    await prisma.federationPairingSession.create({
+      data: {
+        pairingId: requested.pairingId,
+        direction: "outgoing",
+        status: "pending",
+        relationshipPreset: "same-organization",
+        projectionTemplateKey: "same-organization",
+        matchingCode: requested.matchingCode,
+        pairingSecretEnc: encryptSecret(requested.pairingSecret),
+        peerAuthorityUrl: candidate.endpoint,
+        peerDisplayName: requested.peerDisplayName,
+        peerInstallationId: requested.peerInstallationId,
+        candidateDiscoveryId: candidate.discoveryId,
+        requestedAt: now,
+        expiresAt,
+      },
+    });
+    revalidatePath(ADMIN_PATH);
+    return {
+      ok: true,
+      pairingId: requested.pairingId,
+      status: "pending",
+      matchingCode: requested.matchingCode,
+      peerDisplayName: requested.peerDisplayName,
+      peerAuthorityUrl: candidate.endpoint,
+      expiresAt: expiresAt.toISOString(),
+      projectionSummary: requested.projectionSummary,
+    };
+  } catch (error) {
+    return { ok: false, error: "internal_error", message: error instanceof Error ? error.message : "Nearby pairing failed." };
+  }
+}
+
+export async function pollNearbyPairingAction(pairingId: string): Promise<NearbyPairingActionResult> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  const row = await prisma.federationPairingSession.findUnique({ where: { pairingId } });
+  if (!row || row.direction !== "outgoing") {
+    return { ok: false, error: "not_found", message: "Pairing session not found." };
+  }
+  const baseResult = {
+    pairingId: row.pairingId,
+    matchingCode: row.matchingCode,
+    peerDisplayName: row.peerDisplayName,
+    peerAuthorityUrl: row.peerAuthorityUrl,
+    expiresAt: row.expiresAt.toISOString(),
+    projectionSummary: summarizeNearbyPairingProjection(),
+  };
+  if (row.status === "consumed" || row.status === "denied" || row.status === "expired") {
+    return { ok: true, ...baseResult, status: row.status };
+  }
+  if (row.expiresAt.getTime() <= Date.now()) {
+    await prisma.federationPairingSession.update({
+      where: { id: row.id },
+      data: { status: "expired", pairingSecretEnc: null },
+    });
+    return { ok: true, ...baseResult, status: "expired" };
+  }
+  if (!row.pairingSecretEnc) {
+    return { ok: false, error: "internal_error", message: "Stored pairing credential is unavailable." };
+  }
+  const pairingSecret = decryptSecret(row.pairingSecretEnc);
+  if (!pairingSecret) {
+    return { ok: false, error: "internal_error", message: "Stored pairing credential could not be decrypted." };
+  }
+  const peer = await pollNearbyPairingPeer({
+    candidateEndpoint: row.peerAuthorityUrl,
+    pairingId: row.pairingId,
+    pairingSecret,
+  });
+  if (!peer.ok) return { ok: false, error: "internal_error", message: peer.message };
+  if (peer.status !== "approved") {
+    await prisma.federationPairingSession.update({
+      where: { id: row.id },
+      data: {
+        status: peer.status,
+        ...(peer.status === "pending" ? {} : { pairingSecretEnc: null }),
+        lastPolledAt: new Date(),
+        pollCount: { increment: 1 },
+      },
+    });
+    revalidatePath(ADMIN_PATH);
+    return { ok: true, ...baseResult, status: peer.status };
+  }
+  const [localAuthorityUrl, organization] = await Promise.all([
+    Promise.resolve(resolveAppBaseUrl()),
+    prisma.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true, name: true } }),
+  ]);
+  if (!localAuthorityUrl) {
+    return { ok: false, error: "internal_error", message: "This installation's base URL is not configured." };
+  }
+  const enrolled = await enrollWithPeer({
+    peerAuthorityUrl: row.peerAuthorityUrl,
+    bootstrapToken: peer.bootstrapToken,
+    localAuthorityUrl,
+    displayName: organization?.name?.trim() || "Nearby DPF installation",
+    localOrganizationId: organization?.id ?? null,
+    peerOrganizationRef: row.peerInstallationId,
+  });
+  if (!enrolled.ok) {
+    return { ok: false, error: "internal_error", message: enrolled.message };
+  }
+  const consumedAt = new Date();
+  await prisma.federationPairingSession.update({
+    where: { id: row.id },
+    data: {
+      status: "consumed",
+      consumedAt,
+      pairingSecretEnc: null,
+      lastPolledAt: consumedAt,
+      pollCount: { increment: 1 },
+    },
+  });
+  revalidatePath(ADMIN_PATH);
+  return { ok: true, ...baseResult, status: "consumed", linkId: enrolled.linkId };
+}
+
+export async function approveNearbyPairingAction(pairingId: string): Promise<
+  { ok: true; status: "approved" } | ActionFailure
+> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  const result = await approveIncomingNearbyPairing({ pairingId, approverPrincipalId: gate.principalId });
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error === "not_found" ? "not_found" : "invalid_transition",
+      message: result.error === "expired" ? "Pairing request expired." : "Pairing request cannot be approved.",
+    };
+  }
+  revalidatePath(ADMIN_PATH);
+  return result;
+}
+
+export async function denyNearbyPairingAction(pairingId: string, reason: string): Promise<
+  { ok: true; status: "denied" } | ActionFailure
+> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  const result = await denyIncomingNearbyPairing({
+    pairingId,
+    deniedByPrincipalId: gate.principalId,
+    reason,
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error === "invalid_input" ? "invalid_input" : "invalid_transition",
+      message: result.error === "invalid_input" ? "A denial reason is required." : "Pairing request cannot be denied.",
+    };
+  }
+  revalidatePath(ADMIN_PATH);
+  return result;
 }
 
 export type SetFederationDiscoveryActionResult =

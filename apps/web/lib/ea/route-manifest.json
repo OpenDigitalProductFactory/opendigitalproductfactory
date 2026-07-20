@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 573,
+  "routeCount": 574,
   "routes": [
     {
       "routePath": "/",
@@ -3785,6 +3785,16 @@
         "id"
       ],
       "file": "apps/web/app/(shell)/compliance/submissions/[id]/page.tsx"
+    },
+    {
+      "routePath": "/connect/pair",
+      "kind": "route",
+      "segments": [
+        "connect",
+        "pair"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/connect/pair/route.ts"
     },
     {
       "routePath": "/coworker-decisions",

@@ -38,6 +38,21 @@ Open **Platform > Connections** to find nearby DPF installations or connect by i
 
 The page reports whether the native Edge Node is listening for nearby installations. If discovery is not set up, paused, or unhealthy, use the Edge Nodes link to review its authority and network status. Invitation-based setup remains available when local-network discovery cannot be used.
 
+For another installation owned by the same organization, choose **Set up this
+DPF**. Automatic setup is available only when both installations advertise a
+private/local HTTPS address whose certificate is trusted by the other host.
+Confirm that both screens show the same matching code and the same **Shares / Stays
+here** summary, then approve on the receiving installation. DPF exchanges and
+redeems a short-lived invitation, but the resulting connection remains pending
+until an authorized operator independently approves the connection on both
+installations. The matching code is only a visual check; it is never a password
+or bearer credential.
+
+If the candidate uses HTTP, its certificate cannot be verified, or discovery is
+unavailable, use the invitation controls on the same page. Never bypass the TLS
+warning: issue the one-time invitation on one installation and enter it with the
+peer URL on the other.
+
 Choose the relationship preset that matches the connection:
 
 - **Same organization** for installations operated by the same company.
