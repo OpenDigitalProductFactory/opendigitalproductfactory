@@ -208,7 +208,7 @@ export function prepareInsertParameter(
 
   if (columnType?.dataType === "ARRAY" && Array.isArray(value)) {
     return {
-      placeholder: `${placeholder}::text[]`,
+      placeholder: `${placeholder}::${arrayElementTypeCast(columnType.udtName)}`,
       value: toPostgresTextArrayLiteral(value),
     };
   }
@@ -247,6 +247,18 @@ export function prepareInsertParameter(
 
 function toPostgresTextArrayLiteral(value: unknown[]): string {
   return `{${value.map((item: unknown) => `"${String(item).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
+function arrayElementTypeCast(arrayUdtName: string): string {
+  if (!arrayUdtName.startsWith("_") || arrayUdtName.length === 1) {
+    throw new Error(`Unexpected PostgreSQL array UDT name: ${arrayUdtName}`);
+  }
+
+  // PostgreSQL exposes array UDTs as _<element-type>. Quote the catalog-owned
+  // identifier so built-ins (int4/text) and case-sensitive custom enums both
+  // resolve without treating any part of the name as SQL syntax.
+  const elementType = arrayUdtName.slice(1).replaceAll('"', '""');
+  return `"${elementType}"[]`;
 }
 
 /**
