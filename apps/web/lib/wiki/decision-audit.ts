@@ -23,6 +23,40 @@ export function tierForProfileKind(kind: string | null | undefined): DecisionAud
   }
 }
 
+/** Map the gate that produced a row onto its governance tier. */
+export function tierForGateKey(gateKey: string | null | undefined): DecisionAuditTierOrOther {
+  switch (gateKey) {
+    case "build-studio":
+      return "wwmd";
+    case "org-business":
+      return "wwwd";
+    case "profession":
+      return "wsid";
+    default:
+      return "other";
+  }
+}
+
+/**
+ * The tier a ledger row audits under (BI-1BE30A9A).
+ *
+ * The gate that ran wins over the profile that resolved. Tiering on profile
+ * kind alone is wrong whenever doctrine fell back across kinds: the profession
+ * gate falls back to MARK_DPF_PLATFORM_PROFILE when the craft corpus has no
+ * material, so a WSID decision would file itself under WWMD and the WSID tier
+ * would read "never used" no matter how often the gate ran.
+ *
+ * `gateKey` is null only on rows written before the column existed; those fall
+ * back to profile kind, which is accurate for them because the profession gate
+ * had never run at the time they were written.
+ */
+export function tierForRow(row: {
+  gateKey?: string | null;
+  profile?: { kind: string } | null;
+}): DecisionAuditTierOrOther {
+  return row.gateKey ? tierForGateKey(row.gateKey) : tierForProfileKind(row.profile?.kind);
+}
+
 export const TIER_LABELS: Record<DecisionAuditTierOrOther, { code: string; expansion: string }> = {
   wwmd: { code: "WWMD", expansion: "Platform doctrine" },
   wwwd: { code: "WWWD", expansion: "Your business" },
@@ -42,6 +76,34 @@ export function profileKindsForTier(tier: DecisionAuditTier): string[] {
   }
 }
 
+/** The gate keys whose rows belong to a tier. */
+export function gateKeysForTier(tier: DecisionAuditTier): string[] {
+  switch (tier) {
+    case "wwmd":
+      return ["build-studio"];
+    case "wwwd":
+      return ["org-business"];
+    case "wsid":
+      return ["profession"];
+  }
+}
+
+/**
+ * Prisma `where` fragment selecting a tier's rows, mirroring `tierForRow`:
+ * the gate wins where it is recorded, and rows predating `gateKey` fall back
+ * to profile kind. Both branches are needed — filtering on `gateKey` alone
+ * would hide every historical row, and on profile kind alone would misfile
+ * fallback rows (BI-1BE30A9A).
+ */
+export function tierWhere(tier: DecisionAuditTier): Record<string, unknown> {
+  return {
+    OR: [
+      { gateKey: { in: gateKeysForTier(tier) } },
+      { gateKey: null, profile: { kind: { in: profileKindsForTier(tier) } } },
+    ],
+  };
+}
+
 export type DecisionAuditRowInput = {
   interactionId: string;
   createdAt: Date;
@@ -57,6 +119,10 @@ export type DecisionAuditRowInput = {
   outcomePayload: unknown;
   humanOutcome: unknown;
   profile: { kind: string; name: string } | null;
+  /** The gate that produced the row; null on rows predating the column. */
+  gateKey?: string | null;
+  /** True when the gate's doctrine fell back off its own profile kind. */
+  gateFallbackUsed?: boolean | null;
   escalationCapture: { createdAt: Date } | null;
   deferralCapture: { gapReason: string } | null;
 };
@@ -82,6 +148,14 @@ export type DecisionAuditRow = {
   callerLabel: string;
   /** Thread the consult belonged to, when the caller carried one. */
   callerThreadId: string | null;
+  /** The gate that produced this row, for "which door did this come through?". */
+  gateKey: string | null;
+  /**
+   * True when the tier's own doctrine had no material and the gate fell back.
+   * Surfaced so a WSID row decided from platform defaults is not mistaken for
+   * one grounded in the profession's craft corpus.
+   */
+  gateFallbackUsed: boolean;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -145,7 +219,7 @@ export function buildCallerStats(rows: DecisionAuditRow[]): DecisionCallerStat[]
 }
 
 export function toAuditRow(row: DecisionAuditRowInput): DecisionAuditRow {
-  const tier = tierForProfileKind(row.profile?.kind);
+  const tier = tierForRow(row);
   const payload = asRecord(row.outcomePayload);
   const human = asRecord(row.humanOutcome);
   const resolvedByHuman = Boolean(row.escalationCapture) || Object.keys(human).length > 0;
@@ -169,6 +243,8 @@ export function toAuditRow(row: DecisionAuditRowInput): DecisionAuditRow {
     domainClass: row.domainClass,
     routeContext: row.routeContext ?? "—",
     confidence: row.confidenceAfter,
+    gateKey: row.gateKey ?? null,
+    gateFallbackUsed: row.gateFallbackUsed === true,
   };
 }
 

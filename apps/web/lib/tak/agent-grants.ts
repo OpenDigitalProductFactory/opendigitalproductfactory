@@ -224,6 +224,26 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // its organization's stance without a write grant. Satisfies routing-audit INV-1.
   evaluate_org_business_decision: ["work_capsule_read"],
 
+  // Profession/WSID craft-decision consultation (BI-88B77204). This entry was
+  // MISSING, and TOOL_TO_GRANTS denies unlisted tools by default — so the only
+  // door to the WSID tier was shut for every coworker, not just the ones
+  // lacking the grant the pack advertised. That is why the tier held 0 rows
+  // while decision-routing-block.ts was instructing agents to call it.
+  //
+  // Keyed on `registry_read`, matching `principle_decide` (the WWMD sibling):
+  // advisory, read-only, scoped to the CALLER'S OWN profession corpus, and it
+  // executes nothing. A coworker may always consult its own craft. The pack
+  // previously advertised `work_capsule_read`, which is unrelated — this gate
+  // reads decision-perspective material, never a work capsule.
+  evaluate_profession_decision: ["registry_read"],
+
+  // Two more doors sealed the same way as evaluate_profession_decision, found
+  // by the registry-wide sweep the BI-88B77204 fix added. Both packs already
+  // declared the grant they intended; only the gating entry was missing, so
+  // the intent is adopted verbatim rather than reinvented.
+  dispatch_consolidation_bet: ["build_promote"],
+  spawn_subagents: ["coworker_engagement_write"],
+
   // Org/WWWD qa elicitation feeder (BI-44526F3E Phase C): capture a CONFIRMED
   // operator answer about the business into the org corpus via enrichOrgCorpus
   // (qa provenance, first-party trust, draft-by-default per BI-1378). Requires

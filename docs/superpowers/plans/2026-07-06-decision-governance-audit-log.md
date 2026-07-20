@@ -28,10 +28,14 @@ Two legs, one PR:
 
 Tier attribution is by profile kind (`platform`→WWMD, `organization`→WWWD, `profession`→WSID), so rows written by the Build Studio gate, the org business gate, work-pattern review, and the new kernel-consult recorder all land in the same audit view without special-casing their writers.
 
+> **Amended 2026-07-20 (BI-1BE30A9A).** Profile-kind attribution is correct only while no gate falls back across kinds. It is not: `evaluateProfessionDecisionGate` resolves to `MARK_DPF_PLATFORM_PROFILE` whenever the craft corpus has no material for a decision class, so a WSID decision would persist with `profileId=mark-dpf-platform` and audit as **WWMD** — leaving the WSID tier reading "never used" however often the gate ran, and inviting exactly the wrong conclusion (§3 below assumed a silent tier means no writer; it can equally mean a misattributed one).
+>
+> Attribution is therefore by **the gate that produced the row**, recorded on `DecisionInteraction.gateKey` (`build-studio`→WWMD, `org-business`→WWWD, `profession`→WSID) with a companion `gateFallbackUsed` flag preserving the "was this the coworker's own doctrine or a fallback?" signal that profile kind used to carry implicitly. Profile kind remains the fallback for rows written before the column existed; that backfill is exact, because the profession gate had never run when they were written. See `tierForRow` in `apps/web/lib/wiki/decision-audit.ts`.
+
 ## 3. Explicitly out of scope
 
 - Routing coworker business decisions through `evaluate_org_business_decision` (BI-44526F3E Phase A3) — once that lands, its rows appear here automatically.
-- WSID-attributed writes from profession surfaces (no current writer; the tier shows honestly silent until one exists).
+- ~~WSID-attributed writes from profession surfaces (no current writer; the tier shows honestly silent until one exists).~~ **Superseded 2026-07-20:** a writer does exist — `evaluate_profession_decision` — but it was unreachable because the pack required a grant the EA coworker lacks (BI-88B77204), and would have been misattributed if reached (BI-1BE30A9A). The tier was silent for two compounding reasons, neither of them "no writer". Routing the architecture advisory through the gate (BI-D6CFE63A) is the first real WSID writer.
 - Escalation-resolution workflows (exist at `/platform/ai/founder-review` and `/wiki/review`; the log links to them).
 
 ## 4. Verification

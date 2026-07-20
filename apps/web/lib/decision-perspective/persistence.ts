@@ -4,6 +4,7 @@ import {
   DECISION_OUTCOME_TYPES,
   DECISION_RISK_TIERS,
   type DecisionDomainClass,
+  type DecisionGateKey,
   type DecisionOutcomeType,
   type DecisionPerspectiveEvaluationResult,
   type DecisionRiskTier,
@@ -198,6 +199,15 @@ export async function persistDecisionInteraction(input: {
   phaseTo?: string | null;
   /** Extra fields merged into outcomePayload (e.g. { orgProfileSelected }). */
   outcomePayloadExtra?: Record<string, unknown>;
+  /**
+   * Which gate produced this row (BI-1BE30A9A). The audit tier derives from
+   * this rather than from the resolved profile kind, so a gate that fell back
+   * to another kind's doctrine for material still audits under its own tier.
+   * Omitted only by callers that predate the column.
+   */
+  gateKey?: DecisionGateKey;
+  /** True when doctrine fell back off the gate's own profile kind. */
+  gateFallbackUsed?: boolean;
 }): Promise<{ interactionId: string; row: Record<string, unknown> }> {
   const interactionId = input.interactionId ?? createDecisionInteractionId();
   const row = await input.db.decisionInteraction.create({
@@ -228,6 +238,8 @@ export async function persistDecisionInteraction(input: {
       confidenceAfter: input.evaluation.confidenceAfter,
       outcomeType: input.evaluation.outcomeType,
       principleConflict: input.evaluation.principleConflict,
+      gateKey: input.gateKey ?? null,
+      gateFallbackUsed: input.gateFallbackUsed ?? false,
       outcomePayload: {
         outcomeType: input.evaluation.outcomeType,
         domainClass: input.evaluation.domainClass,

@@ -9,7 +9,7 @@ import { prisma } from "@dpf/db";
 
 import { StatusBadge } from "@/components/ui/report-kit";
 import { LocalTime } from "@/components/ui/LocalTime";
-import { TIER_LABELS, tierForProfileKind } from "@/lib/wiki/decision-audit";
+import { TIER_LABELS, tierForRow } from "@/lib/wiki/decision-audit";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +62,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
   });
   if (!row) notFound();
 
-  const tier = tierForProfileKind(row.profile?.kind);
+  const tier = tierForRow(row);
   const tierLabel = TIER_LABELS[tier];
   const payload = asRecord(row.outcomePayload);
   const optionDescriptions = asRecord(payload.optionDescriptions);
