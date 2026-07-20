@@ -27,6 +27,7 @@ Every install has one active `ScheduledJob` row per job id, with the physical he
 - Parent: `BI-69306ED7`
 - Fleet-safe migration, index rebuild, fixture, exact gate, live proof, and preview acceptance -> `BI-69306ED7`
 - Dependencies: blocks `BI-7430E579`; builds on `BI-2296E46C`
+- Receipt: `cmrth7zdb00j301p0u7lq9fbs`
 - Rationale: source remediation and full preview acceptance are one indivisible integrity correction.
 
 ## Risks and rollback
