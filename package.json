@@ -23,6 +23,7 @@
     "check:lifecycle-surfaces": "node --test scripts/lifecycle-surface-policy.test.mjs",
     "test:endpoints": "tsx scripts/test-endpoints.ts",
     "verify:preflight": "tsx scripts/dpf-verify-preflight.ts",
+    "pr:ready": "node scripts/pr-readiness.mjs",
     "check:bundle-boundaries": "node scripts/check-bundle-boundaries.mjs",
     "check:diagram-dependency-pins": "node scripts/check-diagram-dependency-pins.mjs",
     "check:reporting-composition": "node scripts/check-reporting-composition.mjs",
