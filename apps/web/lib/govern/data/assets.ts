@@ -169,6 +169,28 @@ export function resolveField(
 
 const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...[
+    ["data:founder-demand-cluster", "FounderDemandCluster"],
+    ["data:founder-demand-cluster-member", "FounderDemandClusterMember"],
+  ].map(([id, prismaModel]) => ({
+    id: id as DataAssetId,
+    physical: { prismaModel },
+    domain: "federated-demand",
+    ownerRole: "founder-business-owner",
+    stewardRole: "data-steward",
+    categories: ["operational", "content", "security-audit"] as DataCategory[],
+    sensitivity: "confidential" as DataSensitivity,
+    criticality: "high" as DataCriticality,
+    subjectLocators: [
+      { role: "organization" as const, fieldPath: prismaModel === "FounderDemandCluster" ? "organization" : "cluster.organization" },
+    ],
+    lifecycleClass: "business-record" as LifecycleClassKey,
+    purposeCapabilities: ["service-delivery", "platform-operations", "product-analytics"] as ProcessingPurposeKey[],
+    residencyClass: "local-only" as ResidencyClassKey,
+    projectionClass: "masked-content" as ProjectionClass,
+    classification: { state: "confirmed" as const, source: "manual" as const, effectiveFrom: "2026-07-20" },
+    fields: [],
+  })),
+  ...[
     ["data:partner-account", "PartnerAccount"],
     ["data:partner-agreement", "PartnerAgreement"],
     ["data:partner-entitlement", "PartnerEntitlement"],

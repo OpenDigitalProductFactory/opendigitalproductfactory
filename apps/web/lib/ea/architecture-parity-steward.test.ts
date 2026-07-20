@@ -32,6 +32,7 @@ function projectionResult(overrides: Partial<SysmlProjectionsResult> = {}): Sysm
     it4itCoverage: healthy,
     securityPosture: healthy,
     workPatternArchitecture: healthy,
+    federatedDemandArchitecture: healthy,
     ...overrides,
   };
 }

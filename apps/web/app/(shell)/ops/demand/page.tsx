@@ -5,14 +5,17 @@ import { DemandBoard } from "@/components/ops/DemandBoard";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { NetworkDemandPanel } from "@/components/ops/NetworkDemandPanel";
 import { getDemandShareContext, getNetworkDemandItems } from "@/lib/federation/demand-read-model";
+import { FounderSharedPortfolioPanel } from "@/components/ops/FounderSharedPortfolioPanel";
+import { getFounderSharedPortfolio } from "@/lib/federation/founder-portfolio";
 
 export const dynamic = "force-dynamic";
 
 export default async function DemandPage() {
-  const [items, networkItems, shareContext, policyConfig] = await Promise.all([
+  const [items, networkItems, shareContext, founderPortfolio, policyConfig] = await Promise.all([
     getDemandItems(),
     getNetworkDemandItems(),
     getDemandShareContext(),
+    getFounderSharedPortfolio(),
     prisma.platformDevConfig.findUnique({
       where: { id: "singleton" },
       select: { demandFramework: true, demandBucketTargets: true },
@@ -30,6 +33,12 @@ export default async function DemandPage() {
         </p>
       </div>
       <OpsTabNav />
+      {founderPortfolio.enabled ? (
+        <FounderSharedPortfolioPanel
+          inbox={JSON.parse(JSON.stringify(founderPortfolio.inbox))}
+          clusters={JSON.parse(JSON.stringify(founderPortfolio.clusters))}
+        />
+      ) : null}
       <NetworkDemandPanel
         items={JSON.parse(JSON.stringify(networkItems))}
         shareContext={JSON.parse(JSON.stringify(shareContext))}

@@ -1,0 +1,79 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Federated demand inbox/outbox mirrors",
+    "Founder Hub shared portfolio read model",
+    "Hive contribution ledger and configured forge delivery mirror"
+  ],
+  "migration": {
+    "name": "20260720080000_founder_shared_portfolio",
+    "backfill": "none — existing mirrors remain the inbox; founder clusters and result-only contributions are created explicitly after operator review"
+  },
+  "tests": [
+    "packages/db/src/founder-shared-portfolio-schema.test.ts",
+    "packages/db/src/founder-shared-portfolio.test.ts",
+    "packages/db/src/federated-demand-disposition-contract.test.ts",
+    "apps/web/lib/federation/demand-disposition.test.ts",
+    "apps/web/lib/hive/result-store.test.ts",
+    "apps/web/lib/ea/federated-demand-architecture-extract.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:founder-demand-cluster",
+      "prismaModel": "FounderDemandCluster",
+      "lifecycleDisposition": "Founder Hub owns cluster curation; archive preserves the disposition audit and deleting the owning organization cascades the cluster",
+      "fields": [
+        {
+          "fieldId": "data:founder-demand-cluster#all",
+          "resolution": "governed",
+          "reason": "stores founder-owned clustering and disposition without creating a second backlog",
+          "provenance": "federated demand network design sections 8 and 14",
+          "flags": ["sensitive"],
+          "fieldPolicy": "contains only minimized demand snapshots, opaque origin identifiers, founder disposition, and a nullable reference to the existing local backlog"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:founder-demand-cluster-member",
+      "prismaModel": "FounderDemandClusterMember",
+      "lifecycleDisposition": "cascades with its founder cluster; immutable origin identity is unique and route attestations remain auditable",
+      "fields": [
+        {
+          "fieldId": "data:founder-demand-cluster-member#all",
+          "resolution": "governed",
+          "reason": "deduplicates direct and reseller routes while preserving route evidence and environment promotion",
+          "provenance": "federated demand network design V-08 and V-14",
+          "flags": ["sensitive"],
+          "fieldPolicy": "pseudonymous installation and envelope identifiers only; unknown environment metadata fails safely to development"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:hive-contribution-ledger#result-delivery",
+      "prismaModel": "HiveContributionLedger",
+      "lifecycleDisposition": "retained under Hive contribution policy; forge retry/delivery fields do not affect the accepted local result record",
+      "fields": [
+        {
+          "fieldId": "data:hive-contribution-ledger#resultBundle",
+          "resolution": "governed",
+          "reason": "durably accepts result, evidence, provenance, attribution, review, and disposition independently of GitHub",
+          "provenance": "federated demand network design V-12 and V-15",
+          "flags": ["sensitive"],
+          "fieldPolicy": "result-only allow-list rejects backlog, capsule, private planning, customer context, priority, estimate, and discussion fields before persistence"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "assetId": "projection:founder-demand-and-hive-result",
+      "derivedContractId": "dpf.demand-disposition/1+dpf.hive-result/1",
+      "cleanupTest": "apps/web/lib/hive/result-intake.test.ts forbidden nested and top-level fields",
+      "reconciliationTest": "apps/web/lib/federation/demand-disposition.test.ts same-link validation and multi-route return notices"
+    }
+  ]
+}

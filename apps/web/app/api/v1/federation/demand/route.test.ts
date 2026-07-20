@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockResolveIdentity } = vi.hoisted(() => ({
+const { mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockHandleIncomingDisposition, mockResolveIdentity } = vi.hoisted(() => ({
   mockResolveAuth: vi.fn(),
   mockHandleIncomingDemand: vi.fn(),
   mockHandleIncomingDemandResponse: vi.fn(),
+  mockHandleIncomingDisposition: vi.fn(),
   mockResolveIdentity: vi.fn(),
 }));
 
@@ -12,6 +13,7 @@ vi.mock("@/lib/auth/federation-link-token", () => ({ resolveFederationLinkAuth: 
 vi.mock("@/lib/federation/demand-exchange", () => ({ handleIncomingDemand: mockHandleIncomingDemand }));
 vi.mock("@/lib/federation/demand-response", () => ({ handleIncomingDemandResponse: mockHandleIncomingDemandResponse }));
 vi.mock("@/lib/federation/demand-identity", () => ({ resolveFederationIdentity: mockResolveIdentity }));
+vi.mock("@/lib/federation/demand-disposition", () => ({ handleIncomingDemandDisposition: mockHandleIncomingDisposition }));
 
 import { POST } from "./route";
 
@@ -55,6 +57,7 @@ beforeEach(() => {
     disposition: "observed",
   });
   mockHandleIncomingDemandResponse.mockResolvedValue({ action: "created", responseId: "rsp_opaque" });
+  mockHandleIncomingDisposition.mockResolvedValue({ action: "created", noticeId: "fdn_opaque" });
 });
 
 describe("POST /api/v1/federation/demand", () => {
@@ -94,6 +97,15 @@ describe("POST /api/v1/federation/demand", () => {
 
     expect(response.status).toBe(202);
     expect(mockHandleIncomingDemandResponse).toHaveBeenCalledWith(expect.anything(), "link_1", demandResponse);
+    expect(mockHandleIncomingDemand).not.toHaveBeenCalled();
+  });
+
+  it("routes founder disposition notices over the same authenticated channel", async () => {
+    const notice = { specVersion: "dpf.demand-disposition/1", noticeId: "fdn_opaque" };
+    const response = await POST(request("dpf.demand.dispositioned", notice));
+
+    expect(response.status).toBe(202);
+    expect(mockHandleIncomingDisposition).toHaveBeenCalledWith(expect.anything(), "link_1", notice);
     expect(mockHandleIncomingDemand).not.toHaveBeenCalled();
   });
 

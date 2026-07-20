@@ -49,6 +49,22 @@ state and consent explanation. Manage the relationship itself under **Platform
 > Connections**. See the [federated demand channel runbook](../../operations/federated-demand-channels.md)
 for enrollment, revocation, and recovery procedures.
 
+### Founder shared portfolio
+
+On the Founder Hub authority installation, **Delivery Flow** also shows the
+Founder shared portfolio when trusted upstream reseller demand exists. Select
+one or more unclustered signals, name the review cluster, and create it. Reach
+counts distinct originating installations; a direct copy and a reseller-routed
+copy of the same origin count once while both routes remain auditable.
+
+Development and test signals are labeled and cannot enter the production
+portfolio until an authorized operator selects **Promote to production
+portfolio**. Accepting an eligible cluster creates a normal local backlog item;
+rejecting it does not create work. The decision is queued back to the sharing
+connection and appears under **Founder decisions** on the originating
+installation. Local backlogs continue to operate if the Founder Hub or GitHub
+is unavailable.
+
 ## Promotions
 
 The Promotions tab in Operations shows all features that have been through the Build Studio ship phase. Each promotion has a status:

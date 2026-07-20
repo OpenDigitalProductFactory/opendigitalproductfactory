@@ -77,6 +77,13 @@ describe("NetworkDemandPanel", () => {
           message: "We can validate this.",
           receivedAt: "2026-07-20T06:00:00.000Z",
         }],
+        dispositions: [{
+          noticeId: "notice_opaque",
+          decision: "accepted",
+          message: "Included in the shared platform portfolio.",
+          releaseApplicability: { releaseRef: "release_opaque", applicability: "Available in the next compatible release." },
+          receivedAt: "2026-07-20T06:30:00.000Z",
+        }],
       }}
     />);
 
@@ -87,6 +94,8 @@ describe("NetworkDemandPanel", () => {
     expect(html).toContain("Forward to Founder Hub");
     expect(html).toContain("Reseller One");
     expect(html).toContain("offered help");
+    expect(html).toContain("Founder decisions");
+    expect(html).toContain("Available in the next compatible release");
     expect(html).not.toContain("inst_customer");
   });
 });

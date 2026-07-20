@@ -23,3 +23,17 @@ The Admin area is the control centre for platform configuration. It is where adm
 - Update branding settings and preview how they appear across the platform
 - Maintain reference data tables used by portfolios, compliance, HR, and other areas
 - Configure storefront settings including domain routing and public storefront behaviour
+
+## Hive result review
+
+Open **Admin > Hive Contributions** to review result-only contributions received
+from trusted reseller channels. The intake record is saved before any GitHub
+operation. It may contain a code result, verification evidence, DCO/provenance,
+attribution, and a review recommendation; source backlog items, priorities,
+estimates, discussions, work capsules, and customer-private context are rejected
+before persistence.
+
+Choose **Accept** to approve the result and attempt delivery to the configured
+forge, or **Reject** to retain the audit without delivery. A GitHub outage leaves
+the accepted contribution intact and shows retry state in the ledger. Use
+**Retry forge delivery** after credentials or connectivity recover.

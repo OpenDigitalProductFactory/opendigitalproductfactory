@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@dpf/db";
-import type { DemandEnvelopeV1, DemandResponseV1 } from "@dpf/db/federated-demand-contract";
+import type { DemandDispositionNoticeV1, DemandEnvelopeV1, DemandResponseV1 } from "@dpf/db/federated-demand-contract";
 
 import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
 import { validateFederationCloudEvent } from "@/lib/federation/cloud-event-guard";
@@ -16,6 +16,7 @@ import {
   type DemandResponseDb,
 } from "@/lib/federation/demand-response";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import { handleIncomingDemandDisposition } from "@/lib/federation/demand-disposition";
 
 const ERROR_STATUS: Record<string, number> = {
   missing_authorization: 401,
@@ -34,6 +35,7 @@ const RESPONSE_ACTIVITIES = new Set([
   "dpf.demand.interest-recorded",
   "dpf.demand.help-offered",
 ]);
+const DISPOSITION_ACTIVITIES = new Set(["dpf.demand.dispositioned", "dpf.release.applicability-published"]);
 
 function isInboundActivity(value: unknown): value is InboundDemandActivity {
   return typeof value === "string" && INBOUND_ACTIVITIES.has(value as InboundDemandActivity);
@@ -85,6 +87,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: false, error: "invalid_demand_response", violations: response.violations }, { status: 422 });
     }
     return NextResponse.json({ ok: true, ...response }, { status: response.action === "noop" ? 200 : 202 });
+  }
+
+  if (typeof event.type === "string" && DISPOSITION_ACTIVITIES.has(event.type)) {
+    const disposition = await handleIncomingDemandDisposition(
+      prisma as never,
+      authz.linkId,
+      event.data as DemandDispositionNoticeV1,
+    );
+    if (disposition.action === "rejected") {
+      return NextResponse.json({ ok: false, error: "invalid_demand_disposition", violations: disposition.violations }, { status: 422 });
+    }
+    return NextResponse.json({ ok: true, ...disposition }, { status: disposition.action === "noop" ? 200 : 202 });
   }
 
   if (!isInboundActivity(event.type)) {
