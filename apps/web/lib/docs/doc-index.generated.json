@@ -8025,7 +8025,8 @@
       "anchors": [
         "overview",
         "key-concepts",
-        "what-you-can-do"
+        "what-you-can-do",
+        "hive-result-review"
       ]
     },
     "docs/user-guide/ai-workforce/ai-cost-governance.md": {
@@ -8752,6 +8753,7 @@
         "key-concepts",
         "what-you-can-do",
         "shared-demand",
+        "founder-shared-portfolio",
         "promotions",
         "promoter-timeout"
       ]
