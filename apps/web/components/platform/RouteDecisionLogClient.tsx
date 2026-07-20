@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
 import type { CandidateTrace } from "@/lib/routing/types";
+import type { ProviderSuitabilityRouteReceipt } from "@/lib/routing/provider-suitability/evidence";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -45,8 +46,8 @@ function CandidateTable({ candidates }: { candidates: CandidateTrace[] }) {
   const dims = Object.keys(candidates[0]?.dimensionScores ?? {});
 
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+    <div className="max-w-full overflow-x-auto">
+      <table className="min-w-[560px]" style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--dpf-border)" }}>
             <th style={{ textAlign: "left", padding: "4px 8px", color: "var(--dpf-muted)", fontWeight: 500 }}>Model</th>
@@ -90,6 +91,23 @@ function CandidateTable({ candidates }: { candidates: CandidateTrace[] }) {
   );
 }
 
+function SuitabilityReceipt({ receipt }: { receipt: ProviderSuitabilityRouteReceipt }) {
+  return (
+    <div className="break-words" style={{ marginTop: 12, border: "1px solid var(--dpf-border)", borderRadius: 6, padding: 10, fontSize: 11 }}>
+      <div style={{ color: "var(--dpf-text)", fontWeight: 600, marginBottom: 6 }}>Provider suitability evidence</div>
+      <div style={{ color: "var(--dpf-muted)", lineHeight: 1.6 }}>
+        <div>Connection: <span className="break-all" style={{ fontFamily: "monospace", color: "var(--dpf-text)" }}>{receipt.connectionRef}</span></div>
+        <div>Channel/account: <span style={{ color: "var(--dpf-text)" }}>{receipt.executionChannel} · {receipt.accountClass}</span></div>
+        <div>Policy/compiler: <span style={{ fontFamily: "monospace", color: "var(--dpf-text)" }}>{receipt.policyId} · {receipt.compilerVersion}</span></div>
+        {receipt.selectedUnderlyingProviderId && <div>Underlying provider: <span style={{ color: "var(--dpf-text)" }}>{receipt.selectedUnderlyingProviderId}</span></div>}
+        {receipt.obligations?.requiredRegion && <div>Required processing region: <span style={{ color: "var(--dpf-text)" }}>{receipt.obligations.requiredRegion}</span></div>}
+        {receipt.explanationCodes.length > 0 && <div>Decision evidence: <span style={{ color: "var(--dpf-text)" }}>{receipt.explanationCodes.join(", ")}</span></div>}
+      </div>
+      <div style={{ marginTop: 6, color: "var(--dpf-muted)" }}>This receipt records policy facts only—never prompts, attachments, credentials, or external account IDs.</div>
+    </div>
+  );
+}
+
 // ── Single decision row ───────────────────────────────────────────────────────
 
 function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
@@ -99,17 +117,16 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
   const modelLabel = row.selectedModelId ?? row.selectedEndpointId;
 
   return (
-    <div style={{ borderBottom: "1px solid #1a1a2e" }}>
+    <div className="min-w-0 max-w-full overflow-hidden" style={{ borderBottom: "1px solid #1a1a2e" }}>
       {/* Summary line */}
       <button
         onClick={() => setExpanded((v) => !v)}
+        className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[130px_120px_80px_60px_minmax(0,1fr)_80px]"
         style={{
           width: "100%",
           background: "none",
           border: "none",
           cursor: "pointer",
-          display: "grid",
-          gridTemplateColumns: "130px 120px 80px 60px 1fr 80px",
           gap: 8,
           alignItems: "center",
           padding: "10px 12px",
@@ -185,7 +202,7 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
       {expanded && (
         <div style={{ padding: "0 12px 16px", borderTop: "1px solid #1e1e3a", marginTop: 4 }}>
           {/* Metadata row */}
-          <div style={{ display: "flex", gap: 16, marginTop: 12, marginBottom: 12, fontSize: 11, color: "var(--dpf-muted)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12, marginBottom: 12, fontSize: 11, color: "var(--dpf-muted)" }}>
             {row.agentMessageId && (
               <span>Message: <span style={{ color: "var(--dpf-text)", fontFamily: "monospace" }}>{row.agentMessageId.slice(0, 12)}…</span></span>
             )}
@@ -215,6 +232,7 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
               <CandidateTable candidates={row.excludedTrace} />
             </>
           )}
+          {row.suitabilityReceipt && <SuitabilityReceipt receipt={row.suitabilityReceipt} />}
         </div>
       )}
     </div>
@@ -281,9 +299,7 @@ export function RouteDecisionLogClient({ rows }: Props) {
       </div>
 
       {/* Column header */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "130px 120px 80px 60px 1fr 80px",
+      <div className="hidden sm:grid sm:grid-cols-[130px_120px_80px_60px_minmax(0,1fr)_80px]" style={{
         gap: 8,
         padding: "6px 12px",
         fontSize: 10,
@@ -301,7 +317,7 @@ export function RouteDecisionLogClient({ rows }: Props) {
       </div>
 
       {/* Rows */}
-      <div style={{ background: "var(--dpf-bg)", borderRadius: "0 0 8px 8px" }}>
+      <div className="min-w-0 max-w-full" style={{ background: "var(--dpf-bg)", borderRadius: "0 0 8px 8px" }}>
         {filtered.map((row) => (
           <DecisionRow key={row.id} row={row} />
         ))}

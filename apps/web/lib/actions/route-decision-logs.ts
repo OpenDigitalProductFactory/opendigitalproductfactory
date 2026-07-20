@@ -4,6 +4,11 @@
  */
 import { prisma } from "@dpf/db";
 import type { CandidateTrace } from "@/lib/routing/types";
+import type { ProviderSuitabilityRouteReceipt } from "@/lib/routing/provider-suitability/evidence";
+import {
+  rollUpProviderRoutingTelemetry,
+  type ProviderRoutingTelemetryRollup,
+} from "@/lib/inference/provider-routing-rollup";
 
 export interface RouteDecisionLogRow {
   id: string;
@@ -19,6 +24,7 @@ export interface RouteDecisionLogRow {
   policyRulesApplied: string[];
   fallbackChain: string[];
   shadowMode: boolean;
+  suitabilityReceipt: ProviderSuitabilityRouteReceipt | null;
   createdAt: Date;
 }
 
@@ -49,6 +55,7 @@ export async function getRouteDecisionLogs(limit = 100): Promise<RouteDecisionLo
     policyRulesApplied: r.policyRulesApplied,
     fallbackChain: r.fallbackChain,
     shadowMode: r.shadowMode,
+    suitabilityReceipt: r.suitabilityReceipt as ProviderSuitabilityRouteReceipt | null,
     createdAt: r.createdAt,
   }));
 }
@@ -70,4 +77,30 @@ export async function getRouteDecisionStats(): Promise<RouteDecisionStats> {
       : 0;
 
   return { total, uniqueTaskTypes, uniqueModels, avgFitnessScore };
+}
+
+export async function getProviderSuitabilityTelemetryRollup(
+  minimumCohortSize = 5,
+): Promise<ProviderRoutingTelemetryRollup> {
+  const since = new Date(Date.now() - 30 * 86_400_000);
+  const rows = await prisma.routeDecisionLog.findMany({
+    where: { createdAt: { gte: since }, suitabilityReceipt: { not: { equals: null } } },
+    select: {
+      selectedEndpointId: true,
+      selectedModelId: true,
+      suitabilityReceipt: true,
+    },
+    take: 5_000,
+  });
+  return rollUpProviderRoutingTelemetry(rows.flatMap((row) => {
+    const receipt = row.suitabilityReceipt as ProviderSuitabilityRouteReceipt | null;
+    if (!receipt || receipt.schemaVersion !== "provider-suitability-route-receipt/v1") return [];
+    return [{
+      providerId: receipt.selectedProviderId,
+      modelId: row.selectedModelId ?? "unrecorded-model",
+      activityClass: receipt.activityClass ?? "unclassified-activity",
+      workloadClasses: receipt.workloadClasses,
+      outcome: row.selectedEndpointId === "none" ? "excluded" as const : "selected" as const,
+    }];
+  }), { minimumCohortSize });
 }

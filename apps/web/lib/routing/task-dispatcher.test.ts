@@ -128,6 +128,8 @@ describe("callWithFallbackChain", () => {
       policyId: "policy-sha256",
       compilerVersion: "provider-suitability/v1",
       inputVersion: "work-context/v1",
+      activityClass: "summarize",
+      workloadClasses: ["customer-records"],
       connectionRef: "connection-sha256:1234567890abcdef12345678",
       executionChannel: "direct-api" as const,
       accountClass: "enterprise" as const,

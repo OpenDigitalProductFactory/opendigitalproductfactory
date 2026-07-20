@@ -149,6 +149,7 @@ export async function getRecentRouteDecisions(endpointId?: string, limit = 20) {
       fitnessScore: true,
       policyRulesApplied: true,
       shadowMode: true,
+      suitabilityReceipt: true,
       createdAt: true,
     },
   });

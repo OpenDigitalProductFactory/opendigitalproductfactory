@@ -231,9 +231,9 @@ unreviewed connections; no account tier, contract, or entitlement is inferred.
 - [x] Write failing receipt tests that capture policy/input versions, provider/underlying-provider identity, exclusions, obligations, and explanation codes without sensitive content.
 - [x] Make expired evidence downgrade restricted eligibility immediately while leaving general/public routing governed by its own policy.
 - [x] Render contract/evidence status and next action on the existing provider detail page; do not create another admin workspace.
-- [ ] Run migration, unit, typecheck, build, UX, and route-receipt evidence gates.
+- [x] Run migration, unit, typecheck, build, UX, and route-receipt evidence gates.
 - [x] Update operations and AI provider docs.
-- [ ] Commit with DCO: `feat(ai-providers): govern trust evidence and route receipts`.
+- [x] Commit with DCO: `feat(ai-providers): govern trust evidence and route receipts`.
 
 ### Task 8: BI-AIPS-008 - Continuous Suitability, Rollout, And Completion Gate
 
@@ -246,15 +246,28 @@ unreviewed connections; no account tier, contract, or entitlement is inferred.
 - Modify: provider overview/detail and operations route-explanation surfaces selected during UX audit
 - Modify: `docs/user-guide/ai-workforce/model-routing-lifecycle.md`
 
-- [ ] Write failing rollup tests partitioned by activity/workload class while preserving privacy thresholds and existing provider/model totals.
-- [ ] Add drift/expiry attention signals for provider catalog facts, account attestations, contract evidence, regional entitlement, and repeated route failure.
-- [ ] Add drift signals when the observed execution channel, account class, plan limit, endpoint, or credential no longer matches the attested contract/entitlement posture.
-- [ ] Keep telemetry advisory: it may promote/degrade recommendations inside hard policy but cannot override PDP, contract, residency, or operator denial.
-- [ ] Add rollout flags in this order: compiler shadow mode, admin preview, onboarding recommendation, selected vertical bindings, restricted OpenRouter, evidence enforcement, continuous tuning.
-- [ ] Exercise dental, retail, credit-union, training, and software-platform journeys against the running portal.
-- [ ] Run the full affected unit suites, production build, UX gate, migration gate if applicable, docs checks, secret scan, and `pnpm pr:health` before PR readiness.
-- [ ] Record final evidence against every BI and the epic; unresolved restricted-route evidence keeps the epic open.
-- [ ] Commit with DCO: `feat(ai-routing): complete continuous provider suitability`.
+- [x] Write failing rollup tests partitioned by activity/workload class while preserving privacy thresholds and existing provider/model totals.
+- [x] Add drift/expiry attention signals for provider catalog facts, account attestations, contract evidence, regional entitlement, and repeated route failure.
+- [x] Add drift signals when the observed execution channel, account class, plan limit, endpoint, or credential no longer matches the attested contract/entitlement posture.
+- [x] Keep telemetry advisory: it may promote/degrade recommendations inside hard policy but cannot override PDP, contract, residency, or operator denial.
+- [x] Add rollout flags in this order: compiler shadow mode, admin preview, onboarding recommendation, selected vertical bindings, restricted OpenRouter, evidence enforcement, continuous tuning.
+- [x] Exercise dental, retail, credit-union, training, and software-platform journeys against the running portal.
+- [x] Run the full affected unit suites, production build, UX gate, migration gate if applicable, docs checks, secret scan, and `pnpm pr:health` before PR readiness.
+- [x] Record final evidence against every BI and the epic; unresolved restricted-route evidence keeps the epic open.
+- [x] Commit with DCO: `feat(ai-routing): complete continuous provider suitability`.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md`
+  - `docs/superpowers/plans/2026-07-19-ai-provider-suitability-routing.md`
+  - `docs/superpowers/specs/2026-06-20-onboarding-intake-derivation-design.md`
+- Current code substrate reviewed:
+  - V2 routing and `RequestContract` propagation, provider connection/profile loading, trust-evidence contracts, provider overview/detail, route-audit, attention aggregation, organization/business context, archetype, governed workload, PDP/PEP, and A2A/corpus paths under `apps/web/`.
+- Source of truth:
+  - The connection-scoped suitability projection compiled from canonical organization/workload facts and provider evidence; hard authorization remains with existing routing, residency, contract, PDP, and operator controls.
+- Decision:
+  - Extend the existing provider and audit ownership surfaces. Continuous telemetry stays advisory and privacy-thresholded, and cannot override hard policy. Do not add a parallel compliance assistant, provider model, policy evaluator, or navigation workspace.
 
 ## Completion Criteria
 

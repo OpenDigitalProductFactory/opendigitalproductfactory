@@ -24,6 +24,7 @@ import { resolveModelSelectionByPhase } from "@/lib/inference/phase-model-resolu
 import Link from "next/link";
 import { ProviderSuitabilityGuide } from "@/components/platform/ProviderSuitabilityGuide";
 import { loadProviderOnboardingRecommendation } from "@/lib/routing/provider-suitability/provider-onboarding-data";
+import { getProviderSuitabilityTelemetryRollup } from "@/lib/actions/route-decision-logs";
 
 
 /**
@@ -67,7 +68,7 @@ export default async function ProvidersPage() {
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
-  const [providers, byProvider, byAgent, freshJobs, detected, modelSummaries, cliPoolStatuses, budgetEvents, recentRejections, localOnlyInference, onboardingRecommendation] = await Promise.all([
+  const [providers, byProvider, byAgent, freshJobs, detected, modelSummaries, cliPoolStatuses, budgetEvents, recentRejections, localOnlyInference, onboardingRecommendation, suitabilityTelemetry] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
@@ -79,6 +80,7 @@ export default async function ProvidersPage() {
     countRecentRejections(),
     getLocalOnlyInference(),
     loadProviderOnboardingRecommendation(),
+    getProviderSuitabilityTelemetryRollup(),
   ]);
   const aiProviders = providers.filter((pw) => pw.provider.endpointType !== "service");
 
@@ -152,7 +154,7 @@ export default async function ProvidersPage() {
 
       <DetectedServicesBanner detected={detected} />
 
-      <ProviderSuitabilityGuide recommendation={onboardingRecommendation} />
+      <ProviderSuitabilityGuide recommendation={onboardingRecommendation} telemetry={suitabilityTelemetry} />
 
       {/* CLI pool rate-limit detail (reset times, error snippets). The live gate
           itself now also shows inline on each CLI-backed provider's row as the

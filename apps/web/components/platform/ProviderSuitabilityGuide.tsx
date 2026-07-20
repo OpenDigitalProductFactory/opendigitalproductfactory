@@ -1,6 +1,22 @@
 import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import type { ProviderOnboardingRecommendation, ProviderRecommendationItem } from "@/lib/routing/provider-suitability/onboarding-recommendation";
 import { formatProviderReviewObjective } from "@/lib/routing/provider-suitability/provider-review-packet";
+import type { ProviderRoutingTelemetryRollup } from "@/lib/inference/provider-routing-rollup";
+
+const WORKLOAD_LABELS: Record<string, string> = {
+  "public-marketing": "Public marketing",
+  "internal-operations": "Internal operations",
+  "customer-records": "Customer records",
+  "employee-records": "Employee records",
+  "payments-finance": "Payments and financial records",
+  "health-phi": "Health and patient information",
+  "student-records": "Student records",
+  "regulated-decisioning": "Regulated decisions",
+  "legal-privileged": "Legally privileged work",
+  "secrets-credentials": "Secrets and credentials",
+  "source-code": "Source code",
+  "unknown-restricted": "Unclassified restricted work",
+};
 
 function ConnectionList({ items, emptyMessage }: { items: ProviderRecommendationItem[]; emptyMessage: string }) {
   if (items.length === 0) return <p className="m-0 text-xs text-[var(--dpf-muted)]">{emptyMessage}</p>;
@@ -15,7 +31,7 @@ function ConnectionList({ items, emptyMessage }: { items: ProviderRecommendation
   );
 }
 
-export function ProviderSuitabilityGuide({ recommendation }: { recommendation: ProviderOnboardingRecommendation }) {
+export function ProviderSuitabilityGuide({ recommendation, telemetry }: { recommendation: ProviderOnboardingRecommendation; telemetry?: ProviderRoutingTelemetryRollup }) {
   const statusLabel = recommendation.status === "ready" ? "Ready with guardrails" : recommendation.status === "review-needed" ? "Review needed" : "Setup needed";
   const specialistObjective = formatProviderReviewObjective(recommendation.reviewPacket);
   return (
@@ -44,6 +60,18 @@ export function ProviderSuitabilityGuide({ recommendation }: { recommendation: P
         </div>
       </div>
 
+      <div role="region" aria-label="Work DPF is protecting" className="mt-4 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+        <p className="m-0 text-xs font-semibold text-[var(--dpf-text)]">Work DPF is protecting</p>
+        <p className="mt-1 text-[11px] text-[var(--dpf-muted)]">Derived from the company profile, markets, products, customers, and planned AI work. Correct these labels before relying on the recommendation.</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {recommendation.workloadClasses.map((workload) => (
+            <span key={workload} className="rounded-full border border-[var(--dpf-border)] px-2 py-1 text-[11px] text-[var(--dpf-text)]">
+              {WORKLOAD_LABELS[workload] ?? workload.replaceAll("-", " ")}
+            </span>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         <div role="region" aria-label="Use now" className="min-w-0 rounded-md border border-[var(--dpf-border)] p-3">
           <h3 className="mb-2 text-xs font-semibold text-[var(--dpf-text)]">Use now</h3>
@@ -68,6 +96,15 @@ export function ProviderSuitabilityGuide({ recommendation }: { recommendation: P
         </dl>
       </details>
       <p className="mt-4 text-xs font-semibold text-[var(--dpf-text)]">Next action: {recommendation.nextAction}</p>
+      <p className="mt-1 text-[11px] text-[var(--dpf-muted)]">DPF continuously watches evidence expiry, account/channel drift, regional entitlement changes, and repeated route failures. Observations can request review or lower a recommendation, but cannot override a policy denial.</p>
+      {telemetry && telemetry.totalRequests > 0 && (
+        <div className="mt-3 rounded-md border border-[var(--dpf-border)] p-3 text-xs text-[var(--dpf-text)]">
+          <div className="font-semibold">Last 30 days: {telemetry.totalRequests} governed route decision{telemetry.totalRequests === 1 ? "" : "s"}</div>
+          <div className="mt-1 text-[11px] text-[var(--dpf-muted)]">
+            {telemetry.selectedRoutes} selected · {telemetry.exclusions} blocked before dispatch. Workload detail appears only after at least {telemetry.minimumCohortSize} similar decisions; {telemetry.suppressedWorkloadClasses.length} small cohort{telemetry.suppressedWorkloadClasses.length === 1 ? " is" : "s are"} hidden.
+          </div>
+        </div>
+      )}
       <p className="mt-1 text-[11px] text-[var(--dpf-muted)]">{recommendation.caveat}</p>
     </section>
   );

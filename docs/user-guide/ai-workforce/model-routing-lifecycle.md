@@ -124,6 +124,18 @@ Open **Platform → AI Operations → Providers & Routing**, choose a provider, 
 
 Every governed route may carry a privacy-safe suitability receipt. The receipt records policy and input versions, the selected provider and any router-selected underlying provider, the connection's channel/account posture, exclusions, obligations, and explanation codes. It deliberately excludes prompts, messages, credentials, vendor account identifiers, organization identifiers, evidence documents, and free-text explanations.
 
+For activity-governed work, the same suitability projection used during provider setup is bound into the live `RequestContract` before `routeEndpointV2` selects a model. Existing operator restrictions can only become narrower: provider allowlists intersect, denials accumulate, and the stricter residency rule wins. A preferred provider/model, cost tuning, model health, or fallback cannot restore a connection removed by this gate.
+
+Open the route decision on the provider detail page or **Platform → Audit → Route Decisions** to see **Provider suitability evidence**. It shows the hashed connection reference, execution channel, account class, compiler/policy versions, processing-region obligation, and explanation codes. Workload-class detail is aggregated only after at least five similar decisions; smaller cohorts remain hidden.
+
+### Continuous review and rollout
+
+DPF watches the provider catalog, account attestations, contract and regional-entitlement expiry, conflicting/rejected evidence, repeated route failures, and differences between the observed connection and its attested channel, account class, plan, endpoint, or credential kind. These observations create an owner attention item with a direct repair link. Expired, rejected, or mismatched evidence continues to fail closed for restricted work.
+
+Telemetry is advisory. It may lower a recommendation, request review, or tune ordering among connections that are already allowed. It cannot override a data-policy decision, contract boundary, residency requirement, operator denial, or missing account evidence.
+
+The rollout is cumulative and ordered: compiler shadow → admin preview → onboarding recommendation → selected regulated/technical verticals → restricted OpenRouter → evidence enforcement → continuous tuning. The default installation enforces account evidence while leaving tuning advisory. Dental/healthcare, retail, credit-union, training/education, and software-platform journeys use the same work-context derivation and compiler; there is no vertical-specific policy engine.
+
 ## How Routing Adapts Over Time
 
 | Event | What Happens |
@@ -138,6 +150,8 @@ Every governed route may carry a privacy-safe suitability receipt. The receipt r
 | Admin overrides AgentModelConfig | Takes effect immediately. Seed will not overwrite admin-configured rows on next restart. |
 | Provider evidence expires or is rejected | The affected claim stops authorizing restricted work; the provider detail page shows the repair action. |
 | Provider evidence is replaced | The prior revision remains an audit record but no longer authorizes work. |
+| Provider posture drifts from its attestation | The owner receives an attention item; restricted routing stays blocked until the posture or evidence is reviewed. |
+| A workload cohort is small | Provider/model totals remain available, but workload-class detail stays hidden until the privacy threshold is met. |
 
 ## Provider-Specific Notes
 

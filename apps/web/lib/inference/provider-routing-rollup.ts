@@ -143,3 +143,86 @@ export function rollUpProviderModels(profiles: ProfileForRollup[]): ProviderMode
     lastEvalAt: lastEvalAt ? lastEvalAt.toISOString() : null,
   };
 }
+
+export type ProviderRoutingTelemetrySample = {
+  providerId: string;
+  modelId: string;
+  activityClass: string;
+  workloadClasses: readonly string[];
+  outcome: "selected" | "success" | "failure" | "excluded";
+};
+
+export type ProviderRoutingTelemetryRollup = {
+  totalRequests: number;
+  selectedRoutes: number;
+  successes: number;
+  failures: number;
+  exclusions: number;
+  byProvider: Record<string, number>;
+  byModel: Record<string, number>;
+  byActivityClass: Record<string, number>;
+  byWorkloadClass: Record<string, { requests: number; successes: number; failures: number }>;
+  suppressedWorkloadClasses: string[];
+  minimumCohortSize: number;
+};
+
+function increment(target: Record<string, number>, key: string): void {
+  target[key] = (target[key] ?? 0) + 1;
+}
+
+/**
+ * Operational routing totals remain complete at provider/model level. Workload
+ * cohorts are only emitted once they meet the privacy floor, preventing rare
+ * regulated activity classes from becoming a person- or customer-level signal.
+ */
+export function rollUpProviderRoutingTelemetry(
+  samples: ReadonlyArray<ProviderRoutingTelemetrySample>,
+  options: { minimumCohortSize?: number } = {},
+): ProviderRoutingTelemetryRollup {
+  const minimumCohortSize = Math.max(3, Math.floor(options.minimumCohortSize ?? 5));
+  const byProvider: Record<string, number> = {};
+  const byModel: Record<string, number> = {};
+  const byActivityClass: Record<string, number> = {};
+  const workload = new Map<string, { requests: number; successes: number; failures: number }>();
+  let successes = 0;
+  let selectedRoutes = 0;
+  let failures = 0;
+  let exclusions = 0;
+
+  for (const sample of samples) {
+    increment(byProvider, sample.providerId);
+    increment(byModel, `${sample.providerId}/${sample.modelId}`);
+    increment(byActivityClass, sample.activityClass);
+    if (sample.outcome === "selected") selectedRoutes += 1;
+    else if (sample.outcome === "success") successes += 1;
+    else if (sample.outcome === "failure") failures += 1;
+    else exclusions += 1;
+    for (const workloadClass of new Set(sample.workloadClasses)) {
+      const current = workload.get(workloadClass) ?? { requests: 0, successes: 0, failures: 0 };
+      current.requests += 1;
+      if (sample.outcome === "success") current.successes += 1;
+      if (sample.outcome === "failure") current.failures += 1;
+      workload.set(workloadClass, current);
+    }
+  }
+
+  const byWorkloadClass: ProviderRoutingTelemetryRollup["byWorkloadClass"] = {};
+  const suppressedWorkloadClasses: string[] = [];
+  for (const [workloadClass, counts] of [...workload.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    if (counts.requests < minimumCohortSize) suppressedWorkloadClasses.push(workloadClass);
+    else byWorkloadClass[workloadClass] = counts;
+  }
+  return {
+    totalRequests: samples.length,
+    selectedRoutes,
+    successes,
+    failures,
+    exclusions,
+    byProvider: Object.fromEntries(Object.entries(byProvider).sort()),
+    byModel: Object.fromEntries(Object.entries(byModel).sort()),
+    byActivityClass: Object.fromEntries(Object.entries(byActivityClass).sort()),
+    byWorkloadClass,
+    suppressedWorkloadClasses,
+    minimumCohortSize,
+  };
+}

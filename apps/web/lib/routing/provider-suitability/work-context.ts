@@ -57,13 +57,13 @@ function defaultWorkloadClass(input: {
 }): AiWorkloadClassKey {
   if (input.stage === "attract") return "public-marketing";
   if (input.stage === "settle") return "payments-finance";
-  if (input.stage === "operate-improve") return "internal-operations";
   if (
     input.category === "software-platform" &&
     (input.activityClass === "code-edit" || input.activityClass === "verify")
   ) {
     return "source-code";
   }
+  if (input.stage === "operate-improve") return "internal-operations";
   const restricted = input.category ? CATEGORY_RESTRICTED_DEFAULT[input.category] : undefined;
   if (restricted) return restricted;
   if (input.stage === "capture" || input.stage === "qualify" || input.stage === "deliver" || input.stage === "retain") {

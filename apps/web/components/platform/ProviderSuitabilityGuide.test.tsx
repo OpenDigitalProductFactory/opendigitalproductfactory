@@ -97,6 +97,7 @@ describe("ProviderSuitabilityGuide", () => {
     expect(screen.getByRole("region", { name: "Use now" }).textContent).toContain("No connection is approved to use now");
     expect(screen.getByRole("region", { name: "Use after review" }).textContent).toContain("No connection is waiting for review");
     expect(screen.getByRole("region", { name: "Not for this work" }).textContent).toContain("No connection is blocked for this work");
+    expect(screen.getByRole("region", { name: "Work DPF is protecting" }).textContent).toContain("Customer records");
     expect(screen.getByText(/Your COO coordinates the Data Governance specialist/)).toBeTruthy();
     expect(screen.getByText(/Next action:/).textContent).toContain(recommendation.nextAction);
   });

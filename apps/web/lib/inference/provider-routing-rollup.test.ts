@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { rollUpProviderModels, type ProfileForRollup } from "./provider-routing-rollup";
+import {
+  rollUpProviderModels,
+  rollUpProviderRoutingTelemetry,
+  type ProfileForRollup,
+} from "./provider-routing-rollup";
 
 function mk(overrides: Partial<ProfileForRollup> = {}): ProfileForRollup {
   return {
@@ -112,5 +116,26 @@ describe("rollUpProviderModels (BI-1B46967D)", () => {
       mk({ modelId: "with-eval", profileSource: "evaluated", reasoning: 80, codegen: 80, toolFidelity: 80, evalCount: 1, lastEvalAt: new Date("2026-06-14T00:00:00Z") }),
     ]);
     expect(s.representativeModelId).toBe("with-eval");
+  });
+});
+
+describe("rollUpProviderRoutingTelemetry (BI-AIPS-008)", () => {
+  const samples = [
+    { providerId: "openai", modelId: "gpt", activityClass: "summarize", workloadClasses: ["customer-records"], outcome: "success" },
+    { providerId: "openai", modelId: "gpt", activityClass: "summarize", workloadClasses: ["customer-records"], outcome: "failure" },
+    { providerId: "openai", modelId: "gpt", activityClass: "summarize", workloadClasses: ["customer-records"], outcome: "success" },
+    { providerId: "local", modelId: "qwen", activityClass: "code-edit", workloadClasses: ["source-code"], outcome: "success" },
+    { providerId: "local", modelId: "qwen", activityClass: "code-edit", workloadClasses: ["source-code"], outcome: "success" },
+  ] as const;
+
+  it("preserves provider/model totals while suppressing small workload cohorts", () => {
+    const rollup = rollUpProviderRoutingTelemetry(samples, { minimumCohortSize: 3 });
+
+    expect(rollup.totalRequests).toBe(5);
+    expect(rollup.byProvider).toEqual({ local: 2, openai: 3 });
+    expect(rollup.byModel).toEqual({ "local/qwen": 2, "openai/gpt": 3 });
+    expect(rollup.byActivityClass).toEqual({ "code-edit": 2, summarize: 3 });
+    expect(rollup.byWorkloadClass).toEqual({ "customer-records": { requests: 3, successes: 2, failures: 1 } });
+    expect(rollup.suppressedWorkloadClasses).toEqual(["source-code"]);
   });
 });

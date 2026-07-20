@@ -9,6 +9,11 @@ import type {
 import { isEeaState } from "@dpf/db/eu-jurisdictions";
 import { parseOrgAddress } from "@/lib/shared/org-address";
 import { resolveProviderTrustEvidence } from "./evidence";
+import {
+  parseApplicability,
+  regulationApplies,
+} from "@dpf/db/regulation-applicability";
+import type { RegulationSuitabilityResult } from "./types";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -95,7 +100,21 @@ export function connectionPosture(connection: {
   };
 }
 
-export async function loadProviderOnboardingRecommendation() {
+export type ProviderSuitabilitySourceContext = {
+  businessProfile: BusinessSuitabilityProfile;
+  handlesCardPayments: boolean;
+  regulationResults: RegulationSuitabilityResult[];
+  connections: Array<{
+    label: string;
+    status: string;
+    facts: ReturnType<typeof resolveProviderTrustFacts>;
+  }>;
+};
+
+/** Shared account/business fact loader for onboarding preview and live routing. */
+export async function loadProviderSuitabilitySourceContext(
+  applicableRegulationIds: readonly string[] = [],
+): Promise<ProviderSuitabilitySourceContext> {
   const organization = await prisma.organization.findFirst({ select: { id: true, address: true } });
   const [businessContext, storefront, connections] = await Promise.all([
     organization ? prisma.businessContext.findUnique({ where: { organizationId: organization.id } }) : null,
@@ -127,10 +146,38 @@ export async function loadProviderOnboardingRecommendation() {
       ? businessContext.riskPosture
       : null,
   };
+  const regulationRows = applicableRegulationIds.length > 0
+    ? await prisma.regulation.findMany({
+        where: { regulationId: { in: [...new Set(applicableRegulationIds)] } },
+        select: { regulationId: true, applicability: true },
+      })
+    : [];
+  const regulationResults: RegulationSuitabilityResult[] = regulationRows.map((regulation) => {
+    const applicability = parseApplicability(regulation.applicability);
+    return {
+      regulationId: regulation.regulationId,
+      applicability: applicability
+        ? regulationApplies(applicability, {
+            operatesIn: profile.operatesIn,
+            sellsTo: profile.sellsTo,
+            employsIn: profile.employsIn,
+            dataResidency: profile.dataResidency,
+            archetype: profile.archetypeCategory ?? undefined,
+            archetypeId: profile.archetypeId ?? undefined,
+          })
+        : {
+            applies: false,
+            reason: "Regulation applicability is not declared in the generic evaluator.",
+            matchedBasis: [],
+            undeclared: true,
+          },
+    };
+  });
 
-  return buildProviderOnboardingRecommendation({
+  return {
     businessProfile: profile,
     handlesCardPayments: businessContext?.handlesCardPayments ?? false,
+    regulationResults,
     connections: connections.map((connection) => {
       const evidence = resolveProviderTrustEvidence({
         connection: connectionPosture(connection),
@@ -150,5 +197,10 @@ export async function loadProviderOnboardingRecommendation() {
         }),
       };
     }),
-  });
+  };
+}
+
+export async function loadProviderOnboardingRecommendation() {
+  const context = await loadProviderSuitabilitySourceContext();
+  return buildProviderOnboardingRecommendation(context);
 }
