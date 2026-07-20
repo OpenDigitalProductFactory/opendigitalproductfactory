@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { vi, describe, it, expect } from 'vitest';
 import path from 'path';
-import { writeFileSync, mkdtempSync } from 'fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'fs';
 import os from 'os';
 import { syncEngineRegistry, enginesMissingMuslSafeRecipe } from './sync-engine-registry';
 
@@ -24,6 +24,21 @@ describe("enginesMissingMuslSafeRecipe", () => {
 });
 
 const dataPath = path.join(__dirname, '../data/build-engines.json');
+
+describe('canonical engine registry', () => {
+  it('recognizes current and legacy Claude Code versions without accepting malformed output', () => {
+    const registry = JSON.parse(readFileSync(dataPath, 'utf-8')) as {
+      claude: { verify: { versionRegex: string } };
+    };
+    const extractVersion = (stdout: string) =>
+      new RegExp(registry.claude.verify.versionRegex).exec(stdout)?.[1] ?? null;
+
+    expect(extractVersion('2.1.215 (Claude Code)\n')).toBe('2.1.215');
+    expect(extractVersion('claude-cli/1.5.0\n')).toBe('1.5.0');
+    expect(extractVersion('Claude Code\n')).toBeNull();
+    expect(extractVersion('')).toBeNull();
+  });
+});
 
 const now = new Date();
 const mockResult = { createdAt: now, updatedAt: now };

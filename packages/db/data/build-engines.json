@@ -3,7 +3,7 @@
     "binary": "claude",
     "verify": {
       "command": "claude --version",
-      "versionRegex": "claude[- ]cli[/ ]([0-9.]+)"
+      "versionRegex": "([0-9]+\\.[0-9]+\\.[0-9]+)"
     },
     "bakeInDefault": true,
     "recipes": [
