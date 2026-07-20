@@ -18,6 +18,7 @@
     "./customer-lifecycle": "./src/customer-lifecycle.ts",
     "./trust-link-lifecycle": "./src/trust-link-lifecycle.ts",
     "./federation-link-types": "./src/federation-link-types.ts",
+    "./federation-pairing-types": "./src/federation-pairing-types.ts",
     "./federated-demand-contract": "./src/federated-demand-contract.ts",
     "./federated-channel": "./src/federated-channel.ts",
     "./founder-shared-portfolio": "./src/founder-shared-portfolio.ts",

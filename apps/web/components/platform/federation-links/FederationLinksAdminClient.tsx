@@ -1,18 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
+import { InlineBusy } from "@/components/ui/InlineBusy";
 import { StatusBadge } from "@/components/ui/report-kit";
 import {
   approveFederationLinkAction,
+  approveNearbyPairingAction,
+  denyNearbyPairingAction,
   enrollWithPeerAction,
   issueFederationBootstrapAction,
+  pollNearbyPairingAction,
   quarantineFederationLinkAction,
   revokeFederationLinkAction,
   setFederationDiscoveryEnabledAction,
   setFederationLinkEnvironmentAction,
+  startNearbyPairingAction,
 } from "@/lib/actions/federation-links";
 import type { NearbyFederationCandidate } from "@/lib/federation/nearby-candidates";
 
@@ -39,11 +45,25 @@ export interface NearbyDiscoveryHealth {
   detail: string;
 }
 
+export interface NearbyPairingRow {
+  pairingId: string;
+  direction: "incoming" | "outgoing";
+  status: string;
+  matchingCode: string;
+  peerDisplayName: string;
+  peerAuthorityUrl: string;
+  expiresAt: string;
+  sharedSlices: string[];
+  retentionClass: string;
+  staysLocal: string[];
+}
+
 type Flash = { kind: "success" | "error"; text: string } | null;
 
 export function FederationLinksAdminClient({
   rows,
   nearbyCandidates = [],
+  nearbyPairings = [],
   nearbyDiscoveryHealth = {
     status: "unavailable",
     label: "Not set up",
@@ -52,8 +72,10 @@ export function FederationLinksAdminClient({
 }: {
   rows: FederationLinkRow[];
   nearbyCandidates?: NearbyFederationCandidate[];
+  nearbyPairings?: NearbyPairingRow[];
   nearbyDiscoveryHealth?: NearbyDiscoveryHealth;
 }) {
+  const router = useRouter();
   const [flash, setFlash] = useState<Flash>(null);
   const [relationshipPreset, setRelationshipPreset] = useState<
     "same-organization" | "service-provider" | "channel"
@@ -66,14 +88,110 @@ export function FederationLinksAdminClient({
   const [peerUrl, setPeerUrl] = useState("");
   const [peerToken, setPeerToken] = useState("");
   const [peerName, setPeerName] = useState("");
+  const [activePairing, setActivePairing] = useState<NearbyPairingRow | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function selectNearbyCandidate(candidate: NearbyFederationCandidate) {
+  const pairingRows = useMemo(() => {
+    if (!activePairing) return nearbyPairings;
+    return [activePairing, ...nearbyPairings.filter((row) => row.pairingId !== activePairing.pairingId)];
+  }, [activePairing, nearbyPairings]);
+
+  function actionPairingRow(
+    result: Extract<Awaited<ReturnType<typeof startNearbyPairingAction>>, { ok: true }>,
+  ): NearbyPairingRow {
+    return {
+      pairingId: result.pairingId,
+      direction: "outgoing",
+      status: result.status,
+      matchingCode: result.matchingCode,
+      peerDisplayName: result.peerDisplayName,
+      peerAuthorityUrl: result.peerAuthorityUrl,
+      expiresAt: result.expiresAt,
+      sharedSlices: result.projectionSummary.sharedSlices,
+      retentionClass: result.projectionSummary.retentionClass,
+      staysLocal: result.projectionSummary.staysLocal,
+    };
+  }
+
+  useEffect(() => {
+    const outgoing = pairingRows.find(
+      (row) => row.direction === "outgoing" && (row.status === "pending" || row.status === "approved"),
+    );
+    if (!outgoing || isPending) return;
+    const timer = window.setTimeout(() => {
+      startTransition(async () => {
+        const result = await pollNearbyPairingAction(outgoing.pairingId);
+        if (!result.ok) {
+          setFlash({ kind: "error", text: `Pairing check failed: ${result.message}` });
+          return;
+        }
+        setActivePairing(actionPairingRow(result));
+        if (result.status === "consumed") {
+          setFlash({
+            kind: "success",
+            text: `Secure setup completed${result.linkId ? ` — link ${result.linkId}` : ""}. Approve the new connection below; it becomes trusted after both installations approve.`,
+          });
+          router.refresh();
+        }
+      });
+    }, 3_000);
+    return () => window.clearTimeout(timer);
+  }, [isPending, pairingRows, router]);
+
+  async function selectNearbyCandidate(candidate: NearbyFederationCandidate) {
     if (candidate.automaticPairing === "blocked-insecure-transport") return;
-    setPeerUrl(candidate.endpoint);
-    setPeerName(`Nearby DPF ${candidate.discoveryId.slice(-4)}`);
-    setRelationshipPreset("same-organization");
-    setRole("same-org-peer");
+    const confirmed = await confirmDialog({
+      title: "Connect another installation",
+      message: "Is this another DPF owned by your organization? Both installations will show the same code and sharing summary before approval.",
+      confirmLabel: "Yes, start secure setup",
+    });
+    if (!confirmed) return;
+    setFlash(null);
+    startTransition(async () => {
+      const result = await startNearbyPairingAction({
+        discoveryId: candidate.discoveryId,
+        endpoint: candidate.endpoint,
+      });
+      if (!result.ok) {
+        setFlash({ kind: "error", text: `Secure setup failed: ${result.message} Manual invitation remains available below.` });
+        return;
+      }
+      setActivePairing(actionPairingRow(result));
+      setFlash({ kind: "success", text: "Secure setup started. Confirm the same code on both installations." });
+    });
+  }
+
+  async function onApprovePairing(row: NearbyPairingRow) {
+    const confirmed = await confirmDialog({
+      title: "Approve this installation",
+      message: `Approve ${row.peerDisplayName} only if it shows the same code ${row.matchingCode} and you accept the sharing summary. The connection still remains pending until both installations approve it.`,
+      confirmLabel: "Approve this installation",
+    });
+    if (!confirmed) return;
+    startTransition(async () => {
+      const result = await approveNearbyPairingAction(row.pairingId);
+      setFlash(result.ok
+        ? { kind: "success", text: "Pairing approved here. Waiting for the other installation to finish setup." }
+        : { kind: "error", text: `Pairing approval failed: ${result.message}` });
+      if (result.ok) router.refresh();
+    });
+  }
+
+  async function onDenyPairing(row: NearbyPairingRow) {
+    const reason = await promptDialog({
+      title: "Deny this installation",
+      message: `Why are you denying ${row.peerDisplayName}?`,
+      required: true,
+      confirmLabel: "Deny connection",
+    });
+    if (!reason?.trim()) return;
+    startTransition(async () => {
+      const result = await denyNearbyPairingAction(row.pairingId, reason.trim());
+      setFlash(result.ok
+        ? { kind: "success", text: "Pairing request denied. No invitation or connection was created." }
+        : { kind: "error", text: `Pairing denial failed: ${result.message}` });
+      if (result.ok) router.refresh();
+    });
   }
 
   function setNearbyDiscovery(enabled: boolean) {
@@ -299,16 +417,76 @@ export function FederationLinksAdminClient({
                   </div>
                   <button
                     type="button"
-                    disabled={!secure}
+                    disabled={!secure || isPending}
                     onClick={() => selectNearbyCandidate(candidate)}
                     className="rounded px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)] disabled:opacity-50"
                     style={{ backgroundColor: secure ? "var(--dpf-accent)" : "var(--dpf-muted)" }}
                   >
-                    {secure ? "Set up this DPF" : "Secure setup required"}
+                    {secure && isPending ? <InlineBusy label="Starting…" tone="current" /> : secure ? "Set up this DPF" : "Secure setup required"}
                   </button>
                 </div>
               );
             })}
+          </div>
+        )}
+        {pairingRows.length > 0 && (
+          <div className="mt-4 space-y-3" aria-live="polite">
+            {pairingRows.map((pairing) => (
+              <div
+                key={pairing.pairingId}
+                className="rounded border p-3"
+                style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-2)" }}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--dpf-text)]">
+                      {pairing.direction === "incoming"
+                        ? `${pairing.peerDisplayName} is asking to connect`
+                        : `${pairing.peerDisplayName} is waiting for approval`}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                      Confirm this same code on both installations:
+                    </p>
+                    <code className="mt-1 block text-lg font-bold tracking-widest text-[var(--dpf-text)]">
+                      {pairing.matchingCode}
+                    </code>
+                    <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                      Expires {new Date(pairing.expiresAt).toLocaleString()}.
+                    </p>
+                  </div>
+                  <StatusBadge label={pairing.status} intent={pairing.status === "approved" ? "success" : "neutral"} variant="soft" />
+                </div>
+                <div className="mt-3 rounded border p-2 text-xs text-[var(--dpf-muted)]" style={{ borderColor: "var(--dpf-border)" }}>
+                  <p><span className="font-medium text-[var(--dpf-text)]">Shares:</span> {pairing.sharedSlices.join(", ")} · retain: {pairing.retentionClass}</p>
+                  <p className="mt-1"><span className="font-medium text-[var(--dpf-text)]">Stays here:</span> {pairing.staysLocal.join(", ")}</p>
+                </div>
+                {pairing.direction === "incoming" && pairing.status === "pending" && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => onApprovePairing(pairing)}
+                      className="rounded px-3 py-1.5 text-sm font-medium text-[var(--dpf-bg)] disabled:opacity-50"
+                      style={{ backgroundColor: "var(--dpf-accent)" }}
+                    >
+                      {isPending ? <InlineBusy label="Approving…" tone="current" /> : "Approve this installation"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => onDenyPairing(pairing)}
+                      className="rounded border px-3 py-1.5 text-sm font-medium text-[var(--dpf-text)] disabled:opacity-50"
+                      style={{ borderColor: "var(--dpf-border)", backgroundColor: "var(--dpf-surface-1)" }}
+                    >
+                      Deny
+                    </button>
+                  </div>
+                )}
+                {pairing.direction === "outgoing" && (pairing.status === "pending" || pairing.status === "approved") && (
+                  <div className="mt-3"><InlineBusy label="Checking for approval…" /></div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </section>

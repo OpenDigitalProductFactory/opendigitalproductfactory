@@ -85,7 +85,9 @@
   component family
 - **Source truth:** expiring in-process candidate cache populated only by the
   authenticated Edge route; `EdgeNodeCapability` owns enabled/health state;
-  `FederationLink` remains the only durable trust record
+  `FederationPairingSession` owns expiring setup state;
+  `FederationBootstrapToken` remains invitation authority and `FederationLink`
+  remains the only durable trust record
 - **Empty/failure behavior:** no candidates keeps the invitation path visible;
   missing capability links to Edge Nodes; HTTP, certificate, multicast, and
   firewall failures explain why automatic setup is unavailable
@@ -107,8 +109,12 @@ existing federation/Edge runtime rather than an invented external pattern.
 
 - **Alignment:** aligned with concerns. The implementation extends the existing
   native Edge capability, `FederationBootstrapToken`, `FederationLink`,
-  principal, and projection-template substrate; it adds no competing trust
-  model, table, or migration.
+  principal, credential-crypto, and projection-template substrate. Governed
+  decision `DI-CE359E1CA3FB` selected one additive
+  `FederationPairingSession` because restart-safe one-time delivery, expiry,
+  throttling, and auditable approve/deny state do not belong on the invitation
+  authority row or the GitHub-specific OAuth device session. It adds no
+  competing identity, approval, or trust model.
 - **Allocation:** DNS-SD stays in the native Go Edge Node because Docker Desktop
   does not expose the Windows/macOS host multicast interfaces faithfully. The
   portal receives only authenticated, bounded candidate snapshots.
@@ -131,6 +137,37 @@ existing federation/Edge runtime rather than an invented external pattern.
 - **Evidence boundary:** CGO-disabled cross-compilation is source portability
   evidence, not Windows/macOS two-node functional evidence. V-01 remains open
   until both installed native services are exercised on the real LAN.
+
+### Task 2 SysML architecture note — secure nearby pairing
+
+- **Scope:** pairing behavior inside the DPF Federated Demand Network;
+  discovery, demand exchange, and trusted-link authority remain unchanged.
+- **Changed requirements/constraints:** automatic exchange requires
+  certificate-valid private/link-local HTTPS, a 256-bit one-time bearer secret,
+  a non-secret matching code, bounded expiry, explicit approve/deny, one-time
+  bootstrap retrieval, and independent link approvals.
+- **Changed interfaces/ports:** `/connect/pair` adds request and authenticated
+  poll operations; the existing Connections server actions add local
+  approve/deny and initiation operations; existing federation enrollment remains
+  the only link-creation interface.
+- **Allocations:** protocol validation and TLS client behavior live in
+  `apps/web/lib/federation`; Postgres `FederationPairingSession` owns ephemeral
+  state; `FederationBootstrapToken` owns invitation authority;
+  `FederationLink` owns relationship trust; Connections owns operator review.
+- **Verification cases:** source-local secret/code/HTTPS tests, route validation
+  and replay tests, approval/denial/expiry transition tests, invitation replay
+  rejection, Connections desktop/narrow/failure-path exercise, migration apply,
+  production build, and installed macOS↔Windows V-01/V-03 evidence.
+- **Data authority impact:** one additive ephemeral Postgres authority; nearby
+  candidate cache and UI are derived, and no local backlog data enters the
+  session.
+- **EA/current-state catch-up:** add the session data element and pairing port
+  allocation to the existing federated-demand parity projection in the same PR.
+- **Parity/extractor impact:** extend the existing federation architecture
+  source registry/projection; do not hand-maintain a separate SysML file.
+- **Open architecture risks:** local certificate provisioning and actual
+  macOS/Windows interoperability remain canonical-runtime evidence gates; an
+  HTTPS candidate with an untrusted certificate must fail closed.
 
 ## Task 3: Implement reliable demand delivery and reconciliation
 

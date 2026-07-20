@@ -18,6 +18,7 @@ const REQUIREMENTS = [
 
 const PARTS = [
   ["local-backlog", "Local Backlog Authority", "BacklogItem", "Each installation owns its work, priority, status, estimate, and build state."],
+  ["pairing-session", "Federation Pairing Session", "FederationPairingSession", "Owns expiring device-binding state and one-time bootstrap delivery; never creates relationship trust."],
   ["federated-mirror", "Federated Demand Mirror", "FederatedRecordMirror", "Stores minimized peer observations and durable protocol outbox state; never owns local work."],
   ["founder-cluster", "Founder Shared Portfolio", "FounderDemandCluster", "Founder Hub owns cluster membership, reach, disposition, and canonical local-item mapping."],
   ["founder-origin", "Founder Deduplicated Origin", "FounderDemandClusterMember", "Counts one immutable installation/envelope origin once while retaining every route attestation."],
@@ -74,6 +75,9 @@ export function buildFederatedDemandArchitectureModel(): SysmlDesiredModel {
     relationships.push({ fromKey: FEDERATED_DEMAND_PACKAGE_KEY, toKey: key, relSlug: "contains" });
   }
   relationships.push(
+    { fromKey: "fdn:part:pairing-session", toKey: "fdn:port:pairing", relSlug: "connects" },
+    { fromKey: "fdn:part:pairing-session", toKey: "fdn:req:02", relSlug: "satisfies" },
+    { fromKey: "fdn:part:pairing-session", toKey: "fdn:req:09", relSlug: "satisfies" },
     { fromKey: "fdn:part:local-backlog", toKey: "fdn:port:delivery-flow", relSlug: "connects" },
     { fromKey: "fdn:port:delivery-flow", toKey: "fdn:part:federated-mirror", relSlug: "connects" },
     { fromKey: "fdn:part:federated-mirror", toKey: "fdn:port:founder-portfolio", relSlug: "connects" },

@@ -194,6 +194,16 @@ export {
   type FederationRole,
 } from "./federation-link-types";
 export {
+  FEDERATION_PAIRING_DIRECTIONS,
+  FEDERATION_PAIRING_STATUSES,
+  canTransitionFederationPairing,
+  isFederationPairingDirection,
+  isFederationPairingStatus,
+  resolveFederationPairingStatus,
+  type FederationPairingDirection,
+  type FederationPairingStatus,
+} from "./federation-pairing-types";
+export {
   DEMAND_ACTIVITIES,
   DEMAND_ATTRIBUTIONS,
   DEMAND_AUDIENCES,

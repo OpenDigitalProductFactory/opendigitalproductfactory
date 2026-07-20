@@ -1,0 +1,63 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Federated Demand Network SysML projection",
+    "Connections pairing read model"
+  ],
+  "migration": {
+    "name": "20260720120000_federation_pairing_session",
+    "backfill": "none — existing manual invitations and federation links remain valid; sessions are created only by new nearby-pairing requests"
+  },
+  "tests": [
+    "packages/db/src/federation-pairing-types.test.ts",
+    "packages/db/src/federation-pairing-schema.test.ts",
+    "apps/web/lib/federation/nearby-pairing.test.ts",
+    "apps/web/lib/ea/federated-demand-architecture-extract.test.ts",
+    "apps/web/lib/govern/data/assets.test.ts",
+    "apps/web/lib/govern/data/coverage.live.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:federation-pairing-session",
+      "prismaModel": "FederationPairingSession",
+      "lifecycleDisposition": "short-lived setup authority; terminal sessions retain bounded audit metadata under federation policy, while bearer material is cleared on consumption or expiry",
+      "fields": [
+        {
+          "fieldId": "data:federation-pairing-session#pairingSecretHash",
+          "resolution": "governed",
+          "reason": "authenticates a one-time incoming poll without retaining the plaintext request secret",
+          "provenance": "federated demand network design section 5.2 durable nearby pairing session",
+          "flags": ["sensitive"],
+          "fieldPolicy": "SHA-256 hash only; plaintext is returned once over certificate-valid HTTPS and is never persisted on the receiving installation"
+        },
+        {
+          "fieldId": "data:federation-pairing-session#pairingSecretEnc",
+          "resolution": "governed",
+          "reason": "allows the requesting installation to resume an approved session after a page or process restart",
+          "provenance": "federated demand network design V-03 and governed decision DI-CE359E1CA3FB",
+          "flags": ["sensitive"],
+          "fieldPolicy": "AES-256-GCM through the existing credential-crypto boundary; cleared when the session is consumed, denied, or expires"
+        },
+        {
+          "fieldId": "data:federation-pairing-session#bootstrapTokenEnc",
+          "resolution": "governed",
+          "reason": "delivers the approved single-use enrollment authority to the requesting installation exactly once",
+          "provenance": "federated demand network design section 5.2 durable nearby pairing session",
+          "flags": ["sensitive"],
+          "fieldPolicy": "AES-256-GCM through the existing credential-crypto boundary; returned only to the authenticated pairing poll and cleared immediately after delivery"
+        },
+        {
+          "fieldId": "data:federation-pairing-session#operatorMetadata",
+          "resolution": "governed",
+          "reason": "shows both authorized operators the same bounded identity, matching code, status, and canonical projection summary",
+          "provenance": "federated demand network design V-03",
+          "flags": ["sensitive"],
+          "fieldPolicy": "installation ID, local/private authority URL, display name, rotating discovery alias, matching code, status, timestamps, and canonical projection template reference only; no backlog, customer, attachment, discussion, priority, estimate, or private planning data"
+        }
+      ]
+    }
+  ]
+}

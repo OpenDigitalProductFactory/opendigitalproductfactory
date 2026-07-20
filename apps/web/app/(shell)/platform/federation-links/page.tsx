@@ -1,16 +1,19 @@
 import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
+import { isFederationPairingDirection } from "@dpf/db/federation-pairing-types";
 import { resolveIncidentProjectionSpec } from "@dpf/db/projection-egress";
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { listNearbyFederationCandidates } from "@/lib/federation/nearby-candidates";
+import { summarizeNearbyPairingProjection } from "@/lib/federation/nearby-pairing";
 import { resolveFounderDemandEnvironment } from "@dpf/db/founder-shared-portfolio";
 import {
   FederationLinksAdminClient,
   type FederationLinkRow,
   type NearbyDiscoveryHealth,
+  type NearbyPairingRow,
 } from "@/components/platform/federation-links/FederationLinksAdminClient";
 import {
   PartnerBusinessPanel,
@@ -34,7 +37,7 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
-  const [links, discoveryCapabilities, partnerAccounts] = await Promise.all([
+  const [links, discoveryCapabilities, partnerAccounts, nearbyPairingSessions] = await Promise.all([
     prisma.federationLink.findMany({
       include: { principal: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
@@ -58,6 +61,14 @@ export default async function FederationLinksPage() {
       },
       orderBy: { createdAt: "asc" },
       take: 200,
+    }),
+    prisma.federationPairingSession.findMany({
+      where: {
+        status: { in: ["pending", "approved"] },
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { requestedAt: "desc" },
+      take: 20,
     }),
   ]);
 
@@ -134,6 +145,23 @@ export default async function FederationLinksPage() {
     supportRouteCount: partner._count.supportRoutes,
     recognitionCount: partner._count.contributionRecognitions,
   }));
+  const nearbyProjection = summarizeNearbyPairingProjection();
+  const nearbyPairings: NearbyPairingRow[] = nearbyPairingSessions.flatMap((pairing) =>
+    isFederationPairingDirection(pairing.direction)
+      ? [{
+          pairingId: pairing.pairingId,
+          direction: pairing.direction,
+          status: pairing.status,
+          matchingCode: pairing.matchingCode,
+          peerDisplayName: pairing.peerDisplayName,
+          peerAuthorityUrl: pairing.peerAuthorityUrl,
+          expiresAt: pairing.expiresAt.toISOString(),
+          sharedSlices: nearbyProjection.sharedSlices,
+          retentionClass: nearbyProjection.retentionClass,
+          staysLocal: nearbyProjection.staysLocal,
+        }]
+      : [],
+  );
   const enrolledLinkIds = new Set(partnerAccounts.flatMap((partner) => partner.federationLinkId ? [partner.federationLinkId] : []));
   const eligiblePartnerLinks = links
     .filter((link) => link.role === "channel-upstream" && link.linkState === "trusted" && !enrolledLinkIds.has(link.linkId))
@@ -151,6 +179,7 @@ export default async function FederationLinksPage() {
       <FederationLinksAdminClient
         rows={rows}
         nearbyCandidates={listNearbyFederationCandidates()}
+        nearbyPairings={nearbyPairings}
         nearbyDiscoveryHealth={nearbyDiscoveryHealth}
       />
       <PartnerBusinessPanel partners={partners} eligibleLinks={eligiblePartnerLinks} />
