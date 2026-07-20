@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Scheduled job registry",
+    "Scheduler runtime job lookup",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720180000_repair_scheduled_job_index_integrity",
+    "backfill": "forced-heap exact-key convergence: newest updatedAt/lastRunAt/createdAt/id survivor remains active, collision-checked quarantine job ids preserve older job state and ids, then complete unique-index rebuild; no row is deleted"
+  },
+  "tests": [
+    "packages/db/src/scheduled-job-index-integrity-migration.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:scheduled-job#job-id-integrity-repair",
+      "prismaModel": "ScheduledJob",
+      "lifecycleDisposition": "the newest persisted job state remains canonical; each older duplicate remains durable under a reserved quarantine job id with its original row id, configuration, execution state, and timestamps",
+      "fields": [
+        {
+          "fieldId": "data:scheduled-job#jobId",
+          "resolution": "governed",
+          "reason": "restore trustworthy scheduler identity without deleting job history or weakening sanitized-clone enforcement",
+          "provenance": "BI-69306ED7 forced heap/index evidence and migration fixture"
+        }
+      ]
+    }
+  ]
+}
