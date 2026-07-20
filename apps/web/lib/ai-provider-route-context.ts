@@ -1,10 +1,12 @@
 import type { ProviderSuitabilityPolicy } from "./routing/provider-suitability/types";
+import type { OpenRouterPolicyObligations } from "./routing/provider-suitability/types";
 import type { RequestContract } from "./routing/request-contract";
 
 export type ProviderSuitabilityRouteContext = {
   allowedProviders?: string[];
   deniedProviders?: string[];
   residencyPolicy?: RequestContract["residencyPolicy"];
+  openRouterObligations?: OpenRouterPolicyObligations;
 };
 
 function normalizeProviderIds(values: readonly string[]): string[] {
@@ -25,7 +27,7 @@ const RESIDENCY_RANK: Readonly<Record<NonNullable<RequestContract["residencyPoli
 export function applyProviderSuitabilityRouteContext<T extends Record<string, unknown>>(
   routeContext: T & ProviderSuitabilityRouteContext,
   policy: ProviderSuitabilityPolicy,
-): T & Required<ProviderSuitabilityRouteContext> {
+): T & ProviderSuitabilityRouteContext {
   const policyAllowed = normalizeProviderIds(policy.allowedProviders);
   const existingAllowed = routeContext.allowedProviders === undefined
     ? null
@@ -49,6 +51,9 @@ export function applyProviderSuitabilityRouteContext<T extends Record<string, un
     allowedProviders,
     deniedProviders,
     residencyPolicy,
+    ...(policy.openRouterObligations
+      ? { openRouterObligations: policy.openRouterObligations }
+      : {}),
   };
 }
 

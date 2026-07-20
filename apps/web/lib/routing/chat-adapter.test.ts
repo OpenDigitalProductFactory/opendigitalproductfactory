@@ -279,6 +279,88 @@ describe("chatAdapter", () => {
     expect(sentBody.reasoning_effort).toBe("medium");
   });
 
+  it("OpenRouter: sends bounded provider controls, metadata header, and safe routing evidence", async () => {
+    stubFetchOk({
+      choices: [{ message: { content: "bounded answer" } }],
+      usage: { prompt_tokens: 5, completion_tokens: 3 },
+      openrouter_metadata: {
+        region: "fra",
+        endpoints: { available: [{ provider: "Anthropic", model: "anthropic/claude", selected: true }] },
+        attempts: [{ provider: "Anthropic", model: "anthropic/claude", status: 200, output: "drop" }],
+      },
+    });
+
+    const result = await chatAdapter.execute(makeRequest({
+      providerId: "openrouter",
+      modelId: "anthropic/claude",
+      plan: makePlan({
+        providerId: "openrouter",
+        modelId: "anthropic/claude",
+        openRouterPolicy: {
+          posture: "restricted",
+          providerSettings: {
+            only: ["anthropic"],
+            allow_fallbacks: false,
+            require_parameters: true,
+            data_collection: "deny",
+            zdr: true,
+          },
+          requestRouterMetadata: true,
+          requireUnderlyingProviderEvidence: true,
+          providerConnectionId: "conn-openrouter",
+        },
+      }),
+      provider: {
+        baseUrl: "https://openrouter.ai/api/v1",
+        headers: { Authorization: "Bearer test", "Content-Type": "application/json" },
+      },
+    }));
+
+    const [url, fetchOpts] = mockFetch.mock.calls[0];
+    expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(fetchOpts.headers).toMatchObject({ "X-OpenRouter-Metadata": "enabled" });
+    expect(JSON.parse(fetchOpts.body).provider).toEqual({
+      only: ["anthropic"],
+      allow_fallbacks: false,
+      require_parameters: true,
+      data_collection: "deny",
+      zdr: true,
+    });
+    expect(result.raw).toEqual({
+      openRouterRoutingEvidence: {
+        underlyingProviderEvidence: "returned",
+        selectedProvider: "Anthropic",
+        selectedModel: "anthropic/claude",
+        region: "fra",
+        attempts: [{ provider: "Anthropic", model: "anthropic/claude", status: 200 }],
+      },
+    });
+  });
+
+  it("OpenRouter: uses the entitlement-bound EU URL and fails restricted responses closed without metadata", async () => {
+    stubFetchOk({
+      choices: [{ message: { content: "must not be returned" } }],
+      usage: { prompt_tokens: 5, completion_tokens: 3 },
+    });
+    const promise = chatAdapter.execute(makeRequest({
+      providerId: "openrouter",
+      plan: makePlan({
+        providerId: "openrouter",
+        openRouterPolicy: {
+          posture: "restricted",
+          providerSettings: { only: ["mistral"], allow_fallbacks: false, zdr: true, data_collection: "deny" },
+          requestRouterMetadata: true,
+          requireUnderlyingProviderEvidence: true,
+          providerConnectionId: "conn-eu",
+          requiredBaseUrl: "https://eu.openrouter.ai/api/v1",
+        },
+      }),
+      provider: { baseUrl: "https://openrouter.ai/api/v1", headers: { Authorization: "Bearer test" } },
+    }));
+    await expect(promise).rejects.toThrow(/underlying-provider metadata/i);
+    expect(mockFetch.mock.calls[0][0]).toBe("https://eu.openrouter.ai/api/v1/chat/completions");
+  });
+
   // ── 3. Anthropic: correct URL, body shape, system prompt separate ──
 
   it("Anthropic: correct URL, body shape, system prompt separate", async () => {

@@ -59,6 +59,10 @@ export interface RoutedExecutionPlan {
   maxTokens: number;
   temperature?: number;
   providerSettings: Record<string, unknown>;
+  /** Typed, fail-closed OpenRouter wire policy. Present only for OpenRouter plans. */
+  openRouterPolicy?: import("./provider-suitability/openrouter-policy").OpenRouterExecutionPolicy;
+  /** Retained across fallback construction so OpenRouter cannot become an unbounded fallback. */
+  openRouterObligations?: import("./provider-suitability/types").OpenRouterPolicyObligations;
   toolPolicy: {
     toolChoice?: "auto" | "required" | "none";
     allowParallelToolCalls?: boolean;

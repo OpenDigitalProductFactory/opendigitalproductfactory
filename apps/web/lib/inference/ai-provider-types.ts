@@ -221,6 +221,14 @@ export type RegistryProviderEntry = {
       baseUrl: string;
       requiresEnterpriseEnablement: boolean;
     }>;
+    routerPassThrough?: {
+      exposesUnderlyingProvider: boolean;
+      supportsProviderAllowlist: boolean;
+      supportsProviderBlocklist: boolean;
+      supportsZdrFilter: boolean;
+      supportsDataCollectionDeny: boolean;
+      supportsBoundedFallbacks: boolean;
+    };
   };
   serviceKind?: "mcp" | "built_in" | null;
   authorizeUrl?: string | null;

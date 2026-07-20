@@ -108,6 +108,8 @@ export type ProviderEntitlements = {
   adminAuditControls?: boolean | null;
   enterpriseSupportOrSla?: boolean | null;
   enabledRegions?: string[];
+  /** Account-approved OpenRouter endpoint slugs; never inferred from provider marketing. */
+  approvedUnderlyingProviderSlugs?: string[];
 };
 
 export type ProviderConnectionPosture = {
@@ -174,6 +176,13 @@ export type OpenRouterPolicyObligations = {
   denyDataCollection: boolean;
   requireBoundedFallbacks: boolean;
   requiredRegion: string | null;
+  approvedEndpointSlugs: string[];
+  providerConnectionId: string | null;
+  accountClass: ProviderAccountClass;
+  evidenceStatus: ProviderConnectionPosture["evidenceStatus"];
+  regionalProcessingEntitled: boolean;
+  enabledRegions: string[];
+  requiredBaseUrl: string | null;
 };
 
 export type ProviderSuitabilityPolicy = {
