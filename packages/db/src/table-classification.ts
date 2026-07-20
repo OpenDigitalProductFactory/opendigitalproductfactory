@@ -245,7 +245,15 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
 /** Fallback for tables not yet classified — defaults to confidential (obfuscate). */
 export const DEFAULT_SENSITIVITY: TableSensitivity = "confidential";
 
+// The clone enumerates physical PostgreSQL names, while this registry is keyed
+// by canonical Prisma model names. Keep explicit aliases for mapped models whose
+// classification differs from the confidential fallback.
+const PHYSICAL_TABLE_MODEL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  vector_embedding: "VectorEmbedding",
+});
+
 /** Look up the sensitivity level for a table, falling back to DEFAULT_SENSITIVITY. */
 export function getTableSensitivity(tableName: string): TableSensitivity {
-  return TABLE_CLASSIFICATION[tableName] ?? DEFAULT_SENSITIVITY;
+  const canonicalName = PHYSICAL_TABLE_MODEL_ALIASES[tableName] ?? tableName;
+  return TABLE_CLASSIFICATION[canonicalName] ?? DEFAULT_SENSITIVITY;
 }

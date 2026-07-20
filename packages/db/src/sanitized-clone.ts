@@ -86,6 +86,11 @@ export type ColumnTypeInfo = {
   udtName: string;
 };
 
+export type CloneColumnInfo = ColumnTypeInfo & {
+  columnName: string;
+  isGenerated: boolean;
+};
+
 const OMITTED_NATIVE_TYPES = new Set(["tsvector", "vector"]);
 
 export function quoteIdentifier(identifier: string): string {
@@ -141,13 +146,76 @@ export async function runWithDestinationCleanup<T>(
   }
 }
 
-export function buildPgDumpArgs(prodUrl: string, tableName: string): string[] {
+export function resolveCompatibleCopyColumns(
+  sourceColumns: readonly CloneColumnInfo[],
+  destinationColumns: readonly CloneColumnInfo[],
+  tableName: string,
+): string[] {
+  const destinationByName = new Map(
+    destinationColumns.map((column) => [column.columnName, column]),
+  );
+  const compatible: string[] = [];
+
+  for (const source of sourceColumns) {
+    const destination = destinationByName.get(source.columnName);
+    if (!destination || source.isGenerated || destination.isGenerated) continue;
+
+    if (source.dataType !== destination.dataType || source.udtName !== destination.udtName) {
+      throw new Error(
+        `Sanitized clone type mismatch for ${tableName}.${source.columnName}: source ${source.dataType}/${source.udtName}, destination ${destination.dataType}/${destination.udtName}`,
+      );
+    }
+    compatible.push(source.columnName);
+  }
+
+  if (compatible.length === 0) {
+    throw new Error(`Sanitized clone found no compatible insertable columns for ${tableName}`);
+  }
+  return compatible;
+}
+
+export function buildCompatibleSanitizedSelectList(
+  sourceColumns: readonly CloneColumnInfo[],
+  destinationColumns: readonly CloneColumnInfo[],
+  tableName: string,
+): string {
+  const compatibleColumns = new Set(
+    resolveCompatibleCopyColumns(sourceColumns, destinationColumns, tableName),
+  );
+  const columnTypes = new Map(
+    sourceColumns
+      .filter((column) => compatibleColumns.has(column.columnName))
+      .map((column) => [
+        column.columnName,
+        { dataType: column.dataType, udtName: column.udtName },
+      ]),
+  );
+  return buildSanitizedSelectList(columnTypes);
+}
+
+export function buildSourceCopyArgs(
+  prodUrl: string,
+  tableName: string,
+  columns: readonly string[],
+): string[] {
+  const projection = columns.map(quoteIdentifier).join(", ");
   return [
     `--dbname=${prodUrl}`,
-    "--data-only",
-    `--table=public.${quoteIdentifier(tableName)}`,
-    "--no-owner",
-    "--no-privileges",
+    "--set=ON_ERROR_STOP=1",
+    `--command=COPY (SELECT ${projection} FROM ${quoteIdentifier(tableName)}) TO STDOUT WITH (FORMAT binary)`,
+  ];
+}
+
+export function buildDestinationCopyArgs(
+  devUrl: string,
+  tableName: string,
+  columns: readonly string[],
+): string[] {
+  const columnList = columns.map(quoteIdentifier).join(", ");
+  return [
+    `--dbname=${devUrl}`,
+    "--set=ON_ERROR_STOP=1",
+    `--command=COPY ${quoteIdentifier(tableName)} (${columnList}) FROM STDIN WITH (FORMAT binary)`,
   ];
 }
 
@@ -289,6 +357,7 @@ export async function runSanitizedClone(): Promise<void> {
     assertDistinctDatabaseIdentities(productionIdentity, destinationIdentity);
 
     const destinationTables = await listPublicTables(dev, true);
+    const destinationTableNames = new Set(destinationTables.map(({ tablename }) => tablename));
 
     await runWithDestinationCleanup(
       () => resetDestinationData(dev, destinationTables.map(({ tablename }) => tablename)),
@@ -306,6 +375,10 @@ export async function runSanitizedClone(): Promise<void> {
         let autoIndex = users.length;
 
         for (const { tablename } of tables) {
+          if (!destinationTableNames.has(tablename)) {
+            console.log(`  SKIP (source schema ahead): ${tablename}`);
+            continue;
+          }
           const sensitivity = getTableSensitivity(tablename);
 
           if (sensitivity === "restricted") {
@@ -327,7 +400,7 @@ export async function runSanitizedClone(): Promise<void> {
           if (AUDIT_TABLES.has(tablename)) {
             const copyCount = Math.min(rowCount, AUDIT_RECORD_LIMIT);
             console.log(`  AUDIT (last ${copyCount} of ${rowCount}): ${tablename}`);
-            const rows = await selectRowsForSanitization(prod, tablename, copyCount);
+            const rows = await selectRowsForSanitization(prod, dev, tablename, copyCount);
             const obfuscated = obfuscateRows(rows, userIdMap, () => ++autoIndex);
             await insertRowsWithReplicationDisabled(dev, tablename, obfuscated);
             continue;
@@ -335,10 +408,10 @@ export async function runSanitizedClone(): Promise<void> {
 
           if (sensitivity === "public" || sensitivity === "internal") {
             console.log(`  COPY (${sensitivity}): ${tablename} (${rowCount} rows)`);
-            await copyTableVerbatim(tablename, prodUrl, devUrl);
+            await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev);
           } else if (sensitivity === "confidential") {
             console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
-            const rows = await selectRowsForSanitization(prod, tablename);
+            const rows = await selectRowsForSanitization(prod, dev, tablename);
             const obfuscated = obfuscateRows(rows, userIdMap, () => ++autoIndex);
             await insertRowsWithReplicationDisabled(dev, tablename, obfuscated);
           }
@@ -391,24 +464,34 @@ async function resetDestinationData(
 }
 
 async function selectRowsForSanitization(
-  client: RawDatabaseClient,
+  sourceClient: RawDatabaseClient,
+  destinationClient: RawDatabaseClient,
   tableName: string,
   limit?: number,
 ): Promise<Array<Record<string, unknown>>> {
-  const columnTypes = await getColumnTypes(client, tableName);
-  const selectList = buildSanitizedSelectList(columnTypes);
-  if (!selectList) return [];
+  const [sourceColumns, destinationColumns] = await Promise.all([
+    getCloneColumns(sourceClient, tableName),
+    getCloneColumns(destinationClient, tableName),
+  ]);
+  const selectList = buildCompatibleSanitizedSelectList(
+    sourceColumns,
+    destinationColumns,
+    tableName,
+  );
+  const compatibleColumns = new Set(
+    resolveCompatibleCopyColumns(sourceColumns, destinationColumns, tableName),
+  );
 
   const quotedTable = quoteIdentifier(tableName);
-  const orderColumn = columnTypes.has("createdAt")
+  const orderColumn = compatibleColumns.has("createdAt")
     ? quoteIdentifier("createdAt")
-    : columnTypes.has("id")
+    : compatibleColumns.has("id")
       ? quoteIdentifier("id")
       : null;
   const orderClause = limit && orderColumn ? ` ORDER BY ${orderColumn} DESC` : "";
   const limitClause = limit ? ` LIMIT ${Math.max(0, Math.trunc(limit))}` : "";
 
-  return client.$queryRawUnsafe<Array<Record<string, unknown>>>(
+  return sourceClient.$queryRawUnsafe<Array<Record<string, unknown>>>(
     `SELECT ${selectList} FROM ${quotedTable}${orderClause}${limitClause}`,
   );
 }
@@ -438,35 +521,43 @@ function obfuscateRows(
 }
 
 /**
- * Copy all rows from a table in production to dev using pg_dump piped to psql.
- * This is the most reliable approach — handles JSON, arrays, and all column types
- * without needing to serialize/deserialize through Prisma.
+ * Stream all compatible rows from production to dev using PostgreSQL binary
+ * COPY. The explicit catalog-derived projection tolerates additive schema skew
+ * without serializing values through JavaScript.
  */
-async function copyTableVerbatim(
+async function copyTableCompatible(
   tableName: string,
   prodUrl: string,
   devUrl: string,
+  prod: RawDatabaseClient,
+  dev: RawDatabaseClient,
 ): Promise<void> {
-  const pgDump = spawn("pg_dump", buildPgDumpArgs(prodUrl, tableName), {
+  const [sourceColumns, destinationColumns] = await Promise.all([
+    getCloneColumns(prod, tableName),
+    getCloneColumns(dev, tableName),
+  ]);
+  const columns = resolveCompatibleCopyColumns(sourceColumns, destinationColumns, tableName);
+
+  const sourcePsql = spawn("psql", buildSourceCopyArgs(prodUrl, tableName, columns), {
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const psql = spawn("psql", buildPsqlArgs(devUrl), {
+  const destinationPsql = spawn("psql", buildDestinationCopyArgs(devUrl, tableName, columns), {
     stdio: ["pipe", "ignore", "pipe"],
     env: buildPsqlEnvironment(),
   });
 
-  const pgDumpError = collectBoundedStderr(pgDump);
-  const psqlError = collectBoundedStderr(psql);
+  const sourceError = collectBoundedStderr(sourcePsql);
+  const destinationError = collectBoundedStderr(destinationPsql);
 
   try {
     await Promise.all([
-      pipeline(pgDump.stdout!, psql.stdin!),
-      waitForChild(pgDump, "pg_dump", pgDumpError),
-      waitForChild(psql, "psql", psqlError),
+      pipeline(sourcePsql.stdout!, destinationPsql.stdin!),
+      waitForChild(sourcePsql, "source psql", sourceError),
+      waitForChild(destinationPsql, "destination psql", destinationError),
     ]);
   } catch (error) {
-    pgDump.kill();
-    psql.kill();
+    sourcePsql.kill();
+    destinationPsql.kill();
     throw error;
   }
 }
@@ -600,6 +691,35 @@ async function getColumnTypes(
       { dataType: row.dataType, udtName: row.udtName },
     ]),
   );
+}
+
+async function getCloneColumns(
+  client: RawDatabaseClient,
+  tableName: string,
+): Promise<CloneColumnInfo[]> {
+  const rows = await client.$queryRawUnsafe<Array<{
+    columnName: string;
+    dataType: string;
+    udtName: string;
+    isGenerated: "ALWAYS" | "NEVER";
+  }>>(
+    `SELECT column_name AS "columnName",
+            data_type AS "dataType",
+            udt_name AS "udtName",
+            is_generated AS "isGenerated"
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1
+      ORDER BY ordinal_position`,
+    tableName,
+  );
+
+  return rows.map((row) => ({
+    columnName: row.columnName,
+    dataType: row.dataType,
+    udtName: row.udtName,
+    isGenerated: row.isGenerated === "ALWAYS",
+  }));
 }
 
 // ── Neo4j Clone Pipeline ─────────────────────────────────────────────────────

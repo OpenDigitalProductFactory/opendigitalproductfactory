@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   buildDestinationResetSql,
-  buildPgDumpArgs,
+  buildSourceCopyArgs,
+  buildDestinationCopyArgs,
+  buildCompatibleSanitizedSelectList,
   buildPsqlEnvironment,
   buildPsqlArgs,
   buildSanitizedSelectList,
@@ -16,6 +18,7 @@ import {
   prepareInsertParameter,
   runWithDestinationCleanup,
   insertRowsWithReplicationDisabled,
+  resolveCompatibleCopyColumns,
 } from "./sanitized-clone";
 
 describe("obfuscation", () => {
@@ -228,14 +231,48 @@ describe("bounded confidential inserts", () => {
   });
 });
 
-describe("verbatim copy command arguments", () => {
-  it("passes URLs and table names as arguments rather than shell syntax", () => {
-    expect(buildPgDumpArgs("postgresql://source/db?x=1&y=2", 'odd"table')).toEqual([
+describe("schema-compatible streaming copy", () => {
+  const ordinary = (columnName: string, udtName = "text") => ({
+    columnName,
+    dataType: udtName === "text" ? "text" : "USER-DEFINED",
+    udtName,
+    isGenerated: false,
+  });
+
+  it("copies only shared non-generated columns in source order", () => {
+    expect(resolveCompatibleCopyColumns(
+      [ordinary("id"), ordinary("sourceAhead"), ordinary("displayName"), { ...ordinary("searchVector", "tsvector"), isGenerated: true }],
+      [ordinary("displayName"), ordinary("destinationAhead"), ordinary("id"), ordinary("searchVector", "tsvector")],
+      "DecisionInteraction",
+    )).toEqual(["id", "displayName"]);
+  });
+
+  it("fails closed when a shared column changed type", () => {
+    expect(() => resolveCompatibleCopyColumns(
+      [ordinary("id", "text")],
+      [ordinary("id", "uuid")],
+      "Example",
+    )).toThrow(/Example\.id.*text.*uuid/);
+  });
+
+  it("uses the same compatible projection before confidential rows are obfuscated", () => {
+    expect(buildCompatibleSanitizedSelectList(
+      [ordinary("id"), ordinary("sourceAhead"), ordinary("displayName"), ordinary("embedding", "vector")],
+      [ordinary("id"), ordinary("displayName"), ordinary("embedding", "vector"), ordinary("destinationAhead")],
+      "DecisionInteraction",
+    )).toBe('"id", "displayName", NULL::text AS "embedding"');
+  });
+
+  it("passes URLs and catalog-derived identifiers as process arguments", () => {
+    expect(buildSourceCopyArgs("postgresql://source/db?x=1&y=2", 'odd"table', ["id", 'display"Name'])).toEqual([
       "--dbname=postgresql://source/db?x=1&y=2",
-      "--data-only",
-      '--table=public."odd""table"',
-      "--no-owner",
-      "--no-privileges",
+      "--set=ON_ERROR_STOP=1",
+      '--command=COPY (SELECT "id", "display""Name" FROM "odd""table") TO STDOUT WITH (FORMAT binary)',
+    ]);
+    expect(buildDestinationCopyArgs("postgresql://destination/db?x=1&y=2", 'odd"table', ["id", 'display"Name'])).toEqual([
+      "--dbname=postgresql://destination/db?x=1&y=2",
+      "--set=ON_ERROR_STOP=1",
+      '--command=COPY "odd""table" ("id", "display""Name") FROM STDIN WITH (FORMAT binary)',
     ]);
     expect(buildPsqlArgs("postgresql://destination/db?x=1&y=2")).toEqual([
       "--dbname=postgresql://destination/db?x=1&y=2",
@@ -266,6 +303,11 @@ describe("table classification helpers", () => {
   it("keeps provider connections with their restricted provider parent", () => {
     expect(shouldSkipTable("ModelProvider")).toBe(true);
     expect(shouldSkipTable("AiProviderConnection")).toBe(true);
+  });
+
+  it("applies restricted model classifications to mapped physical table names", () => {
+    expect(shouldSkipTable("VectorEmbedding")).toBe(true);
+    expect(shouldSkipTable("vector_embedding")).toBe(true);
   });
 
   it("does not copy source-derived vector embeddings", () => {
