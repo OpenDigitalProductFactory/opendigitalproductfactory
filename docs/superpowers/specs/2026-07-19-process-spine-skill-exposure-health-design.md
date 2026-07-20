@@ -71,6 +71,11 @@ pre-PR gate contract in `docs/testing/pre-pr-gate.md`, and code substrate
 `scripts/sandbox-freshness-preflight.mjs`; this change repairs readiness and
 sandbox-evidence behavior without changing UI routes or coworker authority.
 
+UX-Fit-Decision: fits-with-guardrails. No app route or user-facing control
+changes; the readiness output reduces operator cognitive load by naming the
+plain-language difference between DPF skills installed on disk and DPF-native
+replacement skills loaded/exposed in the active session.
+
 ## Design
 
 The canonical replacement map is
