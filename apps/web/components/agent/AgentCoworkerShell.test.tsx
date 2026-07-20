@@ -105,7 +105,7 @@ vi.mock("./agent-panel-prefs", () => ({
   savePanelSize: vi.fn(),
 }));
 
-function renderShell() {
+function renderShell(cooConversationalName: string | null = null) {
   return render(
     <AgentCoworkerShell
       userContext={{
@@ -114,6 +114,7 @@ function renderShell() {
         isSuperuser: false,
       }}
       useUnifiedCoworker={true}
+      cooConversationalName={cooConversationalName}
     />,
   );
 }
@@ -181,6 +182,15 @@ describe("AgentCoworkerShell support entry", () => {
     cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it("passes the organization COO presentation preference to the panel", async () => {
+    renderShell("Number Two");
+    fireEvent.click(screen.getByRole("button", { name: "Open coworker" }));
+    await settleShellThread();
+    expect(agentCoworkerPanelMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      cooConversationalName: "Number Two",
+    }));
   });
 
   it("handles a valid open-agent-feedback event in the existing panel", async () => {

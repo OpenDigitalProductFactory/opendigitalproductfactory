@@ -10,6 +10,7 @@ import {
   type StepStatus,
 } from "@/lib/actions/setup-constants";
 import { advanceStep, skipStep, pauseSetup, completeSetup, markStepTriggered } from "@/lib/actions/setup-progress";
+import { CooNameSetupCard } from "./CooNameSetupCard";
 
 /** Build a context-aware trigger prompt for the current setup step.
  * Sent as an autoMessage — triggers a real LLM call so the COO responds
@@ -22,7 +23,7 @@ import { advanceStep, skipStep, pauseSetup, completeSetup, markStepTriggered } f
  * Prompts under "Route Personas"). Customizing the COO's guidance during setup
  * is done by editing the onboarding-coo prompt, not these trigger strings.
  */
-function buildStepTrigger(step: string, ctx: Record<string, string>): string {
+export function buildStepTrigger(step: string, ctx: Record<string, string>): string {
   const org = ctx.orgName ? `Organisation: ${ctx.orgName}` : "Organisation: not yet entered";
   const archetype = ctx.suggestedArchetypeName ? `Business type: ${ctx.suggestedArchetypeName}` : "";
   const industry = ctx.industry || ctx.suggestedIndustry ? `Industry: ${ctx.industry || ctx.suggestedIndustry}` : "";
@@ -39,6 +40,7 @@ function buildStepTrigger(step: string, ctx: Record<string, string>): string {
     "storefront": "Storefront — customer-facing portal",
     "platform-development": "Platform Development — contribution and governance mode",
     "build-studio": "Build Studio — custom feature development",
+    "meet-your-coo": "Meet your AI COO — optionally choose how they are addressed",
     "workspace": "Workspace — day-to-day operations and guardrails",
   };
 
@@ -53,7 +55,14 @@ function buildStepTrigger(step: string, ctx: Record<string, string>): string {
   // Workspace is the final step — welcome the user and orient them, but do NOT
   // create epics, backlog items, or start building anything.
   if (step === "workspace") {
-    return `[Setup step: ${label}]\n${contextLine}\n\nThis is the final setup step. Welcome the user to their workspace. Briefly explain that this is where they will manage day-to-day operations — viewing their backlog, talking to coworkers, and monitoring work. Congratulate them on completing setup. Do NOT create any epics, backlog items, or guardrails. Do NOT start building or decomposing anything. Keep it to 2-3 sentences.`;
+    const cooName = ctx.cooConversationalName && ctx.cooConversationalName !== "COO"
+      ? `${ctx.cooConversationalName} · AI COO`
+      : "COO";
+    return `[Setup step: ${label}]\n${contextLine}\n\nThis is the final setup step. Welcome the user to their workspace and introduce their standing coworker as ${cooName}. Make clear that the conversational name does not change the coworker's AI identity, permissions, authority, or the owner's accountability. Briefly explain that this is where they will manage day-to-day operations — viewing their backlog, talking to coworkers, and monitoring work. Congratulate them on completing setup. Do NOT create any epics, backlog items, or guardrails. Do NOT start building or decomposing anything. Keep it to 2-3 sentences.`;
+  }
+
+  if (step === "meet-your-coo") {
+    return `[Setup step: ${label}]\n${contextLine}\n\nExplain in plain language that the Onboarding COO guiding setup is distinct from the standing AI COO that will have the owner's back after setup. The owner may keep the title COO or choose an optional conversational name. The name is organization-visible presentation only and cannot change identity, permissions, authority, accountability, or audit records. Invite them to use the naming card; keep it to 2-3 sentences.`;
   }
 
   if (step === "ai-providers") {
@@ -105,7 +114,9 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
     const timer = setTimeout(() => {
       document.dispatchEvent(
         new CustomEvent("open-agent-panel", {
-          detail: { autoMessage: trigger },
+          // Setup guidance always belongs to the distinct Onboarding COO and
+          // its own thread, even though the tour renders on real portal routes.
+          detail: { autoMessage: trigger, routeContext: "/setup" },
         }),
       );
       void markStepTriggered(progressId, currentStep);
@@ -125,9 +136,9 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
     window.location.href = nextRoute;
   };
 
-  const handleContinue = () => {
+  const handleContinue = (contextUpdate?: Record<string, string>) => {
     startTransition(async () => {
-      const updated = await advanceStep(progressId);
+      const updated = await advanceStep(progressId, contextUpdate);
       if ("blocked" in updated && updated.blocked === "storefront-required") {
         // The storefront hasn't been created yet — keep the operator on the
         // storefront setup so they finish the wizard before moving on.
@@ -185,8 +196,9 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
   // Listen for setup action clicks from the coworker panel
   useEffect(() => {
     function handleSetupAction(e: Event) {
-      const action = (e as CustomEvent<string>).detail;
-      if (action === "continue") handleContinue();
+      const detail = (e as CustomEvent<string | { action: string; contextUpdate?: Record<string, string> }>).detail;
+      const action = typeof detail === "string" ? detail : detail.action;
+      if (action === "continue") handleContinue(typeof detail === "string" ? undefined : detail.contextUpdate);
       else if (action === "skip") handleSkip();
       else if (action === "pause") handlePause();
     }
@@ -202,6 +214,13 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
         steps={steps}
         onStepClick={handleStepClick}
       />
+      {currentStep === "meet-your-coo" && (
+        <CooNameSetupCard
+          progressId={progressId}
+          initialName={setupContext.cooConversationalName ?? null}
+          disabled={isPending}
+        />
+      )}
       {blockedMsg && (
         <div
           role="alert"

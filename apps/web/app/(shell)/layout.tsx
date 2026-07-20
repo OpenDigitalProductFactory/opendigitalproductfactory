@@ -64,7 +64,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       },
     }),
     prisma.organization.findFirst({
-      select: { name: true, logoUrl: true },
+      select: { name: true, logoUrl: true, cooConversationalName: true },
     }),
     isUnifiedCoworkerEnabled(),
     resolveHomePhoneCountry(),
@@ -247,6 +247,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         <AgentCoworkerShell
           userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
           useUnifiedCoworker={useUnifiedCoworker}
+          cooConversationalName={organization?.cooConversationalName ?? null}
         />
         {/* FeedbackButton moved to Header — see HeaderFeedbackButton */}
         <QueueFlusher />

@@ -8,6 +8,8 @@ order: 3
 
 DPF coworkers are purposed helpers, not a generic chatbot. The coworker on a page understands the page, the selected business archetype, the user's role, and the tools that coworker is allowed to propose.
 
+The standing COO may have an owner-chosen conversational name, shown as **Name · AI COO**. This is presentation only: the canonical coworker remains COO, and identity, permissions, authority, audit attribution, and the owner's accountability do not change. Authorized users can change or clear the name from the COO record in **AI Workforce**.
+
 For the broader product framing, see [Market Archetypes And Coworkers](../market-archetypes.md).
 
 ## How It Works

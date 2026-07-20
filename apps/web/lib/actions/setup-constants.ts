@@ -13,6 +13,7 @@ export const SETUP_STEPS = [
   "storefront",          // /storefront — customer-facing portal setup
   "platform-development",// /admin/platform-development — contribution mode
   "build-studio",        // /build — show the self-development capability
+  "meet-your-coo",       // /workspace — optionally choose a conversational name for the standing COO
   "workspace",           // /workspace — see the workspace, meet the COO
 ] as const;
 
@@ -26,6 +27,7 @@ export const STEP_ROUTES: Record<string, string> = {
   "storefront": "/storefront",
   "platform-development": "/admin/platform-development",
   "build-studio": "/build",
+  "meet-your-coo": "/workspace",
   "workspace": "/workspace",
 };
 
@@ -39,6 +41,7 @@ export const STEP_LABELS: Record<string, string> = {
   "storefront": "Storefront",
   "platform-development": "Platform Dev",
   "build-studio": "Build",
+  "meet-your-coo": "Meet Your COO",
   "workspace": "Workspace",
 };
 
@@ -49,6 +52,7 @@ export type SetupContext = {
   orgName?: string;
   industry?: string;
   hasCloudProvider?: boolean;
+  cooConversationalName?: string;
   skippedSteps?: string[];
   // Populated by importBrandFromUrl during the branding step
   suggestedCompanyName?: string;

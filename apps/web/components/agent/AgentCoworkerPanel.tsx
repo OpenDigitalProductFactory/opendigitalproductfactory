@@ -22,30 +22,10 @@ import { getConversationParticipants } from "@/lib/actions/conversation-particip
 import type { ConversationParticipant } from "@/lib/tak/conversation-participants-core";
 import { isTaskInFlight } from "@/lib/tak/task-state-intent";
 import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStatus";
-import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
+import { SetupActionButtonsWrapper } from "@/components/setup/SetupActionButtonsWrapper";
 import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
-
-/** Renders setup action buttons only when the setup overlay is active (data attribute on <html>) */
-function SetupActionButtonsWrapper({ isPending }: { isPending: boolean }) {
-  const [active, setActive] = useState(false);
-  const [isLast, setIsLast] = useState(false);
-
-  useEffect(() => {
-    function check() {
-      setActive(document.documentElement.hasAttribute("data-setup-active"));
-      setIsLast(document.documentElement.getAttribute("data-setup-last-step") === "true");
-    }
-    check();
-    // Re-check on navigation (MutationObserver on the html element's attributes)
-    const observer = new MutationObserver(check);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-setup-active", "data-setup-last-step"] });
-    return () => observer.disconnect();
-  }, []);
-
-  if (!active || isPending) return null;
-  return <SetupActionButtons isLastStep={isLast} />;
-}
+import { presentStandingCoo, resolveCooPresentationName } from "@/lib/coworker-presentation/coo-name";
 import {
   loadElevatedAssistPreference,
   saveElevatedAssistPreference,
@@ -89,6 +69,8 @@ type Props = {
   threadLoadState?: ThreadLoadState;
   /** Recovery for a failed load: hard reload to fetch a fresh bundle (see shell handler). */
   onReloadToReconnect?: () => void;
+  /** Organization-scoped presentation preference for the standing COO only. */
+  cooConversationalName?: string | null;
 };
 
 type MessageSendOptions = {
@@ -148,6 +130,7 @@ export function AgentCoworkerPanel({
   isDocked = false,
   threadLoadState,
   onReloadToReconnect,
+  cooConversationalName = null,
 }: Props) {
   const pathname = usePathname();
   // During setup, use the override so the onboarding-coo agent handles all steps
@@ -286,7 +269,7 @@ export function AgentCoworkerPanel({
   voicePlaybackEnabledRef.current = voicePlaybackEnabled;
 
   const routeAgent: AgentInfo = resolveAgentForRouteSync(effectiveRoute, userContext);
-  const agent = routeAgent;
+  const agent = presentStandingCoo(routeAgent, cooConversationalName);
   const webAccessAvailable = agentHoldsWebSearchGrant(agent.agentId);
   const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
@@ -1003,7 +986,11 @@ export function AgentCoworkerPanel({
               key={msg.id}
               message={msg}
               showAgentLabel={showAgentLabel}
-              agentName={showAgentLabel && msg.agentId ? (AGENT_NAME_MAP[msg.agentId] ?? msg.agentId) : null}
+              agentName={showAgentLabel && msg.agentId ? resolveCooPresentationName({
+                agentId: msg.agentId,
+                canonicalName: AGENT_NAME_MAP[msg.agentId] ?? msg.agentId,
+                conversationalName: cooConversationalName,
+              }) : null}
               onApprove={handleApprove}
               onReject={handleReject}
               {...(decisionActive ? { onDecision: (value: string) => handleSend(value) } : {})}

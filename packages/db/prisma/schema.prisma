@@ -3788,6 +3788,9 @@ model Organization {
   address                       Json?
   logoUrl                       String?
   designSystem                  Json?
+  // Optional organization-facing address for the standing AGT-ORCH-000 coworker.
+  // Canonical identity, routing, authority, and attribution remain Agent.displayName="COO".
+  cooConversationalName         String?
   // EP-WIKI-004: per-org retrieval mode for wiki search.
   // "vector" = the EP-WIKI-001 default (Qdrant cosine similarity only).
   // "ppr"    = vector seeds → Personalized PageRank over the per-org

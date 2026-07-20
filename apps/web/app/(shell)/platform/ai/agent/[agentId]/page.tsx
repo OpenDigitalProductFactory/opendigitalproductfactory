@@ -40,6 +40,8 @@ import {
   DecisionsPanel,
 } from "@/components/platform/coworker-record/panels";
 import { NeedsAndPlaybooksPanel } from "@/components/platform/coworker-record/NeedsAndPlaybooksPanel";
+import { CooConversationalNameCard } from "@/components/platform/coworker-record/CooConversationalNameCard";
+import { isStandingCooAgentId } from "@/lib/coworker-presentation/coo-name";
 
 const BUDGET_CLASS_LABELS: Record<string, string> = {
   quality_first: "Quality first",
@@ -173,6 +175,9 @@ export default async function AgentDetailPage({
     { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
     "manage_platform",
   );
+  const cooNamePreference = isStandingCooAgentId(agent.agentId)
+    ? await prisma.organization.findFirst({ select: { cooConversationalName: true } }).catch(() => null)
+    : null;
 
   const providerNames: Record<string, string> = {};
   for (const p of activeProviders) providerNames[p.providerId] = p.name;
@@ -312,6 +317,13 @@ export default async function AgentDetailPage({
         {gaid && <span style={{ marginLeft: 12 }}>GAID: <code style={{ fontSize: 10 }}>{gaid}</code></span>}
         {agent.slugId && <span style={{ marginLeft: 12 }}>Slug: <code style={{ fontSize: 10 }}>{agent.slugId}</code></span>}
       </div>
+
+      {isStandingCooAgentId(agent.agentId) && (
+        <CooConversationalNameCard
+          initialName={cooNamePreference?.cooConversationalName ?? null}
+          canWrite={canWrite}
+        />
+      )}
 
       <CoworkerRecordTabs tabs={tabs}>
         <OverviewPanel record={record} summary={summary} />
