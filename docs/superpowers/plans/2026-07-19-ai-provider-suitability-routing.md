@@ -253,8 +253,8 @@ unreviewed connections; no account tier, contract, or entitlement is inferred.
 - [x] Add rollout flags in this order: compiler shadow mode, admin preview, onboarding recommendation, selected vertical bindings, restricted OpenRouter, evidence enforcement, continuous tuning.
 - [x] Exercise dental, retail, credit-union, training, and software-platform journeys against the running portal.
 - [ ] Run the full affected unit suites, production build, UX gate, migration gate if applicable, docs checks, secret scan, and `pnpm pr:health` before PR readiness.
-- [ ] Record final evidence against every BI and the epic; unresolved restricted-route evidence keeps the epic open.
-- [ ] Commit with DCO: `feat(ai-routing): complete continuous provider suitability`.
+- [x] Record final evidence against every BI and the epic; unresolved restricted-route evidence keeps the epic open.
+- [x] Commit with DCO: `feat(ai-routing): complete continuous provider suitability`.
 
 ## Completion Criteria
 
