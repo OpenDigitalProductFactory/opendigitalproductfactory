@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildProviderOnboardingRecommendation } from "./onboarding-recommendation";
+import { buildProviderOnboardingRecommendation, resolveRuntimeConnectionStatus } from "./onboarding-recommendation";
 import type { BusinessSuitabilityProfile, ProviderTrustFacts } from "./types";
 
 const business: BusinessSuitabilityProfile = {
@@ -39,6 +39,11 @@ function facts(overrides: Partial<ProviderTrustFacts>): ProviderTrustFacts {
 }
 
 describe("provider onboarding recommendation", () => {
+  it("uses runtime provider activation without reviving a disabled connection", () => {
+    expect(resolveRuntimeConnectionStatus("active", "unconfigured")).toBe("active");
+    expect(resolveRuntimeConnectionStatus("active", "disabled")).toBe("disabled");
+    expect(resolveRuntimeConnectionStatus("inactive", "active")).toBe("inactive");
+  });
   it("limits an unreviewed personal or unknown cloud connection to public or synthetic work", () => {
     const result = buildProviderOnboardingRecommendation({
       businessProfile: business,

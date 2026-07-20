@@ -28,6 +28,12 @@ export type ProviderOnboardingRecommendation = {
   workloadClasses: AiWorkloadClassKey[];
 };
 
+export function resolveRuntimeConnectionStatus(providerStatus: string, connectionStatus: string): string {
+  if (connectionStatus === "disabled") return "disabled";
+  if (providerStatus === "active") return "active";
+  return providerStatus;
+}
+
 function sortedUnique<T extends string>(values: T[]): T[] {
   return [...new Set(values)].sort();
 }

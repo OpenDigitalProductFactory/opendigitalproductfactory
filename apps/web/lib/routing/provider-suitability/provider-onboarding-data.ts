@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { buildProviderOnboardingRecommendation } from "./onboarding-recommendation";
+import { buildProviderOnboardingRecommendation, resolveRuntimeConnectionStatus } from "./onboarding-recommendation";
 import { resolveProviderTrustFacts } from "./provider-trust";
 import type {
   BusinessSuitabilityProfile,
@@ -89,7 +89,7 @@ export async function loadProviderOnboardingRecommendation() {
     prisma.storefrontConfig.findFirst({ select: { archetypeId: true, archetype: { select: { category: true } } } }),
     prisma.aiProviderConnection.findMany({
       where: organization ? { OR: [{ organizationId: organization.id }, { organizationId: null }] } : undefined,
-      include: { provider: { select: { providerId: true, name: true, category: true, endpointType: true, catalogEntry: true } } },
+      include: { provider: { select: { providerId: true, name: true, category: true, endpointType: true, catalogEntry: true, status: true } } },
       orderBy: [{ status: "asc" }, { label: "asc" }],
     }),
   ]);
@@ -116,7 +116,10 @@ export async function loadProviderOnboardingRecommendation() {
     handlesCardPayments: businessContext?.handlesCardPayments ?? false,
     connections: connections.map((connection) => ({
       label: connection.label || connection.provider.name,
-      status: connection.status,
+      // ModelProvider owns runtime activation. AiProviderConnection may retain its
+      // setup-state value after activation, so do not let that stale projection
+      // downgrade (or accidentally upgrade) the onboarding recommendation.
+      status: resolveRuntimeConnectionStatus(connection.provider.status, connection.status),
       facts: resolveProviderTrustFacts({
         catalog: catalogFacts(connection.provider),
         connection: connectionPosture(connection),
