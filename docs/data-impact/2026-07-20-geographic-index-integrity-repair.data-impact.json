@@ -1,0 +1,64 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Admin reference-data Region and City read models",
+    "Address-to-City mastered relationship",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720123000_repair_geographic_index_integrity",
+    "backfill": "heap-grounded exact-key convergence: deterministic Region and City survivors, Address and lineage repointing, uniquely labelled superseded tombstones, normalized-name disambiguation, and complete Region/City index rebuild; no rows are deleted"
+  },
+  "tests": [
+    "packages/db/src/geographic-index-integrity-migration.test.ts",
+    "packages/db/src/seed-geographic-data.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:reference-region#integrity-repair",
+      "prismaModel": "Region",
+      "lifecycleDisposition": "exact-key losers remain durable superseded tombstones linked to one deterministic survivor; all other Region rows retain their lifecycle state",
+      "fields": [
+        {
+          "fieldId": "data:reference-region#name-status-mergedIntoId",
+          "resolution": "governed",
+          "reason": "restore case-insensitive uniqueness while preserving the losing row and explicit canonical lineage",
+          "provenance": "BI-7C2B91EF heap/index divergence evidence and MDM merge contract section 5.5"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:reference-city#integrity-repair",
+      "prismaModel": "City",
+      "lifecycleDisposition": "exact raw-key losers remain durable superseded tombstones; surviving Cities move to the canonical Region; distinct normalized variants remain active with deterministic disambiguation",
+      "fields": [
+        {
+          "fieldId": "data:reference-city#regionId-name-nameNormalized-status-mergedIntoId-disambiguator",
+          "resolution": "governed",
+          "reason": "converge duplicate Region/City keys without deleting master data or collapsing distinct normalized labels",
+          "provenance": "BI-7C2B91EF functional repair fixture and governed decision DI-AED2CD86A2B0"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:address#city-survivor-repoint",
+      "prismaModel": "Address",
+      "lifecycleDisposition": "Address lifecycle is unchanged; only cityId is repointed from a proven exact-key loser to its canonical survivor in the same transaction",
+      "fields": [
+        {
+          "fieldId": "data:address#cityId",
+          "resolution": "governed",
+          "reason": "preserve every Address relationship before the referenced City becomes a superseded tombstone",
+          "provenance": "existing MDM mergeCity contract and geographic integrity migration fixture"
+        }
+      ]
+    }
+  ]
+}
