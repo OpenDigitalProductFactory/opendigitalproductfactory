@@ -28,6 +28,10 @@ const {
       create: vi.fn(),
       update: vi.fn(),
     },
+    aiProviderConnection: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
   },
   mockAutoDiscoverAndProfile: vi.fn(),
   mockGetDecryptedCredential: vi.fn(),
@@ -78,7 +82,45 @@ import {
   discoverModels,
   runProviderCatalogReconciliationIfDue,
   testProviderAuth,
+  updateProviderConnectionPosture,
 } from "./ai-providers";
+
+describe("updateProviderConnectionPosture", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth.mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: true } });
+    mockCan.mockReturnValue(true);
+  });
+
+  it("records an operator attestation without promoting it to contract proof", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({
+      entitlements: { adminAuditControls: true },
+      evidenceStatus: "unreviewed",
+    });
+    mockPrisma.aiProviderConnection.update.mockResolvedValue({});
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ status: "active" });
+
+    await updateProviderConnectionPosture({
+      providerId: "anthropic",
+      accountClass: "business-team",
+      noTraining: true,
+      enabledRegions: [" EU ", "eu", "UK"],
+    });
+
+    expect(mockPrisma.aiProviderConnection.update).toHaveBeenCalledWith({
+      where: { connectionId: "provider-default-anthropic" },
+      data: expect.objectContaining({
+        accountClass: "business-team",
+        evidenceStatus: "operator-attested",
+        entitlements: { adminAuditControls: true, noTraining: true, enabledRegions: ["eu", "uk"] },
+      }),
+    });
+    expect(mockActivateProvider).toHaveBeenCalledWith("anthropic", {
+      trigger: "test_auth",
+      skipDiscovery: true,
+    });
+  });
+});
 
 describe("testProviderAuth", () => {
   beforeEach(() => {

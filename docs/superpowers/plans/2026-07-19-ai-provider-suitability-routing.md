@@ -143,6 +143,8 @@ unreviewed connections; no account tier, contract, or entitlement is inferred.
 - Modify: `apps/web/app/(shell)/platform/ai/providers/page.tsx`
 - Modify: `apps/web/app/(shell)/platform/ai/providers/page.test.tsx`
 
+**Implementation checkpoint (2026-07-19):** The first delivery reorders business context before provider choice, records account-class/no-training/region attestations on the existing `AiProviderConnection`, renders the canonical suitability projection as `use now` / `use after review` / `not for this work`, previews egress and blocking in plain language, adds conservative activation clearance, and updates the role-only COO + AGT-902 corpus/citation contract. Operator declarations remain attestations rather than contract proof. Remaining acceptance work below includes attention-item creation, full archetype/jurisdiction fixtures, and live accessibility/mobile/no-egress evidence.
+
 - [ ] Write failing recommendation tests for declared `operatesIn`, `sellsTo`, `employsIn`, and `dataResidency` bases plus archetype, risk posture, and active provider state.
 - [ ] Add plain-language setup questions only where existing `BusinessContext` or confirmed `DataProcessingActivity` cannot already answer them.
 - [ ] Infer API/OAuth/CLI/local channel from the connection flow, then ask whether the connected account is regular, business/team, enterprise, cloud-tenant, or unknown and whether a contract/entitlement is on file. Explain that consumer subscriptions and metered APIs are separate surfaces.

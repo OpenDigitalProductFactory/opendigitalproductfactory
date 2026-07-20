@@ -5,9 +5,9 @@
  */
 export const SETUP_STEPS = [
   "account-bootstrap",   // /setup — the ONE custom page (org + user creation)
-  "ai-providers",        // /platform/ai/providers — configure AI providers
-  "branding",            // /admin/branding — logo, colors, tagline
   "business-context",    // /storefront/settings/business — tell us about your business
+  "ai-providers",        // /platform/ai/providers — choose governed AI connections
+  "branding",            // /admin/branding — logo, colors, tagline
   "how-you-decide",      // /coworker-decisions/stance — confirm the archetype-prefilled stance cards (BI-D6DC2432)
   "operating-hours",     // /storefront/settings/operations — business hours
   "storefront",          // /storefront — customer-facing portal setup

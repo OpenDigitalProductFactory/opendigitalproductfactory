@@ -14,6 +14,9 @@ const { mockPrisma, mockAutoDiscoverAndProfile } = vi.hoisted(() => ({
       findMany: vi.fn(),
       update: vi.fn(),
     },
+    aiProviderConnection: {
+      findMany: vi.fn(),
+    },
   },
   mockAutoDiscoverAndProfile: vi.fn(),
 }));
@@ -34,10 +37,11 @@ describe("activateProvider", () => {
     mockPrisma.modelProvider.update.mockResolvedValue({});
     mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
     mockPrisma.mcpServer.findMany.mockResolvedValue([]);
+    mockPrisma.aiProviderConnection.findMany.mockResolvedValue([]);
     mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 3, profiled: 3 });
   });
 
-  it("sets status to active and derives 3-level clearance for cloud providers", async () => {
+  it("keeps an unreviewed cloud connection at public clearance after authentication", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic-sub",
       category: "direct",
@@ -48,14 +52,48 @@ describe("activateProvider", () => {
     const result = await activateProvider("anthropic-sub", { trigger: "test_auth" });
 
     expect(result.status).toBe("active");
-    expect(result.clearance).toEqual(["public", "internal", "confidential"]);
+    expect(result.clearance).toEqual(["public"]);
     expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
       where: { providerId: "anthropic-sub" },
       data: {
         status: "active",
-        sensitivityClearance: ["public", "internal", "confidential"],
+        sensitivityClearance: ["public"],
       },
     });
+  });
+
+  it("allows internal and confidential data only for a reviewed business connection with no-training evidence", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic-sub",
+      category: "direct",
+      endpointType: "llm",
+      status: "unconfigured",
+    });
+    mockPrisma.aiProviderConnection.findMany.mockResolvedValue([{
+      accountClass: "business-team",
+      evidenceStatus: "operator-attested",
+      entitlements: { noTraining: true },
+    }]);
+
+    const result = await activateProvider("anthropic-sub", { trigger: "test_auth" });
+
+    expect(result.clearance).toEqual(["public", "internal", "confidential"]);
+  });
+
+  it("does not let an explicit override broaden an unreviewed cloud connection", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "custom-provider",
+      category: "direct",
+      endpointType: "llm",
+      status: "unconfigured",
+    });
+
+    const result = await activateProvider("custom-provider", {
+      trigger: "mcp_register",
+      sensitivityClearance: ["public", "internal", "confidential", "restricted"],
+    });
+
+    expect(result.clearance).toEqual(["public"]);
   });
 
   it("derives 4-level clearance for local providers", async () => {
@@ -111,7 +149,7 @@ describe("activateProvider", () => {
       where: { providerId: "codex" },
       data: {
         status: "active",
-        sensitivityClearance: ["public", "internal", "confidential"],
+        sensitivityClearance: ["public"],
         authMethod: "oauth2_authorization_code",
       },
     });

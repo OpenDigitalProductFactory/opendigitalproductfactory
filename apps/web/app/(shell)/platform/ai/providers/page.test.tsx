@@ -60,6 +60,22 @@ vi.mock("@/lib/ollama", () => ({
   checkBundledProviders: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/routing/provider-suitability/provider-onboarding-data", () => ({
+  loadProviderOnboardingRecommendation: vi.fn().mockResolvedValue({
+    status: "review-needed",
+    headline: "Keep company data out until account terms are confirmed",
+    useNow: [],
+    useAfterReview: [],
+    notForThisWork: [],
+    whatMayLeave: "Public prompts",
+    whatStaysLocal: "Secrets",
+    whatDpfBlocks: "Company data",
+    nextAction: "Choose a business account.",
+    caveat: "Local is not automatically compliant.",
+    workloadClasses: ["public-marketing"],
+  }),
+}));
+
 vi.mock("@/components/platform/DetectedServicesBanner", () => ({
   DetectedServicesBanner: () => <div>detected-services-banner</div>,
 }));
@@ -92,6 +108,8 @@ describe("ProvidersPage", () => {
     const html = renderToStaticMarkup(await ProvidersPage());
 
     expect(html).toContain("Providers &amp; Routing");
+    expect(html).toContain("Business-safe provider guidance");
+    expect(html).toContain("Keep company data out until account terms are confirmed");
     expect(html).toContain("detected-services-banner");
     expect(html).toContain("token-spend-panel");
     expect(html).toContain("scheduled-jobs-table");

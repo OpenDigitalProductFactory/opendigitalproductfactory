@@ -313,6 +313,54 @@ export async function configureProvider(input: {
   return {};
 }
 
+const PROVIDER_ACCOUNT_CLASSES = ["regular", "business-team", "enterprise", "unknown"] as const;
+
+/**
+ * Record the operator's connected-account declaration. This is deliberately
+ * an attestation, not contract proof; uploaded/reviewed supplier evidence owns
+ * the stronger `contract-uploaded` state.
+ */
+export async function updateProviderConnectionPosture(input: {
+  providerId: string;
+  accountClass: (typeof PROVIDER_ACCOUNT_CLASSES)[number];
+  noTraining: boolean | null;
+  enabledRegions: string[];
+}): Promise<{ error?: string }> {
+  await requireManageProviders();
+  if (!PROVIDER_ACCOUNT_CLASSES.includes(input.accountClass)) {
+    return { error: "Choose a valid account type" };
+  }
+  const connection = await prisma.aiProviderConnection.findUnique({
+    where: { connectionId: `provider-default-${input.providerId}` },
+    select: { entitlements: true, evidenceStatus: true },
+  });
+  if (!connection) return { error: "Provider connection not found" };
+  const existingEntitlements = connection.entitlements && typeof connection.entitlements === "object" && !Array.isArray(connection.entitlements)
+    ? connection.entitlements as Record<string, unknown>
+    : {};
+  await prisma.aiProviderConnection.update({
+    where: { connectionId: `provider-default-${input.providerId}` },
+    data: {
+      accountClass: input.accountClass,
+      evidenceStatus: connection.evidenceStatus === "contract-uploaded" ? "contract-uploaded" : "operator-attested",
+      lastReviewedAt: new Date(),
+      entitlements: {
+        ...existingEntitlements,
+        noTraining: input.noTraining,
+        enabledRegions: [...new Set(input.enabledRegions.map((region) => region.trim().toLowerCase()).filter(Boolean))].sort(),
+      },
+    },
+  });
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId: input.providerId },
+    select: { status: true },
+  });
+  if (provider?.status === "active") {
+    await activateProvider(input.providerId, { trigger: "test_auth", skipDiscovery: true });
+  }
+  return {};
+}
+
 // ─── Test provider auth ───────────────────────────────────────────────────────
 
 function buildResponsesProbeUrl(providerId: string, baseUrl: string): string {
@@ -474,7 +522,8 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
 
     res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
     if (res.ok) {
-      // Clearance derived automatically: local/ollama → 4 levels, cloud → 3 levels
+      // Clearance is evidence-derived: local/non-egress can use all levels;
+      // hosted connections remain public-only until business terms are reviewed.
       await activateProvider(providerId, {
         trigger: "test_auth",
         ...getLinkedActivationOptions(providerId, provider.authMethod),

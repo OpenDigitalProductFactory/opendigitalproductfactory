@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 525,
+  "pageCount": 526,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -5085,6 +5085,18 @@
         "see-also"
       ]
     },
+    "docs/professions/legal-compliance/wiki/ai-provider-account-and-sovereignty-review.md": {
+      "publicHref": "/professions/legal-compliance/wiki/ai-provider-account-and-sovereignty-review/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "how-to-apply",
+        "provider-examples",
+        "see-also"
+      ]
+    },
     "docs/professions/legal-compliance/wiki/ccpa-consumer-rights.md": {
       "publicHref": "/professions/legal-compliance/wiki/ccpa-consumer-rights/",
       "portalHref": null,
@@ -8042,6 +8054,7 @@
         "none",
         "how-oauth-works",
         "choosing-the-right-method",
+        "business-safe-review",
         "finance-bridge",
         "where-to-review-it",
         "troubleshooting"
