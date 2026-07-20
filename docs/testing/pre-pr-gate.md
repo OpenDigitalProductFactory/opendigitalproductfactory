@@ -168,7 +168,10 @@ The command plan carries required process environment as `env NAME=value ...`
 prefixes, and the Node runner interprets those prefixes directly instead of
 depending on a host `env` executable. This keeps the 8 GiB `NODE_OPTIONS`
 headroom on both POSIX and Windows typecheck paths; the production build may
-still use the host-specific strategy selected by the plan.
+still use the host-specific strategy selected by the plan. Vitest runs with
+Node's experimental host web-storage disabled so Node 26 cannot shadow the
+`localStorage` and `sessionStorage` implementations owned by jsdom. This is a
+test-runner compatibility setting, not a change to application runtime policy.
 
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both

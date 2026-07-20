@@ -21,6 +21,7 @@ describe("createLocalIntegrationPlan", () => {
       arch: "arm64",
       lockfileSha256: "lock-sha",
       nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
+      testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
     });
 
     assert.equal(evidence.toolchainFingerprint.length, 64);
@@ -33,6 +34,7 @@ describe("createLocalIntegrationPlan", () => {
       arch: "arm64",
       lockfileSha256: "lock-sha",
       nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
+      testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
     });
     assert.equal(evidence.toolchainFingerprint, createToolchainFingerprint({
       arch: "arm64",
@@ -40,6 +42,7 @@ describe("createLocalIntegrationPlan", () => {
       gitVersion: "git version 2.50.1",
       lockfileSha256: "lock-sha",
       nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
+      testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
       nodeVersion: "v24.0.0",
       platform: "linux",
       pnpmVersion: "10.14.0",
@@ -59,10 +62,23 @@ describe("createLocalIntegrationPlan", () => {
       "git merge --no-ff --no-edit doc/build-studio-decision-skill-packs",
       "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/doc-build-studio-decision-skill-packs",
       "pnpm --filter @dpf/db exec prisma generate",
-      "pnpm --filter web exec vitest run",
+      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
+  });
+
+  it("disables Node host web-storage before Vitest starts jsdom workers (BI-3E989BEA)", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "fix/node-26-webstorage",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+    });
+
+    assert.ok(plan.commands.map((command) => command.join(" ")).includes(
+      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run",
+    ));
   });
 
   it("uses a locally available accepted-base ref without fetching by default (BI-76551B2D)", () => {

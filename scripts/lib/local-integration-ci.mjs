@@ -27,6 +27,12 @@ export function dockerBuildTag(candidateBranch) {
 // it). Verified 2026-07-05: default heap SIGABRT; 8 GiB completes cleanly.
 export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=8192";
 
+// Node 26 exposes experimental host localStorage/sessionStorage accessors even
+// when no backing file is configured. Those undefined host values shadow the
+// web storage that jsdom installs in Vitest fork workers. Disable only Node's
+// host implementation at process start so jsdom remains the environment owner.
+export const HOST_TEST_NODE_OPTIONS = "NODE_OPTIONS=--no-experimental-webstorage";
+
 export function resolveCommandInvocation(command, baseEnv = process.env) {
   if (command[0] !== "env") {
     return { command: command[0], args: command.slice(1), env: baseEnv };
@@ -84,6 +90,7 @@ export function createToolchainFingerprint(input) {
     arch: input.arch ?? "unknown",
     lockfileSha256: input.lockfileSha256 ?? "unknown",
     nodeOptions: input.nodeOptions ?? "",
+    testNodeOptions: input.testNodeOptions ?? "",
   };
   return {
     toolchain,
@@ -118,6 +125,7 @@ export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd()
     arch: process.arch,
     lockfileSha256: fileSha256(`${cwd}/pnpm-lock.yaml`),
     nodeOptions: HOST_BUILD_NODE_OPTIONS,
+    testNodeOptions: HOST_TEST_NODE_OPTIONS,
   });
 }
 
@@ -153,7 +161,7 @@ export function createLocalIntegrationPlan(input) {
     ...(input.includeMigrateDeploy
       ? [["pnpm", "--filter", "@dpf/db", "exec", "prisma", "migrate", "deploy"]]
       : []),
-    ["pnpm", "--filter", "web", "exec", "vitest", "run"],
+    ["env", HOST_TEST_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "vitest", "run"],
     // typecheck needs the same heap headroom as the host-next build: with the
     // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
     // exactly like the build worker did (BI-B5011ACE) — observed live on the
