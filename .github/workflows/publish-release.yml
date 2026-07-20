@@ -10,8 +10,9 @@ name: Publish GitHub Release
 # and counted per-asset - so the project finally accrues a real
 # downloads-over-time series instead of relying on uncounted git clones.
 #
-# Docker image publishing is handled separately by publish-image.yml; this
-# workflow is source-distribution only and attaches no custom build assets.
+# Docker image publishing is handled separately by publish-image.yml. This
+# workflow also attaches the integrity-bound native Edge binaries required for
+# host-LAN discovery on macOS and Windows Docker Desktop installs.
 #
 # Triggers:
 #   - push of a tag matching v*  -> release that tag automatically.
@@ -54,6 +55,11 @@ jobs:
           # Full history + tags so git describe / tag verification work.
           fetch-depth: 0
 
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: services/edge-node-go/go.mod
+          cache-dependency-path: services/edge-node-go/go.sum
+
       - name: Resolve target tag
         id: resolve
         env:
@@ -80,13 +86,22 @@ jobs:
           TAG: ${{ steps.resolve.outputs.tag }}
         run: |
           set -euo pipefail
-          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "Release ${TAG} already exists - nothing to do (idempotent)."
-            exit 0
+          git checkout --detach "refs/tags/${TAG}"
+          make -C services/edge-node-go build-darwin-arm64 VERSION="${TAG}"
+          make -C services/edge-node-go build-windows-amd64 VERSION="${TAG}"
+          cd services/edge-node-go/bin
+          sha256sum dpf-edge-node-darwin-arm64 dpf-edge-node-windows-amd64.exe > dpf-edge-node-checksums.sha256
+          cd ../../..
+          if ! gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create "${TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${TAG}" \
+              --generate-notes \
+              --verify-tag
           fi
-          gh release create "${TAG}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --title "${TAG}" \
-            --generate-notes \
-            --verify-tag
-          echo "Published GitHub Release ${TAG}."
+          gh release upload "${TAG}" \
+            services/edge-node-go/bin/dpf-edge-node-darwin-arm64 \
+            services/edge-node-go/bin/dpf-edge-node-windows-amd64.exe \
+            services/edge-node-go/bin/dpf-edge-node-checksums.sha256 \
+            --repo "${GITHUB_REPOSITORY}" --clobber
+          echo "Published GitHub Release ${TAG} with native Edge assets."

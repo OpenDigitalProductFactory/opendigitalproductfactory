@@ -96,6 +96,7 @@ test("consumer release assets are integrity-bound and execute the canonical adap
       "scripts/installer/validate-install-state.mjs",
       "scripts/installer/install-state-transaction.mjs",
       "scripts/installer/install-state-lock-contract.json",
+      "scripts/installer/native-edge-host.ps1",
       "scripts/installer/lib/state.ps1",
     ];
     const manifest = [];

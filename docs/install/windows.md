@@ -81,8 +81,13 @@ re-runs without re-prompting.
 6. **`docker compose up -d`** — brings up postgres, portal-init
    (migrations + seed), and the portal.
 7. **Health check** — polls `http://localhost:3000/api/health`.
-8. **Edge Node bootstrap** — mints a single-use auto-approve token and
-   enrolls the bundled Edge Node container.
+8. **Edge Node bootstrap** — mints a single-use auto-approve token, downloads
+   and checksum-verifies the native Go Edge Node, and supervises it with a
+   Windows Scheduled Task at logon. The host process owns the physical
+   multicast interfaces that Docker Desktop hides from Linux containers. It
+   derives the active private IPv4 portal address by default. Discovery works
+   over HTTP; automatic pairing requires an explicitly trusted, certificate-
+   valid HTTPS `DPF_LAN_AUTHORITY_URL`.
 9. **Autostart** — registers a Windows **Scheduled Task** so the stack
    starts at logon (see [Autostart](#autostart)).
 

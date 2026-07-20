@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.dpf-edge-node</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>@@DPF_EDGE_LAUNCH_SCRIPT@@</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>@@DPF_EDGE_LOG_DIR@@/edge-node.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@@DPF_EDGE_LOG_DIR@@/edge-node.err.log</string>
+</dict>
+</plist>

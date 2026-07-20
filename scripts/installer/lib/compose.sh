@@ -98,7 +98,9 @@ dpf_compose_files() {
   # user's machine). Operators who want real-NIC visibility on Linux
   # can opt into the host-network profile by setting
   # COMPOSE_PROFILES=linux-host-network in the environment.
-  if [ "${DPF_INCLUDE_EDGE:-0}" = "1" ]; then
+  # macOS uses the host-native Go process because Docker Desktop hides the
+  # physical multicast interfaces. Linux retains the container overlay.
+  if [ "${DPF_INCLUDE_EDGE:-0}" = "1" ] && [ "$DPF_PLATFORM" != "darwin" ]; then
     DPF_COMPOSE_FILES+=(-f docker-compose.edge.yml)
   fi
 
