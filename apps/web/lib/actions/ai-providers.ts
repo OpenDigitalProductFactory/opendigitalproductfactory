@@ -29,6 +29,7 @@ import { activateProvider } from "@/lib/govern/activate-provider";
 import { seedAiProviderFinanceBridge } from "@/lib/finance/ai-provider-finance";
 import { autoConfigureBuildStudio } from "@/lib/ai-provider-build-studio-config";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+export { updateProviderConnectionPosture } from "@/lib/actions/provider-connection-posture";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
 const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);
@@ -312,56 +313,6 @@ export async function configureProvider(input: {
   await refreshDefaultProviderConnectionOwners(prisma, input.providerId);
   return {};
 }
-
-const PROVIDER_ACCOUNT_CLASSES = ["regular", "business-team", "enterprise", "unknown"] as const;
-
-/**
- * Record the operator's connected-account declaration. This is deliberately
- * an attestation, not contract proof; uploaded/reviewed supplier evidence owns
- * the stronger `contract-uploaded` state.
- */
-export async function updateProviderConnectionPosture(input: {
-  providerId: string;
-  accountClass: (typeof PROVIDER_ACCOUNT_CLASSES)[number];
-  noTraining: boolean | null;
-  enabledRegions: string[];
-}): Promise<{ error?: string }> {
-  await requireManageProviders();
-  if (!PROVIDER_ACCOUNT_CLASSES.includes(input.accountClass)) {
-    return { error: "Choose a valid account type" };
-  }
-  const connection = await prisma.aiProviderConnection.findUnique({
-    where: { connectionId: `provider-default-${input.providerId}` },
-    select: { entitlements: true, evidenceStatus: true },
-  });
-  if (!connection) return { error: "Provider connection not found" };
-  const existingEntitlements = connection.entitlements && typeof connection.entitlements === "object" && !Array.isArray(connection.entitlements)
-    ? connection.entitlements as Record<string, unknown>
-    : {};
-  await prisma.aiProviderConnection.update({
-    where: { connectionId: `provider-default-${input.providerId}` },
-    data: {
-      accountClass: input.accountClass,
-      evidenceStatus: connection.evidenceStatus === "contract-uploaded" ? "contract-uploaded" : "operator-attested",
-      lastReviewedAt: new Date(),
-      entitlements: {
-        ...existingEntitlements,
-        noTraining: input.noTraining,
-        enabledRegions: [...new Set(input.enabledRegions.map((region) => region.trim().toLowerCase()).filter(Boolean))].sort(),
-      },
-    },
-  });
-  const provider = await prisma.modelProvider.findUnique({
-    where: { providerId: input.providerId },
-    select: { status: true },
-  });
-  if (provider?.status === "active") {
-    await activateProvider(input.providerId, { trigger: "test_auth", skipDiscovery: true });
-  }
-  return {};
-}
-
-// ─── Test provider auth ───────────────────────────────────────────────────────
 
 function buildResponsesProbeUrl(providerId: string, baseUrl: string): string {
   if (providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api")) {
