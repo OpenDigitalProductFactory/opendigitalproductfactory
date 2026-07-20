@@ -107,6 +107,8 @@ export type AgentEvent =
       toAgentId: string;
       taskRunId: string | null;
       outcome: "completed" | "failed" | "canceled";
+      /** Server-validated, persisted primary-coworker response for specialized governed returns. */
+      ownerMessage?: string;
     }
   // BI-4ab6be39 stall detection — emitted by ops/taskrun-watchdog when a
   // working TaskRun is transitioned to "stalled". Operator UIs subscribe to

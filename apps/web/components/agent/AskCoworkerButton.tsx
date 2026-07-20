@@ -1,5 +1,7 @@
 "use client";
 
+import type { ProviderReviewPacket } from "@/lib/routing/provider-suitability/provider-review-packet";
+
 // Shared "hand this to the coworker" affordance (BI-01EA3EBE).
 //
 // Several surfaces report a platform problem but historically offered no route
@@ -14,6 +16,8 @@ type Props = {
   prompt: string;
   /** Route whose coworker should answer (e.g. "/admin", "/platform"). Omit to use the current route's coworker. */
   routeContext?: string;
+  /** Validated, minimized provider review context for the deterministic COO consultation path. */
+  providerReviewPacket?: ProviderReviewPacket;
   label?: string;
   className?: string;
   title?: string;
@@ -24,6 +28,7 @@ type Props = {
 export function AskCoworkerButton({
   prompt,
   routeContext,
+  providerReviewPacket,
   label = "Ask coworker",
   className = "text-[var(--dpf-accent)] hover:underline underline-offset-2",
   title,
@@ -35,7 +40,11 @@ export function AskCoworkerButton({
       onClick={() =>
         document.dispatchEvent(
           new CustomEvent("open-agent-panel", {
-            detail: { autoMessage: prompt, ...(routeContext ? { routeContext } : {}) },
+            detail: {
+              autoMessage: prompt,
+              ...(routeContext ? { routeContext } : {}),
+              ...(providerReviewPacket ? { providerReviewPacket } : {}),
+            },
           }),
         )
       }

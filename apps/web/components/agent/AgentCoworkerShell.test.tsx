@@ -20,11 +20,15 @@ let pathname = "/build";
 const {
   agentCoworkerPanelMock,
   getOrCreateThreadSnapshotMock,
+  getThreadSnapshotByIdMock,
   startFeedbackSupportMock,
+  startProviderComplianceConsultationMock,
 } = vi.hoisted(() => ({
   agentCoworkerPanelMock: vi.fn(),
   getOrCreateThreadSnapshotMock: vi.fn(),
+  getThreadSnapshotByIdMock: vi.fn(),
   startFeedbackSupportMock: vi.fn(),
+  startProviderComplianceConsultationMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -33,6 +37,11 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/actions/agent-coworker", () => ({
   getOrCreateThreadSnapshot: getOrCreateThreadSnapshotMock,
+  getThreadSnapshotById: getThreadSnapshotByIdMock,
+}));
+
+vi.mock("@/lib/actions/provider-compliance-consultation", () => ({
+  startProviderComplianceConsultation: startProviderComplianceConsultationMock,
 }));
 
 vi.mock("@/lib/actions/feedback-support", () => ({
@@ -143,6 +152,15 @@ describe("AgentCoworkerShell support entry", () => {
     getOrCreateThreadSnapshotMock.mockResolvedValue({
       threadId: "thread-1",
       messages: [],
+    });
+    getThreadSnapshotByIdMock.mockResolvedValue({
+      threadId: "thread-1",
+      messages: [{ id: "request-1", content: "Provider review requested" }],
+    });
+    startProviderComplianceConsultationMock.mockResolvedValue({
+      success: true,
+      childThreadId: "child-1",
+      taskRunId: "task-1",
     });
     startFeedbackSupportMock.mockResolvedValue({
       ok: true,
@@ -364,6 +382,57 @@ describe("AgentCoworkerShell support entry", () => {
       "Continue setup",
     );
     expect(startFeedbackSupportMock).not.toHaveBeenCalled();
+  });
+
+  it("starts a provider consultation once the routed COO thread is ready without auto-sending a duplicate model turn", async () => {
+    pathname = "/workspace";
+    renderShell();
+    await settleShellThread();
+    const packet = {
+      schemaVersion: "provider-compliance-review.v1",
+      purpose: "provider-suitability-advice",
+      organizationRef: "org-1",
+      businessContext: {
+        archetypeId: null,
+        archetypeCategory: null,
+        jurisdictionBasis: { operatesIn: [], sellsTo: [], employsIn: [], dataResidency: [] },
+        riskPosture: null,
+      },
+      recommendation: { status: "not-ready", workloadClasses: [] },
+      providerConnections: [],
+      requestedAdvisory: [
+        "regulatory-applicability",
+        "account-and-contract-evidence",
+        "retention-and-training-treatment",
+        "processing-region-and-sovereignty",
+        "workload-restrictions",
+        "safe-next-action",
+      ],
+    };
+
+    act(() => {
+      document.dispatchEvent(new CustomEvent("open-agent-panel", {
+        detail: {
+          autoMessage: "Review provider setup",
+          routeContext: "/workspace",
+          providerReviewPacket: packet,
+        },
+      }));
+    });
+
+    await waitFor(() => {
+      expect(startProviderComplianceConsultationMock).toHaveBeenCalledWith({
+        parentThreadId: "thread-1",
+        routeContext: "/workspace",
+        packet,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Provider review requested")).toBeInTheDocument();
+    });
+    const latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(latestProps.pendingAutoMessage).toBeNull();
+    expect(startProviderComplianceConsultationMock).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces a failed thread load and recovers via reload-to-reconnect (BI-D028B2A8)", async () => {

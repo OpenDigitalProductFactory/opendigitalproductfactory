@@ -13,6 +13,7 @@ const {
     },
     taskRun: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       update: vi.fn(),
     },
     agentMessage: {
@@ -157,6 +158,8 @@ describe("runChildThreadExecution", () => {
     mockPrisma.user.findUnique.mockResolvedValue({ isSuperuser: true });
     mockPrisma.taskRun.update.mockResolvedValue({});
     mockPrisma.agentThread.update.mockResolvedValue({});
+    mockPrisma.agentThread.findUnique.mockResolvedValue(null);
+    mockPrisma.taskRun.findUnique.mockResolvedValue(null);
     mockResolveAgent.mockResolvedValue({
       agentId: "agent-mkt",
       systemPrompt: "You are the marketing specialist.",
@@ -250,6 +253,76 @@ describe("runChildThreadExecution", () => {
     expect(mockPrisma.taskRun.update).toHaveBeenCalledWith({
       where: { taskRunId: "TR-CHILD-1" },
       data: expect.objectContaining({ status: "completed" }),
+    });
+  });
+
+  it("returns a validated provider advisory to the parent in the COO voice", async () => {
+    const specialistReply = JSON.stringify({
+      schemaVersion: "provider-compliance-advisory.v1",
+      decision: "conditional",
+      plainLanguageSummary: "Use only after the business terms and EU processing region are verified.",
+      safestNextAction: "Obtain the signed business terms.",
+      workloadRestrictions: ["Do not send customer records."],
+      unknowns: ["Retention terms are not evidenced."],
+      humanReviewRequired: true,
+      citations: [{ title: "Provider terms", reference: "DOC-42", supports: "The account terms govern retention." }],
+    });
+    mockExecuteLoop.mockResolvedValue({ content: specialistReply, executedTools: [] });
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.taskRun.findUnique.mockResolvedValue({
+      a2aMetadata: {
+        collaboration: {
+          kind: "handoff",
+          fromAgentId: "coo",
+          toAgentId: "AGT-902",
+          enteredVia: "handoff",
+          tier: 2,
+          summary: "Reviewing provider compliance and sovereignty",
+        },
+      },
+    });
+
+    await runChildThreadExecution({ ...ctx, agentId: "AGT-902", routeContext: "/workspace" });
+
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        threadId: "parent-1",
+        role: "assistant",
+        agentId: "coo",
+        routeContext: "/workspace",
+        content: expect.stringContaining("My recommendation: conditional"),
+      }),
+    });
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ content: expect.stringContaining("Provider terms") }),
+    });
+  });
+
+  it("returns a safe non-approval when the provider specialist output is ungrounded", async () => {
+    mockExecuteLoop.mockResolvedValue({ content: "It should probably be fine.", executedTools: [] });
+    mockPrisma.agentThread.findUnique.mockResolvedValue({ parentThreadId: "parent-1" });
+    mockPrisma.taskRun.findUnique.mockResolvedValue({
+      a2aMetadata: {
+        collaboration: {
+          kind: "handoff",
+          fromAgentId: "coo",
+          toAgentId: "AGT-902",
+          enteredVia: "handoff",
+          tier: 2,
+          summary: "Reviewing provider compliance and sovereignty",
+        },
+      },
+    });
+
+    await runChildThreadExecution({ ...ctx, agentId: "AGT-902", routeContext: "/workspace" });
+
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        threadId: "parent-1",
+        role: "assistant",
+        agentId: "coo",
+        content: expect.stringMatching(/could not substantiate.*no provider approval/i),
+      }),
     });
   });
 });

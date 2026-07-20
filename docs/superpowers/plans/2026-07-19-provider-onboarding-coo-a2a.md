@@ -3,7 +3,7 @@
 **Backlog item:** BI-26684747
 **Parent acceptance:** BI-AIPS-004, BI-C98C6AB7
 **Epic:** EP-AI-PROVIDER-SUITABILITY
-**Status:** In implementation
+**Status:** Implemented; verification in progress
 
 ## Outcome
 
@@ -41,6 +41,7 @@ Substrate verification found no overlapping open PR and no existing provider-onb
 - **AI boundary:** the existing “Ask my COO” action is the explicit confirmation. The panel must preview the minimized purpose and show the specialist handoff/result; opening an informational card alone must not transmit data.
 - **Failure:** denied/unavailable specialist consultation stays in the COO thread, says what DPF could not substantiate, and leaves provider posture unchanged.
 - **Evidence:** component/route tests, A2A authority tests, keyboard/screen-reader assertions for the collaboration card, authenticated desktop/mobile walkthrough.
+- **Implementation review (2026-07-19):** still `fits-with-guardrails`. The change reuses the existing provider guide, `AskCoworkerButton`, COO panel, and collaboration cards. It adds no route, navigation item, dashboard, or specialist launcher. The provider recommendation projection remains the visible source truth; the validated packet is the server-owned AI boundary. Unknown, unavailable, or malformed specialist output produces a COO-readable non-approval and cannot change provider policy. The remaining broad comprehension/mobile/accessibility study stays in BI-BF3DFDB8 rather than expanding this delivery concern.
 
 ## Phase 1 — make the existing authority contract truthful
 
@@ -68,6 +69,8 @@ This is the first independently shippable phase.
 
 ## Phase 2 — define and minimize the provider-review packet
 
+**Status:** Implemented.
+
 **Deliverable:** a pure, versioned builder/validator produces a bounded consultation objective from the recommendation projection and canonical business-context references.
 
 **Contract:** recommendation status, workload classes, jurisdiction basis identifiers, provider-connection/evidence references, explicit unknowns, and requested advisory fields. It rejects or omits customer records, free-form prompt bodies, credentials, secrets, raw personal data, and regulated values.
@@ -82,6 +85,8 @@ This is the first independently shippable phase.
 
 ## Phase 3 — execute the governed child consultation
 
+**Status:** Implemented.
+
 **Deliverable:** after the owner's explicit COO action and once the parent thread exists, the COO dispatches the packet to AGT-902 using `requestCoworker`, producing the existing visible collaboration card and chain-of-custody records.
 
 **Files:**
@@ -93,6 +98,8 @@ This is the first independently shippable phase.
 **Verification:** red-first integration test for parent thread → authorized AGT-902 child → visible handoff/provenance; denied/unavailable target leaves posture unchanged and returns a COO-readable failure.
 
 ## Phase 4 — return a structured advisory to the COO thread
+
+**Status:** Implemented.
 
 **Deliverable:** AGT-902's result is validated as `recommended | conditional | not-suitable` with concerns, citations, missing facts, human-review needs, workload restrictions, and one safe next action; the COO synthesizes it without changing provider eligibility.
 

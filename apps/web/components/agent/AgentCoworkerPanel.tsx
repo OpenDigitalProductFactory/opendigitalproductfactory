@@ -17,7 +17,7 @@ import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerPriorityDock } from "@/components/golden-triangle/CoworkerPriorityDock";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
-import type { CollaborationCard } from "./HandoffCard";
+import { collaborationReturnMessage, type CollaborationCard } from "./HandoffCard";
 import { getConversationParticipants } from "@/lib/actions/conversation-participants-action";
 import type { ConversationParticipant } from "@/lib/tak/conversation-participants-core";
 import { isTaskInFlight } from "@/lib/tak/task-state-intent";
@@ -397,13 +397,9 @@ export function AgentCoworkerPanel({
         // Brand-extraction progress from the Inngest worker (cross-process)
         // EP-A2A multi-agent collaboration — render the handoff/summon/return
         // inline and refresh the participant rail.
-        if (
-          data.type === "collaboration:handoff" ||
-          data.type === "collaboration:summon" ||
-          data.type === "collaboration:return"
-        ) {
-          const labelOf = (id: string | undefined, fallback: string) =>
-            (id ? AGENT_NAME_MAP[id] : undefined) ?? id ?? fallback;
+        if (data.type === "collaboration:handoff" || data.type === "collaboration:summon" ||
+          data.type === "collaboration:return") {
+          const labelOf = (id: string | undefined, fallback: string) => (id ? AGENT_NAME_MAP[id] : undefined) ?? id ?? fallback;
           let card: CollaborationCard;
           if (data.type === "collaboration:handoff") {
             card = {
@@ -432,9 +428,12 @@ export function AgentCoworkerPanel({
               fromLabel: labelOf(data.fromAgentId, "Coworker"),
               toLabel: labelOf(data.toAgentId, "Owner"),
               tier: 2,
-              outcome: data.outcome,
+              outcome: data.outcome, summary: data.ownerMessage ? "Grounded advisory added to the COO conversation." : undefined,
               childThreadId: data.childThreadId,
             };
+            const returnedMessage = collaborationReturnMessage(data, effectiveRoute);
+            if (returnedMessage) setMessages((prev) => prev.some((message) => message.id === returnedMessage.id)
+              ? prev : [...prev, returnedMessage]);
           }
           setCollaborationCards((prev) => (prev.some((c) => c.id === card.id) ? prev : [...prev, card]));
           refreshParticipantsRef.current();
