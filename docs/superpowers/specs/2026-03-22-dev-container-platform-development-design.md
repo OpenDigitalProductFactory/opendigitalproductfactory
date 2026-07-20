@@ -173,10 +173,12 @@ Sanitization rules per sensitivity level:
 
 | Sensitivity | Example Tables | Clone Strategy |
 |-------------|---------------|----------------|
-| **public** | TaxonomyNode, EaElementType, EaRelationshipType, StorefrontArchetype | Copy verbatim |
-| **internal** | Portfolio, DigitalProduct, EaElement, EaView, FeatureBuild, Epic, BacklogItem | Copy verbatim -- operator's own work, valuable for realistic testing |
+| **public** | TaxonomyNode, EaElementType, EaRelationshipType, StorefrontArchetype | Stream compatible columns verbatim with PostgreSQL binary COPY |
+| **internal** | Portfolio, DigitalProduct, EaElement, EaView, FeatureBuild, Epic, BacklogItem | Stream compatible columns verbatim with PostgreSQL binary COPY -- operator's own work, valuable for realistic testing |
 | **confidential** | User, EmployeeProfile, Team, Customer, Agent governance profiles | Obfuscate PII: names -> "Dev User NNN", emails -> `devNNN@dpf.test`, phone -> `555-0NNN`. Preserve relationships and role assignments. |
 | **restricted** | ModelProvider credentials, CREDENTIAL_ENCRYPTION_KEY, API keys, AuthorizationDecisionLog | Never copy. Generate fresh dev-only credentials. Provider registry structure copied but secrets replaced with empty/placeholder values. |
+
+For public and internal tables, the source and migrated destination catalogs define the transfer projection. The clone copies non-generated columns present on both sides in source order, ignores additive source-only or destination-only columns/tables, and fails closed if a shared column's PostgreSQL type differs. This lets a contributor preview run safely while another in-flight branch has already applied an additive migration to the local source install, without loading large tables into JavaScript memory or weakening the destination reset-on-failure guarantee.
 
 ### Audit Trail Handling
 
