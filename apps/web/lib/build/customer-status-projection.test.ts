@@ -13,6 +13,9 @@ describe("projectBuildStudioCustomerStatus (BI-BB13B599)", () => {
     expect(status.whatIsBeingBuilt).toBe("Add a dark-mode toggle");
     expect(status.lifecyclePosition).toBe("Automated work in progress");
     expect(status.worker).toBe("Automated build in progress");
+    expect(status.evidence).toContain("blocked on a system");
+    expect(status.nextAction).toContain("clear the system or runtime blocker");
+    expect(status.owner).toBe("Build Studio / operator");
     expect(status.needsYou).toBe(true);
   });
 
@@ -23,6 +26,8 @@ describe("projectBuildStudioCustomerStatus (BI-BB13B599)", () => {
     });
     expect(status.lifecyclePosition).toBe("In progress");
     expect(status.worker).toBe("Work in progress");
+    expect(status.nextAction).toContain("continue implementation");
+    expect(status.owner).toBe("Build Studio build agent");
     expect(status.needsYou).toBe(false);
   });
 
@@ -33,6 +38,8 @@ describe("projectBuildStudioCustomerStatus (BI-BB13B599)", () => {
     });
     expect(status.lifecyclePosition).toBe("Done");
     expect(status.worker).toBe("Finished");
+    expect(status.nextAction).toContain("review the completed work");
+    expect(status.owner).toBe("reviewer");
     expect(status.needsYou).toBe(false);
   });
 
@@ -49,6 +56,9 @@ describe("projectBuildStudioCustomerStatus (BI-BB13B599)", () => {
     const status = projectBuildStudioCustomerStatus({ build, capsule: null });
     expect(status.lifecyclePosition).toBe("Building it");
     expect(status.worker).toBe("Work in progress");
+    expect(status.evidence).toBe("Build Studio phase is build.");
+    expect(status.nextAction).toContain("continue implementation");
+    expect(status.owner).toBe("Build Studio build agent");
     expect(status.needsYou).toBe(false);
   });
 
@@ -59,6 +69,8 @@ describe("projectBuildStudioCustomerStatus (BI-BB13B599)", () => {
     });
     expect(status.needsYou).toBe(true);
     expect(status.worker).toBe("Hit a problem");
+    expect(status.nextAction).toContain("resolve the failure");
+    expect(status.owner).toBe("Build Studio / operator");
   });
 
   it("is business-safe by construction — never leaks an executor name to the customer", () => {

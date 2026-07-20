@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   COWORKER_INTERACTION_CONTRACT_HEADING,
   formatCoworkerOperationalCloseout,
+  formatCoworkerOperationalMessage,
   withCoworkerInteractionContract,
 } from "./coworker-interaction-contract";
 
@@ -49,6 +50,23 @@ describe("coworker interaction contract", () => {
       "Evidence: typecheck and scoped tests passed on branch feat/example",
       "Next action: open the governed PR",
       "Owner: agent",
+    ].join("\n"));
+  });
+
+  it("formats deterministic summary messages with an operational closeout", () => {
+    expect(formatCoworkerOperationalMessage({
+      summary: "Research completed but needs one repair.",
+      status: "needs revision",
+      evidence: "design review found a missing codebase audit",
+      nextAction: "patch the evidence and rerun design review",
+      owner: "Build Studio ideate agent",
+    })).toBe([
+      "Research completed but needs one repair.",
+      "",
+      "Status: needs revision",
+      "Evidence: design review found a missing codebase audit",
+      "Next action: patch the evidence and rerun design review",
+      "Owner: Build Studio ideate agent",
     ].join("\n"));
   });
 });

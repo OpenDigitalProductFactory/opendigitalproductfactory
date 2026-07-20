@@ -41,7 +41,10 @@ import { resolveReadingLevelForRoute } from "@/lib/readability/policy";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
-import { formatCoworkerOperationalCloseout } from "@/lib/tak/coworker-interaction-contract";
+import {
+  formatCoworkerOperationalCloseout,
+  formatCoworkerOperationalMessage,
+} from "@/lib/tak/coworker-interaction-contract";
 import {
   extractInvokedSkillId,
   getSkillsForAgent,
@@ -248,18 +251,66 @@ async function summariseIdeateOutcome(
   const head = `I've researched the codebase and drafted the design.\n\n**Approach:** ${approach.slice(0, 300)}\n\n`;
 
   if (!reviewPassed) {
-    return `${head}Design review flagged some issues — I'll revise and re-run the review.`;
+    return formatCoworkerOperationalMessage({
+      summary: `${head}Design review flagged issues in the draft.`,
+      status: "needs revision",
+      evidence: `design review did not pass for build ${buildId}.`,
+      nextAction: "revise the design evidence and rerun the design review.",
+      owner: "Build Studio ideate agent",
+    });
   }
 
   if (currentPhase === "plan") {
-    return `${head}Design review passed and we're now in the Plan phase. I'll draft the implementation plan next.`;
+    return formatCoworkerOperationalMessage({
+      summary: `${head}Design review passed and the build advanced to the Plan phase.`,
+      status: "ready for planning",
+      evidence: `design review passed for build ${buildId}; current phase is plan.`,
+      nextAction: "draft the implementation plan.",
+      owner: "Build Studio planning agent",
+    });
   }
   if (currentPhase === "ideate") {
     // Review passed but auto-advance gate held us. Make the blocker visible
     // instead of asking a rhetorical "ready?" question.
-    return `${head}Design review passed, but the phase gate is holding advance (usually missing intake anchors — taxonomy, backlog, epic, or a constrained goal). I'll complete the remaining anchors and retry.`;
+    return formatCoworkerOperationalMessage({
+      summary: `${head}Design review passed, but the phase gate is holding advance.`,
+      status: "blocked before planning",
+      evidence: `build ${buildId} is still in ideate; an intake anchor such as taxonomy, backlog, epic, or constrained goal is missing.`,
+      nextAction: "complete the missing intake anchor and retry the phase advance.",
+      owner: "Build Studio ideate agent",
+    });
   }
-  return `${head}Design review passed. Current phase: ${currentPhase ?? "unknown"}.`;
+  return formatCoworkerOperationalMessage({
+    summary: `${head}Design review passed, but the current phase could not be confirmed.`,
+    status: "needs review",
+    evidence: `build ${buildId} phase is ${currentPhase ?? "unknown"} after design review.`,
+    nextAction: "refresh the build phase state before proceeding.",
+    owner: "Build Studio",
+  });
+}
+
+function formatIncompleteIdeateDesignMessage(buildId: string): string {
+  return formatCoworkerOperationalMessage({
+    summary: "The codebase research ran but did not produce a complete design.",
+    status: "blocked before planning",
+    evidence: `research output for build ${buildId} was missing a usable proposed approach.`,
+    nextAction: "rerun ideate research with the existing build context and verify codebase access first.",
+    owner: "Build Studio ideate agent",
+  });
+}
+
+function formatIdeateResearchIssueMessage(args: {
+  summary: string;
+  evidence: string;
+  nextAction: string;
+}): string {
+  return formatCoworkerOperationalMessage({
+    summary: args.summary,
+    status: "needs revision",
+    evidence: args.evidence,
+    nextAction: args.nextAction,
+    owner: "Build Studio ideate agent",
+  });
 }
 
 // ─── Server Actions ─────────────────────────────────────────────────────────
@@ -2144,7 +2195,7 @@ export async function sendMessage(input: {
               if (approach.length < 30) {
                 // Design doc saved but approach is blank — research engine produced an empty doc.
                 console.log(`[coworker] Approach too short (${approach.length} chars) — treating as empty doc`);
-                responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
+                responseContent = formatIncompleteIdeateDesignMessage(resolvedBuildId);
               } else {
                 // Run the design doc review
                 console.log(`[coworker] Running reviewDesignDoc...`);
@@ -2184,7 +2235,7 @@ export async function sendMessage(input: {
                   // An empty approach means the research engine ran but produced a blank doc.
                   const approach = String(rawDoc.proposedApproach ?? "").trim();
                   if (approach.length < 30) {
-                    responseContent = "The codebase research ran but didn't produce a complete design. The research engine may have had trouble accessing the codebase. Please try starting the feature again — if the problem persists, check that the sandbox is running.";
+                    responseContent = formatIncompleteIdeateDesignMessage(resolvedBuildId);
                   } else {
                     agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
                     const reviewResult = await executeTool("reviewDesignDoc", { buildId: resolvedBuildId }, user.id!, { routeContext: input.routeContext });
@@ -2198,16 +2249,36 @@ export async function sendMessage(input: {
                     );
                   }
                 } else {
-                  responseContent = `Research completed. ${retryResult.message ?? "Please describe what you'd like me to focus on for this feature."}`;
+                  responseContent = formatIdeateResearchIssueMessage({
+                    summary: `Research completed, but the patched design evidence was not accepted.${retryResult.message ? ` ${retryResult.message}` : ""}`,
+                    evidence: `saveBuildEvidence rejected the patched design document for build ${resolvedBuildId}.`,
+                    nextAction: "revise the design evidence and rerun ideate review.",
+                  });
                 }
               } else {
-                responseContent = `Research completed but the design doc needs revision. ${saveResult.message ?? "Please provide more context about the feature."}`;
+                responseContent = formatIdeateResearchIssueMessage({
+                  summary: `Research completed, but the design document needs revision.${saveResult.message ? ` ${saveResult.message}` : ""}`,
+                  evidence: `saveBuildEvidence did not accept the design document for build ${resolvedBuildId}.`,
+                  nextAction: "revise the design document and rerun design review.",
+                });
               }
             }
           } else {
             responseContent = ideateResult.error
-              ? `Research encountered an issue: ${ideateResult.error}`
-              : "Research completed but I couldn't generate a structured design. Let me try a different approach.";
+              ? formatCoworkerOperationalMessage({
+                summary: `Research encountered an issue: ${ideateResult.error}`,
+                status: "blocked before planning",
+                evidence: `ideate research failed for build ${resolvedBuildId}: ${ideateResult.error}`,
+                nextAction: "rerun ideate research after confirming codebase access and provider availability.",
+                owner: "Build Studio ideate agent",
+              })
+              : formatCoworkerOperationalMessage({
+                summary: "Research completed but did not generate a structured design.",
+                status: "blocked before planning",
+                evidence: `ideate research for build ${resolvedBuildId} returned no structured design document.`,
+                nextAction: "rerun ideate research with a narrower feature goal and save the structured design evidence.",
+                owner: "Build Studio ideate agent",
+              });
           }
 
           // Clear the research request
@@ -2288,11 +2359,29 @@ export async function sendMessage(input: {
       let sysContent: string;
       if (e.attempts.length > 0) {
         const failureDetails = e.attempts.map((a) => `${a.providerId}: ${a.error.slice(0, 200)}`).join("; ");
-        sysContent = `All AI providers failed: ${failureDetails}. Check configuration in Platform > AI Providers.`;
+        sysContent = formatCoworkerOperationalMessage({
+          summary: "All AI providers failed for this coworker turn.",
+          status: "blocked",
+          evidence: failureDetails,
+          nextAction: "restore or switch the configured AI provider in Platform > AI Providers, then retry the coworker turn.",
+          owner: "operator/admin",
+        });
       } else if (inactiveProviders.length > 0) {
-        sysContent = `AI co-workers are temporarily offline. Type "re-enable" to reactivate a provider, or visit Platform > AI Providers.`;
+        sysContent = formatCoworkerOperationalMessage({
+          summary: "AI coworkers are temporarily offline because configured providers are inactive.",
+          status: "blocked",
+          evidence: `${inactiveProviders.length} provider${inactiveProviders.length === 1 ? "" : "s"} are inactive: ${inactiveProviders.map((p) => p.name || p.providerId).join(", ")}.`,
+          nextAction: "reactivate a provider from Platform > AI Providers, then retry the coworker turn.",
+          owner: "operator/admin",
+        });
       } else {
-        sysContent = "No AI providers are configured. An administrator can set them up from Platform > AI Providers.";
+        sysContent = formatCoworkerOperationalMessage({
+          summary: "No AI providers are configured for coworker responses.",
+          status: "blocked",
+          evidence: "provider lookup found no active or inactive model providers for this route.",
+          nextAction: "configure at least one AI provider in Platform > AI Providers.",
+          owner: "operator/admin",
+        });
       }
 
       const sysMsg = await prisma.agentMessage.create({
