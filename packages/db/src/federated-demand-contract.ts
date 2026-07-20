@@ -51,6 +51,13 @@ export interface DemandEnvelopeV1 {
   evidence?: Array<{ kind: string; digest: string; safeRef?: string }>;
   signal: { occurrenceCount: number; affectedOrganizations?: number };
   attribution: DemandAttribution;
+  /** Source-owned consent for a downstream intermediary to forward this
+   * minimized envelope. Absence means forwarding is forbidden. */
+  forwarding?: {
+    permitted: boolean;
+    audiences: DemandAudience[];
+    expiresAt?: string;
+  };
   createdAt: string;
   updatedAt: string;
   payloadDigest: string;
@@ -68,6 +75,22 @@ export interface DemandDigestV1 {
   originInstallationId: string;
   generatedAt: string;
   records: DemandDigestRecordV1[];
+}
+
+export const DEMAND_RESPONSE_KINDS = ["interest", "help-offer"] as const;
+export type DemandResponseKind = (typeof DEMAND_RESPONSE_KINDS)[number];
+
+export interface DemandResponseV1 {
+  specVersion: "dpf.demand-response/1";
+  responseId: string;
+  envelopeId: string;
+  originInstallationId: string;
+  originRecordRef: string;
+  responseKind: DemandResponseKind;
+  message?: string;
+  responderAttribution: DemandAttribution;
+  createdAt: string;
+  payloadDigest: string;
 }
 
 const REQUIRED_FIELDS = [
@@ -92,12 +115,14 @@ const COLLABORATIVE_FIELDS = [
   "workType",
   "applicability",
   "evidence",
+  "forwarding",
 ];
 
 const PARTNER_FIELDS = [
   ...REQUIRED_FIELDS,
   "workType",
   "applicability",
+  "forwarding",
 ];
 
 const COMMUNITY_FIELDS = [
@@ -157,6 +182,48 @@ export function computeDemandPayloadDigest(value: Omit<DemandEnvelopeV1, "payloa
   return `sha256:${createHash("sha256").update(stableJson(content)).digest("hex")}`;
 }
 
+export function computeDemandResponseDigest(
+  value: Omit<DemandResponseV1, "payloadDigest"> | DemandResponseV1,
+): string {
+  const content = { ...(value as DemandResponseV1) } as Record<string, unknown>;
+  delete content.payloadDigest;
+  return `sha256:${createHash("sha256").update(stableJson(content)).digest("hex")}`;
+}
+
+export function validateDemandResponseV1(value: unknown): string[] {
+  if (!isRecord(value)) return ["response:invalid"];
+  const allowed = new Set([
+    "specVersion", "responseId", "envelopeId", "originInstallationId",
+    "originRecordRef", "responseKind", "message", "responderAttribution",
+    "createdAt", "payloadDigest",
+  ]);
+  const violations: string[] = [];
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) violations.push(`field:not-allowed:${key}`);
+  }
+  if (value.specVersion !== "dpf.demand-response/1") violations.push("specVersion:unsupported");
+  if (!isNonEmptyString(value.responseId, 160)) violations.push("responseId:invalid");
+  if (!isNonEmptyString(value.envelopeId, 160)) violations.push("envelopeId:invalid");
+  if (!isNonEmptyString(value.originInstallationId, 160)) violations.push("originInstallationId:invalid");
+  if (!isNonEmptyString(value.originRecordRef, 240)) violations.push("originRecordRef:invalid");
+  if (!(DEMAND_RESPONSE_KINDS as readonly unknown[]).includes(value.responseKind)) {
+    violations.push("responseKind:unsupported");
+  }
+  if (value.message !== undefined && (typeof value.message !== "string" || value.message.length > 1_000)) {
+    violations.push("message:invalid");
+  }
+  if (!(DEMAND_ATTRIBUTIONS as readonly unknown[]).includes(value.responderAttribution)) {
+    violations.push("responderAttribution:unsupported");
+  }
+  if (!isIsoTimestamp(value.createdAt)) violations.push("createdAt:invalid");
+  if (typeof value.payloadDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.payloadDigest)) {
+    violations.push("payloadDigest:invalid");
+  } else if (computeDemandResponseDigest(value as unknown as DemandResponseV1) !== value.payloadDigest) {
+    violations.push("payloadDigest:mismatch");
+  }
+  return violations;
+}
+
 /** Pure protocol conformance check used before persistence or semantic processing. */
 export function validateDemandEnvelopeV1(
   value: unknown,
@@ -188,6 +255,23 @@ export function validateDemandEnvelopeV1(
     violations.push(typeof value.summary === "string" && value.summary.length > 4_000 ? "summary:too-long" : "summary:invalid");
   }
   if (!(DEMAND_ATTRIBUTIONS as readonly unknown[]).includes(value.attribution)) violations.push("attribution:unsupported");
+  if (value.forwarding !== undefined) {
+    if (!isRecord(value.forwarding)) {
+      violations.push("forwarding:invalid");
+    } else {
+      if (typeof value.forwarding.permitted !== "boolean") violations.push("forwarding.permitted:invalid");
+      if (!Array.isArray(value.forwarding.audiences) || value.forwarding.audiences.length > 4) {
+        violations.push("forwarding.audiences:invalid");
+      } else if (value.forwarding.audiences.some(
+        (audience) => !(DEMAND_AUDIENCES as readonly unknown[]).includes(audience),
+      )) {
+        violations.push("forwarding.audiences:unsupported");
+      }
+      if (value.forwarding.expiresAt !== undefined && !isIsoTimestamp(value.forwarding.expiresAt)) {
+        violations.push("forwarding.expiresAt:invalid");
+      }
+    }
+  }
   if (!isIsoTimestamp(value.createdAt)) violations.push("createdAt:invalid");
   if (!isIsoTimestamp(value.updatedAt)) violations.push("updatedAt:invalid");
   if (typeof value.payloadDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.payloadDigest)) {

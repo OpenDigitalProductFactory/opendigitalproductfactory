@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockResolveAuth, mockHandleIncomingDemand, mockResolveIdentity } = vi.hoisted(() => ({
+const { mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockResolveIdentity } = vi.hoisted(() => ({
   mockResolveAuth: vi.fn(),
   mockHandleIncomingDemand: vi.fn(),
+  mockHandleIncomingDemandResponse: vi.fn(),
   mockResolveIdentity: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/federation-link-token", () => ({ resolveFederationLinkAuth: mockResolveAuth }));
 vi.mock("@/lib/federation/demand-exchange", () => ({ handleIncomingDemand: mockHandleIncomingDemand }));
+vi.mock("@/lib/federation/demand-response", () => ({ handleIncomingDemandResponse: mockHandleIncomingDemandResponse }));
 vi.mock("@/lib/federation/demand-identity", () => ({ resolveFederationIdentity: mockResolveIdentity }));
 
 import { POST } from "./route";
@@ -52,6 +54,7 @@ beforeEach(() => {
     originVersion: 1,
     disposition: "observed",
   });
+  mockHandleIncomingDemandResponse.mockResolvedValue({ action: "created", responseId: "rsp_opaque" });
 });
 
 describe("POST /api/v1/federation/demand", () => {
@@ -83,6 +86,15 @@ describe("POST /api/v1/federation/demand", () => {
       envelope,
       { receivingInstallationId: "inst_receiver" },
     );
+  });
+
+  it("routes collaboration responses to the durable response handler", async () => {
+    const demandResponse = { specVersion: "dpf.demand-response/1", responseId: "rsp_opaque" };
+    const response = await POST(request("dpf.demand.help-offered", demandResponse));
+
+    expect(response.status).toBe(202);
+    expect(mockHandleIncomingDemandResponse).toHaveBeenCalledWith(expect.anything(), "link_1", demandResponse);
+    expect(mockHandleIncomingDemand).not.toHaveBeenCalled();
   });
 
   it("returns validation violations without acknowledging receipt", async () => {

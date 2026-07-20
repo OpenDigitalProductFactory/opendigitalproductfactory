@@ -31,6 +31,7 @@ export function buildDemandEnvelope(input: {
   contract: ProjectionContractSpec;
   audience: DemandAudience;
   attribution: DemandAttribution;
+  forwarding?: DemandEnvelopeV1["forwarding"];
 }): { envelope: DemandEnvelopeV1; violations: string[] } {
   const refs = deriveDemandNetworkRefs(input.identity, input.source.localRecordRef);
   const candidate: DemandEnvelopeV1 = {
@@ -46,6 +47,7 @@ export function buildDemandEnvelope(input: {
     ...(input.source.product ? { applicability: { product: input.source.product } } : {}),
     signal: { occurrenceCount: Math.max(0, input.source.occurrenceCount) },
     attribution: input.attribution,
+    ...(input.forwarding ? { forwarding: input.forwarding } : {}),
     createdAt: input.source.createdAt.toISOString(),
     updatedAt: input.source.updatedAt.toISOString(),
     payloadDigest: "sha256:pending",

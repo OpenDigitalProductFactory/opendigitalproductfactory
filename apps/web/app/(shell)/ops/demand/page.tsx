@@ -4,14 +4,15 @@ import { resolveDemandPolicy } from "@/lib/demand/policy";
 import { DemandBoard } from "@/components/ops/DemandBoard";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { NetworkDemandPanel } from "@/components/ops/NetworkDemandPanel";
-import { getNetworkDemandItems } from "@/lib/federation/demand-read-model";
+import { getDemandShareContext, getNetworkDemandItems } from "@/lib/federation/demand-read-model";
 
 export const dynamic = "force-dynamic";
 
 export default async function DemandPage() {
-  const [items, networkItems, policyConfig] = await Promise.all([
+  const [items, networkItems, shareContext, policyConfig] = await Promise.all([
     getDemandItems(),
     getNetworkDemandItems(),
+    getDemandShareContext(),
     prisma.platformDevConfig.findUnique({
       where: { id: "singleton" },
       select: { demandFramework: true, demandBucketTargets: true },
@@ -29,7 +30,10 @@ export default async function DemandPage() {
         </p>
       </div>
       <OpsTabNav />
-      <NetworkDemandPanel items={JSON.parse(JSON.stringify(networkItems))} />
+      <NetworkDemandPanel
+        items={JSON.parse(JSON.stringify(networkItems))}
+        shareContext={JSON.parse(JSON.stringify(shareContext))}
+      />
       <DemandBoard
         items={JSON.parse(JSON.stringify(items))}
         bucketTargets={policy.bucketTargets}

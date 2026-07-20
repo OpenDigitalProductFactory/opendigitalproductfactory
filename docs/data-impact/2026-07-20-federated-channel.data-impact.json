@@ -1,0 +1,115 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "federated demand inbox/outbox mirrors",
+    "Founder Hub partner business read model"
+  ],
+  "migration": {
+    "name": "20260720064000_federated_channel",
+    "backfill": "none — partner business records are enrolled explicitly and peer installation identity is learned through an authenticated digest"
+  },
+  "tests": [
+    "packages/db/src/federated-channel-schema.test.ts",
+    "packages/db/src/federated-channel.test.ts",
+    "apps/web/lib/federation/channel-demand.test.ts",
+    "apps/web/lib/federation/demand-response.test.ts",
+    "apps/web/lib/federation/demand-delivery.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:federation-link#peer-installation-id",
+      "prismaModel": "FederationLink",
+      "lifecycleDisposition": "cleared with the owning federation link; no hostname-derived or globally identifying value is stored",
+      "fields": [
+        {
+          "fieldId": "data:federation-link#peerInstallationId",
+          "resolution": "governed",
+          "reason": "authenticated pseudonymous peer identity is required for forwarding loop prevention and reconciliation",
+          "provenance": "federated demand network design section 6.2",
+          "flags": ["sensitive"],
+          "fieldPolicy": "learn only from an authenticated digest on a trusted link; reject identity changes; never derive from hostname"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:partner-account",
+      "prismaModel": "PartnerAccount",
+      "lifecycleDisposition": "Founder Hub owns the commercial record; terminating or deleting the account cascades its agreements, entitlements, support routes, and recognition links",
+      "fields": [
+        {
+          "fieldId": "data:partner-account#all",
+          "resolution": "governed",
+          "reason": "Founder Hub requires a business-only reseller account distinct from customer and human identity records",
+          "provenance": "federated demand network design sections 4.1 and 11 Slice 3"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:partner-agreement",
+      "prismaModel": "PartnerAgreement",
+      "lifecycleDisposition": "cascades with PartnerAccount; expired safe references remain only under the partner retention policy",
+      "fields": [
+        {
+          "fieldId": "data:partner-agreement#all",
+          "resolution": "governed",
+          "reason": "records governed agreement state and references without copying signed documents",
+          "provenance": "federated demand network design Slice 3"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:partner-entitlement",
+      "prismaModel": "PartnerEntitlement",
+      "lifecycleDisposition": "cascades with PartnerAccount and retains nullable references when an agreement or offering is retired",
+      "fields": [
+        {
+          "fieldId": "data:partner-entitlement#all",
+          "resolution": "governed",
+          "reason": "links a partner-specific grant to the existing offering catalog",
+          "provenance": "federated demand network design Slice 3"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:partner-support-route",
+      "prismaModel": "PartnerSupportRoute",
+      "lifecycleDisposition": "cascades with PartnerAccount; disabling a route preserves its operational history without granting authority",
+      "fields": [
+        {
+          "fieldId": "data:partner-support-route#all",
+          "resolution": "governed",
+          "reason": "stores local support routing separately from federation authorization",
+          "provenance": "federated demand network design Slice 3"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:partner-contribution-recognition",
+      "prismaModel": "PartnerContributionRecognition",
+      "lifecycleDisposition": "cascades with PartnerAccount while the nullable ledger reference preserves Hive contribution authority",
+      "fields": [
+        {
+          "fieldId": "data:partner-contribution-recognition#all",
+          "resolution": "governed",
+          "reason": "recognizes a result without duplicating the immutable Hive contribution or contributor planning context",
+          "provenance": "federated demand network design sections 7.4 and Slice 3"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "assetId": "projection:federated-channel-demand",
+      "derivedContractId": "dpf.demand/1+dpf.demand-response/1",
+      "cleanupTest": "apps/web/lib/federation/demand-delivery.test.ts withdrawal and dead-letter cases",
+      "reconciliationTest": "apps/web/lib/federation/demand-response.test.ts same-link envelope validation and idempotency cases"
+    }
+  ]
+}

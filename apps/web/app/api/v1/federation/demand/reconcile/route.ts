@@ -6,6 +6,7 @@ import { validateDemandDigestV1, type DemandDigestV1 } from "@dpf/db/federated-d
 import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
 import { validateFederationCloudEvent } from "@/lib/federation/cloud-event-guard";
 import { compareIncomingDemandDigest, type DemandDigestDb } from "@/lib/federation/demand-digest";
+import { bindPeerInstallationIdentity } from "@/lib/federation/channel-demand";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const ERROR_STATUS: Record<string, number> = {
@@ -54,6 +55,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { ok: false, error: "invalid_demand_digest", violations },
       { status: 422 },
     );
+  }
+
+  try {
+    await bindPeerInstallationIdentity(
+      prisma,
+      authz.linkId,
+      (event.data as DemandDigestV1).originInstallationId,
+    );
+  } catch (error) {
+    return NextResponse.json({
+      ok: false,
+      error: "peer_identity_mismatch",
+      message: error instanceof Error ? error.message : "Peer identity mismatch",
+    }, { status: 409 });
   }
 
   const result = await compareIncomingDemandDigest(

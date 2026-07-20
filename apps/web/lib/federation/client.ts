@@ -6,7 +6,7 @@
 // storage is a separate slice). Injected `fetchImpl` keeps it unit-testable.
 
 import { toCloudEvent } from "@dpf/db/projection-serialization";
-import type { InboundDemandActivity } from "./demand-exchange";
+import type { DemandActivity } from "@dpf/db/federated-demand-contract";
 
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
@@ -114,7 +114,7 @@ export async function sendProposalToPeer(target: PeerLinkTarget, proposal: unkno
 /** Deliver one versioned, already-minimized demand envelope to a trusted peer. */
 export async function sendDemandToPeer(
   target: PeerLinkTarget,
-  activity: InboundDemandActivity,
+  activity: DemandActivity,
   demandEnvelope: unknown,
   options: { eventId?: string; now?: Date } = {},
 ): Promise<PeerPostResult> {

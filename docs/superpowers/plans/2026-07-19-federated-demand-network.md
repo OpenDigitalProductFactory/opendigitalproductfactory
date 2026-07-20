@@ -214,11 +214,41 @@ before the backlog item closes.
 - Extend existing organization/agreement/entitlement substrates after architecture parity review
 - Add reseller portfolio projections and help/response actions without a second backlog
 
-- [ ] Add `service-provider` and `channel` invitation presets with customer-controlled outbound projections and independent revocation.
-- [ ] Model Founder Hub reseller enrollment, standing, agreements/entitlements, offerings, support routing, and contribution recognition in their existing business owners.
-- [ ] Add reseller aggregation, pseudonymous attribution, help offers, and selective forwarding with transitive consent.
-- [ ] Prove multiple partners can coexist with non-overlapping projection scopes and no implied exclusivity.
-- [ ] Add EA/SysML parity for every schema/API surface in the same slice.
+- [x] Add `service-provider` and `channel` invitation presets with customer-controlled outbound projections and independent revocation.
+- [x] Model Founder Hub reseller enrollment, standing, agreements/entitlements, offerings, support routing, and contribution recognition in their existing business owners.
+- [x] Add reseller aggregation, pseudonymous attribution, help offers, and selective forwarding with transitive consent.
+- [x] Prove multiple partners can coexist with non-overlapping projection scopes and no implied exclusivity.
+- [x] Add EA/SysML parity for every schema/API surface in the same slice.
+
+**Slice 3 implementation receipt (2026-07-20, BI-D964E2DA):**
+
+- **Architecture:** `PartnerAccount` is a thin Founder-owned commercial account,
+  not a login identity, customer account, or remote backlog. Agreements,
+  entitlements, support routes, and contribution recognition reference their
+  existing owners (`ServiceOffering`, `HiveContributionLedger`, and
+  `FederationLink`) rather than copying catalog, contribution, or trust state.
+- **Federation:** customer/reseller selection is explicit per link; `channel`
+  links are directional and non-exclusive. Forwarding is denied unless the
+  source envelope grants the `founder` audience, and the reseller preserves the
+  original opaque origin and pseudonymous attribution while appending a signed
+  route attestation.
+- **Collaboration:** interest and help offers use bounded
+  `dpf.demand-response/1` envelopes. Responses can refer only to an envelope
+  previously shared over the same link and cannot contain backlog, capsule, or
+  planning identifiers.
+- **UX:** Connections exposes customer/reseller/channel roles and a Founder Hub
+  reseller panel. Delivery Flow exposes explicit per-link sharing, withdrawal,
+  forwarding, interest/help actions, and received response receipts.
+- **Data authority:** the local installation remains authoritative for its
+  backlog and outbound consent; the receiver owns only its mirror and response.
+  Founder Hub owns partner-business records. Hive remains the contribution-result
+  authority. The accompanying DataImpactManifest records model lifecycle and
+  projection cleanup/reconciliation coverage.
+- **EA/current-state parity:** Prisma-to-EA data mirror derives the new partner
+  models and relationship edges; the route-family extractor derives the demand
+  response port. No hand-maintained duplicate model was introduced. Publication
+  is gated by `check:architecture-parity`, route-manifest, migration, build, and
+  browser verification.
 
 **Verification:** customer negative-egress fixtures; multi-partner authorization tests; revoked-link behavior; reseller/customer/founder happy paths; role-appropriate UX; migration deploy and production build.
 

@@ -168,6 +168,29 @@ export function resolveField(
 // baseline (legacy-coverage-baseline.ts), never as a blanket "internal" default.
 
 const SEED_ASSETS: readonly DataAssetDefinition[] = [
+  ...[
+    ["data:partner-account", "PartnerAccount"],
+    ["data:partner-agreement", "PartnerAgreement"],
+    ["data:partner-entitlement", "PartnerEntitlement"],
+    ["data:partner-support-route", "PartnerSupportRoute"],
+    ["data:partner-contribution-recognition", "PartnerContributionRecognition"],
+  ].map(([id, prismaModel]) => ({
+    id: id as DataAssetId,
+    physical: { prismaModel },
+    domain: "partner-channel",
+    ownerRole: "founder-business-owner",
+    stewardRole: "data-steward",
+    categories: ["configuration"] as DataCategory[],
+    sensitivity: "confidential" as DataSensitivity,
+    criticality: "standard" as DataCriticality,
+    subjectLocators: [],
+    lifecycleClass: "operational" as LifecycleClassKey,
+    purposeCapabilities: ["service-delivery", "platform-operations"] as ProcessingPurposeKey[],
+    residencyClass: "local-only" as ResidencyClassKey,
+    projectionClass: "metadata" as ProjectionClass,
+    classification: { state: "confirmed" as const, source: "manual" as const, effectiveFrom: "2026-07-20" },
+    fields: [],
+  })),
   {
     id: "data:ai-provider-connection",
     physical: { prismaModel: "AiProviderConnection" },

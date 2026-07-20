@@ -3,12 +3,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { mockSetDiscovery } = vi.hoisted(() => ({ mockSetDiscovery: vi.fn() }));
+const { mockSetDiscovery, mockIssueInvitation } = vi.hoisted(() => ({
+  mockSetDiscovery: vi.fn(),
+  mockIssueInvitation: vi.fn(),
+}));
 
 vi.mock("@/lib/actions/federation-links", () => ({
   approveFederationLinkAction: vi.fn(),
   enrollWithPeerAction: vi.fn(),
-  issueFederationBootstrapAction: vi.fn(),
+  issueFederationBootstrapAction: mockIssueInvitation,
   quarantineFederationLinkAction: vi.fn(),
   revokeFederationLinkAction: vi.fn(),
   setFederationDiscoveryEnabledAction: mockSetDiscovery,
@@ -85,5 +88,21 @@ describe("FederationLinksAdminClient nearby setup", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enable nearby discovery" }));
 
     await waitFor(() => expect(mockSetDiscovery).toHaveBeenCalledWith(true));
+  });
+});
+
+describe("FederationLinksAdminClient channel setup", () => {
+  it("offers a reseller/founder channel without implying exclusivity", () => {
+    render(<FederationLinksAdminClient rows={[]} />);
+
+    fireEvent.change(screen.getByLabelText("Relationship preset"), {
+      target: { value: "channel" },
+    });
+
+    expect((screen.getByLabelText("Relationship preset") as HTMLSelectElement).value).toBe("channel");
+    expect(screen.getByRole("option", { name: "channel-upstream (we receive curated demand)" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "channel-downstream (we share curated demand)" })).toBeTruthy();
+    expect(screen.getByText(/Each installation independently chooses what demand crosses this link/)).toBeTruthy();
+    expect(screen.getByText(/does not make this partner exclusive/i)).toBeTruthy();
   });
 });

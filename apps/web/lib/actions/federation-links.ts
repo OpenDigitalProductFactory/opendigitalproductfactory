@@ -6,6 +6,8 @@
 // the federation enrollment lib (lib/federation/enrollment). All mutations
 // revalidate the admin path so the UI sees fresh state.
 
+import { createHash } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@dpf/db";
@@ -17,6 +19,7 @@ import {
   type FederationRelationshipPreset,
   type FederationRole,
 } from "@dpf/db/federation-link-types";
+import { isPartnerStanding, type PartnerStanding } from "@dpf/db/federated-channel";
 
 import { resolveAppBaseUrl } from "@/lib/app-url";
 import { auth } from "@/lib/auth";
@@ -202,6 +205,122 @@ export async function revokeFederationLinkAction(
     return { ok: true, linkId, linkState };
   } catch (err) {
     return { ok: false, error: "internal_error", message: err instanceof Error ? err.message : "revoke failed" };
+  }
+}
+
+// ── Founder Hub partner-business ownership ──────────────────────────────────
+
+export type PartnerBusinessActionResult =
+  | { ok: true; partnerId: string; standing: string }
+  | ActionFailure;
+
+function semanticId(prefix: string, value: string): string {
+  return `${prefix}-${createHash("sha256").update(value).digest("hex").slice(0, 16).toUpperCase()}`;
+}
+
+export async function enrollChannelPartnerAction(input: {
+  linkId: string;
+  displayName?: string;
+  agreementReference?: string;
+}): Promise<PartnerBusinessActionResult> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  if (!input.linkId?.trim()) {
+    return { ok: false, error: "invalid_input", message: "Choose a channel connection." };
+  }
+  try {
+    const [link, organization] = await Promise.all([
+      prisma.federationLink.findUnique({
+        where: { linkId: input.linkId.trim() },
+        select: {
+          linkId: true,
+          role: true,
+          linkState: true,
+          peerOrganizationRef: true,
+          principal: { select: { displayName: true } },
+        },
+      }),
+      prisma.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }),
+    ]);
+    if (!link || !organization) {
+      return { ok: false, error: "not_found", message: "Connection or local organization was not found." };
+    }
+    if (link.role !== "channel-upstream") {
+      return { ok: false, error: "invalid_input", message: "Only an upstream channel connection can be enrolled as a Founder Hub reseller." };
+    }
+    if (link.linkState !== "trusted") {
+      return { ok: false, error: "invalid_transition", message: "Both installations must approve the connection before enrollment." };
+    }
+    const externalOrganizationRef = link.peerOrganizationRef ?? `peer:${link.linkId}`;
+    const partnerId = semanticId("PARTNER", `${organization.id}:${externalOrganizationRef}`);
+    const partner = await prisma.partnerAccount.upsert({
+      where: {
+        organizationId_externalOrganizationRef: {
+          organizationId: organization.id,
+          externalOrganizationRef,
+        },
+      },
+      create: {
+        partnerId,
+        organizationId: organization.id,
+        federationLinkId: link.linkId,
+        externalOrganizationRef,
+        displayName: input.displayName?.trim() || link.principal.displayName,
+        partnerKind: "reseller",
+        standing: "pending",
+        tier: "registered",
+        enrolledAt: new Date(),
+      },
+      update: {
+        federationLinkId: link.linkId,
+        displayName: input.displayName?.trim() || link.principal.displayName,
+      },
+      select: { id: true, partnerId: true, standing: true },
+    });
+    if (input.agreementReference?.trim()) {
+      const agreementReference = input.agreementReference.trim();
+      await prisma.partnerAgreement.upsert({
+        where: { agreementId: semanticId("PAGR", `${partner.partnerId}:${agreementReference}`) },
+        create: {
+          agreementId: semanticId("PAGR", `${partner.partnerId}:${agreementReference}`),
+          partnerAccountId: partner.id,
+          agreementType: "reseller",
+          status: "active",
+          externalReference: agreementReference,
+          effectiveFrom: new Date(),
+        },
+        update: { status: "active", externalReference: agreementReference },
+      });
+    }
+    revalidatePath(ADMIN_PATH);
+    return { ok: true, partnerId: partner.partnerId, standing: partner.standing };
+  } catch (error) {
+    return { ok: false, error: "internal_error", message: error instanceof Error ? error.message : "Partner enrollment failed" };
+  }
+}
+
+export async function updateChannelPartnerStandingAction(
+  partnerId: string,
+  standing: string,
+): Promise<PartnerBusinessActionResult> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  if (!partnerId?.trim() || !isPartnerStanding(standing)) {
+    return { ok: false, error: "invalid_input", message: "Choose a valid partner and standing." };
+  }
+  try {
+    const partner = await prisma.partnerAccount.update({
+      where: { partnerId: partnerId.trim() },
+      data: {
+        standing: standing as PartnerStanding,
+        reviewedAt: new Date(),
+      },
+      select: { partnerId: true, standing: true },
+    });
+    revalidatePath(ADMIN_PATH);
+    return { ok: true, partnerId: partner.partnerId, standing: partner.standing };
+  } catch (error) {
+    return { ok: false, error: "internal_error", message: error instanceof Error ? error.message : "Partner update failed" };
   }
 }
 

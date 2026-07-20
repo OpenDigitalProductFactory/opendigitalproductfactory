@@ -19,6 +19,7 @@
     "./trust-link-lifecycle": "./src/trust-link-lifecycle.ts",
     "./federation-link-types": "./src/federation-link-types.ts",
     "./federated-demand-contract": "./src/federated-demand-contract.ts",
+    "./federated-channel": "./src/federated-channel.ts",
     "./projection-serialization": "./src/projection-serialization.ts",
     "./projection-egress": "./src/projection-egress.ts",
     "./remote-action-dispatch": "./src/remote-action-dispatch.ts",
