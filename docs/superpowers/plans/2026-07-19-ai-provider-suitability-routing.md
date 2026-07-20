@@ -252,9 +252,22 @@ unreviewed connections; no account tier, contract, or entitlement is inferred.
 - [x] Keep telemetry advisory: it may promote/degrade recommendations inside hard policy but cannot override PDP, contract, residency, or operator denial.
 - [x] Add rollout flags in this order: compiler shadow mode, admin preview, onboarding recommendation, selected vertical bindings, restricted OpenRouter, evidence enforcement, continuous tuning.
 - [x] Exercise dental, retail, credit-union, training, and software-platform journeys against the running portal.
-- [ ] Run the full affected unit suites, production build, UX gate, migration gate if applicable, docs checks, secret scan, and `pnpm pr:health` before PR readiness.
+- [x] Run the full affected unit suites, production build, UX gate, migration gate if applicable, docs checks, secret scan, and `pnpm pr:health` before PR readiness.
 - [x] Record final evidence against every BI and the epic; unresolved restricted-route evidence keeps the epic open.
 - [x] Commit with DCO: `feat(ai-routing): complete continuous provider suitability`.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md`
+  - `docs/superpowers/plans/2026-07-19-ai-provider-suitability-routing.md`
+  - `docs/superpowers/specs/2026-06-20-onboarding-intake-derivation-design.md`
+- Current code substrate reviewed:
+  - V2 routing and `RequestContract` propagation, provider connection/profile loading, trust-evidence contracts, provider overview/detail, route-audit, attention aggregation, organization/business context, archetype, governed workload, PDP/PEP, and A2A/corpus paths under `apps/web/`.
+- Source of truth:
+  - The connection-scoped suitability projection compiled from canonical organization/workload facts and provider evidence; hard authorization remains with existing routing, residency, contract, PDP, and operator controls.
+- Decision:
+  - Extend the existing provider and audit ownership surfaces. Continuous telemetry stays advisory and privacy-thresholded, and cannot override hard policy. Do not add a parallel compliance assistant, provider model, policy evaluator, or navigation workspace.
 
 ## Completion Criteria
 
