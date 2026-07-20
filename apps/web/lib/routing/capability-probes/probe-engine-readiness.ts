@@ -19,6 +19,8 @@
 
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 
+import { extractEngineVersion } from "./engine-version-parser";
+
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const PROBE_TIMEOUT_MS = 10_000;
 
@@ -78,8 +80,8 @@ export async function probeEngineReadiness(engine: EngineProbeConfig): Promise<E
     };
   }
 
-  const match = regex.exec(stdout);
-  if (!match) {
+  const version = extractEngineVersion({ ...engine, versionRegex: regex }, stdout);
+  if (!version) {
     return {
       engineId: engine.engineId,
       present: false,
@@ -92,7 +94,7 @@ export async function probeEngineReadiness(engine: EngineProbeConfig): Promise<E
   return {
     engineId: engine.engineId,
     present: true,
-    version: match[1] ?? match[0],
+    version,
     probedAt,
   };
 }
