@@ -1,0 +1,72 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "PostgreSQL FederatedRecordMirror rows for demand-envelope inbox/outbox state",
+    "EA data-model mirror derived from the canonical Prisma schema"
+  ],
+  "migration": {
+    "name": "20260720053500_federated_demand_peer_identity",
+    "backfill": "Older duplicate peer references are quarantined as conflict rows before the inverse unique key is created; existing rows receive zero/null delivery defaults and no payload is rewritten or deleted."
+  },
+  "tests": [
+    "apps/web/lib/federation/demand-delivery.test.ts",
+    "apps/web/lib/federation/demand-digest.test.ts",
+    "apps/web/lib/federation/demand-exchange.test.ts",
+    "apps/web/lib/federation/demand-reconciliation.test.ts",
+    "packages/db/src/federated-demand-contract.test.ts",
+    "scripts/audit-architecture-parity.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:federated-record-mirror",
+      "prismaModel": "FederatedRecordMirror",
+      "lifecycleDisposition": "Federation receipt and delivery metadata follow the mirror's existing revocation and audited-retention lifecycle; withdrawals retain provenance without preserving unprojected source backlog data.",
+      "fields": [
+        {
+          "fieldId": "data:federated-record-mirror#peerRecordRef",
+          "resolution": "governed",
+          "reason": "The inverse link/type/peer-reference key gives inbound retry identity the same database enforcement already used for local-canonical mirrors.",
+          "provenance": "Opaque origin reference from a validated dpf.demand/1 envelope"
+        },
+        {
+          "fieldId": "data:federated-record-mirror#deliveryAttempts",
+          "resolution": "governed",
+          "reason": "A bounded attempt counter drives exponential retry and the dead-letter threshold without coupling federation to the forge queue.",
+          "provenance": "Federated demand delivery worker"
+        },
+        {
+          "fieldId": "data:federated-record-mirror#nextDeliveryAt",
+          "resolution": "governed",
+          "reason": "The next eligible delivery time makes offline recovery durable and scheduler-safe.",
+          "provenance": "Federated demand delivery worker"
+        },
+        {
+          "fieldId": "data:federated-record-mirror#lastDeliveryAt",
+          "resolution": "governed",
+          "reason": "The last attempt timestamp supports auditable retry and withdrawal delivery behavior.",
+          "provenance": "Federated demand delivery worker"
+        },
+        {
+          "fieldId": "data:federated-record-mirror#lastDeliveryError",
+          "resolution": "governed",
+          "reason": "A bounded operational failure message explains retry/dead-letter state without storing peer credentials or raw backlog content.",
+          "provenance": "Federated demand client failure classification"
+        },
+        {
+          "fieldId": "data:federated-record-mirror#acknowledgedVersion",
+          "resolution": "governed",
+          "reason": "The committed peer receipt version prevents an acknowledgment retry from losing source-version convergence state.",
+          "provenance": "Authenticated peer receipt"
+        },
+        {
+          "fieldId": "data:federated-record-mirror#deadLetteredAt",
+          "resolution": "governed",
+          "reason": "The terminal retry timestamp makes exhausted delivery visible and auditable while leaving explicit repair to reconciliation.",
+          "provenance": "Federated demand delivery worker"
+        }
+      ]
+    }
+  ]
+}

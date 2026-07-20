@@ -16,6 +16,7 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 - **Promotions** — Records of features moving from the Build Studio sandbox to production. Each promotion tracks its status (pending, approved, deployed, rolled back), deployment log, and backup reference.
 - **Change Requests (RFCs)** — Formal change records created when features are shipped. RFCs track the type of change (normal, emergency), risk level, and approval chain.
 - **Deployment Windows** — Time periods when deployments are allowed. Normal changes respect these windows; emergency changes can override them.
+- **Network Demand** — Demand that another approved DPF installation explicitly shared. You can observe or follow it without changing your backlog, or adopt it to create a new locally owned backlog item. The source installation cannot change your local status, priority, estimate, or build state.
 
 ## What You Can Do
 
@@ -28,6 +29,27 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 - Monitor deployment status in real time (the page polls for updates)
 - Review deployment logs and backup references for completed promotions
 - Track change requests and their lifecycle (draft, approved, in-progress, completed)
+- Review shared demand on Delivery Flow, follow useful signals, and deliberately adopt selected items into your local backlog
+
+## Shared Demand
+
+Delivery Flow shows a **Shared by connected installations** panel above the
+local investment and execution flow. It contains only the minimized demand an
+approved connection is allowed to project. When nothing has been shared, the
+panel keeps a direct path to **Connections** so an operator can review pairing
+and demand-sharing policy without interrupting local backlog work.
+
+- **Observe** leaves the item as read-only network context.
+- **Follow** records local interest and keeps the item visible as its source
+  publishes newer versions or a withdrawal.
+- **Adopt into our backlog** creates a separate, locally authoritative backlog
+  item with immutable federation provenance. Later peer updates never overwrite
+  its local delivery state.
+
+Connection policy and revocation are managed from **Platform > Connections**.
+Source installation IDs, source backlog IDs, routing paths, customer-private
+context, estimates, priorities, discussions, attachments, and work-capsule
+details are not displayed or copied into the shared-demand view.
 
 ## Promotions
 

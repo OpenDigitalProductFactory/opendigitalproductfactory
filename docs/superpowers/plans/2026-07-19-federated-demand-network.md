@@ -14,6 +14,25 @@
 
 ---
 
+## Backlog coverage
+
+- Decision: decomposed
+- Parent: `BI-E3A084ED`
+- Cross-platform LAN discovery and secure pairing -> `BI-52D34506`
+- Reliable delivery, reconciliation, and local adoption -> `BI-44AA45BF`
+- Reseller/customer channel and Founder Hub business management -> `BI-D964E2DA`
+- Founder Hub shared portfolio and governed Hive result intake -> `BI-D25A0C31`
+- Optional relay and routed-network reachability -> `BI-D43D3D76`
+- Dependencies: `BI-44AA45BF` depends on `BI-52D34506`; `BI-D964E2DA` depends on `BI-44AA45BF`; `BI-D25A0C31` depends on `BI-D964E2DA`; `BI-D43D3D76` depends on `BI-D25A0C31` and direct-link operational evidence.
+- Receipt: `cmrsu0l7x09j801pgkgzdun6x`
+
+The six live BacklogItems were revalidated through governed MCP before this
+receipt was recorded. Slice 5 is explicitly deferred, so no independently
+shippable successor remains only in Markdown. The dedicated
+`record_plan_backlog_coverage` tool is not yet present in this installation's
+live MCP tool list; the receipt therefore uses the governed `manual_check`
+compatibility path established by the coverage-enforcement rollout.
+
 ## Task 1: Establish protocol, relationship, projection, and Hive-boundary contracts
 
 **Completion:** Source implementation and source-local verification completed in the Slice 0 PR. No schema, endpoint, runtime, or UX surface changed.
