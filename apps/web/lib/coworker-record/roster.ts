@@ -9,7 +9,7 @@
 // RosterView without serialization hazards.
 
 import { prisma } from "@dpf/db";
-import { COWORKER_SLUG_TO_CANONICAL_AGENT_ID } from "@dpf/db/agent-identity";
+import { COWORKER_SLUG_TO_CANONICAL_AGENT_ID, resolveAgentIdentity } from "@dpf/db/agent-identity";
 import {
   PROFESSION_REGISTRY,
   findProfessionFamilyForAgentIdentity,
@@ -221,7 +221,21 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       agentId: agent.agentId,
       slugId: agent.slugId,
       name: agent.name,
-      displayName: agent.displayName,
+      // Resolve through agent-identity rather than trusting the persisted
+      // column (BI-29F07F46). Agent.displayName is a SNAPSHOT taken at seed
+      // time, so an identity correction only reached installs that happened to
+      // be re-seeded afterwards — which is why the roster kept showing
+      // "EA Architect" after the override was authored. Resolving at read time
+      // makes agent-identity.ts the single source of truth in fact and not just
+      // by intent, and self-heals every existing install with no data migration.
+      displayName: resolveAgentIdentity({
+        agentId: agent.agentId,
+        name: agent.name,
+        slugId: agent.slugId,
+        displayName: agent.displayName,
+        kind: agent.kind,
+        tier: agent.tier ? String(agent.tier) : undefined,
+      }).displayName,
       kind: agent.kind,
       tier: agent.tier,
       valueStream: agent.valueStream,
