@@ -9,6 +9,7 @@ order: 1
 - `/wiki`
 - `/wiki/[...slug]`
 - `/admin/wiki/lint`
+- `/coworker-decisions/decisions` and `/coworker-decisions/decisions/[interactionId]`
 - Founder-kernel pages, platform principles, entity notes, stances, heuristics, and source-backed knowledge
 
 ## Workflow
@@ -29,6 +30,14 @@ Coworkers can retrieve wiki context, propose edits, and use principles as govern
 WWMD uses the same wiki substrate for decision support. It retrieves relevant principles, compares candidate options against multiple dimensions, and returns a recommendation, arbitration, escalation, or deferral with confidence and sources attached. See [Autonomy, WWMD, and trusted coworker decisions](../../architecture/autonomy-and-wwmd.md).
 
 How much each coworker acts on its own — its proactivity — is set from your industry's risk posture and can be confirmed or adjusted per coworker. See [Coworker Proactivity](../ai-workforce/coworker-proactivity.md).
+
+## Reading The Decision Log
+
+The decision log at `/coworker-decisions/decisions` is the record of what your AI workforce actually decided, split into three tiers: **WWMD** (platform doctrine), **WWWD** (your business), and **WSID** (role craft). Open a row for the options weighed, the rationale, the principles that pulled which way, and whether a human still needs to resolve it.
+
+Each row is filed under **the gate that made the decision**, not the doctrine it happened to consult. This distinction matters when you are judging coverage: a role-craft (WSID) decision falls back to platform doctrine whenever that profession's corpus has nothing to say about the question, and it is still a WSID decision. Rows decided that way are marked as having used a fallback — read them as "the role decided, but not from its own craft yet", which is a signal to grow that profession's corpus rather than evidence the tier is working well.
+
+A tier reading **"never used"** means that gate has recorded nothing. Treat it as a question, not a conclusion: it can mean the gate genuinely is not exercised, or that nothing is wired to call it. Compare it against the **Consults by caller** panel on the same page — a coworker that never appears there has never consulted the kernel at all.
 
 ## What To Watch
 
