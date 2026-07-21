@@ -519,6 +519,54 @@ const RULES: ApplicabilityRule[] = [
     },
   },
   {
+    // Goods-custody operating model (warehousing-fulfilment archetypes). The
+    // custody-and-fulfilment provisioning value is the axis signal — the mirror
+    // of reservation-and-return, and distinct from a goods business that simply
+    // holds stock (wholesale-distribution owns what is on its racks; a 3PL does
+    // not).
+    name: "custody-and-fulfilment-warehousing",
+    evaluate: (axes) => {
+      if (axes.provisioning !== "custody-and-fulfilment") return [];
+
+      return [
+        {
+          key: "goods-custody",
+          applicability: "required",
+          reason:
+            "Custody operators hold stock they do not own and are liable for it — the ledger is per owning client, by location, lot, serial, and expiry.",
+          ownershipScopes: ["customer-account"],
+          isolation: "strict-customer-scope",
+        },
+        {
+          key: "warehouse-operations",
+          applicability: "required",
+          reason:
+            "Receive → put-away → pick → pack → despatch, plus cycle counting and dock appointments, is the operating loop being run.",
+          ownershipScopes: ["organization"],
+          transactionContexts: ["order"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "storage-and-handling-billing",
+          applicability: "recommended",
+          reason:
+            "Storage rent and handling are two meters on one account, on a rate card with minimums and accessorials; fulfilment-only operators may bill per order alone.",
+          ownershipScopes: ["customer-account"],
+          transactionContexts: ["billing-period"],
+          isolation: "strict-customer-scope",
+        },
+        {
+          key: "customer-sites",
+          applicability: "required",
+          reason:
+            "Goods are received from and despatched to specific client sites; the site is the address on the receipt and the BOL.",
+          ownershipScopes: ["customer-account", "customer-site"],
+          isolation: "strict-customer-scope",
+        },
+      ];
+    },
+  },
+  {
     name: "partner-channel-from-axes",
     evaluate: (axes, portfolios) => {
       const program = derivePartnerProgramProfile(axes, portfolios);

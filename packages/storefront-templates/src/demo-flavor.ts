@@ -222,6 +222,7 @@ export const CATEGORY_FLAVOR_DEFAULTS: Partial<Record<ArchetypeCategory, Pick<De
   "asset-rental": { notes: "Assets turn quickly, returns are inspected and back on the line, and nothing sits idle or overdue." },
   "security-services": { notes: "Every post and patrol is covered, incidents are logged and answered fast, and contracts renew on trust." },
   "hoa-property-management": { notes: "Requests are actioned, dues stay current, and the community sees the place well kept." },
+  "warehousing-fulfilment": { notes: "Goods booked in the day they land, stock counts that match the shelf, and every order out before cut-off." },
 };
 
 /** Resolve the default flavor for an archetype: its own entry merged over its

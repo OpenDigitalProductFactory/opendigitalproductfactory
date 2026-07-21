@@ -76,7 +76,13 @@ export type WorkspaceHomeComponentKey =
   | "patient-queue"
   | "retail-replenishment"
   | "coworker-handoffs"
-  | "shift-summary";
+  | "shift-summary"
+  // Warehousing & fulfilment. Distinct from `retail-replenishment` and
+  // `inventory-alerts`: those watch stock the business owns and needs to
+  // reorder; this watches count variances against a client's stock held in
+  // custody, where the discrepancy itself is the reportable event.
+  | "stock-accuracy"
+  | "dock-capacity";
 
 export type WorkspaceHomeDataRefKind = "projection" | "canonical-data" | "signal";
 

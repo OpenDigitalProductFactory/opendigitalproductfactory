@@ -25,7 +25,10 @@ export type OperationalValueStreamStageKey =
   | "trust-compliance"
   | "operate-improve"
   /** Rental/shared-asset only: the asset returns to the pool and is inspected. */
-  | "return-inspect";
+  | "return-inspect"
+  /** Goods-custody only: the customer's goods arrive, are checked in, and come
+   *  to rest in the facility before any outbound work happens. */
+  | "receive-store";
 
 export type CapacityUnitType =
   | "slot-hours"
@@ -38,7 +41,12 @@ export type CapacityUnitType =
   | "loan-processing-throughput"
   | "statutory-throughput"
   | "reusable-pooled-asset"
-  | "governance-cycle";
+  | "governance-cycle"
+  /** Custodial facility space — pallet positions, bin locations, cubic volume.
+   *  Distinct from `durable-stock` (stock the business owns and sells) and from
+   *  `physical-hard-cap` (seats/rooms): the constraint is racking and cube, and
+   *  the headline measure is utilisation against it. */
+  | "custodial-space";
 
 export type DemandSignature =
   | "steady"
@@ -95,6 +103,15 @@ const RETURN_INSPECT_SPEC: StageSpec = {
   order: 45, // between deliver (40) and settle (50)
 };
 
+const RECEIVE_STORE_SPEC: StageSpec = {
+  key: "receive-store",
+  label: "Receive & Store",
+  // Between qualify (30, the dock appointment) and deliver (40, pick/pack/
+  // despatch). Custody inverts the rental ordering: goods come to rest BEFORE
+  // the outbound work, where a rental asset returns AFTER it.
+  order: 35,
+};
+
 const CROSS_CUT_SPECS: StageSpec[] = [
   { key: "trust-compliance", label: "Trust & Compliance", order: 70 },
   { key: "operate-improve", label: "Operate & Improve", order: 80 },
@@ -113,6 +130,7 @@ const STAGE_CAPABILITY_MAP: Record<OperationalValueStreamStageKey, ArchetypeModu
   "trust-compliance": [],
   "operate-improve": ["integrations"],
   "return-inspect": ["rental-fleet", "rental-agreements"],
+  "receive-store": ["customer-estate", "service-operations"],
 };
 
 const STAGE_METRIC_MAP: Record<OperationalValueStreamStageKey, string[]> = {
@@ -125,6 +143,9 @@ const STAGE_METRIC_MAP: Record<OperationalValueStreamStageKey, string[]> = {
   "trust-compliance": ["obligations-status"],
   "operate-improve": ["backlog-throughput"],
   "return-inspect": ["asset-utilization", "turnaround", "overdue-returns"],
+  // dock-to-stock and inventory accuracy are the two the industry actually
+  // manages to; space utilisation is the capacity constraint behind them.
+  "receive-store": ["dock-to-stock", "inventory-accuracy", "space-utilization"],
 };
 
 // ── Category defaults (used only when axes do not set a commercial model) ─────
@@ -148,6 +169,8 @@ const CATEGORY_DEFAULT_COMMERCIAL_MODEL: Partial<Record<ArchetypeCategory, Comme
   // venues capture the ticket sale. Per-leaf axes still override this default.
   "media-production": "transactional",
   "live-events-venues": "transactional",
+  // Custody work runs on contract accounts against a rate card, not a sale.
+  "warehousing-fulfilment": "account-based-fees",
 };
 
 function resolveCommercialModel(a: ArchetypeDefinition): CommercialModel {
@@ -187,6 +210,9 @@ const CATEGORY_DEFAULT_DEMAND: Partial<Record<ArchetypeCategory, DemandSignature
   "media-production": "seasonal",
   // On-sale spikes and event dates make live-events demand event-driven.
   "live-events-venues": "event-driven",
+  // Contract volume arrives steadily; the client's own seasonality shows up as
+  // throughput variance inside a standing agreement, not as new demand.
+  "warehousing-fulfilment": "steady",
 };
 
 const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitType>> = {
@@ -210,6 +236,8 @@ const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitT
   "media-production": "billable-hours",
   // Venue and event capacity is a physical hard cap (seats / room).
   "live-events-venues": "physical-hard-cap",
+  // Racking, bin locations, and cube — the constraint a warehouse sells.
+  "warehousing-fulfilment": "custodial-space",
 };
 
 // ── Derivation ───────────────────────────────────────────────────────────────
@@ -235,9 +263,13 @@ function resolveLoadBearingStages(
   cm: CommercialModel,
   isRental: boolean,
   isDonation: boolean,
+  isCustody: boolean,
 ): OperationalValueStreamStageKey[] {
   if (isRental) return ["qualify"]; // reserve the right asset against a finite pool
   if (isDonation) return ["capture"]; // capture the gift; no purchase artefact downstream
+  // Custody is won or lost on the inbound: dock-to-stock and inventory accuracy
+  // determine whether every downstream pick is possible and correct.
+  if (isCustody) return ["receive-store"];
   switch (cm) {
     case "appointment-checkout":
       return ["qualify"];
@@ -304,9 +336,15 @@ export function deriveOperationalValueStream(archetype: ArchetypeDefinition): Op
   const commercialModel = resolveCommercialModel(archetype);
   const provisioning = archetype.activationProfile?.axes?.provisioning;
   const isRental = provisioning === "reservation-and-return";
+  const isCustody = provisioning === "custody-and-fulfilment";
   const isDonation = archetype.ctaType === "donation";
 
-  const loadBearingStageKeys = resolveLoadBearingStages(commercialModel, isRental, isDonation);
+  const loadBearingStageKeys = resolveLoadBearingStages(
+    commercialModel,
+    isRental,
+    isDonation,
+    isCustody,
+  );
   const trustGates = resolveTrustGates(archetype, isRental);
   const capacityUnit = resolveCapacityUnit(archetype, isRental, commercialModel);
   const demandSignature = isRental
@@ -319,6 +357,7 @@ export function deriveOperationalValueStream(archetype: ArchetypeDefinition): Op
   const specs: StageSpec[] = [
     ...PRIMARY_STAGE_SPECS,
     ...(isRental ? [RETURN_INSPECT_SPEC] : []),
+    ...(isCustody ? [RECEIVE_STORE_SPEC] : []),
     ...CROSS_CUT_SPECS,
   ].sort((x, y) => x.order - y.order);
 

@@ -108,4 +108,31 @@ export const ARCHETYPE_SUPPLY_MANIFEST: Partial<
       { name: "Consumables & Accessories", description: "Consumables and accessories sold alongside a rental." },
     ],
   },
+  "warehousing-fulfilment": {
+    suppliers: [
+      {
+        name: "Packaging & Consumables Supplier",
+        description:
+          "Cartons, pallets, stretch wrap, and labels. Consumed per order, so usage tracks despatch volume and is usually recharged to the client.",
+      },
+      {
+        name: "Materials Handling Equipment",
+        description:
+          "Forklifts, pallet trucks, and racking — bought or leased, with servicing. Availability caps how much can be moved in a shift.",
+      },
+      {
+        name: "Carriers & Parcel Networks",
+        description:
+          "Pallet networks and parcel carriers that collect outbound freight. Their cut-off times set the deadline every pick wave runs against.",
+      },
+      {
+        name: "WMS & Systems Vendor",
+        description:
+          "The warehouse management system and scanning hardware — the stock ledger of record, and where client integrations land.",
+      },
+    ],
+    // A 3PL sells custody and handling, not goods; the stock on its racks
+    // belongs to its clients and must never be projected as its own.
+    goods: [],
+  },
 };

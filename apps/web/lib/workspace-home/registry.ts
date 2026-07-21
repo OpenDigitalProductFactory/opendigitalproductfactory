@@ -38,6 +38,12 @@ const WORKSPACE_HOME_COMPONENT_KEYS = new Set<string>([
   "retail-replenishment",
   "coworker-handoffs",
   "shift-summary",
+  // Warehousing & fulfilment (2026-07-21 archetype). Kept in lockstep with
+  // WorkspaceHomeComponentKey in types.ts — the registry fails closed on an
+  // unknown key, so a profile referencing a key missing here breaks the
+  // production build at page-data collection, not at typecheck.
+  "stock-accuracy",
+  "dock-capacity",
 ]);
 
 const WORKSPACE_HOME_DATA_REF_KINDS = new Set(["projection", "canonical-data", "signal"]);

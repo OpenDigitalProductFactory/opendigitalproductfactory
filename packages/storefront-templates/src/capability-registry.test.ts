@@ -35,6 +35,9 @@ describe("capability registry", () => {
       "rental-fleet",
       "rental-agreements",
       "asset-pool",
+      "goods-custody",
+      "warehouse-operations",
+      "storage-and-handling-billing",
     ]);
   });
 

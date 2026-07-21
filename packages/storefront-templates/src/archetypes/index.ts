@@ -19,6 +19,7 @@ import { movingAndLogisticsArchetypes } from "./moving-and-logistics";
 import { securityServicesArchetypes } from "./security-services";
 import { mediaProductionArchetypes } from "./media-production";
 import { liveEventsVenuesArchetypes } from "./live-events-venues";
+import { warehousingFulfilmentArchetypes } from "./warehousing-fulfilment";
 
 export const ALL_ARCHETYPES = [
   ...healthcareWellnessArchetypes,
@@ -42,4 +43,5 @@ export const ALL_ARCHETYPES = [
   ...securityServicesArchetypes,
   ...mediaProductionArchetypes,
   ...liveEventsVenuesArchetypes,
+  ...warehousingFulfilmentArchetypes,
 ];

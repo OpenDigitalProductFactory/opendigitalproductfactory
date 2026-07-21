@@ -463,6 +463,28 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 
 ---
 
+### 6.22 Warehousing & Fulfilment — `third-party-logistics`, `ecommerce-fulfilment`, `cold-chain-storage`, `cross-dock-transload`
+
+> Added 2026-07-21. The goods-custody category: the operator takes goods it does **not** own into its facility and is paid to hold and handle them. Gated by the `custody-and-fulfilment` provisioning axis. Distinct from `asset-rental`'s `self-storage` (customer keeps the key; no custody, no handling), from `retail-goods`' `wholesale-distribution` (sells stock it owns), and from `moving-and-logistics` (custody is transient and in-transit, with no facility inventory of record). Design: [`docs/superpowers/specs/2026-07-21-warehousing-fulfilment-archetype-design.md`](../superpowers/specs/2026-07-21-warehousing-fulfilment-archetype-design.md).
+
+- **Value delivered:** a client's stock is held safely, counted accurately, and despatched correctly and on time — the client's working capital and their promise to their own customers both sit on the operator's racks.
+- **Commercial model:** `account-based-fees` — contract accounts invoiced monthly off a **rate card with two meters**: storage rent on space held (per pallet/bin per period) plus handling on work done (per receipt, pick, pack, or order), with monthly minimums and accessorials.
+- **Load-bearing stage:** **S4c Receive & Store** — the custody-only stage inserted between Qualify (the dock appointment) and Deliver (pick/pack/despatch). Custody is won or lost on the inbound: dock-to-stock and inventory accuracy determine whether every downstream pick is possible and correct.
+- **Distinctive stage:** goods come to rest *before* the outbound work, inverting the rental ordering (where the asset returns *after*). Stock is strictly segregated per owning client — one client's inventory must never surface in another's view.
+- **Trust gate:** goods-in-trust liability and insurance posture, honest count variances (flag a discrepancy rather than absorb it), and per-client data separation. Cold chain adds temperature-record integrity (GDP/GxP).
+- **Value-stream-critical assertions:** storage and handling render as separate revenue lines; the DOCK twin shows dock doors, racking, and pick waves rather than a sales floor; the receive-store stage appears in demand-by-stage; capacity reads as `custodial-space` (pallet positions/cube), not `durable-stock`.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `third-party-logistics` | Contract storage posture; pallet-in/pallet-out, bonded storage, and kitting/VAS. |
+| `ecommerce-fulfilment` | Order-centric: pick/pack per order, channel integrations, returns processing. |
+| `cold-chain-storage` | Temperature bands and continuous monitoring; compliance certification is the differentiator. |
+| `cross-dock-transload` | Near-zero dwell — dock-door time, not storage, is the constraint and the meter. |
+
+Related: `freight-brokerage` joins `moving-and-logistics` in the same change — the non-asset movement model (matches shipper to carrier, earns the spread, owns no trucks and takes no custody), so it is deliberately **not** dispatch-native and declares `sales-assisted`.
+
+---
+
 ## 7. Demand–capacity dynamics at the load-bearing stage
 
 The load-bearing stage (Section 6) is not only where the main transaction interface between stakeholders sits — it is also **where demand meets finite capacity.** That is not a coincidence: a stage is load-bearing precisely because the business lives or dies on its ability to match demand against a scarce resource there. Managing that match — *neither starving demand nor paying for idle capacity* — is the operator's hardest recurring decision, and it is where a typical operator most needs the platform's help.

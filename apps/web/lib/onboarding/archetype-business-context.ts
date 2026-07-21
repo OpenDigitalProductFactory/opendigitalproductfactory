@@ -254,6 +254,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our 'inventory' is trucks, fuel, packing materials, and the crew's time; the discipline is routing, load planning, and keeping vehicles and equipment road-ready. Driver hours and vehicle availability are the real constraints on what we can promise.",
   },
+  "warehousing-fulfilment": {
+    missionTheme:
+      "look after our clients' goods as if they were our own, and get every order out on time and correct",
+    businessModel:
+      "Contract accounts on a rate card: storage billed on the space held, handling billed on the work done. Accuracy and on-time despatch are what keep an account and win the next one.",
+    whoWeServe:
+      "We serve businesses that trust us to hold and handle stock they own. We are custodians, not owners — their inventory is their working capital and their promise to their own customers, and both sit on our racks.",
+    howWeDecide:
+      "We decide for accuracy first, then speed: a fast pick of the wrong item costs more than a slow one of the right one. We keep each client's stock and data strictly separate, count honestly, and flag a discrepancy rather than absorb it quietly.",
+    supplyChain:
+      "Our capacity is racking, dock doors, materials-handling equipment, and the hours of the people who work them; our consumables are packaging and pallets. Space and labour are the real constraints on what we can take on, and a booked-in receipt that is not put away is capacity we cannot sell.",
+  },
   "security-services": {
     missionTheme:
       "keep the people, property, and events entrusted to us safe",

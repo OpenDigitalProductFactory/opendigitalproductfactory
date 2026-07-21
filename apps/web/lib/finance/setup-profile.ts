@@ -17,6 +17,7 @@ const FINANCE_PROFILE_BY_ARCHETYPE_CATEGORY: Record<string, string> = {
   "software-platform": "software_platform",
   "media-production": "media_production",
   "live-events-venues": "live_events_venues",
+  "warehousing-fulfilment": "warehousing_fulfilment",
 };
 
 export function financeProfileSlugFromCategory(category: string | null | undefined): string {

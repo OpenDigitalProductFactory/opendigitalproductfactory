@@ -3,6 +3,7 @@ import {
   getCapabilityApplicability,
   readActivationProfile,
 } from "../activation-profile";
+import { needsFieldDispatch } from "../field-dispatch";
 import { ALL_ARCHETYPES } from "./index";
 
 describe("archetype catalog", () => {
@@ -333,14 +334,23 @@ describe("archetype catalog", () => {
       "auto-glass", "locksmith", "mobile-detailing", "mobile-mechanic", "mobile-tire", "roadside-assistance",
     ]);
     expect(moving.map((a) => a.archetypeId).sort()).toEqual([
-      "courier-delivery", "junk-removal", "last-mile-freight", "moving-company",
+      "courier-delivery", "freight-brokerage", "junk-removal", "last-mile-freight", "moving-company",
     ]);
     expect(security.map((a) => a.archetypeId).sort()).toEqual([
       "alarm-cctv-install", "guard-patrol",
     ]);
 
-    // Every leaf in the new categories derives field dispatch from its axes.
-    for (const a of [...auto, ...moving, ...security]) {
+    // `freight-brokerage` sits in the moving category but is deliberately NOT
+    // dispatch-native: a non-asset broker sells from a desk and routes nobody's
+    // vehicles, so it declares `sales-assisted` and derives field dispatch off.
+    // It is excluded from the dispatch-axes assertion by design, not oversight.
+    const dispatchNativeMoving = moving.filter((a) => a.archetypeId !== "freight-brokerage");
+    expect(needsFieldDispatch(readActivationProfile(
+      moving.find((a) => a.archetypeId === "freight-brokerage")!.activationProfile,
+    )!.axes)).toBe(false);
+
+    // Every dispatch-native leaf in the new categories derives dispatch from its axes.
+    for (const a of [...auto, ...dispatchNativeMoving, ...security]) {
       expect(a.activationProfile?.axes?.form, `${a.archetypeId} form`).toBe("services");
       expect(a.activationProfile?.axes?.delivery, `${a.archetypeId} delivery`).toBe("physical");
       expect(a.activationProfile?.axes?.consumptionChannel, `${a.archetypeId} channel`).toBe("onsite-plus-portal");

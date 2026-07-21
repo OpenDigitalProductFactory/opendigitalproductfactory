@@ -231,6 +231,7 @@ const TEMPLATE_ROLES: Record<TwinTemplate, string[]> = {
   STORE: ["Store Manager", "Sales Associate", "Stock Lead"],
   VENUE: ["Event Manager", "Coordinator", "Box Office"],
   COUNTER: ["Case Officer", "Senior Reviewer", "Intake Clerk"],
+  DOCK: ["Warehouse Manager", "Inventory Controller", "Picker"],
   TENANTS: ["Account Manager", "Success Lead", "Onboarding Specialist"],
   PIPELINE: ["Partner", "Senior Associate", "Associate"],
   PROGRAMS: ["Program Director", "Program Manager", "Volunteer Coordinator"],

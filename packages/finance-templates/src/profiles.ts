@@ -49,6 +49,16 @@ const AD_HOC_INVOICE_PATTERN: BillingPatternProfile = {
   recurringBillingApplicability: "optional",
 };
 
+// Matches what `deriveBillingPatternProfile` produces for the
+// `account-based-fees` commercial model — a standing client account invoiced in
+// arrears off a rate card, rather than a charge taken at the point of work.
+const RETAINER_PATTERN: BillingPatternProfile = {
+  primaryPaymentPattern: "retainer",
+  supportedPaymentPatterns: ["retainer", "ad-hoc-invoice"],
+  invoiceExecutionMode: "prepared-not-prescribed",
+  recurringBillingApplicability: "recommended",
+};
+
 const STATUTORY_FEES_PATTERN: BillingPatternProfile = {
   primaryPaymentPattern: "ad-hoc-invoice",
   supportedPaymentPatterns: ["ad-hoc-invoice", "recurring-agreement"],
@@ -619,6 +629,47 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
       { code: "5010", name: "Production & Staging", type: "expense" },
       { code: "5020", name: "Marketing & Ticketing Fees", type: "expense" },
       { code: "5030", name: "Staffing & Security", type: "expense" },
+    ],
+  },
+
+  warehousing_fulfilment: {
+    archetypeCategory: "warehousing-fulfilment",
+    displayName: "Warehousing & Fulfilment",
+    defaultPaymentTerms: "Net 30",
+    defaultCurrency: "GBP",
+    vatRegistered: true,
+    defaultTaxRate: 20,
+    dunningEnabled: true,
+    dunningStyle: "standard",
+    // Contract accounts invoiced monthly off a rate card — storage accrual plus
+    // handling activity — so periods are prepared, not charged at the point of
+    // work.
+    billingPatternProfile: RETAINER_PATTERN,
+    invoiceTemplateStyle: "professional",
+    expenseCategories: [
+      "Warehouse Rent & Rates",
+      "Warehouse Labour",
+      "Materials Handling Equipment",
+      "Packaging & Consumables",
+      "Outbound Carriage",
+      "Utilities & Refrigeration",
+      "Insurance & Goods-in-Trust Cover",
+      "WMS & Systems",
+    ],
+    purchaseOrdersEnabled: true,
+    // The two meters are separate revenue lines on purpose: storage is rent on
+    // space, handling is paid work, and a 3PL manages their margins apart.
+    chartOfAccountsSeed: [
+      { code: "4000", name: "Storage Revenue", type: "revenue" },
+      { code: "4010", name: "Handling Revenue", type: "revenue" },
+      { code: "4020", name: "Value-Added Services Revenue", type: "revenue" },
+      { code: "4030", name: "Carriage Recharged", type: "revenue" },
+      { code: "4040", name: "Accessorial Charges", type: "revenue" },
+      { code: "5000", name: "Warehouse Rent & Rates", type: "expense" },
+      { code: "5010", name: "Warehouse Labour", type: "expense" },
+      { code: "5020", name: "Outbound Carriage", type: "expense" },
+      { code: "5030", name: "Packaging & Consumables", type: "expense" },
+      { code: "5040", name: "Utilities & Refrigeration", type: "expense" },
     ],
   },
 };
