@@ -1,0 +1,26 @@
+# Archetype completeness baseline — categories NOT yet meeting the Tier-2
+# provisioning-depth floor (>=1 WSID corpus page AND a recorded coworker
+# decision). This list may only SHRINK: a new archetype must meet the floor
+# and is never added here; a grandfathered one that gains corpus + a decision
+# is removed on the next --update. Do not park new work here.
+asset-rental
+automotive-services
+banking-financial-services
+beauty-personal-care
+education-training
+fitness-recreation
+food-hospitality
+healthcare-wellness
+hoa-property-management
+live-events-venues
+media-production
+moving-and-logistics
+nonprofit-community
+pet-services
+professional-services
+public-sector
+real-estate-construction
+retail-goods
+security-services
+software-platform
+trades-maintenance

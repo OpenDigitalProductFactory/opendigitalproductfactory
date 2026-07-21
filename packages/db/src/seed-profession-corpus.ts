@@ -973,6 +973,53 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "weekly caps; hours logged via logbook or ELD.",
     retrievedAt: "2026-06-16",
   },
+  // warehousing-fulfilment: the custody-and-fulfilment craft — receiving
+  // discipline, goods-in-trust liability, cold-chain integrity, bonded control.
+  "wikipedia/warehouse-management-system": {
+    sourceType: "reference",
+    title: "Warehouse management system",
+    url: "https://en.wikipedia.org/wiki/Warehouse_management_system",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "A WMS manages inbound receiving, put-away, storage location, picking, and " +
+      "despatch; dock-to-stock — the elapsed time from a receipt hitting the dock " +
+      "to it being put away and available to pick — is a core receiving KPI.",
+    retrievedAt: "2026-07-21",
+  },
+  "wikipedia/warehouse-receipt": {
+    sourceType: "reference",
+    title: "Warehouse receipt",
+    url: "https://en.wikipedia.org/wiki/Warehouse_receipt",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "A warehouse receipt is a document of title issued by a warehouse operator " +
+      "acknowledging custody of a depositor's goods; under a bailment the operator " +
+      "does not own the goods but is liable for their safekeeping (UCC Article 7 " +
+      "in the US).",
+    retrievedAt: "2026-07-21",
+  },
+  "wikipedia/good-distribution-practice": {
+    sourceType: "reference",
+    title: "Good distribution practice",
+    url: "https://en.wikipedia.org/wiki/Good_distribution_practice",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "GDP governs storage and distribution of medicinal products: the cold chain " +
+      "must be maintained and continuously monitored, with temperature excursions " +
+      "recorded and investigated, so product integrity is provable at handover.",
+    retrievedAt: "2026-07-21",
+  },
+  "wikipedia/bonded-warehouse": {
+    sourceType: "reference",
+    title: "Bonded warehouse",
+    url: "https://en.wikipedia.org/wiki/Bonded_warehouse",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "A bonded warehouse stores imported goods with duty and import VAT " +
+      "suspended until the goods are released; the operator holds a customs bond " +
+      "and must keep auditable records, and duty falls due on release for home use.",
+    retrievedAt: "2026-07-21",
+  },
 
   // ── Jurisdiction-basis exemplars (WSID regional-basis model) ──
   // global basis: PCI DSS applies wherever cards are handled (card-brand

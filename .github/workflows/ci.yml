@@ -314,6 +314,28 @@ jobs:
       - name: Run guard
         run: node scripts/check-module-size.mjs
 
+  archetype-completeness-guard:
+    name: Archetype Completeness Guard
+    runs-on: ubuntu-latest
+    # The archetype-side equivalent of the coworker conformance gate. A new
+    # business archetype must not ship the template substrate alone and forget
+    # its WSID corpus + coworker decision (as warehousing-fulfilment did before
+    # backfill). Two tiers: structural presence blocks ALL categories; the
+    # provisioning-depth floor (>=1 corpus page + a recorded coworker decision)
+    # hard-blocks NEW categories while the pre-existing gaps ratchet down from
+    # scripts/archetype-completeness-baseline.txt. Skill: dpf-add-archetype.
+    # Spec: docs/superpowers/specs/2026-07-21-archetype-provisioning-playbook-design.md
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Gate logic unit tests
+        run: node --test scripts/check-archetype-completeness.test.mjs
+      - name: Run guard
+        run: node scripts/check-archetype-completeness.mjs
+
   finding-substrate-guard:
     name: Finding Substrate Guard
     runs-on: ubuntu-latest

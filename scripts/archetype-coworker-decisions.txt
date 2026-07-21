@@ -1,0 +1,15 @@
+# Recorded coworker decision per archetype category — dimension 3 of the
+# archetype provisioning playbook (docs/superpowers/specs/2026-07-21-archetype-
+# provisioning-playbook-design.md). Every NEW archetype must record a decision
+# here; the completeness gate requires it. Format, one per line:
+#
+#   <category>\t<disposition>
+#
+# disposition ::= seeded:<agentId>      # a COWORKER_AGENT_SEEDS entry serves it
+#               | extends:<agentId>     # an existing coworker serves it (say why in the design doc)
+#               | new-planned:<BI-id>   # a dedicated coworker is warranted and filed for the establish_coworker lifecycle
+#
+# Grandfathered categories (in archetype-completeness-baseline.txt) are exempt
+# until their corpus lands; they do not need a line here yet.
+
+warehousing-fulfilment	new-planned:BI-A94DA462
