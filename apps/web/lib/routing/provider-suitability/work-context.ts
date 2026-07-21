@@ -82,14 +82,28 @@ function cloneProfile(profile: AiWorkloadDataProfile): AiWorkloadDataProfile {
   };
 }
 
+// BI-4C8F9E2A — the parameter is deliberately NOT named `workloadClass`, and the
+// property below is deliberately written `workloadClass: hintWorkloadClass`
+// rather than shorthand. Turbopack's minifier inlines this function into its sole
+// caller — `classes.map((workloadClass) => profileFromHint(workloadClass, …))` —
+// renames that map parameter to a single letter, but then FAILS to rewrite an
+// object-shorthand `{ workloadClass }` whose value was that renamed parameter,
+// emitting a bare `{ workloadClass }` that references nothing. The result is a
+// runtime `ReferenceError: workloadClass is not defined` that fires on EVERY
+// routed-phase route (plan / design-review / plan-review), which
+// resolve_model_selection then mislabels "No AI providers are configured". The
+// bug exists ONLY in the minified production bundle — source, typecheck, and unit
+// tests are all clean — so nothing but a built-bundle check catches it. Giving the
+// parameter a distinct name and writing the property explicitly denies the
+// minifier the shorthand it mishandles. Do not "simplify" this back to shorthand.
 function profileFromHint(
-  workloadClass: AiWorkloadClassKey,
+  hintWorkloadClass: AiWorkloadClassKey,
   activity: ActivityContract,
   classificationKnown: boolean,
 ): AiWorkloadDataProfile {
   const governed = activity.governedData;
   const base = deriveAiWorkloadDataProfile({
-    workloadClass,
+    workloadClass: hintWorkloadClass,
     classificationKnown,
     applicableRegulationIds: governed?.applicableRegulationIds,
     processingActivityId: governed?.processingActivityId,
