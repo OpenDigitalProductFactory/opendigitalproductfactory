@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -30,7 +32,11 @@ test("Bash and PowerShell PKI bootstraps expose the same safe lifecycle", async 
 
   for (const source of [shell, powershell]) {
     assert.match(source, /authority/i);
+    assert.match(source, /issue-join/i);
     assert.match(source, /join/i);
+    assert.match(source, /DPF_ORGANIZATION_JOIN_V1/);
+    assert.match(source, /expires/i);
+    assert.match(source, /intended/i);
     assert.match(source, /fingerprint/i);
     assert.match(source, /root_ca\.crt/);
     assert.match(source, /authority\.crt/);
@@ -47,6 +53,107 @@ test("Bash and PowerShell PKI bootstraps expose the same safe lifecycle", async 
   assert.doesNotMatch(powershell, /ConvertFrom-Json -AsHashtable|ForEach-Object -Parallel/);
 });
 
+test("join packages are short-lived, intended-peer-bound, and never require a CA private key", async () => {
+  const [shell, powershell] = await Promise.all([
+    read("scripts/bootstrap-organization-pki.sh"),
+    read("scripts/bootstrap-organization-pki.ps1"),
+  ]);
+
+  for (const source of [shell, powershell]) {
+    assert.match(source, /package_id/i);
+    assert.match(source, /ca_url/i);
+    assert.match(source, /root_fingerprint/i);
+    assert.match(source, /intended_hostname/i);
+    assert.match(source, /expires_at/i);
+    assert.match(source, /enrollment_token/i);
+    assert.match(source, /15m|900/);
+    assert.doesNotMatch(source, /root_ca\.key[^\n]*(?:package|join)/i);
+  }
+});
+
+test("Bash join rejects an expired package before Docker is invoked", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dpf-join-expired-"));
+  const packagePath = join(directory, "expired.dpfjoin");
+  const script = new URL("../bootstrap-organization-pki.sh", import.meta.url).pathname;
+
+  try {
+    await writeFile(packagePath, [
+      "DPF_ORGANIZATION_JOIN_V1",
+      "package_id=0123456789abcdef0123456789abcdef",
+      "ca_url=https://192.168.0.10:9000",
+      `root_fingerprint=${"a".repeat(64)}`,
+      "intended_hostname=peer.local",
+      "intended_sans=192.168.0.20",
+      "expires_at=1",
+      "enrollment_token=fixture-enrollment-token-expired",
+      "",
+    ].join("\n"), { mode: 0o600 });
+    await chmod(packagePath, 0o600);
+
+    const result = spawnSync("bash", [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    assert.equal(result.status, 77);
+    assert.match(result.stderr, /expired/i);
+    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Bash join rejects a package intended for a different installation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dpf-join-peer-"));
+  const packagePath = join(directory, "wrong-peer.dpfjoin");
+  const script = new URL("../bootstrap-organization-pki.sh", import.meta.url).pathname;
+
+  try {
+    await writeFile(packagePath, [
+      "DPF_ORGANIZATION_JOIN_V1",
+      "package_id=0123456789abcdef0123456789abcdef",
+      "ca_url=https://192.168.0.10:9000",
+      `root_fingerprint=${"a".repeat(64)}`,
+      "intended_hostname=other.local",
+      "intended_sans=192.168.0.20",
+      `expires_at=${Math.floor(Date.now() / 1000) + 900}`,
+      "enrollment_token=fixture-enrollment-token-wrong-peer",
+      "",
+    ].join("\n"), { mode: 0o600 });
+    await chmod(packagePath, 0o600);
+
+    const result = spawnSync("bash", [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    assert.equal(result.status, 77);
+    assert.match(result.stderr, /intended for another installation/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Bash join rejects a public CA origin before Docker is invoked", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dpf-join-public-ca-"));
+  const packagePath = join(directory, "public-ca.dpfjoin");
+  const script = new URL("../bootstrap-organization-pki.sh", import.meta.url).pathname;
+
+  try {
+    await writeFile(packagePath, [
+      "DPF_ORGANIZATION_JOIN_V1",
+      "package_id=0123456789abcdef0123456789abcdef",
+      "ca_url=https://example.com:9000",
+      `root_fingerprint=${"a".repeat(64)}`,
+      "intended_hostname=peer.local",
+      "intended_sans=192.168.0.20",
+      `expires_at=${Math.floor(Date.now() / 1000) + 900}`,
+      "enrollment_token=fixture-enrollment-token-public-ca",
+      "",
+    ].join("\n"), { mode: 0o600 });
+    await chmod(packagePath, 0o600);
+
+    const result = spawnSync("bash", [script, "--mode", "join", "--join-package", packagePath], { encoding: "utf8" });
+    assert.equal(result.status, 77);
+    assert.match(result.stderr, /private or local/i);
+    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("PKI bootstrap refuses silent CA replacement and never prints enrollment secrets", async () => {
   const [shell, powershell] = await Promise.all([
     read("scripts/bootstrap-organization-pki.sh"),
@@ -60,6 +167,16 @@ test("PKI bootstrap refuses silent CA replacement and never prints enrollment se
     powershell,
     /Write-(?:Host|Output)[^\n]*(?:\$enrollmentToken|\$PasswordFile)/i,
   );
+});
+
+test("the organization CA server certificate includes operator-supplied private SANs", async () => {
+  const [shell, powershell] = await Promise.all([
+    read("scripts/bootstrap-organization-pki.sh"),
+    read("scripts/bootstrap-organization-pki.ps1"),
+  ]);
+
+  assert.match(shell, /DPF_PKI_DNS_NAMES="\$HOSTNAME_VALUE,\$SANS,/);
+  assert.match(powershell, /DPF_PKI_DNS_NAMES[^\n]*\$San/);
 });
 
 test("Bash bootstrap rejects public binds and argument injection before Docker", () => {

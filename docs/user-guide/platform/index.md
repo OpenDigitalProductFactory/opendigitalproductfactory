@@ -48,6 +48,16 @@ until an authorized operator independently approves the connection on both
 installations. The matching code is only a visual check; it is never a password
 or bearer credential.
 
+When the second installation does not yet trust the organization's private
+HTTPS authority, DPF support can create a private `.dpfjoin` file for that one
+installation. Move the file to the joining computer within 15 minutes and let
+the DPF installer apply it. The file carries the public-root fingerprint and a
+one-time enrollment authority; it never carries the organization's CA private
+key. It works only for the named installation and is removed after successful
+use. This establishes certificate trust only—the two Connections screens still
+show the matching code and still require independent approval before any demand
+is shared.
+
 If the candidate uses HTTP, its certificate cannot be verified, or discovery is
 unavailable, use the invitation controls on the same page. Never bypass the TLS
 warning: issue the one-time invitation on one installation and enter it with the

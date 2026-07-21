@@ -1,14 +1,16 @@
 # PowerShell 5.1-compatible organization PKI bootstrap for Windows.
 [CmdletBinding()]
 param(
-    [ValidateSet("authority", "join")][string]$Mode = "authority",
-    [Parameter(Mandatory)][string]$Hostname,
+    [ValidateSet("authority", "issue-join", "join")][string]$Mode = "authority",
+    [string]$Hostname,
     [string[]]$San = @(),
     [string]$OutDir = (Join-Path $env:USERPROFILE ".dpf\pki"),
     [string]$BindAddress = "127.0.0.1",
     [string]$CaUrl,
     [string]$Fingerprint,
     [string]$TokenFile,
+    [string]$JoinPackage,
+    [string]$PackageOutput,
     [string]$OrganizationName = "DPF Organization CA",
     [switch]$NoStartTls
 )
@@ -23,7 +25,49 @@ $script:PasswordFileEffective = $PasswordFile
 $AuthorityCert = Join-Path $OutDir "authority.crt"
 $AuthorityKey = Join-Path $OutDir "authority.key"
 $Caddyfile = Join-Path $OutDir "Caddyfile"
+$PackageId = $null
+$PackageToken = $null
 
+if ($Mode -eq "join" -and $JoinPackage) {
+    if (-not (Test-Path -LiteralPath $JoinPackage -PathType Leaf)) { throw "Join package was not found" }
+    $tokenAcl = & icacls $JoinPackage
+    if ($tokenAcl -match "Everyone|BUILTIN\\Users") { throw "Join package must be private" }
+    $lines = [IO.File]::ReadAllLines($JoinPackage)
+    if ($lines.Count -lt 2 -or $lines[0].TrimEnd("`r") -ne "DPF_ORGANIZATION_JOIN_V1") { throw "Join package version is not supported" }
+    $fields = @{}
+    foreach ($line in $lines[1..($lines.Count - 1)]) {
+        $clean = $line.TrimEnd("`r")
+        if (-not $clean) { continue }
+        $separator = $clean.IndexOf('=')
+        if ($separator -lt 1) { throw "Join package contains a malformed field" }
+        $key = $clean.Substring(0, $separator)
+        $value = $clean.Substring($separator + 1)
+        if ($fields.ContainsKey($key)) { throw "Join package contains duplicate fields" }
+        if ($key -notin @("package_id", "ca_url", "root_fingerprint", "intended_hostname", "intended_sans", "expires_at", "enrollment_token")) {
+            throw "Join package contains an unknown field"
+        }
+        $fields[$key] = $value
+    }
+    foreach ($required in @("package_id", "ca_url", "root_fingerprint", "intended_hostname", "expires_at", "enrollment_token")) {
+        if (-not $fields.ContainsKey($required) -or -not $fields[$required]) { throw "Join package is incomplete" }
+    }
+    if ($fields.package_id -notmatch '^[a-f0-9]{32}$') { throw "Join package id is invalid" }
+    if ($fields.root_fingerprint -notmatch '^[A-Fa-f0-9]{64}$') { throw "Join package root fingerprint is invalid" }
+    if ($fields.intended_hostname -notmatch '^[A-Za-z0-9._:-]+$') { throw "Join package intended peer is invalid" }
+    if ($fields.expires_at -notmatch '^[0-9]{1,12}$') { throw "Join package expiry is invalid" }
+    if ($fields.enrollment_token -notmatch '^[A-Za-z0-9._-]+$') { throw "Join package enrollment authority is invalid" }
+    $nowEpoch = [int64]([DateTime]::UtcNow - [DateTime]'1970-01-01').TotalSeconds
+    if ([int64]$fields.expires_at -le $nowEpoch) { throw "Join package has expired" }
+    if ($Hostname -and $Hostname -ne $fields.intended_hostname) { throw "Join package is intended for another installation" }
+    $Hostname = $fields.intended_hostname
+    $San = if ($fields.intended_sans) { @($fields.intended_sans.Split(',') | Where-Object { $_ }) } else { @() }
+    $CaUrl = $fields.ca_url
+    $Fingerprint = $fields.root_fingerprint
+    $PackageId = $fields.package_id
+    $PackageToken = $fields.enrollment_token
+}
+
+if (-not $Hostname) { throw "Hostname is required" }
 if ($Hostname -notmatch '^[A-Za-z0-9._:-]+$') { throw "Hostname contains unsupported characters" }
 foreach ($name in $San) {
     if ($name -notmatch '^[A-Za-z0-9._:-]+$') { throw "SAN contains unsupported characters" }
@@ -35,6 +79,34 @@ if (-not [Net.IPAddress]::TryParse($BindAddress, [ref]$parsedBind) -or $parsedBi
 $octets = $BindAddress.Split('.') | ForEach-Object { [int]$_ }
 $isPrivate = $octets[0] -eq 127 -or $octets[0] -eq 10 -or ($octets[0] -eq 192 -and $octets[1] -eq 168) -or ($octets[0] -eq 172 -and $octets[1] -ge 16 -and $octets[1] -le 31)
 if (-not $isPrivate) { throw "BindAddress must be a private IPv4 address or loopback" }
+
+$parsedCaUrl = $null
+if ($CaUrl) {
+    if (-not [Uri]::TryCreate($CaUrl, [UriKind]::Absolute, [ref]$parsedCaUrl) -or
+        $parsedCaUrl.Scheme -ne "https" -or $parsedCaUrl.UserInfo -or
+        $parsedCaUrl.AbsolutePath -ne "/" -or $parsedCaUrl.Query -or $parsedCaUrl.Fragment) {
+        throw "CaUrl must be an origin-only HTTPS URL"
+    }
+    $privateCaHost = $false
+    $caAddress = $null
+    if ([Net.IPAddress]::TryParse($parsedCaUrl.Host, [ref]$caAddress) -and $caAddress.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork) {
+        $caOctets = $caAddress.GetAddressBytes()
+        $privateCaHost = $caOctets[0] -eq 127 -or $caOctets[0] -eq 10 -or
+            ($caOctets[0] -eq 192 -and $caOctets[1] -eq 168) -or
+            ($caOctets[0] -eq 172 -and $caOctets[1] -ge 16 -and $caOctets[1] -le 31)
+    } else {
+        $caHost = $parsedCaUrl.Host.ToLowerInvariant()
+        $privateCaHost = $caHost -eq "localhost" -or $caHost -eq "host.docker.internal" -or
+            $caHost.EndsWith(".local") -or $caHost.EndsWith(".internal")
+    }
+    if (-not $privateCaHost) { throw "CaUrl must name a private or local HTTPS authority" }
+}
+if ($Mode -eq "issue-join" -and (-not $CaUrl -or -not $PackageOutput)) {
+    throw "issue-join mode requires CaUrl and PackageOutput"
+}
+if ($Mode -eq "issue-join" -and (Test-Path -LiteralPath $PackageOutput)) {
+    throw "Refusing to overwrite an existing join package"
+}
 
 function Invoke-DpfPkiCompose {
     param([Parameter(Mandatory)][string[]]$Arguments)
@@ -50,7 +122,7 @@ function Invoke-DpfPkiCompose {
         $env:DPF_PKI_PASSWORD_FILE = $script:PasswordFileEffective
         $env:DPF_PKI_TRUST_BUNDLE = $RootCert
         $env:DPF_PKI_BIND_ADDRESS = $BindAddress
-        $env:DPF_PKI_DNS_NAMES = "$Hostname,$BindAddress,localhost,127.0.0.1"
+        $env:DPF_PKI_DNS_NAMES = ((@($Hostname) + $San + @($BindAddress, "localhost", "127.0.0.1")) | Where-Object { $_ }) -join ","
         $env:DPF_PKI_NAME = $OrganizationName
         $env:DPF_TLS_DIR = $OutDir
         & docker compose --project-directory $RepoRoot -f (Join-Path $RepoRoot "docker-compose.yml") -f (Join-Path $RepoRoot "docker-compose.pki.yml") @Arguments
@@ -69,6 +141,15 @@ function Invoke-DpfPkiCompose {
 if (-not (Get-Command docker.exe -ErrorAction SilentlyContinue)) { throw "Docker is required" }
 New-Item -ItemType Directory -Force -Path $OutDir, (Join-Path $OutDir "secrets") | Out-Null
 
+if ($Mode -eq "join" -and $JoinPackage) {
+    $TokenFile = Join-Path $OutDir "secrets\.join-token-$PackageId"
+    [IO.File]::WriteAllText($TokenFile, "$PackageToken`n", (New-Object Text.UTF8Encoding($false)))
+    $PackageToken = $null
+    & icacls $TokenFile /inheritance:r /grant:r "$env:USERNAME`:F" 2>&1 | Out-Null
+}
+
+$JoinSucceeded = $false
+try {
 if ($Mode -eq "authority") {
     if (-not (Test-Path -LiteralPath $PasswordFile)) {
         $bytes = New-Object byte[] 32
@@ -115,6 +196,36 @@ if ($Mode -eq "authority") {
     if ($LASTEXITCODE -ne 0) { throw "organization_pki_leaf_issue_failed" }
     Invoke-DpfPkiCompose -Arguments @("cp", "step-ca:/home/step/certs/dpf-portal.crt", $AuthorityCert)
     Invoke-DpfPkiCompose -Arguments @("cp", "step-ca:/home/step/secrets/dpf-portal.key", $AuthorityKey)
+} elseif ($Mode -eq "issue-join") {
+    if (-not (Test-Path -LiteralPath $PasswordFile)) { throw "Organization CA is not initialized on this installation" }
+    Invoke-DpfPkiCompose -Arguments @("up", "-d", "step-ca")
+    Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "health", "--ca-url", "https://127.0.0.1:9000", "--root", "/home/step/certs/root_ca.crt") | Out-Null
+    $Fingerprint = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "certificate", "fingerprint", "/home/step/certs/root_ca.crt")).Trim()
+    $sanArguments = @("--san", $Hostname)
+    foreach ($name in $San) { $sanArguments += @("--san", $name) }
+    $tokenArguments = @("exec", "-T", "step-ca", "step", "ca", "token", $Hostname) + $sanArguments + @("--not-after", "15m", "--provisioner", "dpf-installer", "--password-file", "/run/secrets/step-ca-password")
+    $enrollmentToken = (Invoke-DpfPkiCompose -Arguments $tokenArguments).Trim()
+    $bytes = New-Object byte[] 16
+    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $package_id = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+    $expires_at = [int64]([DateTime]::UtcNow - [DateTime]'1970-01-01').TotalSeconds + 900
+    $intendedSans = $San -join ','
+    $package = @(
+        "DPF_ORGANIZATION_JOIN_V1",
+        "package_id=$package_id",
+        "ca_url=$CaUrl",
+        "root_fingerprint=$Fingerprint",
+        "intended_hostname=$Hostname",
+        "intended_sans=$intendedSans",
+        "expires_at=$expires_at",
+        "enrollment_token=$enrollmentToken"
+    ) -join "`n"
+    [IO.File]::WriteAllText($PackageOutput, "$package`n", (New-Object Text.UTF8Encoding($false)))
+    & icacls $PackageOutput /inheritance:r /grant:r "$env:USERNAME`:F" 2>&1 | Out-Null
+    $enrollmentToken = $null
+    Write-Host "Organization join package created at $PackageOutput."
+    Write-Host "It expires in 15 minutes and is intended only for $Hostname."
+    exit 0
 } else {
     if (-not $CaUrl -or -not $Fingerprint) { throw "join mode requires CaUrl and Fingerprint" }
     if (-not $CaUrl.StartsWith("https://", [StringComparison]::OrdinalIgnoreCase)) { throw "join mode requires an HTTPS CaUrl" }
@@ -155,7 +266,16 @@ if (-not $NoStartTls) {
     Invoke-DpfPkiCompose -Arguments @("-f", (Join-Path $RepoRoot "docker-compose.tls.yml"), "up", "-d", "portal", "portal-tls")
     Invoke-DpfPkiCompose -Arguments @("-f", (Join-Path $RepoRoot "docker-compose.tls.yml"), "restart", "portal-tls") | Out-Null
 }
+$JoinSucceeded = $Mode -eq "join"
 
 Write-Host "Organization HTTPS is configured for $Hostname."
 Write-Host "Public root fingerprint: $Fingerprint"
 Write-Host "PKI recovery directory: $OutDir (protect and back up with host secrets)."
+} finally {
+    if ($TokenFile -and $JoinPackage -and (Test-Path -LiteralPath $TokenFile)) {
+        Remove-Item -LiteralPath $TokenFile -Force -ErrorAction SilentlyContinue
+    }
+    if ($JoinSucceeded -and $JoinPackage -and (Test-Path -LiteralPath $JoinPackage)) {
+        Remove-Item -LiteralPath $JoinPackage -Force -ErrorAction SilentlyContinue
+    }
+}

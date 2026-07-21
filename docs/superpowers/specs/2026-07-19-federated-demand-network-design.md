@@ -549,3 +549,21 @@ plumbing, not federation authorization: nearby candidate validation, expiring
 invitation authority, matching-code dual approval, `FederationLink`, and
 projection review remain mandatory. Public or operator-provided corporate PKI
 remains valid for cross-organization reseller/customer/founder relationships.
+
+Resolved for the organization bootstrap transfer: the versioned
+`DPF_ORGANIZATION_JOIN_V1` package is a private, expiring installer artifact,
+not a federation record and not a second trust model. It contains only a random
+package id, origin-only private HTTPS CA URL, public-root fingerprint, intended
+hostname/SAN set, epoch expiry, and short-lived Step CA enrollment authority.
+It contains no CA private key and creates no `FederationLink`; matching-code
+dual approval remains a separate mandatory step. The package is accepted only
+by the intended installation, through strict closed-field parsing and private
+file permissions, and is removed after successful consumption.
+
+Resolved for portal automation: governed decision `DI-E461878DCB73` selected
+the general mutating Edge-action control plane over a dedicated privileged
+localhost broker. The portal will not mount the Docker socket, CA password, or
+CA configuration. Organization package issue/import action types cannot be
+enabled until the existing remote-action threat model's machine-bound trust,
+signed single-use dispatch, scope/allow-list, explicit approval/change,
+rollback, and independent health-evidence gates are implemented.
