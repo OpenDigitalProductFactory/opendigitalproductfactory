@@ -263,3 +263,92 @@ describe("runBacklogTriageDrain", () => {
     expect(applyBuild).toHaveBeenCalledWith("BI-UNSIZED", "small", expect.any(String));
   });
 });
+
+// BI-BB2E585C. The drain mutates governed BacklogItem state from a model
+// decision, hourly and unattended. It previously wrote no DecisionInteraction
+// row at all, so the decision log an operator reviews to answer "what is my AI
+// workforce deciding?" silently omitted the platform's most frequent
+// autonomous writer — reading as coverage rather than as a gap.
+describe("triageOneItem governance ledger (BI-BB2E585C)", () => {
+  const item: TriageCandidate = { itemId: "BI-LEDGER", title: "Clear build" };
+  const confidentBuild = '{"outcome":"build","effortSize":"small","confidence":0.95,"rationale":"clear"}';
+
+  it("records the decision BEFORE applying the mutation", async () => {
+    const order: string[] = [];
+    const recordDecision = vi.fn(async () => {
+      order.push("ledger");
+      return true;
+    });
+    const applyBuild = vi.fn(async () => {
+      order.push("mutate");
+    });
+
+    const outcome = await triageOneItem(item, {
+      decide: async () => confidentBuild,
+      applyBuild,
+      recordDecision,
+    });
+
+    expect(outcome).toBe("auto-built");
+    expect(order).toEqual(["ledger", "mutate"]);
+    expect(recordDecision).toHaveBeenCalledWith(
+      item,
+      expect.objectContaining({ outcome: "build" }),
+      "small",
+    );
+  });
+
+  it("fail-closed: does NOT mutate when the decision cannot be ledgered", async () => {
+    const applyBuild = vi.fn(async () => {});
+    const outcome = await triageOneItem(item, {
+      decide: async () => confidentBuild,
+      applyBuild,
+      recordDecision: async () => false,
+    });
+
+    expect(outcome).toBe("left-for-operator");
+    expect(applyBuild).not.toHaveBeenCalled();
+  });
+
+  it("fail-closed: a throwing ledger blocks the mutation rather than the drain", async () => {
+    const applyBuild = vi.fn(async () => {});
+    const outcome = await triageOneItem(item, {
+      decide: async () => confidentBuild,
+      applyBuild,
+      recordDecision: async () => {
+        throw new Error("db down");
+      },
+    });
+
+    expect(outcome).toBe("left-for-operator");
+    expect(applyBuild).not.toHaveBeenCalled();
+  });
+
+  it("never ledgers a decision it was not going to apply", async () => {
+    const recordDecision = vi.fn(async () => true);
+    const outcome = await triageOneItem(item, {
+      decide: async () => '{"outcome":"needs-human","confidence":0.5}',
+      applyBuild: async () => {},
+      recordDecision,
+    });
+
+    expect(outcome).toBe("left-for-operator");
+    expect(recordDecision).not.toHaveBeenCalled();
+  });
+
+  it("passes the APPLIED size to the ledger, not the model's overridden one", async () => {
+    // Author intent wins over the model's re-estimate (BI-TRIAGE-SIZE-OVERWRITE);
+    // the ledger must record what was actually written to the row.
+    const recordDecision = vi.fn(async () => true);
+    await triageOneItem(
+      { itemId: "BI-SIZED", title: "Authored size", effortSize: "large" },
+      {
+        decide: async () => confidentBuild, // model says "small"
+        applyBuild: async () => {},
+        recordDecision,
+      },
+    );
+
+    expect(recordDecision).toHaveBeenCalledWith(expect.anything(), expect.anything(), "large");
+  });
+});

@@ -7,6 +7,9 @@ import {
   AGENT_KINDS,
   COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
   resolveCanonicalAgentId,
+  canonicalDisplayNameFor,
+  ENTERPRISE_ARCHITECT_AGENT_ID,
+  ENTERPRISE_ARCHITECT_DISPLAY_NAME,
 } from "./agent-identity.js";
 import { COWORKER_AGENT_SEEDS } from "./workforce-seed.js";
 
@@ -125,6 +128,66 @@ describe("dual-seed slug → canonical map (BI-74FD6420)", () => {
     const seedIds = new Set(COWORKER_AGENT_SEEDS.map((c) => c.agentId));
     for (const slug of ["build-specialist", "external-catalog-scout", "marketing-specialist", "customer-advisor"]) {
       expect(seedIds.has(slug)).toBe(true);
+    }
+  });
+});
+
+// BI-29F07F46. One coworker answered to two names depending on which plane you
+// observed it from: the roster derived "EA Architect" by tokenizing the slug
+// `ea-architect` (a name authored nowhere, so grepping for it finds no origin),
+// while the seed, the reviewer prompts, the HR-300 role, the profession
+// registry and the wsid-enterprise-architecture profile all said "Enterprise
+// Architect". An operator seeing both concluded they were different actors.
+describe("Enterprise Architect answers to one name (BI-29F07F46)", () => {
+  it("resolves the same display name from BOTH seed paths", () => {
+    // The dual-seed rows carry different agentIds and different `name` values,
+    // so the override must be keyed on both or the two planes diverge again.
+    expect(
+      resolveAgentIdentity({ agentId: "AGT-WS-EA", name: "ea-architect" }).displayName,
+    ).toBe(ENTERPRISE_ARCHITECT_DISPLAY_NAME);
+    expect(
+      resolveAgentIdentity({
+        agentId: "ea-architect",
+        slugId: "ea-architect",
+        name: "Enterprise Architect",
+      }).displayName,
+    ).toBe(ENTERPRISE_ARCHITECT_DISPLAY_NAME);
+  });
+
+  it("no longer derives the slug-tokenized name that appeared nowhere else", () => {
+    // Guards the derivation, not just the constant: "EA Architect" is what
+    // ACRONYMS + Title Case produces from the slug, and it must not resurface.
+    expect(deriveAgentDisplayName("ea-architect")).toBe("EA Architect");
+    expect(ENTERPRISE_ARCHITECT_DISPLAY_NAME).not.toBe("EA Architect");
+    expect(
+      resolveAgentIdentity({ agentId: "AGT-WS-EA", name: "ea-architect" }).displayName,
+    ).not.toBe("EA Architect");
+  });
+
+  it("keeps the exported prompt constant bound to the override table", () => {
+    // The reviewer prompts and static labels interpolate this constant instead
+    // of a literal, so renaming the coworker in one place renames it everywhere.
+    expect(canonicalDisplayNameFor(ENTERPRISE_ARCHITECT_AGENT_ID)).toBe(
+      ENTERPRISE_ARCHITECT_DISPLAY_NAME,
+    );
+    expect(canonicalDisplayNameFor("ea-architect")).toBe(ENTERPRISE_ARCHITECT_DISPLAY_NAME);
+  });
+
+  it("stays distinct from its muddying near-neighbours", () => {
+    // AGT-901 Solution Architect / AGT-121 Architecture Definition / AGT-181
+    // Architecture Guardrail / AGT-BUILD-DA Build Data Architect are DIFFERENT
+    // coworkers whose names all read "architect-ish". Converging the EA name
+    // must not collide with any of them.
+    const neighbours = [
+      { agentId: "AGT-901", name: "architecture-agent", expected: "Solution Architect" },
+      { agentId: "AGT-121", name: "architecture-definition-agent", expected: "Architecture Definition" },
+      { agentId: "AGT-181", name: "architecture-guardrail-agent", expected: "Architecture Guardrail" },
+      { agentId: "AGT-BUILD-DA", name: "build-data-architect", expected: "Build Data Architect" },
+    ];
+    for (const n of neighbours) {
+      const displayName = resolveAgentIdentity({ agentId: n.agentId, name: n.name }).displayName;
+      expect(displayName, n.agentId).toBe(n.expected);
+      expect(displayName, n.agentId).not.toBe(ENTERPRISE_ARCHITECT_DISPLAY_NAME);
     }
   });
 });

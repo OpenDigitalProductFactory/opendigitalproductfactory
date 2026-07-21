@@ -16,6 +16,7 @@ import type {
   DecisionPerspectiveEvaluationResult,
   DecisionPerspectiveProfile,
   DecisionDomainClass,
+  DecisionGateKey,
   DecisionRiskTier,
   PerspectiveMaterial,
   PerspectiveMaterialScore,
@@ -447,6 +448,9 @@ export async function evaluatePerspectiveGate(input: {
   const interactionId = createDecisionInteractionId();
   const isWwwd = input.organizationId !== undefined;
   const prefix = isWwwd ? "wwwd" : "wwmd";
+  // The gate this row audits under, independent of which profile doctrine
+  // ultimately resolved to (BI-1BE30A9A).
+  const gateKey: DecisionGateKey = isWwwd ? "org-business" : "build-studio";
   const now = input.now ?? new Date();
 
   let resolved;
@@ -517,6 +521,8 @@ export async function evaluatePerspectiveGate(input: {
       routeContext: input.routeContext,
       phaseFrom: input.phaseFrom === undefined ? (input.build ? "plan" : null) : input.phaseFrom,
       phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
+      gateKey,
+      gateFallbackUsed: isWwwd && !orgProfileSelected,
       outcomePayloadExtra: isWwwd
         ? { orgProfileSelected, caller: input.caller ?? null }
         : undefined,
@@ -680,6 +686,8 @@ export async function evaluatePerspectiveGate(input: {
     routeContext: input.routeContext,
     phaseFrom: input.phaseFrom === undefined ? (input.build ? "plan" : null) : input.phaseFrom,
     phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
+    gateKey,
+    gateFallbackUsed: isWwwd && !orgProfileSelected,
     outcomePayloadExtra: isWwwd ? { orgProfileSelected } : undefined,
   });
 

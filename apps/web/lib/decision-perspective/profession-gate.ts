@@ -20,6 +20,7 @@ import { resolveProfileMaterialForProfession } from "./material";
 import { createDecisionInteractionId, persistDecisionInteraction } from "./persistence";
 import type {
   DecisionDomainClass,
+  DecisionGateKey,
   DecisionPerspectiveEvaluationInput,
   DecisionPerspectiveEvaluationResult,
   DecisionPerspectiveProfile,
@@ -31,6 +32,9 @@ type ProfessionGateClient = Parameters<typeof resolveProfileMaterialForProfessio
   Parameters<typeof persistDecisionInteraction>[0]["db"];
 
 type GateEvaluator = (input: DecisionPerspectiveEvaluationInput) => DecisionPerspectiveEvaluationResult;
+
+/** Every row this gate writes audits as WSID, whatever doctrine it fell back to. */
+const PROFESSION_GATE_KEY: DecisionGateKey = "profession";
 
 export type ProfessionAgentIdentityInput = {
   agentId?: string | null;
@@ -199,6 +203,10 @@ export async function evaluateProfessionDecisionGate(input: {
       routeContext: input.routeContext,
       phaseFrom: input.phaseFrom ?? null,
       phaseTo: input.phaseTo ?? null,
+      // The resolver threw, so doctrine is the platform fallback — but this is
+      // still a WSID decision and must audit as one (BI-1BE30A9A).
+      gateKey: PROFESSION_GATE_KEY,
+      gateFallbackUsed: true,
       outcomePayloadExtra: {
         professionProfileSelected,
         professionKey,
@@ -292,6 +300,11 @@ export async function evaluateProfessionDecisionGate(input: {
     routeContext: input.routeContext,
     phaseFrom: input.phaseFrom ?? null,
     phaseTo: input.phaseTo ?? null,
+    // Tier on the gate, not the resolved profile: when the craft corpus has no
+    // material the profile is MARK_DPF_PLATFORM_PROFILE, and tiering on that
+    // would file this WSID decision under WWMD (BI-1BE30A9A).
+    gateKey: PROFESSION_GATE_KEY,
+    gateFallbackUsed: !professionProfileSelected,
     outcomePayloadExtra: {
       professionProfileSelected,
       professionKey,

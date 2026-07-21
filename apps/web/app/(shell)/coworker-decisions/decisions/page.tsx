@@ -14,7 +14,7 @@ import {
   DECISION_AUDIT_TIERS,
   buildCallerStats,
   buildTierStats,
-  profileKindsForTier,
+  tierWhere,
   toAuditRow,
   type DecisionAuditRowInput,
   type DecisionAuditTier,
@@ -52,7 +52,7 @@ export default async function DecisionLogPage({
   const [tierStatRaw, rows] = await Promise.all([
     Promise.all(
       DECISION_AUDIT_TIERS.map(async (tier) => {
-        const where = { profile: { kind: { in: profileKindsForTier(tier) } } };
+        const where = tierWhere(tier);
         const [total, last7d, last30d, unresolved, latest] = await Promise.all([
           prisma.decisionInteraction.count({ where }),
           prisma.decisionInteraction.count({
@@ -81,9 +81,7 @@ export default async function DecisionLogPage({
       }),
     ),
     prisma.decisionInteraction.findMany({
-      where: activeTier
-        ? { profile: { kind: { in: profileKindsForTier(activeTier) } } }
-        : undefined,
+      where: activeTier ? tierWhere(activeTier) : undefined,
       orderBy: { createdAt: "desc" },
       take: ROW_LIMIT,
       select: {
@@ -100,6 +98,8 @@ export default async function DecisionLogPage({
         confidenceAfter: true,
         outcomePayload: true,
         humanOutcome: true,
+        gateKey: true,
+        gateFallbackUsed: true,
         profile: { select: { kind: true, name: true } },
         escalationCapture: { select: { createdAt: true } },
         deferralCapture: { select: { gapReason: true } },

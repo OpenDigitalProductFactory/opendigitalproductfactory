@@ -5,7 +5,6 @@
 import type {
   ReviewResult,
   ReviewerVerdict,
-  ArchitectureAdvisory,
   BuildDesignDoc,
   BuildPlanDoc,
   BuildDeliberationPhase,
@@ -21,7 +20,7 @@ import type {
   DeliberationConsensusState,
   DeliberationActivatedRiskLevel,
 } from "@/lib/deliberation/types";
-import type { PrismaClient } from "@dpf/db";
+import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
@@ -311,7 +310,7 @@ export function buildArchitectureReviewPrompt(
 - Are migrations/backfills modeled per the deployment doctrine (inline backfill, immutable committed migrations)?
 - Does the decomposition keep coupling intentional and blast radius contained?`;
 
-  return `You are the Enterprise Architect performing an ADVISORY architectural-alignment review of a Build Studio ${artifactLabel}. You are the "chief architect" lens: you do NOT re-run the design/plan checklist (other reviewers own that) and you do NOT gate the build. Your job is to surface architectural alignment and concerns, and to propose concrete edits the author can fold into the spec.
+  return `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} performing an ADVISORY architectural-alignment review of a Build Studio ${artifactLabel}. You are the "chief architect" lens: you do NOT re-run the design/plan checklist (other reviewers own that) and you do NOT gate the build. Your job is to surface architectural alignment and concerns, and to propose concrete edits the author can fold into the spec.
 
 ${artifactLabel.toUpperCase()}:
 ${describeArchitectureArtifact(input)}
@@ -337,45 +336,6 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
   "issues": [{"severity": "critical|important|minor", "description": "...", "suggestion": "concrete spec edit"}],
   "summary": "one sentence architectural-alignment summary"
 }`;
-}
-
-/** Reduce a parsed architecture ReviewResult into the advisory record nested on
- *  ReviewResult.architectureAdvisory. Returns null when the reviewer was absent
- *  or its output failed to parse — an architecture reviewer that didn't answer
- *  must not masquerade as "no concerns". */
-export function architectureAdvisoryFromReview(
-  arch: ReviewResult | null,
-): ArchitectureAdvisory | null {
-  if (!arch || arch.parseError) return null;
-  return { summary: arch.summary, issues: arch.issues };
-}
-
-/** Build the advisory and auto-file [reference-doc] findings (process-spine §6.5). */
-export async function finalizeArchitectureAdvisory(
-  prisma: PrismaClient,
-  arch: ReviewResult | null,
-  userId: string,
-  agentId: string | null | undefined,
-  threadId: string | null | undefined,
-  routeContext: string,
-): Promise<ArchitectureAdvisory | null> {
-  const advisory = architectureAdvisoryFromReview(arch);
-  if (arch?.issues?.length) {
-    try {
-      const { promoteReferenceDocFindings } = await import(
-        "@/lib/process-spine/canonical-improvement-digest"
-      );
-      await promoteReferenceDocFindings(prisma, arch.issues, {
-        userId,
-        agentId: agentId ?? null,
-        threadId: threadId ?? null,
-        routeContext,
-      });
-    } catch (err) {
-      console.error("[reference-doc-promotion] failed", err);
-    }
-  }
-  return advisory;
 }
 
 // ─── Per-reviewer verdicts ───────────────────────────────────────────────────

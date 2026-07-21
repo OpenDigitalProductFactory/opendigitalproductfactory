@@ -1,0 +1,44 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Decision log per-tier read model (WWMD/WWWD/WSID stat cards and timeline)",
+    "Decision record drill-in read model",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260720200000_decision_interaction_gate_key",
+    "backfill": "additive only: two nullable/defaulted columns plus one index. Existing rows are backfilled from the joined DecisionPerspectiveProfile.kind (platform->build-studio, organization->org-business, profession->profession). The backfill is exact rather than approximate because the profession gate had never executed when these rows were written (live census at time of change: 169 platform, 10 organization, 0 profession), so no historical row's gate is ambiguous. No rows are deleted, no column is dropped, no value is overwritten."
+  },
+  "tests": [
+    "apps/web/lib/wiki/decision-audit.test.ts",
+    "apps/web/lib/decision-perspective/profession-gate.test.ts",
+    "apps/web/lib/operate/backlog-triage-ledger.test.ts",
+    "apps/web/lib/operate/backlog-triage-drain.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-interaction#gate-attribution",
+      "prismaModel": "DecisionInteraction",
+      "lifecycleDisposition": "every existing DecisionInteraction row is retained unchanged apart from gaining a derived gateKey; the ledger remains append-only and no interaction is reclassified away from a tier it was correctly filed under",
+      "fields": [
+        {
+          "fieldId": "data:decision-interaction#gateKey",
+          "resolution": "governed",
+          "reason": "the governance audit tier must derive from the gate that produced the row, not from the fallback-resolved profile: evaluateProfessionDecisionGate resolves to MARK_DPF_PLATFORM_PROFILE whenever the craft corpus has no material, so a WSID decision persisted with profileId=mark-dpf-platform and audited as WWMD, leaving the WSID tier reading 'never used' however often the gate ran",
+          "provenance": "BI-1BE30A9A file:line evidence; amended contract in docs/superpowers/plans/2026-07-06-decision-governance-audit-log.md (supersedes its original profile-kind attribution rule); functional reproduction on the live install produced DI-5EBFC997637F with gateKey=profession, gateFallbackUsed=true, profileId=mark-dpf-platform"
+        },
+        {
+          "fieldId": "data:decision-interaction#gateFallbackUsed",
+          "resolution": "governed",
+          "reason": "preserves the 'was this the coworker's own doctrine or a cross-kind fallback?' signal that profile kind previously carried implicitly, so a WSID row decided from platform defaults is not mistaken for one grounded in the profession's craft corpus",
+          "provenance": "BI-1BE30A9A; profession-gate.test.ts asserts the flag on both the fallback and own-corpus paths"
+        }
+      ]
+    }
+  ]
+}

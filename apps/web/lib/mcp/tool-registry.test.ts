@@ -9,6 +9,8 @@ import { SIEM_TOOLS } from "@/lib/mcp-tools-siem";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
 
+import { TOOL_PACK_REGISTRY } from "./pack-registry";
+
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
 import { runtimeCoordinationPack } from "./packs/runtime-coordination-pack";
 import { workCapsulesPack } from "./packs/work-capsules-pack";
@@ -382,5 +384,70 @@ describe("executeTool inline-case ratchet", () => {
       removed,
       `baseline lists tools no longer inline — run \`node scripts/check-mcp-tool-pack.mjs --update\`: ${removed.join(", ")}`,
     ).toEqual([]);
+  });
+});
+
+// BI-88B77204. The per-pack "R3 no-drift" suites above are enumerated BY HAND,
+// so a pack that is never added to the list is never checked — which is how
+// `evaluate_profession_decision` shipped with no TOOL_TO_GRANTS entry at all.
+// TOOL_TO_GRANTS denies unlisted tools by default (isToolAllowedByGrants), so
+// the effect was not a loose permission but a silently sealed door: the only
+// entry point to the WSID decision tier was unreachable for every coworker,
+// and the tier read "never used" for months while the routing block instructed
+// agents to call it. A console.warn at deny time is not observable in CI.
+//
+// This sweep is registry-driven rather than hand-listed, so it covers packs
+// that do not exist yet.
+describe("tool-pack grant coverage (registry-wide)", () => {
+  // Shrinking baseline — BI-F998BCE8. These seven are the same defect, but
+  // their packs declare `grants: {}` with an "Ungated (self-scoped)" intent
+  // the gating layer cannot currently express (there is no "no grant needed"
+  // value, only listed-or-denied). Resolving that is a deliberate call on the
+  // gating contract, not a drive-by; until then they are quarantined here so a
+  // NEW ungated tool still fails loudly.
+  //
+  // This list may only shrink. Closing BI-F998BCE8 means emptying it and
+  // deleting the allowance below.
+  const KNOWN_UNGATED_BI_F998BCE8 = [
+    "coworker-goal:evaluate_task_goal",
+    "coworker-goal:list_task_goals",
+    "coworker-goal:set_task_goal",
+    "coworker-memory:list_working_notes",
+    "coworker-memory:record_working_note",
+    "effort-context:read_effort_context",
+    "effort-context:record_effort_context",
+  ];
+
+  it("gives every registered pack tool a TOOL_TO_GRANTS entry", () => {
+    const ungated = TOOL_PACK_REGISTRY.packs.flatMap((pack) =>
+      pack.definitions
+        .filter((def) => !TOOL_TO_GRANTS[def.name])
+        .map((def) => `${pack.packId}:${def.name}`),
+    );
+    const unexpected = ungated.filter((t) => !KNOWN_UNGATED_BI_F998BCE8.includes(t));
+    expect(
+      unexpected,
+      `these pack tools have no TOOL_TO_GRANTS entry and are therefore DENIED for every coworker — add one, or extend the BI-F998BCE8 baseline only with a decision behind it: ${unexpected.join(", ")}`,
+    ).toEqual([]);
+
+    // Ratchet: the baseline must not outlive the tools it excuses.
+    const staleBaseline = KNOWN_UNGATED_BI_F998BCE8.filter((t) => !ungated.includes(t));
+    expect(
+      staleBaseline,
+      `these tools are gated now — remove them from KNOWN_UNGATED_BI_F998BCE8: ${staleBaseline.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("keeps every pack-mirrored grant identical to the gating source", () => {
+    const drifted: string[] = [];
+    for (const pack of TOOL_PACK_REGISTRY.packs) {
+      for (const [name, grants] of Object.entries(pack.grants)) {
+        const gating = TOOL_TO_GRANTS[name];
+        if (JSON.stringify(gating) !== JSON.stringify(grants)) {
+          drifted.push(`${pack.packId}:${name} (pack=${JSON.stringify(grants)} gating=${JSON.stringify(gating)})`);
+        }
+      }
+    }
+    expect(drifted, `pack grant metadata drifted from TOOL_TO_GRANTS: ${drifted.join(", ")}`).toEqual([]);
   });
 });

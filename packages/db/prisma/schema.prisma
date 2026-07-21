@@ -12287,6 +12287,17 @@ model DecisionInteraction {
   principleConflict Boolean                           @default(false)
   outcomePayload    Json                              @default("{}")
   humanOutcome      Json?
+  // Which governance gate produced this row (BI-1BE30A9A). The audit tier
+  // derives from THIS, not from the fallback-resolved profile kind: a
+  // profession/WSID decision that fell back to platform doctrine for material
+  // still belongs to the WSID tier, otherwise the tier reads empty and the
+  // operator concludes — wrongly — that the gate is never called.
+  // Null on rows written before the column existed; the read model falls back
+  // to profile.kind for those.
+  gateKey           String?
+  // True when the gate ran but doctrine fell back off the gate's own profile
+  // kind (e.g. profession gate resolving to MARK_DPF_PLATFORM_PROFILE).
+  gateFallbackUsed  Boolean                           @default(false)
   createdAt         DateTime                          @default(now())
   updatedAt         DateTime                          @updatedAt
   profile           DecisionPerspectiveProfile        @relation("DecisionInteractionProfile", fields: [profileId], references: [profileId], onDelete: Cascade)
@@ -12309,6 +12320,8 @@ model DecisionInteraction {
   @@index([triggeredByUserId])
   @@index([domainClass, createdAt])
   @@index([outcomeType, createdAt])
+  // Backs the per-tier count/latest queries on the decision log.
+  @@index([gateKey, createdAt])
   @@index([principleConflict, createdAt])
   @@index([riskTier, createdAt])
 }

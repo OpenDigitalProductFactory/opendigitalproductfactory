@@ -4,7 +4,6 @@ import {
   buildPlanReviewPrompt,
   buildCodeReviewPrompt,
   buildArchitectureReviewPrompt,
-  architectureAdvisoryFromReview,
   ARCHITECTURE_REVIEW_REFERENCES,
   parseReviewResponse,
   applyTestFirstLenienceForKind,
@@ -17,6 +16,7 @@ import {
   mapCompactSummaryToBuildEntry,
   type ReviewBranchInput,
 } from "./build-reviewers";
+import { architectureAdvisoryFromReview } from "./architecture-advisory-ledger";
 import type { ReviewResult, BuildDesignDoc } from "@/lib/feature-build-types";
 
 describe("buildDesignReviewPrompt", () => {

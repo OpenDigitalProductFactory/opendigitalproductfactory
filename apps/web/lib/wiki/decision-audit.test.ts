@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 
 import {
   buildTierStats,
+  gateKeysForTier,
   profileKindsForTier,
+  tierForGateKey,
   tierForProfileKind,
+  tierForRow,
+  tierWhere,
   toAuditRow,
   type DecisionAuditRowInput,
   buildCallerStats,
@@ -44,6 +48,86 @@ describe("tierForProfileKind", () => {
     for (const tier of ["wwmd", "wwwd", "wsid"] as const) {
       for (const kind of profileKindsForTier(tier)) {
         expect(tierForProfileKind(kind)).toBe(tier);
+      }
+    }
+  });
+});
+
+describe("tierForGateKey", () => {
+  it("maps gate keys onto the three governance tiers", () => {
+    expect(tierForGateKey("build-studio")).toBe("wwmd");
+    expect(tierForGateKey("org-business")).toBe("wwwd");
+    expect(tierForGateKey("profession")).toBe("wsid");
+    expect(tierForGateKey("not-a-gate")).toBe("other");
+    expect(tierForGateKey(null)).toBe("other");
+  });
+
+  it("round-trips with gateKeysForTier", () => {
+    for (const tier of ["wwmd", "wwwd", "wsid"] as const) {
+      for (const key of gateKeysForTier(tier)) {
+        expect(tierForGateKey(key)).toBe(tier);
+      }
+    }
+  });
+});
+
+describe("tierForRow (BI-1BE30A9A)", () => {
+  // The regression this whole change exists for: the profession gate falls
+  // back to MARK_DPF_PLATFORM_PROFILE when the craft corpus has no material
+  // for a decision class. Tiering on the resolved profile filed that WSID
+  // decision under WWMD, so the WSID tier read "never used" no matter how
+  // often the gate ran.
+  it("keeps a profession decision in WSID even when doctrine fell back to platform", () => {
+    expect(
+      tierForRow({ gateKey: "profession", profile: { kind: "platform" } }),
+    ).toBe("wsid");
+  });
+
+  it("keeps an org decision in WWWD even when doctrine fell back to platform", () => {
+    expect(
+      tierForRow({ gateKey: "org-business", profile: { kind: "platform" } }),
+    ).toBe("wwwd");
+  });
+
+  it("prefers the gate over the profile kind whenever both are present", () => {
+    expect(tierForRow({ gateKey: "build-studio", profile: { kind: "profession" } })).toBe("wwmd");
+  });
+
+  it("falls back to profile kind for rows written before gateKey existed", () => {
+    expect(tierForRow({ gateKey: null, profile: { kind: "organization" } })).toBe("wwwd");
+    expect(tierForRow({ profile: { kind: "platform" } })).toBe("wwmd");
+  });
+
+  it("reports 'other' when neither dimension resolves", () => {
+    expect(tierForRow({ gateKey: null, profile: null })).toBe("other");
+  });
+});
+
+describe("tierWhere", () => {
+  it("matches the gate first and profile kind only for pre-column rows", () => {
+    expect(tierWhere("wsid")).toEqual({
+      OR: [
+        { gateKey: { in: ["profession"] } },
+        { gateKey: null, profile: { kind: { in: ["profession"] } } },
+      ],
+    });
+  });
+
+  // A filter that diverges from tierForRow would make the tier counts
+  // disagree with the rows the timeline actually shows.
+  it("agrees with tierForRow on both branches, for every tier", () => {
+    for (const tier of ["wwmd", "wwwd", "wsid"] as const) {
+      const where = tierWhere(tier) as {
+        OR: [
+          { gateKey: { in: string[] } },
+          { gateKey: null; profile: { kind: { in: string[] } } },
+        ];
+      };
+      for (const gateKey of where.OR[0].gateKey.in) {
+        expect(tierForRow({ gateKey, profile: null })).toBe(tier);
+      }
+      for (const kind of where.OR[1].profile.kind.in) {
+        expect(tierForRow({ gateKey: null, profile: { kind } })).toBe(tier);
       }
     }
   });

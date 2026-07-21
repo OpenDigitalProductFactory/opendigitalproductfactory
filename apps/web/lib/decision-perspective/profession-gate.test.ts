@@ -97,6 +97,8 @@ describe("evaluateProfessionDecisionGate", () => {
     };
     expect(payload.professionProfileSelected).toBe(true);
     expect(payload.professionKey).toBe("data-architect");
+    expect(data.gateKey).toBe("profession");
+    expect(data.gateFallbackUsed).toBe(false);
   });
 
   it("falls back to platform as ADVISORY when the craft corpus is silent", async () => {
@@ -115,6 +117,15 @@ describe("evaluateProfessionDecisionGate", () => {
 
     expect(result.professionProfileSelected).toBe(false);
     expect(result.operatorMessage).toMatch(/platform defaults/);
+
+    // BI-1BE30A9A: doctrine fell back to the platform profile, so tiering on
+    // the resolved profile would have filed this WSID decision under WWMD and
+    // left the WSID tier reading "never used". The gate key must survive the
+    // fallback; gateFallbackUsed preserves the "not its own craft" signal.
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.profileId).toBe(MARK_DPF_PLATFORM_PROFILE.profileId);
+    expect(data.gateKey).toBe("profession");
+    expect(data.gateFallbackUsed).toBe(true);
   });
 
   it("coverage gap forces defer and is not allowed", async () => {
@@ -141,6 +152,10 @@ describe("evaluateProfessionDecisionGate", () => {
     expect(result.evaluation.outcomeType).toBe("escalate");
     expect(result.evaluation.rationale).toMatch(/fail-closed/);
     expect(db.decisionInteraction.create).toHaveBeenCalled();
+    // Even the fail-closed row belongs to WSID — an escalation the operator
+    // must see in the tier whose gate produced it.
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.gateKey).toBe("profession");
   });
 
   it("unbound coworker (no profession family) defers with the unbound message", async () => {

@@ -148,7 +148,12 @@ export const professionDecisionPack: ToolPack = {
     evaluate_profession_decision: (params, userId, context) =>
       evaluateProfessionDecision(params, userId, context),
   },
+  // Mirrors agent-grants.ts TOOL_TO_GRANTS, which stays the gating source;
+  // tool-registry.test.ts asserts the two never drift. Advertising
+  // `work_capsule_read` here while TOOL_TO_GRANTS held no entry at all is how
+  // BI-88B77204 hid: the pack looked authoritative and named a plausible
+  // grant, but gating denied the tool by default for everyone.
   grants: {
-    evaluate_profession_decision: ["work_capsule_read"],
+    evaluate_profession_decision: ["registry_read"],
   },
 };

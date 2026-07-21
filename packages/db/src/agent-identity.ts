@@ -42,6 +42,17 @@ export const AGENT_IDENTITY_OVERRIDES: Record<string, { displayName?: string; ki
   // Onboarding COO must Title-Case COO consistently (not "Onboarding Coo").
   "AGT-WS-ONBOARD": { displayName: "Onboarding COO" },
   "onboarding-coo": { displayName: "Onboarding COO" },
+  // BI-29F07F46. Derivation tokenizes the slug `ea-architect` into "EA" (an
+  // ACRONYM) + "Architect" = "EA Architect" — a name authored NOWHERE, which is
+  // why grepping for it finds no origin. Meanwhile the seed name, the reviewer
+  // prompts, the HR-300 role, the profession registry label and the
+  // wsid-enterprise-architecture profile all say "Enterprise Architect". The
+  // roster was the odd one out, so an operator saw "EA Architect" in the portal
+  // and "Enterprise Architect" in Docker Desktop's model requests and could not
+  // tell they were one coworker. Converge on the name eight other homes already
+  // use rather than propagating the derived one.
+  "AGT-WS-EA": { displayName: "Enterprise Architect" },
+  "ea-architect": { displayName: "Enterprise Architect" },
   // Two distinct registry agents both derived to "Portfolio Backlog" after
   // noise-suffix strip — keep them legibly distinct on the roster (BI-74FD6420).
   "AGT-102": { displayName: "Portfolio Backlog Manager" },
@@ -164,6 +175,28 @@ export function resolveAgentIdentity(input: AgentIdentityInput): AgentIdentity {
   );
   return { displayName, kind };
 }
+
+/**
+ * Canonical human-facing name for a coworker that must be named in code
+ * authored before any Agent row is loaded — system prompts, static UI labels.
+ *
+ * Prefer `Agent.displayName` / `resolveAgentIdentity` whenever you have the
+ * row. This exists so the places that CANNOT do a lookup still resolve through
+ * this module instead of hardcoding a string, which is how one coworker came to
+ * answer to two names across the roster, the reviewer prompts and the records
+ * (BI-29F07F46). Returns null for an agent with no authored override, so a
+ * caller must decide deliberately rather than silently inventing a name.
+ */
+export function canonicalDisplayNameFor(agentIdOrSlug: string): string | null {
+  return AGENT_IDENTITY_OVERRIDES[agentIdOrSlug]?.displayName ?? null;
+}
+
+/** The chief-architect lens: the EA coworker's canonical id and name.
+ *  Bound to AGENT_IDENTITY_OVERRIDES, so renaming the coworker there renames it
+ *  in every prompt and label that references this constant. */
+export const ENTERPRISE_ARCHITECT_AGENT_ID = "AGT-WS-EA";
+export const ENTERPRISE_ARCHITECT_DISPLAY_NAME: string =
+  AGENT_IDENTITY_OVERRIDES[ENTERPRISE_ARCHITECT_AGENT_ID]!.displayName!;
 
 /** Title-case a kind for display (e.g. "orchestrator" → "Orchestrator"). */
 export function formatAgentKind(kind: string): string {

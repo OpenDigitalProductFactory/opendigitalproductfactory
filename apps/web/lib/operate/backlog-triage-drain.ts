@@ -165,6 +165,21 @@ export type TriageDrainDeps = {
   decide: (item: TriageCandidate) => Promise<string>;
   /** Apply a confident build decision (status→open, triageOutcome=build, effortSize, resolution). */
   applyBuild: (itemId: string, effortSize: string, rationale: string) => Promise<void>;
+  /**
+   * Record the decision to the governance ledger BEFORE it is applied
+   * (BI-BB2E585C). Resolving false (or throwing) blocks the mutation and leaves
+   * the item for a human — fail-closed, because the ledger row is the only
+   * evidence the auto-mutation was governed at all.
+   *
+   * Optional so existing callers/tests compile; omitting it means the mutation
+   * proceeds unledgered, which is the defect. `triageOneItem` warns loudly when
+   * it is absent so the omission cannot be silent.
+   */
+  recordDecision?: (
+    item: TriageCandidate,
+    decision: TriageDecision,
+    appliedEffortSize: string,
+  ) => Promise<boolean>;
 };
 
 /** Outcome of triaging a single item — the unit the scheduled drain accounts by. */
@@ -183,7 +198,7 @@ export type TriageItemOutcome = "auto-built" | "left-for-operator";
  */
 export async function triageOneItem(
   item: TriageCandidate,
-  deps: Pick<TriageDrainDeps, "decide" | "applyBuild">,
+  deps: Pick<TriageDrainDeps, "decide" | "applyBuild" | "recordDecision">,
 ): Promise<TriageItemOutcome> {
   let decision: TriageDecision | null = null;
   try {
@@ -192,12 +207,30 @@ export async function triageOneItem(
     decision = null;
   }
   const size = autoApplyBuildSize(decision, item);
-  if (!size) return "left-for-operator";
+  if (!size || !decision) return "left-for-operator";
+
+  // Ledger BEFORE mutating (BI-BB2E585C). Fail-closed: an unrecordable decision
+  // is not applied, so the ledger can never understate what the drain changed.
+  if (deps.recordDecision) {
+    let recorded = false;
+    try {
+      recorded = await deps.recordDecision(item, decision, size);
+    } catch {
+      recorded = false;
+    }
+    if (!recorded) return "left-for-operator";
+  } else {
+    console.warn(
+      `[backlog-triage-drain] ${item.itemId}: applying a build decision with NO governance ledger — ` +
+        "recordDecision dep is missing (BI-BB2E585C)",
+    );
+  }
+
   try {
     await deps.applyBuild(
       item.itemId,
       size,
-      `Auto-triaged by scheduled drain: ${(decision?.rationale ?? "confident build").slice(0, 400)}`,
+      `Auto-triaged by scheduled drain: ${(decision.rationale ?? "confident build").slice(0, 400)}`,
     );
     return "auto-built";
   } catch {

@@ -3,12 +3,13 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { scheduleAgentTask } from "@/lib/actions/agent-task-scheduler";
+import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 
 const AGENTS = [
   { id: "coo", name: "COO", route: "/workspace" },
   { id: "portfolio-advisor", name: "Portfolio Analyst", route: "/portfolio" },
   { id: "inventory-specialist", name: "Inventory Specialist", route: "/inventory" },
-  { id: "ea-architect", name: "EA Architect", route: "/ea" },
+  { id: "ea-architect", name: ENTERPRISE_ARCHITECT_DISPLAY_NAME, route: "/ea" },
   { id: "hr-specialist", name: "HR Specialist", route: "/employee" },
   { id: "customer-advisor", name: "Customer Advisor", route: "/customer" },
   { id: "ops-coordinator", name: "Operations Coordinator", route: "/ops" },
