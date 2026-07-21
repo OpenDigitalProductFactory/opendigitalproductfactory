@@ -12,6 +12,8 @@ BIND_ADDRESS="${DPF_PKI_BIND_ADDRESS:-127.0.0.1}"
 CA_URL=""
 FINGERPRINT=""
 TOKEN_FILE=""
+JOIN_PACKAGE=""
+PACKAGE_OUTPUT=""
 ORG_NAME="${DPF_PKI_NAME:-DPF Organization CA}"
 START_TLS=1
 SANS=""
@@ -25,15 +27,20 @@ Authority (first installation):
     --hostname <private-name-or-IP> [--san <name-or-IP>] \
     [--bind-address <private-IP>] [--out-dir <directory>]
 
-Join (another installation; public root fingerprint + one-time token only):
+Issue a 15-minute package for one intended installation:
+  bash scripts/bootstrap-organization-pki.sh --mode issue-join \
+    --hostname <joining-private-name-or-IP> [--san <name-or-IP>] \
+    --ca-url <https://private-ca:9000> --package-output <file.dpfjoin>
+
+Join (another installation; one private package file only):
   bash scripts/bootstrap-organization-pki.sh --mode join \
-    --hostname <private-name-or-IP> --ca-url <https://private-ca:9000> \
-    --fingerprint <sha256> --token-file <mode-0600-file>
+    --join-package <mode-0600-file.dpfjoin> [--out-dir <directory>]
 
 The root private key never leaves the Authority installation. Join mode accepts
 only a fingerprint-pinned public root and a short-lived enrollment token. Both
 modes write root_ca.crt, authority.crt, authority.key, and Caddyfile. Existing
-CA state is reused; the script refuses silent CA replacement.
+CA state is reused; the script refuses silent CA replacement. A join package
+uses the DPF_ORGANIZATION_JOIN_V1 contract and carries no CA private key.
 EOF
 }
 
@@ -43,6 +50,83 @@ append_san() {
 
 valid_name_or_ip() {
   printf '%s' "$1" | grep -Eq '^[A-Za-z0-9._:-]+$'
+}
+
+valid_ca_url() {
+  printf '%s' "$1" | grep -Eq '^https://[A-Za-z0-9._:-]+$'
+}
+
+valid_private_ca_url() {
+  valid_ca_url "$1" || return 1
+  ca_origin="${1#https://}"
+  ca_host="${ca_origin%%:*}"
+  case "$ca_host" in
+    localhost|*.local|*.internal|host.docker.internal) return 0 ;;
+  esac
+  private_ipv4_or_loopback "$ca_host"
+}
+
+read_join_package() {
+  package_path="$1"
+  [ -f "$package_path" ] || { echo "Join package was not found" >&2; exit 64; }
+  package_mode="$(stat -f '%Lp' "$package_path" 2>/dev/null || stat -c '%a' "$package_path" 2>/dev/null || echo unknown)"
+  [ "$package_mode" = "600" ] || { echo "Join package must have mode 0600" >&2; exit 77; }
+
+  package_header=""
+  package_id=""
+  package_ca_url=""
+  package_fingerprint=""
+  package_hostname=""
+  package_sans=""
+  package_expires_at=""
+  package_token=""
+  seen_package_id=0
+  seen_ca_url=0
+  seen_fingerprint=0
+  seen_hostname=0
+  seen_sans=0
+  seen_expiry=0
+  seen_token=0
+  line_number=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    line_number=$((line_number + 1))
+    if [ "$line_number" -eq 1 ]; then package_header="$line"; continue; fi
+    [ -n "$line" ] || continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    [ "$key" != "$line" ] || { echo "Join package contains a malformed field" >&2; exit 77; }
+    case "$key" in
+      package_id) [ "$seen_package_id" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_package_id=1; package_id="$value" ;;
+      ca_url) [ "$seen_ca_url" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_ca_url=1; package_ca_url="$value" ;;
+      root_fingerprint) [ "$seen_fingerprint" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_fingerprint=1; package_fingerprint="$value" ;;
+      intended_hostname) [ "$seen_hostname" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_hostname=1; package_hostname="$value" ;;
+      intended_sans) [ "$seen_sans" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_sans=1; package_sans="$value" ;;
+      expires_at) [ "$seen_expiry" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_expiry=1; package_expires_at="$value" ;;
+      enrollment_token) [ "$seen_token" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_token=1; package_token="$value" ;;
+      *) echo "Join package contains an unknown field" >&2; exit 77 ;;
+    esac
+  done < "$package_path"
+
+  [ "$package_header" = "DPF_ORGANIZATION_JOIN_V1" ] || { echo "Join package version is not supported" >&2; exit 77; }
+  printf '%s' "$package_id" | grep -Eq '^[a-f0-9]{32}$' || { echo "Join package id is invalid" >&2; exit 77; }
+  valid_private_ca_url "$package_ca_url" || { echo "Join package CA URL must be private or local HTTPS" >&2; exit 77; }
+  printf '%s' "$package_fingerprint" | grep -Eq '^[A-Fa-f0-9]{64}$' || { echo "Join package root fingerprint is invalid" >&2; exit 77; }
+  valid_name_or_ip "$package_hostname" || { echo "Join package intended peer is invalid" >&2; exit 77; }
+  printf '%s' "$package_expires_at" | grep -Eq '^[0-9]{1,12}$' || { echo "Join package expiry is invalid" >&2; exit 77; }
+  printf '%s' "$package_token" | grep -Eq '^[A-Za-z0-9._-]+$' || { echo "Join package enrollment authority is invalid" >&2; exit 77; }
+  now_epoch="$(date +%s)"
+  [ "$package_expires_at" -gt "$now_epoch" ] || { echo "Join package has expired" >&2; exit 77; }
+  if [ -n "$HOSTNAME_VALUE" ] && [ "$HOSTNAME_VALUE" != "$package_hostname" ]; then
+    echo "Join package is intended for another installation" >&2
+    exit 77
+  fi
+  HOSTNAME_VALUE="$package_hostname"
+  SANS="$package_sans"
+  CA_URL="$package_ca_url"
+  FINGERPRINT="$package_fingerprint"
+  PACKAGE_ID="$package_id"
+  PACKAGE_TOKEN="$package_token"
 }
 
 private_ipv4_or_loopback() {
@@ -59,7 +143,7 @@ private_ipv4_or_loopback() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --mode) shift; MODE="${1:?--mode requires authority or join}" ;;
+    --mode) shift; MODE="${1:?--mode requires authority, issue-join, or join}" ;;
     --hostname) shift; HOSTNAME_VALUE="${1:?--hostname requires a value}" ;;
     --san) shift; append_san "${1:?--san requires a value}" ;;
     --out-dir) shift; OUT_DIR="${1:?--out-dir requires a value}" ;;
@@ -67,6 +151,8 @@ while [ "$#" -gt 0 ]; do
     --ca-url) shift; CA_URL="${1:?--ca-url requires a value}" ;;
     --fingerprint) shift; FINGERPRINT="${1:?--fingerprint requires a value}" ;;
     --token-file) shift; TOKEN_FILE="${1:?--token-file requires a value}" ;;
+    --join-package) shift; JOIN_PACKAGE="${1:?--join-package requires a value}" ;;
+    --package-output) shift; PACKAGE_OUTPUT="${1:?--package-output requires a value}" ;;
     --org-name) shift; ORG_NAME="${1:?--org-name requires a value}" ;;
     --no-start-tls) START_TLS=0 ;;
     -h|--help) usage; exit 0 ;;
@@ -75,7 +161,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-case "$MODE" in authority|join) ;; *) echo "--mode must be authority or join" >&2; exit 64 ;; esac
+case "$MODE" in authority|issue-join|join) ;; *) echo "--mode must be authority, issue-join, or join" >&2; exit 64 ;; esac
+if [ "$MODE" = "join" ] && [ -n "$JOIN_PACKAGE" ]; then read_join_package "$JOIN_PACKAGE"; fi
 [ -n "$HOSTNAME_VALUE" ] || { echo "--hostname is required" >&2; exit 64; }
 valid_name_or_ip "$HOSTNAME_VALUE" || { echo "--hostname contains unsupported characters" >&2; exit 64; }
 old_ifs="$IFS"
@@ -83,9 +170,15 @@ IFS=','
 for san in $SANS; do valid_name_or_ip "$san" || { echo "--san contains unsupported characters" >&2; exit 64; }; done
 IFS="$old_ifs"
 private_ipv4_or_loopback "$BIND_ADDRESS" || { echo "--bind-address must be a private IPv4 address or loopback" >&2; exit 64; }
+if [ "$MODE" = "issue-join" ]; then
+  [ -n "$CA_URL" ] || { echo "issue-join mode requires --ca-url" >&2; exit 64; }
+  valid_private_ca_url "$CA_URL" || { echo "issue-join mode requires a private or local origin-only HTTPS --ca-url" >&2; exit 64; }
+  [ -n "$PACKAGE_OUTPUT" ] || { echo "issue-join mode requires --package-output" >&2; exit 64; }
+  [ ! -e "$PACKAGE_OUTPUT" ] || { echo "Refusing to overwrite an existing join package" >&2; exit 73; }
+fi
 command -v docker >/dev/null 2>&1 || { echo "Docker is required" >&2; exit 69; }
 docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 is required" >&2; exit 69; }
-if [ "$MODE" = "authority" ]; then
+if [ "$MODE" = "authority" ] || [ "$MODE" = "issue-join" ]; then
   command -v openssl >/dev/null 2>&1 || { echo "OpenSSL is required in authority mode" >&2; exit 69; }
 fi
 
@@ -99,11 +192,20 @@ AUTHORITY_CERT="$OUT_DIR/authority.crt"
 AUTHORITY_KEY="$OUT_DIR/authority.key"
 CADDYFILE="$OUT_DIR/Caddyfile"
 
+if [ "$MODE" = "join" ] && [ -n "$JOIN_PACKAGE" ]; then
+  TOKEN_FILE="$OUT_DIR/secrets/.join-token-$PACKAGE_ID"
+  umask 077
+  printf '%s\n' "$PACKAGE_TOKEN" > "$TOKEN_FILE"
+  chmod 0600 "$TOKEN_FILE"
+  unset PACKAGE_TOKEN
+  trap 'rm -f "$TOKEN_FILE"' EXIT HUP INT TERM
+fi
+
 compose() {
   DPF_PKI_PASSWORD_FILE="$PASSWORD_FILE_EFFECTIVE" \
   DPF_PKI_TRUST_BUNDLE="$ROOT_CERT" \
   DPF_PKI_BIND_ADDRESS="$BIND_ADDRESS" \
-  DPF_PKI_DNS_NAMES="$HOSTNAME_VALUE,$BIND_ADDRESS,localhost,127.0.0.1" \
+  DPF_PKI_DNS_NAMES="$HOSTNAME_VALUE,$SANS,$BIND_ADDRESS,localhost,127.0.0.1" \
   DPF_PKI_NAME="$ORG_NAME" \
   DPF_TLS_DIR="$OUT_DIR" \
   docker compose --project-directory "$REPO_ROOT" \
@@ -157,6 +259,38 @@ if [ "$MODE" = "authority" ]; then
   fi
   compose cp step-ca:/home/step/certs/dpf-portal.crt "$AUTHORITY_CERT" >/dev/null
   compose cp step-ca:/home/step/secrets/dpf-portal.key "$AUTHORITY_KEY" >/dev/null
+elif [ "$MODE" = "issue-join" ]; then
+  [ -f "$PASSWORD_FILE" ] || { echo "Organization CA is not initialized on this installation" >&2; exit 69; }
+  compose up -d step-ca
+  compose exec -T step-ca step ca health --ca-url https://127.0.0.1:9000 \
+    --root /home/step/certs/root_ca.crt >/dev/null
+  FINGERPRINT="$(compose exec -T step-ca step certificate fingerprint /home/step/certs/root_ca.crt | tr -d '\r\n')"
+  san_args="--san $HOSTNAME_VALUE"
+  old_ifs="$IFS"
+  IFS=','
+  for san in $SANS; do san_args="$san_args --san $san"; done
+  IFS="$old_ifs"
+  # shellcheck disable=SC2086 # Values passed by word splitting were validated above.
+  token="$(compose exec -T step-ca step ca token "$HOSTNAME_VALUE" $san_args \
+    --not-after 15m --provisioner dpf-installer --password-file /run/secrets/step-ca-password)"
+  package_id="$(openssl rand -hex 16)"
+  expires_at="$(( $(date +%s) + 900 ))"
+  umask 077
+  {
+    printf '%s\n' "DPF_ORGANIZATION_JOIN_V1"
+    printf 'package_id=%s\n' "$package_id"
+    printf 'ca_url=%s\n' "$CA_URL"
+    printf 'root_fingerprint=%s\n' "$FINGERPRINT"
+    printf 'intended_hostname=%s\n' "$HOSTNAME_VALUE"
+    printf 'intended_sans=%s\n' "$SANS"
+    printf 'expires_at=%s\n' "$expires_at"
+    printf 'enrollment_token=%s\n' "$token"
+  } > "$PACKAGE_OUTPUT"
+  chmod 0600 "$PACKAGE_OUTPUT"
+  unset token
+  echo "Organization join package created at $PACKAGE_OUTPUT."
+  echo "It expires in 15 minutes and is intended only for $HOSTNAME_VALUE."
+  exit 0
 else
   [ -n "$CA_URL" ] || { echo "join mode requires --ca-url" >&2; exit 64; }
   [ -n "$FINGERPRINT" ] || { echo "join mode requires --fingerprint" >&2; exit 64; }
@@ -208,6 +342,10 @@ chmod 0644 "$CADDYFILE"
 if [ "$START_TLS" = "1" ]; then
   compose -f "$REPO_ROOT/docker-compose.tls.yml" up -d portal portal-tls
   compose -f "$REPO_ROOT/docker-compose.tls.yml" restart portal-tls >/dev/null
+fi
+
+if [ "$MODE" = "join" ] && [ -n "$JOIN_PACKAGE" ]; then
+  rm -f "$JOIN_PACKAGE" 2>/dev/null || true
 fi
 
 echo "Organization HTTPS is configured for $HOSTNAME_VALUE."

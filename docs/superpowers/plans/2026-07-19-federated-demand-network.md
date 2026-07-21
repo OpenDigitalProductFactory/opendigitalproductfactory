@@ -115,10 +115,12 @@ guided organization join code is added.
 - [ ] Add source-contract tests, isolated CA initialize/issue/renew tests,
   compose rendering on macOS/Windows/Linux, recovery/rollback evidence, and
   documentation for root/intermediate/password custody.
-- [ ] Add a guided, expiring organization join package containing CA URL,
+- [x] Add an expiring organization join package containing CA URL,
   public root fingerprint, one-time enrollment authority, intended peer, and
   expiry. Import must verify the fingerprint and still require federation
   matching-code dual approval; no root private key crosses installations.
+- [ ] Expose package issue/import as a guided contextual Connections action
+  after the governed mutating host-action prerequisites are implemented.
 - [ ] Wire install/repair flows to the join package so a normal operator never
   copies certificates, edits environment variables, opens a shell, or manages
   Caddy/Step CA directly.
@@ -126,6 +128,59 @@ guided organization join code is added.
   add/remove expiry, validate HTTPS from each portal, exchange a nearby
   invitation, approve both sides, and record evidence before closing
   `BI-52D34506`.
+
+#### Organization-join package increment
+
+**Implemented contract:** the existing cross-platform PKI bootstrap owner now
+issues and consumes `DPF_ORGANIZATION_JOIN_V1` `.dpfjoin` packages. Each file is
+permission-restricted, bound to one intended hostname and SAN set, carries an
+origin-only HTTPS CA URL plus the public-root fingerprint, and expires together
+with its 15-minute Step CA enrollment authority. Import rejects unknown or
+duplicate fields, insecure file permissions, wrong-peer use, invalid roots, and
+expired authority before contacting Docker. Successful import removes the
+package and its temporary token file. The root or intermediate private key is
+never packaged.
+
+**Functional evidence:** an isolated authority issued a real package to a
+separate installation directory; the joining container fingerprint-pinned the
+root, obtained a `joiner.local` leaf with the intended loopback SAN, produced a
+valid leaf to intermediate to root chain, and consumed the package. That
+exercise also found and fixed a bootstrap defect: operator-supplied SANs now
+enter the CA server certificate on Bash and PowerShell, so the joining host can
+validate the CA's host-accessible private name.
+
+**Remaining guided-experience gate:** the package is installer-owned and ready
+for a host executor, but the portal must not receive the CA password, root key,
+or Docker socket. The existing `RemoteAction` host channel is deliberately
+read-only. Governed decision `DI-E461878DCB73` therefore rejected a one-off
+privileged localhost broker and selected the general threat-modeled mutating
+Edge-action path (high confidence, margin 1.379). The Connections action stays
+gated until machine-bound Edge trust, signed single-use dispatch, per-node
+action allow-lists, a `ChangeRequest`, rollback declaration, and post-action
+health evidence exist. This preserves the checkbox above as incomplete: the
+secure package works, while the no-shell portal invocation is still pending.
+
+#### Task 2 UX fit review — organization join
+
+- **Decision:** fits-with-guardrails
+- **Owning area:** Platform
+- **Route family:** existing `/platform/federation-links` Connections page
+- **Primary persona:** founder/operator adding another company installation
+  without handling certificates, environment variables, or shell commands
+- **Navigation layer:** contextual action; no new dashboard, tab, or global item
+- **Reuse/convergence:** existing Connections setup and approval workflow; the
+  host executor will reuse governed `RemoteAction`, not a new privileged broker
+- **Source truth:** Step CA owns certificate issuance; the expiring package owns
+  only bootstrap transfer; `FederationPairingSession` and `FederationLink` keep
+  their existing approval and trust authority
+- **Empty/failure behavior:** unavailable host execution explains the security
+  prerequisite and leaves manual invitation visible; expired/wrong-peer files
+  fail before host mutation
+- **AI boundary:** no coworker prompt and no autonomous trust creation
+- **Evidence before the portal action merges:** machine-bound Edge channel
+  verification, action approval and rollback evidence, light/dark and narrow
+  viewport exercise, keyboard/file-picker behavior, expired/wrong-peer package
+  fixtures, and installed macOS-to-Windows success
 
 **Risks and rollback:** CA key loss invalidates renewal and CA replacement
 invalidates peer trust. Back up the PKI volume and password secret as one
