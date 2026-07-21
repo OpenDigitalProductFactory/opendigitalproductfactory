@@ -125,7 +125,11 @@ function Invoke-DpfPkiCompose {
         $env:DPF_PKI_DNS_NAMES = ((@($Hostname) + $San + @($BindAddress, "localhost", "127.0.0.1")) | Where-Object { $_ }) -join ","
         $env:DPF_PKI_NAME = $OrganizationName
         $env:DPF_TLS_DIR = $OutDir
-        & docker compose --project-directory $RepoRoot -f (Join-Path $RepoRoot "docker-compose.yml") -f (Join-Path $RepoRoot "docker-compose.pki.yml") @Arguments
+        $composeFiles = @("-f", (Join-Path $RepoRoot "docker-compose.yml"), "-f", (Join-Path $RepoRoot "docker-compose.organization-trust.yml"))
+        if ($Mode -in @("authority", "issue-join")) {
+            $composeFiles += @("-f", (Join-Path $RepoRoot "docker-compose.pki.yml"))
+        }
+        & docker compose --project-directory $RepoRoot @composeFiles @Arguments
         if ($LASTEXITCODE -ne 0) { throw "organization_pki_compose_failed" }
     } finally {
         foreach ($key in $old.Keys) {
@@ -135,6 +139,34 @@ function Invoke-DpfPkiCompose {
                 Set-Item -Path "env:$key" -Value $old[$key]
             }
         }
+    }
+}
+
+function Set-DpfOrganizationTrustEnvironment {
+    $envPath = Join-Path $RepoRoot ".env"
+    if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) { return }
+    foreach ($value in @($RootCert, $OutDir)) {
+        if ($value -match "[`r`n]") { throw "PKI paths must not contain newlines" }
+    }
+    $content = [IO.File]::ReadAllLines($envPath) | Where-Object {
+        $_ -notmatch '^DPF_ORGANIZATION_TRUST_ENABLED=' -and
+        $_ -notmatch '^DPF_PKI_TRUST_BUNDLE=' -and
+        $_ -notmatch '^DPF_TLS_DIR='
+    }
+    $content += @(
+        "DPF_ORGANIZATION_TRUST_ENABLED=1",
+        "DPF_PKI_TRUST_BUNDLE=$RootCert",
+        "DPF_TLS_DIR=$OutDir"
+    )
+    $suffix = [guid]::NewGuid().ToString('N')
+    $temporary = "$envPath.organization-trust.$suffix.tmp"
+    $backup = "$envPath.organization-trust.$suffix.bak"
+    try {
+        [IO.File]::WriteAllLines($temporary, $content, (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::Replace($temporary, $envPath, $backup, $true)
+    } finally {
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -261,6 +293,8 @@ $hosts {
 }
 "@
 [IO.File]::WriteAllText($Caddyfile, $caddy, (New-Object Text.UTF8Encoding($false)))
+
+Set-DpfOrganizationTrustEnvironment
 
 if (-not $NoStartTls) {
     Invoke-DpfPkiCompose -Arguments @("-f", (Join-Path $RepoRoot "docker-compose.tls.yml"), "up", "-d", "portal", "portal-tls")

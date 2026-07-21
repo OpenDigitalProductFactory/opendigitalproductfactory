@@ -124,6 +124,15 @@ guided organization join code is added.
 - [ ] Wire install/repair flows to the join package so a normal operator never
   copies certificates, edits environment variables, opens a shell, or manages
   Caddy/Step CA directly.
+  - [x] Add the cross-platform installer input and persistent restart wiring:
+    `--organization-join-package` on macOS/Linux and
+    `-OrganizationJoinPackage` on Windows validate and consume the package,
+    configure member trust/TLS, and restore those overlays on later starts.
+    The member overlay is physically separate from the Step CA authority
+    overlay, so a joined installation cannot accidentally start a second CA.
+  - [ ] Replace the installer argument with the contextual Connections action
+    once the governed mutating Edge-action prerequisite is available; that is
+    the remaining no-shell/file-picker experience required by this checkbox.
 - [ ] Run installed macOS + Windows V-01/V-03: restart both services, observe
   add/remove expiry, validate HTTPS from each portal, exchange a nearby
   invitation, approve both sides, and record evidence before closing
@@ -159,6 +168,16 @@ gated until machine-bound Edge trust, signed single-use dispatch, per-node
 action allow-lists, a `ChangeRequest`, rollback declaration, and post-action
 health evidence exist. This preserves the checkbox above as incomplete: the
 secure package works, while the no-shell portal invocation is still pending.
+
+**Installer lifecycle increment:** both platform installers now accept the
+private package as a first-class input, call the same strict bootstrap with TLS
+startup deferred, and let the normal install compose step start the trusted
+HTTPS endpoint. A successful bootstrap atomically persists only the public-root
+path, TLS directory, and enabled marker into `.env`; subsequent macOS/Linux and
+Windows start paths restore the member-trust and TLS overlays automatically.
+The release asset manifest carries the Windows bootstrap and overlays. Member
+trust is split from `docker-compose.pki.yml`, keeping `step-ca` exclusive to the
+authority installation.
 
 #### Task 2 UX fit review — organization join
 

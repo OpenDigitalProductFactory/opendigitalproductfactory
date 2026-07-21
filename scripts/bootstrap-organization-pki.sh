@@ -202,6 +202,10 @@ if [ "$MODE" = "join" ] && [ -n "$JOIN_PACKAGE" ]; then
 fi
 
 compose() {
+  local compose_files=(-f "$REPO_ROOT/docker-compose.yml" -f "$REPO_ROOT/docker-compose.organization-trust.yml")
+  if [ "$MODE" = "authority" ] || [ "$MODE" = "issue-join" ]; then
+    compose_files+=( -f "$REPO_ROOT/docker-compose.pki.yml" )
+  fi
   DPF_PKI_PASSWORD_FILE="$PASSWORD_FILE_EFFECTIVE" \
   DPF_PKI_TRUST_BUNDLE="$ROOT_CERT" \
   DPF_PKI_BIND_ADDRESS="$BIND_ADDRESS" \
@@ -209,8 +213,22 @@ compose() {
   DPF_PKI_NAME="$ORG_NAME" \
   DPF_TLS_DIR="$OUT_DIR" \
   docker compose --project-directory "$REPO_ROOT" \
-    -f "$REPO_ROOT/docker-compose.yml" \
-    -f "$REPO_ROOT/docker-compose.pki.yml" "$@"
+    "${compose_files[@]}" "$@"
+}
+
+persist_organization_trust() {
+  env_file="$REPO_ROOT/.env"
+  [ -f "$env_file" ] || return 0
+  case "$OUT_DIR$ROOT_CERT" in *$'\n'*|*$'\r'*) echo "PKI paths must not contain newlines" >&2; exit 64 ;; esac
+  env_tmp="$(mktemp "$env_file.organization-trust.XXXXXX")"
+  awk -F= '$1 != "DPF_ORGANIZATION_TRUST_ENABLED" && $1 != "DPF_PKI_TRUST_BUNDLE" && $1 != "DPF_TLS_DIR" { print }' "$env_file" > "$env_tmp"
+  {
+    printf 'DPF_ORGANIZATION_TRUST_ENABLED=1\n'
+    printf 'DPF_PKI_TRUST_BUNDLE=%s\n' "$ROOT_CERT"
+    printf 'DPF_TLS_DIR=%s\n' "$OUT_DIR"
+  } >> "$env_tmp"
+  chmod 0600 "$env_tmp"
+  mv "$env_tmp" "$env_file"
 }
 
 if [ "$MODE" = "authority" ]; then
@@ -338,6 +356,8 @@ $HOSTS {
 }
 EOF
 chmod 0644 "$CADDYFILE"
+
+persist_organization_trust
 
 if [ "$START_TLS" = "1" ]; then
   compose -f "$REPO_ROOT/docker-compose.tls.yml" up -d portal portal-tls

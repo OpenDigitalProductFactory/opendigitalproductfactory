@@ -118,6 +118,10 @@ Flags:
                 (docker-compose.edge-standalone.yml).
   --no-edge     Force-skip the local Edge Node even if a prior install
                 enabled it (Edge is already off by default).
+  --organization-join-package <file.dpfjoin>
+                Join an existing organization trust domain during install.
+                The private package is validated, consumed, and deleted on
+                success; certificates and restart wiring are automatic.
   -h, --help    Show this help.
 
 Status: Phase 6+ vertical slice. Full end-user install (Docker
@@ -142,6 +146,8 @@ DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-}"    # opt-in; resolved after state init 
 # the install path, becomes the worktree base. Empty = single-tree mode (current
 # behavior). Future phases will turn this into a hard install/dev separation.
 DPF_DEV_WORKSPACE_PATH_ARG=""
+DPF_ORGANIZATION_JOIN_PACKAGE=""
+DPF_INSTALL_CALLER_DIR="$PWD"
 SUBCOMMAND=""
 
 while [ $# -gt 0 ]; do
@@ -157,6 +163,10 @@ while [ $# -gt 0 ]; do
     --no-autostart)         DPF_AUTOSTART=0 ;;
     --with-edge)            DPF_INCLUDE_EDGE=1 ;;
     --no-edge)              DPF_INCLUDE_EDGE=0 ;;
+    --organization-join-package)
+                            shift
+                            [ -n "${1:-}" ] || { echo "--organization-join-package requires a file" >&2; exit 64; }
+                            DPF_ORGANIZATION_JOIN_PACKAGE="$1" ;;
     --force-unsupported-host)
                             DPF_FORCE_UNSUPPORTED_HOST=1
                             export DPF_FORCE_UNSUPPORTED_HOST ;;
@@ -170,6 +180,17 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
+  case "$DPF_ORGANIZATION_JOIN_PACKAGE" in
+    /*) : ;;
+    *) DPF_ORGANIZATION_JOIN_PACKAGE="$DPF_INSTALL_CALLER_DIR/$DPF_ORGANIZATION_JOIN_PACKAGE" ;;
+  esac
+  [ -f "$DPF_ORGANIZATION_JOIN_PACKAGE" ] || {
+    echo "Organization join package was not found: $DPF_ORGANIZATION_JOIN_PACKAGE" >&2
+    exit 66
+  }
+fi
 
 cd "$REPO_ROOT"
 
@@ -847,6 +868,15 @@ fi
 #     happen inside portal-init using whatever DPF_LLM_PROVIDER
 #     resolves to (Docker Model Runner on Docker Desktop; Ollama on
 #     Linux native Docker via docker-compose.linux.yml).
+if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
+  step "Organization trust"
+  bash "$REPO_ROOT/scripts/bootstrap-organization-pki.sh" \
+    --mode join --join-package "$DPF_ORGANIZATION_JOIN_PACKAGE" --no-start-tls
+  export DPF_ORGANIZATION_TRUST_ENABLED=1
+  dpf_compose_files "$DPF_MODE"
+  ok "Organization HTTPS trust configured; the one-time package was consumed"
+fi
+
 step "Bringing up the platform"
 # Stamp the build with the current commit so /ops/self-upgrade can compare the
 # running image to the upgrade target. Contributor mode builds from local

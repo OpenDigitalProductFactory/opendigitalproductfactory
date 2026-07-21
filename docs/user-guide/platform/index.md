@@ -58,6 +58,15 @@ use. This establishes certificate trust only—the two Connections screens still
 show the matching code and still require independent approval before any demand
 is shared.
 
+The installer owns the technical work. On macOS/Linux it accepts the file as
+the **organization join package** input; the Windows installer accepts the same
+`.dpfjoin` file. After validation, DPF obtains the local HTTPS certificate,
+stores the public organization root, configures the HTTPS endpoint, and remembers
+that trust on later starts. A joining installation does not run or receive the
+organization CA. Until the Connections file picker is enabled, support may need
+to supply this installer input during setup; operators should never extract the
+file or copy certificates and environment settings by hand.
+
 If the candidate uses HTTP, its certificate cannot be verified, or discovery is
 unavailable, use the invitation controls on the same page. Never bypass the TLS
 warning: issue the one-time invitation on one installation and enter it with the

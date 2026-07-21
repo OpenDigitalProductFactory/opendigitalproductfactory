@@ -81,6 +81,7 @@ done
 # that already has a bundled node > default OFF. Export so dpf_compose_files
 # includes the edge overlay only when this install enabled it.
 export DPF_INCLUDE_EDGE="$(dpf_resolve_edge_enabled "$REPO_ROOT")"
+# dpf_compose_files also restores persisted organization-trust and TLS overlays.
 
 cd "$REPO_ROOT"
 dpf_platform

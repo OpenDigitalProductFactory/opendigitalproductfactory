@@ -36,6 +36,10 @@ $composeArgs = @("-f", "docker-compose.yml")
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
     $composeArgs += @("-f", "docker-compose.override.yml")
 }
+$envPath = Join-Path $DPF_DIR ".env"
+if ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_ORGANIZATION_TRUST_ENABLED=1$' -Quiet)) {
+    $composeArgs += @("-f", "docker-compose.organization-trust.yml", "-f", "docker-compose.tls.yml")
+}
 if ($includeEdge -and (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml"))) {
     $composeArgs += @("-f", "docker-compose.edge.yml")
 }

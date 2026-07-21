@@ -1,0 +1,11 @@
+# Organization member trust overlay. This is deliberately separate from the
+# Step CA authority service so a joining installation never starts a second CA.
+
+services:
+  portal:
+    environment:
+      # Node reads this only at process start. Public Web PKI roots remain in
+      # the default trust store; this adds the pinned organization root.
+      NODE_EXTRA_CA_CERTS: /etc/dpf/pki/root_ca.crt
+    volumes:
+      - ${DPF_PKI_TRUST_BUNDLE:?Set DPF_PKI_TRUST_BUNDLE to the organization root_ca.crt path}:/etc/dpf/pki/root_ca.crt:ro
