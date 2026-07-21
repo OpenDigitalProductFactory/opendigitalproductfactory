@@ -9,6 +9,7 @@ const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8
 
 test("organization PKI compose pins the approved image and protects CA custody", async () => {
   const compose = await read("docker-compose.pki.yml");
+  const trust = await read("docker-compose.organization-trust.yml");
 
   assert.match(
     compose,
@@ -21,7 +22,59 @@ test("organization PKI compose pins the approved image and protects CA custody",
   assert.match(compose, /DPF_PKI_BIND_ADDRESS:-127\.0\.0\.1/);
   assert.match(compose, /no-new-privileges:true/);
   assert.match(compose, /step_ca_data/);
-  assert.match(compose, /NODE_EXTRA_CA_CERTS/);
+  assert.doesNotMatch(compose, /NODE_EXTRA_CA_CERTS/);
+  assert.doesNotMatch(compose, /\n\s{2}portal:/);
+  assert.match(trust, /NODE_EXTRA_CA_CERTS/);
+  assert.match(trust, /DPF_PKI_TRUST_BUNDLE/);
+  assert.doesNotMatch(trust, /step-ca:/);
+});
+
+test("installers consume an organization join package without asking operators to manage PKI", async () => {
+  const [shellInstaller, windowsInstaller] = await Promise.all([
+    read("install-dpf.sh"),
+    read("install-dpf.ps1"),
+  ]);
+
+  assert.match(shellInstaller, /--organization-join-package/);
+  assert.match(shellInstaller, /Organization join package was not found/);
+  assert.match(shellInstaller, /bootstrap-organization-pki\.sh[\s\S]*--mode[\s\S]*join[\s\S]*--no-start-tls/);
+  assert.match(windowsInstaller, /OrganizationJoinPackage/);
+  assert.match(windowsInstaller, /organization_join_package_not_found/);
+  assert.match(windowsInstaller, /bootstrap-organization-pki\.ps1[\s\S]*-Mode[\s\S]*join[\s\S]*-NoStartTls/);
+});
+
+test("successful PKI bootstrap persists member trust for normal restart lifecycle", async () => {
+  const [shellBootstrap, windowsBootstrap, shellStart, windowsStart, composeLib] = await Promise.all([
+    read("scripts/bootstrap-organization-pki.sh"),
+    read("scripts/bootstrap-organization-pki.ps1"),
+    read("dpf-start.sh"),
+    read("scripts/dpf-start.ps1"),
+    read("scripts/installer/lib/compose.sh"),
+  ]);
+
+  for (const source of [shellBootstrap, windowsBootstrap]) {
+    assert.match(source, /DPF_ORGANIZATION_TRUST_ENABLED/);
+    assert.match(source, /DPF_PKI_TRUST_BUNDLE/);
+    assert.match(source, /DPF_TLS_DIR/);
+  }
+  assert.match(composeLib, /docker-compose\.organization-trust\.yml/);
+  assert.match(composeLib, /docker-compose\.tls\.yml/);
+  assert.match(shellStart, /DPF_ORGANIZATION_TRUST_ENABLED|organization-trust/);
+  assert.match(windowsStart, /docker-compose\.organization-trust\.yml/);
+  assert.match(windowsStart, /docker-compose\.tls\.yml/);
+});
+
+test("Windows consumer release carries the verified organization-join lifecycle assets", async () => {
+  const dockerfile = await read("Dockerfile");
+
+  for (const asset of [
+    "docker-compose.pki.yml",
+    "docker-compose.organization-trust.yml",
+    "docker-compose.tls.yml",
+    "scripts/bootstrap-organization-pki.ps1",
+  ]) {
+    assert.match(dockerfile, new RegExp(asset.replaceAll(".", "\\.")));
+  }
 });
 
 test("Bash and PowerShell PKI bootstraps expose the same safe lifecycle", async () => {

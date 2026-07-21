@@ -104,6 +104,17 @@ dpf_compose_files() {
     DPF_COMPOSE_FILES+=(-f docker-compose.edge.yml)
   fi
 
+  # Organization members persist this marker only after a fingerprint-pinned
+  # join succeeds. Trust/TLS is a member lifecycle concern; the Step CA
+  # authority overlay is deliberately not added here.
+  organization_trust="${DPF_ORGANIZATION_TRUST_ENABLED:-}"
+  if [ -z "$organization_trust" ] && [ -f .env ]; then
+    organization_trust="$(sed -n 's/^DPF_ORGANIZATION_TRUST_ENABLED=//p' .env | tail -1)"
+  fi
+  if [ "$organization_trust" = "1" ]; then
+    DPF_COMPOSE_FILES+=(-f docker-compose.organization-trust.yml -f docker-compose.tls.yml)
+  fi
+
   # Append any caller-provided extras (e.g. docker-compose.dev.yml for
   # the developer port-exposing overlay).
   while [ "$#" -gt 0 ]; do

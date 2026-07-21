@@ -4,9 +4,14 @@ param(
     [string]$Version = "latest",
     [switch]$LibraryOnly,
     [switch]$WithEdge,
-    [switch]$NoEdge
+    [switch]$NoEdge,
+    [ValidateNotNullOrEmpty()][string]$OrganizationJoinPackage
 )
 $ErrorActionPreference = "Stop"
+$OrganizationJoinPackagePath = if ($OrganizationJoinPackage) { [IO.Path]::GetFullPath($OrganizationJoinPackage) } else { $null }
+if ($OrganizationJoinPackagePath -and -not (Test-Path -LiteralPath $OrganizationJoinPackagePath -PathType Leaf)) {
+    throw "organization_join_package_not_found:$OrganizationJoinPackagePath"
+}
 
 function Resolve-DPFNativeEdgeModulePath {
     param([Parameter(Mandatory)][string]$InstallDir)
@@ -334,6 +339,15 @@ function Get-DPFComposeArgs {
         $composeArgs += @("-f", "docker-compose.edge.yml")
     }
 
+    $envPath = Join-Path $InstallDir ".env"
+    $organizationTrust = $env:DPF_ORGANIZATION_TRUST_ENABLED -eq "1"
+    if (-not $organizationTrust -and (Test-Path -LiteralPath $envPath)) {
+        $organizationTrust = [bool](Select-String -LiteralPath $envPath -Pattern '^DPF_ORGANIZATION_TRUST_ENABLED=1$' -Quiet)
+    }
+    if ($organizationTrust) {
+        $composeArgs += @("-f", "docker-compose.organization-trust.yml", "-f", "docker-compose.tls.yml")
+    }
+
     return $composeArgs
 }
 
@@ -538,6 +552,10 @@ if (Test-Path (Join-Path $DPF_DIR "docker-compose.release.yml")) {
 }
 if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
     $composeArgs += @("-f", "docker-compose.override.yml")
+}
+$envPath = Join-Path $DPF_DIR ".env"
+if ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_ORGANIZATION_TRUST_ENABLED=1$' -Quiet)) {
+    $composeArgs += @("-f", "docker-compose.organization-trust.yml", "-f", "docker-compose.tls.yml")
 }
 docker compose @composeArgs up -d
 
@@ -1483,6 +1501,17 @@ if ($env:Path -notlike "*$safetyBin*") {
 Write-Action "Open a new terminal for the PATH change to take effect in other windows."
 
 # --- Step 6: Start Platform ---------------------------------------------------
+
+if ($OrganizationJoinPackagePath) {
+    Write-Host ""
+    Write-Host "  Configuring organization trust..." -ForegroundColor Cyan
+    $bootstrap = Join-Path $DPF_DIR "scripts\bootstrap-organization-pki.ps1"
+    if (-not (Test-Path -LiteralPath $bootstrap)) { $bootstrap = Join-Path $PSScriptRoot "scripts\bootstrap-organization-pki.ps1" }
+    if (-not (Test-Path -LiteralPath $bootstrap)) { throw "organization_pki_bootstrap_missing" }
+    & $bootstrap -Mode join -JoinPackage $OrganizationJoinPackagePath -NoStartTls
+    $env:DPF_ORGANIZATION_TRUST_ENABLED = "1"
+    Write-OK "Organization HTTPS trust configured; the one-time package was consumed"
+}
 
 Write-Step 7 10 "Starting the platform..."
 if (-not (Test-StepDone "started")) {

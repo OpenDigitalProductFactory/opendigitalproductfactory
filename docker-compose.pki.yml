@@ -45,14 +45,6 @@ services:
       retries: 10
       start_period: 20s
 
-  portal:
-    environment:
-      # Node reads this only at process start. It adds the organization root;
-      # public Web PKI roots remain available through the default trust store.
-      NODE_EXTRA_CA_CERTS: /etc/dpf/pki/root_ca.crt
-    volumes:
-      - ${DPF_PKI_TRUST_BUNDLE:?Set DPF_PKI_TRUST_BUNDLE to the organization root_ca.crt path}:/etc/dpf/pki/root_ca.crt:ro
-
 secrets:
   step-ca-password:
     file: ${DPF_PKI_PASSWORD_FILE:?Set DPF_PKI_PASSWORD_FILE to a mode-0600 file}
