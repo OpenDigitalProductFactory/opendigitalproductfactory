@@ -32,6 +32,10 @@
 
 import { prisma } from "@dpf/db";
 import { previewRoute, type RouteAndCallOptions } from "@/lib/inference/routed-inference";
+import {
+  classifyDispatchFailure,
+  type DispatchFailureVerdict,
+} from "@/lib/inference/dispatch-failure-class";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import {
   loadPhaseEnableCandidateProviders,
@@ -234,7 +238,14 @@ async function resolveRoutedPhase(args: {
       flags: [],
     };
   } catch (err) {
-    // prepareRoute throws NoEligibleEndpointsError when zero providers exist.
+    // BI-8C44DB49: this catch used to relabel EVERY prepareRoute throw as
+    // "no providers are configured". On an install with three endpoints — all
+    // excluded because none offered `toolUse` — that reading sent both the
+    // operator and a debugging session after a configuration problem that did
+    // not exist, while the real capability gap stayed invisible for days. Report
+    // what actually happened; only claim "no providers" when that is the case.
+    const verdict = classifyDispatchFailure(err);
+    const structural = verdict.code !== "transient";
     return {
       ...base,
       providerId: null,
@@ -246,13 +257,36 @@ async function resolveRoutedPhase(args: {
       flags: [
         {
           severity: "error",
-          code: "no-providers",
-          message: `No AI providers are configured — the ${args.label} phase cannot run.`,
-          remediation:
-            "Connect a provider in Providers & Routing, or configure a local model endpoint.",
+          code: structural ? verdict.code : "no-providers",
+          message: structural
+            ? `The ${args.label} phase cannot run: ${verdict.summary}`
+            : `No AI providers are configured — the ${args.label} phase cannot run.`,
+          remediation: remediationFor(verdict),
         },
       ],
     };
+  }
+}
+
+/**
+ * Remediation that matches the actual constraint (BI-8C44DB49). "Connect a
+ * provider" is useless advice when providers exist and were excluded — it tells
+ * the operator to fix something that is not broken.
+ */
+function remediationFor(verdict: DispatchFailureVerdict): string {
+  switch (verdict.code) {
+    case "capability-floor-unmet":
+      return verdict.missingCapability
+        ? `Activate a model that supports '${verdict.missingCapability}' in Platform > AI > Model Assignment. Existing endpoints were excluded for lacking it, so adding another provider without that capability will not help.`
+        : "Activate a model whose capabilities satisfy this phase in Platform > AI > Model Assignment.";
+    case "context-overflow":
+      return "Raise the served context window on the local endpoint (DMR serving config), or reduce the prompt/tool budget for this phase.";
+    case "no-eligible-endpoint":
+      return "Relax this phase's routing contract, or activate an endpoint that satisfies it, in Providers & Routing.";
+    case "sensitivity-unsatisfiable":
+      return "Permit a provider for this sensitivity/residency policy, or lower the request's sensitivity.";
+    default:
+      return "Connect a provider in Providers & Routing, or configure a local model endpoint.";
   }
 }
 
