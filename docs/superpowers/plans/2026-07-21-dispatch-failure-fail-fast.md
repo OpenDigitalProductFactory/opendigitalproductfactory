@@ -66,11 +66,23 @@ Everything else is `transient` and retryable up to the ceiling.
       relabelling structural failures as `no-providers` and emits remediation
       that matches the real constraint ("activate a model supporting `toolUse`",
       not "connect a provider" when providers exist).
-- [ ] **2 — fail-fast in the dispatch path.** `lib/deliberation/orchestrator.ts`
-      creates a fresh `active` TaskRun per attempt with no cap. On a structural
-      verdict it must settle the run terminally with `verdict.summary` and record
-      the code, so the sweep has something to read. Seam: the `try` around the
-      DeliberationRun creation/dispatch.
+- [ ] **2 — PREFLIGHT the route before creating the TaskRun.** Not post-hoc
+      settling — that was the obvious design and it does not work. Evidence:
+      `orchestrator.ts:731` already catches and calls
+      `settleBootstrapTaskRun(taskRunId, "failed")`, yet all 5,026 rows are
+      `stalled`, which is the *watchdog's* state, not the orchestrator's. The
+      reason is `settleBootstrapTaskRun` scopes its update to rows still in
+      `active|working|queued|running`, so once the watchdog reaps a slow failure
+      to `stalled` the orchestrator's own handler is a silent no-op. Any fix that
+      settles *after* the attempt loses the same race.
+
+      So: call the side-effect-free `previewRoute` for the deliberation's
+      contract BEFORE `prisma.taskRun.create`, classify with
+      `classifyDispatchFailure`, and on a structural verdict return a blocked
+      outcome carrying `verdict.summary` — creating no TaskRun at all. The row
+      that never exists cannot stall, cannot be reaped, cannot be retried, and
+      cannot hold the quiescence gate open. This is also the literal reading of
+      the operator's ask: "raise an error vs. trying what won't work."
 - [ ] **3 — attempt ceiling on the sweep.** The re-dispatch sweep must count
       prior attempts per build and consult `shouldRedispatch`. Same unbounded
       retry class as BI-A009313E; the ceiling is what makes an unrecognised
