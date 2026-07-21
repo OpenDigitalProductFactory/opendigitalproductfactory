@@ -240,6 +240,34 @@ export const DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS: WorkspaceHomeContribution[] =
     ],
   }),
   profile({
+    // Custody operations are not mobile field ops (the work happens at the
+    // operator's own facility) and not retail (the stock belongs to clients),
+    // so warehousing gets its own home rather than joining either.
+    id: "home-warehousing-fulfilment",
+    label: "Warehouse operations home",
+    description:
+      "Inbound bookings, stock accuracy, outbound waves, and client exceptions for warehousing and fulfilment operations.",
+    primaryOperatingQuestion: "what is at risk of missing cut-off or going out wrong today?",
+    topConcerns: [
+      "inbound waiting to be booked in",
+      "orders at risk of missing carrier cut-off",
+      "stock accuracy and count variances",
+      "space and dock capacity",
+      "client exceptions and handoffs",
+    ],
+    archetypeCategories: ["warehousing-fulfilment"],
+    primitives: ["inventory-watch", "capacity-lanes", "decision-queue", "communication-exceptions", "handoff-queue"],
+    requiredCanonicalData: ["customer-account", "work-item", "work-schedule"],
+    requiredSignals: ["scheduled-work", "urgent-exception", "communication-failed", "coworker-handoff"],
+    components: [
+      { key: "stock-accuracy", slotId: "today-now", primitiveKey: "inventory-watch", title: "Stock accuracy and count variances", dataRefs: [workItem] },
+      { key: "dock-capacity", slotId: "today-now", primitiveKey: "capacity-lanes", title: "Dock, space, and wave capacity", dataRefs: [workSchedule, scheduledWork] },
+      { key: "unassigned-work", slotId: "exceptions-needs-review", primitiveKey: "decision-queue", title: "Receipts and orders needing action", dataRefs: [workItem, urgentException] },
+      { key: "customer-callbacks", slotId: "exceptions-needs-review", primitiveKey: "communication-exceptions", title: "Client follow-up", dataRefs: [customerAccount, failedCommunication] },
+      { key: "coworker-handoffs", slotId: "coworker-handoffs", primitiveKey: "handoff-queue", title: "Warehouse and office handoffs", dataRefs: [coworkerHandoff] },
+    ],
+  }),
+  profile({
     id: "home-food-hospitality",
     label: "Service period home",
     description:

@@ -437,6 +437,30 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Peak-season campaign", "Realtor referral outreach", "Review request", "B2B account proposal"],
   },
 
+  "warehousing-fulfilment": {
+    primaryGoal: "Win contract accounts that fill the racks and keep them full — proof of accuracy and on-time despatch beats a headline rate",
+    stakeholders: "E-commerce brands, importers and distributors, manufacturers, freight forwarders",
+    campaignTypes: [
+      "Capacity-available campaigns when space frees up",
+      "Peak-season readiness offers ahead of Q4",
+      "Switching campaigns targeting brands outgrowing their current 3PL",
+      "Freight forwarder and broker referral partnerships",
+      "Facility tour and open-day invitations",
+      "Case studies on accuracy and despatch performance",
+      "Integration-led content for the platforms clients sell on",
+    ],
+    contentTone: "Dependable, precise, evidence-led",
+    keyMetrics: [
+      "Enquiry-to-contract conversion",
+      "Space utilisation and committed capacity",
+      "Revenue per pallet and per order",
+      "Client retention and account growth",
+      "On-time despatch and order accuracy cited in wins",
+    ],
+    ctaLanguage: ["Request a quote", "Book a facility tour", "Get a rate card", "Check available capacity"],
+    agentSkills: ["Capacity-available campaign", "Peak-season readiness outreach", "Forwarder referral outreach", "Client performance review"],
+  },
+
   "security-services": {
     primaryGoal: "Win and renew recurring contracts — built on credibility, a response track record, and compliance assurance",
     stakeholders: "Businesses, property managers, event organizers, residents, insurers",

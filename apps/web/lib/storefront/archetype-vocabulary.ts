@@ -134,6 +134,15 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Box Office", stakeholderLabel: "Guests",
     teamLabel: "Team", inboxLabel: "Bookings", agentName: "Box Office Manager",
   },
+  // Warehousing & fulfilment — custody of a client's goods. The stakeholder is
+  // the *client* whose stock is held (a 3PL's customer is a business shipping
+  // through it), and the inbox carries enquiries for storage and handling.
+  "warehousing-fulfilment": {
+    itemsLabel: "Services & Rates", singleItemLabel: "Service", addButtonLabel: "Add service",
+    categoryLabel: "Service", priceLabel: "Rate",
+    portalLabel: "Client Portal", stakeholderLabel: "Clients",
+    teamLabel: "Warehouse Team", inboxLabel: "Enquiries", agentName: "Warehouse Manager",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {

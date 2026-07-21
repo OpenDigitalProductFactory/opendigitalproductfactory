@@ -102,6 +102,7 @@ const PROVISIONING_VALUES = new Set<ProvisioningModel>([
   "device-bound",
   "episode-of-care",
   "reservation-and-return",
+  "custody-and-fulfilment",
 ]);
 const PLATFORM_VALUES = new Set<PlatformEcosystem>(["no", "yes-marketplace", "yes-developer"]);
 const PORTFOLIO_SCOPES = new Set<PortfolioScope>(["absent", "minimal", "standard", "primary"]);

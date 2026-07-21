@@ -63,6 +63,35 @@ const LOGISTICS_B2B_ACTIVATION: ArchetypeDefinition["activationProfile"] = {
   },
 };
 
+// Non-asset freight brokerage — the one leaf in this category that is NOT
+// dispatch-native. The broker sells from a desk, so `consumptionChannel` is
+// `sales-assisted` rather than `onsite-plus-portal`; that alone makes
+// `needsFieldDispatch` derive false, so no `fieldDispatch` override is needed.
+// Revenue is the spread on a load, which reads as account-based fees against a
+// shipper account rather than a per-job transaction.
+const FREIGHT_BROKERAGE_ACTIVATION: ArchetypeDefinition["activationProfile"] = {
+  profileType: "standard",
+  modules: ["customer-estate", "service-operations", "billing-readiness", "integrations"],
+  billingReadinessMode: "prepared-not-prescribed",
+  customerGraph: "separate-customer-projection",
+  estateSeparation: "shared",
+  axes: {
+    form: "services",
+    delivery: "physical",
+    primaryConsumer: "business",
+    consumptionChannel: "sales-assisted",
+    commercialModel: "account-based-fees",
+    provisioning: "account-with-billing",
+    platform: "no",
+  },
+  portfolios: {
+    foundational: { scope: "minimal" },
+    manufactureAndDeliver: { scope: "primary", it4itStages: ["request-to-fulfill"] },
+    forEmployees: { scope: "standard" },
+    productsAndServicesSold: { scope: "primary" },
+  },
+};
+
 export const movingAndLogisticsArchetypes: ArchetypeDefinition[] = [
   {
     archetypeId: "moving-company",
@@ -174,5 +203,57 @@ export const movingAndLogisticsArchetypes: ArchetypeDefinition[] = [
       { name: "details", label: "What do you need delivered?", type: "textarea" as const, required: false },
     ],
     activationProfile: LOGISTICS_B2B_ACTIVATION,
+  },
+  {
+    // Non-asset freight brokerage: matches a shipper's load to a carrier's
+    // capacity on a lane and earns the spread (typically ~15%). It owns no
+    // trucks and takes no custody, so it is neither a custody archetype
+    // (warehousing-fulfilment) nor a dispatch one — a broker moves other
+    // people's vehicles and has no fleet of its own to route. US operation
+    // requires FMCSA broker authority and a $75,000 surety bond; that is a
+    // compliance overlay, not template substrate.
+    archetypeId: "freight-brokerage",
+    name: "Freight Brokerage & Forwarding",
+    category: "moving-and-logistics",
+    ctaType: "inquiry",
+    tags: ["freight broker", "brokerage", "freight forwarding", "load matching", "3pl", "logistics", "b2b"],
+    itemTemplates: [
+      { name: "Full Truckload (FTL)", description: "A dedicated trailer for your load, priced by lane", priceType: "quote" },
+      { name: "Less-Than-Truckload (LTL)", description: "Shared trailer space, priced by freight class and weight", priceType: "quote" },
+      { name: "Expedited & Hot-Shot Freight", description: "Time-critical loads covered at short notice", priceType: "quote" },
+      { name: "Specialised & Oversized Freight", description: "Flatbed, reefer, and out-of-gauge loads", priceType: "quote" },
+      { name: "Freight Forwarding & Customs", description: "International movements with customs documentation handled", priceType: "quote" },
+      { name: "Carrier Onboarding", description: "Join our carrier network — authority and insurance verified", priceType: "free" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Services", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "testimonials", title: "What Shippers Say", sortOrder: 3 },
+      { type: "contact", title: "Get a Freight Quote", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "companyName", label: "Company name", type: "text" as const, required: true },
+      { name: "enquiryType", label: "I am a", type: "select" as const, required: true, options: ["Shipper with freight to move", "Carrier looking for loads", "Both"] },
+      { name: "originDestination", label: "Origin and destination", type: "text" as const, required: false, placeholder: "Collection city / postcode to delivery city / postcode" },
+      { name: "freightMode", label: "Freight mode", type: "select" as const, required: false, options: ["Full truckload (FTL)", "Less-than-truckload (LTL)", "Expedited", "Specialised / oversized", "International", "Not sure"] },
+      { name: "loadDetails", label: "Load details", type: "textarea" as const, required: false, placeholder: "Commodity, weight, pallet count, and any timing requirements" },
+    ],
+    // A broker's board IS a pipeline — loads moving quote → tender → covered →
+    // in transit → delivered → invoiced — so PIPELINE is the right template,
+    // but its default nouns ("matters", "professionals") are a law-firm's.
+    // ADR-4 override rebinds them to the trade's own words.
+    twinProfile: {
+      resourceNoun: { singular: "broker", plural: "brokers" },
+      workItemNoun: { singular: "load", plural: "loads" },
+      queues: [
+        { key: "quotes", label: "Quotes out" },
+        { key: "uncovered", label: "Loads to cover" },
+        { key: "intransit", label: "In transit" },
+      ],
+      capacityChips: ["loads to cover", "margin per load", "in transit"],
+    },
+    activationProfile: FREIGHT_BROKERAGE_ACTIVATION,
   },
 ];

@@ -145,6 +145,10 @@ export interface FieldDispatchProfileOverride {
  *  - `provisioning !== "reservation-and-return"` — excludes the rental-pool model
  *    (asset-rental, shared-machinery co-ops), which is the `rental-fleet`
  *    capability, not field dispatch.
+ *  - `provisioning !== "custody-and-fulfilment"` — excludes the goods-custody
+ *    model (warehousing-fulfilment). The work happens at the *operator's*
+ *    facility, not the customer's site; the resource being allocated is a dock
+ *    door and a pick wave, which is `warehouse-operations`, not dispatch.
  *
  * Known boundaries handled by the {@link FieldDispatchProfileOverride} escape
  * hatch and the trades-profile work (F7):
@@ -159,7 +163,8 @@ export function needsFieldDispatch(axes: OperatingModelAxes): boolean {
     axes.form === "services" &&
     (axes.delivery === "physical" || axes.delivery === "hybrid") &&
     axes.consumptionChannel === "onsite-plus-portal" &&
-    axes.provisioning !== "reservation-and-return"
+    axes.provisioning !== "reservation-and-return" &&
+    axes.provisioning !== "custody-and-fulfilment"
   );
 }
 

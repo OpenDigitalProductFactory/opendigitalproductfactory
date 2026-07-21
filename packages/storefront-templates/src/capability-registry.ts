@@ -229,6 +229,40 @@ export const CAPABILITY_REGISTRY = {
     defaultIsolation: "organization-scope",
     surfaces: ["rental", "utilization"],
   },
+  // Goods-custody capabilities — gated by the custody-and-fulfilment
+  // provisioning model (warehousing-fulfilment archetypes; design doc
+  // 2026-07-21). The stock belongs to the customer, so the ledger and the
+  // handling record are both strictly customer-scoped: one client's stock must
+  // never be visible in another's, which is the multi-client tenancy a 3PL WMS
+  // is defined by.
+  "goods-custody": {
+    label: "Goods Custody & Stock Ledger",
+    portfolio: "manufactureAndDeliver",
+    it4itStage: "detect-to-correct",
+    defaultOwnershipScope: "customer-account",
+    defaultIsolation: "strict-customer-scope",
+    surfaces: ["warehouse", "inventory"],
+  },
+  "warehouse-operations": {
+    label: "Warehouse Operations",
+    portfolio: "manufactureAndDeliver",
+    it4itStage: "request-to-fulfill",
+    defaultOwnershipScope: "organization",
+    defaultIsolation: "organization-scope",
+    surfaces: ["warehouse", "operations"],
+  },
+  "storage-and-handling-billing": {
+    label: "Storage & Handling Billing",
+    portfolio: "productsAndServicesSold",
+    defaultOwnershipScope: "customer-account",
+    defaultIsolation: "strict-customer-scope",
+    surfaces: ["finance", "billing-readiness", "warehouse"],
+    setupPrompt: {
+      question: "Do you bill storage separately from handling?",
+      helpText:
+        "Turns on a rate card with two meters — storage rent per pallet or bin per period, and handling per receipt, pick, or order — plus monthly minimums and accessorial charges. Fulfilment-only operators who bill per order can leave this off and add it later.",
+    },
+  },
 } as const satisfies Record<string, CapabilityRegistryEntry>;
 
 export type CapabilityKey = keyof typeof CAPABILITY_REGISTRY;

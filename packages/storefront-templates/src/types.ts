@@ -70,7 +70,21 @@ export type ArchetypeCategory =
    *  concert promoters (arrange tours, book talent + venues, carry box-office
    *  risk), and talent & booking agencies. Event-driven, ticketed value stream;
    *  capacity is a physical hard cap (seats/room). Same design doc as above. */
-  | "live-events-venues";
+  | "live-events-venues"
+  /** Warehousing & fulfilment: the business takes **custody of goods it does not
+   *  own** into a facility and is paid to hold and handle them — 3PL contract
+   *  warehousing, e-commerce fulfilment centres, cold/temperature-controlled
+   *  storage, and bonded/records storage. The defining value stream is
+   *  receive → put-away → store → pick/pack → despatch (the S4c Receive & Store
+   *  stage), billed as storage rent (per pallet/bin per period) plus handling
+   *  (per receipt/pick/order). Custody is the discriminator: distinct from
+   *  `asset-rental`'s `self-storage` (the customer keeps their own key and
+   *  self-serves — no custody, no handling), from `retail-goods`'
+   *  `wholesale-distribution` (sells stock it *owns*), and from
+   *  `moving-and-logistics` (custody is transient and in-transit, with no
+   *  facility inventory of record). See
+   *  docs/superpowers/specs/2026-07-21-warehousing-fulfilment-archetype-design.md. */
+  | "warehousing-fulfilment";
 
 export interface FormField {
   name: string;
@@ -258,7 +272,16 @@ export type ProvisioningModel =
    *  and returning it — the rental/shared-asset entitlement model. Distinct from
    *  account-with-billing: the asset is re-pooled, not consumed. Gates the
    *  rental-fleet / rental-agreements / asset-pool capabilities. */
-  | "reservation-and-return";
+  | "reservation-and-return"
+  /** The operator takes **custody of goods it does not own** into its facility
+   *  and is paid to hold and handle them (bailment) — 3PL warehousing,
+   *  fulfilment, cold storage, cross-dock. The mirror image of
+   *  reservation-and-return: there, the operator's own asset goes out to the
+   *  customer and comes back; here, the customer's goods come in and the
+   *  operator handles them. Gates the goods-custody / warehouse-operations /
+   *  storage-and-handling-billing capabilities. See
+   *  docs/superpowers/specs/2026-07-21-warehousing-fulfilment-archetype-design.md. */
+  | "custody-and-fulfilment";
 
 export type PlatformEcosystem = "no" | "yes-marketplace" | "yes-developer";
 

@@ -23,7 +23,7 @@ import { deriveFieldDispatchProfile } from "./field-dispatch";
  * role not patient) — this profile just says which template and which nouns.
  */
 
-/** The 12 twin templates. Physical templates render *space*; board templates
+/** The 13 twin templates. Physical templates render *space*; board templates
  *  (TENANTS/PIPELINE/PROGRAMS) render *portfolio state* for non-physical work. */
 export type TwinTemplate =
   | "FLOOR" // tables/stations + seats on a floor plan (food-hospitality)
@@ -35,6 +35,7 @@ export type TwinTemplate =
   | "STORE" // shelves/stock + POS lanes + fulfilment (point-of-sale retail)
   | "VENUE" // seat/space map + run-of-show timeline (ticketed events)
   | "COUNTER" // service counters/case stations (statutory/public services)
+  | "DOCK" // dock doors + racking + pick faces (custody-and-fulfilment warehousing)
   | "TENANTS" // accounts/tenants x health/usage/seats (board — SaaS/banking)
   | "PIPELINE" // matters/engagements/productions x stage (board — prof-svcs/media)
   | "PROGRAMS"; // programs/funds/donors/campaigns (board — nonprofit)
@@ -61,6 +62,7 @@ export type TwinCogKind =
   | "restock-and-pick"
   | "space-and-date"
   | "next-in-line"
+  | "wave-and-picker"
   | "route-at-risk-account"
   | "assign-by-utilization"
   | "allocate-to-program";
@@ -163,6 +165,7 @@ const PHYSICAL_TEMPLATES: ReadonlySet<TwinTemplate> = new Set<TwinTemplate>([
   "STORE",
   "VENUE",
   "COUNTER",
+  "DOCK",
 ]);
 
 const n = (singular: string, plural: string): TwinNoun => ({ singular, plural });
@@ -259,6 +262,23 @@ const TEMPLATE_DEFAULTS: Record<
     cog: { kind: "next-in-line", signals: ["sla-clock", "workload", "skill"] },
     capacityChips: ["in queue", "SLA at risk", "reviewer-days"],
   },
+  DOCK: {
+    zones: [
+      z("inbound", "Inbound dock"),
+      z("racking", "Put-away & racking"),
+      z("pick", "Pick faces"),
+      z("outbound", "Pack & despatch"),
+    ],
+    // The racking holds the countable capacity (pallet positions), not the
+    // dock apron — doors are a throughput constraint, space is the sold one.
+    capacityZoneKey: "racking",
+    resourceNoun: n("dock door", "dock doors"),
+    workItemNoun: n("shipment", "shipments"),
+    queues: [q("appointments", "Inbound appointments"), q("waves", "Outbound waves")],
+    // The carrier cut-off is the deadline every wave is racing.
+    cog: { kind: "wave-and-picker", signals: ["workload", "availability", "deadline"] },
+    capacityChips: ["space utilisation", "dock-to-stock", "orders to despatch"],
+  },
   TENANTS: {
     zones: [z("board", "Account health board")],
     capacityZoneKey: "board",
@@ -339,7 +359,15 @@ function chooseTemplate(
     return { template: "YARD" };
   }
 
-  // 3. Non-physical → the board family (SaaS/banking/prof-svcs/media/nonprofit).
+  // 3. Goods held in custody → DOCK. Must precede the board family and the
+  //    `form === "goods"` → STORE safety net: a 3PL's floor is racking and dock
+  //    doors, not a sales floor with POS lanes, and the stock on it is the
+  //    client's, so STORE's restock-and-pick cog would be plain wrong.
+  if (provisioning === "custody-and-fulfilment" || category === "warehousing-fulfilment") {
+    return { template: "DOCK" };
+  }
+
+  // 4. Non-physical → the board family (SaaS/banking/prof-svcs/media/nonprofit).
   //    Category-specific board checks come BEFORE the generic member-owned rule so
   //    a member-owned credit union → TENANTS/portfolio (with "Members" vocabulary),
   //    not the donor/campaign PROGRAMS board.
@@ -367,7 +395,7 @@ function chooseTemplate(
     return { template: "PIPELINE" };
   }
 
-  // 4. Physical categories.
+  // 5. Physical categories.
   if (category === "food-hospitality") {
     return { template: "FLOOR" };
   }
@@ -412,7 +440,7 @@ function chooseTemplate(
     return { template: "BOOK", variant: "class-grid" };
   }
 
-  // 5. Final safety net — never return undefined.
+  // 6. Final safety net — never return undefined.
   if (schedulingPattern === "slot") return { template: "BOOK", variant: "provider-chair" };
   if (axes?.form === "goods") return { template: "STORE" };
   return { template: "PIPELINE" };

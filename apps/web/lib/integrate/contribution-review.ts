@@ -129,6 +129,7 @@ const VERTICAL_CATEGORIES = [
   { value: "banking-financial-services", label: "Banking & Financial Services", keywords: ["bank", "banking", "credit union", "deposit", "loan", "mortgage", "lending", "bian", "member", "branch", "underwriting"] },
   { value: "media-production", label: "Media & Production", keywords: ["film", "video", "production", "commercial", "post-production", "vfx", "editing", "studio", "crew", "staging", "av", "documentary"] },
   { value: "live-events-venues", label: "Live Events & Venues", keywords: ["venue", "ticket", "box office", "concert", "tour", "promoter", "booking", "talent", "festival", "theatre", "gig", "event"] },
+  { value: "warehousing-fulfilment", label: "Warehousing & Fulfilment", keywords: ["warehouse", "warehousing", "3pl", "fulfilment", "fulfillment", "pick and pack", "pallet", "inventory", "stock", "putaway", "cross-dock", "cold storage", "sscc", "asn", "wms", "despatch"] },
 ];
 
 // CTA type to vertical affinity — features using booking, purchase, etc.

@@ -3,7 +3,7 @@ import { INDUSTRY_OPTIONS, INDUSTRY_SLUGS, isIndustrySlug, industryLabel } from 
 
 describe("industries", () => {
   it("exposes exactly the 21 canonical industries", () => {
-    expect(INDUSTRY_OPTIONS).toHaveLength(21);
+    expect(INDUSTRY_OPTIONS).toHaveLength(22);
     expect(INDUSTRY_SLUGS).toContain("healthcare-wellness");
     expect(INDUSTRY_SLUGS).toContain("hoa-property-management");
     expect(INDUSTRY_SLUGS).toContain("software-platform");

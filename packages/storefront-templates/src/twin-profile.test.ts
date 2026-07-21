@@ -6,6 +6,7 @@ import { deriveFieldDispatchProfile } from "./field-dispatch";
 import { readActivationProfile } from "./activation-profile";
 
 const ALL_TEMPLATES: TwinTemplate[] = [
+  "DOCK",
   "FLOOR",
   "TERRITORY",
   "YARD",
