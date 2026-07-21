@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 530,
+  "pageCount": 534,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -5440,6 +5440,50 @@
     },
     "docs/professions/operations/wiki/trades-epa-608-refrigerant-certification.md": {
       "publicHref": "/professions/operations/wiki/trades-epa-608-refrigerant-certification/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "why-it-matters",
+        "source"
+      ]
+    },
+    "docs/professions/operations/wiki/warehouse-bonded-duty-suspended-control.md": {
+      "publicHref": "/professions/operations/wiki/warehouse-bonded-duty-suspended-control/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "why-it-matters",
+        "source"
+      ]
+    },
+    "docs/professions/operations/wiki/warehouse-cold-chain-gdp-integrity.md": {
+      "publicHref": "/professions/operations/wiki/warehouse-cold-chain-gdp-integrity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "why-it-matters",
+        "source"
+      ]
+    },
+    "docs/professions/operations/wiki/warehouse-dock-to-stock-receiving.md": {
+      "publicHref": "/professions/operations/wiki/warehouse-dock-to-stock-receiving/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "why-it-matters",
+        "source"
+      ]
+    },
+    "docs/professions/operations/wiki/warehouse-goods-in-trust-custody-liability.md": {
+      "publicHref": "/professions/operations/wiki/warehouse-goods-in-trust-custody-liability/",
       "portalHref": null,
       "publishedPublic": true,
       "publishedPortal": false,
