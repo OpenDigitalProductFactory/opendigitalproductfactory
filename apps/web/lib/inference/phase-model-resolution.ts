@@ -246,6 +246,16 @@ async function resolveRoutedPhase(args: {
     // what actually happened; only claim "no providers" when that is the case.
     const verdict = classifyDispatchFailure(err);
     const structural = verdict.code !== "transient";
+    // BI-573A8EB3: keeping only err.message here is how a `ReferenceError:
+    // workloadClass is not defined` (a Turbopack-minifier bug in the suitability
+    // path) stayed invisible for days — the message names the symptom, the STACK
+    // names the file. Log the stack once per failure so the next opaque routing
+    // throw is diagnosable from the logs instead of by bundle archaeology. The
+    // returned rationale stays the human-readable message.
+    console.error(
+      `[phase-model-resolution] ${args.label} route failed (${verdict.code}):`,
+      err instanceof Error ? (err.stack ?? err.message) : err,
+    );
     return {
       ...base,
       providerId: null,

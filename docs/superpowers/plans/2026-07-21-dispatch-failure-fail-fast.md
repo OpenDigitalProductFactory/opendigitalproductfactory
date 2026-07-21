@@ -2,7 +2,20 @@
 
 Status: slice 1 landed, slices 2–4 open
 Owner: platform / inference
-Related: BI-8C44DB49, BI-A009313E (stranded-ideate flood, same unbounded-retry class)
+Related: BI-8C44DB49, BI-A009313E (stranded-ideate flood, same unbounded-retry class),
+BI-573A8EB3 (the UPSTREAM cause — see below)
+
+## Update — the upstream trigger is BI-573A8EB3, a Turbopack minifier bug
+
+This fail-fast work bounds the *damage* (don't retry what can't succeed). The
+thing that can't succeed was finally root-caused: routed phases (plan /
+design-review / plan-review) throw `ReferenceError: workloadClass is not defined`
+from a Turbopack inlining bug in `provider-suitability/work-context.ts` — the
+source is correct, only the minified bundle is broken, so no unit test sees it.
+Fixed under BI-573A8EB3. With that fixed AND an eligible provider, the 8 stranded
+`plan`-phase builds can actually advance instead of feeding the flood. The
+fail-fast slices remain worth landing: they are the general guarantee that any
+*future* structural dispatch failure is bounded rather than infinite.
 
 ## The incident this exists to prevent
 
