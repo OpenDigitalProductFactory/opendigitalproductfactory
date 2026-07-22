@@ -123,7 +123,6 @@ function cleanContent(raw: string): string {
 function makeNoteKey(content: string): string {
   const tokens = content
     .toLowerCase()
-    .replace(/recordcoworkernote/g, "recordcoworkernote")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .split(/\s+/)
