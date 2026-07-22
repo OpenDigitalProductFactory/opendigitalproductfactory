@@ -8,7 +8,15 @@ import {
   type PasswordResetIssueResult,
   type UserActionResult,
 } from "@/lib/actions/users";
-import { EmailInput } from "@/components/ui/EmailInput";
+import {
+  EmailField,
+  TextField,
+  SelectField,
+  CheckboxField,
+  SubmitButton,
+  FormStatus,
+  ConsequenceNotice,
+} from "@/components/ui/form";
 
 type RoleOption = {
   roleId: string;
@@ -24,11 +32,6 @@ type Props = {
   roles: RoleOption[];
   users: UserOption[];
 };
-
-function resultClasses(result: UserActionResult | null): string {
-  if (!result) return "text-[var(--dpf-muted)]";
-  return result.ok ? "text-green-400" : "text-red-400";
-}
 
 export function AdminUserAccessPanel({ roles, users }: Props) {
   const router = useRouter();
@@ -67,9 +70,7 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
         setResetResult({ ok: false, message: "Select a user to reset password." });
         return;
       }
-      const result = await adminIssuePasswordReset({
-        userId: resetUserId,
-      });
+      const result = await adminIssuePasswordReset({ userId: resetUserId });
       setResetResult(result);
       if (result.ok) {
         router.refresh();
@@ -78,104 +79,129 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
   }
 
   return (
-    <div className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-6">
+    <div className="space-y-6 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
       <div>
         <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Access setup (Admin)</h3>
-        <p className="text-xs text-[var(--dpf-muted)] mt-1">Create user credentials and perform password resets.</p>
+        <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+          Create user credentials and perform password resets.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="space-y-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-          <h4 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-wider">Create user</h4>
-          <label className="block">
-            <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">Email</span>
-            <EmailInput
-              value={createEmail}
-              onValueChange={(v) => setCreateEmail(v)}
-              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
-              placeholder="person@company.com"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">Temporary password</span>
-            <input
-              value={createPassword}
-              onChange={(e) => setCreatePassword(e.target.value)}
-              type="password"
-              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
-              placeholder="12+ chars, upper/lower/number/symbol"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">Primary role</span>
-            <select
-              value={createRoleId}
-              onChange={(e) => setCreateRoleId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
-            >
-              {roles.map((role) => (
-                <option key={role.roleId} value={role.roleId}>
-                  {role.roleId} - {role.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="inline-flex items-center gap-2 text-xs text-[var(--dpf-muted)]">
-            <input
-              type="checkbox"
-              checked={createSuperuser}
-              onChange={(e) => setCreateSuperuser(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
-            />
-            Superuser
-          </label>
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={onCreate}
-            className="rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          >
-            {isPending ? "Saving..." : "Create user"}
-          </button>
-          <p className={`text-xs ${resultClasses(createResult)}`}>
-            {createResult?.message ?? "Password policy: min 12 chars with upper/lower/number/symbol."}
-          </p>
-        </div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* Create user */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onCreate();
+          }}
+          noValidate
+          className="space-y-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
+        >
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--dpf-text)]">
+            Create user
+          </h4>
 
-        <div className="space-y-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-          <h4 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-wider">Password reset</h4>
-          <label className="block">
-            <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">User</span>
-            <select
-              value={resetUserId}
-              onChange={(e) => setResetUserId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
-            >
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.email}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={onReset}
-            className="rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          >
-            {isPending ? "Saving..." : "Issue recovery"}
-          </button>
+          <ConsequenceNotice
+            tone={createSuperuser ? "danger" : "info"}
+            summary="This creates a new sign-in and grants portal access."
+            what={
+              createSuperuser
+                ? "Adds an account with the temporary password and role you set. Superuser is ticked — this person will be able to control everything, including other admins."
+                : "Adds an account with the temporary password and role you set. They can sign in right away and are prompted to change the password."
+            }
+            who="The person at the email address you enter. No one else is notified automatically."
+            reversibility="Reversible — deactivate the account or change its role anytime from Employee → HR."
+            recovery="Wrong details? Deactivate the user under Employee → HR, or issue a password reset on the right."
+          />
+
+          <EmailField
+            name="new-user-email"
+            label="Email"
+            value={createEmail}
+            onValueChange={setCreateEmail}
+            required
+            autoComplete="off"
+            placeholder="person@company.com"
+          />
+          <TextField
+            name="temporary-password"
+            label="Temporary password"
+            type="password"
+            value={createPassword}
+            onValueChange={setCreatePassword}
+            required
+            autoComplete="new-password"
+            hint="Min 12 characters with upper/lower/number/symbol. The user changes it on first sign-in."
+          />
+          <SelectField
+            name="primary-role"
+            label="Primary role"
+            value={createRoleId}
+            onValueChange={setCreateRoleId}
+            required
+            options={roles.map((role) => ({ value: role.roleId, label: `${role.roleId} - ${role.name}` }))}
+          />
+          <CheckboxField
+            name="superuser"
+            label="Superuser"
+            checked={createSuperuser}
+            onCheckedChange={setCreateSuperuser}
+            hint="Full control of the platform, including other admin accounts. Grant only when necessary."
+          />
+          <SubmitButton pending={isPending} pendingLabel="Creating…">
+            Create user
+          </SubmitButton>
+          <FormStatus
+            error={createResult && !createResult.ok ? createResult.message : null}
+            success={createResult?.ok ? createResult.message : null}
+          />
+        </form>
+
+        {/* Password reset */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onReset();
+          }}
+          noValidate
+          className="space-y-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
+        >
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--dpf-text)]">
+            Password reset
+          </h4>
+
+          <ConsequenceNotice
+            tone="warning"
+            summary="This ends the user's current password and issues a recovery link."
+            what="Their existing password stops working immediately. A one-time recovery link (or email, when configured) lets them set a new one."
+            who="The user you select below. They'll need the link to get back in."
+            reversibility="Partly — the old password can't be restored, but you can re-issue a new recovery link anytime."
+            recovery="If the email doesn't arrive, use the manual recovery link shown here after you issue it."
+          />
+
+          <SelectField
+            name="reset-user"
+            label="User"
+            value={resetUserId}
+            onValueChange={setResetUserId}
+            options={users.map((user) => ({ value: user.id, label: user.email }))}
+          />
+          <SubmitButton pending={isPending} pendingLabel="Issuing…">
+            Issue recovery
+          </SubmitButton>
           {resetResult?.recoveryLink ? (
             <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
-              <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">Manual recovery link</span>
+              <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+                Manual recovery link
+              </span>
               <p className="mt-1 break-all text-xs text-[var(--dpf-text)]">{resetResult.recoveryLink}</p>
             </div>
           ) : null}
-          <p className={`text-xs ${resultClasses(resetResult)}`}>
-            {resetResult?.message ?? "Issue a recovery email when configured, or reveal a one-time manual link during bootstrap."}
-          </p>
-        </div>
+          <FormStatus
+            error={resetResult && !resetResult.ok ? resetResult.message : null}
+            success={resetResult?.ok ? resetResult.message : null}
+          />
+        </form>
       </div>
     </div>
   );

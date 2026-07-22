@@ -8,6 +8,7 @@ import {
 } from "./business-context-form-state";
 import { EmailInput } from "@/components/ui/EmailInput";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+import { SubmitButton, FormStatus } from "@/components/ui/form";
 import { BusinessDocumentUpload } from "@/components/admin/BusinessDocumentUpload";
 import { RosterImport } from "@/components/admin/RosterImport";
 import { MarketContextFields } from "@/components/admin/MarketContextFields";
@@ -340,6 +341,7 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
         <label style={labelStyle}>
           <div style={fieldLabelStyle}>What does your business do?</div>
           <textarea
+            name="description"
             value={data.description}
             onChange={(e) => update("description", e.target.value)}
             placeholder="Describe what your business does in 1-2 sentences"
@@ -375,6 +377,7 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             )}
           </div>
           <textarea
+            name="mission"
             value={data.mission}
             onChange={(e) => update("mission", e.target.value)}
             placeholder={missionSuggestion ?? "Your mission in a sentence — the difference you set out to make"}
@@ -398,6 +401,7 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
           <div style={fieldLabelStyle}>Who do you serve?</div>
           <input
             type="text"
+            name="targetMarket"
             value={data.targetMarket}
             onChange={(e) => update("targetMarket", e.target.value)}
             placeholder="e.g. Homeowners in the community, Local pet owners, Small business clients"
@@ -496,7 +500,7 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             {/* Country (drives the state picker + timezone) */}
             <label style={labelStyle}>
               <div style={fieldLabelStyle}>Country</div>
-              <select value={countrySel} onChange={(e) => onCountryChange(e.target.value)} style={inputStyle}>
+              <select name="country" autoComplete="country" value={countrySel} onChange={(e) => onCountryChange(e.target.value)} style={inputStyle}>
                 <option value="" style={optionStyle}>Select country…</option>
                 {COUNTRY_OPTIONS.map((c) => (
                   <option key={c.code} value={c.code} style={optionStyle}>{c.name}</option>
@@ -510,6 +514,8 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
                 <div style={fieldLabelStyle}>Country name</div>
                 <input
                   type="text"
+                  name="country"
+                  autoComplete="country-name"
                   value={data.address.country ?? ""}
                   onChange={(e) => updateAddressField("country", e.target.value)}
                   placeholder="Country"
@@ -523,6 +529,8 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
               <div style={fieldLabelStyle}>Street address</div>
               <input
                 type="text"
+                name="line1"
+                autoComplete="address-line1"
                 value={data.address.line1 ?? ""}
                 onChange={(e) => updateAddressField("line1", e.target.value)}
                 placeholder="123 Main St"
@@ -533,6 +541,8 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
               <div style={fieldLabelStyle}>Address line 2 {optionalHint}</div>
               <input
                 type="text"
+                name="line2"
+                autoComplete="address-line2"
                 value={data.address.line2 ?? ""}
                 onChange={(e) => updateAddressField("line2", e.target.value)}
                 placeholder="Suite, unit, floor"
@@ -546,6 +556,8 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
                 <div style={fieldLabelStyle}>City / Town</div>
                 <input
                   type="text"
+                  name="city"
+                  autoComplete="address-level2"
                   value={data.address.city ?? ""}
                   onChange={(e) => updateAddressField("city", e.target.value)}
                   placeholder="City"
@@ -557,6 +569,8 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
                 <label style={labelStyle}>
                   <div style={fieldLabelStyle}>State</div>
                   <select
+                    name="stateCode"
+                    autoComplete="address-level1"
                     value={data.address.stateCode ?? ""}
                     onChange={(e) => onStateChange(e.target.value)}
                     style={inputStyle}
@@ -572,6 +586,8 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
                   <div style={fieldLabelStyle}>State / Province / Region {optionalHint}</div>
                   <input
                     type="text"
+                    name="region"
+                    autoComplete="address-level1"
                     value={data.address.region ?? ""}
                     onChange={(e) => updateAddressField("region", e.target.value)}
                     placeholder="Region"
@@ -586,6 +602,8 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
               <div style={fieldLabelStyle}>Postal / ZIP code</div>
               <input
                 type="text"
+                name="postalCode"
+                autoComplete="postal-code"
                 value={data.address.postalCode ?? ""}
                 onChange={(e) => updateAddressField("postalCode", e.target.value)}
                 placeholder="ZIP / postcode"
@@ -718,8 +736,10 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
           <label style={labelStyle}>
             <div style={fieldLabelStyle}>Contact email</div>
             <EmailInput
+              name="contactEmail"
               value={data.contactEmail}
               onValueChange={(v) => update("contactEmail", v)}
+              autoComplete="email"
               placeholder="info@example.com"
               style={inputStyle}
             />
@@ -728,8 +748,10 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
           <label style={labelStyle}>
             <div style={fieldLabelStyle}>Contact phone</div>
             <PhoneInput
+              name="contactPhone"
               value={data.contactPhone}
               onValueChange={(v) => update("contactPhone", v)}
+              autoComplete="tel"
               placeholder="(415) 555-1234"
               style={inputStyle}
             />
@@ -737,30 +759,19 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
           </label>
         </div>
 
-        {/* Error / success */}
-        {error && <p style={{ color: "var(--dpf-error)", fontSize: 13, margin: 0 }}>{error}</p>}
-        {saved && <p style={{ color: "var(--dpf-success)", fontSize: 13, margin: 0 }}>Saved successfully.</p>}
+        {/* Error / success — announced live regions */}
+        <FormStatus error={error} success={saved ? "Saved successfully." : null} />
 
         {/* Actions */}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
+          <SubmitButton
             type="button"
             onClick={handleSubmit}
-            disabled={submitting}
-            style={{
-              padding: "8px 20px",
-              borderRadius: 6,
-              border: "none",
-              background: "var(--dpf-accent)",
-              color: "#fff",
-              cursor: submitting ? "wait" : "pointer",
-              fontSize: 13,
-              fontWeight: 600,
-              opacity: submitting ? 0.7 : 1,
-            }}
+            pending={submitting}
+            pendingLabel="Saving…"
           >
-            {submitting ? "Saving..." : isEdit ? "Save" : "Continue"}
-          </button>
+            {isEdit ? "Save" : "Continue"}
+          </SubmitButton>
         </div>
       </div>
     </div>

@@ -42,6 +42,36 @@ All `<input>`, `<select>`, `<textarea>` elements receive a baseline via `@layer 
 - **Disabled:** `opacity: 0.5; cursor: not-allowed`
 - **Active/focused:** Border color changes to `--dpf-accent`
 
+## User-facing form contract (mandatory)
+
+Every user-facing form — public/customer auth, storefront setup, employee HR/pay,
+admin, and archetype booking/intake — composes the shared primitives in
+[`apps/web/components/ui/form/`](../apps/web/components/ui/form/) so field wiring
+and action feedback are consistent for non-technical owners and assistive
+technology. Do **not** hand-roll a label/input pair, a submit spinner, or a bespoke
+consequence banner; a form that re-implements these is a defect (BI-8E74C749).
+
+**Primitives** (import from `@/components/ui/form`):
+
+| Primitive | Responsibility |
+|---|---|
+| `FormField` | Labeled-control wrapper (render-prop). Owns `<label htmlFor>`↔`id`, required/optional marker, `aria-required`, `aria-invalid`, hint + error wired via `aria-describedby`, and `role="alert"` on the error. |
+| `TextField` / `EmailField` / `SelectField` / `TextareaField` / `CheckboxField` | Typed controls built on `FormField`. `EmailField` also normalizes on blur via `EmailInput`. |
+| `SubmitButton` | Primary action with a first-class pending state (`aria-busy` + `InlineBusy`); disables to prevent double-submit. |
+| `FormStatus` | Settled outcome region — error is assertive (`role="alert"`), success is polite (`role="status"` + `aria-live`). |
+| `ConsequenceNotice` | Risk-proportional consequence copy behind progressive disclosure (native `<details>`): what changes, who's affected, reversibility, recovery. |
+
+**The contract each field must satisfy:**
+1. **Stable name + id-label wiring** — every control has a `name` and an `id` bound to a real `<label htmlFor>` (so `getByLabelText`, click-to-focus, and AT all work).
+2. **Accessible label** — visible label text, never placeholder-as-label.
+3. **Required/optional state** — exposed visibly (`*` / `(optional)`) **and** to AT (`aria-required`, the native `required` attribute, and an SR-only "(required)").
+4. **Correct `autocomplete`** — `username`/`email` for identifiers, `current-password` for sign-in, `new-password` for set/confirm/temporary passwords, `name`/`tel`, and the `address-line1`/`address-level1`/`address-level2`/`postal-code`/`country` tokens for addresses. Use `off` only for admin-entered credentials for *another* user, and one-off date/time pickers.
+5. **Inline validation** — field-level errors set `aria-invalid` and render through `FormField`'s described `role="alert"` region, not only a form-level banner.
+
+**Mutating submits** show pending → success/failure through `SubmitButton` + `FormStatus` (never a silent recolor or a bare text swap).
+
+**Sensitive actions** (create/deactivate a user, reset a password, change pay) carry a `ConsequenceNotice` that answers what changes, who/what is affected, whether it can be undone, and the recovery path — kept behind progressive disclosure so a non-technical owner sees one plain summary line, not a wall of text.
+
 ## Prohibited Patterns
 
 These patterns are NOT allowed in component code:

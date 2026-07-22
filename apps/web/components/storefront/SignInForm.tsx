@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { EmailInput } from "@/components/ui/EmailInput";
+import { EmailField, TextField, SubmitButton, FormStatus } from "@/components/ui/form";
 
 export function SignInForm({ orgSlug }: { orgSlug?: string }) {
   const router = useRouter();
@@ -26,89 +26,61 @@ export function SignInForm({ orgSlug }: { orgSlug?: string }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 360 }}>
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 13, fontWeight: 500 }}>Email address</label>
-          <EmailInput
-            value={email}
-            onValueChange={(v) => setEmail(v)}
-            required
-            style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
-          />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 13, fontWeight: 500 }}>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: "10px 20px",
-            background: "var(--dpf-accent, #4f46e5)",
-            color: "var(--dpf-text)",
-            border: "none",
-            borderRadius: 6,
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          {loading ? "…" : "Sign in"}
-        </button>
+    <div className="flex max-w-[360px] flex-col gap-5">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+        <FormStatus error={error} />
+        <EmailField
+          name="email"
+          label="Email address"
+          value={email}
+          onValueChange={setEmail}
+          required
+          autoComplete="username"
+        />
+        <TextField
+          name="password"
+          label="Password"
+          type="password"
+          value={password}
+          onValueChange={setPassword}
+          required
+          autoComplete="current-password"
+        />
+        <SubmitButton pending={loading} pendingLabel="Signing in…">
+          Sign in
+        </SubmitButton>
       </form>
 
       {/* Social auth — shown only when configured */}
       {process.env.NEXT_PUBLIC_ENABLE_SOCIAL_AUTH === "true" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ textAlign: "center", fontSize: 12, color: "var(--dpf-muted)" }}>or continue with</div>
+        <div className="flex flex-col gap-2">
+          <div className="text-center text-xs text-[var(--dpf-muted)]">or continue with</div>
           <button
             type="button"
             onClick={() => signIn("google", { callbackUrl: "/portal" })}
-            style={{
-              padding: "10px 20px",
-              border: "1px solid var(--dpf-border)",
-              borderRadius: 6,
-              fontSize: 14,
-              cursor: "pointer",
-              background: "#fff",
-              color: "var(--dpf-text)",
-            }}
+            className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-5 py-2.5 text-sm text-[var(--dpf-text)]"
           >
             Continue with Google
           </button>
           <button
             type="button"
             onClick={() => signIn("apple", { callbackUrl: "/portal" })}
-            style={{
-              padding: "10px 20px",
-              border: "1px solid var(--dpf-border)",
-              borderRadius: 6,
-              fontSize: 14,
-              cursor: "pointer",
-              background: "#000",
-              color: "var(--dpf-text)",
-            }}
+            className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-5 py-2.5 text-sm text-[var(--dpf-text)]"
           >
             Continue with Apple
           </button>
         </div>
       )}
 
-      <div style={{ textAlign: "center", fontSize: 12, color: "var(--dpf-muted)" }}>
-        <a href={orgSlug ? `/s/${orgSlug}/sign-up` : "/portal/sign-up"} style={{ color: "var(--dpf-accent, #4f46e5)", fontWeight: 500 }}>
+      <div className="text-center text-xs text-[var(--dpf-muted)]">
+        <a
+          href={orgSlug ? `/s/${orgSlug}/sign-up` : "/portal/sign-up"}
+          className="font-medium text-[var(--dpf-accent)]"
+        >
           Create an account
         </a>
         {" · "}
-        <a href="/login" style={{ color: "var(--dpf-muted)" }}>
+        <a href="/login" className="text-[var(--dpf-muted)]">
           Staff login
         </a>
       </div>

@@ -48,4 +48,37 @@ describe("BusinessContextForm", () => {
     expect(html).toContain("Legacy spreadsheets");
     expect(html).toContain("sourceSystem");
   });
+
+  // BI-8E74C749: the /storefront/settings/business form must carry stable field
+  // names and correct autocomplete tokens (the compact audit flagged missing
+  // names on this dense setup form), plus an accessible submit action.
+  it("wires stable names on the free-text business fields", () => {
+    const html = renderToStaticMarkup(
+      <BusinessContextForm initial={baseInitial} archetypeSummary={null} />,
+    );
+    expect(html).toContain('name="description"');
+    expect(html).toContain('name="mission"');
+    expect(html).toContain('name="targetMarket"');
+  });
+
+  it("gives contact + address inputs autocomplete tokens", () => {
+    const html = renderToStaticMarkup(
+      <BusinessContextForm initial={baseInitial} archetypeSummary={null} />,
+    );
+    expect(html).toContain('name="contactEmail"');
+    expect(html).toContain('autocomplete="email"');
+    expect(html).toContain('name="contactPhone"');
+    expect(html).toContain('autocomplete="tel"');
+    expect(html).toContain('autocomplete="address-line1"');
+    expect(html).toContain('autocomplete="postal-code"');
+    expect(html).toContain('autocomplete="country"');
+  });
+
+  it("renders an accessible primary submit action", () => {
+    const html = renderToStaticMarkup(
+      <BusinessContextForm initial={baseInitial} archetypeSummary={null} isEdit={false} />,
+    );
+    expect(html).toContain("<button");
+    expect(html).toContain("Continue");
+  });
 });

@@ -2,7 +2,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { EmailInput } from "@/components/ui/EmailInput";
+import {
+  TextField,
+  EmailField,
+  SubmitButton,
+  FormStatus,
+} from "@/components/ui/form";
 
 export function SignUpForm({
   orgSlug,
@@ -18,6 +23,13 @@ export function SignUpForm({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Inline field-level validation: surface the mismatch on the confirm field
+  // itself (aria-invalid + described error) rather than only a form-level banner.
+  const mismatch =
+    confirmPassword.length > 0 && password !== confirmPassword
+      ? "Passwords do not match."
+      : undefined;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,7 +49,7 @@ export function SignUpForm({
     });
 
     if (!res.ok) {
-      const data = await res.json() as { error?: string };
+      const data = (await res.json()) as { error?: string };
       setError(data.error ?? "Sign-up failed. Please try again.");
       setLoading(false);
       return;
@@ -55,57 +67,51 @@ export function SignUpForm({
   }
 
   return (
-    <form onSubmit={handleSubmit}
-      style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 360 }}>
-      {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500 }}>Full name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Your name"
-          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
-        />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500 }}>Email address</label>
-        <EmailInput
-          value={email}
-          onValueChange={(v) => setEmail(v)}
-          required
-          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
-        />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500 }}>Password</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
-        />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500 }}>Confirm password</label>
-        <input
-          type="password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          required
-          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
-        />
-      </div>
-      <button
-        type="submit"
-        disabled={loading}
-        style={{ padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "var(--dpf-text)", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-        {loading ? "…" : "Create account"}
-      </button>
-      <p style={{ fontSize: 13, color: "var(--dpf-muted)", textAlign: "center" }}>
+    <form onSubmit={handleSubmit} className="flex max-w-[360px] flex-col gap-4" noValidate>
+      <FormStatus error={error} />
+      <TextField
+        name="name"
+        label="Full name"
+        value={name}
+        onValueChange={setName}
+        required
+        autoComplete="name"
+        placeholder="Your name"
+      />
+      <EmailField
+        name="email"
+        label="Email address"
+        value={email}
+        onValueChange={setEmail}
+        required
+        autoComplete="email"
+      />
+      <TextField
+        name="password"
+        label="Password"
+        type="password"
+        value={password}
+        onValueChange={setPassword}
+        required
+        autoComplete="new-password"
+        hint="At least 12 characters."
+      />
+      <TextField
+        name="confirm-password"
+        label="Confirm password"
+        type="password"
+        value={confirmPassword}
+        onValueChange={setConfirmPassword}
+        required
+        autoComplete="new-password"
+        error={mismatch}
+      />
+      <SubmitButton pending={loading} pendingLabel="Creating account…" disabled={!!mismatch}>
+        Create account
+      </SubmitButton>
+      <p className="text-center text-sm text-[var(--dpf-muted)]">
         Already have an account?{" "}
-        <a href={`/s/${orgSlug}/sign-in`} style={{ color: "var(--dpf-accent, #4f46e5)", fontWeight: 500 }}>
+        <a href={`/s/${orgSlug}/sign-in`} className="font-medium text-[var(--dpf-accent)]">
           Sign in
         </a>
       </p>
