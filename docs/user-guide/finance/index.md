@@ -25,6 +25,23 @@ The Finance area handles your organization's core financial operations: billing 
 - Monitor AI providers as finance-owned suppliers, including draft contracts, open setup work items, and linked billing/usage pages
 - Review committed AI spend and setup gaps from the dedicated `/finance/spend/ai` workspace
 
+## Owner-first overview (food & hospitality)
+
+For restaurants, cafés, bakeries, and caterers (the **food-hospitality** archetype), the `/finance` overview opens with **"what money needs attention today?"** instead of an accountant-shaped dashboard. It foregrounds the money jobs an owner runs day to day:
+
+- **Deposits & event balances** — booking deposits and catering/event balances still to collect
+- **Order & ticket payments** — money coming in from orders, tickets, and covers
+- **Overdue payments** — guest, catering, and event payments past their due date
+- **Supplier bills** — food, drink, and supplier bills waiting to be paid
+- **Payouts & reconciliation** — card payouts landing in the bank, matched back to sales
+- **No-show & cancellation fees** — charge a fee when a guest no-shows or cancels late
+
+Accounting internals — VAT/tax remittance, dunning reminders, payment runs, ledger and P&L reports, bank rules, and AI spend — are kept one tap away under a collapsed **"Accounting & admin"** section. Every other business type keeps the standard finance overview.
+
+## Recording a payment run
+
+A payment run (`/finance/payment-runs`) **records the selected approved bills as paid in DPF** and writes a matching outbound payment. It is **not a draft** and does **not** initiate a real bank transfer — pay your suppliers through your bank as usual, then use a payment run to keep your books settled. The action is labelled **"Record as Paid"** to make this explicit.
+
 ## Route Guide
 
 - `/finance` — Finance overview workspace

@@ -30,6 +30,15 @@ interface Props {
   defaultSignatureRequired?: boolean;
   /** Workspace base currency; pre-fills the currency field before a customer is selected. */
   defaultCurrency?: string;
+  /** Archetype-appropriate label for the account picker (e.g. "Guest or customer"). */
+  customerLabel?: string;
+  /** Archetype-appropriate helper under "require signature before payment". */
+  signatureHint?: string;
+  /**
+   * When the form was opened from a Restaurant billing context (booking, order,
+   * catering, private event), a short badge to confirm what is being billed.
+   */
+  contextLabel?: string | null;
 }
 
 function round2(n: number): number {
@@ -47,6 +56,9 @@ export function CreateInvoiceForm({
   defaultTaxRate = 0,
   defaultSignatureRequired = false,
   defaultCurrency = "USD",
+  customerLabel = "Customer",
+  signatureHint = "The customer signs on the payment page before they can pay. Recommended for engagement letters and service agreements.",
+  contextLabel = null,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -164,12 +176,19 @@ export function CreateInvoiceForm({
 
       {/* Customer & invoice details */}
       <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-        <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-4">
-          Invoice Details
-        </h2>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+            Invoice Details
+          </h2>
+          {contextLabel && (
+            <span className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--dpf-accent)]">
+              {contextLabel}
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className={labelClasses}>Customer *</label>
+            <label className={labelClasses}>{customerLabel} *</label>
             <select
               value={selectedAccountId}
               onChange={(e) => handleCustomerChange(e.target.value)}
@@ -234,10 +253,7 @@ export function CreateInvoiceForm({
               />
               <span className="text-xs text-[var(--dpf-text)]">
                 Require signature before payment
-                <span className="block text-[var(--dpf-muted)]">
-                  The customer signs on the payment page before they can pay. Recommended for
-                  engagement letters and service agreements.
-                </span>
+                <span className="block text-[var(--dpf-muted)]">{signatureHint}</span>
               </span>
             </label>
           </div>
