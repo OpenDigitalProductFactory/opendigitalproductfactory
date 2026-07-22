@@ -96,6 +96,28 @@ Everything else is `transient` and retryable up to the ceiling.
       that never exists cannot stall, cannot be reaped, cannot be retried, and
       cannot hold the quiescence gate open. This is also the literal reading of
       the operator's ask: "raise an error vs. trying what won't work."
+      **Primitive landed** (`lib/deliberation/route-preflight.ts`, 6 tests). Wiring
+      is NOT done, and the last mile has a trap worth naming — it nearly caught
+      two separate probe designs:
+
+      1. A probe passing `tools` is meaningless twice over: `buildBranchRequestContract`
+         sets `requiresTools: false`, and routing RELAXES an unsatisfiable tools
+         requirement anyway (`routed-inference.ts:375` retries with
+         `requiresTools=false` and strips tools). It would pass on an install
+         where every real branch fails.
+      2. A probe passing `ROLE_DEFAULT_CAPABILITIES[roleId]` is ALSO inert for the
+         observed failure. That map is deliberately empty for deliberation —
+         *"Deliberation branches default read-only … toolUse is NOT a floor"*
+         (request-contract.ts:88). So the probe would find no floor, previewRoute
+         would succeed, and the preflight would never block.
+
+      The `Missing: toolUse` floor came from `[agentic-loop] routeAndCall`, i.e.
+      the floor of the AGENT the injected `BranchDispatcher` runs — not the
+      branch role. **Before wiring, trace what `input.dispatcher` passes as
+      `minimumCapabilities`** and feed the probe from that same source. A probe
+      built from anything else is inert, and inert is worse than absent because
+      it reads as covered.
+
 - [ ] **3 — attempt ceiling on the sweep.** The re-dispatch sweep must count
       prior attempts per build and consult `shouldRedispatch`. Same unbounded
       retry class as BI-A009313E; the ceiling is what makes an unrecognised
