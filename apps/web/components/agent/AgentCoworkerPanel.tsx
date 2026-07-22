@@ -50,6 +50,7 @@ import {
 } from "./agent-message-state";
 import { useVoiceSynth } from "./hooks/useVoiceSynth";
 import { deriveComposerState, type ThreadLoadState } from "./composer-state";
+import { resolvePanelRouteContextLabel } from "@/lib/agent/panel-route-context";
 
 type Props = {
   threadId: string | null;
@@ -914,6 +915,7 @@ export function AgentCoworkerPanel({
         onViewProfile={() => setShowProfile(true)}
         marketingSkillRules={marketingSkillRules}
         isDocked={isDocked}
+        routeContextLabel={resolvePanelRouteContextLabel(effectiveRoute)}
       />
 
       {/* Voice activity indicator — shown when voice synthesis is active */}

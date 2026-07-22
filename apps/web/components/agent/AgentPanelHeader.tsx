@@ -34,6 +34,13 @@ type Props = {
   onToggleDev?: () => void;
   marketingSkillRules?: Record<string, { visible?: boolean; label?: string; reframe?: string }> | null;
   isDocked?: boolean;
+  /**
+   * BI-3238AAF0: the business area / route the panel is currently attached to
+   * (e.g. "Finance", "Marketing"). Rendered as a context chip so an owner can
+   * always tell WHERE the coworker is helping, especially after the panel is
+   * carried across a navigation.
+   */
+  routeContextLabel?: string;
 };
 
 /** A single action row inside the overflow menu. */
@@ -104,6 +111,7 @@ export function AgentPanelHeader({
   onViewProfile,
   marketingSkillRules,
   isDocked = false,
+  routeContextLabel,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -165,6 +173,31 @@ export function AgentPanelHeader({
           />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 12, minWidth: 0 }}>
+          {routeContextLabel && (
+            <span
+              data-testid="panel-route-context"
+              title={`Helping on: ${routeContextLabel}`}
+              aria-label={`Current context: ${routeContextLabel}`}
+              style={{
+                fontSize: 9,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: "var(--dpf-accent)",
+                border: "1px solid color-mix(in srgb, var(--dpf-accent) 45%, transparent)",
+                background: "color-mix(in srgb, var(--dpf-accent) 10%, transparent)",
+                borderRadius: 999,
+                padding: "0 6px",
+                lineHeight: 1.6,
+                flex: "0 0 auto",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: 140,
+              }}
+            >
+              {routeContextLabel}
+            </span>
+          )}
           <span
             title={`Data sensitivity: ${formatSensitivityLabel(agent.sensitivity)}`}
             style={{
