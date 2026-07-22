@@ -860,7 +860,9 @@ async def health_capability():
             try:
                 await probe.stop()
             except Exception:
-                pass
+                # Cleanup must not mask the probe verdict — the capability
+                # result is already decided; a stop failure is only logged.
+                logger.warning("capability probe browser stop failed", exc_info=True)
 
     result["service"] = "browser-use-mcp"
     _capability_cache["checked_at"] = now
