@@ -102,8 +102,11 @@ describe("POST /api/storefront/admin/inquiries/[id]/product-backlog", () => {
     expect(mockBacklogItem.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          status: "triaging",
+          workType: "feature",
+          type: "product",
           source: "user-request",
+          status: "triaging",
+          priority: 2,
           digitalProductId: "dp_1",
         }),
       }),
