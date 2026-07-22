@@ -5,8 +5,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { cleanup, render as renderDom, screen } from "@testing-library/react";
 
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
-    <a href={href}>{children}</a>
+  // Forward ALL props (href, aria-label, style, …) like the real Link, so tests
+  // can assert on attributes the component sets beyond href/children.
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>{children}</a>
   ),
 }));
 
@@ -87,6 +89,22 @@ describe("CtaButton price-less purchase guard (AUDIT-R3/R4)", () => {
     expect(hrefFor("booking", null)).toBe("/s/acme/book/item-1");
     expect(hrefFor("donation", null)).toBe("/s/acme/donate");
     expect(hrefFor("inquiry", null)).toBe("/s/acme/inquire/item-1");
+  });
+});
+
+describe("CtaButton item-specific accessible name (BI-4A68EDF6)", () => {
+  it("gives a repeated CTA an item-specific aria-label", () => {
+    const html = renderToStaticMarkup(
+      <CtaButton ctaType="booking" ctaLabel={null} orgSlug="acme" itemId="i1" itemName="Table for 2" />,
+    );
+    expect(html).toContain('aria-label="Book Now: Table for 2"');
+  });
+
+  it("omits aria-label when no item name is provided (unchanged behaviour)", () => {
+    const html = renderToStaticMarkup(
+      <CtaButton ctaType="booking" ctaLabel={null} orgSlug="acme" itemId="i1" />,
+    );
+    expect(html).not.toContain("aria-label");
   });
 });
 

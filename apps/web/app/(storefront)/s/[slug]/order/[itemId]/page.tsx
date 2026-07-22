@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getPublicStorefront, getPublicItem } from "@/lib/storefront-data";
 import { OrderForm } from "@/components/storefront/OrderForm";
+import { StorefrontUnavailable } from "@/components/storefront/StorefrontUnavailable";
 
 export default async function OrderItemPage({
   params,
@@ -13,9 +14,21 @@ export default async function OrderItemPage({
     getPublicItem(slug, itemId),
   ]);
 
-  // A purchasable item must exist and carry a real price. Without a price there
-  // is nothing to charge, so we 404 rather than render a checkout for £0.
-  if (!storefront || !item || item.priceAmount === null) notFound();
+  if (!storefront) notFound();
+
+  // A purchasable item must exist and carry a real price — there is nothing to
+  // charge for a £0 "order". Rather than dead-end a customer on the internal 404,
+  // recover them into the storefront with a clear, business-safe message.
+  if (!item || item.priceAmount === null) {
+    return (
+      <StorefrontUnavailable
+        orgSlug={slug}
+        orgName={storefront.orgName}
+        title="Online ordering isn't available"
+        message={`This item can't be ordered online right now at ${storefront.orgName}. Browse what's available, or send us a message and we'll help.`}
+      />
+    );
+  }
 
   return (
     <div style={{ paddingTop: 40, maxWidth: 520 }}>

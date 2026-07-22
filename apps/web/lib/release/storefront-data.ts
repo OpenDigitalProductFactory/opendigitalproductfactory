@@ -148,7 +148,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
       contactPhone: true,
       socialLinks: true,
       archetype: {
-        select: { archetypeId: true },
+        select: { archetypeId: true, category: true },
       },
       organization: {
         select: {
@@ -276,6 +276,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
     contactPhone: config.contactPhone,
     socialLinks: config.socialLinks as PublicStorefrontConfig["socialLinks"],
     archetypeId: config.archetype?.archetypeId ?? "",
+    archetypeCategory: config.archetype?.category ?? "",
     orgName: org.name,
     orgSlug: org.slug,
     orgLogoUrl: org.logoUrl,

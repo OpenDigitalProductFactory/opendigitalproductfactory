@@ -96,6 +96,8 @@ export interface PublicStorefrontConfig {
   contactPhone: string | null;
   socialLinks: SocialLinks | null;
   archetypeId: string; // human-readable slug from StorefrontArchetype.archetypeId
+  /** Archetype category (e.g. "food-hospitality") — drives vocabulary + trust copy. */
+  archetypeCategory: string;
   orgName: string;
   orgSlug: string;
   orgLogoUrl: string | null;

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 575,
+  "routeCount": 576,
   "routes": [
     {
       "routePath": "/",
@@ -6402,6 +6402,19 @@
         "itemId"
       ],
       "file": "apps/web/app/(storefront)/s/[slug]/order/[itemId]/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/policies",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "policies"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/policies/page.tsx"
     },
     {
       "routePath": "/s/[slug]/sign-in",
