@@ -9,10 +9,12 @@ type Props = {
   currentSlug: string;
   searchItems: Array<{ slug: string; title: string; area: string; content: string }>;
   headings?: DocHeading[];
+  /** Demote the full area catalog into a collapsed disclosure (contextual arrival). */
+  collapseCatalog?: boolean;
   children: React.ReactNode;
 };
 
-export function DocsLayout({ index, currentSlug, searchItems, headings, children }: Props) {
+export function DocsLayout({ index, currentSlug, searchItems, headings, collapseCatalog = false, children }: Props) {
   const tocHeadings = headings ?? [];
 
   return (
@@ -20,7 +22,7 @@ export function DocsLayout({ index, currentSlug, searchItems, headings, children
       {/* Left sidebar — search + area nav */}
       <div className="w-52 shrink-0 hidden lg:block">
         <DocsSearch items={searchItems} />
-        <DocsSidebar index={index} currentSlug={currentSlug} />
+        <DocsSidebar index={index} currentSlug={currentSlug} collapsible={collapseCatalog} />
       </div>
 
       {/* Main content */}

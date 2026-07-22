@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { loadDocPage, loadAllDocs, buildDocsIndex, extractHeadings, AREA_META, AREA_ORDER, type DocsIndex } from "@/lib/docs";
 import { DocsLayout } from "@/components/docs/DocsLayout";
 import { DocRenderer } from "@/components/docs/DocRenderer";
+import { ContextualQuickHelp } from "@/components/docs/ContextualQuickHelp";
 
 type Props = {
   params: Promise<{ slug?: string[] }>;
@@ -28,10 +29,14 @@ export default async function DocsPage({ params, searchParams }: Props) {
     content: d.content.slice(0, 500),
   }));
 
+  // Arrived contextually from a specific page — demote the catalog so the
+  // immediate explanation is not competing with the full docs manual.
+  const contextual = Boolean(sourceRoute);
+
   // No slug = docs home page
   if (!slug || slug.length === 0) {
     return (
-      <DocsLayout index={sidebarIndex} currentSlug="" searchItems={searchItems}>
+      <DocsLayout index={sidebarIndex} currentSlug="" searchItems={searchItems} collapseCatalog={contextual}>
         <DocsHome index={index} sourceRoute={sourceRoute} />
       </DocsLayout>
     );
@@ -45,43 +50,69 @@ export default async function DocsPage({ params, searchParams }: Props) {
   const tocHeadings = extractHeadings(doc.content);
 
   return (
-    <DocsLayout index={sidebarIndex} currentSlug={docSlug} searchItems={searchItems} headings={tocHeadings}>
+    <DocsLayout
+      index={sidebarIndex}
+      currentSlug={docSlug}
+      searchItems={searchItems}
+      headings={tocHeadings}
+      collapseCatalog={contextual}
+    >
       <DocContent doc={doc} sourceRoute={sourceRoute} />
     </DocsLayout>
   );
 }
 
 function DocsHome({ index, sourceRoute }: { index: Record<string, unknown[]>; sourceRoute?: string }) {
+  const contextual = Boolean(sourceRoute);
+  const catalog = (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {AREA_ORDER.map((areaKey) => {
+        const meta = AREA_META[areaKey];
+        if (!meta) return null;
+        const pages = index[areaKey] as unknown[] | undefined;
+        const pageCount = pages?.length ?? 0;
+        return (
+          <a
+            key={areaKey}
+            href={`/docs/${areaKey}/index`}
+            className="block p-4 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors"
+          >
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-1">{meta.label}</h2>
+            <p className="text-xs text-[var(--dpf-muted)]">{meta.description}</p>
+            {pageCount > 0 && (
+              <p className="text-[10px] text-[var(--dpf-muted)] mt-2">
+                {pageCount} page{pageCount !== 1 ? "s" : ""}
+              </p>
+            )}
+          </a>
+        );
+      })}
+    </div>
+  );
+
+  // Contextual arrival: quick help leads, and the full catalog is demoted into
+  // a collapsed disclosure so it does not compete with the immediate answer.
+  if (contextual && sourceRoute) {
+    return (
+      <div>
+        <ContextualQuickHelp sourceRoute={sourceRoute} />
+        <details className="rounded-lg border border-[var(--dpf-border)]">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-[var(--dpf-text)]">
+            Browse the full documentation catalog
+          </summary>
+          <div className="px-4 pb-4">{catalog}</div>
+        </details>
+      </div>
+    );
+  }
+
   return (
     <div>
-      {sourceRoute ? <ContextualSourceBanner sourceRoute={sourceRoute} /> : null}
       <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-2">Documentation</h1>
       <p className="text-sm text-[var(--dpf-muted)] mb-6">
         Learn how to use every area of the platform.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {AREA_ORDER.map((areaKey) => {
-          const meta = AREA_META[areaKey];
-          if (!meta) return null;
-          const pages = index[areaKey] as unknown[] | undefined;
-          const pageCount = pages?.length ?? 0;
-          return (
-            <a
-              key={areaKey}
-              href={`/docs/${areaKey}/index`}
-              className="block p-4 rounded-lg border border-[var(--dpf-border)] hover:border-[var(--dpf-accent)] transition-colors"
-            >
-              <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-1">{meta.label}</h2>
-              <p className="text-xs text-[var(--dpf-muted)]">{meta.description}</p>
-              {pageCount > 0 && (
-                <p className="text-[10px] text-[var(--dpf-muted)] mt-2">
-                  {pageCount} page{pageCount !== 1 ? "s" : ""}
-                </p>
-              )}
-            </a>
-          );
-        })}
-      </div>
+      {catalog}
     </div>
   );
 }
@@ -96,7 +127,7 @@ function DocContent({
   const areaLabel = AREA_META[doc.area]?.label ?? doc.area;
   return (
     <div>
-      {sourceRoute ? <ContextualSourceBanner sourceRoute={sourceRoute} /> : null}
+      {sourceRoute ? <ContextualQuickHelp sourceRoute={sourceRoute} /> : null}
       <div className="mb-2">
         <a href="/docs" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Docs</a>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
@@ -106,29 +137,6 @@ function DocContent({
       </div>
       <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-6">{doc.title}</h1>
       <DocRenderer content={doc.content} sourcePath={`docs/user-guide/${doc.slug}.md`} />
-    </div>
-  );
-}
-
-function ContextualSourceBanner({ sourceRoute }: { sourceRoute: string }) {
-  if (!sourceRoute.startsWith("/")) return null;
-
-  return (
-    <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">
-          Contextual Docs
-        </p>
-        <p className="text-sm text-[var(--dpf-text)]">
-          Opened from <span className="font-mono text-xs">{sourceRoute}</span>
-        </p>
-      </div>
-      <a
-        href={sourceRoute}
-        className="inline-flex items-center rounded-full border border-[var(--dpf-border)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)]"
-      >
-        Back to page
-      </a>
     </div>
   );
 }
