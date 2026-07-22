@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 534,
+  "pageCount": 535,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -8875,6 +8875,21 @@
         "grafana-dashboards",
         "edge-node-fleet-metrics-push-not-scrape",
         "osi-layer-model"
+      ]
+    },
+    "docs/user-guide/operations/self-upgrade.md": {
+      "publicHref": "/user-guide/operations/self-upgrade/",
+      "portalHref": "/docs/operations/self-upgrade",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "overview",
+        "workflow",
+        "what-happens-if-you-do-nothing",
+        "what-is-reversible",
+        "recovery-and-help",
+        "what-to-watch"
       ]
     },
     "docs/user-guide/platform/ai-operations.md": {
