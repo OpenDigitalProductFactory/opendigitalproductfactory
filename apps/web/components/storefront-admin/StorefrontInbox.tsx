@@ -214,44 +214,66 @@ export function StorefrontInbox({
             </div>
             <div style={{ fontSize: 13 }}>{e.name ?? "Anonymous"} · {e.email}</div>
             {e.detail && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 2 }}>{e.detail}</div>}
-            {e.type === "inquiry" && (
-              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <button
-                  onClick={() => sendInquiryToProductBacklog(e.id)}
-                  disabled={!defaultDigitalProduct || pendingInquiryId === e.id}
-                  className="border border-[var(--dpf-accent)] text-[var(--dpf-accent)]"
-                  style={{
-                    padding: "3px 10px",
-                    borderRadius: 4,
-                    background: "none",
-                    cursor: !defaultDigitalProduct || pendingInquiryId === e.id ? "not-allowed" : "pointer",
-                    fontSize: 12,
-                    opacity: !defaultDigitalProduct || pendingInquiryId === e.id ? 0.6 : 1,
-                  }}
-                >
-                  {pendingInquiryId === e.id ? "Sending..." : "Send to backlog"}
-                </button>
-                {e.backlogItemId && (
-                  <span className="text-[var(--dpf-success)]" style={{ fontSize: 12 }}>
-                    Backlog item {e.backlogItemId}
-                  </span>
-                )}
-                {!e.backlogItemId && productBacklogState[e.id] && (
-                  <span
-                    className={productBacklogState[e.id].startsWith("BI-")
-                      ? "text-[var(--dpf-success)]"
-                      : "text-[var(--dpf-error)]"}
-                    style={{
-                      fontSize: 12,
-                    }}
-                  >
-                    {productBacklogState[e.id].startsWith("BI-")
-                      ? `Backlog item ${productBacklogState[e.id]}`
-                      : productBacklogState[e.id]}
-                  </span>
-                )}
-              </div>
-            )}
+            {e.type === "inquiry" && (() => {
+              // A successful send stores the created itemId (BI-…); anything
+              // else stored is an error message to surface for a retry.
+              const clientState = productBacklogState[e.id];
+              const clientItemId = clientState?.startsWith("BI-") ? clientState : null;
+              const errorMessage = clientState && !clientState.startsWith("BI-") ? clientState : null;
+              // Server-rendered link (existing item) OR the item we just made.
+              const backlogItemId = e.backlogItemId ?? clientItemId;
+              const isSending = pendingInquiryId === e.id;
+
+              return (
+                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  {backlogItemId ? (
+                    // Terminal state: the inquiry is already tracked, so there is
+                    // no enabled "Send to backlog" action — only a completed
+                    // marker and a direct link to the created item.
+                    <>
+                      <span
+                        className="text-[var(--dpf-success)]"
+                        style={{ fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}
+                      >
+                        <span aria-hidden="true">✓</span> Sent to backlog
+                      </span>
+                      <a
+                        href={`/ops?itemId=${encodeURIComponent(backlogItemId)}`}
+                        className="text-[var(--dpf-accent)]"
+                        style={{ fontSize: 12, textDecoration: "underline" }}
+                        aria-label={`Open backlog item ${backlogItemId} for inquiry ${e.ref}`}
+                      >
+                        {backlogItemId}
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => sendInquiryToProductBacklog(e.id)}
+                        disabled={!defaultDigitalProduct || isSending}
+                        aria-label={`Send inquiry ${e.ref} to backlog`}
+                        className="border border-[var(--dpf-accent)] text-[var(--dpf-accent)]"
+                        style={{
+                          padding: "3px 10px",
+                          borderRadius: 4,
+                          background: "none",
+                          cursor: !defaultDigitalProduct || isSending ? "not-allowed" : "pointer",
+                          fontSize: 12,
+                          opacity: !defaultDigitalProduct || isSending ? 0.6 : 1,
+                        }}
+                      >
+                        {isSending ? "Sending..." : "Send to backlog"}
+                      </button>
+                      {errorMessage && (
+                        <span className="text-[var(--dpf-error)]" role="alert" style={{ fontSize: 12 }}>
+                          {errorMessage}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             {e.type === "booking" && (
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 {e.status === "pending" && (

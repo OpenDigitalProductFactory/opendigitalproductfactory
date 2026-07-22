@@ -85,6 +85,10 @@ export async function POST(
       itemId: draft.itemId,
       title: draft.title,
       type: draft.type,
+      // Storefront inquiries are engaged product feature work, not a bug or
+      // chore. workType is nullable with no schema default, so it must be set
+      // explicitly or the item lands without an allocation basis (BI-4F4252DB).
+      workType: draft.workType,
       status: draft.status,
       source: draft.source,
       priority: draft.priority,
