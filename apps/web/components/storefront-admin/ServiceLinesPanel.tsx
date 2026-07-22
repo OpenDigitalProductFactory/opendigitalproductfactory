@@ -7,11 +7,18 @@ import {
 } from "@/lib/storefront/service-line-actions";
 import type { StorefrontCompositionView, StorefrontServiceLineView } from "@/lib/storefront/composition-view";
 import { intentStyle } from "@/components/ui/report-kit/statusColors";
+import { confirmDialog } from "@/components/ui/Dialog";
 
 interface AvailableArchetype {
   archetypeSlug: string;
   name: string;
   category: string;
+  itemCount: number;
+  sectionCount: number;
+}
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 interface Props {
@@ -25,8 +32,26 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function handleAdd() {
+  // BI-7D7EE150: adding a service line is a durable business mutation (it seeds
+  // items + sections), so it must never happen on a single unconfirmed click.
+  // Preview exactly what will change and confirm BEFORE the transition (dialog
+  // helpers must not run inside startTransition).
+  async function handleAdd() {
     if (!selectedSlug) return;
+    const selected = availableArchetypes.find((a) => a.archetypeSlug === selectedSlug);
+    if (!selected) return;
+
+    const confirmed = await confirmDialog({
+      title: `Add ${selected.name} as a service line?`,
+      message:
+        `This adds ${selected.name} to your portal, including ${plural(selected.itemCount, "item")} and ` +
+        `${plural(selected.sectionCount, "section")} (sections stay hidden until you show them). ` +
+        `You can remove it again afterwards.`,
+      confirmLabel: "Add service line",
+      cancelLabel: "Cancel",
+    });
+    if (!confirmed) return;
+
     setError(null);
     startTransition(async () => {
       const result = await addStorefrontServiceLine(storefrontId, selectedSlug);
@@ -34,10 +59,23 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
     });
   }
 
-  function handleRemove(compositionId: string) {
+  async function handleRemove(line: StorefrontServiceLineView) {
+    const moduleCount = line.contributedModules.length;
+    const confirmed = await confirmDialog({
+      title: `Remove ${line.operatorLabel}?`,
+      message:
+        `This hides the ${line.operatorLabel} service line` +
+        (moduleCount > 0 ? ` and the ${plural(moduleCount, "module")} it added to your portal` : "") +
+        `. You can add it back later.`,
+      tone: "danger",
+      confirmLabel: "Remove service line",
+      cancelLabel: "Keep it",
+    });
+    if (!confirmed) return;
+
     setError(null);
     startTransition(async () => {
-      const result = await removeStorefrontServiceLine(storefrontId, compositionId);
+      const result = await removeStorefrontServiceLine(storefrontId, line.compositionId);
       if ("error" in result) setError(result.error);
     });
   }
@@ -88,7 +126,7 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
           <ServiceLineRow
             key={line.compositionId}
             line={line}
-            onRemove={() => handleRemove(line.compositionId)}
+            onRemove={() => handleRemove(line)}
             isPending={isPending}
           />
         ))}
