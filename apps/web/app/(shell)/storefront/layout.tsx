@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { resolveResourceVocabulary } from "@/lib/storefront/resource-vocabulary";
 import { StorefrontAdminTabNav } from "@/components/storefront-admin/StorefrontAdminTabNav";
 
 export default async function StorefrontAdminLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +18,7 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
   // Load archetype for vocabulary
   const config = await prisma.storefrontConfig.findFirst({
     include: {
-      archetype: { select: { category: true, customVocabulary: true } },
+      archetype: { select: { archetypeId: true, category: true, customVocabulary: true } },
       sections: { select: { type: true } },
     },
   });
@@ -26,6 +27,10 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
     config?.archetype?.category,
     config?.archetype?.customVocabulary as Record<string, string> | null,
   );
+  const resourceVocab = resolveResourceVocabulary({
+    archetypeId: config?.archetype?.archetypeId,
+    teamLabel: vocabulary.teamLabel,
+  });
   const showAnimals = Boolean(
     config?.sections.some((s) => s.type === "animals-available"),
   );
@@ -53,6 +58,8 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
         showUnits={showUnits}
         showDispatch={showDispatch}
         showIntake={showIntake}
+        showTables={resourceVocab.hasCapacityResources}
+        tablesLabel={resourceVocab.resourceLabel}
       />
       {children}
     </div>

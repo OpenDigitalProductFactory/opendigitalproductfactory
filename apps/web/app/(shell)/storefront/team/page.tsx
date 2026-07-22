@@ -2,12 +2,14 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { TeamManager } from "@/components/storefront-admin/TeamManager";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { resolveResourceVocabulary } from "@/lib/storefront/resource-vocabulary";
+import { classifyStorefrontResource } from "@/lib/storefront/restaurant-capacity";
 
 export default async function TeamPage() {
   const config = await prisma.storefrontConfig.findFirst({
     select: {
       id: true,
-      archetype: { select: { category: true, customVocabulary: true } },
+      archetype: { select: { archetypeId: true, category: true, customVocabulary: true } },
       providers: {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         include: {
@@ -58,13 +60,36 @@ export default async function TeamPage() {
     config.archetype.category,
     config.archetype.customVocabulary as Record<string, string> | null,
   );
+  const resourceVocab = resolveResourceVocabulary({
+    archetypeId: config.archetype.archetypeId,
+    teamLabel: vocabulary.teamLabel,
+  });
+
+  // For a capacity archetype (Restaurant FLOOR), physical tables are managed on
+  // the dedicated Tables & Capacity surface — the Team page is people only, so
+  // tables never appear here under "Staff" as "providers" (BI-7C95A586).
+  const staff = resourceVocab.hasCapacityResources
+    ? providers.filter((p) => classifyStorefrontResource(p) === "staff")
+    : providers;
 
   return (
-    <TeamManager
-      providers={providers}
-      storefrontId={config.id}
-      items={config.items}
-      teamLabel={vocabulary.teamLabel}
-    />
+    <div>
+      {resourceVocab.hasCapacityResources && (
+        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13, marginBottom: 12 }}>
+          People who work here. Manage {resourceVocab.resourcePlural} on the{" "}
+          <Link href="/storefront/tables" style={{ color: "var(--dpf-accent)" }}>
+            {resourceVocab.resourceLabel}
+          </Link>{" "}
+          page.
+        </p>
+      )}
+      <TeamManager
+        providers={staff}
+        storefrontId={config.id}
+        items={config.items}
+        teamLabel={resourceVocab.staffLabel}
+        mode="staff"
+      />
+    </div>
   );
 }

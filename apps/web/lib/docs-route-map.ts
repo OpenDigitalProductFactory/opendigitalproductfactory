@@ -78,6 +78,7 @@ const DOCS_ROUTE_MAP: DocsRouteEntry[] = [
   { routePrefix: "/storefront/settings", docsPath: "/docs/storefront/settings-business-and-operations" },
   { routePrefix: "/storefront/setup", docsPath: "/docs/storefront/setup-and-launch" },
   { routePrefix: "/storefront/team", docsPath: "/docs/storefront/team-and-fulfilment" },
+  { routePrefix: "/storefront/tables", docsPath: "/docs/storefront/team-and-fulfilment" },
   { routePrefix: "/storefront", docsPath: "/docs/storefront/index" },
 
   { routePrefix: "/customer/marketing", docsPath: "/docs/customers/marketing" },

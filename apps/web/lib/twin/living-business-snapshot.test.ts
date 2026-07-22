@@ -303,7 +303,9 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     // a pending booking becomes queue demand + a cog proposal
     expect(snap!.queues[0].items.length).toBeGreaterThan(0);
     expect(snap!.cog).toBeTruthy();
-    // capacity chips are real counts
-    expect(snap!.capacityChips.find((c) => c.key === "ai")!.value).toBe(1);
+    // A restaurant (FLOOR) headlines capacity in its own words — tables/seats/
+    // waitlist — not the archetype-agnostic Workforce/AI counters (BI-7C95A586).
+    expect(snap!.capacityChips.some((c) => c.key === "tables-open")).toBe(true);
+    expect(snap!.capacityChips.some((c) => c.key === "ai")).toBe(false);
   });
 });

@@ -25,6 +25,16 @@ import {
 
 import { buildStageFlow, type StageDemand } from "./stage-flow";
 
+import {
+  deriveRestaurantCapacity,
+  resolveServicePeriod,
+  readinessHeadline,
+  type CapacityBookingInput,
+  type CapacityResourceInput,
+  type OperatingWindow,
+  type RestaurantCapacitySnapshot,
+} from "@/lib/storefront/restaurant-capacity";
+
 import type { Intent } from "@/components/ui/report-kit";
 import {
   formatMoney,
@@ -85,6 +95,9 @@ interface ObligationRow {
 }
 interface BookingRow {
   id: string;
+  /** Present on the live query (selected); optional so pure-helper test fixtures
+   *  that exercise only provider-name behaviour need not supply it. */
+  providerId?: string | null;
   scheduledAt: Date | null;
   createdAt: Date | null;
   status: string;
@@ -235,6 +248,41 @@ export function bookingsToQueueItems(bookings: BookingRow[], now: Date, limit = 
         waiting: b.createdAt ? humanizeWait(now.getTime() - b.createdAt.getTime()) : undefined,
       };
     });
+}
+
+/**
+ * Restaurant (FLOOR) capacity chips — real table/seat/waitlist counters in the
+ * archetype's own words, replacing the archetype-agnostic Workforce/AI/Open-demand
+ * chips for a restaurant so the Workspace headline reads as capacity, not staffing.
+ */
+export function restaurantCapacityChips(snap: RestaurantCapacitySnapshot): CapacityChipData[] {
+  const seated = snap.counts.occupied + snap.counts["turning-soon"];
+  const chips: CapacityChipData[] = [
+    { key: "tables-open", label: "Tables open", value: snap.counts.available, intent: snap.counts.available > 0 ? "success" : "warning", live: true },
+    { key: "tables-seated", label: "Seated", value: seated, intent: "info", live: true },
+  ];
+  if (snap.counts["turning-soon"] > 0) {
+    chips.push({ key: "turning", label: "Turning soon", value: snap.counts["turning-soon"], intent: "warning", live: true });
+  }
+  chips.push(
+    { key: "waiting", label: "Parties waiting", value: snap.waitlistParties, intent: snap.waitlistParties > 0 ? "warning" : "success", live: true },
+    { key: "reservations", label: "Reservations ahead", value: snap.upcomingReservations, intent: "accent", live: true },
+  );
+  return chips;
+}
+
+/** The service-period readiness answer as a top-priority quest — so a
+ *  restaurant's "NEEDS YOU" reflects real reservation/table demand ahead of the
+ *  generic finance/tax quests. Null when nothing needs the owner. */
+export function readinessQuest(snap: RestaurantCapacitySnapshot): QuestData | null {
+  if (!snap.nextAction) return null;
+  return {
+    key: "service-readiness",
+    title: readinessHeadline(snap),
+    detail: snap.nextAction.label,
+    intent: snap.readiness === "not-ready" ? "danger" : "warning",
+    cta: snap.nextAction.label,
+  };
 }
 
 /** The longest a pending item has waited — the queue's headline flow metric. */
@@ -449,6 +497,17 @@ function resolveTemplateDef(archetypeId: string): ArchetypeDefinition | undefine
   return ALL_ARCHETYPES.find((a) => a.archetypeId === archetypeId);
 }
 
+/** Operating windows from the archetype template — the service-period source for
+ *  the workspace readiness answer (the confirmed-hours refinement lives in the
+ *  Tables page loader, which also reads BusinessProfile). */
+function floorWindows(def: ArchetypeDefinition): OperatingWindow[] {
+  return (def.schedulingDefaults?.defaultOperatingHours ?? []).map((h) => ({
+    day: h.day,
+    start: h.start,
+    end: h.end,
+  }));
+}
+
 /**
  * Load the live twin snapshot for the deployment's single org. Returns `null`
  * when no org is configured (or its archetype has no template definition) — the
@@ -501,6 +560,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
         take: 24,
         select: {
           id: true,
+          providerId: true,
           scheduledAt: true,
           createdAt: true,
           status: true,
@@ -546,6 +606,36 @@ export async function loadLivingBusinessSnapshot(opts?: {
     },
   ];
 
+  // FLOOR (Restaurant) capacity: derive one snapshot from the SAME providers +
+  // bookings this projection already loaded, so the Workspace capacity chips,
+  // reservations queue, and readiness answer reconcile with the Storefront
+  // Tables & Capacity page and inbox (BI-7C95A586 / BI-348766E5). The workspace
+  // reads only active providers, so `blocked` is not a workspace headline — the
+  // Tables page owns the authoritative blocked count.
+  const floorSnapshot: RestaurantCapacitySnapshot | null =
+    profile.template === "FLOOR"
+      ? deriveRestaurantCapacity({
+          resources: providers.map(
+            (p): CapacityResourceInput => ({ id: p.id, name: p.name, isActive: p.isActive }),
+          ),
+          bookings: bookings.map(
+            (b): CapacityBookingInput => ({
+              id: b.id,
+              providerId: b.providerId ?? null,
+              scheduledAt: b.scheduledAt,
+              durationMinutes: null, // default turn (90m) applied by the projection
+              status: b.status,
+            }),
+          ),
+          now,
+          nextPeriod: resolveServicePeriod(floorWindows(def), now),
+        })
+      : null;
+
+  // NB: the Reservations-queue reconciliation (fixing "RESERVATIONS 0" while
+  // booking history exists) is owned by BI-348766E5 (PR #3403), which edits this
+  // same queue construction. This PR (BI-7C95A586) deliberately leaves it alone
+  // to avoid duplicating that work — it owns the capacity chips + readiness only.
   const queueItems = bookingsToQueueItems(bookings, now);
   const queues: TwinQueueSnapshot[] = profile.queues.map((qs, i) => ({
     key: qs.key,
@@ -606,18 +696,32 @@ export async function loadLivingBusinessSnapshot(opts?: {
     },
   ];
 
+  // For a restaurant, the headline answers "are we ready for the next service
+  // period?" with capacity in its own words + one next action ahead of the
+  // generic finance/tax quests.
+  const genericQuests = buildQuests({
+    billsDueCount: bills.length,
+    nextTaxDueDays,
+    unassignedCount: unassigned.length,
+  });
+  const quests: QuestData[] = floorSnapshot
+    ? [readinessQuest(floorSnapshot), ...genericQuests].filter((q): q is QuestData => q != null)
+    : genericQuests;
+
   return {
     live: true,
     archetypeId,
     archetypeName: config?.archetype?.name ?? def.name,
     template: profile.template,
-    capacityChips: liveCapacityChips({
-      teamTotal: roster.summary.total,
-      aiCount: roster.summary.agents,
-      openDemand: bookings.length,
-      billsDueCount: bills.length,
-      longestWaitMs: longestWaitMs(bookings, now),
-    }),
+    capacityChips: floorSnapshot
+      ? restaurantCapacityChips(floorSnapshot)
+      : liveCapacityChips({
+          teamTotal: roster.summary.total,
+          aiCount: roster.summary.agents,
+          openDemand: bookings.length,
+          billsDueCount: bills.length,
+          longestWaitMs: longestWaitMs(bookings, now),
+        }),
     stageFlow,
     outcomes,
     zones,
@@ -626,11 +730,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
     cog,
     presence: rosterToPresence(members),
     feed: bookingsToFeed(bookings, profile.workItemNoun.singular),
-    quests: buildQuests({
-      billsDueCount: bills.length,
-      nextTaxDueDays,
-      unassignedCount: unassigned.length,
-    }),
+    quests,
     utility: financeToUtility({
       billsDueCount: bills.length,
       billsDueAmount,

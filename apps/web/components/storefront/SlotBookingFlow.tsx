@@ -39,6 +39,31 @@ export interface SlotBookingFlowProps {
   timezone: string;
   bookingConfig: Record<string, unknown> | null;
   formSchema?: FormField[];
+  /**
+   * Capacity resource noun ("table") for capacity archetypes (Restaurant FLOOR).
+   * When set, availability states read in the business's own words (checking /
+   * fully booked / open) and the confusing "with {provider}" line is suppressed —
+   * a customer books a time, not a waiter. Omitted → generic booking copy, so no
+   * other archetype changes (BI-7C95A586).
+   */
+  resourceNoun?: string;
+}
+
+/** Availability-state copy — restaurant terms when a resource noun is supplied. */
+function availabilityStrings(resourceNoun?: string) {
+  const n = resourceNoun;
+  const plural = n ? `${n}s` : null;
+  return {
+    loadingDates: n ? `Checking ${n} availability…` : "Loading availability…",
+    loadingSlots: n ? `Finding open ${plural}…` : "Loading slots…",
+    emptyMonth: plural
+      ? `Fully booked this month — no ${plural} available. Try the next month or check back soon.`
+      : "No availability this month. Try the next month or check back soon.",
+    emptyDay: plural
+      ? `Fully booked — no ${plural} free on this date. Please pick another day.`
+      : "No available slots on this date. Please pick another day.",
+    selectTime: n ? "Choose a time:" : "Select a time:",
+  };
 }
 
 // ── Shared style helpers ──────────────────────────────────────────────────────
@@ -146,8 +171,10 @@ export function SlotBookingFlow({
   itemName,
   timezone,
   formSchema,
+  resourceNoun,
 }: SlotBookingFlowProps) {
   const router = useRouter();
+  const copy = availabilityStrings(resourceNoun);
 
   // Navigation state
   const [step, setStep] = useState<Step>("date");
@@ -355,6 +382,7 @@ export function SlotBookingFlow({
           loading={datesLoading}
           error={datesError}
           timezone={timezone}
+          copy={copy}
           onPrevMonth={prevMonth}
           onNextMonth={nextMonth}
           onSelectDate={handleDateSelect}
@@ -367,6 +395,7 @@ export function SlotBookingFlow({
           slotsResult={slotsResult}
           loading={slotsLoading || holdLoading}
           error={slotsError ?? holdError}
+          copy={copy}
           onBack={() => setStep("date")}
           onSelectSlot={handleSlotSelect}
         />
@@ -380,6 +409,7 @@ export function SlotBookingFlow({
           itemName={itemName}
           loading={submitLoading}
           error={submitError}
+          resourceNoun={resourceNoun}
           onBack={() => setStep("slot")}
           onSubmit={handleFormSubmit}
           formSchema={formSchema}
@@ -391,6 +421,8 @@ export function SlotBookingFlow({
 
 // ── Date Step ─────────────────────────────────────────────────────────────────
 
+type AvailabilityCopy = ReturnType<typeof availabilityStrings>;
+
 function DateStep({
   viewYear,
   viewMonth,
@@ -398,6 +430,7 @@ function DateStep({
   loading,
   error,
   timezone,
+  copy,
   onPrevMonth,
   onNextMonth,
   onSelectDate,
@@ -408,6 +441,7 @@ function DateStep({
   loading: boolean;
   error: string | null;
   timezone: string;
+  copy: AvailabilityCopy;
   onPrevMonth: () => void;
   onNextMonth: () => void;
   onSelectDate: (date: string) => void;
@@ -500,7 +534,7 @@ function DateStep({
 
       {loading && (
         <div style={{ textAlign: "center", fontSize: 13, color: "var(--dpf-muted)" }}>
-          Loading availability…
+          {copy.loadingDates}
         </div>
       )}
       {error && (
@@ -508,7 +542,7 @@ function DateStep({
       )}
       {!loading && !error && availableDates.size === 0 && (
         <div style={{ textAlign: "center", fontSize: 13, color: "var(--dpf-muted)", padding: "12px 0" }}>
-          No availability this month. Try the next month or check back soon.
+          {copy.emptyMonth}
         </div>
       )}
     </div>
@@ -522,6 +556,7 @@ function SlotStep({
   slotsResult,
   loading,
   error,
+  copy,
   onBack,
   onSelectSlot,
 }: {
@@ -529,6 +564,7 @@ function SlotStep({
   slotsResult: SlotsResult | null;
   loading: boolean;
   error: string | null;
+  copy: AvailabilityCopy;
   onBack: () => void;
   onSelectSlot: (slot: AvailableSlot, provider?: { id: string; name: string; avatarUrl?: string | null }) => void;
 }) {
@@ -545,17 +581,18 @@ function SlotStep({
       </div>
 
       {loading && (
-        <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>Loading slots…</div>
+        <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>{copy.loadingSlots}</div>
       )}
       {error && (
         <div style={{ fontSize: 13, color: "var(--dpf-error)" }}>{error}</div>
       )}
 
-      {!loading && !error && slotsResult && (
+      {!loading && !error && slotsResult && !isEmpty(slotsResult) && (
         <>
           {slotsResult.mode === "next-available" && (
             <NextAvailableSlots
               slots={slotsResult.slots}
+              selectLabel={copy.selectTime}
               onSelect={(slot) => onSelectSlot(slot)}
             />
           )}
@@ -576,7 +613,7 @@ function SlotStep({
 
       {!loading && !error && slotsResult && isEmpty(slotsResult) && (
         <div style={{ fontSize: 14, color: "var(--dpf-muted)" }}>
-          No available slots on this date. Please pick another day.
+          {copy.emptyDay}
         </div>
       )}
     </div>
@@ -590,14 +627,16 @@ function isEmpty(result: SlotsResult): boolean {
 
 function NextAvailableSlots({
   slots,
+  selectLabel = "Select a time:",
   onSelect,
 }: {
   slots: AvailableSlot[];
+  selectLabel?: string;
   onSelect: (slot: AvailableSlot) => void;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>Select a time:</div>
+      <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>{selectLabel}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         {slots.map((slot) => (
           <button
@@ -751,6 +790,7 @@ function FormStep({
   itemName,
   loading,
   error,
+  resourceNoun,
   onBack,
   onSubmit,
   formSchema,
@@ -761,12 +801,15 @@ function FormStep({
   itemName: string;
   loading: boolean;
   error: string | null;
+  resourceNoun?: string;
   onBack: () => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   formSchema?: FormField[];
 }) {
-  const providerName =
-    selectedProvider?.name ?? selectedSlot.providerName;
+  // For a capacity archetype (Restaurant), a table is assigned automatically —
+  // the customer chose a time, not a person — so the "with {provider}" line is
+  // suppressed to avoid reading a table id as a waiter's name (BI-7C95A586).
+  const providerName = resourceNoun ? undefined : (selectedProvider?.name ?? selectedSlot.providerName);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
