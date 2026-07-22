@@ -427,6 +427,24 @@ Verification:
 
 ### Phase 2A: Workflow Message and Call-Chain Runtime
 
+Backlog items created 2026-07-19:
+
+| Item | Scope | Association rationale |
+| --- | --- | --- |
+| `BI-57BE27C9` | Workflow messages and call-chain lineage. | Owns the runtime contract for `WorkflowMessage`, queue-only versus trigger-turn delivery, and `CallChainRef` over `TaskRun` / `TaskNode` / `DelegationChain`. Extends `apps/web/lib/tak/subagent-fanout.ts`, `apps/web/lib/tak/coworker-collaboration.ts`, and the A2A-aligned coworker runtime rather than copying Codex slash paths. |
+| `BI-2858B13F` | Bounded `ContextPacket` assembly. | Owns the anti-bloat layer: minimal/retrieval/work-case/customer-record/WWMD/WWWD/WSID/evidence-only packets, with full-thread context behind a policy reason and capacity-risk receipt. Extends governed memory, WSID professional corpus, Work Case artifacts, and selective-memory doctrine. |
+| `BI-224FDE73` | Human decisions below the root task. | Owns `HumanDecisionNode` and its attention/approval/Workbench projection. Extends human-in-the-loop phase-boundary doctrine, the human attention surface, paused-work approval patterns, and the broader control-plane/human-takeover BI `BI-CTRL-2B7F31`. |
+| `BI-27BFA383` | Cross-portfolio workflow fixtures. | Owns reusable `WorkflowRecipe` fixtures for Build Studio, marketing creative, finance analysis, customer communication, operations remediation, and COO coordination. Proves the substrate is not Build-Studio-only and that workflow intensity remains separate from model effort. |
+
+Recent associated submissions and backlog:
+
+| Reference | What it contributes | Implementation warning |
+| --- | --- | --- |
+| Completed parent `BI-BC0A0EB2` | The activity-routing harness, Activity Workbench, Activity Package, harness audit, calibration, and governed confidence-override substrate are already shipped/recorded against PR `#2506`. | Phase 2A must extend this parent direction, not re-open the model router or create a second route selector. |
+| Build Studio submission `FB-01F80EEF` ("Routing brain truck") | Recent live BuildActivity shows routing-adjacent work repeatedly passing plan review, then blocking on incomplete intake and build-start issues. | Treat as evidence that Build Studio routing/intake/resume needs durable workflow state; do not mark Phase 2A done based on this submission. |
+| `BI-INST-009` | Existing router-policy question: tool-heavy coworkers may need stronger model preference when multiple tool-capable models are eligible. | Feed its concern into model/client profile dimensions (`tool-loop-efficiency`, `orchestrator-fit`, `worker-fit`) instead of adding one-off tool-model bias. |
+| `BI-CTRL-2B7F31` | Unified control-plane model for local runs, remote sessions, and human takeover. | Align interrupt/cancel/pause/resume and human-decision semantics so activity workflows do not invent a parallel control plane. |
+
 Deliverables:
 
 - `apps/web/lib/workflows/workflow-recipe.ts`
