@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { submitBooking } from "@/lib/storefront-actions";
 import { EmailInput } from "@/components/ui/EmailInput";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+import { slotFlowExtraFields, type FormField } from "./slot-booking-fields";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,15 +28,6 @@ type SlotsResult =
   | { mode: "class"; slots: AvailableSlot[] };
 
 type Step = "date" | "slot" | "form" | "confirmation";
-
-type FormField = {
-  name: string;
-  label: string;
-  type: string;
-  required: boolean;
-  options?: string[];
-  placeholder?: string;
-};
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -473,11 +465,19 @@ function DateStep({
           const isPast = dateStr < todayStr;
           const isClickable = isAvailable && !isPast && !loading;
 
+          // The visible label is just the day number, so give the button an
+          // accessible name tied to the full date + availability, e.g.
+          // "Wednesday, July 22, 2026 — available" (BI-36807E68).
+          const dayAccessibleName = `${formatDisplayDate(dateStr)}${
+            isClickable ? " — available" : isPast ? " — past" : " — no availability"
+          }`;
+
           return (
             <button
               key={day}
               disabled={!isClickable}
               onClick={() => isClickable && onSelectDate(dateStr)}
+              aria-label={dayAccessibleName}
               style={{
                 textAlign: "center",
                 padding: "8px 4px",
@@ -821,7 +821,7 @@ function FormStep({
           <PhoneInput name="phone" style={inputStyle} />
         </div>
 
-        {formSchema?.filter(f => !["name", "email", "phone", "notes", "message"].includes(f.name)).map((field) => (
+        {slotFlowExtraFields(formSchema).map((field) => (
           <div key={field.name} style={fieldStyle}>
             <label style={labelStyle}>{field.label}{field.required ? " *" : " (optional)"}</label>
             {field.type === "textarea" ? (
