@@ -32,14 +32,16 @@ export function RosterImport() {
 
   return (
     <div style={{ fontSize: 13 }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>
+      <label htmlFor="roster-import-file" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
         Add your team from a spreadsheet{" "}
         <span style={{ fontWeight: 400, color: "var(--dpf-muted)" }}>(optional)</span>
-      </div>
+      </label>
       <input
+        id="roster-import-file"
         ref={inputRef}
         type="file"
         accept=".csv,.tsv,.xlsx"
+        aria-label="Upload a team spreadsheet"
         disabled={pending}
         onChange={(e) => {
           const f = e.target.files?.[0];

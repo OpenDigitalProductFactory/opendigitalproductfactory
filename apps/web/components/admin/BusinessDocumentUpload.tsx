@@ -41,14 +41,16 @@ export function BusinessDocumentUpload() {
 
   return (
     <div style={{ fontSize: 13 }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>
+      <label htmlFor="business-document-file" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
         Have a business plan or key document?{" "}
         <span style={{ fontWeight: 400, color: "var(--dpf-muted)" }}>(optional)</span>
-      </div>
+      </label>
       <input
+        id="business-document-file"
         ref={inputRef}
         type="file"
         accept=".pdf,.doc,.docx,.txt,.md,.rtf"
+        aria-label="Upload a business plan or key document"
         disabled={uploading}
         onChange={(e) => {
           const f = e.target.files?.[0];

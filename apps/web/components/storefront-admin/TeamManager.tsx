@@ -216,7 +216,8 @@ export function TeamManager({
         <div style={{ fontSize: 15, fontWeight: 600 }}>{teamLabel} ({providers.length})</div>
         <button
           onClick={() => setShowAddForm((v) => !v)}
-          className={`border border-[var(--dpf-border)] ${showAddForm ? "text-white" : ""}`}
+          aria-label={showAddForm ? "Cancel adding a provider" : `Add a new ${teamLabel.toLowerCase().replace(/s$/, "")}`}
+          className={`min-h-[44px] min-w-[44px] border border-[var(--dpf-border)] ${showAddForm ? "text-white" : ""}`}
           style={{ padding: "6px 14px", borderRadius: 5, background: showAddForm ? "var(--dpf-accent)" : "none", cursor: "pointer", fontSize: 13 }}
         >
           {showAddForm ? "Cancel" : "+ Add Provider"}
@@ -253,7 +254,7 @@ export function TeamManager({
               <button
                 onClick={addProvider}
                 disabled={adding || !newName.trim()}
-                className="bg-[var(--dpf-accent)] text-white"
+                className="min-h-[44px] min-w-[44px] bg-[var(--dpf-accent)] text-white"
                 style={{ padding: "7px 16px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
               >
                 {adding ? "Adding…" : "Add Provider"}
@@ -351,7 +352,8 @@ export function TeamManager({
                       <button
                         onClick={() => saveProvider(p)}
                         disabled={edit.saving}
-                        className="bg-[var(--dpf-accent)] text-white"
+                        aria-label={`Save details for ${p.name}`}
+                        className="min-h-[44px] min-w-[44px] bg-[var(--dpf-accent)] text-white"
                         style={{ padding: "6px 14px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
                       >
                         {edit.saving ? "Saving…" : "Save Details"}
@@ -392,7 +394,8 @@ export function TeamManager({
                   <div className="border-t border-[var(--dpf-border)]" style={{ marginTop: 16, paddingTop: 12 }}>
                     <button
                       onClick={() => deleteProvider(p)}
-                      className="border border-[var(--dpf-error)] text-[var(--dpf-error)]"
+                      aria-label={`Delete provider ${p.name}`}
+                      className="min-h-[44px] min-w-[44px] border border-[var(--dpf-error)] text-[var(--dpf-error)]"
                       style={{ padding: "6px 14px", borderRadius: 5, background: "none", cursor: "pointer", fontSize: 13 }}
                     >
                       Delete Provider
