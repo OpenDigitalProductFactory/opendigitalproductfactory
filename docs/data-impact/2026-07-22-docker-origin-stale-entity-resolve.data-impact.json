@@ -1,0 +1,37 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "PortfolioQualityIssue rows (open Docker-origin stale_entity issues)",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260722130000_resolve_docker_origin_stale_entity_issues",
+    "backfill": "status flip only — no row is created or deleted, no id, scope FK, summary, or detection timestamp is changed. Open Docker-origin stale_entity PortfolioQualityIssue rows (issueKey carrying container:/subnet:docker-/gateway:docker-gw:/runtime:docker/docker_host:/host:hostname:<12hex> shapes or a Docker 172.16/12 bridge address, e.g. the leaked network_interface:iface:eth0:172.18.0.14 NIC rows) are set status open->resolved with resolvedAt=NOW(). Real-estate and genuine stale entities (192.168 LAN, named hosts, application/service targets) carry none of these and are left open for the reconcile-on-recovery pass. Non-destructive and idempotent: already-resolved rows are not re-selected."
+  },
+  "tests": [
+    "packages/db/src/docker-origin.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:portfolio-quality-issue#docker-origin-stale-entity-resolve",
+      "prismaModel": "PortfolioQualityIssue",
+      "lifecycleDisposition": "no lifecycle change to the underlying InventoryEntity or any operator-facing record: only the derived quality-issue status transitions open->resolved for issues describing platform-internal Docker bridge/self-scan entity churn. firstDetectedAt, lastDetectedAt, scope FKs, and summary are preserved; rows remain for audit.",
+      "fields": [
+        {
+          "fieldId": "data:portfolio-quality-issue#status",
+          "resolution": "governed",
+          "reason": "resolve permanently-open, never-actionable stale_entity issues emitted for the platform's own Docker self-scan bridge NICs that leaked past the isDockerOriginEntityKey guard; each container recreation orphans the bridge address, so the issue can never resolve on its own and the queue accumulated indefinitely",
+          "provenance": "live-DB analysis (follow-up to BI-527290AA): 159 open stale_entity rows, all null entity FK; 51 are Docker 172.16/12 bridge shape (network_interface:...172.18 + __dpf_quarantined__ wrappers) resolved here; the remaining 108 (platform prom-targets + genuine) are left for the reconcile-on-recovery pass; gated by the same Docker-origin entity-key predicate as the extended isDockerOriginEntityKey guard"
+        },
+        {
+          "fieldId": "data:portfolio-quality-issue#resolvedAt",
+          "resolution": "governed",
+          "reason": "stamp the resolution time for the audit trail on the same open->resolved transition",
+          "provenance": "set to NOW() only on rows matching the Docker-origin entity-key predicate; real-estate/genuine rows are untouched"
+        }
+      ]
+    }
+  ]
+}

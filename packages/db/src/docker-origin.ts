@@ -66,6 +66,16 @@ export function isDockerOriginEntityKey(
     if (DOCKER_DESKTOP_VPNKIT_IPS.has(arpMatch[1])) return true;
   }
 
+  // Docker's 172.16/12 bridge address also appears in key shapes the specific
+  // matches above don't cover — e.g. the self-scan's bridge NIC rows
+  // `network_interface:iface:eth0:172.18.0.14` (and their `__dpf_quarantined__…`
+  // wrappers), which otherwise leak past this guard and open a permanent
+  // stale_entity issue per orphan. The operator's real LAN is 192.168/10, so a
+  // 172.16/12 address anywhere in the key is a reliable Docker-bridge signal.
+  // (DOCKER_BRIDGE_IP_RE is declared below for isDockerOriginRelationshipKey;
+  // the reference resolves at call time.)
+  if (DOCKER_BRIDGE_IP_RE.test(entityKey)) return true;
+
   if (name && nameLooksDockerOrigin(name)) return true;
 
   return false;

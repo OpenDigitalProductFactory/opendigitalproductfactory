@@ -157,6 +157,10 @@ type DiscoverySyncTx = {
       create: Record<string, unknown>;
       update: Record<string, unknown>;
     }): Promise<unknown>;
+    updateMany(args: {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    }): Promise<{ count: number }>;
   };
 };
 
@@ -817,6 +821,43 @@ export async function persistBootstrapDiscoveryRun(
       if (!existingIssueKeys.has(issue.issueKey)) {
         createdIssues += 1;
       }
+    }
+
+    // Reconcile-on-recovery: an entity or relationship observed active in THIS
+    // sweep is no longer stale, so any open stale_entity / stale_relationship
+    // issue for it must resolve. The stale-issue writer only ever opened rows and
+    // never resolved recovered ones, so a row that went stale for one sweep and
+    // came back stayed open forever (the churn that accumulated 1.5k+ open rows).
+    // Keyed by issueKey — the entity/relationship key is embedded — so this is
+    // source-bounded by construction: a key this sweep confirmed active belongs to
+    // this source, and another source's stale issue has a different key and is
+    // never matched. Docker-origin churn is handled by suppression at emission (it
+    // never recovers under the same key); this closes the loop for real estate.
+    const recoveredEntityIssueKeys = [...currentEntityKeys].map(
+      (entityKey) => `inventory_entity:${entityKey}:stale`,
+    );
+    if (recoveredEntityIssueKeys.length > 0) {
+      await tx.portfolioQualityIssue.updateMany({
+        where: {
+          issueType: "stale_entity",
+          status: "open",
+          issueKey: { in: recoveredEntityIssueKeys },
+        },
+        data: { status: "resolved", resolvedAt: now },
+      });
+    }
+    const recoveredRelationshipIssueKeys = normalized.inventoryRelationships.map(
+      (relationship) => `inventory_relationship:${relationship.relationshipKey}:stale`,
+    );
+    if (recoveredRelationshipIssueKeys.length > 0) {
+      await tx.portfolioQualityIssue.updateMany({
+        where: {
+          issueType: "stale_relationship",
+          status: "open",
+          issueKey: { in: recoveredRelationshipIssueKeys },
+        },
+        data: { status: "resolved", resolvedAt: now },
+      });
     }
 
     return {
