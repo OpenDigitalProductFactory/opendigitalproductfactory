@@ -9,6 +9,12 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setEmployeeCompensation } from "@/lib/actions/workforce";
 import type { EmployeeCompensationRow } from "@/lib/hr/compensation-data";
+import {
+  SelectField,
+  TextField,
+  SubmitButton,
+  FormStatus,
+} from "@/components/ui/form";
 
 type Props = {
   employees: EmployeeCompensationRow[];
@@ -16,8 +22,7 @@ type Props = {
   currency: string;
 };
 
-const inputCls =
-  "w-32 px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] text-[var(--dpf-text)]";
+type SaveResult = { ok: boolean; message: string };
 
 function describePay(e: EmployeeCompensationRow, currency: string): string {
   if (e.payType === "hourly" && e.hourlyRate != null) {
@@ -44,7 +49,7 @@ export function CompensationPanel({ employees, currency }: Props) {
   const [standardHours, setStandardHours] = useState<string>(
     selected?.standardAnnualHours?.toString() ?? "",
   );
-  const [message, setMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<SaveResult | null>(null);
 
   function selectEmployee(id: string) {
     setSelectedId(id);
@@ -53,13 +58,13 @@ export function CompensationPanel({ employees, currency }: Props) {
     setHourlyRate(e?.hourlyRate?.toString() ?? "");
     setAnnualSalary(e?.annualSalary?.toString() ?? "");
     setStandardHours(e?.standardAnnualHours?.toString() ?? "");
-    setMessage(null);
+    setResult(null);
   }
 
   function handleSave() {
     if (!selected) return;
     startTransition(async () => {
-      const result = await setEmployeeCompensation({
+      const saved = await setEmployeeCompensation({
         employeeProfileId: selected.employeeProfileId,
         payType,
         ...(payType === "hourly"
@@ -69,8 +74,8 @@ export function CompensationPanel({ employees, currency }: Props) {
               standardAnnualHours: standardHours ? parseInt(standardHours, 10) || null : null,
             }),
       });
-      setMessage(result.message);
-      if (result.ok) router.refresh();
+      setResult(saved);
+      if (saved.ok) router.refresh();
     });
   }
 
@@ -86,105 +91,107 @@ export function CompensationPanel({ employees, currency }: Props) {
       {employees.length === 0 ? (
         <p className="text-xs text-[var(--dpf-muted)]">Add an employee first, then set their pay here.</p>
       ) : (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={selectedId}
-              onChange={(e) => selectEmployee(e.target.value)}
-              className="px-2 py-1 text-xs rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] max-w-56"
-              aria-label="Employee"
-            >
-              {employees.map((e) => (
-                <option key={e.employeeProfileId} value={e.employeeProfileId} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
-                  {e.displayName}
-                </option>
-              ))}
-            </select>
-            {selected && (
-              <span className="text-[10px] text-[var(--dpf-muted)]">{describePay(selected, currency)}</span>
-            )}
-          </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSave();
+          }}
+          noValidate
+          className="space-y-3"
+        >
+          <SelectField
+            name="pay-employee"
+            label="Employee"
+            value={selectedId}
+            onValueChange={selectEmployee}
+            options={employees.map((e) => ({ value: e.employeeProfileId, label: e.displayName }))}
+          />
+          {selected && (
+            <p className="text-[11px] text-[var(--dpf-muted)]">{describePay(selected, currency)}</p>
+          )}
 
-          <div className="flex items-center gap-3 text-xs text-[var(--dpf-text)]">
-            <label className="flex items-center gap-1.5 cursor-pointer">
+          <fieldset className="flex items-center gap-3 text-sm text-[var(--dpf-text)]">
+            <legend className="text-sm font-medium text-[var(--dpf-text)]">How is this person paid?</legend>
+            <label className="flex cursor-pointer items-center gap-1.5">
               <input
                 type="radio"
-                name="payType"
+                name="pay-type"
                 checked={payType === "hourly"}
                 onChange={() => setPayType("hourly")}
               />
               Paid hourly
             </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
+            <label className="flex cursor-pointer items-center gap-1.5">
               <input
                 type="radio"
-                name="payType"
+                name="pay-type"
                 checked={payType === "salary"}
                 onChange={() => setPayType("salary")}
               />
               Salaried
             </label>
-          </div>
+          </fieldset>
 
           {payType === "hourly" ? (
-            <label className="flex items-center gap-2 text-xs text-[var(--dpf-text)]">
-              Hourly pay rate ({currency})
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={hourlyRate}
-                onChange={(e) => setHourlyRate(e.target.value)}
-                className={inputCls}
-              />
-            </label>
+            <TextField
+              name="hourly-rate"
+              label={`Hourly pay rate (${currency})`}
+              type="number"
+              value={hourlyRate}
+              onValueChange={setHourlyRate}
+              required
+              autoComplete="off"
+              min={0}
+              step={0.5}
+              inputClassName="max-w-40"
+            />
           ) : (
             <div className="space-y-2">
-              <label className="flex items-center gap-2 text-xs text-[var(--dpf-text)]">
-                Annual salary ({currency})
-                <input
-                  type="number"
-                  min={0}
-                  step={500}
-                  value={annualSalary}
-                  onChange={(e) => setAnnualSalary(e.target.value)}
-                  className={inputCls}
-                />
-              </label>
+              <TextField
+                name="annual-salary"
+                label={`Annual salary (${currency})`}
+                type="number"
+                value={annualSalary}
+                onValueChange={setAnnualSalary}
+                required
+                autoComplete="off"
+                min={0}
+                step={500}
+                inputClassName="max-w-40"
+              />
               <details className="text-xs">
                 <summary className="cursor-pointer text-[var(--dpf-muted)]">Advanced</summary>
-                <label className="mt-2 flex items-center gap-2 text-xs text-[var(--dpf-text)]">
-                  Standard hours per year
-                  <input
+                <div className="mt-2">
+                  <TextField
+                    name="standard-annual-hours"
+                    label="Standard hours per year"
                     type="number"
+                    value={standardHours}
+                    onValueChange={setStandardHours}
+                    optional
+                    autoComplete="off"
                     min={1}
                     max={8760}
                     step={1}
                     placeholder="2080"
-                    value={standardHours}
-                    onChange={(e) => setStandardHours(e.target.value)}
-                    className={inputCls}
+                    hint="Used to work out an hourly cost for job pricing. Leave blank for 2,080 (40 hours × 52 weeks)."
+                    inputClassName="max-w-40"
                   />
-                </label>
-                <p className="mt-1 text-[10px] text-[var(--dpf-muted)]">
-                  Used to work out an hourly cost for job pricing. Leave blank for 2,080 (40 hours × 52 weeks).
-                </p>
+                </div>
               </details>
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={isPending || !selected}
-              onClick={handleSave}
-              className="text-[11px] px-3 py-1.5 rounded border border-[var(--dpf-accent)]/40 text-[var(--dpf-accent)] hover:bg-[var(--dpf-accent)]/10 disabled:opacity-50"
-            >
+          <div className="flex items-center gap-3">
+            <SubmitButton pending={isPending} pendingLabel="Saving…" disabled={!selected}>
               Save pay
-            </button>
-            {message && <span className="text-[11px] text-[var(--dpf-muted)]">{message}</span>}
+            </SubmitButton>
+            <FormStatus
+              error={result && !result.ok ? result.message : null}
+              success={result?.ok ? result.message : null}
+            />
           </div>
-        </div>
+        </form>
       )}
     </section>
   );

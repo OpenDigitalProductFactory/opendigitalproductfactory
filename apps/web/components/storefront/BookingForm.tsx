@@ -3,6 +3,13 @@
 import { useState } from "react";
 import { submitBooking } from "@/lib/storefront-actions";
 import { useRouter } from "next/navigation";
+import {
+  TextField,
+  EmailField,
+  TextareaField,
+  SubmitButton,
+  FormStatus,
+} from "@/components/ui/form";
 
 export function BookingForm({
   orgSlug,
@@ -19,24 +26,30 @@ export function BookingForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const today = new Date().toISOString().split("T")[0];
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    const fd = new FormData(e.currentTarget);
-    const date = fd.get("date") as string;
-    const time = fd.get("time") as string;
     const scheduledAt = new Date(`${date}T${time}:00`);
 
     const result = await submitBooking(orgSlug, {
       itemId,
-      customerEmail: fd.get("email") as string,
-      customerName: fd.get("name") as string,
-      customerPhone: (fd.get("phone") as string | null) ?? undefined,
+      customerEmail: email,
+      customerName: name,
+      customerPhone: phone || undefined,
       scheduledAt,
       durationMinutes,
-      notes: (fd.get("notes") as string | null) ?? undefined,
+      notes: notes || undefined,
     });
 
     if (!result.success) {
@@ -49,42 +62,69 @@ export function BookingForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 480 }}>
-      {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
-      {[
-        { name: "name", label: "Full name", type: "text" },
-        { name: "email", label: "Email address", type: "email" },
-        { name: "phone", label: "Phone (optional)", type: "tel", required: false },
-      ].map((f) => (
-        <div key={f.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <label style={{ fontSize: 13, fontWeight: 500 }}>{f.label}</label>
-          <input type={f.type} name={f.name} required={f.required !== false}
-            style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }} />
-        </div>
-      ))}
-      <div style={{ display: "flex", gap: 12 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-          <label style={{ fontSize: 13, fontWeight: 500 }}>Date *</label>
-          <input type="date" name="date" required
-            min={new Date().toISOString().split("T")[0]}
-            style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }} />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-          <label style={{ fontSize: 13, fontWeight: 500 }}>Time *</label>
-          <input type="time" name="time" required
-            style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }} />
-        </div>
+    <form onSubmit={handleSubmit} className="flex max-w-[480px] flex-col gap-4" noValidate>
+      <FormStatus error={error} />
+      <TextField
+        name="name"
+        label="Full name"
+        value={name}
+        onValueChange={setName}
+        required
+        autoComplete="name"
+      />
+      <EmailField
+        name="email"
+        label="Email address"
+        value={email}
+        onValueChange={setEmail}
+        required
+        autoComplete="email"
+      />
+      <TextField
+        name="phone"
+        label="Phone"
+        type="tel"
+        value={phone}
+        onValueChange={setPhone}
+        optional
+        autoComplete="tel"
+      />
+      <div className="flex gap-3">
+        <TextField
+          name="date"
+          label="Date"
+          type="date"
+          value={date}
+          onValueChange={setDate}
+          required
+          autoComplete="off"
+          min={today}
+          className="flex-1"
+        />
+        <TextField
+          name="time"
+          label="Time"
+          type="time"
+          value={time}
+          onValueChange={setTime}
+          required
+          autoComplete="off"
+          className="flex-1"
+        />
       </div>
-      <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>Duration: {durationMinutes} minutes</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <label style={{ fontSize: 13, fontWeight: 500 }}>Notes (optional)</label>
-        <textarea name="notes" rows={3}
-          style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14, resize: "vertical" }} />
-      </div>
-      <button type="submit" disabled={loading}
-        style={{ padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "var(--dpf-text)", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-        {loading ? "Booking…" : `Book ${itemName}`}
-      </button>
+      <div className="text-sm text-[var(--dpf-muted)]">Duration: {durationMinutes} minutes</div>
+      <TextareaField
+        name="notes"
+        label="Notes"
+        value={notes}
+        onValueChange={setNotes}
+        optional
+        rows={3}
+        hint="Anything we should know — dietary needs, party size, accessibility."
+      />
+      <SubmitButton pending={loading} pendingLabel="Booking…">
+        {`Book ${itemName}`}
+      </SubmitButton>
     </form>
   );
 }
