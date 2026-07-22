@@ -314,4 +314,62 @@ describe("evaluateInventoryQuality", () => {
 
     expect(result.issues).toHaveLength(0);
   });
+
+  it("emits a stale_relationship issue for a stale real-estate relationship", () => {
+    const result = evaluateInventoryQuality(
+      [],
+      [
+        {
+          relationshipKey: "organization:internal:edge_node:MEMBER_OF:arp:192.168.0.58->unifi:fc:ec:da:bc:a5:49",
+          relationshipType: "MEMBER_OF",
+          status: "stale",
+        },
+      ],
+    );
+
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0].issueType).toBe("stale_relationship");
+  });
+
+  it("suppresses stale_relationship issues for Docker-origin topology", () => {
+    // The dpf_bootstrap self-scan churns these on every container recreation;
+    // each orphaned key would otherwise open a permanent stale_relationship issue.
+    const result = evaluateInventoryQuality(
+      [],
+      [
+        {
+          relationshipKey: "dpf_bootstrap:MEMBER_OF:container:94d702333fd2->docker-net:dpf_default",
+          relationshipType: "MEMBER_OF",
+          status: "stale",
+        },
+        {
+          relationshipKey: "dpf_bootstrap:hosts:docker_runtime:/var/run/docker.sock->container:bd02d3f03235",
+          relationshipType: "hosts",
+          status: "stale",
+        },
+        {
+          relationshipKey: "dpf_bootstrap:monitors:container:07c16aa103f0->container:ff075a384b4b",
+          relationshipType: "monitors",
+          status: "stale",
+        },
+      ],
+    );
+
+    expect(result.issues).toHaveLength(0);
+  });
+
+  it("does not emit for active (non-stale) relationships regardless of origin", () => {
+    const result = evaluateInventoryQuality(
+      [],
+      [
+        {
+          relationshipKey: "organization:internal:edge_node:MEMBER_OF:arp:192.168.0.58->unifi:fc:ec:da:bc:a5:49",
+          relationshipType: "MEMBER_OF",
+          status: "active",
+        },
+      ],
+    );
+
+    expect(result.issues).toHaveLength(0);
+  });
 });

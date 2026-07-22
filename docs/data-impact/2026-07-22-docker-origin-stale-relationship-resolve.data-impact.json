@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "PortfolioQualityIssue rows (open Docker-origin stale_relationship issues)",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260722120000_resolve_docker_origin_stale_relationship_issues",
+    "backfill": "status flip only — no row is created or deleted, no id, scope FK, summary, or detection timestamp is changed. Open Docker-origin stale_relationship PortfolioQualityIssue rows (issueKey carrying container:/docker-net:/docker_runtime:/docker.sock/docker_host:/runtime:docker/subnet:docker-/gateway:docker-gw: tokens) are set status open->resolved with resolvedAt=NOW(). These were emitted for the platform's own ephemeral Docker self-scan topology and can never resolve on their own — each container recreation mints a new 12-hex id, orphaning the relationshipKey as stale forever. Real-estate keys (organization:...arp:192.168->unifi:mac) carry none of these tokens and are intentionally left open. Non-destructive and idempotent: already-resolved rows are not re-selected."
+  },
+  "tests": [
+    "packages/db/src/docker-origin.test.ts",
+    "packages/db/src/discovery-attribution.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:portfolio-quality-issue#docker-origin-stale-relationship-resolve",
+      "prismaModel": "PortfolioQualityIssue",
+      "lifecycleDisposition": "no lifecycle change to the underlying InventoryRelationship or any operator-facing record: only the derived quality-issue status transitions open->resolved for issues describing platform-internal Docker topology churn. firstDetectedAt, lastDetectedAt, scope FKs, and summary are preserved; rows remain for audit.",
+      "fields": [
+        {
+          "fieldId": "data:portfolio-quality-issue#status",
+          "resolution": "governed",
+          "reason": "resolve permanently-open, never-actionable stale_relationship issues emitted for the platform's own Docker self-scan; each container recreation mints a new 12-hex id, orphaning the relationshipKey as stale forever with no resolve pass, so the queue grew unbounded (~1,564 open) and buried real signal",
+          "provenance": "live-DB analysis (follow-up to BI-62846516): 1,564 open stale_relationship rows vs 940 still-stale relationships, all with null relationship FK; the predicate resolves 1,418 Docker-origin rows (container:/docker-net:/docker_runtime:/docker.sock tokens and the Docker 172.16/12 bridge-network range) and leaves 146 open (130 real-estate organization + 16 stable platform stragglers) for a separate reconcile follow-up; gated by the same predicate as the isDockerOriginRelationshipKey code guard"
+        },
+        {
+          "fieldId": "data:portfolio-quality-issue#resolvedAt",
+          "resolution": "governed",
+          "reason": "stamp the resolution time for the audit trail on the same open->resolved transition",
+          "provenance": "set to NOW() only on rows matching the Docker-origin token predicate; real-estate rows are untouched"
+        }
+      ]
+    }
+  ]
+}

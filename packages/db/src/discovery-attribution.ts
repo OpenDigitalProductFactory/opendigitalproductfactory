@@ -1,4 +1,4 @@
-import { isDockerOriginEntityKey } from "./docker-origin";
+import { isDockerOriginEntityKey, isDockerOriginRelationshipKey } from "./docker-origin";
 
 const LOW_CONFIDENCE_THRESHOLD = 0.55;
 const STOP_WORDS = new Set([
@@ -415,6 +415,15 @@ export function evaluateInventoryQuality(
   }
 
   for (const relationship of relationships) {
+    // Docker-origin relationships (container<->container, container<->docker-net,
+    // docker.sock<->container) are platform-internal topology, not operator
+    // estate. Every container recreation mints a new 12-hex id, orphaning the old
+    // relationshipKey as permanently `stale` — one open stale_relationship issue
+    // per orphan that never resolves. Skip issue generation for them, exactly as
+    // the entity loop above skips isDockerOriginEntityKey rows.
+    if (isDockerOriginRelationshipKey(relationship.relationshipKey)) {
+      continue;
+    }
     if (relationship.status === "stale") {
       issues.push({
         issueKey: `inventory_relationship:${relationship.relationshipKey}:stale`,

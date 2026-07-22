@@ -70,3 +70,59 @@ export function isDockerOriginEntityKey(
 
   return false;
 }
+
+// InventoryRelationship keys embed both endpoint entity keys, so a relationship
+// between two ephemeral Docker objects carries the same container / bridge-network
+// / runtime tokens its endpoints do:
+//   dpf_bootstrap:MEMBER_OF:container:94d70233->docker-net:dpf_default
+//   dpf_bootstrap:hosts:docker_runtime:/var/run/docker.sock->container:bd02d3f0
+//   dpf_bootstrap:monitors:container:07c16aa1->container:ff075a38
+// These are platform-internal Docker topology, not operator estate. Docker
+// auto-assigns each container a fresh 12-hex id on every recreation (restart,
+// rebuild, self-upgrade), so the old relationshipKey is never observed again and
+// is marked `stale` forever — one permanently-open stale_relationship quality
+// issue per orphan. The entity loop already skips isDockerOriginEntityKey rows
+// for exactly this reason; relationships had no equivalent guard, so the
+// self-scan accumulated 1.5k+ open stale_relationship rows that buried the real
+// signal. A token scan over the whole key is used rather than
+// endpoint parsing because the source/relationshipType prefix carries a variable
+// number of colons (e.g. `organization:internal:edge_node:...`), which makes
+// splitting the fromKey out ambiguous; the tokens below never appear in
+// real-estate keys (UniFi/arp LAN devices), so the scan stays conservative.
+const DOCKER_RELATIONSHIP_TOKENS: readonly string[] = [
+  "docker-net:",
+  "docker_runtime:",
+  "docker_host:",
+  "subnet:docker-",
+  "gateway:docker-gw:",
+  "/var/run/docker.sock",
+  "runtime:docker",
+];
+
+// A `container:` endpoint on either side of the `->` arrow (or at key start).
+// Mirrors isDockerOriginEntityKey's unconditional `container:` prefix rule.
+const DOCKER_CONTAINER_ENDPOINT_RE = /(?:^|[:>])container:/;
+
+// Docker's default bridge network is 172.16.0.0/12. The self-scan also emits
+// bridge-topology relationships whose endpoints are the bridge hosts and the
+// bridge subnet rather than `container:` rows, e.g.
+//   dpf_bootstrap:MEMBER_OF:arp-host:172.18.0.10->subnet:172.18.0.0/16
+// isDockerOriginEntityKey already treats a 172.16/12 address as Docker; match
+// the same range anywhere in the key. The operator's real LAN is 192.168/10, so
+// this never matches real-estate keys (organization:...arp:192.168.x->unifi:mac).
+const DOCKER_BRIDGE_IP_RE = /(?:^|[^0-9.])172\.(?:1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}/;
+
+/**
+ * Returns true when a relationshipKey clearly describes Docker-internal
+ * topology (a container / bridge-network / docker-runtime relationship, or a
+ * relationship over the Docker 172.16/12 bridge network). Conservative on
+ * purpose — a true positive suppresses a stale_relationship quality issue, so a
+ * false positive would hide a real, actionable one. Real-estate relationship
+ * keys (`organization:...arp:192.168.x->unifi:mac`) match none of these and
+ * correctly return false.
+ */
+export function isDockerOriginRelationshipKey(relationshipKey: string): boolean {
+  if (DOCKER_CONTAINER_ENDPOINT_RE.test(relationshipKey)) return true;
+  if (DOCKER_BRIDGE_IP_RE.test(relationshipKey)) return true;
+  return DOCKER_RELATIONSHIP_TOKENS.some((token) => relationshipKey.includes(token));
+}
