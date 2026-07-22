@@ -67,6 +67,7 @@ export const PORTFOLIOS_OUTSIDE_IN: readonly AttentionPortfolio[] = (
 const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   // Customer-facing revenue surface.
   "approval-outbound": "products-and-services-sold", // marketing/sales drafts to customers
+  "storefront-demand": "products-and-services-sold", // unhandled customer inquiry / reservation — outermost, sorts ahead of generic fallback decisions
   // The workforce — people + AI coworkers needing a human.
   "ai-decision": "for-employees", // a coworker's decision the kernel couldn't make
   "paused-ai": "for-employees", // a coworker paused, needs input/credential

@@ -14,6 +14,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "ai-readiness-blocker": "Choose an intelligence setup fix?",
   "platform-health": "Choose how to handle this outage?",
   "provider-credential": "Reconnect this service?",
+  "storefront-demand": "Handle this customer request?", // overridden per-item by headlineFor (guest + action)
 };
 
 const SPECIALIST: Record<AttentionSource, string> = {
@@ -30,6 +31,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "ai-readiness-blocker": "Technology",
   "platform-health": "Platform operations",
   "provider-credential": "Technology",
+  "storefront-demand": "Front of house",
 };
 
 export function specialistFor(source: AttentionSource): string {
@@ -56,6 +58,12 @@ export function situationFor(item: AttentionItem): string | undefined {
 }
 
 export function headlineFor(item: AttentionItem): string {
+  if (item.source === "storefront-demand") {
+    // The concrete action + guest IS the title ("Confirm Emma Blake's reservation");
+    // render it as the owner question so each card headline is self-explanatory and
+    // uniquely identifies the customer record.
+    return item.title.endsWith("?") ? item.title : `${item.title}?`;
+  }
   if (
     item.source === "escalation" &&
     /(?:upgrade[- ]to[- ]gpu|speechtotext|voice typing)/i.test(item.title)
@@ -82,6 +90,10 @@ export function whyItMattersFor(item: AttentionItem): string {
     case "ai-decision":
     case "agent-proposal":
       return "Your team cannot finish this work without a choice from you.";
+    case "storefront-demand":
+      return item.technical?.workType === "reservation-exception"
+        ? "Two parties are booked into one table — only you can decide who keeps it."
+        : "A customer is waiting on your business to respond.";
     case "research-proposal":
       return "This research may improve how your team serves customers.";
     default:
@@ -94,6 +106,15 @@ export function whyItMattersFor(item: AttentionItem): string {
 const GENERIC_BLAST_RADIUS = new Set(["a coworker task", "a coworker waiting on approval"]);
 
 export function consequenceFor(item: AttentionItem): string {
+  if (item.source === "storefront-demand") {
+    if (item.technical?.workType === "reservation-exception") {
+      return "If you do nothing, both guests may arrive to one table and neither is served.";
+    }
+    if (item.technical?.workType === "reservation") {
+      return "If you do nothing, the guest is left unconfirmed and may book elsewhere.";
+    }
+    return "If you do nothing, the customer waits without a reply and may go elsewhere.";
+  }
   const blastRadius = item.triage.blastRadius;
   if (
     blastRadius &&
@@ -133,6 +154,14 @@ export function recommendationFor(item: AttentionItem): string {
       return "check the recipient and due date before filing.";
     case "agent-proposal":
       return "accept only the stated boundary; this does not give the coworker new authority.";
+    case "storefront-demand":
+      if (item.technical?.workType === "reservation-exception") {
+        return "pick which booking keeps the table, then rebook or message the other guest.";
+      }
+      if (item.technical?.workType === "reservation") {
+        return "check the time and table, then confirm the reservation or message the guest.";
+      }
+      return "read the message and reply, or route it to the right person.";
     case "research-proposal":
       return "keep this in the weekly review unless it affects a decision due sooner.";
     default:

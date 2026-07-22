@@ -13,6 +13,7 @@ import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import { loadPlatformHealthItems } from "./sources/platform-health";
 import { loadProviderCredentialItems, loadProviderSuitabilityDriftItems } from "./sources/provider-credential";
+import { loadStorefrontDemandItems } from "./sources/storefront-demand";
 import {
   loadOutboundItems,
   loadBillItems,
@@ -90,6 +91,7 @@ export async function loadAttentionItems(
     { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
+    { source: "storefront-demand", load: () => loadStorefrontDemandItems(db) },
     {
       source: "provider-credential",
       load: async () => [

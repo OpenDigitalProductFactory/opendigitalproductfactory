@@ -29,6 +29,12 @@ export function classifyOwnerAttentionLane(
   fallbackLevel: ProactivityLevel = "balanced",
 ): OwnerAttentionLaneDecision {
   const appliedLevel = item.proactivity?.level ?? fallbackLevel;
+  if (item.source === "storefront-demand") {
+    // A live customer is waiting on the business. This is the outermost owner-level
+    // work (products & services sold) and is the hard floor that stops the cockpit
+    // ever reading "Nothing needs you right now" while a customer record is unhandled.
+    return decision("needs-you-now", "A customer is waiting on your business.", true, appliedLevel);
+  }
   if (MONEY_SOURCES.has(item.source)) {
     return decision("needs-you-now", "Money would leave the business.", true, appliedLevel);
   }

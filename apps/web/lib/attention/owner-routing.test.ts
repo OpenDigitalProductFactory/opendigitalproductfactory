@@ -70,6 +70,15 @@ describe("classifyOwnerAttentionLane", () => {
     expect(decision.reason).toMatch(/technical|platform|custodian/i);
   });
 
+  it("hard-floors unhandled storefront demand into needs-you at every dial level", () => {
+    const levels: ProactivityLevel[] = ["quiet", "balanced", "assertive"];
+    for (const level of levels) {
+      const decision = classifyOwnerAttentionLane(item("storefront-demand"), level);
+      expect(decision).toMatchObject({ lane: "needs-you-now", hardFloor: true });
+      expect(decision.reason).toMatch(/customer/i);
+    }
+  });
+
   it("keeps real human judgment in needs-you even when assertive", () => {
     expect(
       classifyOwnerAttentionLane(

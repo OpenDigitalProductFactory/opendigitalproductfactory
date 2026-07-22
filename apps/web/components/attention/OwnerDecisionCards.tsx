@@ -128,6 +128,10 @@ function DecisionActions({ entry }: { entry: OwnerAttentionEntry }) {
         <Link
           key={`${choice.kind}:${choice.label}:${choice.href}`}
           href={choice.href}
+          // Many cards repeat the same visible verb ("Confirm reservation", "Review
+          // this decision"). Give each link an accessible name that names the specific
+          // record so it is uniquely targetable by assistive tech (BI-348766E5).
+          aria-label={disambiguate(choice.label, entry.card.headline)}
           className={
             index === 0
               ? "inline-flex min-h-9 items-center rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
@@ -168,6 +172,7 @@ function TechnicalDetail({ entry }: { entry: OwnerAttentionEntry }) {
           <Link
             key={`${action.label}:${action.href}`}
             href={action.href}
+            aria-label={disambiguate(action.label, entry.card.headline)}
             className="text-xs font-semibold text-[var(--dpf-accent)] hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
           >
             {action.label} →
@@ -180,6 +185,15 @@ function TechnicalDetail({ entry }: { entry: OwnerAttentionEntry }) {
 
 function safeId(value: string): string {
   return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
+}
+
+/** Build a unique accessible name for a repeated action verb by appending the card's
+ *  own headline (which names the specific record). Skips the suffix when the label is
+ *  already self-describing enough to contain the headline. */
+function disambiguate(label: string, headline: string): string {
+  const context = headline.replace(/\?+$/, "").trim();
+  if (!context || label.toLowerCase().includes(context.toLowerCase())) return label;
+  return `${label}: ${context}`;
 }
 
 function stripConsequenceLead(value: string): string {

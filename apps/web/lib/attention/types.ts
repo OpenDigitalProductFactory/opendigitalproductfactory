@@ -22,7 +22,8 @@ export type AttentionSource =
   | "research-proposal" // ResearchProposal pending
   | "ai-readiness-blocker" // AI Readiness blocked domain requiring operator action
   | "platform-health" // PortfolioQualityIssue issueType=health_alert, status=open (BI-2F778C13)
-  | "provider-credential"; // an enabled AI provider whose saved sign-in has EXPIRED — reconnect (BI-282C39D5)
+  | "provider-credential" // an enabled AI provider whose saved sign-in has EXPIRED — reconnect (BI-282C39D5)
+  | "storefront-demand"; // an unhandled customer record — inquiry awaiting reply / reservation awaiting confirmation or double-booked (BI-348766E5). Makes Workspace the single owner-readable truth for storefront demand.
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
@@ -55,7 +56,8 @@ export type ResidueReason =
   | "input-required" // a coworker needs human input to continue (TaskRun)
   | "needs-credential" // missing credential / authority, NOT judgment (TaskRun auth-required)
   | "policy-approval" // an agent action awaits approval (AgentActionProposal)
-  | "no-self-heal"; // a platform service is degraded and has no automated repair path (health_alert)
+  | "no-self-heal" // a platform service is degraded and has no automated repair path (health_alert)
+  | "customer-waiting"; // an external customer record is unhandled and the customer is waiting on the business (storefront-demand)
 
 /** How much the human must do. The human_cognitive_load cost axis. */
 export type DecideEffort = "one-tap" | "review" | "judgment";

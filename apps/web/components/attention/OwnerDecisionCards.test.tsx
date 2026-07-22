@@ -73,14 +73,47 @@ describe("OwnerDecisionCards", () => {
     expect(screen.getByText(/the bill may become late/)).toBeTruthy();
     expect(screen.getByText("Your COO recommends")).toBeTruthy();
     expect(screen.getByText("Finance")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Review bill" }).getAttribute("href")).toBe(
-      "/finance/bills",
-    );
+    // The visible verb stays "Review bill"; its accessible name is disambiguated with
+    // the record so repeated verbs are uniquely targetable (still Label-in-Name safe).
+    const reviewLink = screen.getByRole("link", { name: /Review bill/ });
+    expect(reviewLink.getAttribute("href")).toBe("/finance/bills");
+    expect(reviewLink.getAttribute("aria-label")).toBe("Review bill: Approve this bill");
     expect(screen.getByText("Costs money")).toBeTruthy();
     expect(screen.queryByText("Approve bill BILL-1")).toBeNull();
     expect(screen.queryByRole("link", { name: "Open in Operations" })).toBeNull();
     expect(container.innerHTML).toContain("var(--dpf-");
     expect(container.innerHTML).not.toMatch(/#[0-9a-f]{3,8}/i);
+  });
+
+  it("gives repeated action verbs distinct accessible names across cards", () => {
+    const mk = (id: string, headline: string, href: string): OwnerAttentionEntry => ({
+      ...entry,
+      item: { ...entry.item, id, source: "storefront-demand" },
+      card: {
+        ...entry.card,
+        id,
+        source: "storefront-demand",
+        headline,
+        choices: [{ kind: "open-in-context", label: "Confirm reservation", href }],
+      },
+    });
+    render(
+      <OwnerDecisionCards
+        entries={[
+          mk("storefront-demand:booking:a", "Confirm Emma Blake's reservation?", "/storefront/inbox?entryId=a"),
+          mk("storefront-demand:booking:b", "Confirm Tom Ford's reservation?", "/storefront/inbox?entryId=b"),
+        ]}
+      />,
+    );
+
+    // Same visible verb on both cards, but each link is individually targetable.
+    expect(screen.getAllByText("Confirm reservation")).toHaveLength(2);
+    expect(
+      screen.getByRole("link", { name: "Confirm reservation: Confirm Emma Blake's reservation" }).getAttribute("href"),
+    ).toBe("/storefront/inbox?entryId=a");
+    expect(
+      screen.getByRole("link", { name: "Confirm reservation: Confirm Tom Ford's reservation" }).getAttribute("href"),
+    ).toBe("/storefront/inbox?entryId=b");
   });
 
   it("reveals every raw field and builder verb one click down", () => {
