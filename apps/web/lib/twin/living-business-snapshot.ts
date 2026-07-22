@@ -285,6 +285,35 @@ export function readinessQuest(snap: RestaurantCapacitySnapshot): QuestData | nu
   };
 }
 
+/** A queue key that means "reservations" (restaurant FLOOR, rental YARD). */
+export function isReservationQueueKey(key: string): boolean {
+  return /reserv/i.test(key);
+}
+
+/** An upcoming, still-active reservation — a future scheduled slot that is neither
+ *  cancelled nor completed. This is the "reservations on the books" set. */
+export function isUpcomingReservation(b: BookingRow, now: Date): boolean {
+  const status = b.status.toLowerCase();
+  if (status === "cancelled" || status === "completed") return false;
+  return b.scheduledAt != null && b.scheduledAt.getTime() > now.getTime();
+}
+
+/** Upcoming reservations → queue items, soonest slot first. The meaningful metric
+ *  is time-until-service, not age-in-queue. Reconciles the twin Reservations queue
+ *  with the Storefront booking history (BI-348766E5). */
+export function reservationsToQueueItems(bookings: BookingRow[], now: Date, limit = 6): QueueItemData[] {
+  return bookings
+    .filter((b) => isUpcomingReservation(b, now))
+    .sort((a, b) => (a.scheduledAt?.getTime() ?? Infinity) - (b.scheduledAt?.getTime() ?? Infinity))
+    .slice(0, limit)
+    .map((b) => ({
+      key: b.id,
+      label: b.provider?.name ? `With ${b.provider.name}` : "Reservation",
+      meta: b.scheduledAt ? `booked for ${monthDay(b.scheduledAt)}` : "awaiting schedule",
+      waiting: b.scheduledAt ? `in ${humanizeWait(b.scheduledAt.getTime() - now.getTime())}` : undefined,
+    }));
+}
+
 /** The longest a pending item has waited — the queue's headline flow metric. */
 export function longestWaitMs(bookings: BookingRow[], now: Date): number {
   // Only genuine walk-in waits count — scheduled reservations (upcoming or
@@ -632,16 +661,33 @@ export async function loadLivingBusinessSnapshot(opts?: {
         })
       : null;
 
-  // NB: the Reservations-queue reconciliation (fixing "RESERVATIONS 0" while
-  // booking history exists) is owned by BI-348766E5 (PR #3403), which edits this
-  // same queue construction. This PR (BI-7C95A586) deliberately leaves it alone
-  // to avoid duplicating that work — it owns the capacity chips + readiness only.
-  const queueItems = bookingsToQueueItems(bookings, now);
-  const queues: TwinQueueSnapshot[] = profile.queues.map((qs, i) => ({
-    key: qs.key,
-    items: i === 0 ? queueItems : [],
-    emptyLabel: i === 0 ? "No demand waiting" : "Clear",
-  }));
+  // Distribute booking-derived demand across the profile's queues by MEANING, not
+  // just into queue 0. A profile with a dedicated reservations queue (e.g. the
+  // restaurant FLOOR: [waitlist, reservations]) must show its upcoming reservations
+  // there instead of a hardcoded-empty "Reservations 0 / Clear" that contradicts the
+  // Storefront booking history (BI-348766E5 fix 3). Guarded so profiles whose FIRST
+  // queue is the reservations queue (YARD) — and every non-reservation profile —
+  // keep their existing behaviour exactly.
+  const reservationQueuePresent = profile.queues.some((qs, i) => i > 0 && isReservationQueueKey(qs.key));
+  const upcomingReservationItems = reservationQueuePresent
+    ? reservationsToQueueItems(bookings, now)
+    : [];
+  // Keep the general (index 0) queue from double-counting the upcoming reservations
+  // now shown in their own queue.
+  const generalBookings = reservationQueuePresent
+    ? bookings.filter((b) => !isUpcomingReservation(b, now))
+    : bookings;
+  const generalQueueItems = bookingsToQueueItems(generalBookings, now);
+  const queues: TwinQueueSnapshot[] = profile.queues.map((qs, i) => {
+    if (i > 0 && isReservationQueueKey(qs.key)) {
+      return { key: qs.key, items: upcomingReservationItems, emptyLabel: "No upcoming reservations" };
+    }
+    return {
+      key: qs.key,
+      items: i === 0 ? generalQueueItems : [],
+      emptyLabel: i === 0 ? "No demand waiting" : "Clear",
+    };
+  });
 
   const cog = proposeCogAllocation(
     bookings,
