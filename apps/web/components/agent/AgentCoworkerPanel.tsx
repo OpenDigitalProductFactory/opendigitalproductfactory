@@ -271,9 +271,6 @@ export function AgentCoworkerPanel({
 
   const routeAgent: AgentInfo = resolveAgentForRouteSync(effectiveRoute, userContext);
   const agent = presentStandingCoo(routeAgent, cooConversationalName);
-  // BI-3238AAF0: the business area the panel is currently attached to, so the
-  // header can name the owner's context rather than showing anonymous chrome.
-  const routeContextLabel = resolvePanelRouteContextLabel(effectiveRoute);
   const webAccessAvailable = agentHoldsWebSearchGrant(agent.agentId);
   const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
@@ -918,7 +915,7 @@ export function AgentCoworkerPanel({
         onViewProfile={() => setShowProfile(true)}
         marketingSkillRules={marketingSkillRules}
         isDocked={isDocked}
-        routeContextLabel={routeContextLabel}
+        routeContextLabel={resolvePanelRouteContextLabel(effectiveRoute)}
       />
 
       {/* Voice activity indicator — shown when voice synthesis is active */}
