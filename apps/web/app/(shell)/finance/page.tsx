@@ -14,6 +14,8 @@ import { AccountantWorkLanePanel } from "@/components/finance/AccountantWorkLane
 import { getBookkeeperAccountantWorkLane } from "@/lib/finance/accountant-work-lane";
 import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { OwnerFirstFinanceView, type MoneyJobMetric } from "@/components/finance/OwnerFirstFinanceView";
+import { resolveFinanceSurface, type FinanceMetricKey } from "@/lib/finance/finance-surface";
 import { StatCard } from "@/components/ui/report-kit";
 import { RecentInvoicesTable, type RecentInvoiceRow } from "./RecentInvoicesTable";
 
@@ -43,6 +45,7 @@ export default async function FinancePage() {
     activeAssets,
     setupStatus,
     orgSettings,
+    storefrontConfig,
   ] = await Promise.all([
     // Money owed to you — sum amountDue for active receivable statuses
     prisma.invoice.aggregate({
@@ -151,7 +154,14 @@ export default async function FinancePage() {
 
     // Org settings — for base currency
     getOrgSettings(),
+
+    // Storefront archetype — drives the owner-first (food-hospitality) surface
+    prisma.storefrontConfig.findFirst({
+      select: { archetype: { select: { category: true } } },
+    }),
   ]);
+
+  const financeSurface = resolveFinanceSurface(storefrontConfig?.archetype.category);
 
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
@@ -192,9 +202,79 @@ export default async function FinancePage() {
     amount: Number(inv.totalAmount),
   }));
 
-  // Owner-first: open with what must be paid, collected, or approved today, then
-  // demote the accountant lanes and AR/AP/reporting taxonomy behind progressive
-  // disclosure (BI-3BCAF95F).
+  // ─── Owner-first surface (food-hospitality) ─────────────────────────────────
+  // Deeper, finance-specific owner-first view (BI-3326DA86): lead with the
+  // restaurant's real money jobs — the same live figures re-framed as "what
+  // needs attention today" — and push every accounting internal into the
+  // collapsed advanced region. Supersedes the generic owner-first summary band
+  // (BI-3BCAF95F) for food-hospitality, so it returns before that is built.
+  if (financeSurface.mode === "owner-first") {
+    const moneyJobMetrics: Partial<Record<FinanceMetricKey, MoneyJobMetric>> = {
+      "outstanding-receivables": {
+        value: `${sym}${formatMoney(owedAmount)}`,
+        hint: `${owedCount} invoice${owedCount !== 1 ? "s" : ""} outstanding`,
+        intent: owedAmount > 0 ? "warning" : "neutral",
+      },
+      "money-in-month": {
+        value: `${sym}${formatMoney(paidAmount)}`,
+        hint: `${paidCount} invoice${paidCount !== 1 ? "s" : ""} paid this month`,
+        intent: paidAmount > 0 ? "success" : "neutral",
+      },
+      "overdue-count": {
+        value: `${overdueCount}`,
+        hint:
+          overdueCount > 0 && oldestOverdue
+            ? `oldest: ${oldestOverdue.account.name}`
+            : "all up to date",
+        intent: overdueCount > 0 ? "danger" : "success",
+      },
+      "supplier-bills-due": {
+        value: `${sym}${formatMoney(moneyOweAmount)}`,
+        hint: `${moneyOweCount} bill${moneyOweCount !== 1 ? "s" : ""} awaiting payment`,
+        intent: moneyOweAmount > 0 ? "warning" : "success",
+      },
+      "cash-position": {
+        value: bankAccounts.length === 0 ? "No accounts" : `${sym}${formatMoney(totalCash)}`,
+        hint:
+          bankAccounts.length === 0
+            ? "add a bank account to reconcile payouts"
+            : `across ${bankAccounts.length} account${bankAccounts.length !== 1 ? "s" : ""}`,
+        intent: bankAccounts.length === 0 ? "neutral" : totalCash >= 0 ? "success" : "danger",
+      },
+    };
+
+    return (
+      <div>
+        {!setupStatus.isConfigured && <SetupBanner />}
+
+        <FinanceTabNav />
+
+        <OwnerFirstFinanceView
+          surface={financeSurface}
+          metrics={moneyJobMetrics}
+          advancedChildren={<AccountantWorkLanePanel lane={accountantLane} />}
+        />
+
+        {/* Recent invoices — owner-relevant, kept below the money jobs */}
+        <section>
+          <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
+            Recent Invoices
+          </h2>
+          {recentInvoices.length === 0 ? (
+            <p className="text-sm text-[var(--dpf-muted)]">
+              No invoices yet. Bill a booking, order, or catering job to get started.
+            </p>
+          ) : (
+            <RecentInvoicesTable rows={recentInvoiceRows} currencySymbol={sym} />
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  // Owner-first summary for every other archetype (BI-3BCAF95F): open with what
+  // must be paid, collected, or approved today, then demote the accountant lanes
+  // and AR/AP/reporting taxonomy behind progressive disclosure.
   const simple = isSimpleNavMode(
     resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value),
   );
@@ -214,24 +294,7 @@ export default async function FinancePage() {
   return (
     <div>
       {/* Setup prompt banner */}
-      {!setupStatus.isConfigured && (
-        <div className="mb-6 rounded-lg border border-[color-mix(in_srgb,var(--dpf-warning)_35%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-warning)_10%,transparent)] p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-[var(--dpf-warning)]">Complete your financial setup</p>
-              <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
-                Set up your finances based on your business type to get started with invoicing, expenses, and reporting.
-              </p>
-            </div>
-            <Link
-              href="/finance/settings/setup"
-              className="px-3 py-1.5 text-xs font-medium rounded bg-[var(--dpf-warning)] text-[var(--dpf-bg)] hover:opacity-90 transition-opacity shrink-0"
-            >
-              Set Up Now
-            </Link>
-          </div>
-        </div>
-      )}
+      {!setupStatus.isConfigured && <SetupBanner />}
 
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
@@ -583,6 +646,27 @@ export default async function FinancePage() {
       </section>
         </>
       )}
+    </div>
+  );
+}
+
+function SetupBanner() {
+  return (
+    <div className="mb-6 rounded-lg border border-[color-mix(in_srgb,var(--dpf-warning)_35%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-warning)_10%,transparent)] p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-[var(--dpf-warning)]">Complete your financial setup</p>
+          <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
+            Set up your finances based on your business type to get started with invoicing, expenses, and reporting.
+          </p>
+        </div>
+        <Link
+          href="/finance/settings/setup"
+          className="px-3 py-1.5 text-xs font-medium rounded bg-[var(--dpf-warning)] text-[var(--dpf-bg)] hover:opacity-90 transition-opacity shrink-0"
+        >
+          Set Up Now
+        </Link>
+      </div>
     </div>
   );
 }

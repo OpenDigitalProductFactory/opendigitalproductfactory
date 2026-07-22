@@ -77,14 +77,20 @@ export function PaymentRunBuilder({ approvedBills }: Props) {
 
   if (approvedBills.length === 0) {
     return (
-      <p className="text-sm text-[var(--dpf-muted)]">
-        No approved bills ready for payment.
-      </p>
+      <div>
+        <PaymentRunDisclosure />
+        <p className="text-sm text-[var(--dpf-muted)]">
+          No approved bills ready to record as paid.
+        </p>
+      </div>
     );
   }
 
   return (
     <div>
+      {/* What this action does — shown before any bill is selected. */}
+      <PaymentRunDisclosure />
+
       {/* Consolidate toggle */}
       <div className="flex items-center gap-3 mb-4">
         <label className="flex items-center gap-2 cursor-pointer">
@@ -181,7 +187,7 @@ export function PaymentRunBuilder({ approvedBills }: Props) {
               disabled={loading}
               className="px-4 py-2 rounded-md text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              Execute Payment Run
+              Record as Paid
             </button>
           </div>
         </div>
@@ -192,18 +198,19 @@ export function PaymentRunBuilder({ approvedBills }: Props) {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-xl p-6 max-w-sm w-full mx-4">
             <h3 className="text-base font-semibold text-[var(--dpf-text)] mb-2">
-              Confirm Payment Run
+              Record payment run
             </h3>
             <p className="text-sm text-[var(--dpf-muted)] mb-4">
-              This will pay{" "}
+              This records{" "}
               <span className="text-[var(--dpf-text)] font-semibold">
                 {selectedIds.size} bill{selectedIds.size !== 1 ? "s" : ""}
               </span>{" "}
               totalling{" "}
               <span className="text-[var(--dpf-text)] font-semibold">
                 GBP {formatMoney(total)}
-              </span>
-              . This action cannot be undone.
+              </span>{" "}
+              as paid in DPF. It does not move money through your bank — pay your suppliers as
+              usual, then this keeps your books settled. This can&rsquo;t be undone here.
             </p>
             {error && <p className="text-xs text-[var(--dpf-error)] mb-4">{error}</p>}
             <div className="flex gap-3">
@@ -219,12 +226,35 @@ export function PaymentRunBuilder({ approvedBills }: Props) {
                 disabled={loading}
                 className="flex-1 px-4 py-2 rounded-md text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
               >
-                {loading ? "Processing…" : "Confirm & Pay"}
+                {loading ? "Recording…" : "Record as Paid"}
               </button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * States plainly what recording a payment run does BEFORE the owner selects any
+ * bills. `createPaymentRun` marks the selected approved bills as paid and writes
+ * a matching outbound payment record — it does not draft, and it does not
+ * initiate a real bank transfer. Say so, so the owner is not misled into
+ * thinking DPF moved money.
+ */
+function PaymentRunDisclosure() {
+  return (
+    <div className="mb-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+      <p className="text-xs font-semibold text-[var(--dpf-text)]">
+        This records bills as paid — it does not move money
+      </p>
+      <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
+        Recording a payment run marks the selected approved bills as paid in DPF and writes a
+        matching outbound payment. It is <span className="text-[var(--dpf-text)]">not a draft</span>{" "}
+        and it does <span className="text-[var(--dpf-text)]">not initiate a real bank transfer</span>{" "}
+        — pay your suppliers through your bank as usual, then use this to keep your books settled.
+      </p>
     </div>
   );
 }
