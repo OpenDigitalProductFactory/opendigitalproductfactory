@@ -51,13 +51,10 @@ const EXEMPT_PATTERNS = [
 // Dependabot ids via the stale-override audit (BI-CDB2E8AB). This list is CLOSED:
 // a new override may NOT be added here — tag it instead.
 const GRANDFATHERED_DEBT = new Set([
-  "@xmldom/xmldom",
   "node-forge",
   "postcss",
   "@opentelemetry/otlp-transformer>protobufjs",
   "ws@>=8.0.0 <8.20.1",
-  "qs",
-  "esbuild@>=0.17.0 <0.28.1", // has prose advisory but no machine-readable id yet
 ]);
 
 // Entries covered by a shared advisory comment above a sibling entry (the comment
