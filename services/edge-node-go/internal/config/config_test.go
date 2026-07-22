@@ -21,8 +21,34 @@ func clearEnv(t *testing.T) {
 		EnvStateDir, EnvInstallMode, EnvPlatformOverride, EnvVersion,
 		EnvEdgeActionURL, EnvEdgeActionCAFile, EnvEdgeActionCertFile,
 		EnvEdgeActionKeyFile, EnvEdgeActionSigningPublicKeyFile,
+		EnvInstallRoot, EnvOrganizationTrustRole, EnvPkiDir, EnvOrganizationCAURL,
 	} {
 		t.Setenv(k, "")
+	}
+}
+
+func TestLoad_organizationJoinRequiresExplicitFixedHostConfiguration(t *testing.T) {
+	clearEnv(t)
+	setEnv(t, map[string]string{
+		EnvAuthorityURL:          "http://localhost:3000",
+		EnvPlatformOverride:      "darwin",
+		EnvOrganizationTrustRole: "authority",
+		EnvInstallRoot:           "/opt/dpf",
+		EnvPkiDir:                "/opt/dpf-state/pki",
+		EnvOrganizationCAURL:     "https://arcamanus.local:9000",
+		EnvEdgeNodeName:          "arcamanus.local",
+	})
+	cfg, err := Load("0.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.OrganizationJoinEnabled() || cfg.OrganizationTrustRole != "authority" {
+		t.Fatalf("unexpected organization join config: %#v", cfg)
+	}
+
+	t.Setenv(EnvOrganizationCAURL, "https://example.com:9000")
+	if _, err := Load("0.1.0"); err == nil {
+		t.Fatal("public CA URL must fail closed")
 	}
 }
 

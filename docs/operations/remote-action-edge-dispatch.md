@@ -1,7 +1,8 @@
 # Machine-bound Edge action dispatch
 
 DPF can ask an enrolled native Edge Node to run the read-only
-`inventory.collect` action. The Edge Node still initiates every network
+`inventory.collect` action. It can also run exactly two governed organization
+setup actions: `organization.join.issue` and `organization.join.import`. The Edge Node still initiates every network
 connection; the portal never opens an inbound management port on the host.
 
 This channel is deliberately off by default. It is the machine-trust foundation
@@ -38,7 +39,10 @@ The bootstrap records that the trust bundle is configured, but it does not turn
 execution on. `DPF_REMOTE_ACTION_DISPATCH_ENABLED=1` is the separate rollout
 switch. In addition, the specific Edge Node must be trusted, its
 `action.execute` capability must be enabled, and its scope policy must allow
-`inventory.collect`.
+`inventory.collect`. Organization setup additionally requires the exact action
+on the node allow-list, the reported `authority` or `member` host role, local
+operator confirmation, and an approved ChangeRequest with impact, rollback,
+and post-change verification declarations.
 
 All of those conditions are checked again when an action is claimed. Enabling
 the environment switch alone grants no execution authority.
@@ -54,13 +58,22 @@ the environment switch alone grants no execution authority.
    action type, and risk class.
 4. The portal signs a short-lived, node-bound, single-use envelope.
 5. The Edge Node verifies the signature, node, expiry, parameters digest, and
-   durable replay journal before invoking the existing inventory collector.
+   durable replay journal before invoking the existing inventory collector or
+   the fixed Bash/PowerShell PKI bootstrap script through an argument array.
 6. It reports `running` before execution and then reports a sanitized terminal
    result. The portal accepts a result only from the node that claimed the
    action.
 
-There is no script text, command line, executable path, or arbitrary parameter
-surface in this pilot.
+There is no script text, caller-selected executable path, or arbitrary
+parameter surface. `script.run` remains forbidden. Issue accepts only an
+intended peer and a 5–15 minute expiry. Import accepts one validated V2 join
+package. Package material is encrypted at rest, decrypted only for dispatch or
+one-time download, and cleared after import, failure, cancellation, download,
+timeout, or expiry.
+
+An import snapshots the current `.env` and PKI overlay before mutation. A
+script failure or an independent certificate/overlay/portal/Edge health
+disagreement restores that snapshot and reports only a fixed error code.
 
 ## Renewal, quarantine, and revocation
 
@@ -90,7 +103,8 @@ Before enabling the pilot, confirm that:
   host and TCP `8443` is permitted on the private network;
 - the Edge Node is trusted and `action.execute` is enabled only for the intended
   pilot node;
-- `inventory.collect` is the only allowed action type; and
+- the node allow-list contains only the actions deliberately enabled for that
+  host (`inventory.collect`, authority-side issue, or member-side import); and
 - quarantine and revocation are exercised before treating the channel as
   operational.
 

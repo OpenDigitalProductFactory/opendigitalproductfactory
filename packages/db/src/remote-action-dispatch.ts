@@ -34,6 +34,19 @@ export function isReadonlyDispatchActionType(actionType: string): boolean {
   return (READONLY_DISPATCH_ACTION_TYPES as readonly string[]).includes(actionType);
 }
 
+export const PRIVILEGED_DISPATCH_ACTION_TYPES = [
+  "organization.join.issue",
+  "organization.join.import",
+] as const;
+
+export function isPrivilegedDispatchActionType(actionType: string): boolean {
+  return (PRIVILEGED_DISPATCH_ACTION_TYPES as readonly string[]).includes(actionType);
+}
+
+export function isDispatchActionType(actionType: string): boolean {
+  return isReadonlyDispatchActionType(actionType) || isPrivilegedDispatchActionType(actionType);
+}
+
 // ── Dispatch lifecycle (the execution axis, distinct from approvalState) ──────
 export const REMOTE_ACTION_DISPATCH_STATES = [
   "queued", // approved + waiting to be claimed by an in-scope node
@@ -88,6 +101,8 @@ export interface DispatchableActionView {
   customerSiteId: string | null;
   /** When pre-bound to a specific node; null = any in-scope node may claim. */
   edgeNodeId: string | null;
+  /** Privileged actions are re-authorized against the current CR at claim time. */
+  changeRequestApproved?: boolean;
 }
 
 export interface ClaimingNodeView {
@@ -103,6 +118,8 @@ export interface ClaimingNodeView {
   actionExecuteEnabled: boolean;
   /** Explicit per-node action allowlist from the approved scope policy. */
   allowedActionTypes: readonly string[];
+  /** Host-local authority/member posture reported by the native Edge capability. */
+  organizationTrustRole: "authority" | "member" | null;
 }
 
 export interface ClaimDecision {
@@ -135,9 +152,18 @@ export function isClaimableByNode(action: DispatchableActionView, node: Claiming
   if (!node.actionExecuteEnabled) return { claimable: false, reason: "action-execute-capability-disabled" };
   if (action.status !== "queued") return { claimable: false, reason: `action-not-queued (${action.status})` };
   if (action.approvalState !== "approved") return { claimable: false, reason: `action-not-approved (${action.approvalState})` };
-  if (action.riskClass !== "read-only") return { claimable: false, reason: "mutating-action-gated-to-P3" };
-  if (!isReadonlyDispatchActionType(action.actionType)) {
-    return { claimable: false, reason: `actionType-not-in-readonly-allowlist (${action.actionType})` };
+  if (isReadonlyDispatchActionType(action.actionType)) {
+    if (action.riskClass !== "read-only") return { claimable: false, reason: "mutating-action-gated-to-P3" };
+  } else if (isPrivilegedDispatchActionType(action.actionType)) {
+    if (action.riskClass !== "high") return { claimable: false, reason: "privileged-action-risk-class-invalid" };
+    if (!action.edgeNodeId) return { claimable: false, reason: "privileged-action-must-be-machine-bound" };
+    if (!action.changeRequestApproved) return { claimable: false, reason: "approved-change-request-required" };
+    const requiredRole = action.actionType === "organization.join.issue" ? "authority" : "member";
+    if (node.organizationTrustRole !== requiredRole) {
+      return { claimable: false, reason: "wrong-organization-trust-role" };
+    }
+  } else {
+    return { claimable: false, reason: `actionType-not-in-dispatch-allowlist (${action.actionType})` };
   }
   if (!node.allowedActionTypes.includes(action.actionType)) {
     return { claimable: false, reason: `actionType-not-allowed-for-node (${action.actionType})` };

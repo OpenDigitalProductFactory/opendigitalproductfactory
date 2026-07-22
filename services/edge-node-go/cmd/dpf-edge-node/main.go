@@ -23,12 +23,16 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -177,6 +181,19 @@ func run() error {
 				return map[string]any{"inventorySubmission": "accepted"}, nil
 			},
 		}
+		if cfg.OrganizationJoinEnabled() {
+			executor.OrganizationJoin = &action.OrganizationJoinHandler{
+				Config: action.OrganizationJoinConfig{
+					Role: action.OrganizationTrustRole(cfg.OrganizationTrustRole), Platform: cfg.Platform,
+					InstallRoot: cfg.InstallRoot, StateDir: cfg.StateDir, PkiDir: cfg.PkiDir,
+					HostIdentity: cfg.EdgeNodeName, OrganizationCAURL: cfg.OrganizationCAURL,
+					Timeout: 10 * time.Minute,
+				},
+				Verify: func(verifyContext context.Context) (map[string]any, error) {
+					return verifyOrganizationJoin(verifyContext, cfg, client, st)
+				},
+			}
+		}
 		runner := &actionrunner.Runner{Client: actionClient, Executor: executor, NodeToken: st.NodeToken, BatchSize: 1}
 		go func() { errCh <- runActionDispatch(ctx, actionClient, runner, st.NodeToken) }()
 	}
@@ -284,7 +301,7 @@ func federationCapabilityReports() []api.CapabilityReport {
 	}}
 }
 
-func capabilityReports(actionConfigured bool) []api.CapabilityReport {
+func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizationTrustRole string) []api.CapabilityReport {
 	reports := federationCapabilityReports()
 	if !actionConfigured {
 		return reports
@@ -296,12 +313,21 @@ func capabilityReports(actionConfigured bool) []api.CapabilityReport {
 	case actionDispatchDegraded:
 		status = "degraded"
 	}
+	actionTypes := []string{"inventory.collect"}
+	if organizationJoinEnabled {
+		if organizationTrustRole == "authority" {
+			actionTypes = append(actionTypes, "organization.join.issue")
+		} else if organizationTrustRole == "member" {
+			actionTypes = append(actionTypes, "organization.join.import")
+		}
+	}
 	return append(reports, api.CapabilityReport{
 		Capability: "action.execute",
 		Status:     status,
 		Evidence: map[string]any{
-			"transport":   "mutual-tls-pull",
-			"actionTypes": []string{"inventory.collect"},
+			"transport":             "mutual-tls-pull",
+			"actionTypes":           actionTypes,
+			"organizationTrustRole": organizationTrustRole,
 		},
 	})
 }
@@ -419,7 +445,7 @@ func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, s
 		}
 
 		resp, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
-			CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled()),
+			CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole),
 		})
 		if err != nil {
 			if api.IsRevoked(err) {
@@ -467,6 +493,82 @@ func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, s
 			}
 		}
 	}
+}
+
+func verifyOrganizationJoin(
+	ctx context.Context,
+	cfg *config.Config,
+	client *api.Client,
+	st *state.EdgeNodeState,
+) (map[string]any, error) {
+	evidence := map[string]any{
+		"certificateTrust":   false,
+		"overlayPersistence": false,
+		"portalHealth":       false,
+		"edgeHeartbeat":      false,
+	}
+	if err := verifyOrganizationCertificateChain(cfg.PkiDir); err != nil {
+		return evidence, err
+	}
+	evidence["certificateTrust"] = true
+	envContent, err := os.ReadFile(filepath.Join(cfg.InstallRoot, ".env"))
+	if err != nil || !strings.Contains(string(envContent), "DPF_ORGANIZATION_TRUST_ENABLED=1") ||
+		!strings.Contains(string(envContent), "DPF_PKI_TRUST_BUNDLE=") {
+		return evidence, errors.New("organization trust overlay is not persisted")
+	}
+	evidence["overlayPersistence"] = true
+	if err := client.Health(ctx); err != nil {
+		return evidence, err
+	}
+	evidence["portalHealth"] = true
+	if _, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
+		CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole),
+	}); err != nil {
+		return evidence, err
+	}
+	evidence["edgeHeartbeat"] = true
+	return evidence, nil
+}
+
+func verifyOrganizationCertificateChain(pkiDir string) error {
+	rootPEM, err := os.ReadFile(filepath.Join(pkiDir, "root_ca.crt"))
+	if err != nil {
+		return err
+	}
+	authorityPEM, err := os.ReadFile(filepath.Join(pkiDir, "authority.crt"))
+	if err != nil {
+		return err
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(rootPEM) {
+		return errors.New("organization root certificate is invalid")
+	}
+	var certificates []*x509.Certificate
+	remaining := authorityPEM
+	for len(remaining) > 0 {
+		block, rest := pem.Decode(remaining)
+		remaining = rest
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		certificate, parseErr := x509.ParseCertificate(block.Bytes)
+		if parseErr != nil {
+			return parseErr
+		}
+		certificates = append(certificates, certificate)
+	}
+	if len(certificates) == 0 {
+		return errors.New("organization authority certificate is invalid")
+	}
+	intermediates := x509.NewCertPool()
+	for _, certificate := range certificates[1:] {
+		intermediates.AddCert(certificate)
+	}
+	_, err = certificates[0].Verify(x509.VerifyOptions{Roots: roots, Intermediates: intermediates})
+	return err
 }
 
 // runSweep collects host facts each interval and submits them to

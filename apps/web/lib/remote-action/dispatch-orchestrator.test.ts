@@ -8,6 +8,7 @@ import { signEdgeActionEnvelope, verifyEdgeActionEnvelope } from "../../../../pa
 
 import {
   claimActionsForNode,
+  clearExpiredJoinPackageMaterial,
   recordActionResult,
   timeoutStaleClaims,
   type ClaimableActionRow,
@@ -32,6 +33,7 @@ function candidate(over: Partial<ClaimableActionRow> = {}): ClaimableActionRow {
     customerAccountId: null,
     customerSiteId: null,
     edgeNodeId: null,
+    changeRequestId: null,
     parameters: { probe: "iface" },
     ...over,
   };
@@ -45,6 +47,7 @@ const trustedInternalNode = {
   customerSiteId: null,
   actionExecuteEnabled: true,
   allowedActionTypes: ["diagnostics.collect", "inventory.collect"],
+  organizationTrustRole: "member" as const,
 };
 
 const claimOptions = { now: NOW, signer, nonceFactory: () => NONCE };
@@ -53,7 +56,10 @@ function claimDb(candidates: ClaimableActionRow[], updateCount = 1) {
   const findMany = vi.fn().mockResolvedValue(candidates);
   const updateMany = vi.fn().mockResolvedValue({ count: updateCount });
   return {
-    db: { remoteAction: { findMany, updateMany, findUnique: vi.fn(), update: vi.fn() } } as unknown as DispatchOrchestratorDb,
+    db: {
+      remoteAction: { findMany, updateMany, findUnique: vi.fn(), update: vi.fn() },
+      changeRequest: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as DispatchOrchestratorDb,
     findMany,
     updateMany,
   };
@@ -109,13 +115,48 @@ describe("claimActionsForNode", () => {
     expect(res.claimed).toEqual([]);
     expect(updateMany).not.toHaveBeenCalled();
   });
+
+  it("claims an approved import for a member and decrypts package material only into the signed envelope", async () => {
+    const PACKAGE = [
+      "DPF_ORGANIZATION_JOIN_V2",
+      "package_id=0123456789abcdef0123456789abcdef",
+      "ca_url=https://founder-hub.local:9000",
+      `root_fingerprint=${"A".repeat(64)}`,
+      "intended_hostname=windows-dev.local",
+      "intended_sans=windows-dev.local",
+      `expires_at=${Math.floor(NOW.getTime() / 1000) + 600}`,
+      "enrollment_token=token-safe_123",
+      "edge_client_enrollment_token=edge-safe_456",
+      "",
+    ].join("\n");
+    const row = candidate({
+      actionType: "organization.join.import",
+      riskClass: "high",
+      edgeNodeId: "node_1",
+      changeRequestId: "change-1",
+      parameters: { joinPackageEnc: "enc:iv:tag:cipher" },
+    });
+    const { db } = claimDb([row]);
+    vi.mocked(db.changeRequest!.findMany).mockResolvedValue([{ id: "change-1", status: "approved", approvedAt: NOW, approvedById: "employee-1" }]);
+    const result = await claimActionsForNode(db, {
+      ...trustedInternalNode,
+      organizationTrustRole: "member",
+      allowedActionTypes: ["organization.join.import"],
+    }, { ...claimOptions, decryptSecret: () => PACKAGE });
+    expect(result.claimed).toHaveLength(1);
+    expect(result.claimed[0]?.parameters).toEqual({ joinPackage: PACKAGE });
+    expect(JSON.stringify(row.parameters)).not.toContain("token-safe_123");
+  });
 });
 
 function resultDb(row: { actionKey: string; status: string; edgeNodeId: string | null } | null) {
   const findUnique = vi.fn().mockResolvedValue(row);
   const update = vi.fn().mockResolvedValue({});
   return {
-    db: { remoteAction: { findUnique, update, findMany: vi.fn(), updateMany: vi.fn() } } as unknown as DispatchOrchestratorDb,
+    db: {
+      remoteAction: { findUnique, update, findMany: vi.fn(), updateMany: vi.fn() },
+      changeRequest: { findMany: vi.fn() },
+    } as unknown as DispatchOrchestratorDb,
     update,
   };
 }
@@ -156,13 +197,56 @@ describe("recordActionResult", () => {
     const { db } = resultDb(null);
     expect(await recordActionResult(db, { actionKey: "nope", edgeNodeRowId: "node_1", outcome: "succeeded" })).toEqual({ ok: false, reason: "action-not-found" });
   });
+
+  it("encrypts an issued package immediately and never persists plaintext", async () => {
+    const expiresAt = new Date(NOW.getTime() + 600_000).toISOString();
+    const PACKAGE = [
+      "DPF_ORGANIZATION_JOIN_V2",
+      "package_id=0123456789abcdef0123456789abcdef",
+      "ca_url=https://founder-hub.local:9000",
+      `root_fingerprint=${"A".repeat(64)}`,
+      "intended_hostname=windows-dev.local",
+      "intended_sans=",
+      `expires_at=${Math.floor((NOW.getTime() + 600_000) / 1000)}`,
+      "enrollment_token=token-safe_123",
+      "edge_client_enrollment_token=edge-safe_456",
+      "",
+    ].join("\n");
+    const { db, update } = resultDb({ actionKey: "ra_1", status: "running", edgeNodeId: "node_1", actionType: "organization.join.issue", parameters: {} } as never);
+    const result = await recordActionResult(db, {
+      actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded",
+      result: { joinPackage: PACKAGE }, evidence: { enrollment_token: "must-drop", exitCode: 0 },
+    }, { now: NOW, encryptSecret: () => "enc:iv:tag:cipher" });
+    expect(result).toEqual({ ok: true, status: "succeeded" });
+    const data = (update.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
+    expect(data.result).toEqual({ joinPackageEnc: "enc:iv:tag:cipher", expiresAt });
+    expect(JSON.stringify(data)).not.toContain("token-safe_123");
+    expect(JSON.stringify(data)).not.toContain("must-drop");
+  });
+
+  it("clears imported package ciphertext on every terminal outcome", async () => {
+    const { db, update } = resultDb({
+      actionKey: "ra_1", status: "running", edgeNodeId: "node_1",
+      actionType: "organization.join.import", parameters: { joinPackageEnc: "enc:iv:tag:cipher" },
+    } as never);
+    await recordActionResult(db, {
+      actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed", evidence: { errorCode: "join_failed" },
+    }, { now: NOW });
+    const data = (update.mock.calls[0]![0] as { data: Record<string, unknown> }).data;
+    expect(data.parameters).toEqual({ clearedAt: NOW.toISOString() });
+    expect(JSON.stringify(data)).not.toContain("enc:iv:tag:cipher");
+  });
 });
 
 describe("timeoutStaleClaims", () => {
   function timeoutDb(count: number) {
     const updateMany = vi.fn().mockResolvedValue({ count });
+    const findMany = vi.fn().mockResolvedValue([]);
     return {
-      db: { remoteAction: { updateMany, findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() } } as unknown as DispatchOrchestratorDb,
+      db: {
+        remoteAction: { updateMany, findMany, findUnique: vi.fn(), update: vi.fn() },
+        changeRequest: { findMany: vi.fn() },
+      } as unknown as DispatchOrchestratorDb,
       updateMany,
     };
   }
@@ -173,6 +257,7 @@ describe("timeoutStaleClaims", () => {
     expect(res).toEqual({ timedOut: 2 });
     const arg = updateMany.mock.calls[0]![0] as { where: { status: unknown; startedAt: { lt: Date } }; data: Record<string, unknown> };
     expect(arg.where.status).toEqual({ in: ["claimed", "running"] });
+    expect((arg.where as Record<string, unknown>).actionType).toEqual({ not: "organization.join.import" });
     expect(arg.where.startedAt.lt).toEqual(new Date(NOW.getTime() - 600_000));
     expect(arg.data).toEqual({ status: "timed-out", completedAt: NOW });
   });
@@ -182,5 +267,26 @@ describe("timeoutStaleClaims", () => {
     await timeoutStaleClaims(db, { now: NOW });
     const arg = updateMany.mock.calls[0]![0] as { where: { startedAt: { lt: Date } } };
     expect(arg.where.startedAt.lt).toEqual(new Date(NOW.getTime() - 10 * 60 * 1000));
+  });
+});
+
+describe("clearExpiredJoinPackageMaterial", () => {
+  it("atomically clears only expired, still-present package ciphertext", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      { actionKey: "expired", result: { joinPackageEnc: "enc:expired", expiresAt: "2026-06-25T19:59:59.000Z" } },
+      { actionKey: "future", result: { joinPackageEnc: "enc:future", expiresAt: "2026-06-25T20:10:00.000Z" } },
+      { actionKey: "consumed", result: { downloadedAt: NOW.toISOString(), expiresAt: "2026-06-25T19:59:59.000Z" } },
+    ]);
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const db = {
+      remoteAction: { findMany, updateMany, findUnique: vi.fn(), update: vi.fn() },
+      changeRequest: { findMany: vi.fn() },
+    } as unknown as DispatchOrchestratorDb;
+    expect(await clearExpiredJoinPackageMaterial(db, { now: NOW })).toEqual({ cleared: 1 });
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ actionKey: "expired" }),
+      data: { result: { expiresAt: "2026-06-25T19:59:59.000Z", expiredAt: NOW.toISOString() } },
+    }));
   });
 });

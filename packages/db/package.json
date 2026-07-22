@@ -26,6 +26,7 @@
     "./projection-egress": "./src/projection-egress.ts",
     "./remote-action-dispatch": "./src/remote-action-dispatch.ts",
     "./edge-action-envelope": "./src/edge-action-envelope.ts",
+    "./organization-join-action": "./src/organization-join-action.ts",
     "./federated-record-sync": "./src/federated-record-sync.ts",
     "./discovery-triage": "./src/discovery-triage.ts",
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",

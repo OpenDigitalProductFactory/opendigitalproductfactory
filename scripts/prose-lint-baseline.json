@@ -2517,7 +2517,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 5
+    "textMass": 23
   },
   "apps/web/app/api/v1/edge/discovery-runs/route.ts": {
     "vocabulary": 0,

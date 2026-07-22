@@ -26,12 +26,12 @@ func TestExecutorRunsAllowlistedInventoryCollectionExactlyOnce(t *testing.T) {
 		},
 	}
 
-	evidence, err := executor.Execute(context.Background(), signed)
+	output, err := executor.Execute(context.Background(), signed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if calls != 1 || evidence["items"] != 3 {
-		t.Fatalf("calls=%d evidence=%#v", calls, evidence)
+	if calls != 1 || output.Evidence["items"] != 3 {
+		t.Fatalf("calls=%d evidence=%#v", calls, output.Evidence)
 	}
 	if _, err := executor.Execute(context.Background(), signed); !errors.Is(err, ErrNonceConsumed) {
 		t.Fatalf("replay returned %v, want ErrNonceConsumed", err)

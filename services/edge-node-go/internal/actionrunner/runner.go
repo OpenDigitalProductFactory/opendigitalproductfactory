@@ -15,7 +15,7 @@ type Client interface {
 }
 
 type Executor interface {
-	Execute(context.Context, action.SignedEnvelope) (map[string]any, error)
+	Execute(context.Context, action.SignedEnvelope) (action.ExecutionOutput, error)
 }
 
 type Runner struct {
@@ -42,19 +42,20 @@ func (r *Runner) RunOnce(ctx context.Context) error {
 		}); err != nil {
 			return fmt.Errorf("report action running: %w", err)
 		}
-		evidence, executionErr := r.Executor.Execute(ctx, envelope)
+		output, executionErr := r.Executor.Execute(ctx, envelope)
 		outcome := "succeeded"
 		if executionErr != nil {
 			outcome = "failed"
-			evidence = map[string]any{
+			output = action.ExecutionOutput{Evidence: map[string]any{
 				"executionSource": "native-edge",
 				"errorCode":       safeErrorCode(executionErr),
-			}
+			}}
 		}
 		if err := r.Client.ReportAction(ctx, r.NodeToken, api.ActionResultRequest{
 			ActionKey: envelope.ActionKey,
 			Outcome:   outcome,
-			Evidence:  evidence,
+			Evidence:  output.Evidence,
+			Result:    output.Result,
 		}); err != nil {
 			return fmt.Errorf("report action %s: %w", outcome, err)
 		}
@@ -76,6 +77,14 @@ func safeErrorCode(err error) string {
 		return "unsupported_action"
 	case errors.Is(err, action.ErrInvalidParameters):
 		return "invalid_parameters"
+	case errors.Is(err, action.ErrWrongOrganizationTrustRole):
+		return "wrong_organization_trust_role"
+	case errors.Is(err, action.ErrHealthVerificationFailed):
+		return "health_verification_failed"
+	case errors.Is(err, action.ErrHostActionFailed):
+		return "host_action_failed"
+	case errors.Is(err, action.ErrRollbackFailed):
+		return "rollback_failed"
 	default:
 		return "execution_failed"
 	}

@@ -89,8 +89,8 @@ function Install-DPFNativeEdgeNode {
     $escapedState = $stateDir.Replace("'", "''")
     $actionEnvironment = ""
     $platformEnv = Join-Path $InstallDir ".env"
+    $actionValues = @{}
     if (Test-Path -LiteralPath $platformEnv -PathType Leaf) {
-        $actionValues = @{}
         foreach ($line in [IO.File]::ReadAllLines($platformEnv)) {
             $separator = $line.IndexOf('=')
             if ($separator -gt 0) { $actionValues[$line.Substring(0, $separator)] = $line.Substring($separator + 1) }
@@ -110,12 +110,23 @@ function Install-DPFNativeEdgeNode {
             }
         }
     }
+    $organizationRole = if ($actionValues.DPF_ORGANIZATION_TRUST_ROLE) { $actionValues.DPF_ORGANIZATION_TRUST_ROLE } else { "member" }
+    $organizationPkiDir = if ($actionValues.DPF_PKI_DIR) { $actionValues.DPF_PKI_DIR } else { (Join-Path $stateRoot "pki") }
+    $escapedInstallRoot = $InstallDir.Replace("'", "''")
+    $escapedOrganizationRole = $organizationRole.Replace("'", "''")
+    $escapedOrganizationPkiDir = $organizationPkiDir.Replace("'", "''")
+    $organizationEnvironment = "`$env:DPF_INSTALL_ROOT = '$escapedInstallRoot'`r`n`$env:DPF_ORGANIZATION_TRUST_ROLE = '$escapedOrganizationRole'`r`n`$env:DPF_PKI_DIR = '$escapedOrganizationPkiDir'`r`n"
+    if ($actionValues.DPF_ORGANIZATION_CA_URL) {
+        $escapedOrganizationCaUrl = $actionValues.DPF_ORGANIZATION_CA_URL.Replace("'", "''")
+        $organizationEnvironment += "`$env:DPF_ORGANIZATION_CA_URL = '$escapedOrganizationCaUrl'`r`n"
+    }
     @"
 `$env:DPF_AUTHORITY_URL = '$escapedAuthority'
 `$env:DPF_BOOTSTRAP_TOKEN = '$escapedToken'
 `$env:DPF_EDGE_NODE_NAME = '$escapedNodeName'
 `$env:DPF_INSTALL_MODE = 'native'
 `$env:DPF_EDGE_STATE_DIR = '$escapedState'
+$organizationEnvironment
 $actionEnvironment& '$escapedBinary' *>> '$($logDir.Replace("'", "''"))\edge-node.log'
 "@ | Set-Content -LiteralPath $runner -Encoding ASCII
 

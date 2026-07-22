@@ -8,8 +8,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -53,6 +55,14 @@ const (
 	EnvEdgeActionCertFile             = "DPF_EDGE_ACTION_CERT_FILE"
 	EnvEdgeActionKeyFile              = "DPF_EDGE_ACTION_KEY_FILE"
 	EnvEdgeActionSigningPublicKeyFile = "DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE"
+
+	// Privileged organization-join actions are available only when the native
+	// installer pins the source owner and host role. None of these values are
+	// accepted from a RemoteAction parameter.
+	EnvInstallRoot           = "DPF_INSTALL_ROOT"
+	EnvOrganizationTrustRole = "DPF_ORGANIZATION_TRUST_ROLE"
+	EnvPkiDir                = "DPF_PKI_DIR"
+	EnvOrganizationCAURL     = "DPF_ORGANIZATION_CA_URL"
 )
 
 // Config is the loaded, validated runtime configuration.
@@ -69,6 +79,20 @@ type Config struct {
 	EdgeActionCertFile             string
 	EdgeActionKeyFile              string
 	EdgeActionSigningPublicKeyFile string
+	InstallRoot                    string
+	OrganizationTrustRole          string
+	PkiDir                         string
+	OrganizationCAURL              string
+}
+
+func (c *Config) OrganizationJoinEnabled() bool {
+	if c.OrganizationTrustRole != "authority" && c.OrganizationTrustRole != "member" {
+		return false
+	}
+	if c.InstallRoot == "" || c.PkiDir == "" || c.EdgeNodeName == "" {
+		return false
+	}
+	return c.OrganizationTrustRole != "authority" || c.OrganizationCAURL != ""
 }
 
 // ActionDispatchEnabled reports whether the complete fail-closed machine trust
@@ -96,6 +120,10 @@ func Load(version string) (*Config, error) {
 		EdgeActionCertFile:             strings.TrimSpace(os.Getenv(EnvEdgeActionCertFile)),
 		EdgeActionKeyFile:              strings.TrimSpace(os.Getenv(EnvEdgeActionKeyFile)),
 		EdgeActionSigningPublicKeyFile: strings.TrimSpace(os.Getenv(EnvEdgeActionSigningPublicKeyFile)),
+		InstallRoot:                    filepath.Clean(strings.TrimSpace(os.Getenv(EnvInstallRoot))),
+		OrganizationTrustRole:          strings.TrimSpace(os.Getenv(EnvOrganizationTrustRole)),
+		PkiDir:                         filepath.Clean(strings.TrimSpace(os.Getenv(EnvPkiDir))),
+		OrganizationCAURL:              strings.TrimRight(strings.TrimSpace(os.Getenv(EnvOrganizationCAURL)), "/"),
 	}
 
 	if cfg.EdgeNodeName == "" {
@@ -165,10 +193,41 @@ func Load(version string) (*Config, error) {
 		}
 	}
 
+	joinFieldsConfigured := cfg.OrganizationTrustRole != "" || os.Getenv(EnvInstallRoot) != "" ||
+		os.Getenv(EnvPkiDir) != "" || cfg.OrganizationCAURL != ""
+	if joinFieldsConfigured {
+		if cfg.OrganizationTrustRole != "authority" && cfg.OrganizationTrustRole != "member" {
+			problems = append(problems, fmt.Sprintf("%s must be authority or member", EnvOrganizationTrustRole))
+		}
+		if os.Getenv(EnvInstallRoot) == "" || !filepath.IsAbs(cfg.InstallRoot) {
+			problems = append(problems, fmt.Sprintf("%s must be an absolute path", EnvInstallRoot))
+		}
+		if os.Getenv(EnvPkiDir) == "" || !filepath.IsAbs(cfg.PkiDir) {
+			problems = append(problems, fmt.Sprintf("%s must be an absolute path", EnvPkiDir))
+		}
+		if cfg.OrganizationTrustRole == "authority" && !privateHTTPSOrigin(cfg.OrganizationCAURL) {
+			problems = append(problems, fmt.Sprintf("%s must be a private or local HTTPS origin for an authority host", EnvOrganizationCAURL))
+		}
+	}
+
 	if len(problems) > 0 {
 		return nil, errors.New("edge node config invalid:\n  - " + strings.Join(problems, "\n  - "))
 	}
 	return cfg, nil
+}
+
+func privateHTTPSOrigin(value string) bool {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil ||
+		parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" || host == "host.docker.internal" || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
 }
 
 // resolvePlatform converts Go's GOOS to the wire-contract platform

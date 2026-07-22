@@ -4,6 +4,7 @@ import {
   canTransitionDispatch,
   claimableActionsForNode,
   isClaimableByNode,
+  isDispatchActionType,
   isReadonlyDispatchActionType,
   nodeScopeMatchesAction,
   type ClaimingNodeView,
@@ -33,6 +34,7 @@ function node(over: Partial<ClaimingNodeView> = {}): ClaimingNodeView {
     customerSiteId: null,
     actionExecuteEnabled: true,
     allowedActionTypes: ["diagnostics.collect", "inventory.collect"],
+    organizationTrustRole: "member",
     ...over,
   };
 }
@@ -43,6 +45,35 @@ describe("isReadonlyDispatchActionType", () => {
     expect(isReadonlyDispatchActionType("inventory.collect")).toBe(true);
     expect(isReadonlyDispatchActionType("service.restart")).toBe(false);
     expect(isReadonlyDispatchActionType("patch.apply")).toBe(false);
+  });
+});
+
+describe("founder-approved organization join dispatch", () => {
+  it("recognizes only the two closed privileged types", () => {
+    expect(isDispatchActionType("organization.join.issue")).toBe(true);
+    expect(isDispatchActionType("organization.join.import")).toBe(true);
+    expect(isDispatchActionType("script.run")).toBe(false);
+  });
+
+  it("requires high risk, machine binding, approved ChangeRequest, allowlist, and the exact host role", () => {
+    const issue = action({
+      actionType: "organization.join.issue",
+      riskClass: "high",
+      edgeNodeId: "node_1",
+      changeRequestApproved: true,
+    });
+    const authority = node({
+      organizationTrustRole: "authority",
+      allowedActionTypes: ["organization.join.issue"],
+    });
+    expect(isClaimableByNode(issue, authority)).toEqual({ claimable: true });
+    expect(isClaimableByNode(issue, { ...authority, organizationTrustRole: "member" })).toEqual({
+      claimable: false,
+      reason: "wrong-organization-trust-role",
+    });
+    expect(isClaimableByNode({ ...issue, edgeNodeId: null }, authority).claimable).toBe(false);
+    expect(isClaimableByNode({ ...issue, changeRequestApproved: false }, authority).claimable).toBe(false);
+    expect(isClaimableByNode({ ...issue, riskClass: "read-only" }, authority).claimable).toBe(false);
   });
 });
 

@@ -4,16 +4,16 @@
 // RemoteActions in its estate scope and atomically claims them (PULL, not a
 // downward push — no inbound-to-Edge port). Flag-gated OFF
 // (DPF_REMOTE_ACTION_DISPATCH_ENABLED) so the channel is unreachable until the
-// founder turns it on for the two-instance verification. No mutation: read-only
-// only, enforced in claimActionsForNode → @dpf/db/remote-action-dispatch
-// (riskClass + actionType allow-list, tenant scope, trust, capability).
+// founder turns it on for the two-instance verification. Read-only inventory is
+// the default; the two closed organization-join actions additionally require a
+// named node, host role, high-risk approval, and an approved ChangeRequest.
 //
 // Spec: docs/superpowers/specs/2026-06-25-convergent-remote-action-execution-design.md.
 
 import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@dpf/db";
-import { isReadonlyDispatchActionType, type ClaimingNodeView } from "@dpf/db/remote-action-dispatch";
+import { isDispatchActionType, type ClaimingNodeView } from "@dpf/db/remote-action-dispatch";
 
 import { resolveEdgeNodeMtls, type EdgeNodeMtlsDb } from "@/lib/auth/edge-node-mtls";
 import { loadEdgeMtlsProxySecret } from "@/lib/auth/edge-mtls-proxy-secret";
@@ -69,12 +69,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // model §5 R3). No row in mode=enabled ⇒ the node claims nothing.
   const cap = await prisma.edgeNodeCapability.findFirst({
     where: { edgeNodeId: authz.edgeNodeRowId, capability: "action.execute", mode: "enabled" },
-    select: { id: true },
+    select: { id: true, evidence: true },
   });
 
   const configuredActionTypes = Array.isArray(authz.scopePolicy?.actionTypes)
     ? authz.scopePolicy.actionTypes.filter(
-        (value): value is string => typeof value === "string" && isReadonlyDispatchActionType(value),
+        (value): value is string => typeof value === "string" && isDispatchActionType(value),
       )
     : [];
 
@@ -86,6 +86,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     customerSiteId: authz.customerSiteId,
     actionExecuteEnabled: cap !== null,
     allowedActionTypes: configuredActionTypes,
+    organizationTrustRole: organizationTrustRole(cap?.evidence),
   };
 
   let signer;
@@ -105,4 +106,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     { ok: true, nodeId: authz.nodeId, claimed: result.claimed, skipped: result.skipped },
     { status: 200 },
   );
+}
+
+function organizationTrustRole(value: unknown): "authority" | "member" | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const role = (value as Record<string, unknown>).organizationTrustRole;
+  return role === "authority" || role === "member" ? role : null;
 }
