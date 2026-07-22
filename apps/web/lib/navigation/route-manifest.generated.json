@@ -1,0 +1,2323 @@
+{
+  "source": "apps/web/app x apps/web/lib/navigation/portal-navigation-model.ts",
+  "totalPageRoutes": 330,
+  "distinctUnclassifiedRoutes": 154,
+  "counts": {
+    "unclassified": 154,
+    "legacy-redirect": 44,
+    "detail": 75,
+    "nav-model": 57
+  },
+  "routes": [
+    {
+      "route": "/forgot-password",
+      "group": "(auth)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/login",
+      "group": "(auth)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/reset-password",
+      "group": "(auth)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/customer-complete-profile",
+      "group": "(customer-auth)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/customer-link-account",
+      "group": "(customer-auth)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/customer-login",
+      "group": "(customer-auth)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/customer-signup",
+      "group": "(customer-auth)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/portal/account",
+      "group": "(portal)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/portal/cases/[caseKey]",
+      "group": "(portal)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portal/cases",
+      "group": "(portal)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/portal/health/intake/[packetId]",
+      "group": "(portal)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portal/health",
+      "group": "(portal)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/portal/orders",
+      "group": "(portal)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/portal",
+      "group": "(portal)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/portal/services",
+      "group": "(portal)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/portal/support",
+      "group": "(portal)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/portal/sign-in",
+      "group": "(portal-auth)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/setup",
+      "group": "(setup)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/archetypes",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/backlog",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/backups",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/branding",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/build-studio/stall-thresholds",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/business-context",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/admin/business-models",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/cockpit",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/data-stewardship",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/diagnostics",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/hive",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/issue-reports",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/operating-hours",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/admin",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/admin/platform-development",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/prompts",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/reference-data",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/research",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/scheduled-jobs",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/settings",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/skills",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/storefront/inbox",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/storefront/items",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/storefront",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/admin/storefront/sections",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/storefront/settings",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/storefront/setup",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/storefront/team",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/admin/twin-gallery/[archetypeId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/admin/twin-gallery",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/twin-kit",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/admin/wiki/lint",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/build",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/build/work/[capsuleId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/build/work",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/complaints",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/actions/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/actions",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/audits/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/audits",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/controls/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/controls",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/evidence/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/evidence",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/gaps",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/incidents/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/incidents",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/licensing",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/obligations/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/obligations",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/onboard",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/compliance/policies/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/policies",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/posture",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/regulations/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/regulations",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/risks/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/risks",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/compliance/submissions/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/compliance/submissions",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/coworker-decisions/[...slug]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/coworker-decisions/craft/[professionKey]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/coworker-decisions/craft",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/coworker-decisions/decisions/[interactionId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/coworker-decisions/decisions",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/coworker-decisions/edit/[...slug]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/coworker-decisions/matrix",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/coworker-decisions",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/coworker-decisions/perspectives/[profileId]/voice",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/coworker-decisions/perspectives",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/coworker-decisions/proactivity",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/coworker-decisions/review",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/coworker-decisions/stance",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/customer/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/customer/engagements",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/customer/funnel",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/customer/opportunities/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/customer/opportunities",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/customer",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/customer/quotes/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/customer/quotes",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/customer/sales-orders",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/customer/marketing/automation",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/customer/marketing/campaigns",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/customer/marketing/funnel",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/customer/marketing",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/customer/marketing/strategy",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/delivery",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/docs/[[...slug]]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/ea/agents",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/ea/capabilities",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ea/data-model",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ea/models/[slug]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/ea/models",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ea",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/ea/value-streams",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ea/views/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/ea/views",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/employee",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/finance/assets/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/assets/new",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/assets",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/banking/[id]/import",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/banking/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/banking/[id]/reconcile",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/banking/new",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/banking",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/banking/rules",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/bills/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/bills/new",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/bills",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/close",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/configuration",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/expense-claims/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/expense-claims",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/funds",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/invoices/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/invoices/new",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/invoices",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/my-expenses/new",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/my-expenses",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/finance/payment-runs",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/payments",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/purchase-orders/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/purchase-orders/new",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/purchase-orders",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/recurring/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/recurring/new",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/recurring",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/reports/aged-creditors",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/reports/aged-debtors",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/reports/cash-flow",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/reports/general-ledger",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/reports/outstanding",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/reports",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/reports/profit-loss",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/reports/revenue-by-customer",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/reports/vat-summary",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/revenue",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/settings/currency",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/settings/dunning",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/settings",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/settings/rate-card",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/settings/setup",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/settings/tax",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/spend/ai",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/spend",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/suppliers/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/finance/suppliers/new",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/finance/suppliers",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/governance",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/governance/records-requests",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/inventory/entity/[entityId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/inventory",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/knowledge/[articleId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/knowledge/new",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/knowledge",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/member-equity",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/ops/changes",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ops/demand",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ops/dev-loop",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ops/health",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/ops/improvements",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/ops",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/ops/patches",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ops/promotions",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ops/security",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/ops/self-upgrade",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/agent/[agentId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/platform/ai/assignments/bindings/[bindingId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/platform/ai/assignments",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/authority",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/ai/browser-sessions",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/browser-sessions/setup",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/build-studio",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/capability-needs",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/ai/capacity-continuity",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/catalog",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/decisions/[interactionId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/platform/ai/founder-review",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/history",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/ai/memory",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/model-assignment",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/ai/operations-map",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/operations",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/ai/overview",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/ai/priority/outcomes",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/priority",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/ai/prompts",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/providers/[providerId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/platform/ai/providers",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/readiness",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/routing",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/ai/runtime-health",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/ai/skills",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/audit/authority",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/audit/journal",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/audit/ledger",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/audit/metrics",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/audit/operations",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/audit",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/audit/routes",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/development/change-lanes",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/device-catalog",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/edge-nodes",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/federation-links",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/federation-proposals",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/identity/agents",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/identity/applications",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/identity/authorization/bindings/[bindingId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/platform/identity/authorization",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/identity/directory",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/identity/federation",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/identity/groups",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/identity",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/identity/principals",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/integrations",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/integrations/sync",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/schedule",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/service-desk",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/services/[serverId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/platform/services/activate",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/services",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/tools/built-ins",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/tools/catalog",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/tools/catalog/sync",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/discovery",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/tools/discovery/promotion-audit",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/adp",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/tools/integrations/communications",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/email-postmark",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/tools/integrations/facebook-lead-ads",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/facebook-pages",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/google-business-profile",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/google-marketing-intelligence",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/hubspot",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/instagram-business",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/linkedin-personal-social",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/mailchimp",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/microsoft365-communications",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/tools/integrations/quickbooks",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/platform/tools/integrations/stripe",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/integrations/whatsapp-business",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/inventory",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/tools",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/platform/tools/services/[serverId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/platform/tools/services/activate",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/platform/tools/services",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/portfolio/[[...slug]]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/architecture",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/portfolio/product/[id]/architecture",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]/backlog",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]/changes",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]/health",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]/inventory",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]/knowledge",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]/offerings",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]/supply-chain",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]/team",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/product/[id]/versions",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/portfolio/products/[productId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/rental",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/service-requests",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/storefront/animals",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/storefront/dispatch",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/storefront/inbox",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/storefront/intake",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/storefront/items",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/storefront",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/storefront/sections",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/storefront/settings/business",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/storefront/settings/capabilities",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/storefront/settings/operations",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/storefront/settings",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/storefront/setup",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/storefront/team",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/storefront/units",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/wiki/[...slug]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/wiki",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/workbooks/[workbookId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/workbooks",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/workbooks/system/[entityType]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/workspace/calendar",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/workspace/cases/[caseKey]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/workspace/documents/[documentId]",
+      "group": "(shell)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/workspace/documents",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/workspace/inbox",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/workspace/my-queue",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/workspace",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": true,
+      "classification": "nav-model"
+    },
+    {
+      "route": "/s/[slug]/book/[itemId]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]/checkout",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]/donate",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]/inquire/[itemId]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]/inquire",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]/item/[itemId]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]/order/[itemId]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]/sign-in",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]/sign-up",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/approve/[token]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/expense-approve/[token]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/pay/[token]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/quote/[token]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/",
+      "group": "(root)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "legacy-redirect"
+    },
+    {
+      "route": "/sandbox-restricted",
+      "group": "(root)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
+      "route": "/welcome",
+      "group": "(root)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    }
+  ]
+}
