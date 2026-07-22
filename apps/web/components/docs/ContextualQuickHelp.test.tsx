@@ -45,9 +45,9 @@ describe("ContextualQuickHelp", () => {
   });
 
   it("still shows the banner but omits the quick-help panel for routes without curated help", () => {
-    render(<ContextualQuickHelp sourceRoute="/finance/banking" />);
+    render(<ContextualQuickHelp sourceRoute="/no-such-area/banking" />);
 
-    expect(screen.getByRole("link", { name: "Back to page" })).toHaveAttribute("href", "/finance/banking");
+    expect(screen.getByRole("link", { name: "Back to page" })).toHaveAttribute("href", "/no-such-area/banking");
     expect(screen.queryByText("Quick help")).not.toBeInTheDocument();
   });
 
