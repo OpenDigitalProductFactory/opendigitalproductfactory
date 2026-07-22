@@ -147,28 +147,33 @@ export function ScheduleEditor({
           const d = dayStates[i];
           if (!d) return null;
           return (
-            <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={d.enabled}
-                onChange={(e) => setDay(i, { enabled: e.target.checked })}
-                className="accent-[var(--dpf-accent)]"
-              />
-              <span className={d.enabled ? undefined : "text-[var(--dpf-muted)]"} style={{ width: 80 }}>{name}</span>
+            <div key={name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, fontSize: 13 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={d.enabled}
+                  onChange={(e) => setDay(i, { enabled: e.target.checked })}
+                  aria-label={`${name} open`}
+                  className="accent-[var(--dpf-accent)]"
+                />
+                <span className={d.enabled ? undefined : "text-[var(--dpf-muted)]"} style={{ width: 80 }}>{name}</span>
+              </label>
               {d.enabled ? (
                 <>
                   <input
                     type="time"
                     value={d.startTime}
                     onChange={(e) => setDay(i, { startTime: e.target.value })}
-                    className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
+                    aria-label={`${name} opening time`}
+                    className="min-h-[44px] min-w-[44px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
                   />
                   <span className="text-[var(--dpf-muted)]">–</span>
                   <input
                     type="time"
                     value={d.endTime}
                     onChange={(e) => setDay(i, { endTime: e.target.value })}
-                    className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
+                    aria-label={`${name} closing time`}
+                    className="min-h-[44px] min-w-[44px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
                   />
                 </>
               ) : (
@@ -195,7 +200,8 @@ export function ScheduleEditor({
                 {ex.reason && <span className="text-[var(--dpf-muted)]">{ex.reason}</span>}
                 <button
                   onClick={() => removeException(ex.id)}
-                  className="text-[var(--dpf-muted)]"
+                  aria-label={`Remove schedule exception on ${ex.date}`}
+                  className="min-h-[44px] min-w-[44px] text-[var(--dpf-muted)]"
                   style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: 12 }}
                 >
                   Remove
@@ -210,15 +216,17 @@ export function ScheduleEditor({
             type="date"
             value={exceptionDraft.date}
             onChange={(e) => setExceptionDraft((p) => ({ ...p, date: e.target.value }))}
-            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 8px", borderRadius: 4, color: "inherit", fontSize: 12 }}
+            aria-label="Exception date"
+            className="min-h-[44px] min-w-[44px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 8px", borderRadius: 4, color: "inherit", fontSize: 12 }}
           />
           <select
             value={exceptionDraft.isBlocked ? "blocked" : "custom"}
             onChange={(e) => setExceptionDraft((p) => ({ ...p, isBlocked: e.target.value === "blocked" }))}
-            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 8px", borderRadius: 4, color: "inherit", fontSize: 12 }}
+            aria-label="Exception type"
+            className="min-h-[44px] min-w-[44px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 8px", borderRadius: 4, color: "inherit", fontSize: 12 }}
           >
-            <option value="blocked">Block day</option>
-            <option value="custom">Custom hours</option>
+            <option value="blocked" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Block day</option>
+            <option value="custom" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Custom hours</option>
           </select>
           {!exceptionDraft.isBlocked && (
             <>
@@ -226,14 +234,16 @@ export function ScheduleEditor({
                 type="time"
                 value={exceptionDraft.startTime}
                 onChange={(e) => setExceptionDraft((p) => ({ ...p, startTime: e.target.value }))}
-                className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
+                aria-label="Exception opening time"
+                className="min-h-[44px] min-w-[44px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
               />
               <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>–</span>
               <input
                 type="time"
                 value={exceptionDraft.endTime}
                 onChange={(e) => setExceptionDraft((p) => ({ ...p, endTime: e.target.value }))}
-                className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
+                aria-label="Exception closing time"
+                className="min-h-[44px] min-w-[44px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "2px 6px", borderRadius: 4, color: "inherit", fontSize: 12 }}
               />
             </>
           )}
@@ -242,12 +252,14 @@ export function ScheduleEditor({
             placeholder="Reason (optional)"
             value={exceptionDraft.reason}
             onChange={(e) => setExceptionDraft((p) => ({ ...p, reason: e.target.value }))}
-            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 8px", borderRadius: 4, color: "inherit", fontSize: 12, width: 160 }}
+            aria-label="Exception reason (optional)"
+            className="min-h-[44px] min-w-[44px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 8px", borderRadius: 4, color: "inherit", fontSize: 12, width: 160 }}
           />
           <button
             onClick={addException}
             disabled={!exceptionDraft.date}
-            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 10px", borderRadius: 4, color: "inherit", cursor: "pointer", fontSize: 12 }}
+            aria-label="Add schedule exception"
+            className="min-h-[44px] min-w-[44px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]" style={{ padding: "4px 10px", borderRadius: 4, color: "inherit", cursor: "pointer", fontSize: 12 }}
           >
             Add
           </button>
@@ -258,7 +270,7 @@ export function ScheduleEditor({
         <button
           onClick={save}
           disabled={saving}
-          className="bg-[var(--dpf-accent)] text-white" style={{ padding: "6px 14px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+          className="min-h-[44px] min-w-[44px] bg-[var(--dpf-accent)] text-white" style={{ padding: "6px 14px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
         >
           {saving ? "Saving…" : "Save Schedule"}
         </button>
