@@ -34,12 +34,18 @@ describe("resolveQuickHelp", () => {
   it("resolves by longest matching prefix so a leaf route overrides the family default", () => {
     const business = resolveQuickHelp("/storefront/settings/business");
     const operations = resolveQuickHelp("/storefront/settings/operations");
+    // Genuinely unlisted sibling — falls back to the /storefront/settings family.
+    const unlisted = resolveQuickHelp("/storefront/settings/capabilities");
 
-    // The business leaf has its own entry…
+    // Both leaves carry their own curated entry…
     expect(business!.whatThisPageIs).toContain("business-context");
-    // …while an unlisted sibling falls back to the /storefront/settings family entry.
-    expect(operations!.whatThisPageIs).toContain("presentation");
+    expect(operations!.whatThisPageIs).toContain("opening hours");
     expect(operations!.whatThisPageIs).not.toBe(business!.whatThisPageIs);
+
+    // …while the unlisted sibling inherits the family default.
+    expect(unlisted!.whatThisPageIs).toContain("presentation");
+    expect(unlisted!.whatThisPageIs).not.toBe(business!.whatThisPageIs);
+    expect(unlisted!.whatThisPageIs).not.toBe(operations!.whatThisPageIs);
   });
 
   it("returns null for unknown or non-internal source routes", () => {
@@ -82,11 +88,16 @@ describe("resolveQuickHelp", () => {
     // The whole point of the panel is LESS to read than the docs catalog: each
     // answer stays a sentence or two, and a full panel stays well under the
     // ~300-word wall-of-text threshold the live UX audit flagged.
+    // The optional save/confirm answer counts against the same ceiling — adding a
+    // sixth row must not quietly turn the panel back into a wall of text.
+    const ALL_FIELDS: Array<keyof QuickHelp> = [...REQUIRED_FIELDS, "whatChangesIfYouSave"];
     for (const route of getQuickHelpRoutes()) {
       const help = resolveQuickHelp(route)!;
       let panelWords = 0;
-      for (const field of REQUIRED_FIELDS) {
-        const words = help[field].split(/\s+/).length;
+      for (const field of ALL_FIELDS) {
+        const value = help[field];
+        if (!value) continue;
+        const words = value.split(/\s+/).length;
         expect(words, `${route} ${field} exceeds the 60-word answer ceiling`).toBeLessThanOrEqual(60);
         panelWords += words;
       }

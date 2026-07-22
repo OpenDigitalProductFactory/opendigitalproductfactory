@@ -4,11 +4,7 @@ import { loadDocPage, loadAllDocs, buildDocsIndex, extractHeadings, AREA_META, A
 import { DocsLayout } from "@/components/docs/DocsLayout";
 import { DocRenderer } from "@/components/docs/DocRenderer";
 import { ContextualQuickHelp } from "@/components/docs/ContextualQuickHelp";
-import { StorefrontHelpPanel } from "@/components/docs/StorefrontHelpPanel";
-import {
-  resolveStorefrontHelpPanel,
-  type StorefrontHelpPanel as StorefrontHelpPanelData,
-} from "@/lib/docs/storefront-help-panel";
+import { resolveQuickHelp, type QuickHelp } from "@/lib/docs-quick-help";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
 
@@ -18,18 +14,20 @@ type Props = {
 };
 
 /**
- * When a storefront admin route opened this docs page, resolve the task-focused
- * help panel rendered with the install's own archetype vocabulary (BI-2DD18122).
- * Returns null for non-storefront routes or before any storefront is configured.
+ * Resolve route-specific quick help for the source route (BI-2DD18122).
+ *
+ * Storefront routes are rendered in the install's OWN archetype vocabulary — a
+ * Restaurant reads menu / tables / reservations / guests — so the help matches
+ * the words on the screen the owner just left. Vocabulary needs the database, so
+ * it is resolved here (server) and injected; every other area resolves statically.
  */
-async function loadStorefrontHelpPanel(
-  sourceRoute: string | undefined,
-): Promise<StorefrontHelpPanelData | null> {
+async function loadQuickHelp(sourceRoute: string | undefined): Promise<QuickHelp | null> {
   if (!sourceRoute) return null;
+
   const normalized = sourceRoute.split("?")[0] ?? "";
-  if (!normalized.startsWith("/storefront") && !normalized.startsWith("/admin/storefront")) {
-    return null;
-  }
+  const isStorefront =
+    normalized.startsWith("/storefront") || normalized.startsWith("/admin/storefront");
+  if (!isStorefront) return resolveQuickHelp(sourceRoute);
 
   const config = await prisma.storefrontConfig.findFirst({
     select: { archetype: { select: { category: true, customVocabulary: true } } },
@@ -38,24 +36,19 @@ async function loadStorefrontHelpPanel(
     ? null
     : await prisma.businessContext.findFirst({ select: { industry: true } });
 
+  const archetypeCategory = config?.archetype?.category ?? null;
   const vocab = getVocabulary(
-    resolveVocabularyKey({
-      archetypeCategory: config?.archetype?.category ?? null,
-      industry: businessContext?.industry ?? null,
-    }),
+    resolveVocabularyKey({ archetypeCategory, industry: businessContext?.industry ?? null }),
     (config?.archetype?.customVocabulary as Record<string, string> | null) ?? null,
   );
 
-  return resolveStorefrontHelpPanel(sourceRoute, {
-    vocab,
-    archetypeCategory: config?.archetype?.category ?? null,
-  });
+  return resolveQuickHelp(sourceRoute, { vocab, archetypeCategory });
 }
 
 export default async function DocsPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { sourceRoute } = await searchParams;
-  const helpPanel = await loadStorefrontHelpPanel(sourceRoute);
+  const quickHelp = await loadQuickHelp(sourceRoute);
   const allDocs = loadAllDocs();
   const index = buildDocsIndex(allDocs);
 
@@ -74,17 +67,14 @@ export default async function DocsPage({ params, searchParams }: Props) {
   }));
 
   // Arrived contextually from a specific page — demote the catalog so the
-  // immediate explanation is not competing with the full docs manual. When the
-  // storefront help panel resolves for the source route it leads, and the
-  // generic quick-help yields to it (helpPanel routes pass no sourceRoute down).
+  // immediate explanation is not competing with the full docs manual.
   const contextual = Boolean(sourceRoute);
 
   // No slug = docs home page
   if (!slug || slug.length === 0) {
     return (
       <DocsLayout index={sidebarIndex} currentSlug="" searchItems={searchItems} collapseCatalog={contextual}>
-        {helpPanel ? <StorefrontHelpPanel panel={helpPanel} sourceRoute={sourceRoute!} /> : null}
-        <DocsHome index={index} sourceRoute={helpPanel ? undefined : sourceRoute} />
+        <DocsHome index={index} sourceRoute={sourceRoute} quickHelp={quickHelp} />
       </DocsLayout>
     );
   }
@@ -104,13 +94,20 @@ export default async function DocsPage({ params, searchParams }: Props) {
       headings={tocHeadings}
       collapseCatalog={contextual}
     >
-      {helpPanel ? <StorefrontHelpPanel panel={helpPanel} sourceRoute={sourceRoute!} /> : null}
-      <DocContent doc={doc} sourceRoute={helpPanel ? undefined : sourceRoute} />
+      <DocContent doc={doc} sourceRoute={sourceRoute} quickHelp={quickHelp} />
     </DocsLayout>
   );
 }
 
-function DocsHome({ index, sourceRoute }: { index: Record<string, unknown[]>; sourceRoute?: string }) {
+function DocsHome({
+  index,
+  sourceRoute,
+  quickHelp,
+}: {
+  index: Record<string, unknown[]>;
+  sourceRoute?: string;
+  quickHelp?: QuickHelp | null;
+}) {
   const contextual = Boolean(sourceRoute);
   const catalog = (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -143,7 +140,7 @@ function DocsHome({ index, sourceRoute }: { index: Record<string, unknown[]>; so
   if (contextual && sourceRoute) {
     return (
       <div>
-        <ContextualQuickHelp sourceRoute={sourceRoute} />
+        <ContextualQuickHelp sourceRoute={sourceRoute} help={quickHelp} />
         <details className="rounded-lg border border-[var(--dpf-border)]">
           <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-[var(--dpf-text)]">
             Browse the full documentation catalog
@@ -168,14 +165,16 @@ function DocsHome({ index, sourceRoute }: { index: Record<string, unknown[]>; so
 function DocContent({
   doc,
   sourceRoute,
+  quickHelp,
 }: {
   doc: { title: string; content: string; area: string; slug: string };
   sourceRoute?: string;
+  quickHelp?: QuickHelp | null;
 }) {
   const areaLabel = AREA_META[doc.area]?.label ?? doc.area;
   return (
     <div>
-      {sourceRoute ? <ContextualQuickHelp sourceRoute={sourceRoute} /> : null}
+      {sourceRoute ? <ContextualQuickHelp sourceRoute={sourceRoute} help={quickHelp} /> : null}
       <div className="mb-2">
         <a href="/docs" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Docs</a>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
