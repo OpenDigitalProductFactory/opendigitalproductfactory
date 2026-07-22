@@ -68,8 +68,8 @@ describe("NetworkDemandPanel", () => {
       }]}
       shareContext={{
         localItems: [{ itemId: "BI-LOCAL", title: "Local improvement", status: "open" }],
-        targets: [{ linkId: "FL-CUSTOMER", displayName: "Customer One", role: "manages", sharedItemIds: [] }],
-        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Founder Hub" }],
+        targets: [{ linkId: "FL-DISTRIBUTOR", displayName: "Reseller One", role: "managed-by", destinationKind: "distributor", sharedItemIds: [] }],
+        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Arcamanus" }],
         responses: [{
           responseId: "rsp_opaque",
           sourceName: "Reseller One",
@@ -88,14 +88,33 @@ describe("NetworkDemandPanel", () => {
     />);
 
     expect(html).toContain("Share local demand");
-    expect(html).toContain("Share selected demand");
+    expect(html).toContain("End company → distributor → Founder Hub");
+    expect(html).toContain("Reseller One — Distributor");
+    expect(html).toContain("Share with Reseller One");
     expect(html).toContain("Only the minimized title, summary, applicability, signal count");
     expect(html).toContain("90 days");
-    expect(html).toContain("Forward to Founder Hub");
+    expect(html).toContain("Forward to Arcamanus");
     expect(html).toContain("Reseller One");
     expect(html).toContain("offered help");
     expect(html).toContain("Founder decisions");
     expect(html).toContain("Available in the next compatible release");
     expect(html).not.toContain("inst_customer");
+  });
+
+  it("labels a direct Founder Hub destination without offering transitive consent", () => {
+    const html = renderToStaticMarkup(<NetworkDemandPanel
+      items={[]}
+      shareContext={{
+        localItems: [{ itemId: "BI-DISTRIBUTOR", title: "Distributor improvement", status: "open" }],
+        targets: [{ linkId: "FL-FOUNDER", displayName: "Arcamanus", role: "channel-downstream", destinationKind: "founder-hub", sharedItemIds: [] }],
+        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Arcamanus" }],
+        responses: [],
+        dispositions: [],
+      }}
+    />);
+
+    expect(html).toContain("Arcamanus — Founder Hub");
+    expect(html).toContain("Share with Arcamanus");
+    expect(html).not.toContain("for 90 days");
   });
 });

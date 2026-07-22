@@ -26,8 +26,16 @@ export interface NetworkDemandView {
 export interface DemandShareTarget {
   linkId: string;
   displayName: string;
-  role: string;
+  role: "managed-by" | "channel-downstream";
+  destinationKind: "distributor" | "founder-hub";
   sharedItemIds: string[];
+}
+
+interface DemandShareLinkRow {
+  linkId: string;
+  role: string;
+  peerInstallationId: string | null;
+  principal: { displayName: string };
 }
 
 export interface LocalDemandShareCandidate {
@@ -91,6 +99,22 @@ export function mapNetworkDemandRows(rows: DemandReadRow[]): NetworkDemandView[]
   });
 }
 
+export function mapDemandShareTargets(
+  links: DemandShareLinkRow[],
+  sharedByLink: ReadonlyMap<string, string[]>,
+): DemandShareTarget[] {
+  return links.flatMap((link) => {
+    if (link.role !== "managed-by" && link.role !== "channel-downstream") return [];
+    return [{
+      linkId: link.linkId,
+      displayName: link.principal.displayName,
+      role: link.role,
+      destinationKind: link.role === "managed-by" ? "distributor" : "founder-hub",
+      sharedItemIds: sharedByLink.get(link.linkId) ?? [],
+    }];
+  });
+}
+
 export const getNetworkDemandItems = cache(async (): Promise<NetworkDemandView[]> => {
   const rows = await prisma.federatedRecordMirror.findMany({
     where: { recordType: "demand-envelope", canonicalSide: "peer" },
@@ -111,7 +135,7 @@ export const getDemandShareContext = cache(async (): Promise<DemandShareContext>
   const [links, localItems, mirrors, responseMirrors, dispositionMirrors] = await Promise.all([
     prisma.federationLink.findMany({
       where: {
-        role: { in: ["manages", "managed-by", "channel-upstream", "channel-downstream"] },
+        role: { in: ["managed-by", "channel-downstream"] },
         linkState: "trusted",
         revokedAt: null,
         quarantinedAt: null,
@@ -165,13 +189,9 @@ export const getDemandShareContext = cache(async (): Promise<DemandShareContext>
     refs.push(mirror.localRecordRef);
     sharedByLink.set(mirror.federationLinkId, refs);
   }
+  const targets = mapDemandShareTargets(links, sharedByLink);
   return {
-    targets: links.map((link) => ({
-      linkId: link.linkId,
-      displayName: link.principal.displayName,
-      role: link.role,
-      sharedItemIds: sharedByLink.get(link.linkId) ?? [],
-    })),
+    targets,
     founderTargets: links
       .filter((link) => link.role === "channel-downstream" && link.peerInstallationId)
       .map((link) => ({ linkId: link.linkId, displayName: link.principal.displayName })),

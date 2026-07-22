@@ -34,6 +34,8 @@ export function NetworkDemandPanel({
   const [selectedLinkId, setSelectedLinkId] = useState(shareContext.targets[0]?.linkId ?? "");
   const [founderTargetId, setFounderTargetId] = useState(shareContext.founderTargets[0]?.linkId ?? "");
   const [allowFounderForwarding, setAllowFounderForwarding] = useState(false);
+  const selectedTarget = shareContext.targets.find((target) => target.linkId === selectedLinkId);
+  const founderTarget = shareContext.founderTargets.find((target) => target.linkId === founderTargetId);
 
   const run = (mirrorId: string, action: "follow" | "unfollow" | "adopt") => {
     setActiveMirror(mirrorId);
@@ -152,11 +154,11 @@ export function NetworkDemandPanel({
       <div className="mb-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
         <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Share local demand</h3>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-          Choose one local item and one connection. Only the minimized title, summary, applicability, signal count, and chosen attribution leave this installation.
+          End company → distributor → Founder Hub. Choose what is shareable at each step; your local backlog remains private and authoritative. Only the minimized title, summary, applicability, signal count, and chosen attribution leave this installation.
         </p>
         {shareContext.targets.length === 0 ? (
           <p className="mt-3 text-xs text-[var(--dpf-muted)]">
-            No trusted reseller or channel connection is ready. <Link href="/platform/federation-links" className="font-medium text-[var(--dpf-accent)] hover:underline">Review connections</Link>
+            No eligible distributor or Founder Hub connection is ready. <Link href="/platform/federation-links" className="font-medium text-[var(--dpf-accent)] hover:underline">Review connections</Link>
           </p>
         ) : (
           <div className="mt-3 flex flex-wrap items-end gap-3">
@@ -172,32 +174,44 @@ export function NetworkDemandPanel({
               </select>
             </label>
             <label className="text-xs text-[var(--dpf-muted)]">
-              Connection
+              Share with
               <select
-                aria-label="Connection"
+                aria-label="Share with"
                 value={selectedLinkId}
-                onChange={(event) => setSelectedLinkId(event.target.value)}
+                onChange={(event) => {
+                  const nextLinkId = event.target.value;
+                  setSelectedLinkId(nextLinkId);
+                  if (shareContext.targets.find((target) => target.linkId === nextLinkId)?.destinationKind !== "distributor") {
+                    setAllowFounderForwarding(false);
+                  }
+                }}
                 className="mt-1 block rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1.5 text-sm text-[var(--dpf-text)]"
               >
-                {shareContext.targets.map((target) => <option key={target.linkId} value={target.linkId}>{target.displayName}</option>)}
+                {shareContext.targets.map((target) => (
+                  <option key={target.linkId} value={target.linkId}>
+                    {target.displayName} — {target.destinationKind === "distributor" ? "Distributor" : "Founder Hub"}
+                  </option>
+                ))}
               </select>
             </label>
-            <label className="flex max-w-sm items-start gap-2 text-xs text-[var(--dpf-muted)]">
-              <input
-                type="checkbox"
-                checked={allowFounderForwarding}
-                onChange={(event) => setAllowFounderForwarding(event.target.checked)}
-                className="mt-0.5"
-              />
-              Allow this reseller to forward the minimized envelope to Founder Hub for 90 days. Customer identity remains pseudonymous.
-            </label>
+            {selectedTarget?.destinationKind === "distributor" ? (
+              <label className="flex max-w-sm items-start gap-2 text-xs text-[var(--dpf-muted)]">
+                <input
+                  type="checkbox"
+                  checked={allowFounderForwarding}
+                  onChange={(event) => setAllowFounderForwarding(event.target.checked)}
+                  className="mt-0.5"
+                />
+                Allow {selectedTarget.displayName} to forward the minimized demand to its Founder Hub for 90 days. Your identity remains pseudonymous.
+              </label>
+            ) : null}
             <button
               type="button"
               disabled={pending || !selectedItemId || !selectedLinkId}
               onClick={shareLocal}
               className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-semibold text-[var(--dpf-bg)] disabled:opacity-50"
             >
-              {pending ? <InlineBusy label="Queuing…" tone="current" /> : "Share selected demand"}
+              {pending ? <InlineBusy label="Queuing…" tone="current" /> : `Share with ${selectedTarget?.displayName ?? "selected connection"}`}
             </button>
           </div>
         )}
@@ -311,7 +325,7 @@ export function NetworkDemandPanel({
                           onClick={() => forwardToFounder(item.mirrorId)}
                           className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
                         >
-                          {isBusy ? <InlineBusy label="Queuing…" tone="current" /> : "Forward to Founder Hub"}
+                          {isBusy ? <InlineBusy label="Queuing…" tone="current" /> : `Forward to ${founderTarget?.displayName ?? "Founder Hub"}`}
                         </button>
                       ) : null}
                       <button

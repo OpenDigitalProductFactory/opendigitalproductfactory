@@ -1,9 +1,101 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("./demand-delivery", () => ({
+  queueDemandProjection: vi.fn(),
+  queueDemandWithdrawal: vi.fn(),
+  queueForwardedDemand: vi.fn(),
+}));
+vi.mock("./demand-identity", () => ({ resolveFederationIdentity: vi.fn() }));
+vi.mock("./demand-reconciliation", () => ({
+  relationshipPresetForRole: (role: string) => role.startsWith("channel-") ? "channel" : "service-provider",
+}));
+
 import {
   bindPeerInstallationIdentity,
   decodeChannelDemandPolicy,
+  isOutboundDemandSharingRole,
+  selectLocalDemandForLink,
 } from "./channel-demand";
+
+describe("isOutboundDemandSharingRole", () => {
+  it("allows only the local relationship faces that point toward the distributor or Founder Hub", () => {
+    expect(isOutboundDemandSharingRole("managed-by")).toBe(true);
+    expect(isOutboundDemandSharingRole("channel-downstream")).toBe(true);
+    expect(isOutboundDemandSharingRole("manages")).toBe(false);
+    expect(isOutboundDemandSharingRole("channel-upstream")).toBe(false);
+    expect(isOutboundDemandSharingRole("peer")).toBe(false);
+  });
+});
+
+describe("selectLocalDemandForLink direction", () => {
+  it.each(["manages", "channel-upstream"])(
+    "rejects the reverse-facing %s relationship at the service boundary",
+    async (role) => {
+      const db = {
+        federationLink: { findUnique: vi.fn().mockResolvedValue({
+          linkId: "FL-REVERSE",
+          role,
+          linkState: "trusted",
+          peerAuthorityUrl: "https://peer.example",
+          peerTokenEnc: "token",
+          peerInstallationId: "inst_peer",
+          projectionContractId: null,
+          revokedAt: null,
+          quarantinedAt: null,
+        }) },
+        backlogItem: { findUnique: vi.fn().mockResolvedValue({
+          itemId: "BI-LOCAL",
+          title: "Local need",
+          body: null,
+          workType: "feature",
+          occurrenceCount: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          digitalProduct: null,
+        }) },
+        projectionContract: { findFirst: vi.fn().mockResolvedValue(null) },
+      };
+
+      await expect(selectLocalDemandForLink(db as never, {
+        linkId: "FL-REVERSE",
+        itemId: "BI-LOCAL",
+      })).rejects.toThrow("Local demand can only be shared toward your distributor or Founder Hub.");
+    },
+  );
+
+  it("does not attach transitive consent when a distributor shares directly with Founder Hub", async () => {
+    const db = {
+      federationLink: { findUnique: vi.fn().mockResolvedValue({
+        linkId: "FL-FOUNDER",
+        role: "channel-downstream",
+        linkState: "trusted",
+        peerAuthorityUrl: "https://arcamanus.example",
+        peerTokenEnc: "token",
+        peerInstallationId: "inst_founder",
+        projectionContractId: null,
+        revokedAt: null,
+        quarantinedAt: null,
+      }) },
+      backlogItem: { findUnique: vi.fn().mockResolvedValue({
+        itemId: "BI-LOCAL",
+        title: "Distributor need",
+        body: null,
+        workType: "feature",
+        occurrenceCount: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        digitalProduct: null,
+      }) },
+      projectionContract: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+
+    await expect(selectLocalDemandForLink(db as never, {
+      linkId: "FL-FOUNDER",
+      itemId: "BI-LOCAL",
+      allowForwardToFounder: true,
+    })).rejects.toThrow("Founder forwarding consent applies only when sharing with a distributor.");
+  });
+});
 
 describe("decodeChannelDemandPolicy", () => {
   it("defaults partner exchange to explicit selection and pseudonymous attribution", () => {

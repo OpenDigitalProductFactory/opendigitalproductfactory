@@ -78,6 +78,23 @@ const PARTNER_ROLES = new Set<FederationRole>([
   "channel-downstream",
 ]);
 
+export type OutboundDemandSharingRole = Extract<
+  FederationRole,
+  "managed-by" | "channel-downstream"
+>;
+
+const OUTBOUND_DEMAND_SHARING_ROLES = new Set<OutboundDemandSharingRole>([
+  "managed-by",
+  "channel-downstream",
+]);
+
+export function isOutboundDemandSharingRole(
+  role: string,
+): role is OutboundDemandSharingRole {
+  return isFederationRole(role)
+    && OUTBOUND_DEMAND_SHARING_ROLES.has(role as OutboundDemandSharingRole);
+}
+
 export async function bindPeerInstallationIdentity(
   db: { federationLink: { updateMany(args: unknown): Promise<{ count: number }> } },
   linkId: string,
@@ -224,6 +241,11 @@ export async function selectLocalDemandForLink(
     }),
   ]);
   assertTrustedPartnerLink(link);
+  if (!isOutboundDemandSharingRole(link.role)) {
+    throw new Error(
+      "Local demand can only be shared toward your distributor or Founder Hub.",
+    );
+  }
   if (!item) throw new Error("Local demand item was not found.");
   if ((item.body ?? "").includes("[origin:federatedDemand:")) {
     throw new Error("Adopted demand must use governed forwarding so original provenance is preserved.");
@@ -231,6 +253,9 @@ export async function selectLocalDemandForLink(
   const preset = relationshipPresetForRole(link.role);
   if (preset !== "channel" && preset !== "service-provider") {
     throw new Error("This relationship cannot receive explicitly shared demand.");
+  }
+  if (link.role === "channel-downstream" && input.allowForwardToFounder === true) {
+    throw new Error("Founder forwarding consent applies only when sharing with a distributor.");
   }
   const current = decodeChannelDemandPolicy(stored?.cadaPosture);
   const policy: ChannelDemandPolicy = {

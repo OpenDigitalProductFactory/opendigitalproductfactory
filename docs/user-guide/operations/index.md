@@ -39,12 +39,18 @@ installation, not a local backlog item. You can follow it, offer help, or adopt
 it; adoption creates a new locally owned backlog item and never transfers
 control of the sender's work.
 
-For demand your installation owns, use the item-level connection controls to
-share only with eligible approved links. Service-provider and channel links are
-selected explicitly. Forwarding is available only when the original sender
-allowed the Founder Hub audience, and it preserves pseudonymous origin
-provenance. Withdrawal stops the shared copy from being actionable without
-deleting your local item.
+For demand your installation owns, the sharing path is **end company →
+distributor → Founder Hub**. Use the item-level controls to choose one item and
+an eligible approved destination. An end company sees its distributor links; a
+distributor sees its upstream Founder Hub link, identified by the connected
+installation's name (for example, Arcamanus). Customer-facing and downstream
+reseller relationships are never offered as outbound destinations.
+
+Forwarding is off by default. An end company can allow its selected distributor
+to forward the minimized demand to that distributor's Founder Hub for 90 days.
+The distributor sees the forwarding action only while that consent is valid,
+and the original pseudonymous provenance stays attached. Withdrawal stops the
+shared copy from being actionable without deleting the source item.
 
 If a share or response action is unavailable, check the displayed connection
 state and consent explanation. Manage the relationship itself under **Platform
