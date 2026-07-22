@@ -59,6 +59,7 @@ export async function loadOutboundItems(db: Db): Promise<AttentionItem[]> {
 // ─── Bills (AP) — hard dueDate ───────────────────────────────────────────────
 
 export type BillRow = {
+  id: string;
   billRef: string;
   currency: string;
   amountDue: string;
@@ -68,6 +69,10 @@ export type BillRow = {
 
 export function billToAttentionItem(row: BillRow, nowMs: number): AttentionItem {
   const deadlineIso = row.dueDate.toISOString();
+  // Deep-link to the exact bill, not the bills list, so the owner lands on the
+  // specific decision instead of re-finding it (BI-1336126B). The detail route
+  // resolves by internal `id` (see getBill / the bills list row links).
+  const href = `/finance/bills/${encodeURIComponent(row.id)}`;
   return {
     id: `approval-bill:${row.billRef}`,
     source: "approval-bill",
@@ -83,8 +88,8 @@ export function billToAttentionItem(row: BillRow, nowMs: number): AttentionItem 
       irreversible: false,
     },
     createdAtIso: row.createdAt.toISOString(),
-    actions: [{ kind: "open-in-context", label: "Review bill", href: "/finance/bills" }],
-    deepLink: "/finance/bills",
+    actions: [{ kind: "open-in-context", label: "Review bill", href }],
+    deepLink: href,
     audience: { operator: true },
   };
 }
@@ -95,7 +100,7 @@ export async function loadBillItems(db: Db): Promise<AttentionItem[]> {
     where: { status: "awaiting_approval" },
     orderBy: { dueDate: "asc" },
     take: 50,
-    select: { billRef: true, currency: true, amountDue: true, dueDate: true, createdAt: true },
+    select: { id: true, billRef: true, currency: true, amountDue: true, dueDate: true, createdAt: true },
   });
   return rows.map((r) =>
     billToAttentionItem({ ...r, amountDue: r.amountDue.toString() }, nowMs),
@@ -105,6 +110,7 @@ export async function loadBillItems(db: Db): Promise<AttentionItem[]> {
 // ─── Expense claims — no hard deadline ───────────────────────────────────────
 
 export type ExpenseClaimRow = {
+  id: string;
   claimId: string;
   title: string;
   currency: string;
@@ -114,6 +120,8 @@ export type ExpenseClaimRow = {
 };
 
 export function expenseToAttentionItem(row: ExpenseClaimRow): AttentionItem {
+  // Deep-link to the exact claim (resolved by internal `id`, per getExpenseClaim).
+  const href = `/finance/expense-claims/${encodeURIComponent(row.id)}`;
   return {
     id: `approval-expense:${row.claimId}`,
     source: "approval-expense",
@@ -128,8 +136,8 @@ export function expenseToAttentionItem(row: ExpenseClaimRow): AttentionItem {
       irreversible: false,
     },
     createdAtIso: (row.submittedAt ?? row.createdAt).toISOString(),
-    actions: [{ kind: "open-in-context", label: "Review claim", href: "/finance/expense-claims" }],
-    deepLink: "/finance/expense-claims",
+    actions: [{ kind: "open-in-context", label: "Review claim", href }],
+    deepLink: href,
     audience: { operator: true },
   };
 }
@@ -139,7 +147,7 @@ export async function loadExpenseItems(db: Db): Promise<AttentionItem[]> {
     where: { status: "submitted" },
     orderBy: { submittedAt: "desc" },
     take: 50,
-    select: { claimId: true, title: true, currency: true, totalAmount: true, submittedAt: true, createdAt: true },
+    select: { id: true, claimId: true, title: true, currency: true, totalAmount: true, submittedAt: true, createdAt: true },
   });
   return rows.map((r) => expenseToAttentionItem({ ...r, totalAmount: r.totalAmount.toString() }));
 }
@@ -147,6 +155,7 @@ export async function loadExpenseItems(db: Db): Promise<AttentionItem[]> {
 // ─── Regulatory submissions — hard dueDate, high stakes ──────────────────────
 
 export type RegulatorySubmissionRow = {
+  id: string;
   submissionId: string;
   title: string;
   recipientBody: string;
@@ -157,6 +166,8 @@ export type RegulatorySubmissionRow = {
 
 export function regulatoryToAttentionItem(row: RegulatorySubmissionRow, nowMs: number): AttentionItem {
   const deadlineIso = row.dueDate ? row.dueDate.toISOString() : undefined;
+  // Deep-link to the exact submission (resolved by internal `id`, per getSubmission).
+  const href = `/compliance/submissions/${encodeURIComponent(row.id)}`;
   return {
     id: `compliance-submission:${row.submissionId}`,
     source: "compliance-submission",
@@ -172,8 +183,8 @@ export function regulatoryToAttentionItem(row: RegulatorySubmissionRow, nowMs: n
       irreversible: false,
     },
     createdAtIso: row.createdAt.toISOString(),
-    actions: [{ kind: "open-in-context", label: "Open submission", href: "/compliance/submissions" }],
-    deepLink: "/compliance/submissions",
+    actions: [{ kind: "open-in-context", label: "Open submission", href }],
+    deepLink: href,
     audience: { operator: true },
   };
 }
@@ -185,6 +196,7 @@ export async function loadRegulatoryItems(db: Db): Promise<AttentionItem[]> {
     orderBy: { dueDate: "asc" },
     take: 50,
     select: {
+      id: true,
       submissionId: true,
       title: true,
       recipientBody: true,

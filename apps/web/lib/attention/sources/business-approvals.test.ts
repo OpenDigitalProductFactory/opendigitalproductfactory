@@ -12,6 +12,7 @@ const NOW = new Date("2026-06-23T12:00:00.000Z").getTime();
 
 describe("billToAttentionItem", () => {
   const base = {
+    id: "bill_ckabc123",
     billRef: "BILL-2026-0001",
     currency: "GBP",
     amountDue: "500.00",
@@ -28,6 +29,16 @@ describe("billToAttentionItem", () => {
     expect(item.triage.residueReason).toBe("policy-approval");
   });
 
+  it("deep-links Review bill to the exact bill detail, not the list (BI-1336126B)", () => {
+    const item = billToAttentionItem({ ...base, dueDate: new Date("2026-06-22T10:00:00.000Z") }, NOW);
+    expect(item.actions).toHaveLength(1);
+    expect(item.actions[0].label).toBe("Review bill");
+    expect(item.actions[0].href).toBe("/finance/bills/bill_ckabc123");
+    expect(item.deepLink).toBe("/finance/bills/bill_ckabc123");
+    // Never the generic list route the owner had to re-search.
+    expect(item.actions[0].href).not.toBe("/finance/bills");
+  });
+
   it("leaves a far-off bill in the normal tier", () => {
     const item = billToAttentionItem({ ...base, dueDate: new Date("2026-08-01T10:00:00.000Z") }, NOW);
     expect(item.triage.timeToAct).toBe("none");
@@ -37,6 +48,7 @@ describe("billToAttentionItem", () => {
 
 describe("regulatoryToAttentionItem", () => {
   const base = {
+    id: "rs_ck0001",
     submissionId: "RS-1",
     title: "Quarterly VAT return",
     recipientBody: "HMRC",
@@ -50,6 +62,8 @@ describe("regulatoryToAttentionItem", () => {
     expect(item.riskClass).toBe("high-risk");
     expect(item.triage.timeToAct).toBe("due-today");
     expect(isOverrideTier(item)).toBe(true);
+    expect(item.actions[0].href).toBe("/compliance/submissions/rs_ck0001");
+    expect(item.deepLink).toBe("/compliance/submissions/rs_ck0001");
   });
 
   it("handles a submission with no deadline", () => {
@@ -75,6 +89,7 @@ describe("the no-deadline business approvals", () => {
 
   it("maps an expense claim, preferring submittedAt for age", () => {
     const item = expenseToAttentionItem({
+      id: "ec_ck77",
       claimId: "EC-1",
       title: "Client dinner",
       currency: "USD",
@@ -85,6 +100,8 @@ describe("the no-deadline business approvals", () => {
     expect(item.id).toBe("approval-expense:EC-1");
     expect(item.createdAtIso).toBe("2026-06-22T18:00:00.000Z");
     expect(item.context).toBe("USD 82.50");
+    expect(item.actions[0].href).toBe("/finance/expense-claims/ec_ck77");
+    expect(item.deepLink).toBe("/finance/expense-claims/ec_ck77");
   });
 
   it("maps a research proposal as low-risk", () => {
