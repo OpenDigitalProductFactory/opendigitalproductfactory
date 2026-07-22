@@ -168,6 +168,11 @@ export function CoworkerPostureControl({
         }}
         aria-expanded={open}
         aria-haspopup="dialog"
+        // BI-3238AAF0: a stable owner-readable accessible name. Without it the
+        // button's accessible name collapses to the visible summary — "Controls"
+        // when nothing is active — which reads as cryptic chrome. The visible
+        // summary still communicates active posture at a glance.
+        aria-label={`Conversation controls${summaryParts.length > 0 ? `: ${summaryLabel}` : ""}`}
         title="Conversation controls — mode, page editing, and web access for this coworker"
         style={{
           display: "inline-flex",
