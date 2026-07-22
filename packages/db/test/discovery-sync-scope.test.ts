@@ -50,6 +50,7 @@ function buildStubDb() {
         portfolioQualityIssue: {
           findMany: async () => [],
           upsert: async () => ({}),
+          updateMany: async () => ({ count: 0 }),
         },
       }),
   };

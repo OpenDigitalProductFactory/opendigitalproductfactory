@@ -77,6 +77,7 @@ describe("persistBootstrapDiscoveryRun", () => {
             qualityIssues.push(create);
             return {};
           },
+          updateMany: async () => ({ count: 0 }),
         },
       }),
     };
@@ -269,6 +270,7 @@ describe("persistBootstrapDiscoveryRun", () => {
         portfolioQualityIssue: {
           findMany: async () => [],
           upsert: async () => ({}),
+          updateMany: async () => ({ count: 0 }),
         },
       }),
     };
@@ -378,7 +380,7 @@ describe("persistBootstrapDiscoveryRun", () => {
             return {};
           },
         },
-        portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}) },
+        portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}), updateMany: async () => ({ count: 0 }) },
       }),
     };
 
@@ -514,7 +516,7 @@ describe("persistBootstrapDiscoveryRun", () => {
             return {};
           },
         },
-        portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}) },
+        portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}), updateMany: async () => ({ count: 0 }) },
       }),
     };
 
@@ -655,7 +657,7 @@ describe("persistBootstrapDiscoveryRun", () => {
             updateMany: async () => ({ count: 0 }),
           },
           discoveredRelationship: { create: async () => ({}) },
-          portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}) },
+          portfolioQualityIssue: { findMany: async () => [], upsert: async () => ({}), updateMany: async () => ({ count: 0 }) },
           identityResolutionLog: {
             findFirst,
             create: async ({ data }: { data: Record<string, unknown> }) => {

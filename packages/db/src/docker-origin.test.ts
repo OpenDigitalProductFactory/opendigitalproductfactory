@@ -45,6 +45,20 @@ describe("isDockerOriginEntityKey (server-side)", () => {
     expect(isDockerOriginEntityKey("network_client:arp:192.168.0.49")).toBe(false);
     expect(isDockerOriginEntityKey("host:arp:192.168.0.5")).toBe(false);
   });
+
+  it("matches Docker 172.16/12 bridge NIC shapes the specific matches miss", () => {
+    // The self-scan's bridge NIC rows and their quarantined wrappers leaked past
+    // the host:arp:/host:hostname: matches and opened permanent stale_entity issues.
+    expect(isDockerOriginEntityKey("network_interface:iface:eth0:172.18.0.14")).toBe(true);
+    expect(
+      isDockerOriginEntityKey("__dpf_quarantined__cmpjsbvh8006c01lmp4levblx__network_interface:iface:eth0:172.18.0.14"),
+    ).toBe(true);
+    expect(isDockerOriginEntityKey("network_interface:iface:eth0:172.31.255.254")).toBe(true);
+    // Real LAN NIC (192.168) and outside-/12 stay false.
+    expect(isDockerOriginEntityKey("network_interface:iface:Ethernet_2:192.168.0.200")).toBe(false);
+    expect(isDockerOriginEntityKey("network_interface:iface:eth0:172.15.0.1")).toBe(false);
+    expect(isDockerOriginEntityKey("network_interface:iface:eth0:172.32.0.1")).toBe(false);
+  });
 });
 
 describe("isDockerOriginRelationshipKey", () => {
