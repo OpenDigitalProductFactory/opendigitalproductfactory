@@ -350,7 +350,7 @@ Before delivering UI code, verify these items:
 - [ ] All icons from consistent icon set (Heroicons/Lucide)
 - [ ] Brand logos are correct (verified from Simple Icons)
 - [ ] Hover states don't cause layout shift
-- [ ] Use theme colors directly (bg-primary) not var() wrapper
+- [ ] Colors resolve through the project's theme system — for DPF platform UI that is ALWAYS the `--dpf-*` custom properties (e.g. `bg-[var(--dpf-surface-1)]`, per AGENTS.md §12); generated-theme utility names like `bg-primary` apply only to non-DPF product-sandbox stacks with their own Tailwind theme
 
 ### Interaction
 - [ ] All clickable elements have `cursor-pointer`
