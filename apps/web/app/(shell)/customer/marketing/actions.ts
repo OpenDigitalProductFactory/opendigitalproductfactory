@@ -14,6 +14,7 @@ import {
   type OutboundDraftStatus,
 } from "@/lib/marketing/execution";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { guardDraftArchetypeFit } from "@/lib/marketing/fit-guard";
 
 type ActionResult =
   | { ok: true; draftId: string; status: OutboundDraftStatus }
@@ -76,6 +77,13 @@ export async function approveOutboundDraftAction(
 ): Promise<ActionResult> {
   const auth = await requireOperator();
   if ("error" in auth) return { ok: false, error: auth.error };
+
+  // Archetype-fit guard: never approve software-platform / off-archetype-block
+  // copy for a real audience. Checks the operator's edited body when provided,
+  // since they may have fixed the leak before approving.
+  const fit = await guardDraftArchetypeFit({ draftId, contentOverride: editedBody ?? null });
+  if (fit && !fit.ok) return { ok: false, error: fit.error };
+
   return decideOnDraft(draftId, "approved", editedBody ?? null, notes ?? null, auth.userId);
 }
 

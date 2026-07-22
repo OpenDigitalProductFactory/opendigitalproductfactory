@@ -7,9 +7,11 @@ type Props = {
   draftId: string;
   channelConnected: boolean;
   channelId: string;
+  /** True when archetype-fit flags the body as off-archetype/software-platform content. */
+  fitBlocked?: boolean;
 };
 
-export function PublishLinkedInButton({ draftId, channelConnected, channelId }: Props) {
+export function PublishLinkedInButton({ draftId, channelConnected, channelId, fitBlocked }: Props) {
   const [status, setStatus] = useState<"idle" | "publishing" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [externalUrl, setExternalUrl] = useState<string | null>(null);
@@ -30,6 +32,19 @@ export function PublishLinkedInButton({ draftId, channelConnected, channelId }: 
         setMessage(result.error);
       }
     });
+  }
+
+  if (fitBlocked) {
+    return (
+      <p
+        data-testid="publish-blocked-fit"
+        className="rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-1.5 text-xs text-red-500"
+        role="status"
+      >
+        Blocked: this reads as imported/test or off-archetype content. It can’t be published to this
+        business’s audience — reject it or fix the copy first.
+      </p>
+    );
   }
 
   if (!channelConnected) {

@@ -16,6 +16,7 @@ import {
   type OutboundDraftStatus,
 } from "./execution";
 import { getMarketingWorkspaceSnapshot } from "../marketing";
+import { getPlaybook } from "@/lib/tak/marketing-playbooks";
 
 export type DraftMarketingAssetResult =
   | {
@@ -34,9 +35,9 @@ const LINKEDIN_POST_GUIDE = `LinkedIn post shape:
 - Hook in line 1 — pain-led, specific, no generic openers like "I've been thinking…".
 - Target 180–280 words. Concrete examples beat abstractions.
 - Use short paragraphs (1–3 lines). Whitespace makes mobile readable.
-- 0–3 hashtags max, only ones a technical-founder audience would actually search.
-- Exactly one call to action at the end. Comment-trigger CTAs ("comment 'X' for the checklist") perform well for inquiry.
-- No emoji-flood, no "🚀". Confident founder voice, not corporate marketing voice.`;
+- 0–3 hashtags max, only ones this business's actual audience would search.
+- Exactly one call to action at the end, matching the business's booking/inquiry/purchase motion.
+- No emoji-flood, no "🚀". Use the business's own voice, not generic corporate marketing voice.`;
 
 const EMAIL_GUIDE = `Email shape:
 - First line: subject (prefix with "Subject: "). Concise, curiosity-led, no clickbait.
@@ -108,15 +109,31 @@ export async function draftMarketingAsset(input: {
   const proof =
     snapshot.strategy.proofAssets[0]?.label ?? null;
 
+  // Archetype voice: the drafter must speak in THIS business's language, not
+  // generic software-startup voice. The playbook supplies the stakeholders,
+  // tone, and CTA vocabulary for the active archetype (e.g. a restaurant markets
+  // covers, bookings, menus and seasonal offers — never "technical founders").
+  const playbook = getPlaybook(snapshot.storefront.category, snapshot.storefront.ctaType);
+  const archetypeVoice = `This business is a ${
+    snapshot.storefront.archetypeName ?? snapshot.storefront.category ?? "local business"
+  }.
+- Audience: ${playbook.stakeholders}.
+- Voice: ${playbook.contentTone}.
+- Speak in this business's own concepts. Preferred calls to action: ${playbook.ctaLanguage.join(", ")}.
+- NEVER use software-platform language (Build Studio, technical founders, AI workflow, SaaS, software platform). This is a real business marketing to real customers.`;
+
   const systemPrompt = `You are a senior marketing copywriter producing channel-shaped, ready-to-publish copy from a marketing brief.
 
 You produce the body the human will review next. Do NOT produce meta-commentary, options, or "here are three variants" — produce ONE draft, the one you'd publish if you had the authority. The human reviews and edits before any external publish.
 
 ${shapingGuide(task.assetType)}
 
+Business voice (stay inside this — it defines who you are writing as):
+${archetypeVoice}
+
 Constraints:
 - Stay grounded in the brief and the positioning. Do not invent product features that aren't in the brief.
-- Use the strategist's stakeholder language. If the audience term is "technical founders", do not say "SMB owners".
+- Use the strategist's stakeholder language and the business voice above.
 - No placeholders like [Insert X] except the explicit signer placeholder in email sign-offs.`;
 
   const userPrompt = `Brief title: ${task.title}

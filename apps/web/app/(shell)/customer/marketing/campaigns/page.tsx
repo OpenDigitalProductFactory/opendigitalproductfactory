@@ -9,6 +9,7 @@ import {
 } from "@/components/customer-marketing/MarketingRoutePrimitives";
 import { formatMarketingLabel, getMarketingWorkspaceSnapshot } from "@/lib/marketing";
 import { buildMarketingCampaignsView } from "@/lib/marketing/subroutes";
+import { ArchetypeFitNotice } from "@/components/customer-marketing/ArchetypeFitNotice";
 
 export default async function CustomerMarketingCampaignsPage() {
   const snapshot = await getMarketingWorkspaceSnapshot();
@@ -36,6 +37,24 @@ export default async function CustomerMarketingCampaignsPage() {
 
       <MarketingMetricGrid metrics={view.metrics} />
 
+      {view.importedTestCount > 0 ? (
+        <div
+          data-testid="marketing-imported-test-banner"
+          className="rounded-lg border border-red-500/50 bg-red-500/10 p-4 text-sm text-red-500"
+        >
+          <p className="font-semibold">
+            {view.importedTestCount} saved{" "}
+            {view.importedTestCount === 1 ? "artifact reads" : "artifacts read"} like imported / test
+            data
+          </p>
+          <p className="mt-1 leading-snug">
+            These carry software-platform language that doesn&rsquo;t belong in this business&rsquo;s
+            marketing. They&rsquo;re flagged below and blocked from publishing — reject or rewrite them
+            before they go to a real audience.
+          </p>
+        </div>
+      ) : null}
+
       <MarketingSection
         title="Campaign briefs"
         description="Briefs define the audience, channel mix, proof, and measurable outcome before individual assets are drafted."
@@ -62,6 +81,10 @@ export default async function CustomerMarketingCampaignsPage() {
                   </div>
                   <MarketingLifecycleBadge status={campaign.status} />
                 </div>
+
+                {campaign.archetypeFit.severity !== "ok" ? (
+                  <ArchetypeFitNotice assessment={campaign.archetypeFit} className="mt-3" />
+                ) : null}
 
                 <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                   <div>
@@ -138,6 +161,9 @@ export default async function CustomerMarketingCampaignsPage() {
                   </div>
                   <MarketingLifecycleBadge status={task.status} />
                 </div>
+                {task.archetypeFit.severity !== "ok" ? (
+                  <ArchetypeFitNotice assessment={task.archetypeFit} className="mt-3" />
+                ) : null}
                 <p className="mt-3 text-sm text-[var(--dpf-text)]">{task.brief}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-[var(--dpf-muted)]">{task.dueWindow}</span>

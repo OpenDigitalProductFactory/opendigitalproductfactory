@@ -17,6 +17,8 @@ import {
 } from "./execution";
 import { getAdapter } from "./channels/registry";
 import type { ChannelCredentialBundle } from "./channels/contracts";
+import { assessArchetypeFit } from "./archetype-fit";
+import { resolveOrgArchetypeCategory } from "./fit-guard";
 
 export type PublishApprovedDraftResult =
   | {
@@ -51,6 +53,19 @@ export async function publishApprovedDraft(input: {
       error: "draft_not_approved",
       retryable: false,
       message: `Draft is in status ${JSON.stringify(draft.status)}; only "approved" drafts can be published.`,
+    };
+  }
+
+  // Archetype-fit block: software-platform / off-archetype-block content must
+  // never reach a real audience, even if it somehow reached "approved".
+  const fitCategory = await resolveOrgArchetypeCategory(draft.organizationId);
+  const fit = assessArchetypeFit({ text: draft.body, category: fitCategory });
+  if (fit.blocked) {
+    return {
+      ok: false,
+      error: "archetype_fit_blocked",
+      retryable: false,
+      message: fit.summary,
     };
   }
 

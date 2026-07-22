@@ -11,6 +11,8 @@ import {
   MARKETING_AGENTIC_OPERATIONS_ROUTE,
   buildMarketingAgenticOperationTopics,
 } from "@/lib/marketing/agentic-operations";
+import { getPlaybook } from "@/lib/tak/marketing-playbooks";
+import { buildMarketingOwnerDecision } from "@/lib/marketing/next-decision";
 
 export default async function CustomerMarketingPage() {
   const snapshot = await getMarketingWorkspaceSnapshot();
@@ -71,9 +73,40 @@ export default async function CustomerMarketingPage() {
     kpiStack,
     suggestions,
   });
+  const playbook = getPlaybook(snapshot.storefront.category, snapshot.storefront.ctaType);
+  const ownerDecision = buildMarketingOwnerDecision(snapshot, playbook);
 
   return (
     <div className="space-y-6">
+      <section
+        data-testid="marketing-owner-decision"
+        data-decision-id={ownerDecision.id}
+        className="rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-6"
+      >
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dpf-accent)]">
+              Your next decision
+            </p>
+            <h2 className="mt-2 text-xl font-bold text-[var(--dpf-text)]">
+              {ownerDecision.headline}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-[var(--dpf-muted)]">
+              {ownerDecision.detail}
+            </p>
+            <p className="mt-3 text-xs text-[var(--dpf-muted)]">
+              Moves: <span className="font-medium text-[var(--dpf-text)]">{ownerDecision.metricFocus}</span>
+            </p>
+          </div>
+          <Link
+            href={ownerDecision.ctaHref}
+            className="shrink-0 rounded-full bg-[var(--dpf-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90"
+          >
+            {ownerDecision.ctaLabel}
+          </Link>
+        </div>
+      </section>
+
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -98,12 +131,14 @@ export default async function CustomerMarketingPage() {
 
       </div>
 
-      <AgentWorkLauncher
-        agentName="Marketing Strategist"
-        primaryActionLabel="Start marketing review"
-        topics={launcherTopics}
-        routeContext={MARKETING_AGENTIC_OPERATIONS_ROUTE}
-      />
+      <div id="marketing-launcher" className="scroll-mt-24">
+        <AgentWorkLauncher
+          agentName="Marketing Strategist"
+          primaryActionLabel="Start marketing review"
+          topics={launcherTopics}
+          routeContext={MARKETING_AGENTIC_OPERATIONS_ROUTE}
+        />
+      </div>
 
       <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -234,6 +269,7 @@ export default async function CustomerMarketingPage() {
         approvedDrafts={snapshot.approvedDrafts}
         connectedChannels={snapshot.connectedChannels}
         inboundMessages={snapshot.inboundMessages}
+        category={snapshot.storefront.category}
       />
     </div>
   );

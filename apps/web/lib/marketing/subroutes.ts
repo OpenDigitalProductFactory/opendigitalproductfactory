@@ -9,6 +9,7 @@ import {
   isOpenOpportunityStage,
   OPEN_OPPORTUNITY_STAGES,
 } from "@/lib/crm/presentation";
+import { assessArchetypeFit, type ArchetypeFitAssessment } from "@/lib/marketing/archetype-fit";
 
 export type MarketingMetric = {
   label: string;
@@ -31,6 +32,7 @@ export type MarketingCampaignRow = {
   approvedDraftCount: number;
   nextWorkLabel: string;
   kpis: string[];
+  archetypeFit: ArchetypeFitAssessment;
 };
 
 export type MarketingAssetTaskRow = {
@@ -42,6 +44,7 @@ export type MarketingAssetTaskRow = {
   status: string;
   draftStatusLabel: string;
   brief: string;
+  archetypeFit: ArchetypeFitAssessment;
 };
 
 export type MarketingCampaignsView = {
@@ -49,6 +52,8 @@ export type MarketingCampaignsView = {
   campaigns: MarketingCampaignRow[];
   assetTasks: MarketingAssetTaskRow[];
   hasWork: boolean;
+  /** Count of saved artifacts flagged as imported/test data (blocked from publish). */
+  importedTestCount: number;
 };
 
 export type MarketingFunnelEngagementInput = {
@@ -197,6 +202,7 @@ export function buildMarketingCampaignsView(
   const tasks = snapshot.workProducts.assetTasks;
   const pendingReviewCount = snapshot.pendingDrafts.length;
   const approvedCount = snapshot.approvedDrafts.length;
+  const category = snapshot.storefront.category;
 
   const campaigns = briefs.map((brief) => {
     const matchedTasks = tasks.filter((task) => taskMatchesBrief(task, brief));
@@ -230,6 +236,12 @@ export function buildMarketingCampaignsView(
       approvedDraftCount,
       nextWorkLabel,
       kpis: brief.kpis,
+      archetypeFit: assessArchetypeFit({
+        text: [brief.title, brief.objective, brief.audience, brief.notes, brief.kpis.join(" ")]
+          .filter(Boolean)
+          .join("\n"),
+        category,
+      }),
     };
   });
 
@@ -242,7 +254,15 @@ export function buildMarketingCampaignsView(
     status: task.status,
     draftStatusLabel: draftStatusLabel(task.taskId, snapshot),
     brief: nonEmpty(task.brief, "No saved brief"),
+    archetypeFit: assessArchetypeFit({
+      text: [task.title, task.brief].filter(Boolean).join("\n"),
+      category,
+    }),
   }));
+
+  const importedTestCount =
+    campaigns.filter((c) => c.archetypeFit.blocked).length +
+    assetTasks.filter((t) => t.archetypeFit.blocked).length;
 
   return {
     metrics: [
@@ -271,6 +291,7 @@ export function buildMarketingCampaignsView(
     campaigns,
     assetTasks,
     hasWork: briefs.length > 0 || tasks.length > 0,
+    importedTestCount,
   };
 }
 
