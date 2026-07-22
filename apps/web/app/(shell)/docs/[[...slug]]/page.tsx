@@ -1,17 +1,61 @@
 import { notFound } from "next/navigation";
+import { prisma } from "@dpf/db";
 import { loadDocPage, loadAllDocs, buildDocsIndex, extractHeadings, AREA_META, AREA_ORDER, type DocsIndex } from "@/lib/docs";
 import { DocsLayout } from "@/components/docs/DocsLayout";
 import { DocRenderer } from "@/components/docs/DocRenderer";
 import { ContextualQuickHelp } from "@/components/docs/ContextualQuickHelp";
+import { StorefrontHelpPanel } from "@/components/docs/StorefrontHelpPanel";
+import {
+  resolveStorefrontHelpPanel,
+  type StorefrontHelpPanel as StorefrontHelpPanelData,
+} from "@/lib/docs/storefront-help-panel";
+import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
 
 type Props = {
   params: Promise<{ slug?: string[] }>;
   searchParams: Promise<{ sourceRoute?: string }>;
 };
 
+/**
+ * When a storefront admin route opened this docs page, resolve the task-focused
+ * help panel rendered with the install's own archetype vocabulary (BI-2DD18122).
+ * Returns null for non-storefront routes or before any storefront is configured.
+ */
+async function loadStorefrontHelpPanel(
+  sourceRoute: string | undefined,
+): Promise<StorefrontHelpPanelData | null> {
+  if (!sourceRoute) return null;
+  const normalized = sourceRoute.split("?")[0] ?? "";
+  if (!normalized.startsWith("/storefront") && !normalized.startsWith("/admin/storefront")) {
+    return null;
+  }
+
+  const config = await prisma.storefrontConfig.findFirst({
+    select: { archetype: { select: { category: true, customVocabulary: true } } },
+  });
+  const businessContext = config
+    ? null
+    : await prisma.businessContext.findFirst({ select: { industry: true } });
+
+  const vocab = getVocabulary(
+    resolveVocabularyKey({
+      archetypeCategory: config?.archetype?.category ?? null,
+      industry: businessContext?.industry ?? null,
+    }),
+    (config?.archetype?.customVocabulary as Record<string, string> | null) ?? null,
+  );
+
+  return resolveStorefrontHelpPanel(sourceRoute, {
+    vocab,
+    archetypeCategory: config?.archetype?.category ?? null,
+  });
+}
+
 export default async function DocsPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { sourceRoute } = await searchParams;
+  const helpPanel = await loadStorefrontHelpPanel(sourceRoute);
   const allDocs = loadAllDocs();
   const index = buildDocsIndex(allDocs);
 
@@ -30,14 +74,17 @@ export default async function DocsPage({ params, searchParams }: Props) {
   }));
 
   // Arrived contextually from a specific page — demote the catalog so the
-  // immediate explanation is not competing with the full docs manual.
+  // immediate explanation is not competing with the full docs manual. When the
+  // storefront help panel resolves for the source route it leads, and the
+  // generic quick-help yields to it (helpPanel routes pass no sourceRoute down).
   const contextual = Boolean(sourceRoute);
 
   // No slug = docs home page
   if (!slug || slug.length === 0) {
     return (
       <DocsLayout index={sidebarIndex} currentSlug="" searchItems={searchItems} collapseCatalog={contextual}>
-        <DocsHome index={index} sourceRoute={sourceRoute} />
+        {helpPanel ? <StorefrontHelpPanel panel={helpPanel} sourceRoute={sourceRoute!} /> : null}
+        <DocsHome index={index} sourceRoute={helpPanel ? undefined : sourceRoute} />
       </DocsLayout>
     );
   }
@@ -57,7 +104,8 @@ export default async function DocsPage({ params, searchParams }: Props) {
       headings={tocHeadings}
       collapseCatalog={contextual}
     >
-      <DocContent doc={doc} sourceRoute={sourceRoute} />
+      {helpPanel ? <StorefrontHelpPanel panel={helpPanel} sourceRoute={sourceRoute!} /> : null}
+      <DocContent doc={doc} sourceRoute={helpPanel ? undefined : sourceRoute} />
     </DocsLayout>
   );
 }
