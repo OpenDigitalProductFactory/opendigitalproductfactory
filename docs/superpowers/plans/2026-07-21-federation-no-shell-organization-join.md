@@ -25,6 +25,11 @@ This closes the trust prerequisite for certificate-valid nearby pairing and
 automatic reconciliation of policy-eligible same-organization demand. It does
 not weaken local backlog authority or make discovery itself trusted.
 
+Final physical acceptance also depends on the independently governed demand
+direction in `2026-07-21-federated-demand-sharing-direction.md`: deliberately
+selected demand may move end company → distributor/reseller → the configured
+Founder Hub peer (Arcamanus in the founder installation), never the reverse.
+
 ## Backlog coverage
 
 - Decision: decomposed
@@ -39,6 +44,8 @@ The four deliverables are independently shippable: the read-only channel is a
 general security foundation; the two host actions are independently testable
 without UI; the Connections workflow is a user capability; installed-host
 acceptance is governed release evidence rather than source implementation.
+Directional sharing is independently mapped to `BI-485F88E9`, but is a
+dependency of the installed-host acceptance outcome.
 
 ## Architecture decisions
 
@@ -192,7 +199,9 @@ deployed through the governed install/update path.
    reconciles automatically, unselected/excluded fields do not egress, local
    authority is preserved, offline reconnect deduplicates, and revocation stops
    exchange.
-6. Capture V-01/V-03 evidence without secrets and attach it to `BI-52D34506`.
+6. Exercise the role-correct end company → distributor/reseller → Founder Hub
+   route and prove reverse-facing link roles are rejected by both UI and server.
+7. Capture V-01/V-03 evidence without secrets and attach it to `BI-52D34506`.
 
 ## Completion gate
 
@@ -207,4 +216,6 @@ V-03, and a final parent audit proves:
 - only the two founder-approved organization-join mutation types are enabled;
 - certificate-valid pairing and approved automatic demand reconciliation work
   across the actual Founder Hub Mac/Windows topology;
+- only deliberately selected demand follows end company → distributor/reseller
+  → configured Founder Hub direction;
 - local backlog state remains sovereign and unselected data never egresses.
