@@ -40,6 +40,8 @@ describe("NetworkDemandPanel", () => {
     }]} />);
 
     expect(html).toContain("Shared by connected installations");
+    expect(html).toContain("Same-company connections keep share-safe platform demand visible in both directions");
+    expect(html).toContain("and so does every source backlog");
     expect(html).toContain("Follow");
     expect(html).toContain("I&#x27;m interested");
     expect(html).toContain("Offer help");
@@ -88,7 +90,7 @@ describe("NetworkDemandPanel", () => {
     />);
 
     expect(html).toContain("Share local demand");
-    expect(html).toContain("End company → distributor → Founder Hub");
+    expect(html).toContain("Across companies: End company → distributor → Founder Hub");
     expect(html).toContain("Reseller One — Distributor");
     expect(html).toContain("Share with Reseller One");
     expect(html).toContain("Only the minimized title, summary, applicability, signal count");

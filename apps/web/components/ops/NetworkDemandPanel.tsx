@@ -107,7 +107,7 @@ export function NetworkDemandPanel({
             Shared by connected installations
           </h2>
           <p className="mt-1 max-w-3xl text-xs text-[var(--dpf-muted)]">
-            Review demand that another installation chose to share. Follow it for updates, or adopt it when your organization wants to own local work. Your local backlog stays authoritative.
+            Same-company connections keep share-safe platform demand visible in both directions after approval. Across companies, each item is deliberately shared. Follow it for updates, or adopt it when your organization wants to own local work. Your local backlog stays authoritative, and so does every source backlog.
           </p>
         </div>
         <Link href="/platform/federation-links" className="text-xs font-medium text-[var(--dpf-accent)] hover:underline">
@@ -154,7 +154,7 @@ export function NetworkDemandPanel({
       <div className="mb-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
         <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Share local demand</h3>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-          End company → distributor → Founder Hub. Choose what is shareable at each step; your local backlog remains private and authoritative. Only the minimized title, summary, applicability, signal count, and chosen attribution leave this installation.
+          Across companies: End company → distributor → Founder Hub. Choose what is shareable at each step; your local backlog remains private and authoritative. Only the minimized title, summary, applicability, signal count, and chosen attribution leave this installation.
         </p>
         {shareContext.targets.length === 0 ? (
           <p className="mt-3 text-xs text-[var(--dpf-muted)]">

@@ -5,11 +5,27 @@ shares a deliberately minimized demand envelope; it never exposes or co-writes
 the source backlog. The source installation decides which item can travel over
 which connection and may withdraw that projection independently.
 
+## Same-company installations
+
+Approved `same-organization` connections synchronize share-safe platform demand
+in both directions. Every installation runs the same reconciliation policy, so
+new eligible work and later source updates become visible to the other internal
+installations without another sharing click. This is the normal pattern for a
+company operating separate Mac, Windows, development, or test installations.
+
+This is not multi-master backlog replication. Each source backlog item remains
+single-writer authoritative. A peer receives a versioned mirror that it can
+follow, respond to, or adopt as separately owned local work. Status, priority,
+estimate, build state, private planning, discussion, attachments, and customer
+context are not remotely overwritten. Either installation can pause or revoke
+its link, and expanding the projection requires approval on both sides.
+
 ## Customer and reseller operation
 
-The supported business route is **end company → distributor/reseller → Founder
-Hub**. On Arcamanus-managed networks, Arcamanus is the Founder Hub installation;
-other deployments use the configured name of their own central hub.
+Across company boundaries, the supported business route is **end company →
+distributor/reseller → Founder Hub**. On Arcamanus-managed networks, Arcamanus
+is the Founder Hub installation; other deployments use the configured name of
+their own central hub.
 
 1. In **Platform → Connections**, create or accept the appropriate relationship.
    The end company records the distributor as the service provider

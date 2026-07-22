@@ -39,12 +39,20 @@ installation, not a local backlog item. You can follow it, offer help, or adopt
 it; adoption creates a new locally owned backlog item and never transfers
 control of the sender's work.
 
-For demand your installation owns, the sharing path is **end company →
-distributor → Founder Hub**. Use the item-level controls to choose one item and
-an eligible approved destination. An end company sees its distributor links; a
-distributor sees its upstream Founder Hub link, identified by the connected
-installation's name (for example, Arcamanus). Customer-facing and downstream
-reseller relationships are never offered as outbound destinations.
+For installations owned by the same company, an approved
+**same organization** connection keeps share-safe platform demand visible in
+both directions automatically. This supports separate development and test
+systems without merging their databases. Each source item remains authoritative
+on its original installation; the other installation receives a versioned
+mirror and may follow it or adopt separately owned local work.
+
+Across company boundaries, the sharing path for demand your installation owns
+is **end company → distributor → Founder Hub**. Use the item-level controls to
+choose one item and an eligible approved destination. An end company sees its
+distributor links; a distributor sees its upstream Founder Hub link, identified
+by the connected installation's name (for example, Arcamanus). Customer-facing
+and downstream reseller relationships are never offered as outbound
+destinations.
 
 Forwarding is off by default. An end company can allow its selected distributor
 to forward the minimized demand to that distributor's Founder Hub for 90 days.

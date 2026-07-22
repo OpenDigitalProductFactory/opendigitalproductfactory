@@ -17,6 +17,13 @@ the source granted bounded Founder Hub consent. The reusable platform identifies
 Arcamanus by the connected peer's display name rather than hardcoding a private
 installation name into community code.
 
+This directional rule applies across organizational boundaries. Installations
+owned by the same company retain the existing symmetric `same-organization`
+lane: after both sides approve the pairing and projection, each installation
+automatically publishes share-safe platform demand to the other. This provides
+bidirectional visibility without multi-master backlog writes; the originating
+installation remains authoritative and a peer may follow or adopt locally.
+
 ## Existing substrate verified
 
 - `ChannelDemandPolicy` already owns explicit item selection, attribution, and
@@ -28,6 +35,9 @@ installation name into community code.
 - `/ops/demand` and `NetworkDemandPanel` are the existing contextual interface.
 - Federation roles already express both sides of each relationship. No new
   model, enum, route, or navigation entry is required.
+- `same-org-peer` reconciliation already runs symmetrically on every approved
+  internal installation and is intentionally separate from explicit partner
+  sharing controls.
 
 The gap is directional authorization: the read model currently offers all four
 partner roles, and local sharing accepts both faces of those relationships.
@@ -49,13 +59,16 @@ route.
    `channel-downstream` can receive locally originated demand. Keep forwarded
    incoming demand restricted to `channel-downstream`.
 2. Add a pure read-model mapping test proving reverse-facing `manages` and
-   `channel-upstream` links are excluded and valid destinations are classified
+   `channel-upstream` links are excluded, `same-org-peer` remains on its
+   automatic bidirectional lane, and valid partner destinations are classified
    as `distributor` or `founder-hub`.
 3. Enforce the allow-list at the service boundary, not just in React, and query
    only valid outbound roles for the Delivery Flow context.
-4. Make the existing panel role-aware: show the route, label the actual peer,
-   offer forwarding consent only for a distributor destination, and name the
-   selected Founder Hub (for example Arcamanus) on the forwarding action.
+4. Make the existing panel role-aware: explain automatic bidirectional
+   same-company visibility separately from the cross-company route, label the
+   actual peer, offer forwarding consent only for a distributor destination,
+   and name the selected Founder Hub (for example Arcamanus) on the forwarding
+   action.
 5. Update the operator guide and federated-demand runbook so setup and recovery
    use the same directional vocabulary.
 6. Run targeted unit tests, web typecheck/build through the governed sandbox,
