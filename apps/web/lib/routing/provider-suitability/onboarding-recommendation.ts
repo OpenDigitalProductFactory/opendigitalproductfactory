@@ -77,8 +77,13 @@ function compileFor(input: {
 }) {
   return compileAiProviderSuitabilityPolicy({
     businessProfile: input.businessProfile,
-    workloadProfiles: input.workloadClasses.map((workloadClass) =>
-      deriveAiWorkloadDataProfile({ workloadClass }),
+    // Explicit `workloadClass: onboardingWorkloadClass`, never shorthand — same
+    // Turbopack inline-minifier bug as work-context.ts profileFromHint
+    // (BI-573A8EB3). A shorthand `{ workloadClass }` whose value is this renamed
+    // map parameter is emitted as a dangling free reference in the production
+    // bundle. Guarded by scripts/check-no-suitability-object-shorthand.mjs.
+    workloadProfiles: input.workloadClasses.map((onboardingWorkloadClass) =>
+      deriveAiWorkloadDataProfile({ workloadClass: onboardingWorkloadClass }),
     ),
     dataPolicyDecisions: [],
     regulationResults: [],
