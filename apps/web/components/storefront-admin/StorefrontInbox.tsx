@@ -124,7 +124,7 @@ export function StorefrontInbox({
             Requests from your storefront
           </div>
           <div className="text-[var(--dpf-muted)]" style={{ marginTop: 4, fontSize: 12 }}>
-            Use <strong>Send to backlog</strong> to track a customer request as work you can follow up on.
+            Use <strong>Send to backlog</strong> to track a customer request as internal follow-up work. It doesn&apos;t notify the customer.
           </div>
         </div>
       ) : (

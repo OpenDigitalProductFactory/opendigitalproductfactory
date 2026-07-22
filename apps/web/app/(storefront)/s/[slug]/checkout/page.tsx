@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
 
 const TYPE_LABELS: Record<string, { title: string; icon: string }> = {
@@ -19,6 +19,13 @@ export default async function CheckoutPage({
   const { ref, type } = await searchParams;
 
   if (!ref || !type) notFound();
+
+  // An inquiry is not a checkout action, so it gets its own named result route
+  // rather than the payment/booking confirmation page (BI-F20763F5). Redirecting
+  // here also catches any old bookmarked /checkout?type=inquiry links.
+  if (type === "inquiry") {
+    redirect(`/s/${slug}/inquiry/received?ref=${encodeURIComponent(ref)}`);
+  }
 
   const storefrontConfig = await prisma.storefrontConfig.findFirst({
     where: { organization: { slug } },
