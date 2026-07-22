@@ -19,14 +19,14 @@ export default async function StorefrontLayout({
   const brandingCss = buildBrandingStyleTag(storefront.brandingTokens ?? null);
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--dpf-bg)", color: "var(--dpf-text)" }}>
+    <div style={{ minHeight: "100vh", background: "var(--dpf-bg)", color: "var(--dpf-text)", overflowX: "hidden" }}>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
       <StorefrontNav
         orgName={storefront.orgName}
         orgLogoUrl={storefront.orgLogoUrl}
         orgSlug={slug}
       />
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px 48px" }}>
+      <main style={{ width: "100%", maxWidth: 1200, margin: "0 auto", padding: "0 clamp(16px, 4vw, 24px) 48px", boxSizing: "border-box" }}>
         {children}
       </main>
     </div>

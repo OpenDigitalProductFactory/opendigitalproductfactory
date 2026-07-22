@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { DialogHost } from "@/components/ui/Dialog";
 
@@ -8,6 +8,15 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Digital Product Factory",
+};
+
+// Explicit device-width viewport so public/mobile surfaces (e.g. the 390px
+// restaurant storefront flow) scale correctly and never render zoomed-out
+// with horizontal overflow. maximum-scale is intentionally omitted so users
+// can still pinch-zoom (accessibility).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 // BI-QUIESCE-006 — boot-time identity injected as window.__DPF_BOOT__ so

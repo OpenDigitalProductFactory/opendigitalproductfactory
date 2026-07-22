@@ -7,9 +7,9 @@ export function ContactSection({
 }) {
   return (
     <div style={{ padding: "40px 0", borderTop: "1px solid var(--dpf-border)" }}>
-      <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 32, flexWrap: "wrap", overflowWrap: "break-word", wordBreak: "break-word" }}>
         {storefront.contactEmail && (
-          <div>
+          <div style={{ minWidth: 0 }}>
             <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>Email</span><br />
             <a href={`mailto:${storefront.contactEmail}`} style={{ color: "var(--dpf-text)" }}>{storefront.contactEmail}</a>
           </div>
