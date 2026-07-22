@@ -214,19 +214,26 @@ already exists. The work per pillar:
 
 ### 4.1 Knowledge
 
-- **Ground the autonomous path** (BI-744D583B). Call `resolveProfessionCorpusContext` on the
-  build/agent execution path with the same fail-open + budget-compression behavior as chat,
-  and fire the same `ProfessionCorpusGap`/`UsageStat` evidence so autonomous misses also feed
-  growth. This is the single highest-value, lowest-risk fix in the pillar.
-- **Close the growth edge + add freshness** (BI-BE9C95D9). A governed *gap → page* authoring
-  flow: surface open gaps to the profession-owning coworker/human, draft a sourced page under
-  the conduit rule, review, publish, mark addressed. A corpus freshness lifecycle
-  (review-by / re-fetch / decay-or-down-weight on staleness, a stale-page lint) mirroring the
-  material-freshness pattern.
-- **Bind on establish.** Extend the coworker conformance check so an `establish_coworker`-minted
-  coworker must resolve to a profession family — parity with the archetype completeness gate
-  (a coworker with no knowledge base is the coworker-side of the "template-only archetype"
-  failure).
+- **Ground the autonomous path** (BI-744D583B) — **shipped 2026-07-21** (PR #3361). Call
+  `resolveProfessionCorpusContext` on the build/agent execution path with the same fail-open +
+  budget-compression behavior as chat, firing the same `ProfessionCorpusGap`/`UsageStat`
+  evidence so autonomous misses also feed growth.
+- **Close the growth edge + add freshness** (BI-BE9C95D9). *Operator-decided (§5.5):* the
+  *gap → page* authoring flow is **tiered by risk** — low-stakes families auto-publish a
+  coworker-drafted, source-cited page; high-stakes families (legal, compliance, finance,
+  healthcare) require human approval; **every** change lands in the daily digest. On the
+  freshness side, retrieval **caveats** an injected page with its verification age (it does
+  *not* silently down-weight — the corpus is too thin to risk starvation); a **routine job**
+  investigates stale *and conflicting* pages and files a **BI** so the remediation investment
+  is prioritized; auto-purge is reserved for an **obvious 1:1 supersession** (supersede, never
+  delete). Note the stale-page signal already exists (`detectStaleClaims`, `info`) — this is
+  the retrieval consequence + the conflict-resolution loop, not a new lint.
+- **Bind on establish.** *Operator-decided (§5.5):* a coworker that resolves to no profession
+  family **falls back to the `universal` corpus and works immediately** (degraded, not blocked),
+  is flagged in the daily digest, and a **BI is filed** to give it a proper family. This is
+  the coworker-side of the archetype-completeness idea, but softer than the archetype gate on
+  purpose — a coworker still functions on `universal` where a template-only archetype is
+  broken, and "grows per instance" favors low friction over a hard block.
 
 ### 4.2 Memory
 
@@ -234,16 +241,29 @@ Adopt the memory-trust spec's proposals under this epic (BI-4B0A1C1F): make fres
 classification real (P1), supersession lineage on corpus material (P2), close one promotion
 edge as proof (P3), repair the escalation gate-clear defect (P4, BI-6EC1EE25), extend quality
 gating past `plan→build` (P5), and the WWMD default-distrust principle (P6). **Add the missing
-acquisition edge** the memory spec identifies but leaves for this epic: a consolidation step
-that distils a completed thread / build / `PhaseHandoff` into durable `CoworkerMemoryNote`
-rows, and makes the thread checkpoint actually run.
+acquisition edge** the memory spec identifies but leaves for this epic. *Operator-decided
+(§5.5):* the acquisition trigger is **self-nominate + nightly distill** — a coworker flags
+"worth remembering" during its work (`record_working_note`), *and* a nightly pass distils
+notes from completed threads / builds / `PhaseHandoff`s it did not explicitly capture (and
+makes the thread checkpoint actually run). New notes surface in the daily digest; the
+decay/supersede governor keeps them honest so a wrong note cannot persist (the load-bearing
+"maintain safely" half — a note is recalled into every future prompt).
 
 ### 4.3 Judgment
 
 - **Capture outcome-correctness** (BI-A834EE61). Link a `DecisionInteraction` to its eventual
-  result and record a verdict (right / wrong / mixed), most naturally by feeding the
-  `DecisionShadowLedger` reconciliation that already has the fields. This is the signal the
-  whole pillar's feedback edge needs.
+  result and record a verdict, feeding the `DecisionShadowLedger` reconciliation that already
+  has the fields. *Operator-decided (§5.5):* the verdict is **inferred from downstream signals**
+  (a reverted PR, a re-opened ticket, a rolled-back deploy, a churned account, a decision
+  superseded within N days), proposed verdicts surface in the daily digest, and **the operator
+  confirms/overrides only the consequential or ambiguous ones** — the scalable default with a
+  human check where it matters. Calibrates WWWD/WSID; **surfaces WWMD miscalibration for founder
+  review, never auto-rewriting the kernel** (§5).
+- **Close it as a nested loop.** *Operator framing (§5.5):* a coworker's task-loop sits inside
+  its performance-loop inside the org-loop — the Reduction Gear ring structure
+  (`ring-1-coworker` … `ring-5-hive`). The feedback granularity (per-transaction vs. aggregate)
+  is chosen per **ring** by the volume/capacity and the cost of the downstream read, rather than
+  fixed globally.
 - **Sample the confident path.** An audit path for a fraction of confident `recommend`
   outcomes, not just defer/escalate — "confident but wrong" is the failure review never sees.
 - **Reduce the recording leak.** Make the gate harder to skip for consequential actions, or
@@ -277,6 +297,41 @@ should not lag far behind the acquisition edges (the drive belt). Populating mem
 without ever falsifying them is the one ordering that makes the platform *less* safe as it is
 exercised.
 
+## 5.5 Resolution doctrine — the operator's operating model (2026-07-21)
+
+The five design forks (§9) were resolved by the founder in one sitting, and the answers were
+not five independent choices — they define **one operating model** that every autonomous edge
+of the flywheel follows. Stated once, applied everywhere:
+
+> **Act autonomously on the unambiguous; flag honestly (caveat / fallback) on the uncertain;
+> surface everything in one daily digest; escalate the consequential or conflicting to either a
+> human confirmation or a governed BI; and close the loop as calibration that improves WWWD /
+> WSID while surfacing WWMD miscalibration for founder review — never auto-rewriting the kernel.**
+
+Two mechanisms carry the whole model:
+
+- **The daily digest is the single cognitive-load valve.** A solo entrepreneur runs 50+
+  coworkers improving at once. The digest is one surface — auto-published corpus pages, newly
+  distilled memory notes, proposed decision verdicts, under-grounded coworkers, stale/conflicting
+  pages — summarized, so the operator sees the whole estate improving and can pull any thread
+  that looks small-but-worth-investigating. It reuses the existing attention / needs-you surface
+  rather than emitting 50 separate notifications. Nothing autonomous is invisible; almost nothing
+  demands a click.
+- **Escalation is either a human confirm or a governed BI.** When the platform is unsure —
+  a high-stakes corpus page, a conflicting/stale claim, a consequential decision verdict, a
+  coworker with no profession family — it does not guess and it does not silently proceed. It
+  either asks the operator to confirm the few that matter, or files a BI so the remediation
+  investment is *prioritized* against everything else, not force-fit now.
+
+And the founder's framing of the judgment loop is load-bearing: **each coworker's task is a
+closed loop inside a broader closed loop** — task → coworker-performance → org outcome. That is
+the Reduction Gear **ring** structure the platform already has (`ring-1-coworker` …
+`ring-5-hive`), so "what granularity does feedback close at — per-transaction or in aggregate?"
+becomes "which ring closes this loop," chosen by the volume, the capacity, and the cost of the
+downstream read — exactly how human performance and any control system are evaluated.
+
+Per-pillar decisions are recorded inline in §4.1–§4.3 and summarized in §9.
+
 ---
 
 ## 6. Relationship to existing work
@@ -300,6 +355,7 @@ exercised.
 | BI-BE9C95D9 | Knowledge | close the gap→page growth edge + corpus freshness lifecycle |
 | BI-4B0A1C1F | Memory | adopt memory-trust P1–P6 + the experience→note acquisition edge |
 | BI-A834EE61 | Judgment | outcome-correctness signal + close the WWMD/WSID feedback loop |
+| BI-84E51657 | Knowledge | coworker binding: fallback to `universal` + digest + BI when unmapped |
 
 Recommended sequence: **BI-744D583B first** (a today-cost on every autonomous build), then the
 memory acquisition edge, then outcome-correctness — the first two generate the raw material the
@@ -316,13 +372,19 @@ drive belt, never after, per §5.
 - Backfilling every profession family's corpus depth here — that is the per-instance growth the
   flywheel exists to produce, plus a tracked seed-depth program, not a one-time push.
 
-## 9. Open questions for the founder
+## 9. Resolved decisions (founder, 2026-07-21)
 
-1. **Sequencing vs. the memory-trust spec.** That spec is ready to start on its own; do we
-   start it immediately as the memory pillar, or hold for one umbrella kickoff of all three?
-2. **Outcome capture ergonomics.** Outcome-correctness needs *someone or something* to say "that
-   decision was right/wrong" eventually. Human-marked, inferred from downstream signals
-   (a reverted PR, a re-opened ticket, a churned account), or both? This choice shapes
-   BI-A834EE61 most.
-3. **Tier-4 knowledge** (memory-trust open-Q1): "is what we believe about our market still
-   true?" — corpus problem, scheduled-research problem, or out of scope for the first cut?
+The design forks are resolved; the operating model they define is §5.5. Summary:
+
+| # | Fork | Decision |
+|---|---|---|
+| 1 | Corpus gap→page review | **Tiered by risk** — low-stakes auto-publish, high-stakes (legal/finance/compliance/health) human-approved; all in the daily digest. |
+| 2 | Retrieval-time staleness | **Caveat** the injected page with its verification age (no silent down-weight — thin corpus); a **routine job** investigates stale/conflicting pages → files a **BI** to prioritize; auto-purge only on an obvious 1:1 supersession. |
+| 3 | Coworker with no family | **Fallback to `universal` + digest + BI** — works now, flagged, fix prioritized; softer than the archetype hard-block by design. |
+| 4 | Memory capture trigger | **Self-nominate + nightly distill**, surfaced in the digest, kept honest by the decay/supersede governor. |
+| 5 | Decision verdict | **Infer from downstream signals + confirm the consequential**; feeds a **nested closed loop** (Reduction Gear rings), granularity per ring by volume/capacity; calibrates WWWD/WSID, surfaces WWMD for review. |
+
+Remaining founder question, deferred (memory-trust open-Q1): **Tier-4 knowledge** — "is what we
+believe about our market still true?" is a corpus problem, a scheduled-research problem, or out
+of scope for the first cut. Not on the critical path for the four pillar BIs; revisit after the
+acquisition and feedback edges are closed.
