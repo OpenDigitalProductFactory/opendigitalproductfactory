@@ -2779,6 +2779,32 @@ model CoworkerMemoryNote {
   @@index([agentId, noteKind, noteKey])
 }
 
+// BI-D6DFC0E7 (EP-COMPETENCE-FLYWHEEL, host-agent scope). The last-known
+// readiness heartbeat of a build surface (Claude Code / Codex / Grok /
+// Antigravity / Build Studio) wired to THIS instance's durable memory. The
+// bootstrap already computes the state locally (@dpf/bootstrap
+// computeReadinessState); this is the reported, fleet-observable roll of it, so
+// the daily digest can raise a surface that is not-ready or has gone silent.
+// One row per surface — a heartbeat upserts on surfaceKey.
+model AgentSurfaceReadiness {
+  id                 String   @id @default(cuid())
+  // Stable identity of the reporting surface + machine, e.g. "claude-code@<machineId>".
+  surfaceKey         String   @unique
+  clientKind         String // claude-code | codex | grok | antigravity | build-studio
+  // Mirrors @dpf/bootstrap ReadinessState (ready | partial | missing_cli | …).
+  readinessState     String
+  dpfPlatformVersion String?
+  mcpOk              Boolean  @default(false)
+  mcpReason          String?
+  detail             Json?
+  reportedAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([clientKind])
+  @@index([reportedAt(sort: Desc)])
+}
+
 model CoworkerSelfAssessment {
   id                String                   @id @default(cuid())
   assessmentId      String                   @unique

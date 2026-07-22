@@ -33,6 +33,7 @@ import { coworkerServiceCatalogPack } from "./packs/coworker-service-catalog-pac
 import { coworkerToolGrantPack } from "./packs/coworker-tool-grant-pack";
 import { coworkerEstablishPack } from "./packs/coworker-establish-pack";
 import { coworkerMemoryPack } from "./packs/coworker-memory-pack";
+import { surfaceReadinessPack } from "./packs/surface-readiness-pack";
 import { effortContextPack } from "./packs/effort-context-pack";
 import { coworkerGoalPack } from "./packs/coworker-goal-pack";
 import { subagentFanoutPack } from "./packs/subagent-fanout-pack";
@@ -155,4 +156,5 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   buildVisibilityPack,
   buildEvidenceExtraPack,
   principleDecidePack,
+  surfaceReadinessPack,
 ]);
