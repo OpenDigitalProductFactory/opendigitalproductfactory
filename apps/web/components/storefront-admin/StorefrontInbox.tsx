@@ -124,7 +124,7 @@ export function StorefrontInbox({
             Requests from your storefront
           </div>
           <div className="text-[var(--dpf-muted)]" style={{ marginTop: 4, fontSize: 12 }}>
-            Use <strong>Send to backlog</strong> to track a customer request as work you can follow up on.
+            Use <strong>Send inquiry to backlog</strong> on a request to track it as internal work you can follow up on. The customer isn&apos;t notified.
           </div>
         </div>
       ) : (
@@ -225,51 +225,62 @@ export function StorefrontInbox({
               const isSending = pendingInquiryId === e.id;
 
               return (
-                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  {backlogItemId ? (
-                    // Terminal state: the inquiry is already tracked, so there is
-                    // no enabled "Send to backlog" action — only a completed
-                    // marker and a direct link to the created item.
-                    <>
-                      <span
-                        className="text-[var(--dpf-success)]"
-                        style={{ fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}
-                      >
-                        <span aria-hidden="true">✓</span> Sent to backlog
-                      </span>
-                      <a
-                        href={`/ops?itemId=${encodeURIComponent(backlogItemId)}`}
-                        className="text-[var(--dpf-accent)]"
-                        style={{ fontSize: 12, textDecoration: "underline" }}
-                        aria-label={`Open backlog item ${backlogItemId} for inquiry ${e.ref}`}
-                      >
-                        {backlogItemId}
-                      </a>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => sendInquiryToProductBacklog(e.id)}
-                        disabled={!defaultDigitalProduct || isSending}
-                        aria-label={`Send inquiry ${e.ref} to backlog`}
-                        className="border border-[var(--dpf-accent)] text-[var(--dpf-accent)]"
-                        style={{
-                          padding: "3px 10px",
-                          borderRadius: 4,
-                          background: "none",
-                          cursor: !defaultDigitalProduct || isSending ? "not-allowed" : "pointer",
-                          fontSize: 12,
-                          opacity: !defaultDigitalProduct || isSending ? 0.6 : 1,
-                        }}
-                      >
-                        {isSending ? "Sending..." : "Send to backlog"}
-                      </button>
-                      {errorMessage && (
-                        <span className="text-[var(--dpf-error)]" role="alert" style={{ fontSize: 12 }}>
-                          {errorMessage}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    {backlogItemId ? (
+                      // Terminal state: the inquiry is already tracked, so there is
+                      // no enabled "Send to backlog" action — only a completed
+                      // marker and a direct link to the created item.
+                      <>
+                        <span
+                          className="text-[var(--dpf-success)]"
+                          style={{ fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}
+                        >
+                          <span aria-hidden="true">✓</span> Sent to backlog
                         </span>
-                      )}
-                    </>
+                        <a
+                          href={`/ops?itemId=${encodeURIComponent(backlogItemId)}`}
+                          className="text-[var(--dpf-accent)]"
+                          style={{ fontSize: 12, textDecoration: "underline" }}
+                          aria-label={`Open backlog item ${backlogItemId} for inquiry ${e.ref}`}
+                        >
+                          {backlogItemId}
+                        </a>
+                      </>
+                    ) : (
+                      <>
+                        {/* Row-specific label + consequence copy so a non-technical
+                            owner knows exactly which request this acts on and what
+                            sending it changes (BI-F20763F5). */}
+                        <button
+                          onClick={() => sendInquiryToProductBacklog(e.id)}
+                          disabled={!defaultDigitalProduct || isSending}
+                          aria-label={`Send inquiry ${e.ref} to backlog`}
+                          title={`Creates an internal work item from ${e.name ?? "this customer"}'s inquiry ${e.ref}. The customer is not notified.`}
+                          className="border border-[var(--dpf-accent)] text-[var(--dpf-accent)]"
+                          style={{
+                            padding: "3px 10px",
+                            borderRadius: 4,
+                            background: "none",
+                            cursor: !defaultDigitalProduct || isSending ? "not-allowed" : "pointer",
+                            fontSize: 12,
+                            opacity: !defaultDigitalProduct || isSending ? 0.6 : 1,
+                          }}
+                        >
+                          {isSending ? "Sending…" : `Send inquiry ${e.ref} to backlog`}
+                        </button>
+                        {errorMessage && (
+                          <span className="text-[var(--dpf-error)]" role="alert" style={{ fontSize: 12 }}>
+                            {errorMessage}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {!backlogItemId && (
+                    <p className="text-[var(--dpf-muted)]" style={{ fontSize: 11, margin: 0 }}>
+                      Creates an internal work item for your team to follow up. The customer isn&apos;t notified.
+                    </p>
                   )}
                 </div>
               );
