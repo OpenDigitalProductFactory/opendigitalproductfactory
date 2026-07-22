@@ -120,13 +120,13 @@ export function InquiryReceived({
               {contactEmail && (
                 <a
                   href={`mailto:${contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(correctionBody)}`}
-                  style={{ color: "var(--dpf-accent, #4f46e5)", fontWeight: 600 }}
+                  style={{ color: "var(--dpf-accent)", fontWeight: 600 }}
                 >
                   {contactEmail}
                 </a>
               )}
               {contactPhone && (
-                <a href={`tel:${contactPhone.replace(/\s+/g, "")}`} style={{ color: "var(--dpf-accent, #4f46e5)", fontWeight: 600 }}>
+                <a href={`tel:${contactPhone.replace(/\s+/g, "")}`} style={{ color: "var(--dpf-accent)", fontWeight: 600 }}>
                   {contactPhone}
                 </a>
               )}
@@ -145,7 +145,7 @@ export function InquiryReceived({
           href={`/s/${orgSlug}`}
           style={{
             padding: "10px 18px", borderRadius: 6, fontSize: 14, fontWeight: 600,
-            background: "var(--dpf-accent, #4f46e5)", color: "#fff", textDecoration: "none",
+            background: "var(--dpf-accent)", color: "var(--dpf-on-accent)", textDecoration: "none",
           }}
         >
           {`Back to ${orgName}`}
