@@ -222,6 +222,57 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
       })),
     ],
   },
+  {
+    // BI-D6DFC0E7: operational readiness telemetry per build surface. No subject
+    // or business data — which build tool on which machine is wired to durable
+    // memory. telemetry-bounded lifecycle; safe to prune.
+    id: "data:agent-surface-readiness",
+    physical: { prismaModel: "AgentSurfaceReadiness" },
+    domain: "agent-toolchain",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["telemetry", "configuration", "system-internal"],
+    sensitivity: "internal",
+    criticality: "low",
+    subjectLocators: [],
+    lifecycleClass: "telemetry-bounded",
+    purposeCapabilities: ["platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-21" },
+    fields: [
+      {
+        id: "data:agent-surface-readiness#surfaceKey",
+        physicalName: "surfaceKey",
+        resolution: "not-applicable",
+        resolutionReason:
+          "Opaque build-surface + machine identifier (e.g. claude-code@<machineId>) — an operational tool key, not a data subject.",
+        categories: ["system-internal"],
+        sensitivity: "internal",
+        provenance: { source: "manual", state: "confirmed", assertedBy: "data-steward", effectiveFrom: "2026-07-21" },
+      },
+      {
+        id: "data:agent-surface-readiness#readinessState",
+        physicalName: "readinessState",
+        resolution: "not-applicable",
+        resolutionReason:
+          "Computed toolchain readiness state — operational telemetry with no subject or business meaning.",
+        categories: ["telemetry"],
+        sensitivity: "internal",
+        provenance: { source: "manual", state: "confirmed", assertedBy: "data-steward", effectiveFrom: "2026-07-21" },
+      },
+      {
+        id: "data:agent-surface-readiness#detail",
+        physicalName: "detail",
+        resolution: "not-applicable",
+        resolutionReason:
+          "Optional operational detail blob for a heartbeat; carries no subject or business-record data by contract.",
+        categories: ["telemetry"],
+        sensitivity: "internal",
+        provenance: { source: "manual", state: "confirmed", assertedBy: "data-steward", effectiveFrom: "2026-07-21" },
+      },
+    ],
+  },
   ...[
     ["data:founder-demand-cluster", "FounderDemandCluster"],
     ["data:founder-demand-cluster-member", "FounderDemandClusterMember"],
