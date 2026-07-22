@@ -6,6 +6,7 @@ import Apple from "next-auth/providers/apple";
 import { prisma } from "@dpf/db";
 import { verifyPassword, hashPassword } from "./password";
 import { determineSocialAuthFlow, createTempToken } from "./social-auth";
+import { normalizeAuthRedirect } from "./auth-redirect";
 
 /**
  * Load social auth credentials from PlatformConfig DB into process.env.
@@ -209,6 +210,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
+    // BI-86165533: guarantee the post-login redirect targets an operator-visible
+    // host. With trustHost + no AUTH_URL, Auth.js can derive its base URL from the
+    // 0.0.0.0 bind address on some request paths; a relative redirectTo then
+    // resolves to http://0.0.0.0:3000/… which no browser can follow, leaving the
+    // user stranded on /login with no error. normalizeAuthRedirect repairs the
+    // host (PUBLIC_URL when set, else localhost) while preserving Auth.js's
+    // open-redirect guard.
+    redirect({ url, baseUrl }) {
+      return normalizeAuthRedirect({ url, baseUrl, publicUrl: process.env.PUBLIC_URL });
+    },
+
     async signIn({ user, account }) {
       await ensureSocialAuthCredentials();
       // Credential providers: pass through (existing behavior)
