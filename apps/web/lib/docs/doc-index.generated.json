@@ -9074,6 +9074,8 @@
       "anchors": [
         "use-this-doc-for",
         "workflow",
+        "managing-a-row",
+        "fixing-generated-content-that-doesnt-fit",
         "what-to-watch"
       ]
     },
