@@ -15,7 +15,7 @@ type Props = {
 export function HeaderFeedbackButton({ userId }: Props) {
   const pathname = usePathname();
   const [showForm, setShowForm] = useState(false);
-  const [fallbackDetail, setFallbackDetail] = useState<FeedbackEventDetail | null>(null);
+  const [detail, setDetail] = useState<FeedbackEventDetail | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -30,26 +30,15 @@ export function HeaderFeedbackButton({ userId }: Props) {
   }, [showForm]);
 
   function handleClick() {
-    const detail = createManualFeedbackEventDetail(pathname);
-    const handled = !document.dispatchEvent(
-      new CustomEvent("open-agent-feedback", {
-        cancelable: true,
-        detail,
-      }),
-    );
-
-    if (handled) {
+    // A control labeled "Feedback" must open a feedback surface, not the AI
+    // coworker conversation (BI-62FF22DB). Open the feedback form directly and
+    // capture the current route as context.
+    if (showForm) {
+      setShowForm(false);
       return;
     }
-
-    // Fallback: if panel doesn't open, show the simple form
-    setTimeout(() => {
-      const panel = document.querySelector("[data-agent-panel]");
-      if (!panel) {
-        setFallbackDetail(detail);
-        setShowForm(true);
-      }
-    }, 500);
+    setDetail(createManualFeedbackEventDetail(pathname));
+    setShowForm(true);
   }
 
   return (
@@ -57,24 +46,30 @@ export function HeaderFeedbackButton({ userId }: Props) {
       <button
         type="button"
         onClick={handleClick}
+        aria-haspopup="dialog"
+        aria-expanded={showForm}
         className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
       >
         Feedback
       </button>
 
       {showForm && (
-        <div className="absolute right-0 top-full mt-2 w-[300px] bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg shadow-lg z-50 overflow-hidden">
+        <div
+          role="dialog"
+          aria-label="Send feedback"
+          className="absolute right-0 top-full mt-2 w-[300px] bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg shadow-lg z-50 overflow-hidden"
+        >
           <div className="px-3 pt-2.5 text-xs font-semibold text-[var(--dpf-text)]">
             Send Feedback
           </div>
           <FeedbackForm
-            routeContext={fallbackDetail?.routeContext ?? pathname}
+            routeContext={detail?.routeContext ?? pathname}
             {...(userId != null && { userId })}
             source="manual"
-            {...(fallbackDetail && {
-              triggerKind: fallbackDetail.triggerKind,
-              supportSessionId: fallbackDetail.supportSessionId,
-              autoFilePolicy: fallbackDetail.autoFilePolicy,
+            {...(detail && {
+              triggerKind: detail.triggerKind,
+              supportSessionId: detail.supportSessionId,
+              autoFilePolicy: detail.autoFilePolicy,
             })}
             onClose={() => setShowForm(false)}
           />
