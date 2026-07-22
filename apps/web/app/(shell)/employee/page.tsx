@@ -1,5 +1,11 @@
 // apps/web/app/(shell)/employee/page.tsx
+import { cookies } from "next/headers";
 import { prisma } from "@dpf/db";
+import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummary";
+import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
+import { loadOwnerFirstContext } from "@/lib/owner-first/context";
+import { buildEmployeeOwnerSummary } from "@/lib/owner-first/domain-summary";
+import { isSimpleNavMode, NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { EmployeeDirectoryPanel } from "@/components/employee/EmployeeDirectoryPanel";
 import { EmployeeProfilePanel } from "@/components/employee/EmployeeProfilePanel";
 import { EmployeeTabNav } from "@/components/employee/EmployeeTabNav";
@@ -137,12 +143,30 @@ export default async function EmployeePage({ searchParams }: Props) {
   }
   const compensationRows = view === "directory" ? await getEmployeeCompensationRows() : [];
 
+  // Owner-first: lead with service-staffing readiness, then demote role
+  // governance behind progressive disclosure (BI-3BCAF95F). For a Restaurant
+  // owner, "who is on for the next service" comes before HITL tiers and SLAs.
+  const simple = isSimpleNavMode(
+    resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value),
+  );
+  const [{ vocab }, submittedTimesheets] = await Promise.all([
+    loadOwnerFirstContext(),
+    prisma.timesheetPeriod.count({ where: { status: "submitted" } }),
+  ]);
+  const unassignedRoles = roles.filter((r) => r._count.users === 0).length;
+  const ownerSummary = buildEmployeeOwnerSummary(
+    { submittedTimesheets, teamSize: employees.length, unassignedRoles },
+    vocab,
+  );
+
   return (
     <div>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Employee</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">People</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
+            {employees.length} {employees.length === 1 ? "person" : "people"}
+            {" · "}
             {roles.length} role{roles.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -170,48 +194,8 @@ export default async function EmployeePage({ searchParams }: Props) {
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {roles.map((r) => {
-          const userCount = r._count.users;
-          const sla =
-            r.slaDurationH != null && r.slaDurationH > 0
-              ? `${r.slaDurationH}h SLA`
-              : "No SLA";
-
-          return (
-            <div
-              key={r.id}
-              className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4"
-              style={{ borderLeftColor: "#7c8cf8" }}
-            >
-              <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
-                {r.roleId}
-              </p>
-              <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight mb-1">
-                {r.name}
-              </p>
-              {r.description != null && (
-                <p className="text-[10px] text-[var(--dpf-muted)] line-clamp-2 mb-2">
-                  {r.description}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <span className="text-[9px] text-[var(--dpf-muted)]">
-                  HITL T{r.hitlTierMin}
-                </span>
-                <span className="text-[9px] text-[var(--dpf-muted)]">{sla}</span>
-                <span className="text-[9px] text-[var(--dpf-muted)]">
-                  {userCount === 0 ? "Unassigned" : `${userCount} ${userCount === 1 ? "person" : "people"}`}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {roles.length === 0 && (
-        <p className="text-sm text-[var(--dpf-muted)]">No roles registered yet.</p>
-      )}
+      {/* Owner-first: service-staffing readiness leads. */}
+      <OwnerFirstSummaryBand summary={ownerSummary} density={simple ? "simple" : "full"} />
 
       <div className="mt-8">
         <EmployeeTabNav />
@@ -276,18 +260,73 @@ export default async function EmployeePage({ searchParams }: Props) {
         )}
       </div>
 
-      {users.length > 0 && (
+      {/* Role governance — HITL tiers, SLAs, and user access. Demoted behind
+          progressive disclosure so staffing readiness leads (BI-3BCAF95F). Simple
+          mode drops it entirely to reduce body content. */}
+      {!simple && (
         <div className="mt-8">
-          <HrUserLifecyclePanel
-            roles={roles.map((role) => ({ roleId: role.roleId, name: role.name }))}
-            users={users.map((user) => ({
-              id: user.id,
-              email: user.email,
-              isActive: user.isActive,
-              isSuperuser: user.isSuperuser,
-              roleId: user.groups[0]?.platformRole.roleId ?? null,
-            }))}
-          />
+          <OwnerFirstDisclosure
+            summary="Role governance & access"
+            hint="HITL tiers, SLAs, and who can do what"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {roles.map((r) => {
+                const userCount = r._count.users;
+                const sla =
+                  r.slaDurationH != null && r.slaDurationH > 0
+                    ? `${r.slaDurationH}h SLA`
+                    : "No SLA";
+
+                return (
+                  <div
+                    key={r.id}
+                    className="p-4 rounded-lg bg-[var(--dpf-surface-2)] border-l-4"
+                    style={{ borderLeftColor: "#7c8cf8" }}
+                  >
+                    <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
+                      {r.roleId}
+                    </p>
+                    <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight mb-1">
+                      {r.name}
+                    </p>
+                    {r.description != null && (
+                      <p className="text-[10px] text-[var(--dpf-muted)] line-clamp-2 mb-2">
+                        {r.description}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-[9px] text-[var(--dpf-muted)]">
+                        HITL T{r.hitlTierMin}
+                      </span>
+                      <span className="text-[9px] text-[var(--dpf-muted)]">{sla}</span>
+                      <span className="text-[9px] text-[var(--dpf-muted)]">
+                        {userCount === 0 ? "Unassigned" : `${userCount} ${userCount === 1 ? "person" : "people"}`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {roles.length === 0 && (
+              <p className="text-sm text-[var(--dpf-muted)]">No roles registered yet.</p>
+            )}
+
+            {users.length > 0 && (
+              <div className="mt-8">
+                <HrUserLifecyclePanel
+                  roles={roles.map((role) => ({ roleId: role.roleId, name: role.name }))}
+                  users={users.map((user) => ({
+                    id: user.id,
+                    email: user.email,
+                    isActive: user.isActive,
+                    isSuperuser: user.isSuperuser,
+                    roleId: user.groups[0]?.platformRole.roleId ?? null,
+                  }))}
+                />
+              </div>
+            )}
+          </OwnerFirstDisclosure>
         </div>
       )}
     </div>

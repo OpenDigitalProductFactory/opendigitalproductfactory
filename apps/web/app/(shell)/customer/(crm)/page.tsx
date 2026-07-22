@@ -1,7 +1,13 @@
 // apps/web/app/(shell)/customer/page.tsx
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { prisma } from "@dpf/db";
 import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
+import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummary";
+import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
+import { loadOwnerFirstContext } from "@/lib/owner-first/context";
+import { buildCustomerOwnerSummary } from "@/lib/owner-first/domain-summary";
+import { isSimpleNavMode, NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { NewCustomerButton } from "@/components/customer/NewCustomerButton";
 import { DuplicateAccountsPanel } from "@/components/customer/DuplicateAccountsPanel";
 import { RevenueCockpit } from "@/components/customer/RevenueCockpit";
@@ -169,6 +175,33 @@ export default async function CustomerPage({
   );
   const attentionCount = accountsWithAttention.filter((a) => a.attention.signal).length;
 
+  // Owner-first summary: guest follow-up leads, CRM structure moves behind
+  // progressive disclosure (BI-3BCAF95F). Reuse the storefront queues so
+  // reservations/orders/inquiries become concrete follow-up work.
+  const simple = isSimpleNavMode(
+    resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value),
+  );
+  const [{ vocab }, pendingReservations, newInquiries, pendingOrders] = await Promise.all([
+    loadOwnerFirstContext(),
+    prisma.storefrontBooking.count({ where: { status: "pending" } }),
+    prisma.storefrontInquiry.count({ where: { status: "new" } }),
+    prisma.storefrontOrder.count({ where: { status: "pending" } }),
+  ]);
+  const unworkedEngagements = engagementCounts
+    .filter((e) => e.status === "new" || e.status === "contacted")
+    .reduce((sum, e) => sum + e._count, 0);
+  const ownerSummary = buildCustomerOwnerSummary(
+    {
+      pendingReservations,
+      pendingOrders,
+      newInquiries,
+      unworkedEngagements,
+      overdueInvoices: overdueInvoiceCount,
+      renewalsDueSoon: renewalsDueSoonCount,
+    },
+    vocab,
+  );
+
   return (
     <div>
       <div className="mb-6 flex items-start justify-between">
@@ -189,14 +222,28 @@ export default async function CustomerPage({
         <NewCustomerButton />
       </div>
 
-      <RevenueCockpit summary={revenueSummary} />
+      {/* Owner-first: what guest work needs you today, before the CRM. */}
+      <OwnerFirstSummaryBand summary={ownerSummary} density={simple ? "simple" : "full"} />
 
-      <DuplicateAccountsPanel />
+      {/* CRM structure — revenue, duplicates, pipeline grid, and the account list —
+          is the professional detail behind the daily work. Full mode keeps it one
+          click away; Simple mode drops it to reduce body content (BI-3BCAF95F). A
+          grid/surface deep-link (`?view=`) still renders, opened, so the demotion
+          never strands that navigation. */}
+      {(!simple || view) && (
+        <OwnerFirstDisclosure
+          summary="All CRM detail"
+          hint="Revenue, accounts, and pipeline"
+          defaultOpen={Boolean(view)}
+        >
+          <RevenueCockpit summary={revenueSummary} />
 
-      <PlatformGridSection entityType="customer_account" view={view} />
+          <DuplicateAccountsPanel />
 
-      {!view && (
-        <>
+          <PlatformGridSection entityType="customer_account" view={view} />
+
+          {!view && (
+            <>
       {/* Account list — accounts needing the operator lead the list. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {accountsWithAttention.map((a) => {
@@ -246,7 +293,9 @@ export default async function CustomerPage({
       {accounts.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)]">No accounts registered yet.</p>
       )}
-        </>
+            </>
+          )}
+        </OwnerFirstDisclosure>
       )}
     </div>
   );

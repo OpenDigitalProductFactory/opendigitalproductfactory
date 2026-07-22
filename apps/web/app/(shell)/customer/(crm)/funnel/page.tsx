@@ -1,4 +1,5 @@
 // apps/web/app/(shell)/customer/funnel/page.tsx
+import { cookies } from "next/headers";
 import { prisma } from "@dpf/db";
 import {
   CRM_TONE_CLASSES,
@@ -7,6 +8,10 @@ import {
   type CrmTone,
 } from "@/lib/crm/presentation";
 import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
+import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummary";
+import { loadOwnerFirstContext } from "@/lib/owner-first/context";
+import { buildWorkspaceStorefrontSummary } from "@/lib/owner-first/domain-summary";
+import { isSimpleNavMode, NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 
 function getFunnelWidthClass(width: number) {
   if (width >= 90) return "w-full";
@@ -117,6 +122,23 @@ export default async function FunnelPage() {
     ? convRates.reduce((min, c) => (Number(c.rate) < Number(min.rate) ? c : min))
     : null;
 
+  // Owner-first: turn the top-of-funnel storefront counts into concrete guest
+  // follow-up work before the conversion-analysis view (BI-3BCAF95F). The funnel
+  // 30-day counts stay below; these are the items still awaiting a response.
+  const simple = isSimpleNavMode(
+    resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value),
+  );
+  const [{ vocab }, pendingReservations, newInquiriesPending, pendingOrders] = await Promise.all([
+    loadOwnerFirstContext(),
+    prisma.storefrontBooking.count({ where: { status: "pending" } }),
+    prisma.storefrontInquiry.count({ where: { status: "new" } }),
+    prisma.storefrontOrder.count({ where: { status: "pending" } }),
+  ]);
+  const ownerSummary = buildWorkspaceStorefrontSummary(
+    { pendingReservations, newInquiries: newInquiriesPending, pendingOrders },
+    vocab,
+  );
+
   return (
     <div>
       <div className="mb-6">
@@ -125,6 +147,9 @@ export default async function FunnelPage() {
           {config?.archetype?.name ?? "Unknown business"} — last 30 days
         </p>
       </div>
+
+      {/* Owner-first: guest work waiting on a response, before the analysis. */}
+      <OwnerFirstSummaryBand summary={ownerSummary} density={simple ? "simple" : "full"} />
 
       {/* Funnel visualisation */}
       <div className="space-y-3 mb-6">
@@ -168,7 +193,10 @@ export default async function FunnelPage() {
         </div>
       )}
 
-      {/* Pipeline breakdown by stage */}
+      {/* Pipeline + inbox breakdown — the analyst detail. Simple mode drops it to
+          reduce body content (BI-3BCAF95F). */}
+      {!simple && (
+        <>
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3">Pipeline by Stage</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -227,6 +255,8 @@ export default async function FunnelPage() {
           })}
         </div>
       </div>
+        </>
+      )}
 
       {totalInteractions === 0 && (
         <p className="text-sm text-[var(--dpf-muted)] mt-4">

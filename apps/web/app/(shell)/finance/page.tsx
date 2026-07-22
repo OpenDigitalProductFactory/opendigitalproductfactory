@@ -1,6 +1,12 @@
 // apps/web/app/(shell)/finance/page.tsx
 import { prisma } from "@dpf/db";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummary";
+import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
+import { loadOwnerFirstContext } from "@/lib/owner-first/context";
+import { buildFinanceOwnerSummary } from "@/lib/owner-first/domain-summary";
+import { isSimpleNavMode, NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { getFinancialSetupStatus } from "@/lib/actions/financial-setup";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
@@ -186,6 +192,25 @@ export default async function FinancePage() {
     amount: Number(inv.totalAmount),
   }));
 
+  // Owner-first: open with what must be paid, collected, or approved today, then
+  // demote the accountant lanes and AR/AP/reporting taxonomy behind progressive
+  // disclosure (BI-3BCAF95F).
+  const simple = isSimpleNavMode(
+    resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value),
+  );
+  const { vocab } = await loadOwnerFirstContext();
+  const ownerSummary = buildFinanceOwnerSummary(
+    {
+      billsDue: moneyOweCount,
+      overdueInvoices: overdueCount,
+      pendingExpenses: pendingExpenseCount,
+      oldestOverdueName: oldestOverdue?.account.name ?? null,
+      currencySymbol: sym,
+      moneyOwedToYou: owedAmount,
+    },
+    vocab,
+  );
+
   return (
     <div>
       {/* Setup prompt banner */}
@@ -226,6 +251,15 @@ export default async function FinancePage() {
 
       <FinanceTabNav />
 
+      {/* Owner-first: money that needs paying, collecting, or approving today. */}
+      <OwnerFirstSummaryBand summary={ownerSummary} density={simple ? "simple" : "full"} />
+
+      {/* The finance workspace — lanes, at-a-glance money, the full taxonomy, and
+          recent invoices — is the professional detail behind the daily money
+          decisions. Simple mode drops it to reduce body content (BI-3BCAF95F). */}
+      {!simple && (
+        <>
+      <OwnerFirstDisclosure summary="Finance lanes" hint="Revenue, Spend, Close, Configuration">
       <div className="grid gap-4 lg:grid-cols-2 mb-8">
         <FinanceSummaryCard
           title="Revenue"
@@ -270,6 +304,7 @@ export default async function FinancePage() {
       </div>
 
       <AccountantWorkLanePanel lane={accountantLane} />
+      </OwnerFirstDisclosure>
 
       {/* Row 1: Cash Position + 30-day Forecast + Outstanding + Overdue */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -380,7 +415,11 @@ export default async function FinancePage() {
         />
       </div>
 
-      {/* Navigation links */}
+      {/* Navigation links — the AR/AP/procurement/reporting taxonomy. */}
+      <OwnerFirstDisclosure
+        summary="All finance areas"
+        hint="AR, AP, procurement, banking, reports, and settings"
+      >
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* AR links */}
         <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
@@ -526,6 +565,7 @@ export default async function FinancePage() {
           </div>
         </div>
       </div>
+      </OwnerFirstDisclosure>
 
       {/* Recent Invoices */}
       <section>
@@ -541,6 +581,8 @@ export default async function FinancePage() {
           <RecentInvoicesTable rows={recentInvoiceRows} currencySymbol={sym} />
         )}
       </section>
+        </>
+      )}
     </div>
   );
 }
