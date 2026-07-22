@@ -1,11 +1,20 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { StorefrontDashboard } from "@/components/storefront-admin/StorefrontDashboard";
+import { StorefrontSetupPanel } from "@/components/storefront-admin/StorefrontSetupPanel";
 import { ServiceLinesPanel } from "@/components/storefront-admin/ServiceLinesPanel";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
-import { loadCompositionViewData } from "@/lib/storefront/service-line-actions";
+import {
+  loadCompositionViewData,
+  loadRemovedServiceLines,
+} from "@/lib/storefront/service-line-actions";
 import { deriveStorefrontCompositionView } from "@/lib/storefront/composition-view";
+import {
+  deriveStorefrontSetupModel,
+  resolveSetupCapabilities,
+  type GeneratedContentGroupInput,
+} from "@/lib/storefront/setup-model";
 
 function getSetupSteps(portalLabel: string, stakeholderLabel: string) {
   return [
@@ -43,8 +52,13 @@ export default async function StorefrontPage() {
       id: true,
       isPublished: true,
       tagline: true,
+      heroImageUrl: true,
+      contactEmail: true,
+      contactPhone: true,
       organization: { select: { slug: true, name: true } },
-      archetype: { select: { archetypeId: true, ctaType: true } },
+      archetype: {
+        select: { archetypeId: true, category: true, ctaType: true, customVocabulary: true },
+      },
     },
   });
 
@@ -54,16 +68,30 @@ export default async function StorefrontPage() {
       bookingCount,
       orderCount,
       donationCount,
-      compositionData,
-      allArchetypes,
-      visibleSectionCount,
       activeItemCount,
+      visibleSectionCount,
+      resourceCount,
+      businessProfile,
+      compositionData,
+      removedLines,
+      allArchetypes,
     ] = await Promise.all([
       prisma.storefrontInquiry.count({ where: { storefrontId: config.id } }),
       prisma.storefrontBooking.count({ where: { storefrontId: config.id } }),
       prisma.storefrontOrder.count({ where: { storefrontId: config.id } }),
       prisma.storefrontDonation.count({ where: { storefrontId: config.id } }),
+      // Count only live artifacts so add/remove of a service line is honestly
+      // reflected on the dashboard — removing a line hides its items/sections and
+      // the counts drop back (BI-7D7EE150).
+      prisma.storefrontItem.count({ where: { storefrontId: config.id, isActive: true } }),
+      prisma.storefrontSection.count({ where: { storefrontId: config.id, isVisible: true } }),
+      prisma.serviceProvider.count({ where: { storefrontId: config.id } }),
+      prisma.businessProfile.findFirst({
+        where: { isActive: true },
+        select: { hoursConfirmedAt: true },
+      }),
       loadCompositionViewData(config.id),
+      loadRemovedServiceLines(config.id),
       prisma.storefrontArchetype.findMany({
         select: {
           archetypeId: true,
@@ -74,22 +102,79 @@ export default async function StorefrontPage() {
         },
         orderBy: { name: "asc" },
       }),
-      // Count only live artifacts so add/remove of a service line is honestly
-      // reflected on the dashboard — removing a line hides its items/sections and
-      // the counts drop back (BI-7D7EE150: undo must restore the visible state).
-      prisma.storefrontSection.count({
-        where: { storefrontId: config.id, isVisible: true },
-      }),
-      prisma.storefrontItem.count({
-        where: { storefrontId: config.id, isActive: true },
-      }),
     ]);
 
+    const primaryCategory = config.archetype?.category ?? null;
+    const vocabulary = getVocabulary(
+      primaryCategory,
+      config.archetype?.customVocabulary as Record<string, string> | null,
+    );
+    const capabilities = resolveSetupCapabilities(
+      primaryCategory,
+      compositionData?.primary.activationProfile?.modules ?? [],
+    );
+
+    // Generated-content groups, keyed by the composition that produced them.
+    const primaryGroup: GeneratedContentGroupInput = {
+      compositionId: compositionData?.primary.compositionId ?? "primary",
+      name: compositionData?.primary.name ?? config.organization.name,
+      category: primaryCategory ?? "",
+      role: "primary",
+      itemsGenerated: activeItemCount,
+      sectionsGenerated: visibleSectionCount,
+    };
+    const secondaryGroups: GeneratedContentGroupInput[] = (compositionData?.secondaries ?? []).map(
+      (s) => {
+        const counts = compositionData?.seededCountsByCompositionId[s.compositionId] ?? { items: 0, sections: 0 };
+        return {
+          compositionId: s.compositionId,
+          name: s.name,
+          category: s.category,
+          role: "secondary" as const,
+          itemsGenerated: counts.items,
+          sectionsGenerated: counts.sections,
+          crossCategory: s.category !== primaryCategory,
+        };
+      },
+    );
+    const retainedGroups: GeneratedContentGroupInput[] = removedLines.map((r) => ({
+      compositionId: r.compositionId,
+      name: r.name,
+      category: r.category,
+      role: "secondary" as const,
+      itemsGenerated: r.retainedItems,
+      sectionsGenerated: r.retainedSections,
+      crossCategory: r.category !== primaryCategory,
+      retained: true,
+    }));
+
+    const model = deriveStorefrontSetupModel({
+      vocabulary,
+      capabilities,
+      config: {
+        isPublished: config.isPublished,
+        hasTagline: Boolean(config.tagline),
+        hasHeroImage: Boolean(config.heroImageUrl),
+        hasContact: Boolean(config.contactEmail || config.contactPhone),
+      },
+      content: { activeItemCount, visibleSectionCount },
+      resources: { count: resourceCount },
+      availability: { operatingHoursConfigured: Boolean(businessProfile?.hoursConfirmedAt) },
+      serviceLines: {
+        primary: primaryGroup,
+        secondaries: secondaryGroups,
+        retainedSecondaries: retainedGroups,
+      },
+    });
+
+    const activeLines = model.inventory.filter((g) => g.role === "secondary" && g.state === "active");
+    const retainedLines = model.inventory.filter((g) => g.state === "retained");
+
+    // Active service lines (add/remove) are owned by ServiceLinesPanel, kept
+    // as-is so BI-7D7EE150's confirm/preview/undo flow is not duplicated here.
     const compositionView = compositionData
       ? deriveStorefrontCompositionView(compositionData)
       : null;
-
-    // Archetypes not already active in the composition
     const activeSlugSet = new Set([
       compositionData?.primary.archetypeSlug,
       ...(compositionData?.secondaries.map((s) => s.archetypeSlug) ?? []),
@@ -121,6 +206,16 @@ export default async function StorefrontPage() {
             itemCount: activeItemCount,
           }}
           counts={{ inquiries: inquiryCount, bookings: bookingCount, orders: orderCount, donations: donationCount }}
+        />
+        {/* Task-first setup status + generated-content inventory + recovery of
+            removed lines (BI-C39DC90C). Add/remove of active lines stays in
+            ServiceLinesPanel below. */}
+        <StorefrontSetupPanel
+          storefrontId={config.id}
+          steps={model.steps}
+          summary={{ completeCount: model.summary.completeCount, totalCount: model.summary.totalCount }}
+          activeLines={activeLines}
+          retainedLines={retainedLines}
         />
         {compositionView && (
           <ServiceLinesPanel

@@ -10,6 +10,22 @@ const MAX_SECONDARY_LINES = 2;
 
 type ActionResult = { success: true } | { error: string };
 
+/** Result of a mutating service-line action that retains or removes artifacts. */
+type ArtifactActionResult =
+  | { success: true; affected: { items: number; sections: number } }
+  | { error: string };
+
+/** A removed-but-retained service line whose generated content still exists. */
+export interface RetainedServiceLine {
+  compositionId: string;
+  archetypeSlug: string;
+  name: string;
+  category: string;
+  removedAt: Date;
+  retainedItems: number;
+  retainedSections: number;
+}
+
 async function requireAdmin(): Promise<{ organizationId: string } | { error: string }> {
   const session = await auth();
   if (!session?.user || (session.user as { type?: string }).type !== "admin") {
@@ -213,6 +229,132 @@ export async function removeStorefrontServiceLine(
 
   revalidatePath("/storefront");
   return { success: true };
+}
+
+/**
+ * Undo a service-line removal: reactivate the retained composition and its
+ * seeded items. Sections stay hidden (as when first seeded) so the operator
+ * chooses what to reveal. The inverse of removeStorefrontServiceLine.
+ */
+export async function restoreStorefrontServiceLine(
+  storefrontId: string,
+  compositionId: string,
+): Promise<ArtifactActionResult> {
+  const auth = await requireAdmin();
+  if ("error" in auth) return auth;
+
+  const composition = await prisma.storefrontArchetypeComposition.findFirst({
+    where: {
+      id: compositionId,
+      storefrontId,
+      storefront: { organizationId: auth.organizationId },
+      removedAt: { not: null },
+    },
+    select: { id: true, role: true },
+  });
+  if (!composition) return { error: "Removed service line not found" };
+  if (composition.role === "primary") return { error: "Primary service line cannot be restored" };
+
+  // Guard the max-active limit: a restore re-activates a line, so it must not
+  // exceed the same ceiling the add path enforces.
+  const activeSecondaries = await prisma.storefrontArchetypeComposition.count({
+    where: { storefrontId, role: "secondary", removedAt: null },
+  });
+  if (activeSecondaries >= MAX_SECONDARY_LINES) {
+    return { error: `Maximum ${MAX_SECONDARY_LINES} active service lines — remove one before restoring.` };
+  }
+
+  const [itemUpdate, sectionCount] = await Promise.all([
+    prisma.storefrontItem.updateMany({
+      where: { sourceCompositionId: compositionId },
+      data: { isActive: true },
+    }),
+    prisma.storefrontSection.count({ where: { sourceCompositionId: compositionId } }),
+    prisma.storefrontArchetypeComposition.update({
+      where: { id: compositionId },
+      data: { removedAt: null, updatedAt: new Date() },
+    }),
+  ]);
+
+  revalidatePath("/storefront");
+  return { success: true, affected: { items: itemUpdate.count, sections: sectionCount } };
+}
+
+/**
+ * Permanently remove a retained (already-removed) service line's generated
+ * content — the "explain retained artifacts, then let me purge them" recovery.
+ * Only operates on soft-removed lines so an active line's content is never
+ * deleted out from under the storefront.
+ */
+export async function purgeRemovedServiceLine(
+  storefrontId: string,
+  compositionId: string,
+): Promise<ArtifactActionResult> {
+  const auth = await requireAdmin();
+  if ("error" in auth) return auth;
+
+  const composition = await prisma.storefrontArchetypeComposition.findFirst({
+    where: {
+      id: compositionId,
+      storefrontId,
+      storefront: { organizationId: auth.organizationId },
+      removedAt: { not: null },
+    },
+    select: { id: true, role: true },
+  });
+  if (!composition) return { error: "Removed service line not found" };
+  if (composition.role === "primary") return { error: "Primary service line cannot be purged" };
+
+  const seededItems = await prisma.storefrontItem.findMany({
+    where: { sourceCompositionId: compositionId },
+    select: { id: true },
+  });
+  const seededItemIds = seededItems.map((i) => i.id);
+
+  const sectionCount = await prisma.storefrontSection.count({
+    where: { sourceCompositionId: compositionId },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    if (seededItemIds.length > 0) {
+      // Clear dependents that FK to the items before deleting them.
+      await tx.providerService.deleteMany({ where: { itemId: { in: seededItemIds } } });
+      await tx.bookingHold.deleteMany({ where: { itemId: { in: seededItemIds } } });
+      await tx.storefrontItem.deleteMany({ where: { id: { in: seededItemIds } } });
+    }
+    await tx.storefrontSection.deleteMany({ where: { sourceCompositionId: compositionId } });
+    await tx.storefrontArchetypeComposition.delete({ where: { id: compositionId } });
+  });
+
+  revalidatePath("/storefront");
+  return { success: true, affected: { items: seededItemIds.length, sections: sectionCount } };
+}
+
+/**
+ * List removed-but-retained service lines with the generated content still on
+ * disk, so the recovery UI can offer restore-or-purge for each.
+ */
+export async function loadRemovedServiceLines(
+  storefrontId: string,
+): Promise<RetainedServiceLine[]> {
+  const rows = await prisma.storefrontArchetypeComposition.findMany({
+    where: { storefrontId, role: "secondary", removedAt: { not: null } },
+    orderBy: [{ removedAt: "desc" }],
+    include: {
+      archetype: { select: { archetypeId: true, name: true, category: true } },
+      _count: { select: { seededItems: true, seededSections: true } },
+    },
+  });
+
+  return rows.map((row) => ({
+    compositionId: row.id,
+    archetypeSlug: row.archetype.archetypeId,
+    name: row.archetype.name,
+    category: row.archetype.category,
+    removedAt: row.removedAt as Date,
+    retainedItems: row._count.seededItems,
+    retainedSections: row._count.seededSections,
+  }));
 }
 
 /**
