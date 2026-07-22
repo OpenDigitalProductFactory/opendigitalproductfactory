@@ -1,0 +1,115 @@
+name: Stale Override Audit
+
+# Standing prune discipline for the pnpm `overrides:` block (BI-CDB2E8AB, spec
+# §7.4). Cross-checks each TAGGED security floor against the GitHub Dependabot
+# alerts API — "is the advisory that justified this floor still open?" — and
+# reports the floors whose alert is resolved as prune CANDIDATES. It PROPOSES;
+# a human/agent verifies each prune via the §7.1 prune screen (pnpm regen:lockfile)
+# before removing anything. Never edits overrides.
+#
+# Relies on the Override Provenance Guard tag convention
+# (scripts/check-override-comments.mjs). Floors with no machine-readable tag are
+# reported as un-auditable so the tag gets backfilled.
+#
+# See docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md §7.
+
+on:
+  schedule:
+    - cron: "23 7 1 * *" # monthly, 1st — floors go redundant slowly
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "pnpm-workspace.yaml"
+      - "scripts/audit-stale-overrides.mjs"
+      - "scripts/audit-stale-overrides.test.mjs"
+      - "scripts/check-override-comments.mjs"
+      - ".github/workflows/audit-stale-overrides.yml"
+
+permissions:
+  contents: read
+  security-events: read # read Dependabot alerts
+  issues: write # open/update the prune tracking issue
+
+concurrency:
+  group: stale-override-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Stale override audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+
+      # Unit-test the pure classifier + the parser it shares with the guard.
+      - name: Unit tests
+        run: node --test scripts/audit-stale-overrides.test.mjs scripts/check-override-comments.test.mjs
+
+      - name: Audit stale overrides
+        # On scheduled/manual runs require the API (a silent skip would hide that
+        # the audit didn't run). On PRs, tolerate an outage so a transient blip
+        # can't block unrelated merges — it degrades to tag-coverage only.
+        env:
+          GITHUB_TOKEN: ${{ secrets.DEPENDABOT_ALERTS_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          FLAGS=""
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            FLAGS="--require-online"
+          fi
+          node scripts/audit-stale-overrides.mjs $FLAGS
+
+      - name: Publish report to the run summary
+        if: always()
+        run: |
+          { test -f sbom/stale-override-audit.md && cat sbom/stale-override-audit.md; } >> "$GITHUB_STEP_SUMMARY" || echo "No stale-override report produced." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stale-override-audit-${{ github.run_id }}
+          path: |
+            sbom/stale-override-audit.json
+            sbom/stale-override-audit.md
+          if-no-files-found: warn
+          retention-days: 90
+
+      # File the finding: on scheduled runs, if there are prune candidates, open
+      # (or comment on) a single tracking issue. This is the CI-native "file a BI"
+      # — a human/agent triages it into the DPF backlog and runs the prune screen.
+      - name: File prune-candidate tracking issue
+        if: github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          COUNT=$(node -e "console.log(JSON.parse(require('fs').readFileSync('sbom/stale-override-audit.json','utf8')).candidates.length)")
+          if [ "$COUNT" = "0" ]; then
+            echo "No prune candidates — nothing to file."
+            exit 0
+          fi
+          TITLE="chore(deps): stale override floor(s) ready to prune"
+          BODY_FILE="$(mktemp)"
+          {
+            echo "The monthly stale-override audit found **$COUNT** override floor(s) whose justifying Dependabot advisory is no longer open — prune candidates."
+            echo ""
+            echo "Verify each via the §7.1 prune screen (\`pnpm regen:lockfile\` against a fresh store) before removing. Do NOT bulk-remove."
+            echo ""
+            cat sbom/stale-override-audit.md
+            echo ""
+            echo "_Filed by .github/workflows/audit-stale-overrides.yml — run ${{ github.run_id }}._"
+          } > "$BODY_FILE"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file "$BODY_FILE"
+            echo "Commented on existing issue #$EXISTING."
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE"
+          fi

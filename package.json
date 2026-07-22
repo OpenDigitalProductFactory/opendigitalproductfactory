@@ -27,6 +27,7 @@
     "check:bundle-boundaries": "node scripts/check-bundle-boundaries.mjs",
     "check:diagram-dependency-pins": "node scripts/check-diagram-dependency-pins.mjs",
     "check:override-comments": "node scripts/check-override-comments.mjs && node --test scripts/check-override-comments.test.mjs",
+    "audit:stale-overrides": "node scripts/audit-stale-overrides.mjs",
     "regen:lockfile": "node scripts/regen-lockfile.mjs",
     "check:reporting-composition": "node scripts/check-reporting-composition.mjs",
     "check:n1-caller-honesty": "node scripts/check-n-minus-one-caller-honesty.mjs",

@@ -61,13 +61,44 @@ const GRANDFATHERED_DEBT = new Set([
 // tags the whole contiguous run). Keyed explicitly so the sibling still counts.
 const COVERED_BY_SIBLING = new Set(["minimatch@9.0.9>brace-expansion"]);
 
+// Global variant of TAG_RE for extracting EVERY advisory id on a line/comment
+// (TAG_RE itself only tests presence). Kept in lock-step with TAG_RE.
+const TAG_RE_GLOBAL = new RegExp(TAG_RE.source, "gi");
+
+/** Extract every advisory id (Dependabot #NN / GHSA / CVE) from a set of strings. */
+function extractTags(strings) {
+  const out = [];
+  for (const s of strings) {
+    const found = s.match(TAG_RE_GLOBAL);
+    if (found) out.push(...found);
+  }
+  return out;
+}
+
 /**
- * Audit the overrides block. Pure — takes the file text, returns the list of
- * override keys that are security-shaped but carry no machine-readable provenance.
- * @param {string} text pnpm-workspace.yaml contents
- * @returns {{ untagged: string[], scanned: number }}
+ * Classify a single override key. Precedence matches the original guard exactly:
+ * a machine-readable advisory tag wins first, then the exempt/grandfathered/
+ * covered/pattern buckets, else it is an untagged security floor (the failure set).
+ * @returns {"tagged"|"dedup-exempt"|"grandfathered"|"covered-by-sibling"|"pattern-exempt"|"untagged"}
  */
-export function auditOverrides(text) {
+function classifyOverride(key, tags) {
+  if (tags.length > 0) return "tagged";
+  if (EXEMPT_DEDUP.has(key)) return "dedup-exempt";
+  if (GRANDFATHERED_DEBT.has(key)) return "grandfathered";
+  if (COVERED_BY_SIBLING.has(key)) return "covered-by-sibling";
+  if (EXEMPT_PATTERNS.some((re) => re.test(key))) return "pattern-exempt";
+  return "untagged";
+}
+
+/**
+ * Parse the `overrides:` block into structured entries. Shared substrate: the
+ * Override Provenance Guard (`auditOverrides`) and the stale-override audit
+ * (scripts/audit-stale-overrides.mjs) both consume this so the YAML walk lives
+ * in exactly one place (single-source-of-truth).
+ * @param {string} text pnpm-workspace.yaml contents
+ * @returns {{ entries: Array<{ key: string, tags: string[], classification: string }>, scanned: number }}
+ */
+export function parseOverrides(text) {
   const lines = text.split(/\r?\n/);
   const start = lines.findIndex((l) => /^overrides:\s*$/.test(l));
   if (start === -1) throw new Error("no `overrides:` block found");
@@ -79,8 +110,7 @@ export function auditOverrides(text) {
     }
   }
 
-  const untagged = [];
-  let scanned = 0;
+  const entries = [];
   let comments = [];
   for (let i = start + 1; i < end; i++) {
     const line = lines[i];
@@ -99,16 +129,25 @@ export function auditOverrides(text) {
       continue;
     }
     const key = m[2].trim();
-    scanned++;
-    const tagged = TAG_RE.test(line) || comments.some((c) => TAG_RE.test(c));
+    const tags = extractTags([line, ...comments]);
+    entries.push({ key, tags, classification: classifyOverride(key, tags) });
     comments = [];
-    if (tagged) continue;
-    if (EXEMPT_DEDUP.has(key)) continue;
-    if (GRANDFATHERED_DEBT.has(key)) continue;
-    if (COVERED_BY_SIBLING.has(key)) continue;
-    if (EXEMPT_PATTERNS.some((re) => re.test(key))) continue;
-    untagged.push(key);
   }
+  return { entries, scanned: entries.length };
+}
+
+/**
+ * Audit the overrides block. Pure — takes the file text, returns the list of
+ * override keys that are security-shaped but carry no machine-readable provenance.
+ * Thin wrapper over {@link parseOverrides} so behavior stays identical.
+ * @param {string} text pnpm-workspace.yaml contents
+ * @returns {{ untagged: string[], scanned: number }}
+ */
+export function auditOverrides(text) {
+  const { entries, scanned } = parseOverrides(text);
+  const untagged = entries
+    .filter((e) => e.classification === "untagged")
+    .map((e) => e.key);
   return { untagged, scanned };
 }
 
