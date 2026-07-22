@@ -82,29 +82,33 @@ function cloneProfile(profile: AiWorkloadDataProfile): AiWorkloadDataProfile {
   };
 }
 
-// BI-4C8F9E2A — the parameter is deliberately NOT named `workloadClass`, and the
-// property below is deliberately written `workloadClass: hintWorkloadClass`
-// rather than shorthand. Turbopack's minifier inlines this function into its sole
-// caller — `classes.map((workloadClass) => profileFromHint(workloadClass, …))` —
-// renames that map parameter to a single letter, but then FAILS to rewrite an
-// object-shorthand `{ workloadClass }` whose value was that renamed parameter,
-// emitting a bare `{ workloadClass }` that references nothing. The result is a
-// runtime `ReferenceError: workloadClass is not defined` that fires on EVERY
-// routed-phase route (plan / design-review / plan-review), which
-// resolve_model_selection then mislabels "No AI providers are configured". The
-// bug exists ONLY in the minified production bundle — source, typecheck, and unit
-// tests are all clean — so nothing but a built-bundle check catches it. Giving the
-// parameter a distinct name and writing the property explicitly denies the
-// minifier the shorthand it mishandles. Do not "simplify" this back to shorthand.
+// BI-573A8EB3 / BI-4C8F9E2A — EVERY parameter here is deliberately given a
+// distinct name and EVERY property below is written explicit `key: value`, never
+// shorthand. Turbopack's minifier inlines this function into its sole caller —
+// `classes.map((workloadClass) => profileFromHint(workloadClass, …))` — renames
+// the parameters to single letters, but then FAILS to rewrite an object-shorthand
+// `{ x }` whose value was one of those renamed parameters, emitting a bare `{ x }`
+// that references nothing. At runtime that is `ReferenceError: <name> is not
+// defined` on EVERY routed-phase route (plan / design-review / plan-review),
+// which resolve_model_selection mislabels "No AI providers are configured".
+//
+// It bites one property at a time: the error throws on the FIRST dangling
+// reference, so fixing only `workloadClass` (the first shorthand) merely exposed
+// `classificationKnown` (the second) on the live install after deploy — a partial
+// fix that passed a narrow bundle grep but failed reality. Hence: no shorthand at
+// all in this object, and a matching guard (scripts/check-no-suitability-object-
+// shorthand.mjs) now fails CI if any returns. The bug exists ONLY in the minified
+// production bundle — source, typecheck, and unit tests are all clean — so nothing
+// but a built-bundle check or that guard catches it. Do not reintroduce shorthand.
 function profileFromHint(
   hintWorkloadClass: AiWorkloadClassKey,
   activity: ActivityContract,
-  classificationKnown: boolean,
+  hintClassificationKnown: boolean,
 ): AiWorkloadDataProfile {
   const governed = activity.governedData;
   const base = deriveAiWorkloadDataProfile({
     workloadClass: hintWorkloadClass,
-    classificationKnown,
+    classificationKnown: hintClassificationKnown,
     applicableRegulationIds: governed?.applicableRegulationIds,
     processingActivityId: governed?.processingActivityId,
   });
