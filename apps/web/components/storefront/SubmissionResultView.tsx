@@ -84,12 +84,12 @@ export function SubmissionResultView({ result }: { result: SubmissionResultModel
         {(contact.email || contact.phone) && (
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {contact.email && (
-              <a href={`mailto:${contact.email}`} style={{ fontSize: 13, color: "var(--dpf-accent, #4f46e5)" }}>
+              <a href={`mailto:${contact.email}`} style={{ fontSize: 13, color: "var(--dpf-accent)" }}>
                 ✉️ {contact.email}
               </a>
             )}
             {contact.phone && (
-              <a href={`tel:${contact.phone}`} style={{ fontSize: 13, color: "var(--dpf-accent, #4f46e5)" }}>
+              <a href={`tel:${contact.phone}`} style={{ fontSize: 13, color: "var(--dpf-accent)" }}>
                 📞 {contact.phone}
               </a>
             )}

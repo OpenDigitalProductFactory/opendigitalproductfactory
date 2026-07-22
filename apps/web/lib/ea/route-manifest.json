@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 576,
+  "routeCount": 580,
   "routes": [
     {
       "routePath": "/",
@@ -6320,6 +6320,20 @@
       "file": "apps/web/app/(storefront)/s/[slug]/book/[itemId]/page.tsx"
     },
     {
+      "routePath": "/s/[slug]/booking/confirmed",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "booking",
+        "confirmed"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/booking/confirmed/page.tsx"
+    },
+    {
       "routePath": "/s/[slug]/checkout",
       "kind": "page",
       "segments": [
@@ -6344,6 +6358,20 @@
         "slug"
       ],
       "file": "apps/web/app/(storefront)/s/[slug]/donate/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/donation/received",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "donation",
+        "received"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/donation/received/page.tsx"
     },
     {
       "routePath": "/s/[slug]/inquire",
@@ -6374,6 +6402,20 @@
       "file": "apps/web/app/(storefront)/s/[slug]/inquire/[itemId]/page.tsx"
     },
     {
+      "routePath": "/s/[slug]/inquiry/received",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "inquiry",
+        "received"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/inquiry/received/page.tsx"
+    },
+    {
       "routePath": "/s/[slug]/item/[itemId]",
       "kind": "page",
       "segments": [
@@ -6402,6 +6444,20 @@
         "itemId"
       ],
       "file": "apps/web/app/(storefront)/s/[slug]/order/[itemId]/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/order/received",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "order",
+        "received"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/order/received/page.tsx"
     },
     {
       "routePath": "/s/[slug]/policies",
