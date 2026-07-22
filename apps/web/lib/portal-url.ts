@@ -18,6 +18,7 @@
 // (PUBLIC_URL) wins in both.
 
 import { headers } from "next/headers";
+import { rewriteUnspecifiedNetloc } from "@/lib/reachable-url";
 
 const DEFAULT_FALLBACK = "http://localhost:3000";
 
@@ -49,8 +50,13 @@ export async function getPortalUrl(): Promise<string> {
   if (process.env.PUBLIC_URL) return normalize(process.env.PUBLIC_URL);
 
   const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  if (!host) return DEFAULT_FALLBACK;
+  const rawHost = h.get("x-forwarded-host") ?? h.get("host");
+  if (!rawHost) return DEFAULT_FALLBACK;
+
+  // A bind-all Host (0.0.0.0 / ::) is not browser-reachable — rewrite it to
+  // loopback BEFORE picking the protocol, so the derived URL loads and is
+  // treated as local http (BI-86165533).
+  const host = rewriteUnspecifiedNetloc(rawHost);
 
   const proto =
     h.get("x-forwarded-proto") ??

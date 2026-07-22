@@ -6,6 +6,7 @@ import Apple from "next-auth/providers/apple";
 import { prisma } from "@dpf/db";
 import { verifyPassword, hashPassword } from "./password";
 import { determineSocialAuthFlow, createTempToken } from "./social-auth";
+import { resolveAuthRedirect } from "./auth-redirect";
 
 /**
  * Load social auth credentials from PlatformConfig DB into process.env.
@@ -209,6 +210,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
+    // Normalize a bind-all host (0.0.0.0 / ::) in the derived redirect target to
+    // loopback so a default local install's post-login redirect lands on a page
+    // the browser can load, instead of an inert http://0.0.0.0:3000 (BI-86165533).
+    redirect({ url, baseUrl }) {
+      return resolveAuthRedirect(url, baseUrl);
+    },
     async signIn({ user, account }) {
       await ensureSocialAuthCredentials();
       // Credential providers: pass through (existing behavior)
