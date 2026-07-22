@@ -7,15 +7,29 @@ type Props = {
   draftId: string;
   channelConnected: boolean;
   channelId: string;
+  /** When true, content conflicts with the active archetype and must not publish. */
+  fitBlocked?: boolean;
+  fitReason?: string;
 };
 
-export function PublishLinkedInButton({ draftId, channelConnected, channelId }: Props) {
+export function PublishLinkedInButton({
+  draftId,
+  channelConnected,
+  channelId,
+  fitBlocked = false,
+  fitReason,
+}: Props) {
   const [status, setStatus] = useState<"idle" | "publishing" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [externalUrl, setExternalUrl] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function onPublish() {
+    if (fitBlocked) {
+      setStatus("error");
+      setMessage(fitReason ?? "Blocked: content does not fit this business's archetype.");
+      return;
+    }
     setStatus("publishing");
     setMessage(null);
     setExternalUrl(null);
@@ -67,7 +81,8 @@ export function PublishLinkedInButton({ draftId, channelConnected, channelId }: 
       <button
         type="button"
         onClick={onPublish}
-        disabled={pending}
+        disabled={pending || fitBlocked}
+        title={fitBlocked ? fitReason : undefined}
         className="rounded-full bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
       >
         {pending ? "Publishing…" : "Publish to LinkedIn"}

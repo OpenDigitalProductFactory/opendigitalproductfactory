@@ -23,6 +23,7 @@ function snapshot(
       id: "storefront-1",
       archetypeId: "expert-services",
       archetypeName: "Expert Services",
+      category: "professional-services",
       tagline: "Proof-led growth",
       description: "Operational advice",
       ctaType: "inquiry",
@@ -185,6 +186,58 @@ describe("marketing subroute view models", () => {
       "Proposal",
       "Won",
     ]);
+  });
+
+  it("flags campaign artifacts that leak software-platform language as imported/test data", () => {
+    const leaked = snapshot({
+      storefront: {
+        id: "storefront-1",
+        archetypeId: "restaurant",
+        archetypeName: "Restaurant",
+        category: "food-hospitality",
+        tagline: null,
+        description: null,
+        ctaType: "booking",
+      },
+      workProducts: {
+        campaignBriefs: [
+          {
+            briefId: "brief-leak",
+            title: "Meet our technical founders",
+            objective: "Show off the Build Studio AI workflow",
+            audience: "SaaS buyers",
+            channels: ["linkedin"],
+            cta: "Book a demo",
+            proofAssets: [],
+            kpis: [],
+            notes: null,
+            status: "draft",
+            createdAt: now,
+          },
+        ],
+        assetTasks: [
+          {
+            taskId: "task-clean",
+            title: "Draft seasonal tasting menu post",
+            assetType: "email",
+            channel: "email",
+            dueWindow: "this week",
+            brief: "Promote the autumn tasting menu and reserve-a-table CTA.",
+            status: "draft",
+            createdAt: now,
+          },
+        ],
+        kpiCheckpoints: [],
+        automationCandidates: [],
+      },
+    });
+
+    const view = buildMarketingCampaignsView(leaked);
+    expect(view.importedTestCount).toBe(1);
+    expect(view.campaigns[0]!.archetypeFit.blocked).toBe(true);
+    // Clean, in-archetype restaurant task must not be flagged.
+    expect(view.assetTasks[0]!.archetypeFit.blocked).toBe(false);
+    expect(view.assetTasks[0]!.archetypeFit.severity).toBe("ok");
   });
 
   it("summarizes automation approval posture", () => {

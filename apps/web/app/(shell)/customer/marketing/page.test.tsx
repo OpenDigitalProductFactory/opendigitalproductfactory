@@ -63,6 +63,7 @@ function snapshot() {
       id: "storefront-1",
       archetypeId: "expert-services",
       archetypeName: "Expert Services",
+      category: "professional-services",
       tagline: "Proof-led growth",
       description: "Operational advice",
       ctaType: "inquiry",
@@ -136,5 +137,17 @@ describe("CustomerMarketingPage", () => {
     expect(html).not.toContain('data-topic-id="strategy-review"');
     expect(html).not.toContain('data-topic-id="campaign-directions"');
     expect(html).not.toContain('data-topic-id="proof-plan"');
+  });
+
+  it("opens with a single archetype-scoped next decision in the first viewport", async () => {
+    const html = renderToStaticMarkup(await CustomerMarketingPage());
+
+    expect(html).toContain('data-testid="marketing-next-decision"');
+    // Snapshot has a review + proof but no campaign brief → create the first campaign.
+    expect(html).toContain('data-decision-id="create-first-campaign"');
+    expect(html).toContain("Your next decision");
+    // Must not leak software-platform vocabulary onto a customer marketing surface.
+    expect(html).not.toContain("Build Studio");
+    expect(html).not.toContain("backlog item");
   });
 });

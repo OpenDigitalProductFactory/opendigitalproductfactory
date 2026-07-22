@@ -217,3 +217,16 @@ Cockpit tiles, attention cards, and coworker handoffs that open an operator work
 5. **No coordinate deep links** — never deep-link via x/y click targets or ephemeral row indexes; use semantic ids (`BI-*`, `FB-*`, `WC-*`).
 
 When adding a new operator queue, document its query keys next to the route (or in the page's report-kit `FilterBar`) so cockpit cards and `record_execution_evidence` links can reuse them.
+
+## Archetype-scoped customer marketing surfaces
+
+Customer marketing artifacts (campaign briefs, proof prompts, asset tasks, drafts) **must** speak in the vocabulary of the organization's own business archetype. A restaurant markets covers, bookings, menus, seasonal/quiet-period offers, and reviews — never software-platform artifacts such as "Build Studio", "technical founders", or "AI workflow". Early bootstrap and imported/test data can leak DPF-internal vocabulary into a customer surface; the platform detects and contains that leak deterministically (BI-CC580161).
+
+Contract (implemented in `apps/web/lib/marketing/archetype-fit.ts` + `apps/web/lib/marketing/fit-guard.ts`):
+
+1. **Two finding kinds.** `platform-leak` (software-platform / DPF-internal terms foreign to every customer archetype) is a hard **block**; `off-archetype` (vocabulary distinctive to a *different* customer archetype than the active one) is a **warn** — cross-sell copy can be legitimate, so confirm before sending.
+2. **First viewport = one next decision.** `/customer/marketing` opens with a single archetype-scoped owner decision (`buildMarketingOwnerDecision`), phrased in the owner's own metrics (covers, booking fill rate, no-show rate for food-hospitality), not internal delivery jargon.
+3. **Guard at every release point.** Approve, Send email, and Publish to LinkedIn show a fit warning/block and are disabled on a `block`. The block is also enforced server-side (`guardDraftArchetypeFit`, `publishApprovedDraft`) so a client bypass cannot reach a real audience.
+4. **Saved leaks stay visible but inert.** Blocked artifacts render an "Imported / test data — blocked from publish" badge on the strategy and campaigns pages and count toward `importedTestCount`; they are never silently hidden and never publishable.
+
+Archetype vocabulary is sourced from the archetype-category marketing playbooks in `apps/web/lib/tak/marketing-playbooks.ts`; the active category comes from `StorefrontConfig.archetype.category`.

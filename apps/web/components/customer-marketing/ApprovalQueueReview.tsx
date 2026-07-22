@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   approveOutboundDraftAction,
   requestChangesOnDraftAction,
   rejectOutboundDraftAction,
 } from "@/app/(shell)/customer/marketing/actions";
+import { assessArchetypeFit } from "@/lib/marketing/archetype-fit";
+import { ArchetypeFitNotice } from "./ArchetypeFitNotice";
 
 type Props = {
   draftId: string;
@@ -13,22 +15,38 @@ type Props = {
   assetTaskTitle: string | null;
   channelId: string;
   assetType: string;
+  category: string | null;
 };
 
 type FlashState = { kind: "ok" | "err"; message: string } | null;
 
-export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, channelId, assetType }: Props) {
+export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, channelId, assetType, category }: Props) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState(initialBody);
   const [notes, setNotes] = useState("");
   const [flash, setFlash] = useState<FlashState>(null);
   const [pending, startTransition] = useTransition();
 
+  // Live archetype-fit check on the body the operator is about to approve.
+  // Recomputes as they edit, so removing a platform-leak term re-enables Approve.
+  const fit = useMemo(
+    () =>
+      assessArchetypeFit({
+        text: [assetTaskTitle, body].filter(Boolean).join("\n"),
+        category,
+      }),
+    [assetTaskTitle, body, category],
+  );
+
   function showError(err: string) {
     setFlash({ kind: "err", message: err });
   }
 
   function approve(withEdits: boolean) {
+    if (fit.blocked) {
+      showError(fit.summary);
+      return;
+    }
     startTransition(async () => {
       const editedBody = withEdits && body !== initialBody ? body : undefined;
       const result = await approveOutboundDraftAction(draftId, editedBody, notes || undefined);
@@ -134,10 +152,12 @@ export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, chan
                 className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 text-sm text-[var(--dpf-text)] focus:border-[var(--dpf-accent)] focus:outline-none"
               />
 
+              <ArchetypeFitNotice assessment={fit} className="mt-3" />
+
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  disabled={pending}
+                  disabled={pending || fit.blocked}
                   onClick={() => approve(false)}
                   className="rounded-full bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                 >
@@ -145,7 +165,7 @@ export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, chan
                 </button>
                 <button
                   type="button"
-                  disabled={pending || body === initialBody}
+                  disabled={pending || fit.blocked || body === initialBody}
                   onClick={() => approve(true)}
                   className="rounded-full border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] px-4 py-1.5 text-sm font-medium text-[var(--dpf-accent)] disabled:opacity-50"
                 >

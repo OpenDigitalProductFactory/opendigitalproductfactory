@@ -11,6 +11,8 @@ import {
   MARKETING_AGENTIC_OPERATIONS_ROUTE,
   buildMarketingAgenticOperationTopics,
 } from "@/lib/marketing/agentic-operations";
+import { buildMarketingOwnerDecision } from "@/lib/marketing/next-decision";
+import { getPlaybook } from "@/lib/tak/marketing-playbooks";
 
 export default async function CustomerMarketingPage() {
   const snapshot = await getMarketingWorkspaceSnapshot();
@@ -72,8 +74,38 @@ export default async function CustomerMarketingPage() {
     suggestions,
   });
 
+  // Single archetype-scoped next decision for the first viewport — phrased in the
+  // owner's own vocabulary (a restaurant owner sees covers/bookings, not "brief #2").
+  const playbook = getPlaybook(snapshot.storefront.category, snapshot.storefront.ctaType);
+  const nextDecision = buildMarketingOwnerDecision(snapshot, playbook);
+
   return (
     <div className="space-y-6">
+      <section
+        data-testid="marketing-next-decision"
+        data-decision-id={nextDecision.id}
+        className="rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-6"
+      >
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dpf-accent)]">
+          Your next decision
+        </p>
+        <h2 className="mt-2 text-xl font-bold text-[var(--dpf-text)]">
+          {nextDecision.headline}
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm text-[var(--dpf-muted)]">{nextDecision.detail}</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Link
+            href={nextDecision.ctaHref}
+            className="rounded-full bg-[var(--dpf-accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          >
+            {nextDecision.ctaLabel}
+          </Link>
+          <span className="text-xs text-[var(--dpf-muted)]">
+            Moves: {nextDecision.metricFocus}
+          </span>
+        </div>
+      </section>
+
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -234,6 +266,7 @@ export default async function CustomerMarketingPage() {
         approvedDrafts={snapshot.approvedDrafts}
         connectedChannels={snapshot.connectedChannels}
         inboundMessages={snapshot.inboundMessages}
+        category={snapshot.storefront.category}
       />
     </div>
   );

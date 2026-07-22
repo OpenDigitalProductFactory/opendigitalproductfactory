@@ -1,6 +1,8 @@
 import type { InboundMessageRow, OutboundDraftRow } from "@/lib/marketing";
 import { formatMarketingLabel } from "@/lib/marketing";
+import { assessArchetypeFit } from "@/lib/marketing/archetype-fit";
 import { ApprovalQueueReview } from "./ApprovalQueueReview";
+import { ArchetypeFitNotice } from "./ArchetypeFitNotice";
 import { PublishLinkedInButton } from "./PublishLinkedInButton";
 import { PublishEmailButton } from "./PublishEmailButton";
 
@@ -9,6 +11,8 @@ type Props = {
   approvedDrafts: OutboundDraftRow[];
   connectedChannels: string[];
   inboundMessages: InboundMessageRow[];
+  /** Active storefront archetype category, scopes fit checks to this business. */
+  category: string | null;
 };
 
 function timeAgo(date: Date | string): string {
@@ -99,6 +103,7 @@ export function ApprovalQueuePanel({
   approvedDrafts,
   connectedChannels,
   inboundMessages,
+  category,
 }: Props) {
   const linkedInConnected =
     connectedChannels.includes("linkedin-personal-social") ||
@@ -145,6 +150,7 @@ export function ApprovalQueuePanel({
                     assetTaskTitle={draft.assetTaskTitle}
                     channelId={draft.channelId}
                     assetType={draft.assetType}
+                    category={category}
                   />
                 }
               />
@@ -177,33 +183,43 @@ export function ApprovalQueuePanel({
           </p>
         ) : (
           <ul className="mt-4 space-y-3">
-            {approvedDrafts.map((draft) => (
-              <DraftRow
-                key={draft.draftId}
-                draft={draft}
-                trailing={
-                  isLinkedInChannel(draft.channelId) ? (
-                    <PublishLinkedInButton
-                      draftId={draft.draftId}
-                      channelConnected={linkedInConnected}
-                      channelId="linkedin-personal-social"
-                    />
-                  ) : isEmailChannel(draft.channelId) ? (
-                    <PublishEmailButton
-                      draftId={draft.draftId}
-                      channelConnected={emailConnected}
-                      channelId="email-postmark"
-                    />
-                  ) : (
-                    <p className="text-xs text-[var(--dpf-muted)]">
-                      Publishing for{" "}
-                      <span className="text-[var(--dpf-text)]">{draft.channelId}</span> lands in
-                      a later phase.
-                    </p>
-                  )
-                }
-              />
-            ))}
+            {approvedDrafts.map((draft) => {
+              const fit = assessArchetypeFit({ text: draft.body, category });
+              return (
+                <DraftRow
+                  key={draft.draftId}
+                  draft={draft}
+                  trailing={
+                    <div className="space-y-2">
+                      <ArchetypeFitNotice assessment={fit} />
+                      {isLinkedInChannel(draft.channelId) ? (
+                        <PublishLinkedInButton
+                          draftId={draft.draftId}
+                          channelConnected={linkedInConnected}
+                          channelId="linkedin-personal-social"
+                          fitBlocked={fit.blocked}
+                          fitReason={fit.summary}
+                        />
+                      ) : isEmailChannel(draft.channelId) ? (
+                        <PublishEmailButton
+                          draftId={draft.draftId}
+                          channelConnected={emailConnected}
+                          channelId="email-postmark"
+                          fitBlocked={fit.blocked}
+                          fitReason={fit.summary}
+                        />
+                      ) : (
+                        <p className="text-xs text-[var(--dpf-muted)]">
+                          Publishing for{" "}
+                          <span className="text-[var(--dpf-text)]">{draft.channelId}</span> lands in
+                          a later phase.
+                        </p>
+                      )}
+                    </div>
+                  }
+                />
+              );
+            })}
           </ul>
         )}
       </section>

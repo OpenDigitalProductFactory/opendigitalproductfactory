@@ -9,6 +9,10 @@ import {
 } from "@/components/customer-marketing/MarketingRoutePrimitives";
 import { formatMarketingLabel, getMarketingWorkspaceSnapshot } from "@/lib/marketing";
 import { buildMarketingCampaignsView } from "@/lib/marketing/subroutes";
+import {
+  ArchetypeFitBadge,
+  ArchetypeFitNotice,
+} from "@/components/customer-marketing/ArchetypeFitNotice";
 
 export default async function CustomerMarketingCampaignsPage() {
   const snapshot = await getMarketingWorkspaceSnapshot();
@@ -36,6 +40,23 @@ export default async function CustomerMarketingCampaignsPage() {
 
       <MarketingMetricGrid metrics={view.metrics} />
 
+      {view.importedTestCount > 0 ? (
+        <div
+          data-testid="imported-test-banner"
+          className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-500"
+        >
+          <p className="font-semibold">
+            {view.importedTestCount} saved artifact
+            {view.importedTestCount === 1 ? "" : "s"} flagged as imported / test data — blocked
+            from publish
+          </p>
+          <p className="mt-1 text-xs text-red-500/90">
+            These carry software-platform language that does not belong in this business's
+            marketing. They stay visible for cleanup but can never be approved or published.
+          </p>
+        </div>
+      ) : null}
+
       <MarketingSection
         title="Campaign briefs"
         description="Briefs define the audience, channel mix, proof, and measurable outcome before individual assets are drafted."
@@ -53,15 +74,22 @@ export default async function CustomerMarketingCampaignsPage() {
               <MarketingRecordCard key={campaign.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="text-base font-semibold text-[var(--dpf-text)]">
-                      {campaign.title}
-                    </h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+                        {campaign.title}
+                      </h2>
+                      <ArchetypeFitBadge assessment={campaign.archetypeFit} />
+                    </div>
                     <p className="mt-1 text-sm text-[var(--dpf-muted)]">
                       {campaign.objective}
                     </p>
                   </div>
                   <MarketingLifecycleBadge status={campaign.status} />
                 </div>
+
+                {campaign.archetypeFit.severity !== "ok" ? (
+                  <ArchetypeFitNotice assessment={campaign.archetypeFit} className="mt-3" />
+                ) : null}
 
                 <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                   <div>
@@ -129,15 +157,21 @@ export default async function CustomerMarketingCampaignsPage() {
               <MarketingRecordCard key={task.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
-                      {task.title}
-                    </h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
+                        {task.title}
+                      </h2>
+                      <ArchetypeFitBadge assessment={task.archetypeFit} />
+                    </div>
                     <p className="mt-1 text-xs text-[var(--dpf-muted)]">
                       {formatMarketingLabel(task.assetType)} on {task.channelLabel}
                     </p>
                   </div>
                   <MarketingLifecycleBadge status={task.status} />
                 </div>
+                {task.archetypeFit.severity !== "ok" ? (
+                  <ArchetypeFitNotice assessment={task.archetypeFit} className="mt-3" />
+                ) : null}
                 <p className="mt-3 text-sm text-[var(--dpf-text)]">{task.brief}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-[var(--dpf-muted)]">{task.dueWindow}</span>

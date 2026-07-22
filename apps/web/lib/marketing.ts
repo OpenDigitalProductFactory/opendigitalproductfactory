@@ -212,6 +212,7 @@ export type MarketingWorkspaceSnapshot = {
     id: string | null;
     archetypeId: string | null;
     archetypeName: string | null;
+    category: string | null;
     tagline: string | null;
     description: string | null;
     ctaType: string | null;
@@ -1259,6 +1260,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       id: organization.storefrontConfig?.id ?? null,
       archetypeId: organization.storefrontConfig?.archetypeId ?? null,
       archetypeName: cleanText(organization.storefrontConfig?.archetype?.name),
+      category: cleanText(organization.storefrontConfig?.archetype?.category),
       tagline: cleanText(organization.storefrontConfig?.tagline),
       description: cleanText(organization.storefrontConfig?.description),
       ctaType: cleanText(organization.storefrontConfig?.archetype?.ctaType),

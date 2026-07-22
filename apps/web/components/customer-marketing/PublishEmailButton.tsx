@@ -7,14 +7,28 @@ type Props = {
   draftId: string;
   channelConnected: boolean;
   channelId: string;
+  /** When true, content conflicts with the active archetype and must not send. */
+  fitBlocked?: boolean;
+  fitReason?: string;
 };
 
-export function PublishEmailButton({ draftId, channelConnected, channelId }: Props) {
+export function PublishEmailButton({
+  draftId,
+  channelConnected,
+  channelId,
+  fitBlocked = false,
+  fitReason,
+}: Props) {
   const [status, setStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function onSend() {
+    if (fitBlocked) {
+      setStatus("error");
+      setMessage(fitReason ?? "Blocked: content does not fit this business's archetype.");
+      return;
+    }
     setStatus("sending");
     setMessage(null);
     startTransition(async () => {
@@ -50,7 +64,8 @@ export function PublishEmailButton({ draftId, channelConnected, channelId }: Pro
       <button
         type="button"
         onClick={onSend}
-        disabled={pending || status === "done"}
+        disabled={pending || status === "done" || fitBlocked}
+        title={fitBlocked ? fitReason : undefined}
         className="rounded-full bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
       >
         {status === "done" ? "Sent" : pending || status === "sending" ? "Sending…" : "Send email"}
