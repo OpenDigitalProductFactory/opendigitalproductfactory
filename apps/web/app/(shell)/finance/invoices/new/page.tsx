@@ -43,8 +43,9 @@ export default async function NewInvoicePage({ searchParams }: Props) {
   );
 
   const category = storefront?.archetype?.category ?? null;
-  const surface = resolveFinanceSurface(category);
-  const copy = resolveFinanceInvoiceCopy(category);
+  const archetypeId = storefront?.archetype?.archetypeId ?? null;
+  const surface = resolveFinanceSurface(category, archetypeId);
+  const copy = resolveFinanceInvoiceCopy(category, archetypeId);
 
   // When the form is opened from a Restaurant billing context (?from=booking …),
   // lead with that context's framing instead of the generic customer-first copy.
@@ -52,12 +53,14 @@ export default async function NewInvoicePage({ searchParams }: Props) {
   const contextCopy = context ? copy.contexts[context] : null;
   const heading = contextCopy?.title ?? "New Invoice";
   const subhead = contextCopy?.description ?? copy.newInvoiceSubhead;
-  const contextLabel =
-    context && context !== "no-show"
-      ? surface.invoiceEntryPoints.find((entry) => entry.id === context)?.label ?? null
-      : context === "no-show"
-        ? "No-show fee"
-        : null;
+  // Prefer the subtype's own entry-point label; fall back to the context copy
+  // title for contexts that are money-job actions rather than entry points
+  // (e.g. no-show), and to no badge at all for an unmapped context.
+  const contextLabel = context
+    ? surface.invoiceEntryPoints.find((entry) => entry.id === context)?.label ??
+      contextCopy?.title ??
+      null
+    : null;
 
   return (
     <div>

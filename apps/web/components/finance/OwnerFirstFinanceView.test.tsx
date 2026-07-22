@@ -20,7 +20,7 @@ vi.mock("next/link", () => ({
 import { OwnerFirstFinanceView, type MoneyJobMetric } from "./OwnerFirstFinanceView";
 import { resolveFinanceSurface, type FinanceMetricKey } from "@/lib/finance/finance-surface";
 
-const surface = resolveFinanceSurface("food-hospitality");
+const surface = resolveFinanceSurface("food-hospitality", "restaurant");
 
 const metrics: Partial<Record<FinanceMetricKey, MoneyJobMetric>> = {
   "outstanding-receivables": { value: "£1,250.00", hint: "3 invoices outstanding" },
@@ -82,6 +82,33 @@ describe("OwnerFirstFinanceView", () => {
     // The internals live under a collapsed <details> summary, not at the top.
     expect(html).toContain("<details");
     expect(html).toContain("<summary");
+  });
+
+  it("renders Catering money jobs for a catering install, not Restaurant ones", () => {
+    const html = renderToStaticMarkup(
+      <OwnerFirstFinanceView
+        surface={resolveFinanceSurface("food-hospitality", "catering")}
+        metrics={metrics}
+      />,
+    );
+    expect(html).toContain("Event deposits &amp; balances");
+    expect(html).toContain("Quote a catering job");
+    expect(html).toContain("Ingredient &amp; staffing bills");
+    expect(html).not.toContain("No-show &amp; cancellation fees");
+    expect(html).toContain('href="/finance/invoices/new?from=quote"');
+  });
+
+  it("renders Bakery money jobs for a bakery install", () => {
+    const html = renderToStaticMarkup(
+      <OwnerFirstFinanceView
+        surface={resolveFinanceSurface("food-hospitality", "bakery")}
+        metrics={metrics}
+      />,
+    );
+    expect(html).toContain("Custom order deposits &amp; balances");
+    expect(html).toContain("Counter &amp; order takings");
+    expect(html).toContain("Bill a custom order");
+    expect(html).toContain('href="/finance/invoices/new?from=custom-order"');
   });
 
   it("keeps VAT, dunning, payment runs, GL, bank rules, and AI spend links available (deferred, not dropped)", () => {

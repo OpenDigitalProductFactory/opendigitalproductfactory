@@ -20,7 +20,15 @@ order: 3
 
 ## Starting an invoice from context (food & hospitality)
 
-For the **food-hospitality** archetype, `/finance/invoices/new` can start from a specific billing context instead of only a generic customer dropdown. Opening the page with a `from` parameter — `?from=booking`, `?from=order`, `?from=catering`, `?from=private-event`, or `?from=no-show` — sets a contextual heading, an entry-point chooser, a context badge, and Restaurant-appropriate helper copy (guest/catering language). The same entry points are surfaced as cards on the owner-first `/finance` overview. Other business types keep the standard customer-first invoice form and copy.
+For the **food-hospitality** archetype, `/finance/invoices/new` can start from a specific billing context instead of only a generic customer dropdown. Opening the page with a `from` parameter sets a contextual heading, an entry-point chooser, a context badge, and helper copy matched to your business. The same entry points appear as cards on the owner-first `/finance` overview.
+
+The available contexts depend on the business:
+
+- **Restaurant** — `?from=booking`, `?from=order`, `?from=catering`, `?from=private-event`, and `?from=no-show`. Copy uses guest and booking language.
+- **Catering** — `?from=quote` (price a job before it is confirmed; nothing is owed until the client accepts), `?from=event-deposit` (the deposit that secures the date), `?from=event-balance` (the remainder once the event is delivered), and `?from=private-event`. The account picker is labelled **Client**.
+- **Bakery** — `?from=custom-order` (celebration or wedding cake, deposit up front and balance on collection), `?from=counter-sale` (a standard over-the-counter sale), and `?from=delivery` (a pickup or delivery fee).
+
+A blank invoice is always available. Other business types keep the standard customer-first invoice form and professional-services copy.
 
 ## What To Watch
 

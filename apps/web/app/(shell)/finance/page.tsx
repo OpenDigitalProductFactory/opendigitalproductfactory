@@ -155,13 +155,17 @@ export default async function FinancePage() {
     // Org settings — for base currency
     getOrgSettings(),
 
-    // Storefront archetype — drives the owner-first (food-hospitality) surface
+    // Storefront archetype — category drives the owner-first (food-hospitality)
+    // surface; archetypeId narrows it to the subtype (restaurant/catering/bakery).
     prisma.storefrontConfig.findFirst({
-      select: { archetype: { select: { category: true } } },
+      select: { archetype: { select: { category: true, archetypeId: true } } },
     }),
   ]);
 
-  const financeSurface = resolveFinanceSurface(storefrontConfig?.archetype.category);
+  const financeSurface = resolveFinanceSurface(
+    storefrontConfig?.archetype.category,
+    storefrontConfig?.archetype.archetypeId,
+  );
 
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
 
