@@ -265,6 +265,31 @@ export async function executeAutonomousAgenticLoop(input: {
   // considers PlatformIssueReport rows this run produced.
   const startedAt = new Date();
 
+  // BI-744D583B (EP-COMPETENCE-FLYWHEEL): ground the AUTONOMOUS path in
+  // profession (WSID) corpus. The interactive chat path injects the corpus into
+  // its own prompt assembly upstream and passes interactionMode "chat"; every
+  // autonomous caller (dispatcher child threads, scheduled self-tasks, remote
+  // MCP task submission) reaches this single seam with a pre-assembled prompt
+  // that never carried the corpus — so a build-lane coworker worked without its
+  // craft knowledge. Gate on !== "chat" so chat is never double-injected. Total
+  // + fail-open: on any error the original prompt is used unchanged.
+  let systemPrompt = input.systemPrompt;
+  if (input.interactionMode !== "chat") {
+    const { groundPromptWithProfessionCorpus, defaultProfessionGroundingDeps } = await import(
+      "@/lib/tak/profession-grounding"
+    );
+    const grounding = await groundPromptWithProfessionCorpus(
+      {
+        systemPrompt,
+        agentId: input.agentId,
+        query: lastUserRequest(input.chatHistory),
+        routeContext: input.routeContext,
+      },
+      defaultProfessionGroundingDeps,
+    ).catch(() => ({ systemPrompt, grounded: false }));
+    systemPrompt = grounding.systemPrompt;
+  }
+
   // This is the single seam both interactive chat (interactionMode "chat") and
   // autonomous work (scheduled self-tasks, build phases, system tasks) flow
   // through. Tag the inference origin here so the admission gate in callProvider
@@ -274,7 +299,7 @@ export async function executeAutonomousAgenticLoop(input: {
 
   const result = await withInferenceOrigin(inferenceOrigin, () =>
     runAgenticLoop({
-      systemPrompt: input.systemPrompt,
+      systemPrompt,
       chatHistory: input.chatHistory,
       sensitivity: input.sensitivity,
       tools: input.tools,

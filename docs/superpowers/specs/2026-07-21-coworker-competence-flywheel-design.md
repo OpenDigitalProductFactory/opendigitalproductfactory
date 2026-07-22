@@ -296,7 +296,7 @@ exercised.
 
 | BI | Pillar | Edge |
 |---|---|---|
-| BI-744D583B | Knowledge | ground the autonomous executor in profession corpus |
+| BI-744D583B | Knowledge | ground the autonomous executor in profession corpus — **shipped 2026-07-21** (`groundPromptWithProfessionCorpus` at the `executeAutonomousAgenticLoop` seam, gated `interactionMode !== "chat"`) |
 | BI-BE9C95D9 | Knowledge | close the gap→page growth edge + corpus freshness lifecycle |
 | BI-4B0A1C1F | Memory | adopt memory-trust P1–P6 + the experience→note acquisition edge |
 | BI-A834EE61 | Judgment | outcome-correctness signal + close the WWMD/WSID feedback loop |
