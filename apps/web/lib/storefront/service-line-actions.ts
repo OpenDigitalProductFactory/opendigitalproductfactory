@@ -72,12 +72,33 @@ export async function addStorefrontServiceLine(
   });
   const nextSortOrder = (lastComposition?.sortOrder ?? 0) + 1;
 
-  // Write (or reactivate) the composition row
+  // Add/remove must be inverse (BI-7D7EE150). If this line was added before and
+  // then removed, reactivate the exact artifacts it seeded rather than creating a
+  // second, duplicate set — so re-adding restores the prior state cleanly.
+  if (existing) {
+    await prisma.storefrontArchetypeComposition.update({
+      where: { id: existing.id },
+      data: { removedAt: null, sortOrder: nextSortOrder, updatedAt: new Date() },
+    });
+    const seededItemCount = await prisma.storefrontItem.count({
+      where: { sourceCompositionId: existing.id },
+    });
+    if (seededItemCount > 0) {
+      await prisma.storefrontItem.updateMany({
+        where: { sourceCompositionId: existing.id },
+        data: { isActive: true },
+      });
+      // Sections were seeded hidden and stay hidden until the operator reveals
+      // them, matching the original add behavior.
+      revalidatePath("/storefront");
+      return { success: true };
+    }
+    // Legacy row with no provenance-tagged artifacts: fall through and seed.
+  }
+
+  // Write (or reuse the reactivated) composition row.
   const composition = existing
-    ? await prisma.storefrontArchetypeComposition.update({
-        where: { id: existing.id },
-        data: { removedAt: null, sortOrder: nextSortOrder, updatedAt: new Date() },
-      })
+    ? { id: existing.id }
     : await prisma.storefrontArchetypeComposition.create({
         data: {
           storefrontId,

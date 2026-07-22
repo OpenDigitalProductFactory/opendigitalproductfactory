@@ -45,23 +45,45 @@ export default async function StorefrontPage() {
       tagline: true,
       organization: { select: { slug: true, name: true } },
       archetype: { select: { archetypeId: true, ctaType: true } },
-      _count: { select: { sections: true, items: true } },
     },
   });
 
   if (config) {
-    const [inquiryCount, bookingCount, orderCount, donationCount, compositionData, allArchetypes] =
-      await Promise.all([
-        prisma.storefrontInquiry.count({ where: { storefrontId: config.id } }),
-        prisma.storefrontBooking.count({ where: { storefrontId: config.id } }),
-        prisma.storefrontOrder.count({ where: { storefrontId: config.id } }),
-        prisma.storefrontDonation.count({ where: { storefrontId: config.id } }),
-        loadCompositionViewData(config.id),
-        prisma.storefrontArchetype.findMany({
-          select: { archetypeId: true, name: true, category: true },
-          orderBy: { name: "asc" },
-        }),
-      ]);
+    const [
+      inquiryCount,
+      bookingCount,
+      orderCount,
+      donationCount,
+      compositionData,
+      allArchetypes,
+      visibleSectionCount,
+      activeItemCount,
+    ] = await Promise.all([
+      prisma.storefrontInquiry.count({ where: { storefrontId: config.id } }),
+      prisma.storefrontBooking.count({ where: { storefrontId: config.id } }),
+      prisma.storefrontOrder.count({ where: { storefrontId: config.id } }),
+      prisma.storefrontDonation.count({ where: { storefrontId: config.id } }),
+      loadCompositionViewData(config.id),
+      prisma.storefrontArchetype.findMany({
+        select: {
+          archetypeId: true,
+          name: true,
+          category: true,
+          itemTemplates: true,
+          sectionTemplates: true,
+        },
+        orderBy: { name: "asc" },
+      }),
+      // Count only live artifacts so add/remove of a service line is honestly
+      // reflected on the dashboard — removing a line hides its items/sections and
+      // the counts drop back (BI-7D7EE150: undo must restore the visible state).
+      prisma.storefrontSection.count({
+        where: { storefrontId: config.id, isVisible: true },
+      }),
+      prisma.storefrontItem.count({
+        where: { storefrontId: config.id, isActive: true },
+      }),
+    ]);
 
     const compositionView = compositionData
       ? deriveStorefrontCompositionView(compositionData)
@@ -74,7 +96,15 @@ export default async function StorefrontPage() {
     ]);
     const availableArchetypes = allArchetypes
       .filter((a) => !activeSlugSet.has(a.archetypeId))
-      .map((a) => ({ archetypeSlug: a.archetypeId, name: a.name, category: a.category }));
+      .map((a) => ({
+        archetypeSlug: a.archetypeId,
+        name: a.name,
+        category: a.category,
+        // Preview counts so the add-confirmation can name exactly what the
+        // mutation will do (BI-7D7EE150).
+        itemCount: Array.isArray(a.itemTemplates) ? a.itemTemplates.length : 0,
+        sectionCount: Array.isArray(a.sectionTemplates) ? a.sectionTemplates.length : 0,
+      }));
 
     return (
       <>
@@ -87,8 +117,8 @@ export default async function StorefrontPage() {
             orgName: config.organization.name,
             archetypeId: config.archetype?.archetypeId ?? "",
             ctaType: config.archetype?.ctaType ?? "inquiry",
-            sectionCount: config._count.sections,
-            itemCount: config._count.items,
+            sectionCount: visibleSectionCount,
+            itemCount: activeItemCount,
           }}
           counts={{ inquiries: inquiryCount, bookings: bookingCount, orders: orderCount, donations: donationCount }}
         />
