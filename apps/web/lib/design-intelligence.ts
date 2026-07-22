@@ -37,7 +37,39 @@ export type DesignSystemResult = {
 
 // ─── CSV Parsing ────────────────────────────────────────────────────────────
 
-function getDataDir() { return lazyPath().join(getCwd(), "apps/web/data/design-intelligence"); }
+// The data dir must resolve in three very different processes (BI-018AE129):
+// a repo-root dev server, a cwd=apps/web test runner, and the production
+// container whose cwd is the standalone output tree — where this data was
+// never traced but the full source copy exists at apps/web-src/. A silent
+// wrong pick here made every design-intelligence tool return empty in
+// production, so resolution failure must be loud, never an empty fallback.
+const DATA_DIR_CANDIDATES = [
+  "apps/web/data/design-intelligence",
+  "data/design-intelligence",
+  "apps/web-src/data/design-intelligence",
+];
+
+let resolvedDataDir: string | null | undefined;
+
+function getDataDir(): string | null {
+  if (resolvedDataDir !== undefined) return resolvedDataDir;
+  const path = lazyPath();
+  const fs = lazyFs();
+  for (const candidate of DATA_DIR_CANDIDATES) {
+    const dir = path.join(getCwd(), candidate);
+    try {
+      if (fs.existsSync(dir)) {
+        resolvedDataDir = dir;
+        return dir;
+      }
+    } catch {}
+  }
+  resolvedDataDir = null;
+  console.error(
+    `[design-intelligence] data directory not found — searched ${DATA_DIR_CANDIDATES.map((c) => lazyPath().join(getCwd(), c)).join(", ")}. All design domains will be empty; design guidance tools are DEGRADED.`,
+  );
+  return null;
+}
 
 /** Simple CSV parser that handles quoted fields with commas. */
 function parseCsv(content: string): CsvRow[] {
@@ -102,14 +134,35 @@ function loadDomain(domain: DesignDomain): CsvRow[] {
   const filename = fileMap[domain];
   if (cache.has(filename)) return cache.get(filename)!;
 
-  try {
-    const content = lazyFs().readFileSync(lazyPath().join(getDataDir(), filename), "utf-8");
-    const rows = parseCsv(content);
-    cache.set(filename, rows);
-    return rows;
-  } catch {
+  const dataDir = getDataDir();
+  if (dataDir === null) {
+    cache.set(filename, []);
     return [];
   }
+
+  try {
+    const content = lazyFs().readFileSync(lazyPath().join(dataDir, filename), "utf-8");
+    const rows = parseCsv(content);
+    if (rows.length === 0) {
+      console.error(`[design-intelligence] domain "${domain}" (${filename}) loaded 0 rows from ${dataDir} — design guidance for this domain is DEGRADED.`);
+    }
+    cache.set(filename, rows);
+    return rows;
+  } catch (err) {
+    console.error(`[design-intelligence] failed to read domain "${domain}" (${filename}) from ${dataDir}: ${err instanceof Error ? err.message : String(err)} — design guidance for this domain is DEGRADED.`);
+    cache.set(filename, []);
+    return [];
+  }
+}
+
+/**
+ * Per-domain row counts for boot/health probes. A healthy install reports
+ * every domain > 0; any zero means the data plane is degraded (BI-018AE129 —
+ * this must surface as a signal, never as silently-empty tool results).
+ */
+export function designIntelligenceHealth(): Record<DesignDomain, number> {
+  const domains: DesignDomain[] = ["style", "color", "typography", "ux", "landing", "chart", "product", "reasoning"];
+  return Object.fromEntries(domains.map((d) => [d, loadDomain(d).length])) as Record<DesignDomain, number>;
 }
 
 // ─── Search Engine ──────────────────────────────────────────────────────────
