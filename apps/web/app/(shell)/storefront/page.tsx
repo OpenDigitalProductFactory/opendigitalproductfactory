@@ -1,6 +1,10 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { prisma } from "@dpf/db";
 import { StorefrontDashboard } from "@/components/storefront-admin/StorefrontDashboard";
+import { ServiceReadinessCockpit } from "@/components/restaurant-cockpit/ServiceReadinessCockpit";
+import { loadServiceReadiness } from "@/lib/restaurant-cockpit/service-readiness-loader";
+import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
 import { StorefrontSetupPanel } from "@/components/storefront-admin/StorefrontSetupPanel";
 import { ServiceLinesPanel } from "@/components/storefront-admin/ServiceLinesPanel";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
@@ -109,6 +113,21 @@ export default async function StorefrontPage() {
       primaryCategory,
       config.archetype?.customVocabulary as Record<string, string> | null,
     );
+
+    // Restaurant owner service-readiness cockpit — the first daily answer
+    // ("are we ready for the next service period?"). Scoped to food-hospitality
+    // for this first slice; the model itself is archetype-neutral (BI-075F731F).
+    const simpleMode = isSimpleNavMode(
+      resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value),
+    );
+    const readiness =
+      primaryCategory === "food-hospitality"
+        ? await loadServiceReadiness({
+            storefrontId: config.id,
+            category: primaryCategory,
+            customVocabulary: config.archetype?.customVocabulary as Record<string, string> | null,
+          })
+        : null;
     const capabilities = resolveSetupCapabilities(
       primaryCategory,
       compositionData?.primary.activationProfile?.modules ?? [],
@@ -193,6 +212,7 @@ export default async function StorefrontPage() {
 
     return (
       <>
+        {readiness && <ServiceReadinessCockpit summary={readiness} simple={simpleMode} />}
         <StorefrontDashboard
           config={{
             id: config.id,
