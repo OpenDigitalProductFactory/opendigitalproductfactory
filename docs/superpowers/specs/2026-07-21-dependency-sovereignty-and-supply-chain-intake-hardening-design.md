@@ -107,6 +107,23 @@ A stale-but-load-bearing override (a floor that never goes redundant — §7) is
 
 **Non-goals / rejected:** blanket forking; refactoring a fork for security reasons; vendoring dev-only tooling (build tools change too fast and their blast radius is contained to CI).
 
+### 5.1 Ratified bar — concrete cutoffs (kernel decision `DI-957F61CFECEA`, 2026-07-22)
+
+`BI-6B50CE41` ran `dpf-decision-via-kernel` (`principle_decide`, external_coding_agent, universal-ring) over three bar shapes — `strict-all-of`, `weighted-threshold`, `security-first-any-of`. The kernel recommended **`strict-all-of`** (composite 8.26, margin 2.97, high confidence, no commandment conflict); `security-first-any-of` scored *negative* against "Destructive actions require explicit go" and "Never wipe the DB", confirming that aggressive vendoring reads as a reckless, hard-to-reverse move. Top positive contributors: Never Fabricate, Build Gate, **Always Respect Open-Source License Terms**, Architecture Over Shortcuts — the license commandment surfaced as first-class and is folded in as criterion 6.
+
+A dependency is a **Tier-1 vendoring candidate only if it meets ALL SIX** (this resolves §10 Q3):
+
+1. **Runtime-critical** — declared in `dependencies` (not `devDependencies`) of a *shipped* workspace and reachable from a production entrypoint. Build/dev/test-only tooling is disqualified outright.
+2. **Small & legible** — ≤ ~2,000 SLOC of first-party source (excl. tests), single-package (not a multi-package framework), and ≤ 5 runtime sub-dependencies of its own (bounded vendored surface).
+3. **Stable** — ≤ 6 releases in the trailing 12 months **and** no breaking major in the trailing 12 months.
+4. **High blast-radius** — sits in a security-sensitive category: crypto · auth/authn · (de)serialization · template rendering · request routing/parsing · or is in `allowBuilds` (runs code at install).
+5. **Already-patched-by-us** — already carries a DPF `overrides:` floor or a fork/patch (we already maintain a divergence).
+6. **License-compatible to vendor** — permissive license permitting source redistribution within our tree (MIT/BSD/Apache-2.0/ISC class). Copyleft (GPL/AGPL) or unlicensed → **not** a candidate without explicit legal review.
+
+Miss any one → route to Tier-0 hardening, not vendoring. **Tier-2 (fork+refactor)** additionally requires a recorded *product* justification per candidate and is **never** entered for a security reason. `node-forge` is the lead candidate; criteria 1 & 3 get their numeric confirmation inside the pilot (`BI-D549A5A9`).
+
+Execution sequence for the remaining epic: [`docs/superpowers/plans/2026-07-22-ep-dep-sovereignty-remaining-roadmap.md`](../plans/2026-07-22-ep-dep-sovereignty-remaining-roadmap.md).
+
 ---
 
 ## 6. The DPF-native thesis: AI-owned dependency maintenance
@@ -204,7 +221,7 @@ Sequenced by leverage-per-effort. Each phase maps to backlog items under `EP-DEP
 
 1. **Registry proxy build-vs-buy.** Verdaccio (self-hostable, fits fully-local-by-choice) vs Artifactory (heavier, more features). Leans Verdaccio for sovereignty. **OPEN — kernel.**
 2. **Cooldown window length.** 7 / 14 / 30 days trades zero-day protection against patch latency. Recommend starting at 14 and tuning from Dependabot lead-time data. **OPEN.**
-3. **Vendoring bar thresholds** (§5) — "small", "stable", "high blast-radius" need concrete cutoffs before the pilot. **OPEN — ratify in Phase 2.**
+3. **Vendoring bar thresholds** (§5) — "small", "stable", "high blast-radius" need concrete cutoffs before the pilot. **RESOLVED 2026-07-22** — ratified as `strict-all-of` with concrete cutoffs in §5.1 (kernel `DI-957F61CFECEA`, `BI-6B50CE41`).
 4. **Does the AI-maintenance loop clear the bar to scale?** Cannot be answered until the Phase-2 pilot runs. **OPEN by construction.**
 
 ---
