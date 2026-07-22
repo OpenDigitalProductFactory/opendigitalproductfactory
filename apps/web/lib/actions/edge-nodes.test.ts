@@ -7,6 +7,8 @@ const { mockAuth, mockPrisma, mockIssueBootstrapToken, mockRevalidatePath, mockS
     customerAccount: { findUnique: vi.fn() },
     customerSite: { findFirst: vi.fn() },
     edgeNode: { findUnique: vi.fn(), update: vi.fn() },
+    edgeNodeCertificate: { updateMany: vi.fn() },
+    $transaction: vi.fn((operations) => Promise.all(operations)),
   },
   mockIssueBootstrapToken: vi.fn(),
   mockRevalidatePath: vi.fn(),
@@ -294,6 +296,10 @@ describe("approveEdgeNodeAction", () => {
     const updateCall = mockPrisma.edgeNode.update.mock.calls[0]![0];
     expect(updateCall.data.quarantinedAt).toBeNull();
     expect(updateCall.data.quarantineReason).toBeNull();
+    expect(mockPrisma.edgeNodeCertificate.updateMany).toHaveBeenCalledWith({
+      where: { edgeNodeId: "edge_1", status: "quarantined", validUntil: { gt: expect.any(Date) } },
+      data: { status: "active", revokedAt: null, revocationReason: null },
+    });
   });
 });
 
@@ -337,6 +343,14 @@ describe("quarantineEdgeNodeAction", () => {
     expect(updateCall.data.status).toBe("quarantined");
     expect(updateCall.data.quarantineReason).toBe("deviance threshold exceeded");
     expect(updateCall.data.quarantinedAt).toBeInstanceOf(Date);
+    expect(mockPrisma.edgeNodeCertificate.updateMany).toHaveBeenCalledWith({
+      where: { edgeNodeId: "edge_1", status: "active" },
+      data: {
+        status: "quarantined",
+        revokedAt: expect.any(Date),
+        revocationReason: "node_quarantined:deviance threshold exceeded",
+      },
+    });
   });
 });
 
@@ -381,6 +395,14 @@ describe("revokeEdgeNodeAction", () => {
     expect(updateCall.data.tokenRotatedAt).toBeNull();
     expect(updateCall.data.revocationReason).toBe("compromised");
     expect(updateCall.data.revokedAt).toBeInstanceOf(Date);
+    expect(mockPrisma.edgeNodeCertificate.updateMany).toHaveBeenCalledWith({
+      where: { edgeNodeId: "edge_1", status: { not: "revoked" } },
+      data: {
+        status: "revoked",
+        revokedAt: expect.any(Date),
+        revocationReason: "node_revoked:compromised",
+      },
+    });
   });
 });
 

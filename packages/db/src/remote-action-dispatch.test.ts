@@ -27,10 +27,12 @@ function action(over: Partial<DispatchableActionView> = {}): DispatchableActionV
 function node(over: Partial<ClaimingNodeView> = {}): ClaimingNodeView {
   return {
     edgeNodeId: "node_1",
+    nodeId: "edge_external_1",
     trustState: "trusted",
     customerAccountId: null,
     customerSiteId: null,
     actionExecuteEnabled: true,
+    allowedActionTypes: ["diagnostics.collect", "inventory.collect"],
     ...over,
   };
 }
@@ -113,6 +115,15 @@ describe("isClaimableByNode — the gates", () => {
       claimable: false,
       reason: "action-execute-capability-disabled",
     });
+  });
+
+  it("rejects a globally read-only action that is not in this node's explicit allowlist", () => {
+    expect(
+      isClaimableByNode(
+        action({ actionType: "inventory.collect" }),
+        node({ allowedActionTypes: ["diagnostics.collect"] }),
+      ),
+    ).toEqual({ claimable: false, reason: "actionType-not-allowed-for-node (inventory.collect)" });
   });
 
   it("an untrusted node cannot claim", () => {

@@ -71,6 +71,13 @@ dpf_native_edge_install() {
   local template="$repo_root/scripts/installer/macos-edge-node.plist.tmpl"
   local version="${DPF_NATIVE_EDGE_VERSION:-$(git -C "$repo_root" describe --tags --abbrev=0 2>/dev/null || echo latest)}"
   local authority_url="${DPF_LAN_AUTHORITY_URL:-}"
+  local platform_env="$repo_root/.env"
+  local edge_action_url edge_action_ca edge_action_cert edge_action_key edge_action_public
+  edge_action_url="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_URL)"
+  edge_action_ca="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_CA_FILE)"
+  edge_action_cert="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_CERT_FILE)"
+  edge_action_key="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_KEY_FILE)"
+  edge_action_public="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE)"
 
   if [ -z "$authority_url" ]; then
     local lan_ip
@@ -103,6 +110,13 @@ dpf_native_edge_install() {
     printf 'DPF_EDGE_NODE_NAME=%s\n' "$node_name"
     printf 'DPF_INSTALL_MODE=native\n'
     printf 'DPF_EDGE_STATE_DIR=%s\n' "$edge_state_dir"
+    if [ -n "$edge_action_url" ] && [ -f "$edge_action_ca" ] && [ -f "$edge_action_cert" ] && [ -f "$edge_action_key" ] && [ -f "$edge_action_public" ]; then
+      printf 'DPF_EDGE_ACTION_URL=%s\n' "$edge_action_url"
+      printf 'DPF_EDGE_ACTION_CA_FILE=%s\n' "$edge_action_ca"
+      printf 'DPF_EDGE_ACTION_CERT_FILE=%s\n' "$edge_action_cert"
+      printf 'DPF_EDGE_ACTION_KEY_FILE=%s\n' "$edge_action_key"
+      printf 'DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE=%s\n' "$edge_action_public"
+    fi
   } > "$env_file"
   chmod 0600 "$env_file"
 

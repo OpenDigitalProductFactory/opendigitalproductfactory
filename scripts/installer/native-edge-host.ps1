@@ -87,13 +87,36 @@ function Install-DPFNativeEdgeNode {
     $escapedToken = $BootstrapToken.Replace("'", "''")
     $escapedNodeName = $nodeName.Replace("'", "''")
     $escapedState = $stateDir.Replace("'", "''")
+    $actionEnvironment = ""
+    $platformEnv = Join-Path $InstallDir ".env"
+    if (Test-Path -LiteralPath $platformEnv -PathType Leaf) {
+        $actionValues = @{}
+        foreach ($line in [IO.File]::ReadAllLines($platformEnv)) {
+            $separator = $line.IndexOf('=')
+            if ($separator -gt 0) { $actionValues[$line.Substring(0, $separator)] = $line.Substring($separator + 1) }
+        }
+        $requiredActionKeys = @("DPF_EDGE_ACTION_URL", "DPF_EDGE_ACTION_CA_FILE", "DPF_EDGE_ACTION_CERT_FILE", "DPF_EDGE_ACTION_KEY_FILE", "DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE")
+        $completeActionTrust = $true
+        foreach ($key in $requiredActionKeys) {
+            if (-not $actionValues[$key]) { $completeActionTrust = $false }
+        }
+        if ($completeActionTrust -and (Test-Path -LiteralPath $actionValues.DPF_EDGE_ACTION_CA_FILE) -and
+            (Test-Path -LiteralPath $actionValues.DPF_EDGE_ACTION_CERT_FILE) -and
+            (Test-Path -LiteralPath $actionValues.DPF_EDGE_ACTION_KEY_FILE) -and
+            (Test-Path -LiteralPath $actionValues.DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE)) {
+            foreach ($key in $requiredActionKeys) {
+                $escapedValue = $actionValues[$key].Replace("'", "''")
+                $actionEnvironment += "`$env:$key = '$escapedValue'`r`n"
+            }
+        }
+    }
     @"
 `$env:DPF_AUTHORITY_URL = '$escapedAuthority'
 `$env:DPF_BOOTSTRAP_TOKEN = '$escapedToken'
 `$env:DPF_EDGE_NODE_NAME = '$escapedNodeName'
 `$env:DPF_INSTALL_MODE = 'native'
 `$env:DPF_EDGE_STATE_DIR = '$escapedState'
-& '$escapedBinary' *>> '$($logDir.Replace("'", "''"))\edge-node.log'
+$actionEnvironment& '$escapedBinary' *>> '$($logDir.Replace("'", "''"))\edge-node.log'
 "@ | Set-Content -LiteralPath $runner -Encoding ASCII
 
     icacls $stateRoot /inheritance:r /grant:r "$env:USERNAME`:(OI)(CI)F" 2>&1 | Out-Null

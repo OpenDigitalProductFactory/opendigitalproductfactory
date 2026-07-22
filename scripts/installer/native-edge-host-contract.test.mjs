@@ -94,6 +94,22 @@ test("host installers emit the install mode accepted by the native binary", asyn
   assert.doesNotMatch(windowsInstaller, /DPF_INSTALL_MODE\s*=\s*'native-host'/);
 });
 
+test("native host installers activate actions only with the complete machine trust bundle", async () => {
+  const shellInstaller = await read("scripts/installer/native-edge-host.sh");
+  const windowsInstaller = await read("scripts/installer/native-edge-host.ps1");
+  for (const source of [shellInstaller, windowsInstaller]) {
+    for (const key of [
+      "DPF_EDGE_ACTION_URL",
+      "DPF_EDGE_ACTION_CA_FILE",
+      "DPF_EDGE_ACTION_CERT_FILE",
+      "DPF_EDGE_ACTION_KEY_FILE",
+      "DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE",
+    ]) assert.match(source, new RegExp(key));
+  }
+  assert.match(shellInstaller, /\[ -f "\$edge_action_ca" \].*\[ -f "\$edge_action_cert" \].*\[ -f "\$edge_action_key" \]/s);
+  assert.match(windowsInstaller, /completeActionTrust/);
+});
+
 test("macOS host install clears quarantine and signs the verified binary before launchd", async () => {
   const shellInstaller = await read("scripts/installer/native-edge-host.sh");
 

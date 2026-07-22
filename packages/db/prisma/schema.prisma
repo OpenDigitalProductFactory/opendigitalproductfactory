@@ -12739,6 +12739,7 @@ model EdgeNode {
   customerSite                 CustomerSite?         @relation(fields: [customerSiteId], references: [id], onDelete: SetNull)
   subscription                 Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   capabilityRows               EdgeNodeCapability[]
+  certificates                 EdgeNodeCertificate[]
   discoveryRuns                DiscoveryRun[]        @relation("EdgeNodeDiscoveryRuns")
   targetedDiscoveryConnections DiscoveryConnection[] @relation("EdgeNodeTargetedDiscoveryConnections")
   consumedTokens               BootstrapToken[]      @relation("BootstrapTokenConsumer")
@@ -12836,6 +12837,36 @@ model EdgeNodeCapability {
 
   @@unique([edgeNodeId, capability])
   @@index([capability])
+}
+
+// Machine-bound X.509 identities accepted at the dedicated Edge mTLS boundary.
+// The CA private key remains in step-ca; the portal stores only lifecycle and
+// binding metadata needed to re-authorize every request after Caddy verifies
+// the organization-rooted certificate chain.
+model EdgeNodeCertificate {
+  id                String   @id @default(cuid())
+  certificateId     String   @unique
+  edgeNodeId        String
+  fingerprintSha256 String   @unique
+  serialNumber      String
+  subject           String
+  issuer            String
+  provisioner       String
+  status            String   @default("active")
+  validFrom         DateTime
+  validUntil        DateTime
+  registeredAt      DateTime @default(now())
+  lastSeenAt        DateTime?
+  revokedAt         DateTime?
+  revocationReason  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  edgeNode EdgeNode @relation(fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([edgeNodeId, serialNumber])
+  @@index([edgeNodeId, status])
+  @@index([validUntil])
 }
 
 // ─── Edge-detected events (PagerDuty-equivalent) ─────────────────────────────
@@ -13243,6 +13274,13 @@ model RemoteAction {
 
   // queued | dispatched | running | succeeded | failed | rolled-back | timed-out
   status      String    @default("queued")
+  // Immutable signed-dispatch audit. Nullable for historic/P1 rows; populated
+  // atomically when a P2a Edge node claims an action.
+  dispatchNonce        String?   @unique
+  dispatchIssuedAt     DateTime?
+  dispatchExpiresAt    DateTime?
+  dispatchSigningKeyId String?
+  dispatchSignature    String?
   result      Json      @default("{}")
   evidence    Json      @default("{}")
   rollbackOf  String?

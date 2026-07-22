@@ -40,6 +40,9 @@ $envPath = Join-Path $DPF_DIR ".env"
 if ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_ORGANIZATION_TRUST_ENABLED=1$' -Quiet)) {
     $composeArgs += @("-f", "docker-compose.organization-trust.yml", "-f", "docker-compose.tls.yml")
 }
+if ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1$' -Quiet)) {
+    $composeArgs += @("-f", "docker-compose.edge-actions.yml")
+}
 if ($includeEdge -and (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml"))) {
     $composeArgs += @("-f", "docker-compose.edge.yml")
 }

@@ -43,12 +43,13 @@ test("installers consume an organization join package without asking operators t
   assert.match(windowsInstaller, /bootstrap-organization-pki\.ps1[\s\S]*-Mode[\s\S]*join[\s\S]*-NoStartTls/);
 });
 
-test("successful PKI bootstrap persists member trust for normal restart lifecycle", async () => {
-  const [shellBootstrap, windowsBootstrap, shellStart, windowsStart, composeLib] = await Promise.all([
+test("successful PKI bootstrap persists member trust and Edge actions for normal restart lifecycle", async () => {
+  const [shellBootstrap, windowsBootstrap, shellStart, windowsStart, windowsInstaller, composeLib] = await Promise.all([
     read("scripts/bootstrap-organization-pki.sh"),
     read("scripts/bootstrap-organization-pki.ps1"),
     read("dpf-start.sh"),
     read("scripts/dpf-start.ps1"),
+    read("install-dpf.ps1"),
     read("scripts/installer/lib/compose.sh"),
   ]);
 
@@ -59,9 +60,15 @@ test("successful PKI bootstrap persists member trust for normal restart lifecycl
   }
   assert.match(composeLib, /docker-compose\.organization-trust\.yml/);
   assert.match(composeLib, /docker-compose\.tls\.yml/);
+  assert.match(composeLib, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
+  assert.match(composeLib, /docker-compose\.edge-actions\.yml/);
   assert.match(shellStart, /DPF_ORGANIZATION_TRUST_ENABLED|organization-trust/);
   assert.match(windowsStart, /docker-compose\.organization-trust\.yml/);
   assert.match(windowsStart, /docker-compose\.tls\.yml/);
+  assert.match(windowsStart, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
+  assert.match(windowsStart, /docker-compose\.edge-actions\.yml/);
+  assert.match(windowsInstaller, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
+  assert.match(windowsInstaller, /docker-compose\.edge-actions\.yml/);
 });
 
 test("Windows consumer release carries the verified organization-join lifecycle assets", async () => {
@@ -71,6 +78,8 @@ test("Windows consumer release carries the verified organization-join lifecycle 
     "docker-compose.pki.yml",
     "docker-compose.organization-trust.yml",
     "docker-compose.tls.yml",
+    "docker-compose.edge-actions.yml",
+    "scripts/pki/edge-client.tpl",
     "scripts/bootstrap-organization-pki.ps1",
   ]) {
     assert.match(dockerfile, new RegExp(asset.replaceAll(".", "\\.")));
@@ -230,6 +239,53 @@ test("the organization CA server certificate includes operator-supplied private 
 
   assert.match(shell, /DPF_PKI_DNS_NAMES="\$HOSTNAME_VALUE,\$SANS,/);
   assert.match(powershell, /DPF_PKI_DNS_NAMES[^\n]*\$San/);
+});
+
+test("Edge action PKI uses a dedicated client-auth profile and host-owned keys", async () => {
+  const [shell, powershell, compose, template] = await Promise.all([
+    read("scripts/bootstrap-organization-pki.sh"),
+    read("scripts/bootstrap-organization-pki.ps1"),
+    read("docker-compose.pki.yml"),
+    read("scripts/pki/edge-client.tpl"),
+  ]);
+
+  assert.match(template, /clientAuth/);
+  assert.doesNotMatch(template, /serverAuth/);
+  assert.match(compose, /edge-client\.tpl/);
+  for (const source of [shell, powershell]) {
+    assert.match(source, /dpf-edge-client/);
+    assert.match(source, /--x509-template/);
+    assert.match(source, /--x509-max-dur["']?,?[\s\S]*720h/);
+    assert.match(source, /edge-client\.crt/);
+    assert.match(source, /edge-client\.key/);
+    assert.match(source, /edge-action-signing-public\.pem/);
+    assert.match(source, /edge-action-signing-private\.pem/);
+    assert.match(source, /DPF_ORGANIZATION_JOIN_V2/);
+    assert.match(source, /--network["']?,?\s*["']?container:/);
+    assert.doesNotMatch(source, /--ca-url["']?,?\s*["']https:\/\/step-ca:9000/);
+  }
+});
+
+test("Caddy exposes a dedicated verified-client action listener and strips spoofable identity", async () => {
+  const [shell, powershell, tlsCompose, actionCompose] = await Promise.all([
+    read("scripts/bootstrap-organization-pki.sh"),
+    read("scripts/bootstrap-organization-pki.ps1"),
+    read("docker-compose.tls.yml"),
+    read("docker-compose.edge-actions.yml"),
+  ]);
+  for (const source of [shell, powershell]) {
+    assert.match(source, /:8443/);
+    assert.match(source, /require_and_verify/);
+    assert.match(source, /trust_pool file/);
+    assert.match(source, /header_up -X-DPF-Edge-Cert/);
+    assert.match(source, /tls_client_fingerprint/);
+    assert.match(source, /tls_client_certificate_der_base64/);
+  }
+  assert.match(tlsCompose, /DPF_EDGE_ACTION_HTTPS_PORT:-8443/);
+  assert.match(tlsCompose, /caddy:2\.10\.2-alpine@sha256:[a-f0-9]{64}/);
+  assert.doesNotMatch(tlsCompose, /image:\s+caddy:2-alpine/);
+  assert.match(actionCompose, /DPF_EDGE_ACTION_SIGNING_PRIVATE_KEY_FILE/);
+  assert.match(actionCompose, /DPF_EDGE_MTLS_PROXY_SECRET_FILE/);
 });
 
 test("Bash bootstrap rejects public binds and argument injection before Docker", () => {

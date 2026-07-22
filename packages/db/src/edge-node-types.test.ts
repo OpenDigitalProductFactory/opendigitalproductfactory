@@ -8,6 +8,7 @@ import {
   EDGE_NODE_ALIAS_KIND,
   EDGE_NODE_CAPABILITY_MODES,
   EDGE_NODE_CAPABILITY_STATUSES,
+  EDGE_NODE_CERTIFICATE_STATUSES,
   EDGE_NODE_INSTALL_MODES,
   EDGE_NODE_PLATFORMS,
   EDGE_NODE_STATUSES,
@@ -121,6 +122,15 @@ describe("edge-node-types — constants", () => {
       "degraded",
       "failing",
       "unknown",
+    ]);
+  });
+
+  it("EDGE_NODE_CERTIFICATE_STATUSES closes the machine identity lifecycle", () => {
+    expect(EDGE_NODE_CERTIFICATE_STATUSES).toEqual([
+      "active",
+      "quarantined",
+      "superseded",
+      "revoked",
     ]);
   });
 

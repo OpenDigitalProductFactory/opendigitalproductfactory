@@ -270,6 +270,16 @@ export {
   type RemoteActionDispatchState,
 } from "./remote-action-dispatch";
 export {
+  canonicalizeEdgeActionEnvelope,
+  EDGE_ACTION_ENVELOPE_VERSION,
+  MAX_EDGE_ACTION_ENVELOPE_LIFETIME_MS,
+  signEdgeActionEnvelope,
+  verifyEdgeActionEnvelope,
+  type EdgeActionEnvelope,
+  type EdgeActionEnvelopeVerification,
+  type SignedEdgeActionEnvelope,
+} from "./edge-action-envelope";
+export {
   buildOrganizationCrosswalk,
   FEDERATED_RECORD_TYPES,
   reconcileMirror,

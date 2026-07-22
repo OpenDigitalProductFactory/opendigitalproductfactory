@@ -35,6 +35,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/action"
+	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/actionrunner"
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/api"
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/collect"
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/config"
@@ -57,8 +59,15 @@ const (
 	nearbyDiscoveryDegraded
 )
 
+const (
+	actionDispatchUnknown int32 = iota
+	actionDispatchHealthy
+	actionDispatchDegraded
+)
+
 var nearbyDiscoveryHealth atomic.Int32
 var nearbyDiscoveryAccepted atomic.Bool
+var actionDispatchHealth atomic.Int32
 
 func main() {
 	printFixtureMode := flag.Bool("print-enroll-fixture", false,
@@ -99,6 +108,19 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	var actionClient *api.Client
+	if cfg.ActionDispatchEnabled() {
+		httpClient, err := api.NewMutualTLSHTTPClient(api.MutualTLSOptions{
+			CAFile: cfg.EdgeActionCAFile, CertFile: cfg.EdgeActionCertFile, KeyFile: cfg.EdgeActionKeyFile,
+		})
+		if err != nil {
+			return fmt.Errorf("configure Edge action machine identity: %w", err)
+		}
+		actionClient, err = api.New(api.Options{AuthorityURL: cfg.EdgeActionURL, HTTPClient: httpClient})
+		if err != nil {
+			return err
+		}
+	}
 
 	// Stop the loops cleanly on SIGINT/SIGTERM so a service-manager
 	// restart doesn't leave a half-written state.json.
@@ -133,10 +155,31 @@ func run() error {
 	// Race the two loops. Whichever returns first ends the process so
 	// the supervisor can restart with fresh state. Heartbeat exits on
 	// node_revoked; sweep currently runs until ctx is cancelled.
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 4)
 	go func() { errCh <- runHeartbeat(ctx, cfg, client, st) }()
 	go func() { errCh <- runSweep(ctx, cfg, client, st) }()
 	go func() { errCh <- runFederationDiscovery(ctx, cfg, client, st) }()
+	if actionClient != nil {
+		publicKey, err := action.LoadPublicKey(cfg.EdgeActionSigningPublicKeyFile)
+		if err != nil {
+			return err
+		}
+		journal, err := action.OpenReplayJournal(cfg.StateDir, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		executor := &action.Executor{
+			NodeID: st.NodeID, PublicKey: publicKey, Journal: journal,
+			CollectInventory: func(actionContext context.Context) (map[string]any, error) {
+				if err := submitSweep(actionContext, cfg, client, st); err != nil {
+					return nil, err
+				}
+				return map[string]any{"inventorySubmission": "accepted"}, nil
+			},
+		}
+		runner := &actionrunner.Runner{Client: actionClient, Executor: executor, NodeToken: st.NodeToken, BatchSize: 1}
+		go func() { errCh <- runActionDispatch(ctx, actionClient, runner, st.NodeToken) }()
+	}
 
 	select {
 	case err := <-errCh:
@@ -241,6 +284,28 @@ func federationCapabilityReports() []api.CapabilityReport {
 	}}
 }
 
+func capabilityReports(actionConfigured bool) []api.CapabilityReport {
+	reports := federationCapabilityReports()
+	if !actionConfigured {
+		return reports
+	}
+	status := "unknown"
+	switch actionDispatchHealth.Load() {
+	case actionDispatchHealthy:
+		status = "healthy"
+	case actionDispatchDegraded:
+		status = "degraded"
+	}
+	return append(reports, api.CapabilityReport{
+		Capability: "action.execute",
+		Status:     status,
+		Evidence: map[string]any{
+			"transport":   "mutual-tls-pull",
+			"actionTypes": []string{"inventory.collect"},
+		},
+	})
+}
+
 func enrollOnce(ctx context.Context, cfg *config.Config, client *api.Client) (*state.EdgeNodeState, error) {
 	if cfg.BootstrapToken == "" {
 		return nil, errors.New(
@@ -262,12 +327,16 @@ func enrollOnce(ctx context.Context, cfg *config.Config, client *api.Client) (*s
 		ipAddresses = []string{}
 	}
 
+	capabilities := append([]string(nil), nativeCapabilities...)
+	if cfg.ActionDispatchEnabled() {
+		capabilities = append(capabilities, "action.execute")
+	}
 	resp, err := client.Enroll(ctx, cfg.BootstrapToken, api.EnrollRequest{
 		DisplayName:            cfg.EdgeNodeName,
 		Platform:               cfg.Platform,
 		InstallMode:            cfg.InstallMode,
 		Version:                cfg.Version,
-		AdvertisedCapabilities: nativeCapabilities,
+		AdvertisedCapabilities: capabilities,
 		Metadata: map[string]any{
 			"hostname": cfg.EdgeNodeName,
 			"host": map[string]any{
@@ -304,6 +373,40 @@ func enrollOnce(ctx context.Context, cfg *config.Config, client *api.Client) (*s
 	return st, nil
 }
 
+func runActionDispatch(ctx context.Context, client *api.Client, runner *actionrunner.Runner, nodeToken string) error {
+	registered := false
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		if !registered {
+			if err := client.RegisterActionCertificate(ctx, nodeToken); err != nil {
+				actionDispatchHealth.Store(actionDispatchDegraded)
+				slog.Warn("Edge action certificate registration unavailable; channel remains inert", slog.String("err", err.Error()))
+			} else {
+				registered = true
+				actionDispatchHealth.Store(actionDispatchHealthy)
+				slog.Info("Edge action machine certificate registered")
+			}
+		}
+		if registered {
+			if err := runner.RunOnce(ctx); err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				actionDispatchHealth.Store(actionDispatchDegraded)
+				slog.Warn("Edge action poll failed", slog.String("err", err.Error()))
+			} else {
+				actionDispatchHealth.Store(actionDispatchHealthy)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
 func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, st *state.EdgeNodeState) error {
 	ticker := time.NewTicker(time.Duration(st.HeartbeatIntervalSec) * time.Second)
 	defer ticker.Stop()
@@ -316,7 +419,7 @@ func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, s
 		}
 
 		resp, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
-			CapabilityReports: federationCapabilityReports(),
+			CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled()),
 		})
 		if err != nil {
 			if api.IsRevoked(err) {

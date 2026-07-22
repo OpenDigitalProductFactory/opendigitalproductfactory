@@ -1,4 +1,10 @@
+import { generateKeyPairSync } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
+
+// Relative source import keeps this source-local test runnable in an isolated
+// worktree before workspace dependency links are converged by the shared gate.
+import { signEdgeActionEnvelope, verifyEdgeActionEnvelope } from "../../../../packages/db/src/edge-action-envelope";
 
 import {
   claimActionsForNode,
@@ -9,6 +15,12 @@ import {
 } from "./dispatch-orchestrator";
 
 const NOW = new Date("2026-06-25T20:00:00.000Z");
+const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+const NONCE = "nonce_0123456789abcdef";
+const signer = {
+  signingKeyId: "edge-action-signing-v1",
+  sign: (envelope: Parameters<typeof signEdgeActionEnvelope>[0]) => signEdgeActionEnvelope(envelope, privateKey),
+};
 
 function candidate(over: Partial<ClaimableActionRow> = {}): ClaimableActionRow {
   return {
@@ -27,11 +39,15 @@ function candidate(over: Partial<ClaimableActionRow> = {}): ClaimableActionRow {
 
 const trustedInternalNode = {
   edgeNodeId: "node_1",
+  nodeId: "edge_external_1",
   trustState: "trusted",
   customerAccountId: null,
   customerSiteId: null,
   actionExecuteEnabled: true,
+  allowedActionTypes: ["diagnostics.collect", "inventory.collect"],
 };
+
+const claimOptions = { now: NOW, signer, nonceFactory: () => NONCE };
 
 function claimDb(candidates: ClaimableActionRow[], updateCount = 1) {
   const findMany = vi.fn().mockResolvedValue(candidates);
@@ -46,11 +62,20 @@ function claimDb(candidates: ClaimableActionRow[], updateCount = 1) {
 describe("claimActionsForNode", () => {
   it("scenario INTERNAL: claims an internal queued read-only action", async () => {
     const { db, updateMany } = claimDb([candidate()]);
-    const res = await claimActionsForNode(db, trustedInternalNode, { now: NOW });
-    expect(res.claimed).toEqual([{ actionKey: "ra_1", actionType: "diagnostics.collect", parameters: { probe: "iface" } }]);
+    const res = await claimActionsForNode(db, trustedInternalNode, claimOptions);
+    expect(res.claimed).toHaveLength(1);
+    expect(verifyEdgeActionEnvelope(res.claimed[0]!, { publicKey, expectedNodeId: "edge_external_1", now: NOW })).toEqual({ ok: true, nonce: NONCE });
+    expect(res.claimed[0]).toMatchObject({ actionKey: "ra_1", actionType: "diagnostics.collect", parameters: { probe: "iface" } });
     expect(updateMany).toHaveBeenCalledWith({
       where: { actionKey: "ra_1", status: "queued" },
-      data: { status: "claimed", edgeNodeId: "node_1", startedAt: NOW },
+      data: expect.objectContaining({
+        status: "claimed",
+        edgeNodeId: "node_1",
+        startedAt: NOW,
+        dispatchNonce: NONCE,
+        dispatchIssuedAt: NOW,
+        dispatchSigningKeyId: "edge-action-signing-v1",
+      }),
     });
   });
 
@@ -61,26 +86,26 @@ describe("claimActionsForNode", () => {
       candidate({ actionKey: "mine", customerAccountId: "cust1" }),
       candidate({ actionKey: "other", customerAccountId: "cust2" }),
     ]);
-    const res = await claimActionsForNode(db, custNode, { now: NOW });
+    const res = await claimActionsForNode(db, custNode, claimOptions);
     expect(res.claimed.map((c) => c.actionKey)).toEqual(["mine"]);
   });
 
   it("claims nothing for an untrusted or capability-disabled node (no DB read)", async () => {
     const { db, findMany } = claimDb([candidate()]);
-    expect((await claimActionsForNode(db, { ...trustedInternalNode, actionExecuteEnabled: false })).claimed).toEqual([]);
-    expect((await claimActionsForNode(db, { ...trustedInternalNode, trustState: "quarantined" })).claimed).toEqual([]);
+    expect((await claimActionsForNode(db, { ...trustedInternalNode, actionExecuteEnabled: false }, claimOptions)).claimed).toEqual([]);
+    expect((await claimActionsForNode(db, { ...trustedInternalNode, trustState: "quarantined" }, claimOptions)).claimed).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
   });
 
   it("loses the single-claim race gracefully (updateMany count 0 → skipped)", async () => {
     const { db } = claimDb([candidate()], 0);
-    const res = await claimActionsForNode(db, trustedInternalNode, { now: NOW });
+    const res = await claimActionsForNode(db, trustedInternalNode, claimOptions);
     expect(res).toEqual({ claimed: [], skipped: 1 });
   });
 
   it("a mutating candidate is filtered out by the eligibility gate (never claimed)", async () => {
     const { db, updateMany } = claimDb([candidate({ riskClass: "medium", actionType: "service.restart" })]);
-    const res = await claimActionsForNode(db, trustedInternalNode, { now: NOW });
+    const res = await claimActionsForNode(db, trustedInternalNode, claimOptions);
     expect(res.claimed).toEqual([]);
     expect(updateMany).not.toHaveBeenCalled();
   });

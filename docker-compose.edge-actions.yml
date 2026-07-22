@@ -1,0 +1,16 @@
+# Machine-bound Edge action overlay. Added only after the PKI bootstrap has
+# generated all referenced host files; existing organization-trust installs
+# without the action profile therefore continue to start normally.
+
+services:
+  portal:
+    environment:
+      DPF_EDGE_ACTION_SIGNING_PRIVATE_KEY_FILE: /run/secrets/dpf-edge-action-signing-private.pem
+      DPF_EDGE_ACTION_SIGNING_KEY_ID: ${DPF_EDGE_ACTION_SIGNING_KEY_ID:-edge-action-signing-v1}
+      DPF_EDGE_ACTION_SIGNING_PASSWORD_FILE: /run/secrets/dpf-edge-action-signing-password
+      DPF_EDGE_MTLS_PROXY_SECRET_FILE: /run/secrets/dpf-edge-mtls-proxy-secret
+      DPF_REMOTE_ACTION_DISPATCH_ENABLED: ${DPF_REMOTE_ACTION_DISPATCH_ENABLED:-0}
+    volumes:
+      - ${DPF_EDGE_ACTION_SIGNING_PRIVATE_KEY_FILE:?Set DPF_EDGE_ACTION_SIGNING_PRIVATE_KEY_FILE}:/run/secrets/dpf-edge-action-signing-private.pem:ro
+      - ${DPF_EDGE_ACTION_SIGNING_PASSWORD_FILE:?Set DPF_EDGE_ACTION_SIGNING_PASSWORD_FILE}:/run/secrets/dpf-edge-action-signing-password:ro
+      - ${DPF_EDGE_MTLS_PROXY_SECRET_FILE:?Set DPF_EDGE_MTLS_PROXY_SECRET_FILE}:/run/secrets/dpf-edge-mtls-proxy-secret:ro

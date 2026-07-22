@@ -286,19 +286,26 @@ export async function approveEdgeNodeAction(
   }
   // Approving an already-trusted node is a no-op (idempotent); allow it.
 
-  await prisma.edgeNode.update({
-    where: { id: edgeNodeId },
-    data: {
-      trustState: "trusted",
-      status: "active",
-      approvedAt: new Date(),
-      approvedByPrincipalId: gate.principalId,
-      // Approving clears quarantine fields so a previously-quarantined
-      // node can be re-trusted by operator action.
-      quarantinedAt: null,
-      quarantineReason: null,
-    },
-  });
+  const approvedAt = new Date();
+  await prisma.$transaction([
+    prisma.edgeNode.update({
+      where: { id: edgeNodeId },
+      data: {
+        trustState: "trusted",
+        status: "active",
+        approvedAt,
+        approvedByPrincipalId: gate.principalId,
+        // Approving clears quarantine fields so a previously-quarantined
+        // node can be re-trusted by operator action.
+        quarantinedAt: null,
+        quarantineReason: null,
+      },
+    }),
+    prisma.edgeNodeCertificate.updateMany({
+      where: { edgeNodeId, status: "quarantined", validUntil: { gt: approvedAt } },
+      data: { status: "active", revokedAt: null, revocationReason: null },
+    }),
+  ]);
   revalidatePath(ADMIN_PATH);
   return { ok: true, edgeNodeId, trustState: "trusted" };
 }
@@ -335,15 +342,27 @@ export async function quarantineEdgeNodeAction(
     };
   }
 
-  await prisma.edgeNode.update({
-    where: { id: edgeNodeId },
-    data: {
-      trustState: "quarantined",
-      status: "quarantined",
-      quarantinedAt: new Date(),
-      quarantineReason: reason.trim(),
-    },
-  });
+  const quarantineReason = reason.trim();
+  const quarantinedAt = new Date();
+  await prisma.$transaction([
+    prisma.edgeNode.update({
+      where: { id: edgeNodeId },
+      data: {
+        trustState: "quarantined",
+        status: "quarantined",
+        quarantinedAt,
+        quarantineReason,
+      },
+    }),
+    prisma.edgeNodeCertificate.updateMany({
+      where: { edgeNodeId, status: "active" },
+      data: {
+        status: "quarantined",
+        revokedAt: quarantinedAt,
+        revocationReason: `node_quarantined:${quarantineReason}`,
+      },
+    }),
+  ]);
   revalidatePath(ADMIN_PATH);
   return { ok: true, edgeNodeId, trustState: "quarantined" };
 }
@@ -384,17 +403,29 @@ export async function revokeEdgeNodeAction(
   // there's no separate EdgeNodeToken table to clear; the hash on
   // the row IS the credential. Re-enrollment is operator-explicit
   // per spec § Re-enrollment.
-  await prisma.edgeNode.update({
-    where: { id: edgeNodeId },
-    data: {
-      trustState: "revoked",
-      revokedAt: new Date(),
-      revocationReason: reason.trim(),
-      tokenHash: null,
-      tokenPrefix: null,
-      tokenRotatedAt: null,
-    },
-  });
+  const revocationReason = reason.trim();
+  const revokedAt = new Date();
+  await prisma.$transaction([
+    prisma.edgeNode.update({
+      where: { id: edgeNodeId },
+      data: {
+        trustState: "revoked",
+        revokedAt,
+        revocationReason,
+        tokenHash: null,
+        tokenPrefix: null,
+        tokenRotatedAt: null,
+      },
+    }),
+    prisma.edgeNodeCertificate.updateMany({
+      where: { edgeNodeId, status: { not: "revoked" } },
+      data: {
+        status: "revoked",
+        revokedAt,
+        revocationReason: `node_revoked:${revocationReason}`,
+      },
+    }),
+  ]);
   revalidatePath(ADMIN_PATH);
   return { ok: true, edgeNodeId, trustState: "revoked" };
 }

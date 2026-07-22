@@ -19,8 +19,51 @@ func clearEnv(t *testing.T) {
 	for _, k := range []string{
 		EnvAuthorityURL, EnvBootstrapToken, EnvEdgeNodeName,
 		EnvStateDir, EnvInstallMode, EnvPlatformOverride, EnvVersion,
+		EnvEdgeActionURL, EnvEdgeActionCAFile, EnvEdgeActionCertFile,
+		EnvEdgeActionKeyFile, EnvEdgeActionSigningPublicKeyFile,
 	} {
 		t.Setenv(k, "")
+	}
+}
+
+func TestLoad_actionDispatchRequiresCompleteMachineTrustBundle(t *testing.T) {
+	clearEnv(t)
+	setEnv(t, map[string]string{
+		EnvAuthorityURL:     "http://localhost:3000",
+		EnvPlatformOverride: "linux",
+		EnvEdgeActionURL:    "https://localhost:8443",
+		EnvEdgeActionCAFile: "/trust/root.crt",
+	})
+
+	_, err := Load("0.1.0")
+	if err == nil {
+		t.Fatal("expected incomplete action trust configuration to fail closed")
+	}
+	for _, name := range []string{EnvEdgeActionCertFile, EnvEdgeActionKeyFile, EnvEdgeActionSigningPublicKeyFile} {
+		if !strings.Contains(err.Error(), name) {
+			t.Fatalf("error %q does not name missing %s", err, name)
+		}
+	}
+}
+
+func TestLoad_actionDispatchTrustBundleIsOptionalButCompleteWhenEnabled(t *testing.T) {
+	clearEnv(t)
+	setEnv(t, map[string]string{
+		EnvAuthorityURL:                   "http://localhost:3000",
+		EnvPlatformOverride:               "linux",
+		EnvEdgeActionURL:                  "https://localhost:8443/",
+		EnvEdgeActionCAFile:               "/trust/root.crt",
+		EnvEdgeActionCertFile:             "/trust/edge-client.crt",
+		EnvEdgeActionKeyFile:              "/trust/edge-client.key",
+		EnvEdgeActionSigningPublicKeyFile: "/trust/action-signing-public.pem",
+	})
+
+	cfg, err := Load("0.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ActionDispatchEnabled() || cfg.EdgeActionURL != "https://localhost:8443" {
+		t.Fatalf("unexpected action configuration: %#v", cfg)
 	}
 }
 

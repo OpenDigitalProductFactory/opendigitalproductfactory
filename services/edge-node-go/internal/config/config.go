@@ -45,17 +45,38 @@ const (
 	// build time via -ldflags "-X main.Version=..."; env var lets dev
 	// builds override.
 	EnvVersion = "DPF_EDGE_NODE_VERSION"
+
+	// The action listener is deliberately separate from the ordinary Edge API:
+	// it requires a machine certificate in addition to the node bearer token.
+	EnvEdgeActionURL                  = "DPF_EDGE_ACTION_URL"
+	EnvEdgeActionCAFile               = "DPF_EDGE_ACTION_CA_FILE"
+	EnvEdgeActionCertFile             = "DPF_EDGE_ACTION_CERT_FILE"
+	EnvEdgeActionKeyFile              = "DPF_EDGE_ACTION_KEY_FILE"
+	EnvEdgeActionSigningPublicKeyFile = "DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE"
 )
 
 // Config is the loaded, validated runtime configuration.
 type Config struct {
-	AuthorityURL   string
-	BootstrapToken string // empty on subsequent runs
-	EdgeNodeName   string
-	StateDir       string
-	Platform       string // darwin | win32 | linux  (matches TS contract)
-	InstallMode    string // native | container-host | container-vm
-	Version        string
+	AuthorityURL                   string
+	BootstrapToken                 string // empty on subsequent runs
+	EdgeNodeName                   string
+	StateDir                       string
+	Platform                       string // darwin | win32 | linux  (matches TS contract)
+	InstallMode                    string // native | container-host | container-vm
+	Version                        string
+	EdgeActionURL                  string
+	EdgeActionCAFile               string
+	EdgeActionCertFile             string
+	EdgeActionKeyFile              string
+	EdgeActionSigningPublicKeyFile string
+}
+
+// ActionDispatchEnabled reports whether the complete fail-closed machine trust
+// bundle is configured. An installation with no bundle keeps the action channel
+// inert while enrollment, heartbeat, and discovery continue normally.
+func (c *Config) ActionDispatchEnabled() bool {
+	return c.EdgeActionURL != "" && c.EdgeActionCAFile != "" && c.EdgeActionCertFile != "" &&
+		c.EdgeActionKeyFile != "" && c.EdgeActionSigningPublicKeyFile != ""
 }
 
 // Load reads and validates configuration from os environment. Returns
@@ -63,13 +84,18 @@ type Config struct {
 // failing on the first one — operators usually want the full list.
 func Load(version string) (*Config, error) {
 	cfg := &Config{
-		AuthorityURL:   strings.TrimRight(os.Getenv(EnvAuthorityURL), "/"),
-		BootstrapToken: os.Getenv(EnvBootstrapToken),
-		EdgeNodeName:   os.Getenv(EnvEdgeNodeName),
-		StateDir:       os.Getenv(EnvStateDir),
-		Platform:       resolvePlatform(),
-		InstallMode:    strings.TrimSpace(os.Getenv(EnvInstallMode)),
-		Version:        os.Getenv(EnvVersion),
+		AuthorityURL:                   strings.TrimRight(os.Getenv(EnvAuthorityURL), "/"),
+		BootstrapToken:                 os.Getenv(EnvBootstrapToken),
+		EdgeNodeName:                   os.Getenv(EnvEdgeNodeName),
+		StateDir:                       os.Getenv(EnvStateDir),
+		Platform:                       resolvePlatform(),
+		InstallMode:                    strings.TrimSpace(os.Getenv(EnvInstallMode)),
+		Version:                        os.Getenv(EnvVersion),
+		EdgeActionURL:                  strings.TrimRight(strings.TrimSpace(os.Getenv(EnvEdgeActionURL)), "/"),
+		EdgeActionCAFile:               strings.TrimSpace(os.Getenv(EnvEdgeActionCAFile)),
+		EdgeActionCertFile:             strings.TrimSpace(os.Getenv(EnvEdgeActionCertFile)),
+		EdgeActionKeyFile:              strings.TrimSpace(os.Getenv(EnvEdgeActionKeyFile)),
+		EdgeActionSigningPublicKeyFile: strings.TrimSpace(os.Getenv(EnvEdgeActionSigningPublicKeyFile)),
 	}
 
 	if cfg.EdgeNodeName == "" {
@@ -107,6 +133,36 @@ func Load(version string) (*Config, error) {
 	case "native", "container-host", "container-vm":
 	default:
 		problems = append(problems, fmt.Sprintf("%s=%q is unrecognized (need native|container-host|container-vm)", EnvInstallMode, cfg.InstallMode))
+	}
+
+	actionFields := []struct {
+		name  string
+		value string
+	}{
+		{EnvEdgeActionURL, cfg.EdgeActionURL},
+		{EnvEdgeActionCAFile, cfg.EdgeActionCAFile},
+		{EnvEdgeActionCertFile, cfg.EdgeActionCertFile},
+		{EnvEdgeActionKeyFile, cfg.EdgeActionKeyFile},
+		{EnvEdgeActionSigningPublicKeyFile, cfg.EdgeActionSigningPublicKeyFile},
+	}
+	configuredActionFields := 0
+	for _, field := range actionFields {
+		if field.value != "" {
+			configuredActionFields++
+		}
+	}
+	if configuredActionFields > 0 && configuredActionFields != len(actionFields) {
+		for _, field := range actionFields {
+			if field.value == "" {
+				problems = append(problems, fmt.Sprintf("%s is required when the Edge action channel is configured", field.name))
+			}
+		}
+	}
+	if cfg.EdgeActionURL != "" {
+		actionURL, err := url.Parse(cfg.EdgeActionURL)
+		if err != nil || actionURL.Scheme != "https" || actionURL.Host == "" {
+			problems = append(problems, fmt.Sprintf("%s must be an absolute https URL", EnvEdgeActionURL))
+		}
 	}
 
 	if len(problems) > 0 {
