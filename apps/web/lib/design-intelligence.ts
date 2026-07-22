@@ -4,6 +4,7 @@
 // BM25-like keyword matching across multiple design domains.
 
 import { lazyFs, lazyPath, getCwd } from "@/lib/shared/lazy-node";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ function loadDomain(domain: DesignDomain): CsvRow[] {
     cache.set(filename, rows);
     return rows;
   } catch (err) {
-    console.error(`[design-intelligence] failed to read domain "${domain}" (${filename}) from ${dataDir}: ${err instanceof Error ? err.message : String(err)} — design guidance for this domain is DEGRADED.`);
+    console.error(`[design-intelligence] failed to read domain "${domain}" (${filename}) from ${dataDir}: ${getErrorMessage(err)} — design guidance for this domain is DEGRADED.`);
     cache.set(filename, []);
     return [];
   }
