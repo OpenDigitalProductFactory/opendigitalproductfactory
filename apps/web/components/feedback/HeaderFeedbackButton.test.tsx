@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HeaderFeedbackButton } from "./HeaderFeedbackButton";
 
@@ -19,105 +19,55 @@ vi.mock("./FeedbackForm", () => ({
   FeedbackForm: (props: Record<string, unknown>) => {
     feedbackFormMock.props.push(props);
 
-    return <div data-testid="feedback-form">Feedback fallback</div>;
+    return <div data-testid="feedback-form">Feedback form</div>;
   },
 }));
 
 describe("HeaderFeedbackButton", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     pathname = "/build";
     feedbackFormMock.props = [];
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
     cleanup();
   });
 
-  it("dispatches a cancelable manual support event for the build route", () => {
-    const received: CustomEvent[] = [];
+  it("opens a feedback-labeled surface, not the AI coworker conversation", () => {
+    // BI-62FF22DB: a control labeled "Feedback" must not open the coworker
+    // panel. Guard against any coworker-panel event being dispatched.
+    const coworkerEvents: Event[] = [];
     const handler = ((event: Event) => {
-      received.push(event as CustomEvent);
+      coworkerEvents.push(event);
     }) as EventListener;
     document.addEventListener("open-agent-feedback", handler);
+    document.addEventListener("open-agent-panel", handler);
 
     try {
       render(<HeaderFeedbackButton userId="user-1" />);
-      const trigger = screen.getByRole("button", {
-        name: /^feedback$/i,
-      });
-
+      const trigger = screen.getByRole("button", { name: /^feedback$/i });
       expect(trigger).toHaveAccessibleName("Feedback");
 
       fireEvent.click(trigger);
 
-      expect(received).toHaveLength(1);
-      expect(received[0].cancelable).toBe(true);
-      expect(received[0].detail).toEqual(
-        expect.objectContaining({
-          routeContext: "/build",
-          triggerKind: "manual",
-          autoFilePolicy: "ask",
-        }),
-      );
-      expect(received[0].detail.supportSessionId).toMatch(
-        /^dpf_support_[a-f0-9]{32}$/,
-      );
+      // A feedback-specific surface appears, with a clear title and the form.
+      const dialog = screen.getByRole("dialog", { name: /send feedback/i });
+      expect(dialog).toBeInTheDocument();
+      expect(screen.getByText("Send Feedback")).toBeVisible();
+      expect(screen.getByTestId("feedback-form")).toBeInTheDocument();
+
+      // ...and no AI coworker panel is opened.
+      expect(coworkerEvents).toHaveLength(0);
     } finally {
       document.removeEventListener("open-agent-feedback", handler);
+      document.removeEventListener("open-agent-panel", handler);
     }
   });
 
-  it("keeps the fallback form closed when the support event is handled", () => {
-    const handler = ((event: Event) => {
-      event.preventDefault();
-    }) as EventListener;
-    document.addEventListener("open-agent-feedback", handler);
-
-    try {
-      render(<HeaderFeedbackButton userId="user-1" />);
-      fireEvent.click(screen.getByRole("button", { name: "Feedback" }));
-
-      act(() => {
-        vi.advanceTimersByTime(500);
-      });
-
-      expect(screen.queryByTestId("feedback-form")).not.toBeInTheDocument();
-      expect(feedbackFormMock.props).toHaveLength(0);
-    } finally {
-      document.removeEventListener("open-agent-feedback", handler);
-    }
-  });
-
-  it("keeps the fallback form closed when the coworker panel opens", () => {
-    render(<HeaderFeedbackButton userId="user-1" />);
-    fireEvent.click(screen.getByRole("button", { name: "Feedback" }));
-
-    const panel = document.createElement("div");
-    panel.setAttribute("data-agent-panel", "true");
-    document.body.appendChild(panel);
-
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
-
-    expect(screen.queryByTestId("feedback-form")).not.toBeInTheDocument();
-    expect(feedbackFormMock.props).toHaveLength(0);
-    panel.remove();
-  });
-
-  it("opens the fallback form with the same support context when the event is unhandled", () => {
+  it("passes the current route and manual support context to the feedback form", () => {
     render(<HeaderFeedbackButton userId="user-1" />);
     fireEvent.click(screen.getByRole("button", { name: /^feedback$/i }));
 
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
-
-    expect(screen.getByTestId("feedback-form")).toBeInTheDocument();
-    expect(screen.getByText("Feedback fallback")).toBeVisible();
     expect(feedbackFormMock.props).toHaveLength(1);
     expect(feedbackFormMock.props[0]).toEqual(
       expect.objectContaining({
@@ -131,5 +81,18 @@ describe("HeaderFeedbackButton", () => {
     expect(feedbackFormMock.props[0].supportSessionId).toMatch(
       /^dpf_support_[a-f0-9]{32}$/,
     );
+  });
+
+  it("toggles the feedback surface closed on a second click", () => {
+    render(<HeaderFeedbackButton userId="user-1" />);
+    const trigger = screen.getByRole("button", { name: /^feedback$/i });
+
+    fireEvent.click(trigger);
+    expect(screen.getByTestId("feedback-form")).toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(trigger);
+    expect(screen.queryByTestId("feedback-form")).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 });
