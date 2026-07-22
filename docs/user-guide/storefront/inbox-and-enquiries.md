@@ -27,9 +27,17 @@ opening anything else:
 - **Confirm** and **Cancel** buttons that name the specific booking — a screen
   reader announces them as, for example, "Confirm Jane Smith, Table for 2 at 6:30 PM".
 
+Confirming or cancelling always shows you the exact reservation first, then tells
+you what happened: a short "working" state while it runs, a green note when it
+succeeds ("Confirmed — the guest's booking is now confirmed"), or a red note if it
+fails — the booking is unchanged and you can simply try again. Cancelling asks for
+a reason and explains that the guest will see the booking as cancelled.
+
 Urgent reservations that still need you (a booking waiting to be confirmed, one that
 needs a new time, or a double-booking to untangle) also appear in your workspace
 "What needs you now" queue, kept separate from your digital team's other decisions.
+New customer enquiries that haven't been replied to or routed yet appear there too
+("Reply to …"), so a waiting lead is never visible only in this inbox.
 
 ## What To Watch
 

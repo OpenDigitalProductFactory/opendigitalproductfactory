@@ -97,6 +97,7 @@ const fieldStyle: React.CSSProperties = {
 function primaryBtnStyle(disabled?: boolean): React.CSSProperties {
   return {
     padding: "10px 20px",
+    minHeight: 44,
     background: disabled ? "var(--dpf-muted)" : "var(--dpf-accent, #4f46e5)",
     color: "var(--dpf-surface-1, #fff)",
     border: "none",
@@ -117,8 +118,25 @@ function ghostBtnStyle(): React.CSSProperties {
     fontSize: 13,
     padding: 0,
     textDecoration: "underline",
+    // 44px touch-target floor on phone viewports (BI-2B2FCB2B).
+    minHeight: 44,
+    display: "inline-flex",
+    alignItems: "center",
   };
 }
+
+/** Shared 44px-floor style for tappable slot/time buttons (BI-2B2FCB2B). */
+const slotBtnBase: React.CSSProperties = {
+  border: "1px solid var(--dpf-border)",
+  borderRadius: 6,
+  background: "var(--dpf-surface-2)",
+  color: "var(--dpf-text)",
+  fontSize: 14,
+  cursor: "pointer",
+  fontWeight: 500,
+  minHeight: 44,
+  minWidth: 44,
+};
 
 // ── Calendar helpers ──────────────────────────────────────────────────────────
 
@@ -528,6 +546,7 @@ function DateStep({
               style={{
                 textAlign: "center",
                 padding: "8px 4px",
+                minHeight: 44,
                 borderRadius: 6,
                 border: "1px solid transparent",
                 fontSize: 14,
@@ -605,6 +624,7 @@ function SlotStep({
           {slotsResult.mode === "next-available" && (
             <NextAvailableSlots
               slots={slotsResult.slots}
+              dateLabel={formatDisplayDate(selectedDate)}
               selectLabel={copy.selectTime}
               onSelect={(slot) => onSelectSlot(slot)}
             />
@@ -612,12 +632,14 @@ function SlotStep({
           {slotsResult.mode === "customer-choice" && (
             <CustomerChoiceSlots
               providers={slotsResult.providers}
+              dateLabel={formatDisplayDate(selectedDate)}
               onSelect={onSelectSlot}
             />
           )}
           {slotsResult.mode === "class" && (
             <ClassSlots
               slots={slotsResult.slots}
+              dateLabel={formatDisplayDate(selectedDate)}
               onSelect={(slot) => onSelectSlot(slot)}
             />
           )}
@@ -638,12 +660,22 @@ function isEmpty(result: SlotsResult): boolean {
   return result.slots.length === 0;
 }
 
+/** The visible label is just the start time, so tie the accessible name to the
+ *  full slot context — time range + day (+ provider) — mirroring the calendar's
+ *  day buttons (BI-2B2FCB2B). */
+function slotAccessibleName(slot: AvailableSlot, dateLabel: string, providerName?: string): string {
+  const range = `${formatTime(slot.startTime)} to ${formatTime(slot.endTime)}`;
+  return `${range} on ${dateLabel}${providerName ? ` with ${providerName}` : ""}`;
+}
+
 function NextAvailableSlots({
   slots,
+  dateLabel,
   selectLabel = "Select a time:",
   onSelect,
 }: {
   slots: AvailableSlot[];
+  dateLabel: string;
   selectLabel?: string;
   onSelect: (slot: AvailableSlot) => void;
 }) {
@@ -655,16 +687,8 @@ function NextAvailableSlots({
           <button
             key={`${slot.startTime}-${slot.providerId ?? "any"}`}
             onClick={() => onSelect(slot)}
-            style={{
-              padding: "8px 14px",
-              border: "1px solid var(--dpf-border)",
-              borderRadius: 6,
-              background: "var(--dpf-surface-2)",
-              color: "var(--dpf-text)",
-              fontSize: 14,
-              cursor: "pointer",
-              fontWeight: 500,
-            }}
+            aria-label={slotAccessibleName(slot, dateLabel)}
+            style={{ ...slotBtnBase, padding: "8px 14px" }}
           >
             {formatTime(slot.startTime)}
           </button>
@@ -676,9 +700,11 @@ function NextAvailableSlots({
 
 function CustomerChoiceSlots({
   providers,
+  dateLabel,
   onSelect,
 }: {
   providers: SlotsByProvider[];
+  dateLabel: string;
   onSelect: (slot: AvailableSlot, provider: { id: string; name: string; avatarUrl?: string | null }) => void;
 }) {
   return (
@@ -731,16 +757,8 @@ function CustomerChoiceSlots({
               <button
                 key={slot.startTime}
                 onClick={() => onSelect(slot, provider)}
-                style={{
-                  padding: "8px 14px",
-                  border: "1px solid var(--dpf-border)",
-                  borderRadius: 6,
-                  background: "var(--dpf-surface-2)",
-                  color: "var(--dpf-text)",
-                  fontSize: 14,
-                  cursor: "pointer",
-                  fontWeight: 500,
-                }}
+                aria-label={slotAccessibleName(slot, dateLabel, provider.name)}
+                style={{ ...slotBtnBase, padding: "8px 14px" }}
               >
                 {formatTime(slot.startTime)}
               </button>
@@ -754,9 +772,11 @@ function CustomerChoiceSlots({
 
 function ClassSlots({
   slots,
+  dateLabel,
   onSelect,
 }: {
   slots: AvailableSlot[];
+  dateLabel: string;
   onSelect: (slot: AvailableSlot) => void;
 }) {
   return (
@@ -766,11 +786,13 @@ function ClassSlots({
         <button
           key={slot.startTime}
           onClick={() => onSelect(slot)}
+          aria-label={slotAccessibleName(slot, dateLabel)}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             padding: "12px 16px",
+            minHeight: 44,
             border: "1px solid var(--dpf-border)",
             borderRadius: 8,
             background: "var(--dpf-surface-2)",

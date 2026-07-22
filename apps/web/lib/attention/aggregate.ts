@@ -18,6 +18,7 @@ import {
 } from "./sources/coworker-memory";
 import { loadProviderCredentialItems, loadProviderSuitabilityDriftItems } from "./sources/provider-credential";
 import { loadReservationExceptionItems } from "./sources/reservation-exception";
+import { loadStorefrontInquiryItems } from "./sources/storefront-inquiry";
 import {
   loadOutboundItems,
   loadBillItems,
@@ -97,6 +98,7 @@ export async function loadAttentionItems(
     { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
     { source: "reservation-exception", load: () => loadReservationExceptionItems(db) },
+    { source: "storefront-inquiry", load: () => loadStorefrontInquiryItems(db) },
     {
       source: "provider-credential",
       load: async () => [

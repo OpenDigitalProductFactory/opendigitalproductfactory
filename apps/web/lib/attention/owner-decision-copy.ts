@@ -16,6 +16,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "platform-health": "Choose how to handle this outage?",
   "provider-credential": "Reconnect this service?",
   "reservation-exception": "Handle this reservation?",
+  "storefront-inquiry": "Reply to this enquiry?",
 };
 
 const SPECIALIST: Record<AttentionSource, string> = {
@@ -34,6 +35,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "platform-health": "Platform operations",
   "provider-credential": "Technology",
   "reservation-exception": "Front of house",
+  "storefront-inquiry": "Front of house",
 };
 
 export function specialistFor(source: AttentionSource): string {

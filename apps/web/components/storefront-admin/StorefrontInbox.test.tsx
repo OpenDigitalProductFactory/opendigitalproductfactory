@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-vi.mock("@/components/ui/Dialog", () => ({
+const dialogMocks = vi.hoisted(() => ({
+  confirmDialog: vi.fn(),
   promptDialog: vi.fn(),
 }));
+vi.mock("@/components/ui/Dialog", () => dialogMocks);
 
 import { StorefrontInbox } from "./StorefrontInbox";
 
@@ -27,7 +29,42 @@ function inquiry(overrides: Record<string, unknown> = {}) {
   };
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  dialogMocks.confirmDialog.mockReset();
+  dialogMocks.promptDialog.mockReset();
+});
+
+function booking(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "bk_1",
+    ref: "BK-0001",
+    name: "Jane Smith",
+    email: "jane.smith@example.com",
+    type: "booking",
+    detail: "Wednesday, July 22",
+    createdAt: "2026-07-20T10:00:00.000Z",
+    providerName: null,
+    status: "pending",
+    backlogItemId: null,
+    itemName: "Table for 2",
+    covers: 2,
+    whenLabel: "Wednesday, July 22 · 6:30 PM",
+    timeLabel: "6:30 PM",
+    nextAction: "Confirm or decline",
+    ...overrides,
+  };
+}
+
+function stubFetch(response: { ok: boolean; body?: Record<string, unknown> }) {
+  const fetchMock = vi.fn(async () => ({
+    ok: response.ok,
+    json: async () => response.body ?? {},
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
 
 // ── Send-to-backlog action state (BI-4F4252DB) ──────────────────────────────
 describe("StorefrontInbox send-to-backlog state", () => {
@@ -110,5 +147,110 @@ describe("StorefrontInbox — owner inbox visibility (inquiry)", () => {
     );
     expect(screen.getByRole("button", { name: /send inquiry INQ-0001 to backlog/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /send inquiry INQ-SECOND22 to backlog/i })).toBeTruthy();
+  });
+});
+
+// ── Booking action-result contract (BI-3DA1DFDC) ─────────────────────────────
+describe("StorefrontInbox — booking confirm/cancel result states", () => {
+  it("reviews the exact reservation before confirming, then shows a success state without reloading", async () => {
+    dialogMocks.confirmDialog.mockResolvedValue(true);
+    const fetchMock = stubFetch({ ok: true });
+    render(<StorefrontInbox entries={[booking()]} defaultDigitalProduct={defaultDigitalProduct} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /confirm jane smith, table for 2 at 6:30 pm/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/confirmed — the guest's booking is now confirmed\./i)).toBeTruthy(),
+    );
+    // Pre-action review named the exact reservation + consequence.
+    expect(dialogMocks.confirmDialog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/confirm jane smith, table for 2 at 6:30 pm/i),
+        message: expect.stringMatching(/BK-0001.*becomes confirmed/i),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith("/api/storefront/bookings/bk_1/confirm", { method: "POST" });
+    // The row's visible status updated in place — no window.location.reload().
+    expect(screen.getByText("confirmed")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /confirm jane smith/i })).toBeNull();
+  });
+
+  it("does nothing when the owner declines the confirm review", async () => {
+    dialogMocks.confirmDialog.mockResolvedValue(false);
+    const fetchMock = stubFetch({ ok: true });
+    render(<StorefrontInbox entries={[booking()]} defaultDigitalProduct={defaultDigitalProduct} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /confirm jane smith/i }));
+    await waitFor(() => expect(dialogMocks.confirmDialog).toHaveBeenCalled());
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a failed confirm as a row-specific retryable error, not a silent reload", async () => {
+    dialogMocks.confirmDialog.mockResolvedValue(true);
+    stubFetch({ ok: false, body: { error: "Booking already cancelled by the guest." } });
+    render(<StorefrontInbox entries={[booking()]} defaultDigitalProduct={defaultDigitalProduct} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /confirm jane smith/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Booking already cancelled by the guest.");
+    expect(alert.textContent).toMatch(/the booking is unchanged — try again/i);
+    // The action is still available for retry.
+    expect(screen.getByRole("button", { name: /confirm jane smith/i })).toBeTruthy();
+  });
+
+  it("names the reservation in the cancel dialog and shows the cancelled result", async () => {
+    dialogMocks.promptDialog.mockResolvedValue("Guest phoned to cancel");
+    const fetchMock = stubFetch({ ok: true });
+    render(<StorefrontInbox entries={[booking()]} defaultDigitalProduct={defaultDigitalProduct} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel jane smith, table for 2 at 6:30 pm/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/cancelled — the guest sees this booking as cancelled\./i)).toBeTruthy(),
+    );
+    expect(dialogMocks.promptDialog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/cancel jane smith, table for 2 at 6:30 pm/i),
+        message: expect.stringMatching(/BK-0001.*guest will see this booking as cancelled/i),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/storefront/bookings/bk_1/cancel",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(screen.getByText("cancelled")).toBeTruthy();
+  });
+});
+
+// ── Filter announcement + labelled provider select (BI-F0B389C9 residue) ─────
+describe("StorefrontInbox — filter chips and provider select", () => {
+  it("marks the active filter chip and announces the result count", () => {
+    render(
+      <StorefrontInbox
+        entries={[inquiry(), booking()]}
+        defaultDigitalProduct={defaultDigitalProduct}
+      />,
+    );
+    const all = screen.getByRole("button", { name: /filter requests: all/i });
+    expect(all.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: /filter requests: booking/i }));
+    expect(
+      screen.getByRole("button", { name: /filter requests: booking/i }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByRole("status").textContent).toMatch(/showing 1 of 2 requests — booking filter on/i);
+  });
+
+  it("gives the booking provider filter an accessible name", () => {
+    render(
+      <StorefrontInbox
+        entries={[booking({ providerName: "Table 1" })]}
+        providers={[{ id: "p1", name: "Table 1" }]}
+        defaultDigitalProduct={defaultDigitalProduct}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /filter requests: booking/i }));
+    expect(screen.getByRole("combobox", { name: /filter bookings by provider/i })).toBeTruthy();
   });
 });
