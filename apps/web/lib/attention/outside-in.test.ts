@@ -85,6 +85,7 @@ describe("portfolio classification", () => {
     expect(portfolioForSource("approval-outbound")).toBe("products-and-services-sold");
     expect(portfolioForSource("ai-decision")).toBe("for-employees");
     expect(portfolioForSource("paused-ai")).toBe("for-employees");
+    expect(portfolioForSource("coworker-memory")).toBe("for-employees");
   });
 
   it("maps build + back-office sources to the inner portfolios", () => {

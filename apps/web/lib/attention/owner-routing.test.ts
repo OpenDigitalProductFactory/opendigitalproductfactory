@@ -94,6 +94,11 @@ describe("classifyOwnerAttentionLane", () => {
     expect(classifyOwnerAttentionLane(research, "assertive").lane).toBe("weekly-digest");
   });
 
+  it("routes newly acquired coworker memories to the digest", () => {
+    expect(classifyOwnerAttentionLane(item("coworker-memory", { riskClass: "read" })).lane)
+      .toBe("weekly-digest");
+  });
+
   it("routes missing credentials to the custodian instead of pretending they need judgment", () => {
     const paused = item("paused-ai", {
       triage: {

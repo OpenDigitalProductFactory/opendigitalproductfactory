@@ -75,6 +75,7 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   // Build / delivery pipeline (deeper inside).
   escalation: "manufacturing-and-delivery", // Build Studio could not self-repair
   "research-proposal": "manufacturing-and-delivery", // internal capability R&D
+  "coworker-memory": "for-employees", // role-local coworker craft memory
   // Foundational back-office / platform infra (deepest inside).
   "approval-bill": "foundational", // AP bill approval
   "approval-expense": "foundational", // expense claim

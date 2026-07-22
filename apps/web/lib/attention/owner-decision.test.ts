@@ -169,6 +169,7 @@ describe("translateAttentionToOwnerDecision", () => {
     "approval-expense",
     "compliance-submission",
     "research-proposal",
+    "coworker-memory",
     "ai-readiness-blocker",
     "platform-health",
     "provider-credential",

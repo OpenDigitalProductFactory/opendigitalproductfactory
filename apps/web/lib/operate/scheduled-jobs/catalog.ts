@@ -633,7 +633,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "coworker/memory-consolidation-nightly",
     name: "Coworker memory consolidation",
     purpose:
-      "EP-8C706944 Phase 2 (BI-907C4327): the sleep-time 'autoDream' pass — batch-collapses near-duplicate coworker working notes and user facts to one canonical each, then expires entries unused past the retention window (supersession, never a hard delete). If it stops, the memory stores accumulate near-duplicates and stale facts.",
+      "EP-8C706944 Phase 2 + EP-COMPETENCE-FLYWHEEL (BI-907C4327, BI-4B0A1C1F): the sleep-time 'autoDream' pass distills completed work into coworker working notes, advances thread checkpoints, batch-collapses near-duplicate notes/facts to one canonical each, then expires entries unused past the retention window (supersession, never a hard delete). If it stops, coworker memory acquisition stalls and the memory stores accumulate near-duplicates and stale facts.",
     cron: "20 4 * * *",
     cadence: "Daily at 04:20",
     category: "editable",
