@@ -109,6 +109,33 @@ Concrete volumes at stake on the diagnosed install: 1870 `SkillUsageEvent` and 4
 are distinct in a unique index**. A `GROUP BY` collapses them into one apparent group. Check for
 NULLs before concluding a table needs dedupe.
 
+### Quarantine renames the key — it does NOT retire the row
+
+The generic dedupe helper (`dpf_quarantine_duplicate_keys`) is table-agnostic: it renames the
+loser's key column to `__dpf_quarantined__<id>__<original>` and rebuilds the index, and **nothing
+else**. It cannot know each table's own "this row is no longer live" markers, so every quarantined
+loser keeps its original `status` / `lifecycleStage` / `archived` — and its original `displayName`.
+
+That is enough to hide the row from the UNIQUE constraint but **not from the UI**. A quarantined
+`Agent` row still passes the roster filter (`archived = false AND lifecycleStage <> 'retirement'`)
+and renders as a ghost coworker under its original name — the very duplicate the dedupe was meant to
+remove. The same holds anywhere a table is listed by an "is-active" predicate rather than by its
+renamed key: `ModelProfile` (`modelStatus IN ('active','degraded')`), `TaxonomyNode`
+(`status = 'active'`), and so on.
+
+So dedupe is **two** steps, not one:
+
+1. Quarantine the key and rebuild the index (the generic helper).
+2. Retire the quarantined rows using each table's own native marker — verify the value is already
+   present in that column's live domain rather than inventing an enum value. Migration
+   `20260721190000_retire_quarantined_duplicate_rows` is the reference: `Agent` →
+   `archived=true, lifecycleStage='retirement'`; `ModelProfile` → `modelStatus='retired'` with
+   `retiredAt`/`retiredReason`; `TaxonomyNode` → `status='retired'`; `SkillDefinition` →
+   `status='quarantined'`. Retire, do not delete — the tombstone stays for audit and unmerge.
+
+The durable fix is to fold step 2 into the helper (let each table declare its tombstone marker) so a
+future dedupe retires losers in one pass — tracked in BI-8EEEF8CB.
+
 ## Preventing recurrence
 
 - `docker/postgres/Dockerfile` is **pinned by digest**. A floating `:pg16` tag is what let libc move
