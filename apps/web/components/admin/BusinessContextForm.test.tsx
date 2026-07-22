@@ -65,13 +65,16 @@ describe("BusinessContextForm", () => {
     const html = renderToStaticMarkup(
       <BusinessContextForm initial={baseInitial} archetypeSummary={null} />,
     );
+    // React 19 renderToStaticMarkup preserves the camelCase `autoComplete` prop
+    // name in the emitted markup (the browser + jsdom treat it case-insensitively),
+    // so match the token case-insensitively rather than assuming lowercase.
     expect(html).toContain('name="contactEmail"');
-    expect(html).toContain('autocomplete="email"');
+    expect(html).toMatch(/autocomplete="email"/i);
     expect(html).toContain('name="contactPhone"');
-    expect(html).toContain('autocomplete="tel"');
-    expect(html).toContain('autocomplete="address-line1"');
-    expect(html).toContain('autocomplete="postal-code"');
-    expect(html).toContain('autocomplete="country"');
+    expect(html).toMatch(/autocomplete="tel"/i);
+    expect(html).toMatch(/autocomplete="address-line1"/i);
+    expect(html).toMatch(/autocomplete="postal-code"/i);
+    expect(html).toMatch(/autocomplete="country"/i);
   });
 
   it("renders an accessible primary submit action", () => {

@@ -4229,6 +4229,7 @@
         "color-system",
         "contrast-requirements",
         "form-elements",
+        "user-facing-form-contract-mandatory",
         "prohibited-patterns",
         "allowed-hex-usage",
         "component-checklist",
