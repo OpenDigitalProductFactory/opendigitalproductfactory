@@ -23,6 +23,7 @@ function snapshot(
       id: "storefront-1",
       archetypeId: "expert-services",
       archetypeName: "Expert Services",
+      category: "professional-services",
       tagline: "Proof-led growth",
       description: "Operational advice",
       ctaType: "inquiry",
@@ -157,6 +158,62 @@ describe("marketing subroute view models", () => {
       title: "Draft LinkedIn proof post",
       draftStatusLabel: "Pending review",
     });
+  });
+
+  it("flags saved artifacts that leak software-platform language as imported/test data", () => {
+    const leaky = snapshot({
+      storefront: {
+        id: "storefront-r",
+        archetypeId: "restaurant",
+        archetypeName: "Restaurant",
+        category: "food-hospitality",
+        tagline: "Seasonal dining",
+        description: "Neighbourhood restaurant",
+        ctaType: "booking",
+      },
+      workProducts: {
+        campaignBriefs: [
+          {
+            briefId: "brief-leak",
+            title: "Reach technical founders with our AI workflow",
+            objective: "Explain how Build Studio ships software",
+            audience: "technical founders",
+            channels: ["linkedin"],
+            cta: "Book a demo",
+            proofAssets: [],
+            kpis: [],
+            notes: "Mention the SaaS platform.",
+            status: "draft",
+            createdAt: now,
+          },
+          {
+            briefId: "brief-clean",
+            title: "Fill quiet midweek covers with a seasonal tasting menu",
+            objective: "Lift midweek bookings",
+            audience: "local diners",
+            channels: ["email"],
+            cta: "Reserve a table",
+            proofAssets: [],
+            kpis: [],
+            notes: "Feature our five-star reviews.",
+            status: "draft",
+            createdAt: now,
+          },
+        ],
+        assetTasks: [],
+        kpiCheckpoints: [],
+        automationCandidates: [],
+      },
+      pendingDrafts: [],
+    });
+
+    const view = buildMarketingCampaignsView(leaky);
+    const leak = view.campaigns.find((c) => c.id === "brief-leak");
+    const clean = view.campaigns.find((c) => c.id === "brief-clean");
+
+    expect(leak?.archetypeFit.blocked).toBe(true);
+    expect(clean?.archetypeFit.severity).toBe("ok");
+    expect(view.importedTestCount).toBe(1);
   });
 
   it("aggregates funnel evidence without overstating attribution", () => {

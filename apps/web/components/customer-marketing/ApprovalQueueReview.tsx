@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   approveOutboundDraftAction,
   requestChangesOnDraftAction,
   rejectOutboundDraftAction,
 } from "@/app/(shell)/customer/marketing/actions";
+import { assessArchetypeFit } from "@/lib/marketing/archetype-fit";
+import { ArchetypeFitNotice } from "./ArchetypeFitNotice";
 
 type Props = {
   draftId: string;
@@ -13,16 +15,23 @@ type Props = {
   assetTaskTitle: string | null;
   channelId: string;
   assetType: string;
+  category: string | null;
 };
 
 type FlashState = { kind: "ok" | "err"; message: string } | null;
 
-export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, channelId, assetType }: Props) {
+export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, channelId, assetType, category }: Props) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState(initialBody);
   const [notes, setNotes] = useState("");
   const [flash, setFlash] = useState<FlashState>(null);
   const [pending, startTransition] = useTransition();
+
+  // Live archetype-fit assessment of the (possibly edited) body. A hard block
+  // (software-platform / off-archetype content) disables Approve until the
+  // operator edits the leak out. The server action enforces the same rule.
+  const fit = useMemo(() => assessArchetypeFit({ text: body, category }), [body, category]);
+  const approveBlocked = fit.blocked;
 
   function showError(err: string) {
     setFlash({ kind: "err", message: err });
@@ -134,19 +143,25 @@ export function ApprovalQueueReview({ draftId, initialBody, assetTaskTitle, chan
                 className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 text-sm text-[var(--dpf-text)] focus:border-[var(--dpf-accent)] focus:outline-none"
               />
 
+              {fit.severity !== "ok" ? (
+                <ArchetypeFitNotice assessment={fit} className="mt-3" />
+              ) : null}
+
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  disabled={pending}
+                  disabled={pending || approveBlocked}
                   onClick={() => approve(false)}
+                  title={approveBlocked ? fit.summary : undefined}
                   className="rounded-full bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                 >
                   Approve
                 </button>
                 <button
                   type="button"
-                  disabled={pending || body === initialBody}
+                  disabled={pending || body === initialBody || approveBlocked}
                   onClick={() => approve(true)}
+                  title={approveBlocked ? fit.summary : undefined}
                   className="rounded-full border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] px-4 py-1.5 text-sm font-medium text-[var(--dpf-accent)] disabled:opacity-50"
                 >
                   Approve with edits

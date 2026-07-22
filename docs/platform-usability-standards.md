@@ -202,6 +202,28 @@ The common shell chrome that wraps every owner route (`apps/web/app/(shell)/layo
 
 New shell controls, and edits to the existing ones, must be covered by the action-result smoke (`apps/web/components/shell/shell-action-result-contract.test.tsx`), which parameterises the contract across the owner routes.
 
+## Archetype-scoped marketing content (BI-CC580161)
+
+Customer marketing surfaces (`/customer/marketing`, `/customer/marketing/strategy`, `/customer/marketing/campaigns`) must speak in the language of the **organization's own business archetype**. A restaurant markets covers, bookings, menus, seasonal/quiet-period offers and reviews — never software-platform artifacts (Build Studio, technical founders, AI workflow, SaaS, the Digital Product Factory). Bootstrap and imported/test data can leak that vocabulary in; the platform detects and contains it.
+
+### Fit engine (source of truth)
+
+`apps/web/lib/marketing/archetype-fit.ts` — `assessArchetypeFit({ text, category })` returns a deterministic `{ severity: "ok" | "warn" | "block", blocked, findings, summary }`:
+
+- **platform-leak → `block`.** Software-platform / DPF-internal terms are foreign to *every* customer archetype and can never be published. Blocked artifacts are badged **"Imported / test data — blocked from publish"** and cannot pass Approve, Send email, or Publish to LinkedIn.
+- **off-archetype → `warn`.** Vocabulary distinctive to a *different* archetype (e.g. banking "APY", education "enrolment") surfaces a warning to confirm fit before sending; it does not hard-block, because cross-sell copy can be legitimate.
+- The active archetype's own vocabulary never warns.
+
+### Enforcement points
+
+- **Server (authoritative):** `guardDraftArchetypeFit` blocks Approve (`actions.ts`) and `publishApprovedDraft` (`publish.ts`) blocks Publish/Send — client warnings alone are never trusted.
+- **UI:** the approval queue, publish buttons, and saved campaign/asset artifacts (`/campaigns`) render the fit badge/notice and disable release on a hard block.
+- **Drafter:** `draft-builder.ts` derives audience, tone, and CTA vocabulary from the archetype playbook (`lib/tak/marketing-playbooks.ts`) instead of a hardcoded software-founder voice, so generated copy is on-archetype by construction.
+
+### First-viewport decision
+
+`/customer/marketing` opens with **one** archetype-scoped next decision (`lib/marketing/next-decision.ts`, `buildMarketingOwnerDecision`) phrased in the owner's own terms and tied to the archetype's headline metric (e.g. booking fill rate, covers).
+
 ## Standards Referenced
 
 - WCAG 2.2 (W3C Recommendation) — Level AA compliance

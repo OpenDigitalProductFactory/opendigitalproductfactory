@@ -1,6 +1,8 @@
 import type { InboundMessageRow, OutboundDraftRow } from "@/lib/marketing";
 import { formatMarketingLabel } from "@/lib/marketing";
+import { assessArchetypeFit } from "@/lib/marketing/archetype-fit";
 import { ApprovalQueueReview } from "./ApprovalQueueReview";
+import { ArchetypeFitBadge } from "./ArchetypeFitNotice";
 import { PublishLinkedInButton } from "./PublishLinkedInButton";
 import { PublishEmailButton } from "./PublishEmailButton";
 
@@ -9,6 +11,8 @@ type Props = {
   approvedDrafts: OutboundDraftRow[];
   connectedChannels: string[];
   inboundMessages: InboundMessageRow[];
+  /** Active storefront archetype category, for archetype-fit checks. */
+  category: string | null;
 };
 
 function timeAgo(date: Date | string): string {
@@ -56,13 +60,17 @@ function relativeTime(date: Date | string): string {
 function DraftRow({
   draft,
   trailing,
+  category,
 }: {
   draft: OutboundDraftRow;
   trailing: React.ReactNode;
+  category: string | null;
 }) {
+  const fit = assessArchetypeFit({ text: draft.body, category });
   return (
     <li
       data-draft-id={draft.draftId}
+      data-fit-severity={fit.severity}
       className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -80,6 +88,7 @@ function DraftRow({
             <span>
               Drafted by {draft.createdByAgentId ?? "unknown"} · {timeAgo(draft.createdAt)}
             </span>
+            <ArchetypeFitBadge assessment={fit} />
           </div>
           {draft.assetTaskTitle ? (
             <p className="mt-2 truncate text-sm font-medium text-[var(--dpf-text)]">
@@ -99,6 +108,7 @@ export function ApprovalQueuePanel({
   approvedDrafts,
   connectedChannels,
   inboundMessages,
+  category,
 }: Props) {
   const linkedInConnected =
     connectedChannels.includes("linkedin-personal-social") ||
@@ -138,6 +148,7 @@ export function ApprovalQueuePanel({
               <DraftRow
                 key={draft.draftId}
                 draft={draft}
+                category={category}
                 trailing={
                   <ApprovalQueueReview
                     draftId={draft.draftId}
@@ -145,6 +156,7 @@ export function ApprovalQueuePanel({
                     assetTaskTitle={draft.assetTaskTitle}
                     channelId={draft.channelId}
                     assetType={draft.assetType}
+                    category={category}
                   />
                 }
               />
@@ -181,18 +193,21 @@ export function ApprovalQueuePanel({
               <DraftRow
                 key={draft.draftId}
                 draft={draft}
+                category={category}
                 trailing={
                   isLinkedInChannel(draft.channelId) ? (
                     <PublishLinkedInButton
                       draftId={draft.draftId}
                       channelConnected={linkedInConnected}
                       channelId="linkedin-personal-social"
+                      fitBlocked={assessArchetypeFit({ text: draft.body, category }).blocked}
                     />
                   ) : isEmailChannel(draft.channelId) ? (
                     <PublishEmailButton
                       draftId={draft.draftId}
                       channelConnected={emailConnected}
                       channelId="email-postmark"
+                      fitBlocked={assessArchetypeFit({ text: draft.body, category }).blocked}
                     />
                   ) : (
                     <p className="text-xs text-[var(--dpf-muted)]">
