@@ -112,6 +112,7 @@ const CATEGORY_SIGNATURES: Record<string, string[]> = {
   "fitness-recreation": ["class schedule", "membership churn", "trial pass", "personal training"],
   "nonprofit-community": ["donor", "fundraising", "recurring giving", "volunteer recruitment"],
   "warehousing-fulfilment": ["pallet", "3pl", "despatch", "rate card", "committed capacity"],
+  "fabric-care-services": ["claim ticket", "dry cleaning", "wash and fold", "ready for pickup", "garment care"],
   "beauty-personal-care": ["rebooking", "stylist", "gift voucher", "colour service"],
   "asset-rental": ["off-peak", "rentable pool", "return-due", "deposit policy"],
   "live-events-venues": ["on-sale", "presale", "line-up reveal", "season-pass"],

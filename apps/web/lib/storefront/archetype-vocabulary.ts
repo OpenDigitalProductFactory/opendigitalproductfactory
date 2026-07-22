@@ -143,6 +143,12 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Client Portal", stakeholderLabel: "Clients",
     teamLabel: "Warehouse Team", inboxLabel: "Enquiries", agentName: "Warehouse Manager",
   },
+  "fabric-care-services": {
+    itemsLabel: "Services", singleItemLabel: "Service", addButtonLabel: "Add service",
+    categoryLabel: "Service", priceLabel: "Price",
+    portalLabel: "Customer Portal", stakeholderLabel: "Customers",
+    teamLabel: "Fabric Care Team", inboxLabel: "Orders", agentName: "Fabric Care Coordinator",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {
@@ -265,6 +271,11 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
   // Real estate & construction
   "new-home-builder": ["Single Storey", "Double Storey", "Townhouses & Duplexes", "Acreage Designs", "Granny Flats"],
   "custom-home-builder": ["New Home Build", "Knockdown & Rebuild", "Renovation & Extension", "Dual Occupancy", "Acreage Builds"],
+
+  // Fabric care
+  "dry-cleaning-plant-network": ["Dry Cleaning", "Laundry", "Pressing", "Alterations", "Pickup & Delivery"],
+  "wash-and-fold-laundry": ["Wash & Fold", "Commercial Laundry", "Pickup & Delivery", "Subscriptions"],
+  "alterations-tailoring": ["Alterations", "Repairs", "Fittings", "Hemming"],
 };
 
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {

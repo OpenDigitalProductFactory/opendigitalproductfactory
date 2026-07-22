@@ -43,7 +43,7 @@ Implementation source of truth: `StorefrontConfig.archetypeId` selects the insta
 
 ## Current Market Coverage
 
-The source catalog currently contains 21 market categories and 95 leaf archetype templates. The public docs should usually describe the categories first, then use leaf archetypes when a concrete example helps.
+The source catalog currently contains 23 market categories and 103 leaf archetype templates. The public docs should usually describe the categories first, then use leaf archetypes when a concrete example helps.
 
 For a fast owner-facing summary of every category and leaf, use the [Archetype Owner Quick Guide](../marketing/archetype-owner-quick-guide.md). It is the skimmable layer for sales, marketing, and test planning before reading the deeper positioning or audit documents.
 
@@ -70,6 +70,7 @@ For a fast owner-facing summary of every category and leaf, use the [Archetype O
 | Security services | guard patrol, alarm/CCTV install, licensed monitoring-adjacent service |
 | Media production | film/video production, post-production, event production and staging |
 | Live events and venues | event venues, tour promoters, talent booking agencies |
+| Fabric care services | dry-cleaning plant/store networks, wash-and-fold laundry, alterations and tailoring |
 
 The first three persona anchors are:
 

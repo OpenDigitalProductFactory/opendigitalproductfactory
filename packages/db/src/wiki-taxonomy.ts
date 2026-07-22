@@ -373,6 +373,7 @@ export const PROFESSION_ARCHETYPES = [
   "media-production",
   "live-events-venues",
   "warehousing-fulfilment",
+  "fabric-care-services",
 ] as const;
 export type ProfessionArchetype = (typeof PROFESSION_ARCHETYPES)[number];
 

@@ -44,6 +44,11 @@ const WORKSPACE_HOME_COMPONENT_KEYS = new Set<string>([
   // production build at page-data collection, not at typecheck.
   "stock-accuracy",
   "dock-capacity",
+  // Fabric care services (2026-07-22 archetype). Kept in lockstep with
+  // WorkspaceHomeComponentKey in types.ts for the fail-closed registry guard.
+  "plant-capacity",
+  "ticket-exceptions",
+  "garment-tracking",
 ]);
 
 const WORKSPACE_HOME_DATA_REF_KINDS = new Set(["projection", "canonical-data", "signal"]);

@@ -11,6 +11,7 @@ describe("finance setup profile resolution", () => {
     expect(financeProfileSlugFromCategory("education-training")).toBe("education_training");
     expect(financeProfileSlugFromCategory("retail-goods")).toBe("retail");
     expect(financeProfileSlugFromCategory("software-platform")).toBe("software_platform");
+    expect(financeProfileSlugFromCategory("fabric-care-services")).toBe("fabric_care_services");
   });
 
   it("falls back to professional services when the business category is unknown", () => {
@@ -39,6 +40,17 @@ describe("finance setup profile resolution", () => {
     })).toMatchObject({
       slug: "beauty_personal",
       primaryPaymentPattern: "appointment-checkout",
+      recurringBillingApplicability: "optional",
+    });
+  });
+
+  it("exposes point-of-sale finance setup for fabric care", () => {
+    expect(resolveFinanceSetupProfile({
+      category: "fabric-care-services",
+      archetypeName: "Dry Cleaning Plant & Store Network",
+    })).toMatchObject({
+      slug: "fabric_care_services",
+      primaryPaymentPattern: "point-of-sale",
       recurringBillingApplicability: "optional",
     });
   });

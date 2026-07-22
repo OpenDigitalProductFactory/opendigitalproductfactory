@@ -110,6 +110,17 @@ const TRUST_BY_CATEGORY: Record<string, TrustProfile> = {
       "No card details are taken to book. Any deposit is arranged directly with the business.",
     accountPurpose: "manage your appointments and bookings",
   },
+  "fabric-care-services": {
+    bookingNoun: "order",
+    bookingPolicy:
+      "Sending a request shares your service details with the team; any drop-off, pickup, or claim-ticket details are confirmed before work starts.",
+    cancellationPolicy:
+      "Need to change pickup, delivery, or a ready-by request? Contact us using the details below as early as you can.",
+    dietaryNote: null,
+    paymentNote:
+      "No payment is taken to send this request. Cleaning, alteration, and delivery fees are handled directly with the business.",
+    accountPurpose: "manage your garment orders, pickup requests, and claim-ticket updates",
+  },
 };
 
 /** Resolve the trust profile for an archetype category (falls back to generic). */

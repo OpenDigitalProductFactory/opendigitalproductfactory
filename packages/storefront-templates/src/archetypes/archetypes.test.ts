@@ -27,6 +27,47 @@ describe("archetype catalog", () => {
     expect(unique.size).toBe(ids.length);
   });
 
+  it("ships fabric-care services with dry-cleaning plant-network custody flow (BI-7CFFC421)", () => {
+    const fabricCare = ALL_ARCHETYPES.filter((a) => a.category === "fabric-care-services");
+    expect(fabricCare.map((a) => a.archetypeId).sort()).toEqual([
+      "alterations-tailoring",
+      "dry-cleaning-plant-network",
+      "wash-and-fold-laundry",
+    ]);
+
+    const dryCleaner = fabricCare.find((a) => a.archetypeId === "dry-cleaning-plant-network");
+    expect(dryCleaner, "dry-cleaning-plant-network archetype should exist").toBeDefined();
+    expect(dryCleaner?.ctaType).toBe("inquiry");
+    expect(dryCleaner?.activationProfile?.modules).toEqual([
+      "customer-estate",
+      "service-operations",
+      "billing-readiness",
+      "integrations",
+    ]);
+    expect(dryCleaner?.activationProfile?.billingReadinessMode).toBe("prepared-not-prescribed");
+    expect(dryCleaner?.activationProfile?.customerGraph).toBe("separate-customer-projection");
+    expect(dryCleaner?.activationProfile?.estateSeparation).toBe("strict");
+    expect(dryCleaner?.activationProfile?.axes).toMatchObject({
+      form: "services",
+      delivery: "physical",
+      primaryConsumer: "individual",
+      consumptionChannel: "multi-channel",
+      commercialModel: "point-of-sale",
+      provisioning: "account-with-billing",
+      platform: "no",
+    });
+
+    const fieldNames = dryCleaner?.formSchema.map((field) => field.name) ?? [];
+    expect(fieldNames).toEqual(expect.arrayContaining([
+      "preferredLocation",
+      "serviceMode",
+      "neededBy",
+      "garmentNotes",
+    ]));
+    expect(dryCleaner?.itemTemplates.some((item) => /claim ticket/i.test(item.description))).toBe(true);
+    expect(dryCleaner?.itemTemplates.some((item) => /ready/i.test(item.description))).toBe(true);
+  });
+
   it("personal-trainer shares the scheduling/operating-hours setup of the other beauty booking archetypes", () => {
     // AUDIT-R2-PT-P-001 alleged the personal-trainer wizard skips the Operating
     // Hours step. That step is driven by the shared scheduling/activation config,

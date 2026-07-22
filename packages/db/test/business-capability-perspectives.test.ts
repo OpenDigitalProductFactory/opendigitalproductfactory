@@ -101,6 +101,33 @@ describe("business capability perspectives", () => {
     expect(keys).not.toContain("msp-managed-customer-estate");
   });
 
+  it("adds a fabric-care category overlay for garment custody and plant flow", () => {
+    const fabricCare = resolveBusinessCapabilityPerspective({
+      archetypeId: "dry-cleaning-plant-network",
+      category: "fabric-care-services",
+    });
+
+    expect(fabricCare.sourcePerspectiveIds).toEqual(["common-small-business", "fabric-care-services"]);
+    expect(fabricCare.sources.map((source) => source.label)).toEqual(["Common Small Business", "Fabric Care Services"]);
+    expect(fabricCare.sources.map((source) => source.source)).toContain(
+      "DPF fabric-care overlay informed by dry-cleaning POS, claim-ticket custody, plant/workroom flow, ready notifications, pickup routes, and garment-care operating patterns",
+    );
+    const keys = fabricCare.capabilities.map((capability) => capability.key);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        "fabric-care-operations",
+        "fabric-care-intake-claim-ticket",
+        "fabric-care-plant-workroom-flow",
+        "fabric-care-ready-promise-notices",
+        "fabric-care-garment-custody-exceptions",
+        "fabric-care-supplies-equipment",
+        "fabric-care-pos-account-billing",
+      ]),
+    );
+    expect(keys).toContain("customer-service-delivery");
+    expect(keys).not.toContain("trades-dispatch-technician-readiness");
+  });
+
   it("adds the BIAN v14 banking overlay for the banking-financial-services category (BI-5D9DCDE6)", () => {
     const creditUnion = resolveBusinessCapabilityPerspective({
       archetypeId: "credit-union",

@@ -171,6 +171,7 @@ const CATEGORY_DEFAULT_COMMERCIAL_MODEL: Partial<Record<ArchetypeCategory, Comme
   "live-events-venues": "transactional",
   // Custody work runs on contract accounts against a rate card, not a sale.
   "warehousing-fulfilment": "account-based-fees",
+  "fabric-care-services": "point-of-sale",
 };
 
 function resolveCommercialModel(a: ArchetypeDefinition): CommercialModel {
@@ -213,6 +214,7 @@ const CATEGORY_DEFAULT_DEMAND: Partial<Record<ArchetypeCategory, DemandSignature
   // Contract volume arrives steadily; the client's own seasonality shows up as
   // throughput variance inside a standing agreement, not as new demand.
   "warehousing-fulfilment": "steady",
+  "fabric-care-services": "weekly",
 };
 
 const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitType>> = {
@@ -238,6 +240,7 @@ const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitT
   "live-events-venues": "physical-hard-cap",
   // Racking, bin locations, and cube — the constraint a warehouse sells.
   "warehousing-fulfilment": "custodial-space",
+  "fabric-care-services": "service-throughput",
 };
 
 // ── Derivation ───────────────────────────────────────────────────────────────

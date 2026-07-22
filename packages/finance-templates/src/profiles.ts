@@ -672,6 +672,42 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
       { code: "5040", name: "Utilities & Refrigeration", type: "expense" },
     ],
   },
+
+  fabric_care_services: {
+    archetypeCategory: "fabric-care-services",
+    displayName: "Fabric Care Services",
+    defaultPaymentTerms: "Due on receipt",
+    defaultCurrency: "GBP",
+    vatRegistered: true,
+    defaultTaxRate: 20,
+    dunningEnabled: true,
+    dunningStyle: "gentle",
+    billingPatternProfile: POINT_OF_SALE_PATTERN,
+    invoiceTemplateStyle: "minimal",
+    expenseCategories: [
+      "Cleaning Supplies & Solvents",
+      "Plant Labour",
+      "Rent & Utilities",
+      "Packaging Hangers & Tags",
+      "Equipment Maintenance",
+      "Delivery & Route Costs",
+      "Alterations Subcontractors",
+      "POS & Customer Notifications",
+    ],
+    purchaseOrdersEnabled: true,
+    chartOfAccountsSeed: [
+      { code: "4000", name: "Dry Cleaning Revenue", type: "revenue" },
+      { code: "4010", name: "Laundry & Wash-Fold Revenue", type: "revenue" },
+      { code: "4020", name: "Alterations & Repair Revenue", type: "revenue" },
+      { code: "4030", name: "Pickup & Delivery Income", type: "revenue" },
+      { code: "4040", name: "Commercial Account Revenue", type: "revenue" },
+      { code: "5000", name: "Cleaning Supplies & Solvents", type: "expense" },
+      { code: "5010", name: "Plant Labour", type: "expense" },
+      { code: "5020", name: "Rent & Utilities", type: "expense" },
+      { code: "5030", name: "Packaging Hangers & Tags", type: "expense" },
+      { code: "5040", name: "Delivery & Route Costs", type: "expense" },
+    ],
+  },
 };
 
 // ─── Exported functions ───────────────────────────────────────────────────────

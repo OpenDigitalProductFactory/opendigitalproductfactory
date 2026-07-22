@@ -36,15 +36,15 @@ export const ARCHETYPE_TAG_RULESET: Record<string, string[]> = {
   payments:    ["retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-services", "professional-services"],
   ecommerce:   ["retail-goods", "food-hospitality"],
   commerce:    ["retail-goods", "food-hospitality"],
-  pos:         ["retail-goods", "food-hospitality"],
+  pos:         ["retail-goods", "food-hospitality", "fabric-care-services"],
   // Booking / scheduling
   booking:     ["healthcare-wellness", "beauty-personal-care", "pet-services", "fitness-recreation"],
   scheduling:  ["healthcare-wellness", "beauty-personal-care"],
   calendar:    ["healthcare-wellness", "education-training"],
   // Marketing / email
-  email:       ["retail-goods", "fitness-recreation", "nonprofit-community"],
-  marketing:   ["retail-goods", "food-hospitality", "fitness-recreation", "professional-services"],
-  crm:         ["professional-services", "trades-maintenance"],
+  email:       ["retail-goods", "fitness-recreation", "nonprofit-community", "fabric-care-services"],
+  marketing:   ["retail-goods", "food-hospitality", "fitness-recreation", "professional-services", "fabric-care-services"],
+  crm:         ["professional-services", "trades-maintenance", "fabric-care-services"],
   // Website / content
   cms:         ["retail-goods", "food-hospitality", "professional-services", "nonprofit-community"],
   wordpress:   ["retail-goods", "food-hospitality", "professional-services", "nonprofit-community"],
@@ -57,15 +57,16 @@ export const ARCHETYPE_TAG_RULESET: Record<string, string[]> = {
   donations:   ["nonprofit-community"],
   nonprofit:   ["nonprofit-community"],
   // Communication
-  messaging:   ["professional-services", "trades-maintenance"],
+  messaging:   ["professional-services", "trades-maintenance", "fabric-care-services"],
   slack:       ["professional-services"],
   // Finance / accounting
   accounting:  ["professional-services"],
-  invoicing:   ["professional-services", "trades-maintenance"],
+  invoicing:   ["professional-services", "trades-maintenance", "fabric-care-services"],
   // Analytics (cross-cutting — applies to all categories)
   analytics:   [
     "retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-services",
     "professional-services", "trades-maintenance", "nonprofit-community", "healthcare-wellness", "beauty-personal-care",
+    "fabric-care-services",
   ],
 };
 
