@@ -32,6 +32,14 @@ const config = {
   outputFileTracingExcludes: {
     "**/*": ["./node_modules/@swc/core*", "./node_modules/esbuild*"],
   },
+  // BI-018AE129: lib/design-intelligence.ts reads these CSVs with runtime
+  // readFileSync, which NFT tracing cannot see — without this include the
+  // standalone output ships no design-intelligence data and every
+  // search_design_intelligence / generate_design_system call returns empty
+  // in production (the loader also falls back to the apps/web-src copy).
+  outputFileTracingIncludes: {
+    "**/*": ["./data/design-intelligence/**"],
+  },
   // EP-0AF96937 Phase 5: the decision-governance surface moved from /wiki to
   // /coworker-decisions. Permanently redirect the old paths so existing
   // bookmarks, deep links, and any lingering internal references keep working.
