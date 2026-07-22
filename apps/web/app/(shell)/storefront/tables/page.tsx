@@ -2,8 +2,9 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { redirect } from "next/navigation";
 
-import { StatCard, StatusBadge } from "@/components/ui/report-kit";
+import { StatCard } from "@/components/ui/report-kit";
 import { intentStyle } from "@/components/ui/report-kit/statusColors";
+import { TablesNowView } from "@/components/storefront-admin/TablesNowView";
 import { TeamManager } from "@/components/storefront-admin/TeamManager";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveResourceVocabulary } from "@/lib/storefront/resource-vocabulary";
@@ -126,32 +127,9 @@ export default async function TablesCapacityPage() {
         </div>
       )}
 
-      {/* Live table state — reconciles with Workspace and public booking. */}
-      {snapshot && snapshot.tables.length > 0 && (
-        <div className="border border-[var(--dpf-border)]" style={{ borderRadius: 10, overflow: "hidden" }}>
-          <div className="bg-[var(--dpf-surface-1)] border-b border-[var(--dpf-border)]" style={{ padding: "10px 14px", fontSize: 13, fontWeight: 600 }}>
-            Tables right now
-          </div>
-          <div>
-            {snapshot.tables.map((t) => (
-              <div
-                key={t.key}
-                className="border-b border-[var(--dpf-border)]"
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}
-              >
-                <div style={{ flex: 1, fontSize: 14 }}>
-                  {t.label}
-                  {t.seats != null && <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}> · {t.seats} seats</span>}
-                </div>
-                {t.state === "turning-soon" && t.freeInMinutes != null && (
-                  <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>free in {t.freeInMinutes}m</span>
-                )}
-                <StatusBadge intent={capacityStateIntent(t.state)} label={capacityStateLabel(t.state)} variant="soft" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Live table state — graphical floor plan or list, one shared projection
+          so both reconcile with Workspace and public booking. */}
+      {snapshot && snapshot.tables.length > 0 && <TablesNowView tables={snapshot.tables} />}
 
       {/* Manage the physical tables (add / edit / block). */}
       <div style={{ marginTop: 4 }}>
