@@ -2,6 +2,12 @@ import { resolveQuickHelp, type QuickHelp } from "@/lib/docs-quick-help";
 
 type Props = {
   sourceRoute: string;
+  /**
+   * Pre-resolved help, used when the caller has context the module cannot reach
+   * on its own — e.g. the server page resolving the install's archetype
+   * vocabulary for storefront routes. Omit to resolve from the route alone.
+   */
+  help?: QuickHelp | null;
 };
 
 /**
@@ -14,10 +20,10 @@ type Props = {
  * nothing, what is reversible, and where recovery lives. The full doc body
  * follows underneath.
  */
-export function ContextualQuickHelp({ sourceRoute }: Props) {
+export function ContextualQuickHelp({ sourceRoute, help: helpOverride }: Props) {
   if (!sourceRoute.startsWith("/")) return null;
 
-  const help = resolveQuickHelp(sourceRoute);
+  const help = helpOverride !== undefined ? helpOverride : resolveQuickHelp(sourceRoute);
 
   return (
     <section aria-label="Contextual help" className="mb-6">
@@ -52,6 +58,8 @@ const QUICK_HELP_ROWS: Array<{ key: keyof QuickHelp; label: string }> = [
   { key: "whatThisPageIs", label: "What this page is" },
   { key: "actionNow", label: "What to do now" },
   { key: "ifNothingDone", label: "If you do nothing" },
+  // Setup screens must say what a save actually changes before it is pressed.
+  { key: "whatChangesIfYouSave", label: "What changes if you save" },
   { key: "reversible", label: "What's reversible" },
   { key: "recovery", label: "Where to get help" },
 ];
@@ -63,7 +71,7 @@ function QuickHelpPanel({ help }: { help: QuickHelp }) {
         Quick help
       </p>
       <dl className="space-y-3">
-        {QUICK_HELP_ROWS.map((row) => (
+        {QUICK_HELP_ROWS.filter((row) => help[row.key]).map((row) => (
           <div key={row.key}>
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
               {row.label}
