@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { getPublicStorefront, resolveInquiryFormSchema } from "@/lib/storefront-data";
 import { InquiryForm } from "@/components/storefront/InquiryForm";
 
@@ -25,6 +26,10 @@ export default async function InquirePage({
           : "Share what you need and we will route your inquiry to the right team."}
       </p>
       <InquiryForm orgSlug={slug} formSchema={formSchema} />
+      <p style={{ marginTop: 16, fontSize: 12, color: "var(--dpf-muted)" }}>
+        We use your details only to respond to your message. See our{" "}
+        <Link href={`/s/${slug}/policies#privacy`} style={{ color: "var(--dpf-accent)" }}>privacy notice</Link>.
+      </p>
     </div>
   );
 }

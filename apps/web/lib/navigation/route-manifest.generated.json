@@ -1,11 +1,11 @@
 {
   "source": "apps/web/app x apps/web/lib/navigation/portal-navigation-model.ts",
-  "totalPageRoutes": 330,
-  "distinctUnclassifiedRoutes": 154,
+  "totalPageRoutes": 332,
+  "distinctUnclassifiedRoutes": 155,
   "counts": {
-    "unclassified": 154,
+    "unclassified": 155,
     "legacy-redirect": 44,
-    "detail": 75,
+    "detail": 76,
     "nav-model": 57
   },
   "routes": [
@@ -2103,6 +2103,13 @@
       "classification": "legacy-redirect"
     },
     {
+      "route": "/storefront/tables",
+      "group": "(shell)",
+      "dynamic": false,
+      "inNavModel": false,
+      "classification": "unclassified"
+    },
+    {
       "route": "/storefront/team",
       "group": "(shell)",
       "dynamic": false,
@@ -2251,6 +2258,13 @@
     },
     {
       "route": "/s/[slug]",
+      "group": "(storefront)",
+      "dynamic": true,
+      "inNavModel": false,
+      "classification": "detail"
+    },
+    {
+      "route": "/s/[slug]/policies",
       "group": "(storefront)",
       "dynamic": true,
       "inNavModel": false,

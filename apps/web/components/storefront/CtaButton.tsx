@@ -7,6 +7,7 @@ export function CtaButton({
   orgSlug,
   itemId,
   priceAmount,
+  itemName,
 }: {
   ctaType: string;
   ctaLabel: string | null;
@@ -14,6 +15,8 @@ export function CtaButton({
   itemId: string;
   /** Decimal amount as a string (Prisma Decimal serializes to string), or null. */
   priceAmount?: string | null;
+  /** Item name — used to give repeated CTAs an item-specific accessible name. */
+  itemName?: string;
 }) {
   // A "purchase" item with no price has nothing to charge — the order route
   // (/s/[slug]/order/[itemId]) 404s when priceAmount is null. Rather than render
@@ -35,9 +38,15 @@ export function CtaButton({
     : effectiveCtaType === "donation" ? `/s/${orgSlug}/donate`
     : `/s/${orgSlug}/inquire/${itemId}`;
 
+  // A storefront home lists the same "Book Now" label on every card; give each
+  // link an item-specific accessible name (e.g. "Book Now: Table for 2") so
+  // screen-reader users can tell the repeated actions apart.
+  const accessibleName = itemName ? `${label}: ${itemName}` : undefined;
+
   return (
     <Link
       href={href}
+      {...(accessibleName ? { "aria-label": accessibleName } : {})}
       style={{
         display: "inline-flex",
         alignItems: "center",
