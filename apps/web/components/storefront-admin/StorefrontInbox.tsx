@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { promptDialog } from "@/components/ui/Dialog";
+import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
 import { reservationActionLabel } from "@/lib/storefront/booking-summary";
 
 type Entry = {
@@ -60,6 +60,15 @@ export function StorefrontInbox({
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [productBacklogState, setProductBacklogState] = useState<Record<string, string>>({});
   const [pendingInquiryId, setPendingInquiryId] = useState<string | null>(null);
+  // Row-specific booking action result state: an owner must see whether a
+  // confirm/cancel is in flight, succeeded, or failed — never a silent reload
+  // that hides a failed POST (BI-3DA1DFDC).
+  const [bookingAction, setBookingAction] = useState<
+    Record<string, { phase: "pending" | "done" | "error"; message: string }>
+  >({});
+  // Successful actions update the row's visible status without a full reload,
+  // so the success note and the new status stay on screen together.
+  const [statusOverride, setStatusOverride] = useState<Record<string, string>>({});
 
   const filtered = entries.filter((e) => {
     if (typeFilter !== "all" && e.type !== typeFilter) return false;
@@ -67,27 +76,79 @@ export function StorefrontInbox({
     return true;
   });
 
-  async function cancelBooking(id: string) {
+  function bookingLabelParts(e: Entry) {
+    return { guestName: e.name, itemName: e.itemName, timeLabel: e.timeLabel };
+  }
+
+  async function runBookingAction(
+    e: Entry,
+    opts: {
+      pendingMessage: string;
+      successStatus: string;
+      successMessage: string;
+      failureMessage: string;
+      request: () => Promise<Response>;
+    },
+  ) {
+    setBookingAction((s) => ({ ...s, [e.id]: { phase: "pending", message: opts.pendingMessage } }));
+    try {
+      const res = await opts.request();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(typeof body.error === "string" ? body.error : opts.failureMessage);
+      }
+      setStatusOverride((s) => ({ ...s, [e.id]: opts.successStatus }));
+      setBookingAction((s) => ({ ...s, [e.id]: { phase: "done", message: opts.successMessage } }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : opts.failureMessage;
+      setBookingAction((s) => ({
+        ...s,
+        [e.id]: { phase: "error", message: `${message} The booking is unchanged — try again.` },
+      }));
+    }
+  }
+
+  async function cancelBooking(e: Entry) {
+    // Name the exact reservation in the dialog so the owner reviews what they
+    // are cancelling — guest, table/service, time — plus the consequence.
     const reason = await promptDialog({
-      title: "Cancel booking",
-      message: "Cancellation reason:",
+      title: reservationActionLabel("Cancel", bookingLabelParts(e)),
+      message: `Booking ${e.ref}. The guest will see this booking as cancelled. Cancellation reason:`,
       confirmLabel: "Cancel booking",
       cancelLabel: "Keep booking",
     });
     if (reason === null) return; // user dismissed
-    await fetch(`/api/storefront/bookings/${id}/cancel`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason }),
+    await runBookingAction(e, {
+      pendingMessage: "Cancelling…",
+      successStatus: "cancelled",
+      successMessage: "Cancelled — the guest sees this booking as cancelled.",
+      failureMessage: "Couldn't cancel the booking.",
+      request: () =>
+        fetch(`/api/storefront/bookings/${e.id}/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        }),
     });
-    window.location.reload();
   }
 
-  async function confirmBooking(id: string) {
-    await fetch(`/api/storefront/bookings/${id}/confirm`, {
-      method: "POST",
+  async function confirmBooking(e: Entry) {
+    // Pre-action review with consequence copy: exactly which reservation, and
+    // what confirming changes for the guest (BI-3DA1DFDC).
+    const ok = await confirmDialog({
+      title: reservationActionLabel("Confirm", bookingLabelParts(e)),
+      message: `Booking ${e.ref}. The guest's booking becomes confirmed. You can still cancel later with a reason.`,
+      confirmLabel: "Confirm booking",
+      cancelLabel: "Not yet",
     });
-    window.location.reload();
+    if (!ok) return;
+    await runBookingAction(e, {
+      pendingMessage: "Confirming…",
+      successStatus: "confirmed",
+      successMessage: "Confirmed — the guest's booking is now confirmed.",
+      failureMessage: "Couldn't confirm the booking.",
+      request: () => fetch(`/api/storefront/bookings/${e.id}/confirm`, { method: "POST" }),
+    });
   }
 
   async function sendInquiryToProductBacklog(id: string) {
@@ -149,14 +210,16 @@ export function StorefrontInbox({
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
         {["all", "inquiry", "booking", "order", "donation"].map((t) => (
           <button
             key={t}
             onClick={() => { setTypeFilter(t); setProviderFilter("all"); }}
-            className={`border border-[var(--dpf-border)] ${typeFilter === t ? "bg-[var(--dpf-accent)] text-white" : ""}`}
+            aria-pressed={typeFilter === t}
+            aria-label={`Filter requests: ${t === "all" ? "All" : TYPE_LABELS[t]}`}
+            className={`dpf-tap-target border border-[var(--dpf-border)] ${typeFilter === t ? "bg-[var(--dpf-accent)] text-white" : ""}`}
             style={{
-              padding: "4px 10px",
+              padding: "4px 12px",
               borderRadius: 4,
               background: typeFilter === t ? undefined : "none",
               color: typeFilter === t ? undefined : "inherit",
@@ -171,7 +234,8 @@ export function StorefrontInbox({
           <select
             value={providerFilter}
             onChange={(e) => setProviderFilter(e.target.value)}
-            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+            aria-label="Filter bookings by provider"
+            className="dpf-tap-target border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
             style={{
               padding: "4px 10px",
               borderRadius: 4,
@@ -187,6 +251,12 @@ export function StorefrontInbox({
           </select>
         )}
       </div>
+      {/* Announce the active filter + result count so the chips aren't a silent
+          visual-only state (BI-4F4252DB follow-through). */}
+      <p role="status" className="text-[var(--dpf-muted)]" style={{ fontSize: 12, margin: "0 0 16px" }}>
+        Showing {filtered.length} of {entries.length} requests
+        {typeFilter !== "all" ? ` — ${TYPE_LABELS[typeFilter]} filter on` : ""}
+      </p>
 
       {filtered.length === 0 && <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>No entries yet.</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -210,7 +280,9 @@ export function StorefrontInbox({
                 </span>
               )}
               <span style={{ fontSize: 12, fontFamily: "monospace" }}>{e.ref}</span>
-              {e.type === "booking" && e.status && <StatusBadge status={e.status} />}
+              {e.type === "booking" && (statusOverride[e.id] ?? e.status) && (
+                <StatusBadge status={statusOverride[e.id] ?? e.status} />
+              )}
               {e.type === "booking" && e.providerName && (
                 <span className="text-[var(--dpf-accent)]" style={{ fontSize: 11, padding: "1px 7px", borderRadius: 10, background: "rgba(79,70,229,0.12)" }}>
                   {e.providerName}
@@ -270,7 +342,7 @@ export function StorefrontInbox({
                         </span>
                         <a
                           href={`/ops?itemId=${encodeURIComponent(backlogItemId)}`}
-                          className="text-[var(--dpf-accent)]"
+                          className="dpf-tap-target text-[var(--dpf-accent)]"
                           style={{ fontSize: 12, textDecoration: "underline" }}
                           aria-label={`Open backlog item ${backlogItemId} for inquiry ${e.ref}`}
                         >
@@ -287,9 +359,9 @@ export function StorefrontInbox({
                           disabled={!defaultDigitalProduct || isSending}
                           aria-label={`Send inquiry ${e.ref} to backlog`}
                           title={`Creates an internal work item from ${e.name ?? "this customer"}'s inquiry ${e.ref}. The customer is not notified.`}
-                          className="border border-[var(--dpf-accent)] text-[var(--dpf-accent)]"
+                          className="dpf-tap-target border border-[var(--dpf-accent)] text-[var(--dpf-accent)]"
                           style={{
-                            padding: "3px 10px",
+                            padding: "3px 12px",
                             borderRadius: 4,
                             background: "none",
                             cursor: !defaultDigitalProduct || isSending ? "not-allowed" : "pointer",
@@ -315,38 +387,70 @@ export function StorefrontInbox({
                 </div>
               );
             })()}
-            {e.type === "booking" && (
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                {e.status === "pending" && (
-                  <button
-                    onClick={() => confirmBooking(e.id)}
-                    aria-label={reservationActionLabel("Confirm", {
-                      guestName: e.name,
-                      itemName: e.itemName,
-                      timeLabel: e.timeLabel,
-                    })}
-                    className="border border-[var(--dpf-success)] text-[var(--dpf-success)]"
-                    style={{ padding: "3px 10px", borderRadius: 4, background: "none", cursor: "pointer", fontSize: 12 }}
-                  >
-                    Confirm
-                  </button>
-                )}
-                {e.status !== "cancelled" && e.status !== "completed" && (
-                  <button
-                    onClick={() => cancelBooking(e.id)}
-                    aria-label={reservationActionLabel("Cancel", {
-                      guestName: e.name,
-                      itemName: e.itemName,
-                      timeLabel: e.timeLabel,
-                    })}
-                    className="border border-[var(--dpf-error)] text-[var(--dpf-error)]"
-                    style={{ padding: "3px 10px", borderRadius: 4, background: "none", cursor: "pointer", fontSize: 12 }}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            )}
+            {e.type === "booking" && (() => {
+              const status = statusOverride[e.id] ?? e.status;
+              const action = bookingAction[e.id];
+              const busy = action?.phase === "pending";
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {status === "pending" && (
+                      <button
+                        onClick={() => confirmBooking(e)}
+                        disabled={busy}
+                        aria-label={reservationActionLabel("Confirm", bookingLabelParts(e))}
+                        className="dpf-tap-target border border-[var(--dpf-success)] text-[var(--dpf-success)]"
+                        style={{
+                          padding: "3px 12px",
+                          borderRadius: 4,
+                          background: "none",
+                          cursor: busy ? "wait" : "pointer",
+                          fontSize: 12,
+                          opacity: busy ? 0.6 : 1,
+                        }}
+                      >
+                        {busy ? "Working…" : "Confirm"}
+                      </button>
+                    )}
+                    {status !== "cancelled" && status !== "completed" && (
+                      <button
+                        onClick={() => cancelBooking(e)}
+                        disabled={busy}
+                        aria-label={reservationActionLabel("Cancel", bookingLabelParts(e))}
+                        className="dpf-tap-target border border-[var(--dpf-error)] text-[var(--dpf-error)]"
+                        style={{
+                          padding: "3px 12px",
+                          borderRadius: 4,
+                          background: "none",
+                          cursor: busy ? "wait" : "pointer",
+                          fontSize: 12,
+                          opacity: busy ? 0.6 : 1,
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                  {/* Row-specific action result: pending, success, or a failure the
+                      owner can retry — never a silent reload (BI-3DA1DFDC). */}
+                  {action && (
+                    <span
+                      role={action.phase === "error" ? "alert" : "status"}
+                      className={
+                        action.phase === "error"
+                          ? "text-[var(--dpf-error)]"
+                          : action.phase === "done"
+                            ? "text-[var(--dpf-success)]"
+                            : "text-[var(--dpf-muted)]"
+                      }
+                      style={{ fontSize: 12 }}
+                    >
+                      {action.message}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         ))}
       </div>

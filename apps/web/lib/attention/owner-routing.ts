@@ -40,6 +40,11 @@ export function classifyOwnerAttentionLane(
     // choice that is never batched into a digest (BI-3DA1DFDC).
     return decision("needs-you-now", "A guest is waiting on a reservation decision.", true, appliedLevel);
   }
+  if (item.source === "storefront-inquiry") {
+    // A customer is waiting on the owner's first reply — hard-floored like a
+    // reservation so a waiting lead is never batched into a digest (BI-A36CF68D).
+    return decision("needs-you-now", "A customer is waiting on a reply.", true, appliedLevel);
+  }
   if (item.source === "paused-ai" && item.triage.residueReason === "needs-credential") {
     return decision("custodian", "A credential is technical access work, not owner judgment.", false, appliedLevel);
   }

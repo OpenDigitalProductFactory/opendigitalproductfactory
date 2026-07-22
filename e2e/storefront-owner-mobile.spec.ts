@@ -47,3 +47,61 @@ test.describe("Owner team/setup mobile usability @390px (BI-F0B389C9)", () => {
     }
   });
 });
+
+// Residual-closure slice (BI-F0B389C9): the dashboard + inbox routes named in
+// the acceptance now get explicit 390px assertions too. Chips/action controls
+// were sized by the residual-closure PR; earlier routes stay covered above.
+test.describe("Owner dashboard + inbox mobile usability @390px (BI-F0B389C9)", () => {
+  test("no horizontal overflow and a first-viewport owner task on /storefront", async ({ page }) => {
+    await gotoOwnerRoute(page, "/storefront");
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(scrollWidth, "/storefront overflows horizontally at 390px").toBeLessThanOrEqual(
+      clientWidth + 1,
+    );
+    // Chrome budget: the owner's task content (first main-content heading) must
+    // start inside the first phone viewport, not below a wall of shell chrome.
+    const heading = page.locator("main h1, main h2").first();
+    await expect(heading).toBeVisible();
+    const box = await heading.boundingBox();
+    expect(box?.y ?? Infinity, "owner task heading must be in the first 390x844 viewport").toBeLessThan(
+      844,
+    );
+  });
+
+  test("inbox filter chips meet the 44px tap target and expose pressed state", async ({ page }) => {
+    await gotoOwnerRoute(page, "/storefront/inbox");
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(scrollWidth, "/storefront/inbox overflows horizontally at 390px").toBeLessThanOrEqual(
+      clientWidth + 1,
+    );
+
+    const chips = page.getByRole("button", { name: /^filter requests:/i });
+    const chipCount = await chips.count();
+    expect(chipCount, "expected the request filter chips").toBeGreaterThanOrEqual(3);
+    for (let i = 0; i < chipCount; i++) {
+      const chip = chips.nth(i);
+      const box = await chip.boundingBox();
+      expect(box?.height ?? 0, `filter chip #${i} height`).toBeGreaterThanOrEqual(43.5);
+      expect(await chip.getAttribute("aria-pressed"), `filter chip #${i} pressed state`).not.toBeNull();
+    }
+  });
+
+  test("inbox row actions are 44px and row-specific when requests exist", async ({ page }) => {
+    await gotoOwnerRoute(page, "/storefront/inbox");
+    const rowActions = page.getByRole("button", {
+      name: /^(confirm|cancel|send inquiry) /i,
+    });
+    const count = await rowActions.count();
+    test.skip(count === 0, "no actionable requests seeded on this install");
+    for (let i = 0; i < Math.min(count, 6); i++) {
+      const box = await rowActions.nth(i).boundingBox();
+      expect(box?.height ?? 0, `inbox row action #${i} height`).toBeGreaterThanOrEqual(43.5);
+    }
+  });
+});

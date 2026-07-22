@@ -9,10 +9,21 @@ type Props = {
   channelId: string;
   /** True when archetype-fit flags the body as off-archetype/software-platform content. */
   fitBlocked?: boolean;
+  /** Owner-readable artifact title shown in the pre-publish confirmation. */
+  artifactTitle?: string | null;
+  /** Owner-readable audience description shown in the pre-publish confirmation. */
+  audience?: string | null;
 };
 
-export function PublishLinkedInButton({ draftId, channelConnected, channelId, fitBlocked }: Props) {
-  const [status, setStatus] = useState<"idle" | "publishing" | "done" | "error">("idle");
+export function PublishLinkedInButton({
+  draftId,
+  channelConnected,
+  channelId,
+  fitBlocked,
+  artifactTitle,
+  audience,
+}: Props) {
+  const [status, setStatus] = useState<"idle" | "confirming" | "publishing" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [externalUrl, setExternalUrl] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -77,11 +88,50 @@ export function PublishLinkedInButton({ draftId, channelConnected, channelId, fi
     );
   }
 
+  // Explicit owner confirmation before anything leaves the building: channel,
+  // artifact, audience, and the external consequence, reviewed in one place
+  // (BI-CC580161 publish-confirmation acceptance).
+  if (status === "confirming") {
+    return (
+      <div
+        data-testid="publish-confirm-panel"
+        className="flex flex-col gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs text-[var(--dpf-text)]"
+      >
+        <p className="font-semibold">Publish this post publicly?</p>
+        <ul className="flex flex-col gap-1">
+          <li><span className="text-[var(--dpf-muted)]">Channel:</span> LinkedIn</li>
+          {artifactTitle && <li><span className="text-[var(--dpf-muted)]">Post:</span> {artifactTitle}</li>}
+          <li>
+            <span className="text-[var(--dpf-muted)]">Audience:</span>{" "}
+            {audience ?? "everyone who can see this business's LinkedIn presence"}
+          </li>
+          <li>This posts outside DPF. It can be deleted on LinkedIn later, but people may already have seen it.</li>
+        </ul>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onPublish}
+            className="rounded-full bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white"
+          >
+            Yes, publish to LinkedIn
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatus("idle")}
+            className="rounded-full border border-[var(--dpf-border)] px-4 py-1.5 text-sm text-[var(--dpf-text)]"
+          >
+            Keep as draft
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
-        onClick={onPublish}
+        onClick={() => setStatus("confirming")}
         disabled={pending}
         className="rounded-full bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
       >

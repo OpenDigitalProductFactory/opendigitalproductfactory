@@ -9,10 +9,21 @@ type Props = {
   channelId: string;
   /** True when archetype-fit flags the body as off-archetype/software-platform content. */
   fitBlocked?: boolean;
+  /** Owner-readable artifact title shown in the pre-send confirmation. */
+  artifactTitle?: string | null;
+  /** Owner-readable audience description shown in the pre-send confirmation. */
+  audience?: string | null;
 };
 
-export function PublishEmailButton({ draftId, channelConnected, channelId, fitBlocked }: Props) {
-  const [status, setStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
+export function PublishEmailButton({
+  draftId,
+  channelConnected,
+  channelId,
+  fitBlocked,
+  artifactTitle,
+  audience,
+}: Props) {
+  const [status, setStatus] = useState<"idle" | "confirming" | "sending" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -60,11 +71,49 @@ export function PublishEmailButton({ draftId, channelConnected, channelId, fitBl
     );
   }
 
+  // Explicit owner confirmation before the send: channel, artifact, audience,
+  // and the external consequence (BI-CC580161 publish-confirmation acceptance).
+  if (status === "confirming") {
+    return (
+      <div
+        data-testid="send-confirm-panel"
+        className="flex flex-col gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs text-[var(--dpf-text)]"
+      >
+        <p className="font-semibold">Send this email?</p>
+        <ul className="flex flex-col gap-1">
+          <li><span className="text-[var(--dpf-muted)]">Channel:</span> Email</li>
+          {artifactTitle && <li><span className="text-[var(--dpf-muted)]">Message:</span> {artifactTitle}</li>}
+          <li>
+            <span className="text-[var(--dpf-muted)]">Audience:</span>{" "}
+            {audience ?? "the recipients configured for this email channel"}
+          </li>
+          <li>This sends outside DPF and cannot be unsent.</li>
+        </ul>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onSend}
+            className="rounded-full bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white"
+          >
+            Yes, send email
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatus("idle")}
+            className="rounded-full border border-[var(--dpf-border)] px-4 py-1.5 text-sm text-[var(--dpf-text)]"
+          >
+            Keep as draft
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
-        onClick={onSend}
+        onClick={() => setStatus("confirming")}
         disabled={pending || status === "done"}
         className="rounded-full bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
       >

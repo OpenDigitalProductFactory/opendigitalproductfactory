@@ -201,6 +201,7 @@ export function ApprovalQueuePanel({
                       channelConnected={linkedInConnected}
                       channelId="linkedin-personal-social"
                       fitBlocked={assessArchetypeFit({ text: draft.body, category }).blocked}
+                      artifactTitle={draft.assetTaskTitle}
                     />
                   ) : isEmailChannel(draft.channelId) ? (
                     <PublishEmailButton
@@ -208,6 +209,7 @@ export function ApprovalQueuePanel({
                       channelConnected={emailConnected}
                       channelId="email-postmark"
                       fitBlocked={assessArchetypeFit({ text: draft.body, category }).blocked}
+                      artifactTitle={draft.assetTaskTitle}
                     />
                   ) : (
                     <p className="text-xs text-[var(--dpf-muted)]">
