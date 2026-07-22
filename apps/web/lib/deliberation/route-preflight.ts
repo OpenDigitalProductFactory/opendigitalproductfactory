@@ -39,7 +39,7 @@ import {
   classifyDispatchFailure,
   type DispatchFailureVerdict,
 } from "@/lib/inference/dispatch-failure-class";
-import type { AgentMinimumCapabilities } from "@/lib/routing/request-contract";
+import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 
 export interface DeliberationRoutePreflight {
   /** True when NO role could dispatch — do not create a TaskRun. */
