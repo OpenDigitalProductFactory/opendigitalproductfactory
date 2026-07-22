@@ -308,6 +308,20 @@ export async function runUxTest(params: Record<string, unknown>, userId: string,
     const testResult = await testRes.json();
     const testContent = JSON.parse(testResult?.result?.content?.[0]?.text ?? "{}");
 
+    // BI-1BAA177C: a degraded run means the agent could not drive the browser
+    // at all — it is NOT-RUN evidence, never pass/fail. Do not persist steps
+    // (uxVerificationStatus stays unset, so the ship gate keeps blocking) and
+    // say so plainly instead of surfacing 0/N "failures".
+    if (testContent.degraded === true) {
+      const reason = typeof testContent.reason === "string" ? testContent.reason : "browser agent could not run";
+      logBuildActivity(buildId, "run_ux_test", `UX tests DEGRADED (not run): ${reason}`);
+      return {
+        success: false,
+        error: `UX verification DEGRADED — tests did not run: ${reason}`,
+        message: `UX verification did not run: the browser-use agent could not drive its browser (${reason}). This is a NOT-RUN, not a failure of the UI. Check 'docker logs dpf-browser-use-1' and GET /health/capability on the sidecar; re-run once the probe reports capable.`,
+      };
+    }
+
     // Convert to UxTestStep format for storage. screenshot_path (when
     // present) is a filename inside the evidence_dir — turn it into a
     // portal-served URL the ReviewPanel can render.

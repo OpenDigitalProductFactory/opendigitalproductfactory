@@ -369,6 +369,18 @@ async function evaluatePageHandler(
     const sessionId = openContent.session_id;
     if (!sessionId) throw new Error("Failed to open browser session");
 
+    // BI-1BAA177C: a degraded/errored navigation means nothing after this
+    // point is evidence — report NOT-RUN instead of success-shaped emptiness.
+    if (openContent.degraded === true || openContent.status === "error") {
+      const reason = openContent.reason ?? openContent.error ?? "browser agent could not drive the browser";
+      return {
+        success: false,
+        error: `Page evaluation DEGRADED — did not run: ${reason}`,
+        message: `Page evaluation did not run: ${reason}. This is a NOT-RUN (browser-use could not drive its browser), not a clean page. Check GET /health/capability on the sidecar.`,
+        data: { url: targetUrl, degraded: true, reason },
+      };
+    }
+
     // Extract accessibility and UX findings using AI analysis
     const evalRes = await fetch(BROWSER_USE_URL, {
       method: "POST",
@@ -389,6 +401,15 @@ async function evaluatePageHandler(
     });
     const evalResult = await evalRes.json();
     const evalContent = JSON.parse(evalResult?.result?.content?.[0]?.text ?? "{}");
+    if (evalContent.degraded === true) {
+      const reason = evalContent.reason ?? "browser agent could not analyze the page";
+      return {
+        success: false,
+        error: `Page evaluation DEGRADED — did not run: ${reason}`,
+        message: `Page evaluation did not run: ${reason}. This is a NOT-RUN, not a zero-findings result.`,
+        data: { url: targetUrl, degraded: true, reason },
+      };
+    }
 
     // Get screenshot
     const ssRes = await fetch(BROWSER_USE_URL, {
