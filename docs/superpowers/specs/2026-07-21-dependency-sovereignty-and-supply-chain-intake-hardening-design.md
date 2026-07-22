@@ -160,6 +160,8 @@ Editing the `overrides:` block makes pnpm re-resolve the **whole** tree. On a de
 
 Pruning once is not enough — floors re-accumulate. Add a periodic (e.g. monthly, or Dependabot-triggered) **stale-override audit** that runs §7.1 across the whole block and files a BI listing newly-redundant floors. This keeps the control surface legible by construction. Each floor comment should already name its `Dependabot #NN` / GHSA id (PR #3357 established this convention) so the audit can machine-check "is this alert still open?".
 
+**Shipped (`BI-CDB2E8AB`):** `scripts/audit-stale-overrides.mjs` (alias `pnpm audit:stale-overrides`) reuses the Override Provenance Guard's parser to read every floor's advisory tag, cross-checks each against the GitHub Dependabot alerts API, and classifies floors as *prune candidate* (advisory no longer open — verify via §7.1), *load-bearing* (advisory still open), *indeterminate*, or *un-auditable* (security floor with no machine-readable tag → backfill it). It runs monthly via `.github/workflows/audit-stale-overrides.yml`, which files a tracking issue when candidates exist. Report-only and graceful-offline (no token → tag-coverage half only), so fully-local installs still get useful output. It **proposes**; a human/agent runs the per-floor prune screen before removing anything — never auto-edits overrides.
+
 ---
 
 ## 8. Roadmap

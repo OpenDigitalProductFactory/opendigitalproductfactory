@@ -92,6 +92,8 @@ services/adp/pnpm-lock.yaml
 /sbom/provenance-audit.md
 /sbom/internalization-candidates.json
 /sbom/internalization-candidates.md
+/sbom/stale-override-audit.json
+/sbom/stale-override-audit.md
 
 # Python bytecode caches
 __pycache__/
