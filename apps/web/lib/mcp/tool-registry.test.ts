@@ -416,6 +416,11 @@ describe("tool-pack grant coverage (registry-wide)", () => {
     "coworker-memory:record_working_note",
     "effort-context:read_effort_context",
     "effort-context:record_effort_context",
+    // BI-D6DFC0E7: benign self-report telemetry — a surface reporting its OWN
+    // toolchain readiness (and reading the fleet roll-up) cannot exceed its
+    // authority or affect anyone else, mirroring propose_improvement.
+    "surface-readiness:get_fleet_readiness",
+    "surface-readiness:record_surface_readiness",
   ];
 
   it("gives every registered pack tool a TOOL_TO_GRANTS entry", () => {

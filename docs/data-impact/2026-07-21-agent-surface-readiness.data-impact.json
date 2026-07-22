@@ -1,0 +1,67 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "AgentSurfaceReadiness: operational readiness telemetry, one latest-heartbeat row per build surface. No personal, customer, or business-record data — only which build tool (Claude Code / Codex / Grok / Antigravity / Build Studio) on which machine is currently wired to this instance's durable memory."
+  ],
+  "migration": {
+    "name": "20260721190000_add_agent_surface_readiness",
+    "backfill": "none — additive CREATE TABLE of a brand-new relation; no existing rows exist to backfill or violate any constraint."
+  },
+  "tests": [
+    "apps/web/lib/agent-toolchain/fleet-readiness.test.ts",
+    "apps/web/lib/mcp/tool-registry.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:agent-surface-readiness",
+      "prismaModel": "AgentSurfaceReadiness",
+      "lifecycleDisposition": "operational telemetry; the latest heartbeat per surface is upserted (prior state superseded on the next report) and a surface silent past the staleness window is treated as unknown; safe to prune, no retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:agent-surface-readiness#surfaceKey",
+          "resolution": "not-applicable",
+          "reason": "opaque surface+machine identifier for a build tool (e.g. claude-code@<machineId>), not a data subject or business record",
+          "provenance": "the reporting build surface via the agent-toolchain bootstrap"
+        },
+        {
+          "fieldId": "data:agent-surface-readiness#clientKind",
+          "resolution": "not-applicable",
+          "reason": "which CLI client the surface is (claude-code | codex | grok | antigravity | build-studio) — an operational classification",
+          "provenance": "the reporting build surface"
+        },
+        {
+          "fieldId": "data:agent-surface-readiness#readinessState",
+          "resolution": "not-applicable",
+          "reason": "the surface's computed toolchain readiness state (ready | partial | missing_token | …) — operational status only",
+          "provenance": "computeReadinessState in @dpf/bootstrap, reported by the surface"
+        },
+        {
+          "fieldId": "data:agent-surface-readiness#dpfPlatformVersion",
+          "resolution": "not-applicable",
+          "reason": "the platform version the surface converged to, used only for drift detection after a client update",
+          "provenance": "the reporting build surface"
+        },
+        {
+          "fieldId": "data:agent-surface-readiness#mcpOk",
+          "resolution": "not-applicable",
+          "reason": "MCP reachability probe pass/fail — an operational diagnostic, no subject or business data",
+          "provenance": "the bootstrap MCP reachability probe"
+        },
+        {
+          "fieldId": "data:agent-surface-readiness#mcpReason",
+          "resolution": "not-applicable",
+          "reason": "the probe failure reason code (no_token | endpoint_unreachable | …) — an operational diagnostic",
+          "provenance": "the bootstrap MCP reachability probe"
+        },
+        {
+          "fieldId": "data:agent-surface-readiness#detail",
+          "resolution": "not-applicable",
+          "reason": "optional operational detail blob for the heartbeat; carries no personal, customer, or business-record data by contract",
+          "provenance": "the reporting build surface"
+        }
+      ]
+    }
+  ]
+}

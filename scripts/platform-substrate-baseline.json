@@ -1,9 +1,9 @@
 {
   "changeRationale": {
-    "prismaModelCount": "One short-lived FederationPairingSession adds the durable, resumable same-LAN handshake selected by DI-CE359E1CA3FB while reusing FederationBootstrapToken, enrollment, projection, and FederationLink approval substrate."
+    "prismaModelCount": "One AgentSurfaceReadiness heartbeat table (BI-D6DFC0E7) makes each build surface's already-computed toolchain readiness fleet-observable; it reuses the bootstrap's computeReadinessState rather than adding a parallel readiness concept."
   },
-  "generatedAt": "2026-07-20T10:01:44.811Z",
-  "gitSha": "cbd3c56bf79902428b6dcfc83a93394feeff9185",
+  "generatedAt": "2026-07-22T03:26:05.986Z",
+  "gitSha": "055fdc09b05430b79411abcbe6f9842c038163c8",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -20,11 +20,11 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 521
+      "value": 522
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 14325
+      "value": 14367
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
