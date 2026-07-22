@@ -37,12 +37,20 @@ vi.mock("@/lib/shared/lazy-node", () => ({
 }));
 
 import { probeEngineReadiness, type EngineProbeConfig } from "./probe-engine-readiness";
+import { extractEngineVersion } from "./engine-version-parser";
 
 const GROK: EngineProbeConfig = {
   engineId: "grok",
   binary: "grok",
   verifyCommand: "grok --version",
   versionRegex: /(\d+\.\d+\.\d+)/,
+};
+
+const CLAUDE_WITH_STALE_REGISTRY_REGEX: EngineProbeConfig = {
+  engineId: "claude",
+  binary: "claude",
+  verifyCommand: "claude --version",
+  versionRegex: "claude[- ]cli[/ ]([0-9.]+)",
 };
 
 describe("probeEngineReadiness", () => {
@@ -99,5 +107,21 @@ describe("probeEngineReadiness", () => {
 
     expect(result.present).toBe(true);
     expect(result.version).toBe("0.4.1");
+  });
+
+  it("recognizes current Claude Code stdout even when the persisted registry regex is stale", async () => {
+    mockExec.mockResolvedValueOnce({ stdout: "2.1.215 (Claude Code)\n", stderr: "" });
+
+    const result = await probeEngineReadiness(CLAUDE_WITH_STALE_REGISTRY_REGEX);
+
+    expect(result.present).toBe(true);
+    expect(result.version).toBe("2.1.215");
+    expect(result.error).toBeUndefined();
+  });
+
+  it("keeps malformed Claude stdout unparseable", () => {
+    expect(
+      extractEngineVersion(CLAUDE_WITH_STALE_REGISTRY_REGEX, "Claude Code\n"),
+    ).toBeNull();
   });
 });
