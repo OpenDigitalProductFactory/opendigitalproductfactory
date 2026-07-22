@@ -356,6 +356,15 @@ Per-pillar decisions are recorded inline in §4.1–§4.3 and summarized in §9.
 | BI-4B0A1C1F | Memory | adopt memory-trust P1–P6 + the experience→note acquisition edge |
 | BI-A834EE61 | Judgment | outcome-correctness signal + close the WWMD/WSID feedback loop |
 | BI-84E51657 | Knowledge | coworker binding: fallback to `universal` + digest + BI when unmapped |
+| BI-19122722 | Host-agent | cross-surface shared memory across the build surfaces (WWMD scope) |
+| BI-D6DFC0E7 | Host-agent | fleet readiness signal — **slice 1 shipped 2026-07-21** (`AgentSurfaceReadiness` + `evaluateFleetReadiness` roll-up + `record_surface_readiness`/`get_fleet_readiness` MCP tools; digest surfacing + drift-coverage parity for Codex/Grok/Antigravity/Build Studio remain) |
+| BI-IMP-04326905 | Principle | memory at every scope = system-of-record + experience, behind an MCP (the access plane) |
+
+**Host-agent scope** (the surfaces *building* the platform, not a business's coworkers): the
+same three-pillar architecture at WWMD tenancy — shared memory (BI-19122722) needs readiness
+observability (BI-D6DFC0E7) which rests on the access-plane principle (BI-IMP-04326905). You
+cannot share memory a surface cannot reach, nor trust reach you cannot observe. Fleet readiness
+surfaces in the same daily digest as every other flywheel edge.
 
 Recommended sequence: **BI-744D583B first** (a today-cost on every autonomous build), then the
 memory acquisition edge, then outcome-correctness — the first two generate the raw material the
