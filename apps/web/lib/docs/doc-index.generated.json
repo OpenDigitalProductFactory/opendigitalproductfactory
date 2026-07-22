@@ -8564,6 +8564,8 @@
       "anchors": [
         "use-this-doc-for",
         "workflow",
+        "off-archetype-imported-test-artifacts",
+        "funnel-two-different-views",
         "what-to-watch"
       ]
     },
