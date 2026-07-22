@@ -167,6 +167,83 @@ const QUICK_HELP_MAP: QuickHelpEntry[] = [
         "Route offer, proof, or follow-up gaps to the right operations area. Full guidance is in Customers → Marketing below.",
     },
   },
+  // ── BI-2DD18122 coverage: every contextual Docs entry from the main owner
+  // areas lands with a route-specific panel, not the generic catalog. ─────────
+  {
+    routePrefix: "/workspace",
+    help: {
+      whatThisPageIs:
+        "Your daily home — what needs you now across bookings, customers, money, and your digital team, before any subsystem detail.",
+      actionNow:
+        "Work the \"needs you\" queue top-down: each card names one decision and the safest next action; anything below it can wait.",
+      ifNothingDone:
+        "Waiting customers, approvals, and exceptions sit unanswered — the queue is ordered so ignoring it delays the most time-sensitive item first.",
+      reversible:
+        "Opening and reviewing changes nothing. Each card states its own consequence before you act; most decisions can be revisited, and irreversible ones say so.",
+      recovery:
+        "A dismissed or completed card's underlying record stays in its own area (inbox, finance, approvals). Full guidance is in Workspace below.",
+    },
+  },
+  {
+    routePrefix: "/employee",
+    help: {
+      whatThisPageIs:
+        "The People area — your staff and digital coworkers, their roles, and who is covering the work.",
+      actionNow:
+        "Check today's staffing and coverage first; role governance and HR configuration can wait until the day is covered.",
+      ifNothingDone:
+        "Nothing changes by itself, but staffing gaps and unassigned responsibilities stay invisible until they bite during service or delivery.",
+      reversible:
+        "Viewing is free; assignments and role changes can be changed back. Removing a person's access takes effect immediately — re-adding restores it.",
+      recovery:
+        "A wrong assignment or role change is corrected by editing it again — the history stays. Full guidance is in People below.",
+    },
+  },
+  {
+    routePrefix: "/finance",
+    help: {
+      whatThisPageIs:
+        "The money area — what needs attention today (owed to you, owed by you, approvals), ahead of the accountant's lanes.",
+      actionNow:
+        "Answer the money jobs first: what must be collected, paid, or approved today. The Revenue/Spend/Close lanes underneath are for deeper accounting work.",
+      ifNothingDone:
+        "Unpaid invoices age, supplier bills slip past due dates, and approvals block the people waiting on them.",
+      reversible:
+        "Drafting invoices and reviewing is safe. Recording a payment or approving a bill changes your books — each action says whether it moves real money (most only record it).",
+      recovery:
+        "A wrongly recorded payment or invoice can be corrected or voided from its own record. Full guidance is in Finance below.",
+    },
+  },
+  {
+    routePrefix: "/compliance",
+    help: {
+      whatThisPageIs:
+        "The compliance area — the permits, filings, policies, and evidence your business must keep current.",
+      actionNow:
+        "Deal with anything due or expiring first; the rest of the register is reference until a deadline approaches.",
+      ifNothingDone:
+        "Deadlines pass silently — an expired permit or missed filing becomes a real-world business problem, not just a red row here.",
+      reversible:
+        "Tracking and editing the register is safe and reversible. Submitting a filing to an outside body is external — check it before sending.",
+      recovery:
+        "A mis-entered requirement can be edited or removed; submitted filings are corrected with the receiving body. Full guidance is in Compliance below.",
+    },
+  },
+  {
+    routePrefix: "/compliance/licensing",
+    help: {
+      whatThisPageIs:
+        "Licensing readiness — the permits and licences your business needs, with their status and renewal dates.",
+      actionNow:
+        "Confirm every licence the business actually operates under is listed, and act on anything expiring soon — renewals take lead time.",
+      ifNothingDone:
+        "A licence lapses and the business may be operating outside its permissions before anyone notices.",
+      reversible:
+        "Editing the register is reversible and changes nothing externally — renewals themselves happen with the issuing authority.",
+      recovery:
+        "If a licence has already lapsed, contact the issuing authority about reinstatement and record the outcome here. Full guidance is in Compliance below.",
+    },
+  },
 ];
 
 function routeMatches(pathname: string, routePrefix: string): boolean {

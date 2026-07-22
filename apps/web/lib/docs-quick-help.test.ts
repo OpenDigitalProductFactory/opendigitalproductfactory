@@ -47,12 +47,57 @@ describe("resolveQuickHelp", () => {
     expect(resolveQuickHelp(null)).toBeNull();
     expect(resolveQuickHelp("")).toBeNull();
     expect(resolveQuickHelp("https://example.com")).toBeNull();
-    expect(resolveQuickHelp("/finance/banking")).toBeNull();
+    expect(resolveQuickHelp("/no-such-area/banking")).toBeNull();
   });
 
   it("exposes its registered routes for coverage checks", () => {
     const routes = getQuickHelpRoutes();
     expect(routes).toContain("/ops/self-upgrade");
     expect(routes).toContain("/customer/marketing");
+  });
+
+  // ── BI-2DD18122 acceptance: representative sourceRoute coverage + ceilings ──
+  it("covers every contextual entry the acceptance names, across all main owner areas", () => {
+    const acceptanceRoutes = [
+      "/storefront/inbox",
+      "/storefront/items",
+      "/storefront/settings/operations",
+      "/compliance/licensing",
+      "/employee",
+      "/workspace",
+      "/customer/marketing",
+      "/finance",
+      "/ops/self-upgrade",
+    ];
+    for (const route of acceptanceRoutes) {
+      const help = resolveQuickHelp(route);
+      expect(help, `expected quick help for ${route}`).not.toBeNull();
+      for (const field of REQUIRED_FIELDS) {
+        expect(help![field], `${route} is missing ${field}`).toBeTruthy();
+      }
+    }
+  });
+
+  it("keeps every panel inside the overload ceiling — quick help must stay quick", () => {
+    // The whole point of the panel is LESS to read than the docs catalog: each
+    // answer stays a sentence or two, and a full panel stays well under the
+    // ~300-word wall-of-text threshold the live UX audit flagged.
+    for (const route of getQuickHelpRoutes()) {
+      const help = resolveQuickHelp(route)!;
+      let panelWords = 0;
+      for (const field of REQUIRED_FIELDS) {
+        const words = help[field].split(/\s+/).length;
+        expect(words, `${route} ${field} exceeds the 60-word answer ceiling`).toBeLessThanOrEqual(60);
+        panelWords += words;
+      }
+      expect(panelWords, `${route} panel exceeds the 220-word ceiling`).toBeLessThanOrEqual(220);
+    }
+  });
+
+  it("leaf routes override their family default (licensing vs compliance)", () => {
+    const licensing = resolveQuickHelp("/compliance/licensing");
+    const family = resolveQuickHelp("/compliance/policies");
+    expect(licensing!.whatThisPageIs).toContain("Licensing");
+    expect(family!.whatThisPageIs).not.toBe(licensing!.whatThisPageIs);
   });
 });
