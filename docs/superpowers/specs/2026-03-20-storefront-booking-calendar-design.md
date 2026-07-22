@@ -554,3 +554,43 @@ Option 1 is implemented. No data migration creates phantom providers.
 | Walk-in queue management | Real-time queue display is a different UX pattern from scheduled booking. |
 | Full cancellation policy model | Simple reason + timestamp sufficient for SMB v1. |
 | MCP tool for AI coworker scheduling | Builds on `calendar_manage_event` from EP-CAL-001. Follow-on. |
+
+---
+
+## Addendum — Mobile (390px) layout & touch-target hardening (BI-2B2FCB2B, 2026-07-22)
+
+No-contract-change follow-up to the public storefront flow (this spec + the
+storefront-foundation design). The booking steps, API surface, and data model
+are unchanged; this hardens the *presentation* of the customer-facing flow for a
+390px viewport.
+
+**In this PR** (the additive, non-overlapping slice):
+
+- **No horizontal overflow at 390px.** The storefront `<main>` and hero use
+  fluid `clamp()` padding + type; the home banner and long strings (org name,
+  email, address) use `overflow-wrap`. An explicit `width=device-width` viewport
+  is declared at the root layout, and the storefront wrapper sets
+  `overflow-x:hidden` as a backstop.
+- **44px minimum touch targets** on the nav sign-in link (`StorefrontNav`) and
+  the item CTA (`CtaButton`), which the customer taps first on the public home.
+- **Customer vocabulary in public auth.** The storefront sign-in/sign-up page
+  headings use the org name ("Sign in to <org>", "Create your <org> account")
+  instead of generic platform wording.
+
+Smoke test: `StorefrontHome.mobile.test.tsx` (nav + CTA 44px targets, fluid hero
+headline).
+
+**Deferred to concurrent, in-flight PRs** (to avoid conflicting edits to the
+same files) — this addendum documents the boundary so the pieces reconcile:
+
+- Calendar day aria-labels and *not re-asking* for the already-chosen
+  date/time in the confirmation form (the Restaurant archetype schema carries
+  `date`/`time` fields that must be filtered out): **PR #3383** (BI-0E4A1228 /
+  BI-36807E68, `slotFlowExtraFields`).
+- Accessible, labelled submit contract for the public auth forms
+  (`SignInForm`/`SignUpForm`) and the in-form field labels + touch targets:
+  **PR #3386** (BI-8E74C749).
+- The 44px touch targets and full-width inputs *inside* `SlotBookingFlow`
+  (calendar day cells, slot chips, month nav, confirmation form) will be layered
+  on after #3383/#3387 land, to keep this PR free of `SlotBookingFlow.tsx`
+  conflicts.

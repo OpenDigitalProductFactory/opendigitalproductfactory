@@ -39,12 +39,15 @@ export function CtaButton({
     <Link
       href={href}
       style={{
-        display: "inline-block",
-        padding: "8px 20px",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: 44,
+        padding: "10px 20px",
         background: "var(--dpf-accent, #4f46e5)",
         color: "var(--dpf-text)",
         borderRadius: 6,
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: 600,
         textDecoration: "none",
       }}
