@@ -8,6 +8,6 @@ export const MARKETING_TABS: ReadonlyArray<{ label: string; href: string }> = [
   { label: "Overview", href: "/customer/marketing" },
   { label: "Strategy", href: "/customer/marketing/strategy" },
   { label: "Campaigns", href: "/customer/marketing/campaigns" },
-  { label: "Funnel", href: "/customer/marketing/funnel" },
+  { label: "Marketing Funnel", href: "/customer/marketing/funnel" },
   { label: "Automation", href: "/customer/marketing/automation" },
 ];

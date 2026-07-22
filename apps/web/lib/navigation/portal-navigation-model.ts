@@ -214,6 +214,9 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   {
     key: "customer-funnel",
     label: "Funnel",
+    // Disambiguate from the Marketing subnav's "Marketing Funnel": this is the
+    // CRM deal-stage conversion funnel (BI-8AB9C904 duplicate-funnel confusion).
+    sectionNavLabel: "Sales Funnel",
     path: "/customer/funnel",
     parentPath: "/customer",
     domain: "customer",

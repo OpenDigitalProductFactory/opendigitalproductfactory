@@ -184,7 +184,7 @@ describe("getAccessibleSectionNavEntries()", () => {
       "Pipeline",
       "Quotes",
       "Orders",
-      "Funnel",
+      "Sales Funnel",
       "Marketing",
     ]);
     expect(tabs.map((tab) => tab.href)).toContain("/customer/marketing");
