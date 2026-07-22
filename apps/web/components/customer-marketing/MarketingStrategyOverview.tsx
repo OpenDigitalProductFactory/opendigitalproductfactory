@@ -3,7 +3,9 @@ import {
   formatMarketingLabel,
   type MarketingWorkspaceSnapshot,
 } from "@/lib/marketing";
+import { assessArchetypeFit } from "@/lib/marketing/archetype-fit";
 import { DraftAssetButton } from "./DraftAssetButton";
+import { ArchetypeFitBadge } from "./ArchetypeFitNotice";
 
 type Props = {
   snapshot: MarketingWorkspaceSnapshot;
@@ -43,6 +45,7 @@ export function MarketingStrategyOverview({
 }: Props) {
   const isDetail = mode === "detail";
   const strategy = snapshot.strategy;
+  const category = snapshot.storefront.category;
   const territory =
     strategy.geographicScope ?? snapshot.organization.addressSummary ?? "Market territory still needs a decision";
   const constraintNotes = strategy.constraints
@@ -119,11 +122,14 @@ export function MarketingStrategyOverview({
           {strategy.proofAssets.length > 0 ? (
             <ul className="space-y-2 text-sm text-[var(--dpf-text)]">
               {strategy.proofAssets.map((asset) => (
-                <li key={`${asset.type}-${asset.label}`}>
-                  {asset.label}
-                  <span className="ml-2 text-[var(--dpf-muted)]">
+                <li key={`${asset.type}-${asset.label}`} className="flex flex-wrap items-center gap-2">
+                  <span>{asset.label}</span>
+                  <span className="text-[var(--dpf-muted)]">
                     {formatMarketingLabel(asset.type)}
                   </span>
+                  <ArchetypeFitBadge
+                    assessment={assessArchetypeFit({ text: asset.label, category })}
+                  />
                 </li>
               ))}
             </ul>
@@ -249,7 +255,17 @@ export function MarketingStrategyOverview({
               <ul className="space-y-3 text-sm">
                 {snapshot.workProducts.campaignBriefs.map((brief) => (
                   <li key={brief.briefId} className="border-l border-[var(--dpf-border)] pl-3">
-                    <p className="font-medium text-[var(--dpf-text)]">{brief.title}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-[var(--dpf-text)]">{brief.title}</p>
+                      <ArchetypeFitBadge
+                        assessment={assessArchetypeFit({
+                          text: [brief.title, brief.objective, brief.audience, brief.notes]
+                            .filter(Boolean)
+                            .join("\n"),
+                          category,
+                        })}
+                      />
+                    </div>
                     <p className="text-[var(--dpf-muted)]">{brief.objective}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {brief.channels.map((channel) => (
@@ -273,7 +289,15 @@ export function MarketingStrategyOverview({
               <ul className="space-y-3 text-sm">
                 {snapshot.workProducts.assetTasks.map((task) => (
                   <li key={task.taskId} className="border-l border-[var(--dpf-border)] pl-3">
-                    <p className="font-medium text-[var(--dpf-text)]">{task.title}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-[var(--dpf-text)]">{task.title}</p>
+                      <ArchetypeFitBadge
+                        assessment={assessArchetypeFit({
+                          text: [task.title, task.brief].filter(Boolean).join("\n"),
+                          category,
+                        })}
+                      />
+                    </div>
                     <p className="text-[var(--dpf-muted)]">
                       {formatMarketingLabel(task.assetType)}
                       {task.dueWindow ? ` - ${task.dueWindow}` : ""}
