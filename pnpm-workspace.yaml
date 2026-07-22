@@ -21,13 +21,6 @@ overrides:
   'minimatch@9.0.9>brace-expansion': '2.1.2'
   lodash: '4.18.0'
   lodash-es: '4.18.0'
-  '@tootallnate/once': '3.0.1'
-  '@xmldom/xmldom': '0.8.13'
-  # dompurify <= 3.4.10: GHSA-cmwh-pvxp-8882 permanent ALLOWED_ATTR pollution via
-  # setConfig() (Dependabot #90, medium), on top of the earlier < 3.4.9 cluster
-  # (template-tag bypass, IN_PLACE clobber, cross-realm bypass, etc.). Dev-only
-  # transitive via mermaid / @zenuml/core. Floor to the patched 3.4.11.
-  dompurify: '^3.4.11'
   node-forge: '1.4.0'
   postcss: '^8.5.18'
   uuid: '^14.0.0'
@@ -38,21 +31,11 @@ overrides:
   # Any expansion DoS). Floor every runtime entry to the patched 7.6.5.
   'protobufjs@<7.6.5': '^7.6.5'
   'ws@>=8.0.0 <8.20.1': '^8.20.1'
-  # esbuild < 0.28.1: GHSA binary-integrity RCE via NPM_CONFIG_REGISTRY (high) +
-  # arbitrary file read by the Windows dev server (low). Dev-only transitive dep
-  # of vite/vitest; pin the vulnerable range up to the patched release.
-  'esbuild@>=0.17.0 <0.28.1': '^0.28.1'
   # fast-uri <= 3.1.3: GHSA-4c8g-83qw-93j6 host confusion via failed IDN
   # canonicalization (Dependabot #109) + GHSA-v2hh-gcrm-f6hx host confusion via a
   # literal backslash authority delimiter (Dependabot #111), both high. Floor to
   # the patched 3.1.4 on the 3.x line (fast-uri's runtime consumers pin ^3).
   fast-uri: '^3.1.4'
-  # @babel/core <= 7.29.0: GHSA-4x5r-pxfx-6jf8 (CVE-2026-49356) arbitrary file
-  # read via a crafted sourceMappingURL comment (Dependabot #73, low). Dev/build-
-  # only transitive of the Expo metro-config toolchain (apps/mobile). Floor to the
-  # patched 7.29.6; the web app already resolves 7.29.7, so this only lifts the
-  # stale instance.
-  '@babel/core': '^7.29.6'
   # hono < 4.12.27: GHSA-hvrm-45r6-mjfj hono/jsx cross-request context disclosure,
   # GHSA-w62v-xxxg-mg59 server-side XSS via cx() JSX escaping bypass, and
   # GHSA-xgm2-5f3f-mvvc API Gateway v1 header de-dup drop (Dependabot #106/#107/#108,
@@ -71,7 +54,6 @@ overrides:
   '@floating-ui/react': '0.27.19'
   '@floating-ui/utils': '0.2.11'
   ip-address: '^10.2.0'
-  qs: '^6.15.2'
   # sharp < 0.35.0: inherited libvips vulnerabilities CVE-2026-33327/33328/35590/35591
   # (Dependabot #110, high). apps/web already depends on ^0.35.3 directly; this floor
   # also lifts the stale sharp@0.34.5 that Next.js ships as a bundled optionalDependency.
