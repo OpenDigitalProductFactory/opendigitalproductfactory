@@ -186,7 +186,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
         </h2>
         <button
           onClick={openCreate}
-          className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors bg-[var(--dpf-accent)] text-white"
+          className="inline-flex min-h-[44px] items-center px-4 py-1.5 text-xs font-medium rounded-md transition-colors bg-[var(--dpf-accent)] text-white"
         >
           {vocabulary.addButtonLabel}
         </button>
@@ -197,7 +197,8 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
         <div className="flex gap-1 mb-4 flex-wrap">
           <button
             onClick={() => setActiveCategory(null)}
-            className={`px-2.5 py-1 text-[10px] font-medium rounded-full transition-colors ${
+            aria-label="Show all"
+            className={`inline-flex min-h-[44px] items-center px-3 py-1 text-[10px] font-medium rounded-full transition-colors ${
               activeCategory === null
                 ? "bg-[var(--dpf-accent)] text-white"
                 : "bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
@@ -209,7 +210,8 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
             <button
               key={cat}
               onClick={() => setActiveCategory(cat === activeCategory ? null : cat)}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-full transition-colors ${
+              aria-label={`Filter to ${cat}`}
+              className={`inline-flex min-h-[44px] items-center px-3 py-1 text-[10px] font-medium rounded-full transition-colors ${
                 activeCategory === cat
                   ? "bg-[var(--dpf-accent)] text-white"
                   : "bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
@@ -232,7 +234,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
               onDragStart={() => handleDragStart(idx)}
               onDragOver={(e) => handleDragOver(e, idx)}
               onDragEnd={handleDragEnd}
-              className="flex items-center gap-3 p-3 rounded-lg transition-colors cursor-grab active:cursor-grabbing"
+              className="flex flex-wrap items-center gap-3 p-3 rounded-lg transition-colors cursor-grab active:cursor-grabbing"
               style={{
                 background: dragIdx === idx ? "var(--dpf-surface-2)" : "var(--dpf-surface-1)",
                 opacity: item.isActive ? 1 : 0.5,
@@ -270,26 +272,35 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
                 </span>
               </div>
 
-              {/* Actions */}
+              {/* Actions — visually compact but each carries a row-specific
+                  accessible label ("Show Table for 2 …", "Edit …", "Delete …")
+                  and a 44px hit area so they are safe to tap on a phone. */}
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => toggleActive(item.id, !item.isActive)}
-                  className={`text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)] transition-colors ${item.isActive ? "text-[var(--dpf-success)]" : "text-[var(--dpf-muted)]"}`}
-                  title={item.isActive ? "Deactivate" : "Activate"}
+                  className={`inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-[10px] px-2 rounded border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)] transition-colors ${item.isActive ? "text-[var(--dpf-success)]" : "text-[var(--dpf-muted)]"}`}
+                  aria-label={
+                    item.isActive
+                      ? `Hide ${item.name} from your public page`
+                      : `Show ${item.name} on your public page`
+                  }
+                  title={item.isActive ? `Hide ${item.name}` : `Show ${item.name}`}
                 >
                   {item.isActive ? "On" : "Off"}
                 </button>
                 <button
                   onClick={() => openEdit(item)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  title="Edit"
+                  className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-[10px] px-2 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] transition-colors"
+                  aria-label={`Edit ${item.name}`}
+                  title={`Edit ${item.name}`}
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => handleDelete(item)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] hover:border-[var(--dpf-error)]/30 transition-colors"
-                  title="Delete"
+                  className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-[10px] px-2 rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] hover:border-[var(--dpf-error)]/30 transition-colors"
+                  aria-label={`Delete ${item.name}`}
+                  title={`Delete ${item.name}`}
                 >
                   Del
                 </button>
