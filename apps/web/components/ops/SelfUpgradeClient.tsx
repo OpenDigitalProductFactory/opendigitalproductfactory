@@ -80,6 +80,20 @@ type AdmissionSnapshot = {
   summary: string;
 };
 
+type JobEngineHealth = {
+  status: "healthy" | "degraded" | "unknown";
+  detail: string | null;
+  checkedAt: string | null;
+  watchdog?: {
+    status: "healthy" | "degraded" | "unknown";
+    detail: string | null;
+    lastInvocationAt: string | null;
+    lastGatewayHitAt: string | null;
+    lastRecoveryAttemptAt: string | null;
+    lastRecoverySummary: string | null;
+  } | null;
+};
+
 type Props = {
   enabled: boolean;
   channel: string;
@@ -122,11 +136,7 @@ type Props = {
   quiescence?: QuiescenceActivity | null;
   admission?: AdmissionSnapshot | null;
   cooldownUntil?: string | null;
-  jobEngine?: {
-    status: "healthy" | "degraded" | "unknown";
-    detail: string | null;
-    checkedAt: string | null;
-  };
+  jobEngine?: JobEngineHealth;
   history?: LatestRun[];
   historyNextCursor?: string | null;
   initialImpactSummary?: SummaryResult | null;
@@ -312,6 +322,10 @@ export function isExpectedDuringSwap(err: unknown): boolean {
   );
 }
 
+export function shouldPollForJobEngineRecovery(jobEngine: JobEngineHealth | undefined): boolean {
+  return jobEngine?.status === "degraded";
+}
+
 export default function SelfUpgradeClient({
   enabled,
   channel,
@@ -421,6 +435,12 @@ export default function SelfUpgradeClient({
     const interval = setInterval(() => router.refresh(), 4_000);
     return () => clearInterval(interval);
   }, [justQueued, upgradeInFlight, restarting, router]);
+
+  useEffect(() => {
+    if (!shouldPollForJobEngineRecovery(jobEngine)) return;
+    const interval = setInterval(() => router.refresh(), 15_000);
+    return () => clearInterval(interval);
+  }, [jobEngine, router]);
 
   // Drop the reconnect banner once the swapped-in portal actually answers with
   // fresh data. We snapshot the server-derived signature at the moment the swap
@@ -631,14 +651,40 @@ export default function SelfUpgradeClient({
           data-job-engine-health="degraded"
         >
           <div className="font-medium text-[var(--dpf-warning)]">
-            ⚠ Background job engine isn’t dispatching
+            Background jobs need attention
           </div>
           <div className="mt-1 text-[var(--dpf-muted)]">
-            The portal couldn’t register its jobs with Inngest, so background work
-            — self-upgrade, evals, backups, watchdogs — won’t run until this is
-            fixed.{jobEngine.detail ? ` (${jobEngine.detail})` : ""} Restart the
-            portal or check the Inngest service.
+            Self-upgrade, evals, backups, and watchdogs depend on Inngest. The
+            portal retries Inngest registration automatically every 5 minutes and
+            this page checks for recovery while the alert is visible.
           </div>
+          <dl className="mt-2 grid gap-1 text-xs text-[var(--dpf-muted)] sm:grid-cols-2">
+            <div>
+              <dt className="font-medium text-[var(--dpf-text)]">Last check</dt>
+              <dd>
+                <LocalTime value={jobEngine.checkedAt} mode="time" fallback="not recorded yet" />
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium text-[var(--dpf-text)]">Current signal</dt>
+              <dd>{jobEngine.detail ?? "Inngest registration is degraded."}</dd>
+            </div>
+            {jobEngine.watchdog?.lastRecoveryAttemptAt && (
+              <div className="sm:col-span-2">
+                <dt className="font-medium text-[var(--dpf-text)]">Last recovery attempt</dt>
+                <dd>
+                  <LocalTime
+                    value={jobEngine.watchdog.lastRecoveryAttemptAt}
+                    mode="time"
+                    fallback="not recorded yet"
+                  />
+                  {jobEngine.watchdog.lastRecoverySummary
+                    ? ` - ${jobEngine.watchdog.lastRecoverySummary}`
+                    : ""}
+                </dd>
+              </div>
+            )}
+          </dl>
         </div>
       )}
       <div className="flex items-center justify-between">
