@@ -95,6 +95,11 @@ function DecisionSummary({ entry }: { entry: OwnerAttentionEntry }) {
             {capitalize(card.recommendation.text)}
           </span>
         </span>
+        {card.byline ? (
+          <span className="block text-[10px] text-[var(--dpf-muted)]" title="Who produced this — AI-labeled; a role is a presentation label, not an accountable person.">
+            {card.byline}
+          </span>
+        ) : null}
       </span>
 
       <span className="mt-2 block text-[11px] font-medium text-[var(--dpf-muted)]">

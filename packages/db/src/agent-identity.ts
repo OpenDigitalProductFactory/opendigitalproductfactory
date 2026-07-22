@@ -125,6 +125,23 @@ export function deriveAgentDisplayName(source: string): string {
   return tokens.map(titleCaseToken).join(" ");
 }
 
+/**
+ * The ONE user-facing agent-attribution resolver (BI-90CC785C). Given any agentId
+ * or slug, return the role-based display LABEL — override first, else Title-Case
+ * derivation. No raw agentId should ever reach the UI: every surface that shows
+ * "who" an AI coworker is routes through here, so there is a single source of truth
+ * for the role label. Pure + client-safe. Never returns a human persona name
+ * (the ratified role-only contract, BI-7D29937E).
+ */
+export function resolveAgentRoleLabel(agentIdOrSlug: string | null | undefined): string {
+  if (!agentIdOrSlug || !agentIdOrSlug.trim()) return "an AI coworker";
+  const raw = agentIdOrSlug.trim();
+  const canonical = resolveCanonicalAgentId(raw);
+  const override =
+    AGENT_IDENTITY_OVERRIDES[raw]?.displayName ?? AGENT_IDENTITY_OVERRIDES[canonical]?.displayName;
+  return override ?? deriveAgentDisplayName(raw);
+}
+
 /** Derive the role-kind from the name / id / tier. */
 export function deriveAgentKind(source: string, agentId: string, tier?: string): AgentKind {
   const s = source.toLowerCase();

@@ -9,6 +9,7 @@ import {
   parseProactivityChangeProposalParameters,
 } from "@/lib/proactivity/proactivity-change-proposal";
 import { getProactivityLevelCopy } from "@/lib/proactivity/proactivity-copy";
+import { attentionAuthorForAgent } from "../attribution";
 import type { AttentionItem } from "../types";
 
 type Db = typeof prisma;
@@ -18,6 +19,8 @@ export type AgentActionProposalRow = {
   actionType: string;
   parameters: unknown;
   proposedAt: Date;
+  /** The coworker that proposed this — drives the honest byline (BI-AB12B3D3). */
+  agentId: string;
 };
 
 /** Pure projection of one proposed agent action into an attention item. */
@@ -70,6 +73,7 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
         }:${proactivityChange.currentLevel}`,
       },
       technical: { detectedBy: proactivityChange.agentId ?? "AI workforce" },
+      author: attentionAuthorForAgent(proactivityChange.agentId ?? row.agentId),
     };
   }
 
@@ -97,6 +101,7 @@ export function agentProposalToAttentionItem(row: AgentActionProposalRow): Atten
     }],
     deepLink: isActivityRoutingAction ? "/platform/ai/operations-map" : "/platform/ai",
     audience: { operator: true },
+    author: attentionAuthorForAgent(row.agentId),
   };
 }
 
@@ -105,7 +110,7 @@ export async function loadAgentProposalItems(db: Db): Promise<AttentionItem[]> {
     where: { status: "proposed" },
     orderBy: { proposedAt: "desc" },
     take: 50,
-    select: { proposalId: true, actionType: true, parameters: true, proposedAt: true },
+    select: { proposalId: true, actionType: true, parameters: true, proposedAt: true, agentId: true },
   });
   return rows.map(agentProposalToAttentionItem);
 }

@@ -1,3 +1,4 @@
+import { resolveAgentRoleLabel } from "@dpf/db/agent-identity";
 import type { InboundMessageRow, OutboundDraftRow } from "@/lib/marketing";
 import { formatMarketingLabel } from "@/lib/marketing";
 import { assessArchetypeFit } from "@/lib/marketing/archetype-fit";
@@ -86,7 +87,7 @@ function DraftRow({
               {statusLabel(draft.status)}
             </span>
             <span>
-              Drafted by {draft.createdByAgentId ?? "unknown"} · {timeAgo(draft.createdAt)}
+              AI-drafted by your {resolveAgentRoleLabel(draft.createdByAgentId)} · {timeAgo(draft.createdAt)}
             </span>
             <ArchetypeFitBadge assessment={fit} />
           </div>

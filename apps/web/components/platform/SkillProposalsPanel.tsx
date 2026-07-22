@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { CSSProperties } from "react";
+import { resolveAgentRoleLabel } from "@dpf/db/agent-identity";
 
 import type { SkillProposalRow } from "@/lib/skills/proposals";
 import {
@@ -142,8 +143,7 @@ function ProposalRow({
             </p>
           )}
           <p style={{ fontSize: 11, color: "var(--dpf-muted)", margin: "0 0 12px 0" }}>
-            Submitted by <code>{proposal.submittedById}</code> via <code>{proposal.agentId}</code>
-            {proposal.threadId ? <> · thread <code>{proposal.threadId}</code></> : null}
+            AI-proposed by your {resolveAgentRoleLabel(proposal.agentId)}
           </p>
 
           <SimpleDiff current={currentContent} proposed={proposal.proposedContent} />

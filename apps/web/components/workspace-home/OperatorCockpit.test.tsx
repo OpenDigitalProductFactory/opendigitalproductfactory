@@ -46,7 +46,7 @@ describe("OperatorCockpitView", () => {
     expect(html).toContain("2 things need you today");
     expect(html).toContain("Approve this bill?");
     expect(html).toContain("Send this message?");
-    expect(html).toContain("Your COO recommends");
+    expect(html).toContain("AI recommendation");
     expect(html).not.toContain("3040");
     expect(html).not.toContain("high-risk");
   });

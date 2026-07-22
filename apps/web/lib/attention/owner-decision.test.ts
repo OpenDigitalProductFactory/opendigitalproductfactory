@@ -37,7 +37,7 @@ describe("translateAttentionToOwnerDecision", () => {
     expect(card.headline).not.toMatch(/\b(AI|API|DB|GPU|CI|CD)\b/);
     expect(card.whyItMatters).toMatch(/business|customer|team|work/i);
     expect(card.ifYouDoNothing.length).toBeGreaterThan(10);
-    expect(card.recommendation.lead).toBe("Your COO recommends");
+    expect(card.recommendation.lead).toBe("AI recommendation");
     expect(card.recommendation.specialistByline).toBe("Platform operations");
   });
 

@@ -6,6 +6,7 @@
 
 import type { prisma } from "@dpf/db";
 import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { attentionAuthorForAgent } from "../attribution";
 import type { AttentionItem, AttentionRiskClass } from "../types";
 
 type Db = typeof prisma;
@@ -65,6 +66,7 @@ function readProactivity(meta: unknown): AttentionItem["proactivity"] {
 export function pausedAiToAttentionItem(row: TaskRunRow): AttentionItem {
   const authRequired = row.status === "auth-required";
   const risk = readRisk(row.a2aMetadata);
+  const proactivity = readProactivity(row.a2aMetadata);
   return {
     id: `paused-ai:${row.taskRunId}`,
     source: "paused-ai",
@@ -91,7 +93,8 @@ export function pausedAiToAttentionItem(row: TaskRunRow): AttentionItem {
     ],
     deepLink: "/platform/ai/operations-map",
     audience: { operator: true, assigneePrincipalId: row.userId },
-    proactivity: readProactivity(row.a2aMetadata),
+    proactivity: proactivity,
+    ...(proactivity?.actorId ? { author: attentionAuthorForAgent(proactivity.actorId) } : {}),
   };
 }
 

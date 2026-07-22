@@ -167,18 +167,22 @@ describe("agentProposalToAttentionItem", () => {
       actionType: "create_invoice",
       parameters: {},
       proposedAt: new Date("2026-06-23T07:00:00.000Z"),
+      agentId: "coo",
     };
     const item = agentProposalToAttentionItem(row);
     expect(item.id).toBe("agent-proposal:AP-1");
     expect(item.title).toBe("Approve: Create invoice");
     expect(item.triage.residueReason).toBe("policy-approval");
     expect(item.decisionClass.scorability).toBe("unscorable");
+    // BI-AB12B3D3: attributed by ROLE, never a persona name.
+    expect(item.author?.roleLabel).toBe("COO");
   });
 
   it("projects an activity-harness proposal with routing-specific context", () => {
     const item = agentProposalToAttentionItem({
       proposalId: "AP-ROUTE",
       actionType: "activity_harness_confidence_override",
+      agentId: "platform-engineer",
       parameters: {
         kind: "activity-harness-confidence-override",
         activityClass: "code-edit",
@@ -201,6 +205,7 @@ describe("agentProposalToAttentionItem", () => {
     const item = agentProposalToAttentionItem({
       proposalId: "AP-PROACTIVE",
       actionType: "propose_proactivity_change",
+      agentId: "coo",
       parameters: {
         kind: "proactivity-change",
         agentId: "dispatcher",
