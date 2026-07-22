@@ -28,8 +28,9 @@ const {
     mockPrisma: {
       principalAlias: { findFirst: vi.fn() },
       employeeProfile: { findUnique: vi.fn() },
-      edgeNode: { findMany: vi.fn() },
-      remoteAction: { findUnique: vi.fn() },
+      edgeNode: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+      edgeNodeCapability: { update: vi.fn() },
+      remoteAction: { findMany: vi.fn(), findUnique: vi.fn() },
       $transaction: vi.fn(async (callback: (client: typeof transactionClient) => unknown) => callback(transactionClient)),
     },
   };
@@ -51,6 +52,7 @@ vi.mock("@/lib/remote-action/organization-join-actions", () => ({
 }));
 
 import {
+  authorizeOrganizationJoinNodeAction,
   getOrganizationJoinActionStatusAction,
   getOrganizationJoinNodeSummariesAction,
   queueOrganizationJoinActionAction,
@@ -64,6 +66,7 @@ beforeEach(() => {
   mockCan.mockReturnValue(true);
   mockPrisma.principalAlias.findFirst.mockResolvedValue({ principalId: "principal-1" });
   mockPrisma.employeeProfile.findUnique.mockResolvedValue({ id: "employee-1" });
+  mockPrisma.remoteAction.findMany.mockResolvedValue([]);
   tx.changeRequest.create.mockResolvedValue({ id: "change-1" });
   mockCreateAction.mockResolvedValue({ ok: true, actionKey: "ra-join-1" });
   mockPrisma.$transaction.mockImplementation(async (callback) => callback(tx));
@@ -110,6 +113,89 @@ describe("organization join action boundary", () => {
       expect(result.nodes[0]).toMatchObject({ displayName: "Founder Hub", actionType: "organization.join.issue", ready: true });
       expect(result.nodes[1]).toMatchObject({ displayName: "Windows test", actionType: "organization.join.import", ready: false });
     }
+  });
+
+  it("returns the safe latest action so progress survives a page refresh", async () => {
+    mockPrisma.edgeNode.findMany.mockResolvedValue([{
+      id: "edge-row-1",
+      nodeId: "edge-1",
+      platform: "darwin",
+      status: "online",
+      trustState: "trusted",
+      metadata: { hostname: "founder-hub.local" },
+      scopePolicy: { actionTypes: ["organization.join.issue"] },
+      principal: { displayName: "Founder Hub" },
+      capabilityRows: [{ mode: "enabled", status: "healthy", evidence: { organizationTrustRole: "authority" } }],
+    }]);
+    mockPrisma.remoteAction.findMany.mockResolvedValue([{
+      actionKey: "ra-join-1",
+      actionType: "organization.join.issue",
+      edgeNodeId: "edge-row-1",
+      status: "succeeded",
+      approvalState: "approved",
+      result: { joinPackageEnc: "enc:must-not-escape" },
+      evidence: { intendedPeer: "windows-dev.local", enrollmentToken: "must-not-escape" },
+      createdAt: new Date("2026-07-22T10:00:00Z"),
+    }]);
+
+    const result = await getOrganizationJoinNodeSummariesAction();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.nodes[0]).toMatchObject({
+        hostIdentity: "founder-hub.local",
+        latestAction: {
+          actionKey: "ra-join-1",
+          status: "succeeded",
+          packageReady: true,
+          evidence: { intendedPeer: "windows-dev.local" },
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain("must-not-escape");
+    }
+  });
+
+  it("explicitly authorizes only the role-correct action on the named installation", async () => {
+    mockPrisma.edgeNode.findUnique.mockResolvedValue({
+      id: "edge-row-2",
+      trustState: "trusted",
+      scopePolicy: { actionTypes: ["inventory.collect"] },
+      capabilityRows: [{ id: "cap-1", evidence: { organizationTrustRole: "member" } }],
+    });
+    mockPrisma.edgeNode.update.mockResolvedValue({});
+    mockPrisma.edgeNodeCapability.update.mockResolvedValue({});
+    mockPrisma.$transaction.mockResolvedValue([]);
+
+    const result = await authorizeOrganizationJoinNodeAction({
+      edgeNodeId: "edge-row-2",
+      actionType: "organization.join.import",
+      operatorConfirmed: true,
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(mockPrisma.edgeNode.update).toHaveBeenCalledWith({
+      where: { id: "edge-row-2" },
+      data: { scopePolicy: { actionTypes: ["inventory.collect", "organization.join.import"] } },
+    });
+    expect(mockPrisma.edgeNodeCapability.update).toHaveBeenCalledWith({
+      where: { id: "cap-1" },
+      data: { mode: "enabled" },
+    });
+  });
+
+  it("does not authorize a host action without explicit confirmation", async () => {
+    const result = await authorizeOrganizationJoinNodeAction({
+      edgeNodeId: "edge-row-2",
+      actionType: "organization.join.import",
+      operatorConfirmed: false,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "invalid_input",
+      message: "Confirm this installation before enabling secure organization setup",
+    });
+    expect(mockPrisma.edgeNode.findUnique).not.toHaveBeenCalled();
   });
 
   it("creates the approved high-risk change anchor and action atomically", async () => {

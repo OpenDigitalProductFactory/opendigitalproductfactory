@@ -49,23 +49,22 @@ installations. The matching code is only a visual check; it is never a password
 or bearer credential.
 
 When the second installation does not yet trust the organization's private
-HTTPS authority, DPF support can create a private `.dpfjoin` file for that one
-installation. Move the file to the joining computer within 15 minutes and let
-the DPF installer apply it. The file carries the public-root fingerprint and a
-one-time enrollment authority; it never carries the organization's CA private
-key. It works only for the named installation and is removed after successful
-use. This establishes certificate trust only—the two Connections screens still
-show the matching code and still require independent approval before any demand
-is shared.
+HTTPS authority, use **Connect your own installations** on the Connections
+page. On the organization installation, choose **Create join file**, enter the
+joining installation's reported host name, confirm it, and download the file
+when ready. Move the `.dpfjoin` file to the joining computer within its 5- to
+15-minute lifetime. On that installation, choose **Join this installation**,
+select the file, check the safe preview, and approve the join. No command line,
+certificate copying, CA password, or installer rerun is required.
 
-The installer owns the technical work. On macOS/Linux it accepts the file as
-the **organization join package** input; the Windows installer accepts the same
-`.dpfjoin` file. After validation, DPF obtains the local HTTPS certificate,
-stores the public organization root, configures the HTTPS endpoint, and remembers
-that trust on later starts. A joining installation does not run or receive the
-organization CA. Until the Connections file picker is enabled, support may need
-to supply this installer input during setup; operators should never extract the
-file or copy certificates and environment settings by hand.
+The file carries the public-root fingerprint and one-time enrollment authority;
+it never carries the organization's CA private key. It works only for the named
+installation and can be downloaded once. The native Edge host applies the trust
+settings, checks certificate trust, saved settings, portal health, and its secure
+heartbeat, and restores the prior settings if a check fails. The Connections
+page keeps showing progress after a refresh. This establishes machine trust
+only—it does not share backlog data. Demand sharing is a separate, explicit
+choice in Delivery Flow.
 
 If the candidate uses HTTP, its certificate cannot be verified, or discovery is
 unavailable, use the invitation controls on the same page. Never bypass the TLS
