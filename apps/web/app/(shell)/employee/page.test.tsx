@@ -14,6 +14,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+vi.mock("next/headers", () => ({
+  cookies: vi.fn().mockResolvedValue({ get: () => undefined }),
+}));
+
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn().mockResolvedValue({ user: { id: "user-1", platformRole: "HR-000", isSuperuser: false } }),
 }));
@@ -38,6 +42,13 @@ vi.mock("@dpf/db", () => ({
     },
     orgSettings: {
       findFirst: vi.fn().mockResolvedValue(null),
+    },
+    // Owner-first summary (BI-3BCAF95F): archetype context + timesheet approvals.
+    storefrontConfig: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    timesheetPeriod: {
+      count: vi.fn().mockResolvedValue(0),
     },
   },
 }));

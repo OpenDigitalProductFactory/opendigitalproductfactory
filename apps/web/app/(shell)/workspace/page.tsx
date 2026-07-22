@@ -6,6 +6,7 @@ import { prisma } from "@dpf/db";
 import { PlatformWorkspaceHome } from "@/components/workspace-home/PlatformWorkspaceHome";
 import { VerticalWorkspaceHome } from "@/components/workspace-home/VerticalWorkspaceHome";
 import { OperatorCockpit } from "@/components/workspace-home/OperatorCockpit";
+import { WorkspaceStorefrontAttention } from "@/components/owner-first/WorkspaceStorefrontAttention";
 import { WorkspaceTwinHero } from "@/components/workspace-home/WorkspaceTwinHero";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
@@ -66,7 +67,16 @@ export default async function WorkspacePage() {
   // Supersedes the old "Needs you" band; it always states its state, so no other
   // panel can contradict its count. On the twin hero it folds in as the HUD rail so
   // there is still exactly ONE attention surface.
-  const cockpit = <OperatorCockpit userId={session.user.id} />;
+  // Storefront/Funnel signals are reconciled into the attention surface FIRST,
+  // then the cockpit renders the generic coworker-decision residue below it
+  // (BI-3BCAF95F). The storefront band self-hides when there is no guest work, so
+  // it never adds an empty panel to the surface we are decluttering.
+  const cockpit = (
+    <>
+      <WorkspaceStorefrontAttention density={simpleHome ? "simple" : "full"} />
+      <OperatorCockpit userId={session.user.id} />
+    </>
+  );
 
   return (
     <div data-nav-mode={navMode}>
