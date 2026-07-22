@@ -57,6 +57,30 @@ vi.mock("@/components/ops/SelfUpgradeClient", () => ({
   ),
 }));
 
+// BI-8D87084D: owner-readable release card fronts the technical ledger. Stub it
+// to surface the derived state; the summary derivation itself is unit-tested in
+// lib/self-upgrade/owner-summary.test.ts.
+vi.mock("@/components/ops/OwnerReleaseCard", () => ({
+  OwnerReleaseCard: (props: { summary: { state: string } }) => (
+    <div data-testid="owner-release-card" data-release-state={props.summary.state} />
+  ),
+}));
+
+vi.mock("@/lib/self-upgrade/local-changes-ledger", () => ({
+  getLocalChangesLedger: vi.fn().mockResolvedValue({ available: true, changes: [] }),
+}));
+
+vi.mock("@/components/ops/LocalChangesLedger", () => ({
+  LocalChangesLedger: () => <div data-testid="local-changes-ledger" />,
+}));
+
+// The page reads the Simple/Full nav-mode cookie to decide the Advanced default.
+// vi.hoisted so the (hoisted) vi.mock factory can reference the fn without a TDZ.
+const { mockCookieGet } = vi.hoisted(() => ({ mockCookieGet: vi.fn() }));
+vi.mock("next/headers", () => ({
+  cookies: vi.fn().mockResolvedValue({ get: mockCookieGet }),
+}));
+
 import { getSelfUpgradeStatus, listSelfUpgradeRuns } from "@/lib/actions/promotions";
 import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
 import { loadPersistedImpactSummary, summarizeUpgradeImpact } from "@/lib/self-upgrade/impact";
@@ -66,6 +90,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default: install does not customise source — panel stays dormant.
   vi.mocked(getPlatformDevConfig).mockResolvedValue(null as never);
+  // Default nav-mode: no cookie → Full (operator) → Advanced expanded.
+  mockCookieGet.mockReturnValue(undefined);
 });
 
 const baseStatus = {
@@ -264,5 +290,44 @@ describe("SelfUpgradePage", () => {
 
     expect(summarizeUpgradeImpact).not.toHaveBeenCalled();
     expect(loadPersistedImpactSummary).toHaveBeenCalled();
+  });
+
+  it("renders the owner release card ahead of the advanced controls (BI-8D87084D)", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      enabled: true,
+      isFresh: false,
+      targetSha: "b".repeat(40),
+    });
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+
+    // Owner card first, derived state exposed.
+    expect(html).toContain('data-testid="owner-release-card"');
+    expect(html).toContain('data-release-state="update-available"');
+    // Technical controls preserved, now under an Advanced disclosure.
+    expect(html).toContain('data-component="self-upgrade-advanced-toggle"');
+    expect(html).toContain('data-testid="self-upgrade-client"');
+    // Owner card is positioned before the advanced disclosure toggle.
+    expect(html.indexOf('data-testid="owner-release-card"')).toBeLessThan(
+      html.indexOf('data-component="self-upgrade-advanced-toggle"'),
+    );
+  });
+
+  it("expands the advanced controls in Full mode and collapses them in Simple mode", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    // Full (operator) — default cookie unset → details open.
+    const fullHtml = renderToStaticMarkup(await SelfUpgradePage());
+    expect(fullHtml).toMatch(/<details[^>]*\sopen/);
+
+    // Simple (worker) — details collapsed by default.
+    mockCookieGet.mockReturnValue({ value: "worker" });
+    const simpleHtml = renderToStaticMarkup(await SelfUpgradePage());
+    expect(simpleHtml).not.toMatch(/<details[^>]*\sopen/);
+    // The disclosure toggle is still present so it can be opened.
+    expect(simpleHtml).toContain('data-component="self-upgrade-advanced-toggle"');
   });
 });
