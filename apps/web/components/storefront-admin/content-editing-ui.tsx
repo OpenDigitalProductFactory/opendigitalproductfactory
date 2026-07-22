@@ -15,7 +15,7 @@
 //
 // GeneratedResidueBanner is the grouped cross-archetype recovery surface.
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmDialog, alertDialog } from "@/components/ui/Dialog";
 import {
@@ -265,8 +265,8 @@ export function GeneratedResidueBanner({
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
-  const [pending, startTransition] = useTransition();
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const busy = busyKey !== null;
 
   if (groups.length === 0) return null;
 
@@ -290,29 +290,31 @@ export function GeneratedResidueBanner({
     });
     if (!confirmed) return;
 
+    // The recovery runs OUTSIDE any React transition: alertDialog dispatches a
+    // DialogHost state update that never renders interactively inside a deferred
+    // transition, silently wedging the button (BI-FE7C543C). A plain busy flag
+    // keeps the result dialogs reachable.
     setBusyKey(key);
-    startTransition(async () => {
-      let result: RecoverResidueResult;
-      try {
-        result = await recoverGeneratedResidue(storefrontId, { itemIds, sectionIds });
-      } catch {
-        result = { error: "Recovery failed. Please try again." };
-      }
-      setBusyKey(null);
-      if ("error" in result) {
-        await alertDialog({ title: "Couldn’t remove content", message: result.error, tone: "danger" });
-        return;
-      }
-      const parts: string[] = [];
-      if (result.removedItems) parts.push(`${result.removedItems} removed`);
-      if (result.removedSections) parts.push(`${result.removedSections} section${result.removedSections === 1 ? "" : "s"} removed`);
-      if (result.deactivatedItems) parts.push(`${result.deactivatedItems} turned off (had bookings/enquiries)`);
-      await alertDialog({
-        title: "Recovered",
-        message: parts.length ? parts.join(", ") + "." : "Done.",
-      });
-      router.refresh();
+    let result: RecoverResidueResult;
+    try {
+      result = await recoverGeneratedResidue(storefrontId, { itemIds, sectionIds });
+    } catch {
+      result = { error: "Recovery failed. Please try again." };
+    }
+    setBusyKey(null);
+    if ("error" in result) {
+      await alertDialog({ title: "Couldn’t remove content", message: result.error, tone: "danger" });
+      return;
+    }
+    const parts: string[] = [];
+    if (result.removedItems) parts.push(`${result.removedItems} removed`);
+    if (result.removedSections) parts.push(`${result.removedSections} section${result.removedSections === 1 ? "" : "s"} removed`);
+    if (result.deactivatedItems) parts.push(`${result.deactivatedItems} turned off (had bookings/enquiries)`);
+    await alertDialog({
+      title: "Recovered",
+      message: parts.length ? parts.join(", ") + "." : "Done.",
     });
+    router.refresh();
   }
 
   return (
@@ -364,7 +366,7 @@ export function GeneratedResidueBanner({
               </ul>
               <button
                 type="button"
-                disabled={pending}
+                disabled={busy}
                 onClick={() => removeGroups([group], group.key)}
                 className="mt-2 inline-flex min-h-[44px] items-center rounded-md border border-[var(--dpf-error)]/40 px-3 text-xs font-medium text-[var(--dpf-error)] hover:bg-[var(--dpf-error)]/10 disabled:opacity-50"
               >
@@ -376,7 +378,7 @@ export function GeneratedResidueBanner({
           {groups.length > 1 && (
             <button
               type="button"
-              disabled={pending}
+              disabled={busy}
               onClick={() => removeGroups(groups, "__all__")}
               className="inline-flex min-h-[44px] items-center justify-center rounded-md bg-[var(--dpf-error)] px-3 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
