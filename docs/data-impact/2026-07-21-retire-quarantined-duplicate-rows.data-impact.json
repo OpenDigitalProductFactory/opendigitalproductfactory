@@ -1,0 +1,79 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "AI coworker roster and directory",
+    "Active-model inference catalog",
+    "Business-capability taxonomy tree",
+    "Skill registry",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260721190000_retire_quarantined_duplicate_rows",
+    "backfill": "status-only update, no row created or deleted. The prior generic dedupe (20260720193000) renamed each duplicate loser's key to __dpf_quarantined__… and rebuilt the unique index, but left the row otherwise live, so 17 quarantined Agent rows still rendered as ghost coworkers (roster filters archived=false AND lifecycleStage<>'retirement'), 16 ModelProfile rows still matched the active-model catalog, 1 TaxonomyNode and 2 SkillDefinition rows still showed as active. This migration marks each quarantined tombstone inactive using that table's own native marker — Agent archived=true/lifecycleStage='retirement', ModelProfile modelStatus='retired' with retiredAt/retiredReason, TaxonomyNode status='retired', SkillDefinition status='quarantined'. Rows are retained per the tombstone merge policy; they stop rendering as live records. Idempotent, scoped to __dpf_quarantined__ keys, fails closed if any quarantined row remains marked live."
+  },
+  "tests": [
+    "packages/db/src/retire-quarantined-duplicate-rows-migration.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:agent#quarantined-duplicate-retirement",
+      "prismaModel": "Agent",
+      "lifecycleDisposition": "quarantined duplicate coworker rows (survivor already retained by 20260720193000) are marked archived + lifecycleStage='retirement' so they stop rendering in the roster; the row, its id, and inbound references are preserved",
+      "fields": [
+        {
+          "fieldId": "data:agent#lifecycleStage",
+          "resolution": "governed",
+          "reason": "restore a duplicate-free coworker roster after the generic dedupe left quarantined losers active; no coworker capability is lost because the survivor's tool grants are a superset of every loser's (grants revert to the seed map on boot)",
+          "provenance": "BI-8CCF7F13; live verification — 17 roster-visible ghosts before, 0 after, survivor grant-set superset confirmed"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:model-profile#quarantined-duplicate-retirement",
+      "prismaModel": "ModelProfile",
+      "lifecycleDisposition": "quarantined duplicate model profiles are marked modelStatus='retired' with retiredAt/retiredReason so the active-model catalog no longer returns phantom quarantine-keyed models; rows retained",
+      "fields": [
+        {
+          "fieldId": "data:model-profile#modelStatus",
+          "resolution": "governed",
+          "reason": "the active-model query filters modelStatus IN (active,degraded) by providerId, and quarantined rows kept a real providerId with modelStatus='active'",
+          "provenance": "BI-8CCF7F13; apps/web/lib/inference/model-catalog.ts:513"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:taxonomy-node#quarantined-duplicate-retirement",
+      "prismaModel": "TaxonomyNode",
+      "lifecycleDisposition": "quarantined duplicate taxonomy node marked status='retired' so the status='active' render filter excludes the ghost leaf; row retained",
+      "fields": [
+        {
+          "fieldId": "data:taxonomy-node#status",
+          "resolution": "governed",
+          "reason": "taxonomy render filters status='active' (business-capabilities/data.ts:77,243); a quarantined leaf kept its real parent and status='active'",
+          "provenance": "BI-8CCF7F13"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:skill-definition#quarantined-duplicate-retirement",
+      "prismaModel": "SkillDefinition",
+      "lifecycleDisposition": "quarantined duplicate skill definitions marked status='quarantined' (an app-layer skills-lifecycle status); rows retained, and their assignment/usage children were already detached onto the survivor by 20260720193000",
+      "fields": [
+        {
+          "fieldId": "data:skill-definition#status",
+          "resolution": "governed",
+          "reason": "align the row status with the literal quarantine state so skill surfaces stop treating it as active",
+          "provenance": "BI-8CCF7F13; 0 SkillAssignment/SkillUsageEvent rows reference quarantined skillIds"
+        }
+      ]
+    }
+  ]
+}
