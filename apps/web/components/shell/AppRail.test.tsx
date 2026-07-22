@@ -95,11 +95,15 @@ describe("AppRail", () => {
     expect(html).not.toContain("Controls, risk, obligations, and posture.");
   });
 
-  it("uses a horizontal grouped rail on small screens and vertical rail on desktop", () => {
+  it("wraps the grouped rail on small screens and uses a vertical rail on desktop", () => {
+    // BI-882B3680: the mobile rail must wrap (not force a single wide
+    // horizontal-scroll row) so a 390px viewport never overflows the page.
     pathname = "/finance";
     const html = renderToStaticMarkup(<AppRail sections={sections} />);
 
-    expect(html).toContain("overflow-x-auto");
+    expect(html).toContain("flex-wrap");
+    expect(html).not.toContain("overflow-x-auto");
+    expect(html).not.toContain("min-w-max");
     expect(html).toContain("lg:grid");
     expect(html).toContain("whitespace-nowrap");
   });

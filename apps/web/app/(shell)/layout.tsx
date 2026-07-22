@@ -189,8 +189,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         />
         <div className="flex flex-1 flex-col lg:flex-row">
           {shellNavSections.length > 0 && (
-            <aside className="shrink-0 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] lg:w-[248px] lg:border-b-0 lg:border-r">
-              <div className="mx-auto w-full max-w-[1600px] lg:max-w-none">
+            <aside className="min-w-0 shrink-0 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] lg:w-[248px] lg:border-b-0 lg:border-r">
+              <div className="mx-auto w-full min-w-0 max-w-[1600px] lg:max-w-none">
                 <AppRail sections={shellNavSections} mode={navMode} />
               </div>
             </aside>

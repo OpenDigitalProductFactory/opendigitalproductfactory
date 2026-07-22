@@ -67,14 +67,17 @@ export function AppRail({ sections, mode = "operator" }: Props) {
         </button>
       </div>
 
-      <div className="flex gap-3 overflow-x-auto lg:grid lg:overflow-visible">
+      {/* BI-882B3680: on mobile the rail wraps instead of forcing a single wide
+          horizontal-scroll row, so a phone-width viewport (390px) never overflows
+          the page. Desktop keeps the vertical grid rail. */}
+      <div className="flex min-w-0 flex-wrap gap-3 lg:grid lg:overflow-visible">
         {sections.map((section) => (
-          <section key={section.key} className="min-w-max shrink-0 lg:min-w-0">
+          <section key={section.key} className="min-w-0">
             <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
               {section.label}
             </p>
 
-            <div className="mt-1 flex gap-1 lg:block lg:space-y-1">
+            <div className="mt-1 flex flex-wrap gap-1 lg:block lg:space-y-1">
               {section.items.map((item) => {
                 const isActive = activeHref === item.href;
                 return (
