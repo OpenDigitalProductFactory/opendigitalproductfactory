@@ -1792,118 +1792,20 @@ export async function executeTool(
         logBuildActivity(buildId, "reviewBuildPlan", `Plan review failed but is ADVISORY for this kind/size (phase gate does not require planReview-passed) — advancing on the gate; issues recorded for visibility.`);
       }
 
-      // Passed review → auto-advance if gate is satisfied.
+      // Passed review (or advisory-non-gating) → advance to build via the SINGLE
+      // transition executor, shared with the auto-resume reconciler so the plan→
+      // build side-effect lives in exactly one place (BI-05208DE5). The executor
+      // runs the structural + dependency + WWMD kernel gates (fail-open on kernel
+      // error, block on a genuine principle conflict), initializes the build
+      // branch BEFORE flipping the phase (so `buildBranch` is paired with
+      // `phase=build`), auto-dispatches the build orchestrator, and — critically —
+      // COUNTS a branch-init/sandbox failure and escalates past a threshold
+      // instead of silently looping forever (the flood that wedged self-upgrade).
       try {
-        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
-        const { deriveFeatureBuildDependencyGate, FEATURE_BUILD_DEPENDENCY_GATE_SELECT } = await import("@/lib/build/feature-build-dependencies");
-        const updatedBuild = await prisma.featureBuild.findUnique({
-          where: { buildId },
-          select: {
-            phase: true,
-            plan: true,
-            buildPlan: true,
-            planReview: true,
-            id: true,
-            buildId: true,
-            title: true,
-            kind: true,
-            parentEpicId: true,
-            deliberationSummary: true,
-            dependenciesOut: FEATURE_BUILD_DEPENDENCY_GATE_SELECT.dependenciesOut,
-          },
-        });
-        if (updatedBuild && updatedBuild.phase === "plan" && canTransitionPhase("plan", "build")) {
-          const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
-          const happyPathState = normalizeHappyPathState(plan.happyPathState);
-          const gate = checkPhaseGate("plan", "build", {
-            kind: updatedBuild.kind,
-            // Right-sizing matrix: persisted on the plan at promote time. The
-            // warrant supplies deliverableSensitivity/qualityFirst so rigor
-            // scales by altitude + blast-radius, not effort size alone.
-            processSize: (plan.processSize as string | undefined) ?? "medium",
-            deliverableSensitivity: plan.deliverableSensitivity,
-            qualityFirst: plan.qualityFirst === true,
-            buildPlan: updatedBuild.buildPlan,
-            planReview: updatedBuild.planReview,
-            happyPathState,
-          });
-          if (gate.allowed) {
-            const dependencyGate = deriveFeatureBuildDependencyGate(updatedBuild);
-            if (!dependencyGate.allowed) {
-              logBuildActivity(buildId, "phase:gate-blocked", dependencyGate.message);
-            } else {
-              // WWMD kernel gate. The structural checkPhaseGate + dependency gate
-              // above are necessary but not sufficient: the decision kernel
-              // (principle_decide) is the authority on whether plan→build honors
-              // platform principles. The advance-phase HTTP route runs this gate;
-              // this agentic-loop auto-advance MUST too, or local-model builds
-              // silently bypass WWMD. Fail OPEN on evaluator error so a kernel
-              // hiccup can't wedge the streamlined flow — but a genuine principle
-              // conflict (gate not allowed) blocks the auto-advance and surfaces a
-              // DecisionInteraction for operator review.
-              let decisionAllowed = true;
-              try {
-                const { evaluateBuildStudioPlanAdvancementGate } = await import("@/lib/decision-perspective/build-studio-gate");
-                const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
-                  db: prisma,
-                  build: {
-                    buildId: updatedBuild.buildId,
-                    title: updatedBuild.title ?? updatedBuild.buildId,
-                    phase: "plan",
-                    planReview: updatedBuild.planReview as Parameters<typeof evaluateBuildStudioPlanAdvancementGate>[0]["build"]["planReview"],
-                    deliberationSummary: updatedBuild.deliberationSummary as Parameters<typeof evaluateBuildStudioPlanAdvancementGate>[0]["build"]["deliberationSummary"],
-                  },
-                  triggeredByUserId: userId,
-                });
-                if (!decisionGate.allowed) {
-                  decisionAllowed = false;
-                  logBuildActivity(buildId, "wwmd:gate-blocked", decisionGate.operatorMessage ?? "Decision kernel withheld plan→build advancement.");
-                }
-              } catch (wwmdErr) {
-                console.error("[reviewBuildPlan] WWMD gate errored (failing open):", wwmdErr);
-              }
-              if (decisionAllowed) {
-              // Initialize the build branch BEFORE flipping the phase. If the
-              // phase flip lands without buildBranch set, deploy_feature runs
-              // on whatever the current sandbox HEAD is — picking up leftover
-              // work from earlier builds. Gate the transition on the branch
-              // actually being ready so the "phase: build" record is always
-              // paired with a valid buildBranch on the FeatureBuild row.
-              try {
-                const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
-                const sandboxUp = await isSandboxAvailable();
-                if (!sandboxUp) {
-                  logBuildActivity(buildId, "phase:gate-blocked", "Auto-advance to build blocked: sandbox not running. Start the sandbox, then call start_build.");
-                } else {
-                  await startBuildBranch(buildId);
-                  // EP-COST Phase 3: record plan-phase cost rollup, start build tracking, and compact thread
-                  const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
-                  void completeBuildPhaseRun(buildId, "plan");
-                  void startBuildPhaseRun(buildId, "build").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
-                  if (context?.threadId) {
-                    const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
-                    void persistPhaseHandoffSummary(context.threadId, "plan");
-                  }
-                  await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
-                  if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
-                  logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
-                  // Auto-dispatch the build orchestrator so specialist code generation
-                  // runs immediately without waiting for an operator to prompt the
-                  // coworker. The orchestrator handles the full build phase including
-                  // task dispatch, progress tracking, and auto-advance to review.
-                  void import("@/lib/integrate/build-on-plan-approval").then(m =>
-                    m.dispatchBuildForApprovedPlan({ buildId, userId })
-                      .catch(err => console.error("[build-on-plan-approval] auto-dispatch failed:", err))
-                  );
-                }
-              } catch (branchErr) {
-                logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
-              }
-              }
-            }
-          } else {
-            logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
-          }
+        const { performPlanToBuildTransition } = await import("@/lib/integrate/plan-to-build-transition");
+        const outcome = await performPlanToBuildTransition({ buildId, userId, context });
+        if (outcome.kind === "escalated") {
+          logBuildActivity(buildId, "reviewBuildPlan", `plan → build escalated to operator after ${outcome.failures} failed transition attempts (${outcome.reason}).`);
         }
       } catch (err) {
         console.error("[reviewBuildPlan] auto-advance failed:", err);

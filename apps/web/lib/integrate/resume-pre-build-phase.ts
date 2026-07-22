@@ -462,8 +462,48 @@ export async function resumePreBuildPhase(params: {
         const outcome = await dispatchPlanForApprovedBuild({ buildId, userId, forceRegenerate: true });
         return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild:repair", detail: outcome.kind };
       }
-      // No failed verdict — re-run the review (current reviewer logic may now pass
-      // an older verdict); it auto-advances plan->build on pass.
+      // Reconciler (BI-05208DE5): a complete plan whose review already PASSED is
+      // stranded only because the plan→build transition SIDE-EFFECT failed — the
+      // WWMD decision already recommends (the stuck builds carried a cached
+      // `recommend`, confidence 0.9). Perform the transition DIRECTLY via the
+      // shared executor instead of re-running the expensive reviewBuildPlan, which
+      // re-mints a plan-review deliberation that stalls (heartbeats once, watchdog
+      // reaps it) and floods every 30 min — the loop that wedged self-upgrade.
+      // Epic-decomposed children are exempt from the 7-day age-out, so this direct
+      // path (with the executor's bounded-retry + escalation) is the only thing
+      // that stops them looping forever. See target #2 / BI-8C44DB49 for the
+      // orchestrator stall itself.
+      const planReviewPassed =
+        (build.planReview as { decision?: string } | null)?.decision === "pass";
+      if (planReviewPassed) {
+        const { performPlanToBuildTransition } = await import("@/lib/integrate/plan-to-build-transition");
+        const outcome = await performPlanToBuildTransition({ buildId, userId });
+        switch (outcome.kind) {
+          case "advanced":
+            return { kind: "resumed", phase, via: "performPlanToBuildTransition", detail: "advanced plan → build" };
+          case "escalated":
+            return {
+              kind: "skipped",
+              phase,
+              reason: `plan → build transition failed ${outcome.failures}x — escalated to operator; auto-resume paused for this build (${outcome.reason}).`,
+            };
+          case "transition-failed":
+            return {
+              kind: "skipped",
+              phase,
+              reason: `plan → build transition failed (attempt ${outcome.failures}); will retry next cycle (${outcome.reason}).`,
+            };
+          case "gate-blocked":
+          case "wwmd-withheld":
+            return { kind: "skipped", phase, reason: `plan → build ${outcome.kind}: ${outcome.reason}` };
+          case "not-ready":
+            // Build advanced out of plan (or vanished) between scan and now.
+            return { kind: "skipped", phase, reason: `plan → build not-ready: ${outcome.reason}` };
+        }
+      }
+
+      // No usable verdict yet — re-run the review (current reviewer logic may now
+      // pass an older verdict); it auto-advances plan->build on pass.
       const { executeTool } = await import("@/lib/mcp-tools");
       const result = await executeTool("reviewBuildPlan", { buildId }, userId, { featureBuildId: buildId });
       return {
