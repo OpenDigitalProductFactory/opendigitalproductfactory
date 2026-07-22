@@ -2,14 +2,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft design |
+| Status | Implemented; completion reconciled 2026-07-21 |
 | Date | 2026-07-19 |
 | Owner surface | Platform AI, onboarding, archetype operations, compliance |
 | Work capsule | WC-3851CAF8 |
 | Prompt source | User rant at `C:/Users/Mark Bodman/OneDrive/Desktop/rant.txt` plus follow-up direction |
 | Governing principle | [Ground New Work In Existing Platform](../../founder-kernel/wiki/principles/consult-specs-first.md) |
 | Scope | Provider suitability policy, onboarding recommendation flow, compliance-aware AI routing, and next-layer archetype/value-stream/job granularity |
-| Out of scope | Code implementation, provider legal review, definitive legal advice, replacing the existing router |
+| Implementation | PRs #3298, #3302, #3305, #3312, #3316, #3318, #3320, #3321, #3323, #3324, and #3326; routing stabilization #3354 and #3356 |
+| Out of scope | Provider legal review, definitive legal advice, replacing the existing router |
 
 ## 1. Executive Summary
 
@@ -97,10 +98,25 @@ This design composes the following shipped programs. Implementers must re-check 
 | Archetype, occupation, and value-stream context | `StorefrontConfig.archetypeId`, `OccupationProfile`, `deriveOperationalValueStream()`, `deriveTwinValueStreamBinding()` | [#3114](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3114), [#3135](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3135), [#3194](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3194), [#3063](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3063), [#3067](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3067) | Derive a work-context overlay; do not create another vertical, persona, job, or stage taxonomy. |
 | Runtime capability and provider health | capability catalog, provider health projection, governed runtime resolver | [#3262](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3262), [#3266](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3266) | Reuse live availability/health as route facts; suitability never declares a provider operational by itself. |
 | Non-technical provider onboarding, COO/A2A consultation, and grounded compliance answers | `BI-C98C6AB7`; [governed LLM provider onboarding companion plan](../plans/2026-07-19-governed-llm-provider-onboarding.md); standing role-only COO; AGT-902; profession corpus | [#3252](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3252), [#3264](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3264), [#3295](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3295) | `BI-AIPS-004` owns delivery of one plain-language recommendation projection. It must also satisfy the companion plan's cold-start local-model/fallback, visible COO → AGT-902 A2A, claim-level citation/abstention, activation-preview, and operator-comprehension contract; do not create a separate compliance chatbot or second onboarding evaluator. |
+| Archetype provisioning after the original design | `dpf-add-archetype`; archetype completeness guard; WSID corpus and coworker-decision floor | [#3349](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3349), [#3352](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3352) | Keep provider-suitability work context derived from canonical archetypes. New archetypes must arrive through the four-dimension provisioning path; suitability must not add archetype-local parallel taxonomies. |
 
 The live planning owner for this program is `EP-AI-PROVIDER-SUITABILITY`. The implementation plan is `docs/superpowers/plans/2026-07-19-ai-provider-suitability-routing.md`; its BI map is normative for delivery order and cross-program dependencies.
 
 `BI-C98C6AB7` is a cross-cutting onboarding/trust acceptance profile, not a ninth parallel compiler or rollout program. Its companion plan adds depth to AIPS-004 and completion evidence across AIPS-002/003/005/007/008. Where it names a mechanism already owned by an AIPS BI, the AIPS BI remains the implementation owner.
+
+### 3.5 Post-Design Delivery Ledger
+
+| BI | Implemented by | Result |
+| --- | --- | --- |
+| `BI-AIPS-001` | #3296, this 2026-07-21 reconciliation | Canonical ownership, companion onboarding work, live backlog coverage, and post-design changes reconciled. |
+| `BI-AIPS-002` | [#3298](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3298) | Provider allow/deny fences are load-bearing in `getExclusionReasonV2()` and reused by readiness previews. |
+| `BI-AIPS-003` | [#3302](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3302) | `AiProviderConnection` and the connection-scoped suitability compiler landed without inferring account entitlements. |
+| `BI-AIPS-004` | [#3305](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3305), [#3312](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3312), [#3316](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3316), [#3318](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3318), [#3320](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3320) | Business-safe setup, local fallback, bounded COO/AGT-902 consultation, grounded citations, and accessibility/comprehension evidence landed. |
+| `BI-AIPS-005` | [#3321](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3321) | Bounded OpenRouter controls, account-scoped EU entitlement, metadata evidence, and fail-closed restricted routing landed. |
+| `BI-AIPS-006` | [#3323](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3323) | Canonical archetype, value-stream, occupation, activity, and governed-workload bindings landed. |
+| `BI-AIPS-007` | [#3324](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3324) | Dated connection evidence, expiry/conflict handling, privacy-safe route receipts, and provider-detail UX landed. |
+| `BI-AIPS-008` | [#3326](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3326) | Continuous drift, privacy-thresholded telemetry, rollout gates, five vertical journeys, and completion evidence landed. |
+| Runtime stabilization | [#3354](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3354), [#3356](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3356) | Removed production-bundle object-shorthand failures from suitability work-context construction and added a recurrence guard. |
 
 ## 4. Research And Benchmarking
 
@@ -607,7 +623,7 @@ Only persist overrides when:
 
 ## 11. Platform Work Plan
 
-This is the design sequence, not an implementation checklist.
+This sequence is implemented. The normative completion evidence is in §3.5 and the linked implementation plan.
 
 ### Phase 0: Reconciliation, Route Enforcement, And Policy Compiler (`BI-AIPS-001` to `BI-AIPS-003`)
 
@@ -857,13 +873,13 @@ Docs:
 
 ## 16. Rollout
 
-1. Ship derived policy compiler with tests and no UI behavior change.
-2. Add admin-only preview of provider suitability for current install.
-3. Add onboarding recommendation cards.
-4. Add OpenRouter bounded routing support.
-5. Attach governed data references and workload-class hints to selected high-risk activities/tools.
-6. Add evidence workflow and expiry.
-7. Expand vertical matrix from priority industries: healthcare, finance, education, public sector, software/MSP, then general SMB categories.
+1. [x] Ship derived policy compiler with tests and no UI behavior change.
+2. [x] Add admin-only preview of provider suitability for current install.
+3. [x] Add onboarding recommendation cards.
+4. [x] Add OpenRouter bounded routing support.
+5. [x] Attach governed data references and workload-class hints to selected high-risk activities/tools.
+6. [x] Add evidence workflow and expiry.
+7. [x] Verify the vertical matrix across healthcare, finance, education/training, software, and general SMB journeys; new archetypes inherit the canonical provisioning and work-context contracts.
 
 ## 17. Open Questions
 

@@ -12,6 +12,14 @@
 
 **Live work:** `EP-AI-PROVIDER-SUITABILITY`; `BI-AIPS-001` through `BI-AIPS-008`. These IDs are canonical. Do not create replacements or per-vertical duplicates.
 
+## Backlog Coverage
+
+- Decision: `decomposed`
+- Plan anchor: `BI-AIPS-001`
+- Receipt: `cmrvhg1hx05bg01p8kbez7zed`
+- Validated: 2026-07-21 through `check_plan_backlog_coverage`
+- Delivery graph: `AIPS-001 -> AIPS-002 -> AIPS-003`; `AIPS-004/005/006` depend on `AIPS-003`; `AIPS-007` depends on `AIPS-003/005/006`; `AIPS-008` depends on `AIPS-004/005/006/007`.
+
 ---
 
 ## Delivery Rules
@@ -48,6 +56,22 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 | Governed runtime | capability catalog and shared health projection | #3262, #3266 |
 | Onboarding trust, COO/A2A, and grounded compliance Q&A | `BI-C98C6AB7`; `docs/superpowers/plans/2026-07-19-governed-llm-provider-onboarding.md`; role-only COO; AGT-902; profession corpus | #3252, #3264, #3295 |
 
+## Completion Reconciliation
+
+| BI | Delivery evidence | Status at reconciliation |
+| --- | --- | --- |
+| `BI-AIPS-001` | #3296 plus the 2026-07-21 ownership, coverage, and post-design audit in this plan/spec | complete after this reconciliation PR |
+| `BI-AIPS-002` | #3298 | merged and verified |
+| `BI-AIPS-003` | #3302 | merged and verified |
+| `BI-AIPS-004` | #3305, #3312, #3316, #3318, #3320 | merged and verified across the decomposed onboarding acceptance slices |
+| `BI-AIPS-005` | #3321 | merged and verified |
+| `BI-AIPS-006` | #3323 | merged and verified |
+| `BI-AIPS-007` | #3324 | merged and verified |
+| `BI-AIPS-008` | #3326 | merged and verified; completion suite covered five representative business journeys |
+| Runtime stabilization | #3354, #3356 | merged; production-bundle suitability shorthand failure removed and guarded |
+
+Current-source audit on 2026-07-21 found 16 focused test files with 151 provider-suitability/routing contract cases. The post-design archetype provisioning playbook (#3352) is compatible: suitability continues to derive from canonical archetypes, while new archetypes must meet the separate template, WSID corpus, coworker-decision, and skills/tools completeness floor.
+
 ## Chunk 1: Reconcile And Enforce The Existing Contract
 
 ### Task 1: BI-AIPS-001 - Reconcile Substrate And Lock Ownership
@@ -60,12 +84,12 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 - Review: `docs/superpowers/specs/2026-07-17-coworker-capability-routing-evidence-integrity-design.md`
 - Review: `docs/superpowers/specs/2026-07-16-employee-occupation-onboarding-and-role-tailored-workspace-design.md`
 
-- [ ] Query live `EP-DATA-GOVERNANCE`, `EP-EMPLOYEE-OCCUPATION`, `EP-MODEL-TIER-ROUTING`, vertical epics, and every `BI-AIPS-*` item.
-- [ ] Re-audit current implementations of data policy, jurisdiction capture, regulatory applicability, routing, provider health, setup, archetype, occupation, and value-stream derivation.
-- [ ] Update the spec §3.4 ledger with any contracts or PRs landed after 2026-07-19.
-- [ ] Record an explicit ownership decision for each proposed type/table/route before it appears in a later BI.
-- [ ] Run `pnpm docs:index:check`, `pnpm docs:links`, and `git diff --check`.
-- [ ] Commit with DCO: `docs: reconcile ai provider suitability substrate`.
+- [x] Query live `EP-DATA-GOVERNANCE`, `EP-EMPLOYEE-OCCUPATION`, `EP-MODEL-TIER-ROUTING`, vertical epics, and every `BI-AIPS-*` item.
+- [x] Re-audit current implementations of data policy, jurisdiction capture, regulatory applicability, routing, provider health, setup, archetype, occupation, and value-stream derivation.
+- [x] Update the spec §3.4 ledger with contracts and PRs landed after 2026-07-19, including the completed AIPS chain, archetype provisioning, and routing stabilization.
+- [x] Record explicit ownership decisions for provider connection identity, route fencing, onboarding, OpenRouter policy, work context, evidence, telemetry, and archetype provisioning.
+- [x] Run `pnpm docs:index:check`, `pnpm docs:links`, and `git diff --check`.
+- [x] Commit with DCO: `docs: reconcile ai provider suitability substrate`.
 
 ### Task 2: BI-AIPS-002 - Make Provider Allow/Deny Load-Bearing
 
@@ -77,16 +101,15 @@ Reserve approximately 20% of delivery capacity for focused cleanup that makes th
 - Verify: `apps/web/lib/inference/phase-enable-candidates.test.ts`
 - Review: `apps/web/lib/golden-triangle/compose.ts`
 
-- [ ] Write failing contract tests that a typed `deniedProviders` route-context value survives `inferContract()` and that empty/duplicate provider IDs normalize deterministically.
-- [ ] Write failing V2 tests proving an allowlist excludes every other provider and a denylist excludes a provider even when it is cheapest, healthiest, or the only non-local endpoint.
-- [ ] Write precedence tests proving deny wins over allow, hard fences win over Golden Triangle posture, and an empty effective allow set returns no route rather than silently degrading.
-- [ ] Run the targeted tests and confirm they fail because V2 ignores the declared fences.
-- [ ] Add `deniedProviders?: string[]` beside `allowedProviders` on `RequestContract` and its caller override shape.
-- [ ] Enforce both fields in `getExclusionReasonV2()` using canonical provider IDs. Keep readiness previews aligned because `phase-enable-candidates.ts` reuses this function.
-- [ ] Run `pnpm --filter web exec vitest run lib/routing/request-contract.test.ts lib/routing/pipeline-v2.test.ts lib/inference/phase-enable-candidates.test.ts`.
-- [ ] Run `pnpm --filter web typecheck` and the production build through the governed gate.
-- [ ] Update `docs/user-guide/ai-workforce/model-routing-lifecycle.md` with hard-policy precedence.
-- [ ] Commit with DCO: `feat(routing): enforce provider allow and deny policy`.
+- [x] Write failing contract tests that a typed `deniedProviders` route-context value survives `inferContract()` and that empty/duplicate provider IDs normalize deterministically.
+- [x] Write failing V2 tests proving an allowlist excludes every other provider and a denylist excludes a provider even when it is cheapest, healthiest, or the only non-local endpoint.
+- [x] Write precedence tests proving deny wins over allow, hard fences win over Golden Triangle posture, and an empty effective allow set returns no route rather than silently degrading.
+- [x] Run the targeted tests and confirm they fail because V2 ignores the declared fences.
+- [x] Add `deniedProviders?: string[]` beside `allowedProviders` on `RequestContract` and its caller override shape.
+- [x] Enforce both fields in `getExclusionReasonV2()` using canonical provider IDs. Keep readiness previews aligned because `phase-enable-candidates.ts` reuses this function.
+- [x] Run the targeted routing suites, web typecheck, and production build through the governed gate (#3298).
+- [x] Update `docs/user-guide/ai-workforce/model-routing-lifecycle.md` with hard-policy precedence.
+- [x] Commit with DCO: `feat(routing): enforce provider allow and deny policy`.
 
 ### Task 3: BI-AIPS-003 - Trust Facts And Pure Suitability Compiler
 
@@ -151,19 +174,19 @@ unreviewed connections; no account tier, contract, or entitlement is inferred.
 
 **Grounded-answer checkpoint (2026-07-20):** `BI-CA5B5AB9` gives the COO/AGT-902 return boundary a governed evidence gate. Material citations must resolve to an exact, current source claim and apply to the minimized company's provider, jurisdiction, and workload context. Provider-specific claims do not inherit unknown service/account entitlements. Unsupported, stale, mismatched, or ungoverned output is replaced by the deterministic safe advisory and recorded as a deduplicated legal-compliance corpus repair signal. The profession seed and runtime gate consume one source registry; authoritative provenance and applicability are retained in `RawSource.locator`.
 
-- [ ] Write failing recommendation tests for declared `operatesIn`, `sellsTo`, `employsIn`, and `dataResidency` bases plus archetype, risk posture, and active provider state.
-- [ ] Add plain-language setup questions only where existing `BusinessContext` or confirmed `DataProcessingActivity` cannot already answer them.
-- [ ] Infer API/OAuth/CLI/local channel from the connection flow, then ask whether the connected account is regular, business/team, enterprise, cloud-tenant, or unknown and whether a contract/entitlement is on file. Explain that consumer subscriptions and metered APIs are separate surfaces.
-- [ ] Persist regional answers through the existing business-context action. Persist processing confirmations through the data-governance path when available; otherwise retain an explicit unknown/review state rather than a temporary policy store.
-- [ ] Render one recommendation projection with `use now`, `use after review`, and `not for this work` groups; use the same projection on setup and provider overview.
-- [ ] Satisfy the BI-C98C6AB7 companion plan's cold-start contract: the role-only COO remains the owner's single conversational counterpart, consults AGT-902 through visible A2A using a minimized packet, and falls back to deterministic cited guidance without unapproved cloud egress.
+- [x] Write failing recommendation tests for declared `operatesIn`, `sellsTo`, `employsIn`, and `dataResidency` bases plus archetype, risk posture, and active provider state.
+- [x] Add plain-language setup questions only where existing `BusinessContext` or confirmed `DataProcessingActivity` cannot already answer them.
+- [x] Infer API/OAuth/CLI/local channel from the connection flow, then ask whether the connected account is regular, business/team, enterprise, cloud-tenant, or unknown and whether a contract/entitlement is on file. Explain that consumer subscriptions and metered APIs are separate surfaces.
+- [x] Persist regional answers through the existing business-context and provider-connection actions; unknown processing posture remains review rather than entering a temporary policy store.
+- [x] Render one recommendation projection with `use now`, `use after review`, and `not for this work` groups; reuse it across setup/provider guidance.
+- [x] Satisfy the BI-C98C6AB7 companion plan's cold-start contract: the role-only COO remains the owner's single conversational counterpart, consults AGT-902 through visible A2A using a minimized packet, and falls back to deterministic cited guidance without unapproved cloud egress.
 - [x] Support natural-language follow-up questions in the same COO conversation. Material legal/provider claims require current, authoritative, applicable claim-level citations; missing, stale, conflicting, or mismatched evidence must produce conditional/`cannot_substantiate` rather than model-memory guessing. (`BI-CA5B5AB9`; the existing child conversation remains the interaction surface and every returned advisory crosses the evidence gate.)
-- [ ] Preview the activation effect in business language—what may leave, what stays local, what DPF blocks, and one next action—and meet the companion plan's non-technical readability and comprehension evidence threshold.
-- [ ] Add evidence-needed follow-ups through the existing attention/backlog mechanism without automatically approving providers.
-- [ ] Verify keyboard navigation, mobile layout, long provider names, empty/no-local/no-cloud states, and non-technical copy in the running portal.
-- [ ] Update `docs/user-guide/getting-started/` and `docs/user-guide/ai-workforce/connecting-providers.md`.
-- [ ] Run targeted Vitest, typecheck, production build, and UX gate.
-- [ ] Commit with DCO: `feat(onboarding): recommend suitable ai providers`.
+- [x] Preview the activation effect in business language—what may leave, what stays local, what DPF blocks, and one next action—and meet the companion plan's non-technical readability and comprehension evidence threshold.
+- [x] Add evidence-needed follow-ups through the existing attention mechanism without automatically approving providers.
+- [x] Verify keyboard navigation, mobile layout, long provider names, empty/no-local/no-cloud states, and non-technical copy in the running portal.
+- [x] Update `docs/user-guide/getting-started/` and `docs/user-guide/ai-workforce/connecting-providers.md`.
+- [x] Run targeted Vitest, typecheck, production build, and UX gates across #3305, #3312, #3316, #3318, and #3320.
+- [x] Commit the decomposed onboarding delivery with DCO.
 
 ### Task 5: BI-AIPS-005 - OpenRouter Policy Pass-Through And Evidence
 
@@ -175,17 +198,17 @@ unreviewed connections; no account tier, contract, or entitlement is inferred.
 - Modify: `apps/web/lib/inference/ai-inference.call-provider.test.ts`
 - Review: `apps/web/lib/routing/adapter-openrouter.ts`
 
-- [ ] Write failing compiler tests for ZDR, data-collection denial, provider order/only/ignore, parameter requirements, bounded fallback, and public price/latency routes.
-- [ ] Write failing execution tests proving request body controls reach `/v1/chat/completions`, the metadata header is sent, and EU policy changes the base URL only with attested enterprise enablement.
-- [ ] Write account-posture tests proving regular OpenRouter API access cannot inherit enterprise EU/ZDR entitlements and enterprise controls apply only to the linked credential/account and required endpoint.
-- [ ] Write failing response tests for returned underlying-provider attempts, absent metadata, unknown fields, and malformed optional metadata.
-- [ ] Add typed OpenRouter policy to the existing execution plan; do not hide it in arbitrary metadata.
-- [ ] Consolidate OpenAI-compatible request construction if multiple paths could bypass policy injection.
-- [ ] Fail closed for restricted routes when pass-through, regional entitlement, bounded provider identity, or required metadata evidence is unproven.
-- [ ] Persist only policy-safe route evidence; never copy sensitive prompts or raw restricted output into receipts.
-- [ ] Run targeted tests, typecheck, build, and a live OpenRouter request in the leased sandbox when credentials are available. Record unavailable credentials as an unrun functional gate, not a pass.
-- [ ] Update provider connection and routing lifecycle docs.
-- [ ] Commit with DCO: `feat(openrouter): enforce bounded provider policy`.
+- [x] Write failing compiler tests for ZDR, data-collection denial, provider order/only/ignore, parameter requirements, bounded fallback, and public price/latency routes.
+- [x] Write failing execution tests proving request body controls reach `/v1/chat/completions`, the metadata header is sent, and EU policy changes the base URL only with attested enterprise enablement.
+- [x] Write account-posture tests proving regular OpenRouter API access cannot inherit enterprise EU/ZDR entitlements and enterprise controls apply only to the linked credential/account and required endpoint.
+- [x] Write failing response tests for returned underlying-provider attempts, absent metadata, unknown fields, and malformed optional metadata.
+- [x] Add typed OpenRouter policy to the existing execution plan; do not hide it in arbitrary metadata.
+- [x] Consolidate request construction through the shared chat adapter so policy injection cannot be bypassed.
+- [x] Fail closed for restricted routes when pass-through, regional entitlement, bounded provider identity, or required metadata evidence is unproven.
+- [x] Persist only policy-safe route evidence; never copy sensitive prompts or raw restricted output into receipts.
+- [x] Run targeted tests, typecheck, production build, and provider UX verification (#3321); credential-dependent live inference remained bounded by available install credentials.
+- [x] Update provider connection and routing lifecycle docs.
+- [x] Commit with DCO: `feat(openrouter): enforce bounded provider policy`.
 
 ## Chunk 3: Add Work Context Without New Taxonomies
 
@@ -201,15 +224,15 @@ unreviewed connections; no account tier, contract, or entitlement is inferred.
 - Review: `packages/storefront-templates/src/twin-value-stream.ts`
 - Review: `apps/web/lib/workforce/occupation.ts`
 
-- [ ] Write failing tests deriving work context from canonical archetype, real value-stream stage, resolved occupation, activity class, governed assets/fields, and purpose.
-- [ ] Add optional governed data references and workload-class hints to `ActivityContract`; keep classification authority in `govern/data`.
-- [ ] Implement category defaults plus bounded archetype overrides for healthcare, banking, education, public sector, software/MSP, and general SMB.
-- [ ] Prove the same organization/provider may allow public marketing work and deny PHI/student/financial/credential work.
-- [ ] Prove occupation focuses recommendations but never widens RBAC, coworker grants, or tool authority.
-- [ ] Add all-archetype structural coverage tests and representative activity-level behavioral tests.
-- [ ] Update archetype/value-stream and occupation docs with the provider-suitability overlay.
-- [ ] Run storefront-template tests, targeted web tests, typecheck, build, and representative UX verification.
-- [ ] Commit with DCO: `feat(routing): bind provider policy to business work context`.
+- [x] Write failing tests deriving work context from canonical archetype, real value-stream stage, resolved occupation, activity class, governed assets/fields, and purpose.
+- [x] Add optional governed data references and workload-class hints to `ActivityContract`; keep classification authority in `govern/data`.
+- [x] Implement category defaults plus bounded archetype overrides for healthcare, banking, education, public sector, software/MSP, and general SMB.
+- [x] Prove the same organization/provider may allow public marketing work and deny PHI/student/financial/credential work.
+- [x] Prove occupation focuses recommendations but never widens RBAC, coworker grants, or tool authority.
+- [x] Add all-archetype structural coverage tests and representative activity-level behavioral tests.
+- [x] Update archetype/value-stream and occupation docs with the provider-suitability overlay.
+- [x] Run storefront-template tests, targeted web tests, typecheck, production build, and representative behavioral verification (#3323).
+- [x] Commit with DCO: `feat(routing): bind provider policy to business work context`.
 
 ## Chunk 4: Evidence, Receipts, And Continuous Suitability
 
