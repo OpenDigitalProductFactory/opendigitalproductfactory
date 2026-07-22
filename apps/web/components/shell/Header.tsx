@@ -1,12 +1,14 @@
 // apps/web/components/shell/Header.tsx
 "use client";
 
-import { signOutAction } from "@/lib/actions";
 import { ContextualDocsButton } from "@/components/docs/ContextualDocsButton";
 import { HeaderFeedbackButton } from "@/components/feedback/HeaderFeedbackButton";
 import { PlatformHealthIndicator } from "@/components/monitoring/PlatformHealthIndicator";
+import { ShellSignOut } from "@/components/shell/ShellSignOut";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import type { PortalAudienceMode } from "@/lib/navigation/portal-navigation-model";
+import { isSimpleNavMode } from "@/lib/navigation/nav-mode";
 
 type Props = {
   platformRole: string | null;
@@ -14,9 +16,15 @@ type Props = {
   brandLogoUrl: string | null;
   brandLogoUrlLight?: string | null;
   userId?: string | null;
+  navMode?: PortalAudienceMode;
 };
 
-export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLight, userId }: Props) {
+export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLight, userId, navMode = "operator" }: Props) {
+  // Common Shell Action-Result Contract (BI-9C0954D0) C6 + Simple-mode delta:
+  // in Simple (worker) view the header sheds builder-flavored chrome (the
+  // "Internal cockpit" badge and the specialist-team tagline) so the owner sees a
+  // calmer header ahead of the route task. Full view restores it.
+  const simpleMode = isSimpleNavMode(navMode);
   const companyName = brandName.trim().length > 0 ? brandName : "DPF";
   const logoSource = brandLogoUrl?.trim() ?? "";
   const hasLogo = logoSource.length > 0;
@@ -85,17 +93,21 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                   {companyName}
                 </span>
               )}
-              <span className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
-                Internal cockpit
-              </span>
+              {!simpleMode && (
+                <span className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+                  Internal cockpit
+                </span>
+              )}
             </div>
-            <p className="mt-0.5 truncate text-xs text-[var(--dpf-muted)]">
-              Small human team, AI coworkers filling in specialist expertise
-            </p>
+            {!simpleMode && (
+              <p className="mt-0.5 truncate text-xs text-[var(--dpf-muted)]">
+                Small human team, AI coworkers filling in specialist expertise
+              </p>
+            )}
           </div>
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 sm:gap-2">
           <ContextualDocsButton compact />
           <PlatformHealthIndicator />
           <HeaderFeedbackButton userId={userId ?? null} />
@@ -104,14 +116,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
               {platformRole}
             </span>
           )}
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="text-xs text-[var(--dpf-muted)] transition-colors hover:text-[var(--dpf-text)]"
-            >
-              Sign out
-            </button>
-          </form>
+          <ShellSignOut />
         </div>
       </div>
     </header>

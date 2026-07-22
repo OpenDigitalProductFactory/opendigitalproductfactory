@@ -187,6 +187,21 @@ Every coworker that writes customer-facing copy (marketing-specialist and peers)
 - keep architecture and standards copy precise even when it reads higher;
 - check the Flesch–Kincaid grade before publishing.
 
+## Common Shell Action-Result Contract
+
+The common shell chrome that wraps every owner route (`apps/web/app/(shell)/layout.tsx` — header, Simple/Full rail, contextual help, feedback, health badge, coworker panel) must obey one action-result contract so non-technical owners can predict what a control does and see that it happened. Shared, testable pieces live in `apps/web/lib/shell/shell-action-contract.ts`; the design is in `docs/superpowers/specs/2026-07-22-shell-action-result-contract-design.md` (BI-9C0954D0).
+
+| # | Rule | How to satisfy it |
+|---|---|---|
+| C1 | **Unique accessible target per region.** A control's accessible name must not collide with a different destination in the same shell. | The route-scoped help control is **"Help for this page"**; the global catalog nav item is **"All docs"**. Never ship two controls named `Docs`. |
+| C2 | **Label matches result.** The visible/accessible label names the surface or state the click produces. | `Feedback` opens a feedback-labelled surface (`Send feedback`), not a generic assistant. Mode toggles name their outcome (`Switch to Simple view`). |
+| C3 | **Visible result after click.** Every shell action produces a change the owner can perceive — navigation, a labelled popover, a pressed state, an `InlineBusy` pending affordance, or a `role="status"` announcement. A silent state change is a defect. | Sign out shows `Signing out…`; the mode toggle shows `Switching…` + a live-region announcement + a mode-explanation caption. |
+| C4 | **Route-aware behavior.** Route-scoped controls resolve against the current route and say so. | Contextual help uses `buildContextualDocsHref(pathname)` and carries `sourceRoute`. |
+| C5 | **Mobile tap-safe.** Interactive shell controls present a ≥44×44px hit area (WCAG 2.2 AA 2.5.8 Target Size Minimum). | Apply `SHELL_TAP_TARGET_CLASS` (`dpf-tap-target`, defined in `apps/web/app/globals.css`) to the control. |
+| C6 | **Task before chrome.** Owner surfaces expose the route task ahead of global/internal chrome in reading order. | The shell renders a **Skip to main content** link as the first focusable element (targeting `#main-content`), and builder-flavored header chrome recedes in Simple mode. |
+
+New shell controls, and edits to the existing ones, must be covered by the action-result smoke (`apps/web/components/shell/shell-action-result-contract.test.tsx`), which parameterises the contract across the owner routes.
+
 ## Standards Referenced
 
 - WCAG 2.2 (W3C Recommendation) — Level AA compliance

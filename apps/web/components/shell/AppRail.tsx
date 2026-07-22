@@ -1,9 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { PortalAudienceMode, ShellNavSection } from "@/lib/permissions";
 import { NAV_MODE_COOKIE } from "@/lib/navigation/nav-mode";
+import { InlineBusy } from "@/components/ui/InlineBusy";
+import {
+  SHELL_TAP_TARGET_CLASS,
+  navModeExplanation,
+  navModeSwitchAnnouncement,
+  navModeToggleAriaLabel,
+} from "@/lib/shell/shell-action-contract";
 
 type Props = {
   sections: ShellNavSection[];
@@ -22,49 +30,75 @@ export function AppRail({ sections, mode = "operator" }: Props) {
     .filter((item) => matchesPath(pathname, item.href))
     .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 
+  // Common Shell Action-Result Contract (BI-9C0954D0 / BI-BF53A701) C2/C3: the
+  // Simple/Full toggle must produce a visible result and explain the mode. The
+  // pending target drives an immediate "Switching…" affordance while
+  // router.refresh() re-resolves the cookie server-side; the live region
+  // announces the switch for assistive tech.
+  const [pending, setPending] = useState<PortalAudienceMode | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+
+  // Once the server-resolved `mode` prop catches up to the requested value the
+  // refresh has landed — clear the pending affordance.
+  useEffect(() => {
+    setPending(null);
+  }, [mode]);
+
   // EP-NAV-COHERENCE P4: worker/operator rail mode. "Simple" (worker) hides operator /
   // platform chrome for day-to-day business work; "Full" (operator) restores everything.
   // Operator is the default and is always one click away, so worker mode never strands a
   // user away from a surface their role can reach. Persisted in a cookie the shell reads.
   function setMode(next: PortalAudienceMode) {
-    if (next === mode) return;
+    if (next === mode || pending !== null) return;
+    setPending(next);
+    setAnnouncement(navModeSwitchAnnouncement(next));
     document.cookie = `${NAV_MODE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
     router.refresh();
   }
 
-  return (
-    <nav aria-label="Primary" data-nav-mode={mode} className="flex flex-col gap-3 p-3 lg:p-4">
-      <div
-        role="group"
-        aria-label="Navigation detail"
-        className="flex items-center gap-1 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-1 text-[11px] font-medium"
+  const toggleButton = (target: PortalAudienceMode, label: string) => {
+    const active = mode === target;
+    const busy = pending === target;
+    return (
+      <button
+        type="button"
+        onClick={() => setMode(target)}
+        aria-pressed={active}
+        aria-label={navModeToggleAriaLabel(target)}
+        aria-busy={busy}
+        disabled={pending !== null}
+        className={[
+          SHELL_TAP_TARGET_CLASS,
+          "flex-1 rounded-md px-2 py-1 transition-colors disabled:cursor-wait",
+          active
+            ? "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+            : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
+        ].join(" ")}
       >
-        <button
-          type="button"
-          onClick={() => setMode("worker")}
-          aria-pressed={mode === "worker"}
-          className={[
-            "flex-1 rounded-md px-2 py-1 transition-colors",
-            mode === "worker"
-              ? "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
-              : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
-          ].join(" ")}
+        {busy ? <InlineBusy label="Switching…" size="xs" tone="current" /> : label}
+      </button>
+    );
+  };
+
+  return (
+    <nav aria-label="Primary" data-nav-mode={mode} data-audience-mode={mode} className="flex flex-col gap-3 p-3 lg:p-4">
+      <div className="flex flex-col gap-1">
+        <div
+          role="group"
+          aria-label="Navigation detail"
+          className="flex items-center gap-1 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-1 text-[11px] font-medium"
         >
-          Simple
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("operator")}
-          aria-pressed={mode === "operator"}
-          className={[
-            "flex-1 rounded-md px-2 py-1 transition-colors",
-            mode === "operator"
-              ? "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
-              : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
-          ].join(" ")}
-        >
-          Full
-        </button>
+          {toggleButton("worker", "Simple")}
+          {toggleButton("operator", "Full")}
+        </div>
+        {/* Persistent, mode-aware explanation of what this view shows (C2/C3). */}
+        <p className="px-1 text-[10px] leading-snug text-[var(--dpf-muted)]">
+          {navModeExplanation(mode)}
+        </p>
+        {/* Live region: announces the switch to assistive tech without stealing focus. */}
+        <span role="status" aria-live="polite" className="sr-only">
+          {announcement}
+        </span>
       </div>
 
       {/* BI-882B3680: on mobile the rail wraps instead of forcing a single wide

@@ -848,7 +848,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "docs",
-    label: "Docs",
+    label: "All docs",
     path: "/docs",
     parentPath: "/docs",
     domain: "knowledge",

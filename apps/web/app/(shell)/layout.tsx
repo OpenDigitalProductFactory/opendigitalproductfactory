@@ -157,6 +157,16 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     <PhoneCountryProvider country={phoneCountry}>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
       <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
+        {/* Common Shell Action-Result Contract (BI-9C0954D0) C6: the first
+            focusable element skips the global header/rail chrome straight to the
+            route task, so keyboard and assistive-tech owners reach their work
+            ahead of internal chrome. */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-[100] focus:rounded-md focus:border focus:border-[var(--dpf-accent)] focus:bg-[var(--dpf-surface-1)] focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-[var(--dpf-text)]"
+        >
+          Skip to main content
+        </a>
         {activeSetup && (
           <SetupOverlay
             progressId={activeSetup.id}
@@ -186,6 +196,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
             organization?.name ?? "Open Digital Product Factory",
           )}
           userId={user.id}
+          navMode={navMode}
         />
         <div className="flex flex-1 flex-col lg:flex-row">
           {shellNavSections.length > 0 && (
@@ -195,7 +206,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
               </div>
             </aside>
           )}
-          <main className="min-w-0 flex-1">
+          <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 scroll-mt-2 focus:outline-none">
             {/* Full-width by default (operator directive 2026-06-26): the page frame
                 fills the viewport so wide surfaces — boards, grids, tables, canvases —
                 use all the available room instead of a centered 1600px column. A

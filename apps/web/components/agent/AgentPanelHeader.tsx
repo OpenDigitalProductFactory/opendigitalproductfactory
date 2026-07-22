@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { AgentSkillsDropdown } from "./AgentSkillsDropdown";
+import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
 
 function formatSensitivityLabel(value: AgentInfo["sensitivity"]): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -208,6 +209,8 @@ export function AgentPanelHeader({
             aria-haspopup="menu"
             aria-label="More options"
             title="More — profile, diagnostics, erase conversation"
+            // Common Shell Action-Result Contract (BI-9C0954D0) C5: ≥44px tap target.
+            className={SHELL_TAP_TARGET_CLASS}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -309,6 +312,8 @@ export function AgentPanelHeader({
           }}
           title="Close"
           aria-label="Close coworker panel"
+          // Common Shell Action-Result Contract (BI-9C0954D0) C5: ≥44px tap target.
+          className={SHELL_TAP_TARGET_CLASS}
           style={{
             background: "none",
             border: "none",
