@@ -84,6 +84,12 @@ describe("OwnerFirstFinanceView", () => {
     expect(html).toContain("<summary");
   });
 
+  it("offers a coworker-drafted readiness note that promises no action", () => {
+    const html = render();
+    expect(html).toContain("Draft readiness note");
+    expect(html).toContain("nothing is sent and no money moves");
+  });
+
   it("renders Catering money jobs for a catering install, not Restaurant ones", () => {
     const html = renderToStaticMarkup(
       <OwnerFirstFinanceView
