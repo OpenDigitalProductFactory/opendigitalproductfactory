@@ -63,6 +63,7 @@ This spec turns that session's lessons into shared substrate, scoped to dependen
 
 - Superset SKILL.md (both surfaces), `category: ops`, `assignTo: ["build-specialist","platform-engineer","ops-coordinator"]`, `composesFrom: ["dpf-verify-substrate-first"]`, trigger on `dependabot|security alert|vulnerability alert|clear .* (alert|CVE|advisory)|bump .* (vulnerable|CVE)`.
 - Body: the runbook, explicitly naming the fresh-store regen helper and the override-comment convention, and the transitive-vs-direct decision (override the transitive floor; bump the direct dep).
+- **Seed-fit:** `global-default` — a platform-wide agent capability every install/fleet should carry, not archetype- or vertical-scoped. Seeds as a `SkillDefinition` via `seed-skills.ts` auto-discovery.
 
 ## 4. Non-goals
 
