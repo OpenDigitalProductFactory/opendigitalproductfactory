@@ -27,6 +27,11 @@ from browser_use import Agent, BrowserSession, ChatOpenAI, ChatAnthropic
 # without the browser_use deps.
 from url_policy import check_navigation
 
+# Agent-run outcome inspection (BI-1BAA177C) — stdlib-only, unit-tested.
+# Agent.run() does not raise on an aborted run; without this check a dead
+# browser session becomes success-shaped empty results.
+from agent_outcome import agent_outcome
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("browser-use-mcp")
 
@@ -440,15 +445,25 @@ async def handle_browse_open(params: dict[str, Any]) -> dict[str, Any]:
                 llm=llm,
                 browser=session.browser,
             )
-            await agent.run()
+            nav_history = await agent.run()
+            nav_ok, nav_reason = agent_outcome(nav_history)
             session.actions.append(ActionRecord(
                 timestamp=time.time(),
                 action="navigate",
                 detail=f"Opened {url}",
-                success=True,
+                success=nav_ok,
             ))
-            result["status"] = "navigated"
-            result["url"] = url
+            if nav_ok:
+                result["status"] = "navigated"
+                result["url"] = url
+            else:
+                # BI-1BAA177C: an aborted navigation agent must never look
+                # like a navigated session — callers treat degraded as NOT-RUN.
+                result["status"] = "degraded"
+                result["degraded"] = True
+                result["reason"] = nav_reason
+                result["url"] = url
+                logger.error("browse_open DEGRADED for %s: %s", url, nav_reason)
         except Exception as e:
             result["status"] = "error"
             result["error"] = str(e)
@@ -478,6 +493,19 @@ async def handle_browse_act(params: dict[str, Any]) -> dict[str, Any]:
             browser=session.browser,
         )
         agent_result = await agent.run()
+        act_ok, act_reason = agent_outcome(agent_result)
+        if not act_ok:
+            session.actions.append(ActionRecord(
+                timestamp=time.time(), action="act", detail=task, success=False,
+            ))
+            logger.error("browse_act DEGRADED (session %s): %s", session_id, act_reason)
+            return {
+                "session_id": session_id,
+                "status": "degraded",
+                "degraded": True,
+                "reason": act_reason,
+                "task": task,
+            }
 
         # Enforce the target-domain allowlist on the page the action landed on.
         # The act loop drives adaptively, so this is the deterministic checkpoint:
@@ -551,6 +579,19 @@ async def handle_browse_extract(params: dict[str, Any]) -> dict[str, Any]:
             browser=session.browser,
         )
         agent_result = await agent.run()
+        extract_ok, extract_reason = agent_outcome(agent_result)
+        if not extract_ok:
+            session.actions.append(ActionRecord(
+                timestamp=time.time(), action="extract", detail=query, success=False,
+            ))
+            logger.error("browse_extract DEGRADED (session %s): %s", session_id, extract_reason)
+            return {
+                "session_id": session_id,
+                "status": "degraded",
+                "degraded": True,
+                "reason": extract_reason,
+                "query": query,
+            }
 
         session.actions.append(ActionRecord(
             timestamp=time.time(),
@@ -615,7 +656,24 @@ async def handle_browse_run_tests(params: dict[str, Any]) -> dict[str, Any]:
             llm=llm,
             browser=session.browser,
         )
-        await nav_agent.run()
+        nav_history = await nav_agent.run()
+        nav_ok, nav_reason = agent_outcome(nav_history)
+        if not nav_ok:
+            # BI-1BAA177C: if the browser cannot even navigate, every per-test
+            # verdict would be noise — and the old word-heuristic could score
+            # an aborted agent as PASS. Report the whole run as degraded;
+            # callers must treat it as NOT-RUN, never as pass/fail evidence.
+            logger.error("browse_run_tests DEGRADED for %s: %s", url, nav_reason)
+            await sessions.close(session.session_id)
+            return {
+                "url": url,
+                "degraded": True,
+                "reason": f"navigation agent could not drive the browser: {nav_reason}",
+                "total": len(tests),
+                "passed": 0,
+                "failed": 0,
+                "results": [],
+            }
 
         for i, test_case in enumerate(tests):
             try:
@@ -631,6 +689,14 @@ async def handle_browse_run_tests(params: dict[str, Any]) -> dict[str, Any]:
                     browser=session.browser,
                 )
                 agent_result = await agent.run()
+                step_ok, step_reason = agent_outcome(agent_result)
+                if not step_ok:
+                    results.append({
+                        "test": test_case,
+                        "status": "degraded",
+                        "detail": f"agent could not drive the browser: {step_reason}",
+                    })
+                    continue
                 result_str = str(agent_result).lower()
 
                 # Heuristic: check if the agent reported failure
@@ -674,15 +740,23 @@ async def handle_browse_run_tests(params: dict[str, Any]) -> dict[str, Any]:
         await sessions.close(session.session_id)
 
     passed_count = sum(1 for r in results if r["status"] == "pass")
-    failed_count = sum(1 for r in results if r["status"] != "pass")
+    degraded_count = sum(1 for r in results if r["status"] == "degraded")
+    failed_count = sum(1 for r in results if r["status"] not in ("pass", "degraded"))
 
-    return {
+    response: dict[str, Any] = {
         "url": url,
         "total": len(tests),
         "passed": passed_count,
         "failed": failed_count,
         "results": results,
     }
+    if degraded_count:
+        response["degraded_steps"] = degraded_count
+        # Whole run is only evidence when at least one assertion actually ran.
+        if degraded_count == len(results):
+            response["degraded"] = True
+            response["reason"] = "every test agent failed to drive the browser"
+    return response
 
 
 async def handle_browse_close(params: dict[str, Any]) -> dict[str, Any]:
@@ -741,6 +815,58 @@ async def shutdown():
 @app.get("/health")
 async def health():
     return {"status": "healthy", "service": "browser-use-mcp", "model": LLM_MODEL}
+
+
+# BI-1BAA177C: /health only proves HTTP liveness — the live incident had a
+# healthy healthcheck over a browser that could not produce state. This probe
+# exercises the actual capability (launch Chromium, load a page, read state).
+# Cached because a real browser launch is expensive; consumers (portal
+# capability reporting, EP-UX-SYSTEM capability probes) poll infrequently.
+_capability_cache: dict[str, Any] = {"checked_at": 0.0, "result": None}
+_CAPABILITY_TTL_SECONDS = int(os.environ.get("CAPABILITY_PROBE_TTL_SECONDS", "300"))
+
+
+@app.get("/health/capability")
+async def health_capability():
+    now = time.time()
+    cached = _capability_cache["result"]
+    if cached is not None and (now - _capability_cache["checked_at"]) < _CAPABILITY_TTL_SECONDS:
+        return {**cached, "cached": True}
+
+    result: dict[str, Any]
+    probe = None
+    try:
+        probe = BrowserSession(
+            headless=True,
+            executable_path=CHROME_BIN,
+            chromium_sandbox=False,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        )
+        await probe.start()
+        page = await probe.get_current_page()
+        if page is None:
+            result = {"capable": False, "reason": "browser started but produced no page"}
+        else:
+            b64 = await page.screenshot()
+            if b64:
+                result = {"capable": True, "reason": ""}
+            else:
+                result = {"capable": False, "reason": "page produced no screenshot (browser state unavailable)"}
+    except Exception as e:
+        logger.exception("capability probe failed")
+        result = {"capable": False, "reason": f"probe error: {e.__class__.__name__}"}
+    finally:
+        if probe is not None:
+            try:
+                await probe.stop()
+            except Exception:
+                pass
+
+    result["service"] = "browser-use-mcp"
+    _capability_cache["checked_at"] = now
+    _capability_cache["result"] = result
+    status_code = 200 if result.get("capable") else 503
+    return JSONResponse(content={**result, "cached": False}, status_code=status_code)
 
 
 @app.post("/mcp")

@@ -13,6 +13,29 @@ export type UxTestStep = {
   error: string | null;
 };
 
+/**
+ * The browser-use sidecar answered, but its agent could not actually drive
+ * the browser (BI-1BAA177C: aborted runs used to come back as success-shaped
+ * empty results). Callers MUST treat this as NOT-RUN — never as "no findings"
+ * and never as a pass/fail verdict.
+ */
+export class BrowserUseDegradedError extends Error {
+  constructor(public readonly reason: string) {
+    super(`browser-use degraded: ${reason}`);
+    this.name = "BrowserUseDegradedError";
+  }
+}
+
+function throwIfDegraded(result: Record<string, unknown>, context: string): void {
+  if (result.degraded === true || result.status === "degraded") {
+    throw new BrowserUseDegradedError(
+      typeof result.reason === "string" && result.reason
+        ? `${context}: ${result.reason}`
+        : context,
+    );
+  }
+}
+
 type BrowserUseMcpResponse = {
   jsonrpc: string;
   id: number;
@@ -69,10 +92,13 @@ export async function runBrowserUseTests(
   if (options?.buildId) args.evidence_dir = `build_${options.buildId}`;
 
   const result = await callBrowserUse("tools/call", "browse_run_tests", args, 300000);
+  throwIfDegraded(result, "UX test run");
 
   const results = (result.results ?? []) as Array<Record<string, unknown>>;
   return results.map((r, i) => ({
     step: (r.test as string) ?? `Test ${i + 1}`,
+    // A "degraded" step never counts as pass — and its error names the cause
+    // so a reviewer sees "browser could not run", not "UI failed".
     passed: r.status === "pass",
     screenshotUrl: options?.buildId && typeof r.screenshot_path === "string"
       ? `/api/build/${encodeURIComponent(options.buildId)}/evidence/${encodeURIComponent(r.screenshot_path)}`
@@ -95,10 +121,18 @@ export async function evaluatePage(
   if (!sessionId) throw new Error("Failed to open browser session");
 
   try {
+    throwIfDegraded(open, "page navigation");
+    if (open.status === "error") {
+      throw new BrowserUseDegradedError(
+        `page navigation errored: ${typeof open.error === "string" ? open.error : "unknown"}`,
+      );
+    }
+
     const extract = await callBrowserUse("tools/call", "browse_extract", {
       session_id: sessionId,
       query: "Analyze this page for UX and accessibility issues. Return a JSON array of findings.",
     }, 120000);
+    throwIfDegraded(extract, "page evaluation");
 
     const ss = await callBrowserUse("tools/call", "browse_screenshot", {
       session_id: sessionId,
