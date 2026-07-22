@@ -195,10 +195,13 @@ deployed through the governed install/update path.
 3. Verify certificate-valid HTTPS from Mac to Windows and Windows to Mac.
 4. Verify discovery add/expiry, automatic invitation exchange, matching code,
    dual approval, and service restart persistence.
-5. Approve one minimized same-organization projection. Verify selected demand
-   reconciles automatically, unselected/excluded fields do not egress, local
-   authority is preserved, offline reconnect deduplicates, and revocation stops
-   exchange.
+5. On each installation, create or select one eligible platform-demand item.
+   Verify Mac-originated work becomes visible on Windows and Windows-originated
+   work becomes visible on Mac without another sharing click. Update and
+   withdraw each source item, then verify versioned reconciliation, excluded
+   fields never egress, neither peer overwrites source-owned status/priority/
+   estimate/build state, offline reconnect deduplicates, and revocation stops
+   exchange in both directions.
 6. Exercise the role-correct end company → distributor/reseller → Founder Hub
    route and prove reverse-facing link roles are rejected by both UI and server.
 7. Capture V-01/V-03 evidence without secrets and attach it to `BI-52D34506`.
@@ -216,6 +219,8 @@ V-03, and a final parent audit proves:
 - only the two founder-approved organization-join mutation types are enabled;
 - certificate-valid pairing and approved automatic demand reconciliation work
   across the actual Founder Hub Mac/Windows topology;
+- same-company demand visibility is bidirectional while every source backlog
+  remains single-writer authoritative;
 - only deliberately selected demand follows end company → distributor/reseller
   → configured Founder Hub direction;
 - local backlog state remains sovereign and unselected data never egresses.
