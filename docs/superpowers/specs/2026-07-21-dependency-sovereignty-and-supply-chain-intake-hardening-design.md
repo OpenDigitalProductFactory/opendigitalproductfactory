@@ -5,6 +5,7 @@
 | **Status** | Draft — authored 2026-07-21 |
 | **Created** | 2026-07-21 |
 | **Author** | Claude (Opus 4.8) + Mark Bodman |
+| **Architect review** | `dpf-architecture-review` 2026-07-21 — aligned with concerns; folded in the Assurance-Ledger seam (§1.1), registry-proxy blast radius + policy-substrate sequencing (§8 Phase 1), and provenance terminology disambiguation. Reference-doc gap filed as `IP-DF90F`. |
 | **Trigger** | PR #3357 (cleared 11 Dependabot alerts via `pnpm-workspace.yaml` overrides) surfaced two questions: (a) why the override block has grown to 74 entries, and (b) whether DPF should sever ties with external dependencies and self-maintain the code. |
 | **Primary Surfaces** | `pnpm-workspace.yaml`, CI gate scripts, Build Studio Tool Evaluation, Assurance Ledger |
 | **Companion spec** | [`2026-05-21-supply-chain-and-desired-state-assurance-design.md`](2026-05-21-supply-chain-and-desired-state-assurance-design.md) (`EP-ASSURANCE-LEDGER`) |
@@ -19,6 +20,15 @@ The Assurance Ledger spec (`EP-ASSURANCE-LEDGER`) is the **detection** half of s
 This spec is the **prevention / intake / sovereignty** half. It answers a different question: *"on what terms does third-party code enter the tree at all, how much of it do we own outright, and how do we keep the control surface (the override block) from rotting?"* The two are complementary and must not be merged — detection tells you a bad component is present; intake hardening stops it entering, and sovereignty decides which components we refuse to depend on the ecosystem for.
 
 Nothing here re-specifies SBOM/SCA. Where this spec needs "is component X vulnerable?", it defers to the Assurance Ledger.
+
+### 1.1 The seam with the Assurance Ledger (single-source-of-truth)
+
+Two boundaries must be crisp so nothing is built twice (`single-source-of-truth`):
+
+- **Provenance is verified here, recorded there.** The intake provenance gate (§8 Phase 1) is the single *verifier/enforcer* of artifact attestation. It does not own a findings store — it emits an `AssuranceFinding` (kind `provenance`, per the Ledger §6.4) into `EP-ASSURANCE-LEDGER`. One verifier, two consumers (the intake gate blocks; the Ledger records/reports).
+- **Intake policy is Ledger policy.** The cooldown window, provenance thresholds, and the vendoring bar are all *policies*. The Ledger defines the canonical policy substrate — `AssurancePolicy` with `policyKind = "supply-chain"` and an `enforcement` enum (`observe|warn|block|proposal-only`). That model is **proposed but not yet landed in `packages/db/prisma/schema.prisma`** (Ledger Phase 1). This spec's Phase-1 gates MUST therefore either (a) wait for `AssurancePolicy` and express intake policy as rows in it, or (b) ship a minimal enforcement now and file explicit migration debt to fold into `AssurancePolicy` — never a bespoke parallel policy store (`schema-audit-before-features`). Sequencing is called out per phase in §8.
+
+> Terminology: "provenance" in this spec means **supply-chain artifact attestation** (SLSA / npm provenance / sigstore), distinct from the AGENTS.md §17 governance sense ("governance approves evidence, not provenance").
 
 ---
 
@@ -165,6 +175,8 @@ Sequenced by leverage-per-effort. Each phase maps to backlog items under `EP-DEP
 - Private registry mirror/proxy (Verdaccio/Artifactory-class) as the resolution source of record.
 - Version-adoption cooldown policy (generalises the BI-72E0A27B hand-rolled pins).
 - Provenance/signature verification in the New Dependency Gate.
+- **Blast radius (registry proxy).** Changing the resolution source of record touches every path that resolves dependencies: root `.npmrc`, CI resolution, the installers (`scripts/installer/*`), contributor onboarding, edge-node, and Build Studio sandboxes. It MUST wrap the deployment contracts (`2026-05-09-deployment-contracts.md`) and remain **optional / self-hostable** so fully-local and air-gapped installs still resolve without a hosted dependency (the fully-local-by-choice constraint). Ship behind a capability activation, default off, before it becomes the default resolution source.
+- **Policy substrate.** Cooldown thresholds and provenance rules are `AssurancePolicy` rows once that model lands (§1.1); if Phase 1 must ship first, the enforcement is minimal + carries a `TechDebt` row to fold into `AssurancePolicy`, not a new policy table.
 - **Exit:** the "poisoned update" vector is closed without forking anything.
 
 ### Phase 2 — Vendoring pilot (proves the thesis)
