@@ -111,8 +111,8 @@ The `/storefront/team` page is split into **Staff** (people) and a link to **Tab
 ### 4. Workspace readiness reconciliation (`living-business-snapshot.ts`)
 
 - When the twin template is FLOOR (physical capacity), derive the capacity chips from `RestaurantCapacitySnapshot` (tables seated / seats filled / parties waiting) instead of the generic Workforce/AI/Open-demand chips. Non-FLOOR archetypes keep the existing generic chips (gated, additive).
-- Fix the queue fill so scheduled reservations populate the **Reservations** queue (not only walk-ins into queue 0) — resolving `RESERVATIONS 0 Clear` while booking history exists (also serves BI-348766E5).
-- Surface the service-period readiness answer + one next action as a quest so `NEEDS YOU` reflects real reservation demand.
+- Surface the service-period readiness answer + one next action as a quest so `NEEDS YOU` reflects real capacity/service-period demand.
+- **Not here:** the Reservations-queue reconciliation (fixing `RESERVATIONS 0 Clear` while booking history exists) is owned by **BI-348766E5 / PR #3403**, which edits the same queue construction. To avoid duplicating that work (a sibling session already had a duplicate PR closed), this PR leaves the queue fill alone and reconciles only the capacity chips + readiness.
 
 ### 5. Public booking states (`SlotBookingFlow.tsx`)
 

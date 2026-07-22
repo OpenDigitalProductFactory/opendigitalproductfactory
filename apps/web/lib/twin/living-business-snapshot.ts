@@ -251,27 +251,6 @@ export function bookingsToQueueItems(bookings: BookingRow[], now: Date, limit = 
 }
 
 /**
- * Confirmed/scheduled reservations ahead of `now` → the Reservations queue.
- * The generic loader only ever filled queue index 0 (walk-in waitlist), so a
- * restaurant with real booking history still read "RESERVATIONS 0 Clear" — the
- * exact mismatch BI-348766E5 flagged. This populates the reservations lane so
- * the Workspace reconciles with the Storefront inbox.
- */
-export function bookingsToReservationQueue(bookings: BookingRow[], now: Date, limit = 6): QueueItemData[] {
-  const active = new Set(["confirmed", "scheduled", "in_progress", "inprogress", "seated"]);
-  return bookings
-    .filter((b) => b.scheduledAt != null && b.scheduledAt.getTime() >= now.getTime() && active.has(b.status.toLowerCase()))
-    .sort((a, b) => (a.scheduledAt?.getTime() ?? 0) - (b.scheduledAt?.getTime() ?? 0))
-    .slice(0, limit)
-    .map((b) => ({
-      key: b.id,
-      label: b.provider?.name ? `Table · ${b.provider.name}` : "Reservation",
-      meta: b.scheduledAt ? `for ${monthDay(b.scheduledAt)}` : undefined,
-      waiting: b.scheduledAt ? `in ${humanizeWait(b.scheduledAt.getTime() - now.getTime())}` : undefined,
-    }));
-}
-
-/**
  * Restaurant (FLOOR) capacity chips — real table/seat/waitlist counters in the
  * archetype's own words, replacing the archetype-agnostic Workforce/AI/Open-demand
  * chips for a restaurant so the Workspace headline reads as capacity, not staffing.
@@ -653,18 +632,16 @@ export async function loadLivingBusinessSnapshot(opts?: {
         })
       : null;
 
+  // NB: the Reservations-queue reconciliation (fixing "RESERVATIONS 0" while
+  // booking history exists) is owned by BI-348766E5 (PR #3403), which edits this
+  // same queue construction. This PR (BI-7C95A586) deliberately leaves it alone
+  // to avoid duplicating that work — it owns the capacity chips + readiness only.
   const queueItems = bookingsToQueueItems(bookings, now);
-  const reservationItems = bookingsToReservationQueue(bookings, now);
-  const primaryQueueKey = profile.queues[0]?.key;
-  const queues: TwinQueueSnapshot[] = profile.queues.map((qs) => {
-    if (qs.key === "reservations") {
-      return { key: qs.key, items: reservationItems, emptyLabel: "No reservations" };
-    }
-    if (qs.key === primaryQueueKey) {
-      return { key: qs.key, items: queueItems, emptyLabel: "No demand waiting" };
-    }
-    return { key: qs.key, items: [], emptyLabel: "Clear" };
-  });
+  const queues: TwinQueueSnapshot[] = profile.queues.map((qs, i) => ({
+    key: qs.key,
+    items: i === 0 ? queueItems : [],
+    emptyLabel: i === 0 ? "No demand waiting" : "Clear",
+  }));
 
   const cog = proposeCogAllocation(
     bookings,

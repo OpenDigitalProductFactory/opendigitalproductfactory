@@ -134,29 +134,25 @@ describe("capacity state reconciles across owner Tables page and Workspace", () 
     expect(s.nextAction).not.toBeNull(); // there is a next action to take
   });
 
-  it("the Workspace shows reservations (not RESERVATIONS 0) and capacity chips in restaurant terms", async () => {
+  it("the Workspace headlines capacity in restaurant terms, not generic Workforce/AI chips", async () => {
     const snap = await loadLivingBusinessSnapshot({ db: livingBusinessDb(), now: NOW });
     expect(snap).not.toBeNull();
-
-    // The reservations queue is populated — the exact mismatch BI-348766E5
-    // flagged (booking history present but Workspace says "RESERVATIONS 0").
-    const reservations = snap!.queues.find((q) => q.key === "reservations");
-    expect(reservations).toBeDefined();
-    expect(reservations!.items.length).toBe(1);
-
-    // Capacity chips speak tables, not the generic Workforce/AI counters.
+    // Capacity chips speak tables/seats/waitlist, not the generic Workforce/AI counters.
     expect(snap!.capacityChips.some((c) => c.key === "tables-open")).toBe(true);
     expect(snap!.capacityChips.some((c) => c.key === "ai")).toBe(false);
+    // (The Reservations-QUEUE reconciliation is owned by BI-348766E5 / PR #3403.)
   });
 
-  it("owner and workspace agree on the upcoming-reservation count", async () => {
+  it("owner Tables page and Workspace agree on the upcoming-reservation count (shared model)", async () => {
     const [loaded, snap] = await Promise.all([
       loadRestaurantCapacitySnapshot({ db: capacityLoaderDb(), now: NOW }),
       loadLivingBusinessSnapshot({ db: livingBusinessDb(), now: NOW }),
     ]);
     const ownerUpcoming = loaded!.snapshot.upcomingReservations;
-    const workspaceReservations = snap!.queues.find((q) => q.key === "reservations")!.items.length;
-    expect(ownerUpcoming).toBe(workspaceReservations);
+    // Both surfaces derive from deriveRestaurantCapacity on the same fixture, so
+    // the Workspace "reservations ahead" chip reconciles with the owner snapshot.
+    const workspaceChip = snap!.capacityChips.find((c) => c.key === "reservations");
+    expect(workspaceChip?.value).toBe(ownerUpcoming);
   });
 });
 
