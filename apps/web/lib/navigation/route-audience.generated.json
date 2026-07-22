@@ -1,0 +1,2338 @@
+{
+  "generator": "apps/web/scripts/build-route-audience.ts",
+  "pageRouteCount": 330,
+  "summary": {
+    "byAudience": {
+      "admin": 140,
+      "auth-setup": 11,
+      "builder": 3,
+      "customer": 10,
+      "owner": 148,
+      "public": 16,
+      "worker": 2
+    },
+    "byDestinationKind": {
+      "advanced-diagnostic": 94,
+      "detail": 154,
+      "legacy-internal": 29,
+      "section-home": 32,
+      "settings-config": 12,
+      "workflow-step": 9
+    },
+    "overrideCount": 5,
+    "lowConfidenceCount": 0,
+    "lowConfidencePaths": []
+  },
+  "routes": [
+    {
+      "routePath": "/",
+      "audience": "auth-setup",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "override"
+    },
+    {
+      "routePath": "/admin",
+      "audience": "admin",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/archetypes",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/backlog",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/backups",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/branding",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/build-studio/stall-thresholds",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/business-context",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/business-models",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/cockpit",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/data-stewardship",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/diagnostics",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/hive",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/issue-reports",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/operating-hours",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/platform-development",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/prompts",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/reference-data",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/research",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/scheduled-jobs",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/settings",
+      "audience": "admin",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/skills",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/storefront",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/storefront/inbox",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/storefront/items",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/storefront/sections",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/storefront/settings",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/storefront/setup",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/storefront/team",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/twin-gallery",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/twin-gallery/[archetypeId]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/twin-kit",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/wiki/lint",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/build",
+      "audience": "builder",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/build/work",
+      "audience": "builder",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/build/work/[capsuleId]",
+      "audience": "builder",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/complaints",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/actions",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/actions/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/audits",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/audits/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/controls",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/controls/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/evidence",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/evidence/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/gaps",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/incidents",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/incidents/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/licensing",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/obligations",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/obligations/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/onboard",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/policies",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/policies/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/posture",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/regulations",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/regulations/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/risks",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/risks/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/submissions",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/compliance/submissions/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/[...slug]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/craft",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/craft/[professionKey]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/decisions",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/decisions/[interactionId]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/edit/[...slug]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/matrix",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/perspectives",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/perspectives/[profileId]/voice",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/proactivity",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/review",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/coworker-decisions/stance",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer-complete-profile",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer-link-account",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer-login",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer-signup",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/engagements",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/funnel",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/marketing",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/marketing/automation",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/marketing/campaigns",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/marketing/funnel",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/marketing/strategy",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/opportunities",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/opportunities/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/quotes",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/quotes/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer/sales-orders",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/delivery",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/docs/[[...slug]]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ea",
+      "audience": "admin",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ea/agents",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ea/capabilities",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ea/data-model",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ea/models",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ea/models/[slug]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ea/value-streams",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ea/views",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ea/views/[id]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/employee",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/assets",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/assets/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/assets/new",
+      "audience": "owner",
+      "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/banking",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/banking/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/banking/[id]/import",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/banking/[id]/reconcile",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/banking/new",
+      "audience": "owner",
+      "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/banking/rules",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/bills",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/bills/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/bills/new",
+      "audience": "owner",
+      "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/close",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/configuration",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/expense-claims",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/expense-claims/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/funds",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/invoices",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/invoices/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/invoices/new",
+      "audience": "owner",
+      "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/my-expenses",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/my-expenses/new",
+      "audience": "owner",
+      "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/payment-runs",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/payments",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/purchase-orders",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/purchase-orders/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/purchase-orders/new",
+      "audience": "owner",
+      "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/recurring",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/recurring/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/recurring/new",
+      "audience": "owner",
+      "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/reports",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/reports/aged-creditors",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/reports/aged-debtors",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/reports/cash-flow",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/reports/general-ledger",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/reports/outstanding",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/reports/profit-loss",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/reports/revenue-by-customer",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/reports/vat-summary",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/revenue",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/settings",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/settings/currency",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/settings/dunning",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/settings/rate-card",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/settings/setup",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/settings/tax",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/spend",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/spend/ai",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/suppliers",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/suppliers/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/finance/suppliers/new",
+      "audience": "owner",
+      "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/forgot-password",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/governance",
+      "audience": "admin",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/governance/records-requests",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/inventory",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/inventory/entity/[entityId]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/knowledge",
+      "audience": "public",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "override"
+    },
+    {
+      "routePath": "/knowledge/[articleId]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/knowledge/new",
+      "audience": "admin",
+      "destinationKind": "workflow-step",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/login",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/member-equity",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops",
+      "audience": "admin",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/changes",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/demand",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/dev-loop",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/health",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/improvements",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/patches",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/promotions",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/security",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/ops/self-upgrade",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform",
+      "audience": "admin",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/agent/[agentId]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/assignments",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/assignments/bindings/[bindingId]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/authority",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/browser-sessions",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/browser-sessions/setup",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/build-studio",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/capability-needs",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/capacity-continuity",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/catalog",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/decisions/[interactionId]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/founder-review",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/history",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/memory",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/model-assignment",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/operations",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/operations-map",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/overview",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/priority",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/priority/outcomes",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/prompts",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/providers",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/providers/[providerId]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/readiness",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/routing",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/runtime-health",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/ai/skills",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/audit",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/audit/authority",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/audit/journal",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/audit/ledger",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/audit/metrics",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/audit/operations",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/audit/routes",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/development/change-lanes",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/device-catalog",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/edge-nodes",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/federation-links",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/federation-proposals",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/identity",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/identity/agents",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/identity/applications",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/identity/authorization",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/identity/authorization/bindings/[bindingId]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/identity/directory",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/identity/federation",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/identity/groups",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/identity/principals",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/integrations",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/integrations/sync",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/schedule",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/service-desk",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/services",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/services/[serverId]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/services/activate",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/built-ins",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/catalog",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/catalog/sync",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/discovery",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/discovery/promotion-audit",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/adp",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/communications",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/email-postmark",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/facebook-lead-ads",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/facebook-pages",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/google-business-profile",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/google-marketing-intelligence",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/hubspot",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/instagram-business",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/linkedin-personal-social",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/mailchimp",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/microsoft365-communications",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/quickbooks",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/stripe",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/integrations/whatsapp-business",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/inventory",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/services",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/services/[serverId]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/platform/tools/services/activate",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal",
+      "audience": "customer",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal/account",
+      "audience": "customer",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal/cases",
+      "audience": "customer",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal/cases/[caseKey]",
+      "audience": "customer",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal/health",
+      "audience": "customer",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal/health/intake/[packetId]",
+      "audience": "customer",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal/orders",
+      "audience": "customer",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal/services",
+      "audience": "customer",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal/sign-in",
+      "audience": "customer",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portal/support",
+      "audience": "customer",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/[[...slug]]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/architecture",
+      "audience": "owner",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/architecture",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/backlog",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/changes",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/health",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/inventory",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/knowledge",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/offerings",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/supply-chain",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/team",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/versions",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/portfolio/products/[productId]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/rental",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/reset-password",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]/book/[itemId]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]/checkout",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]/donate",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]/inquire",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]/inquire/[itemId]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]/item/[itemId]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]/order/[itemId]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]/sign-in",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/[slug]/sign-up",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/approve/[token]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/expense-approve/[token]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/pay/[token]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/s/quote/[token]",
+      "audience": "public",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/sandbox-restricted",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/service-requests",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/setup",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/animals",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/dispatch",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/inbox",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/intake",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/items",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/sections",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/settings",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/settings/business",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/settings/capabilities",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/settings/operations",
+      "audience": "owner",
+      "destinationKind": "settings-config",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/setup",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/team",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/storefront/units",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/welcome",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/wiki",
+      "audience": "admin",
+      "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/wiki/[...slug]",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/workbooks",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/workbooks/[workbookId]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/workbooks/system/[entityType]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/workspace",
+      "audience": "owner",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "override"
+    },
+    {
+      "routePath": "/workspace/calendar",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/workspace/cases/[caseKey]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/workspace/documents",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/workspace/documents/[documentId]",
+      "audience": "owner",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/workspace/inbox",
+      "audience": "worker",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "override"
+    },
+    {
+      "routePath": "/workspace/my-queue",
+      "audience": "worker",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "override"
+    }
+  ]
+}

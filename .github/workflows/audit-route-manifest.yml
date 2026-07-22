@@ -18,6 +18,10 @@ on:
       - "apps/web/lib/ea/route-manifest.json"
       - "apps/web/scripts/build-route-manifest.ts"
       - "apps/web/lib/ea/route-extract.ts"
+      # The audience registry (BI-8C0F219A) derives from the manifest above.
+      - "apps/web/lib/navigation/route-audience.generated.json"
+      - "apps/web/lib/navigation/route-audience.ts"
+      - "apps/web/scripts/build-route-audience.ts"
       - ".github/workflows/audit-route-manifest.yml"
   push:
     branches: [main]
@@ -62,3 +66,11 @@ jobs:
 
       - name: Check route manifest is up to date
         run: pnpm --filter web check:route-manifest
+
+      # BI-8C0F219A: the audience/destination-kind registry derives from the manifest
+      # above, so it is checked right after. A new page route makes it stale (fix:
+      # pnpm --filter web build:route-audience && commit); routes the heuristic can
+      # only classify low-confidence are printed as a non-fatal warning to pin an
+      # override in apps/web/lib/navigation/route-audience.ts.
+      - name: Check route audience registry is up to date
+        run: pnpm --filter web check:route-audience
