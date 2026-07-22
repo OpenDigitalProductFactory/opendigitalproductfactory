@@ -11,6 +11,10 @@ import {
 } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
+import SelfUpgradeJobEngineHealthAlert, {
+  shouldPollForJobEngineRecovery,
+  type JobEngineHealth,
+} from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
 import { UpgradeScopeRibbon } from "@/components/ops/UpgradeScopeRibbon";
 import { StatusBadge } from "@/components/ui/report-kit";
@@ -78,20 +82,6 @@ type AdmissionSnapshot = {
   buildHolders: number;
   totalHolders: number;
   summary: string;
-};
-
-type JobEngineHealth = {
-  status: "healthy" | "degraded" | "unknown";
-  detail: string | null;
-  checkedAt: string | null;
-  watchdog?: {
-    status: "healthy" | "degraded" | "unknown";
-    detail: string | null;
-    lastInvocationAt: string | null;
-    lastGatewayHitAt: string | null;
-    lastRecoveryAttemptAt: string | null;
-    lastRecoverySummary: string | null;
-  } | null;
 };
 
 type Props = {
@@ -320,10 +310,6 @@ export function isExpectedDuringSwap(err: unknown): boolean {
   return /unexpected response was received|failed to fetch|fetch failed|load failed|networkerror|err_connection|connection (?:refused|reset|closed)|the operation was aborted/i.test(
     message,
   );
-}
-
-export function shouldPollForJobEngineRecovery(jobEngine: JobEngineHealth | undefined): boolean {
-  return jobEngine?.status === "degraded";
 }
 
 export default function SelfUpgradeClient({
@@ -644,49 +630,7 @@ export default function SelfUpgradeClient({
           need to refresh.
         </div>
       )}
-      {jobEngine?.status === "degraded" && (
-        <div
-          className="p-3 rounded-lg bg-[var(--dpf-warning)]/15 border border-[var(--dpf-warning)]/40 text-sm"
-          role="alert"
-          data-job-engine-health="degraded"
-        >
-          <div className="font-medium text-[var(--dpf-warning)]">
-            Background jobs need attention
-          </div>
-          <div className="mt-1 text-[var(--dpf-muted)]">
-            Self-upgrade, evals, backups, and watchdogs depend on Inngest. The
-            portal retries Inngest registration automatically every 5 minutes and
-            this page checks for recovery while the alert is visible.
-          </div>
-          <dl className="mt-2 grid gap-1 text-xs text-[var(--dpf-muted)] sm:grid-cols-2">
-            <div>
-              <dt className="font-medium text-[var(--dpf-text)]">Last check</dt>
-              <dd>
-                <LocalTime value={jobEngine.checkedAt} mode="time" fallback="not recorded yet" />
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-[var(--dpf-text)]">Current signal</dt>
-              <dd>{jobEngine.detail ?? "Inngest registration is degraded."}</dd>
-            </div>
-            {jobEngine.watchdog?.lastRecoveryAttemptAt && (
-              <div className="sm:col-span-2">
-                <dt className="font-medium text-[var(--dpf-text)]">Last recovery attempt</dt>
-                <dd>
-                  <LocalTime
-                    value={jobEngine.watchdog.lastRecoveryAttemptAt}
-                    mode="time"
-                    fallback="not recorded yet"
-                  />
-                  {jobEngine.watchdog.lastRecoverySummary
-                    ? ` - ${jobEngine.watchdog.lastRecoverySummary}`
-                    : ""}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </div>
-      )}
+      <SelfUpgradeJobEngineHealthAlert jobEngine={jobEngine} />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
