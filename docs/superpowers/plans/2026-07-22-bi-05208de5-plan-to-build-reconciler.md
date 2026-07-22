@@ -81,6 +81,10 @@ Single source of truth: extract the transition side-effect from `reviewBuildPlan
 - Regression test reproduces the stranded-with-complete-plan state and asserts it advances (and bounded-escalates).
 - After deploy via governed self-upgrade: re-promote the 8 builds whose `abandonReason` starts "Ops-abandoned to stop perpetual plan-phase resume flood" and confirm they advance out of `plan` — the BI's gating acceptance.
 
-## 7. Backlog coverage
+## Backlog coverage
 
-Single atomic BI (BI-05208DE5). Phases are sequencing, not independently shippable products: Phase 2 (reconciler) has no value without Phase 1 (the shared executor it calls), and both ship in one PR as one behavioral fix. Coverage recorded via `record_plan_backlog_coverage` (`decision: "atomic"`).
+- Decision: atomic
+- Parent: BI-05208DE5
+- Receipt: cmrvgaj4403w101p8dljox040
+- Rationale: Phase 2 (the resume reconciler) has no value without Phase 1 (the shared performPlanToBuildTransition executor it calls); both ship in one PR as one behavioral fix, so no phase is independently shippable.
+- Dependencies: none
