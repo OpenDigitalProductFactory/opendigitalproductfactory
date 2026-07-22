@@ -11,7 +11,7 @@ apps/web/components/ops/SelfUpgradeClient.tsx	1459
 apps/web/components/platform/AiOperationsMap.tsx	2881
 apps/web/components/platform/EffectivePermissionsPanel.tsx	851
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
-apps/web/components/storefront/SlotBookingFlow.tsx	962
+apps/web/components/storefront/SlotBookingFlow.tsx	988
 apps/web/components/workbooks/Grid.tsx	1358
 apps/web/instrumentation.test.ts	897
 apps/web/instrumentation.ts	1442

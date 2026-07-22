@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "accountableOwner": "storefront-experience",
+  "affectedCopies": [
+    "StorefrontBooking.covers / dietaryNotes: reservation party size and dietary notes, shown only on the owner storefront inbox and the workspace reservation-exception attention projection (read-model, no parallel persisted copy)"
+  ],
+  "migration": {
+    "name": "20260722060000_storefront_booking_covers_dietary",
+    "backfill": "none — both columns are nullable and default null; existing bookings are untouched and keep any historical party-size/dietary text in their free-text notes"
+  },
+  "tests": [
+    "apps/web/lib/storefront/booking-summary.test.ts",
+    "apps/web/lib/attention/sources/reservation-exception.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:storefront-booking",
+      "prismaModel": "StorefrontBooking",
+      "lifecycleDisposition": "retained for the life of the parent StorefrontBooking reservation and removed with it; inherits the existing booking retention/cancellation lifecycle, adds no new retention surface",
+      "fields": [
+        {
+          "fieldId": "data:storefront-booking#covers",
+          "resolution": "inherited",
+          "reason": "party size is ordinary reservation logistics with the same scope and lifecycle as the booking it belongs to; it inherits StorefrontBooking's existing customer-booking governance",
+          "provenance": "guest-selected party size on the public booking form (covers field)"
+        },
+        {
+          "fieldId": "data:storefront-booking#dietaryNotes",
+          "resolution": "governed",
+          "reason": "dietary requirements and allergies are health-adjacent personal data a guest supplies, so they must stay scoped to the owning booking and never fan out beyond the owner's own reservation surfaces",
+          "provenance": "guest-entered dietary requirements on the public booking form",
+          "flags": ["subject", "sensitive"],
+          "fieldPolicy": "organization-scoped; visible only to the storefront owner on the reservation and its attention projection; never used for training, marketing, or cross-booking aggregation"
+        }
+      ]
+    }
+  ]
+}

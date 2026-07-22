@@ -35,6 +35,11 @@ export function classifyOwnerAttentionLane(
   if (PUBLIC_SOURCES.has(item.source)) {
     return decision("needs-you-now", "The result would go public or to an outside body.", true, appliedLevel);
   }
+  if (item.source === "reservation-exception") {
+    // A guest is waiting on a reservation decision — an owner-level, customer-facing
+    // choice that is never batched into a digest (BI-3DA1DFDC).
+    return decision("needs-you-now", "A guest is waiting on a reservation decision.", true, appliedLevel);
+  }
   if (item.source === "paused-ai" && item.triage.residueReason === "needs-credential") {
     return decision("custodian", "A credential is technical access work, not owner judgment.", false, appliedLevel);
   }

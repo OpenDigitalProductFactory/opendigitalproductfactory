@@ -110,6 +110,8 @@ export async function submitBooking(
     scheduledAt: Date;
     durationMinutes: number;
     notes?: string;
+    covers?: number;
+    dietaryNotes?: string;
     holderToken?: string;
     providerId?: string;
     assignmentMode?: string;
@@ -152,6 +154,8 @@ export async function submitBooking(
           scheduledAt: data.scheduledAt,
           durationMinutes: data.durationMinutes,
           notes: data.notes,
+          covers: data.covers,
+          dietaryNotes: data.dietaryNotes,
           providerId: data.providerId,
           assignmentMode: data.assignmentMode,
           idempotencyKey: data.idempotencyKey,
@@ -184,6 +188,8 @@ export async function submitBooking(
               scheduledAt: futureScheduledAt,
               durationMinutes: data.durationMinutes,
               notes: data.notes,
+              covers: data.covers,
+              dietaryNotes: data.dietaryNotes,
               providerId: data.providerId,
               assignmentMode: data.assignmentMode,
               recurrenceRule: data.recurrenceRule,
