@@ -259,6 +259,82 @@ export function normaliseModelId(name: string): string {
 }
 
 /**
+ * Max prompt envelope (tokens) a Build Studio REASONING phase (plan /
+ * design-review / plan-review) carries: full persona + skills catalog + tool
+ * schemas + reasoning instructions. Observed live as a
+ * `exceed_context_size_error: request (29362 tokens) exceeds context size
+ * (24576)` on those phases. A local served window below this HARD-EXCLUDES local
+ * from the reasoning phases' candidate set, making them cloud-only — the SPOF
+ * BI-3E614946 surfaces. 30,720 (30 * 1024) covers the observed 29,362 with margin.
+ */
+export const REASONING_PHASE_CONTEXT_ENVELOPE_TOKENS = 30_720;
+
+/**
+ * Whether a local served context is large enough for local to be eligible as a
+ * fallback for the reasoning phases. `null` (no reachable local model / unknown
+ * served window) is treated as not-eligible. This is the degrade flag: when
+ * false, the reasoning phases run cloud-only on this hardware/model.
+ */
+export function isLocalServedContextEligibleForReasoning(servedTokens: number | null): boolean {
+  return servedTokens != null && servedTokens >= REASONING_PHASE_CONTEXT_ENVELOPE_TOKENS;
+}
+
+/**
+ * The resource-aware CEILING (tokens) for the local served context on this host
+ * and model: the most the box can actually serve without over-committing VRAM
+ * (`recommendServedContextTokens` already subtracts weights + headroom and clamps
+ * to the supported band). When the host memory is unknown we cannot verify VRAM,
+ * so we return the practical MAX and let the operator override govern — never
+ * auto-raise blindly. Used both as the default target and as the upper bound on
+ * the operator override, so a pinned value can never over-commit a known GPU.
+ */
+export function computeServedContextCeiling(
+  host: HostMemory | null,
+  modelId: string | null,
+): number {
+  if (!host) return MAX_LOCAL_CONTEXT_TOKENS;
+  return recommendServedContextTokens(host, modelId ? estimateModelVramGb(modelId) : null);
+}
+
+/**
+ * Normalize a persisted `PlatformConfig.host_profile` (written verbatim from the
+ * installer's `DPF_HOST_PROFILE`) into a `HostMemory` + the installer's selected
+ * model. TWO shapes exist and both are supported:
+ *   - Windows / install-dpf.ps1 : flat `{ gpuVramGB, ramGB, selectedModel }`
+ *   - macOS / Linux             : nested `{ architecture, gpu:{vramGB}, ram:{totalGB} }`
+ * Architecture: the explicit field when present (`cpu-only` → `cpu`), else
+ * inferred — positive VRAM → `discrete`, otherwise `cpu` (conservative; without a
+ * VRAM read we cannot claim a usable GPU budget). Returns null for junk/missing.
+ */
+export function parseHostMemory(
+  raw: unknown,
+): { host: HostMemory; selectedModel: string | null } | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const num = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+
+  const nestedGpu = r.gpu && typeof r.gpu === "object" ? (r.gpu as Record<string, unknown>) : null;
+  const nestedRam = r.ram && typeof r.ram === "object" ? (r.ram as Record<string, unknown>) : null;
+
+  const vramGb = num(r.gpuVramGB) ?? (nestedGpu ? num(nestedGpu.vramGB) : null);
+  const totalRamGb = num(r.ramGB) ?? (nestedRam ? num(nestedRam.totalGB) : null);
+  const selectedModel = typeof r.selectedModel === "string" ? r.selectedModel : null;
+
+  // A profile with no memory signal at all is junk.
+  if (vramGb == null && totalRamGb == null && r.architecture == null) return null;
+
+  let architecture: HostArchitecture;
+  const declared = typeof r.architecture === "string" ? r.architecture : null;
+  if (declared === "unified") architecture = "unified";
+  else if (declared === "discrete") architecture = "discrete";
+  else if (declared === "cpu" || declared === "cpu-only") architecture = "cpu";
+  else architecture = vramGb != null && vramGb > 0 ? "discrete" : "cpu";
+
+  return { host: { architecture, vramGb, totalRamGb }, selectedModel };
+}
+
+/**
  * Among installed generation models, choose the single one to KEEP. Prefers a
  * coder model (Build Studio's code-generation use), then the tier the hardware
  * recommends, then the largest that still fits the budget, else the first.

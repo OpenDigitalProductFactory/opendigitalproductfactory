@@ -8,8 +8,68 @@ const { mockPrisma } = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma, DISCOVERY_TRIAGE_AGENT_ID: "discovery-triage" }));
 
-import { reconcileLocalModelContext, resolveLocalServedContextTokens } from "./local-model-context-reconcile";
+import {
+  reconcileLocalModelContext,
+  resolveLocalServedContextTokens,
+  resolveServedContextTarget,
+  resolveHostMemoryProfile,
+} from "./local-model-context-reconcile";
 import { RECOMMENDED_BUILD_CONTEXT_TOKENS, MAX_LOCAL_CONTEXT_TOKENS } from "./local-model-policy";
+
+// host_profile as the live install persists it (Windows/flat shape): RTX 4090.
+const HOST_4090 = { gpuVramGB: 24, ramGB: 63.7, selectedModel: "ai/qwen3-coder" };
+
+/** Route platformConfig.findUnique by key so a test can set the override and the
+ *  host_profile independently. */
+function configByKey(map: Record<string, unknown>) {
+  return (args?: { where?: { key?: string } }) => {
+    const key = args?.where?.key;
+    return Promise.resolve(key && map[key] !== undefined ? { key, value: map[key] } : null);
+  };
+}
+
+describe("resolveServedContextTarget — resource-aware (BI-3E614946)", () => {
+  it("falls back to the build floor when the host profile is unknown", async () => {
+    mockPrisma.platformConfig.findUnique.mockImplementation(configByKey({}));
+    expect(await resolveServedContextTarget()).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
+  });
+
+  it("derives the default from VRAM: a 24 GB 4090 running the 30B coder sizes to the floor honestly", async () => {
+    mockPrisma.platformConfig.findUnique.mockImplementation(configByKey({ host_profile: HOST_4090 }));
+    // 24 - 16 - 5 = 3 GB KV ≈ 24,576 — the hardware genuinely can't serve more with this model.
+    expect(await resolveServedContextTarget()).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
+  });
+
+  it("derives a LARGER default when a smaller model leaves KV room (8B on 24 GB)", async () => {
+    mockPrisma.platformConfig.findUnique.mockImplementation(
+      configByKey({ host_profile: { ...HOST_4090, selectedModel: "ai/qwen3:8B-Q4_K_M" } }),
+    );
+    expect(await resolveServedContextTarget()).toBe(122_880);
+  });
+
+  it("clamps an over-ambitious operator override DOWN to the resource-aware ceiling (no over-commit)", async () => {
+    mockPrisma.platformConfig.findUnique.mockImplementation(
+      configByKey({ host_profile: HOST_4090, "local.servedContextTokens": 200_000 }),
+    );
+    // 200k pinned, but a 24 GB card on the 30B can only serve ~24,576 — clamp down.
+    expect(await resolveServedContextTarget()).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
+  });
+
+  it("trusts an operator override up to MAX when the host is unknown", async () => {
+    mockPrisma.platformConfig.findUnique.mockImplementation(
+      configByKey({ "local.servedContextTokens": 200_000 }),
+    );
+    expect(await resolveServedContextTarget()).toBe(MAX_LOCAL_CONTEXT_TOKENS);
+  });
+
+  it("resolveHostMemoryProfile normalizes the persisted host_profile", async () => {
+    mockPrisma.platformConfig.findUnique.mockImplementation(configByKey({ host_profile: HOST_4090 }));
+    expect(await resolveHostMemoryProfile()).toEqual({
+      host: { architecture: "discrete", vramGb: 24, totalRamGb: 63.7 },
+      selectedModel: "ai/qwen3-coder",
+    });
+  });
+});
 
 // Default: no operator override set → target is the build floor. Individual tests
 // override per case. Set in beforeEach because clearAllMocks() clears calls but

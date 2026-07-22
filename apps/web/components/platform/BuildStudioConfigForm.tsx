@@ -7,6 +7,7 @@ import { probeBuildEnginesAction } from "@/lib/actions/build-engine-actions";
 import type { LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 import { ContributorMcpReadinessCard } from "./ContributorMcpReadinessCard";
+import { ServedContextSummary } from "./ServedContextSummary";
 import {
   CredentialCard,
   isConfigured,
@@ -712,6 +713,7 @@ export function BuildStudioConfigForm({
                           ? <>Leave blank to use the first <strong>coding</strong> model your endpoint serves (embedding models are skipped). ≥22k context recommended.</>
                           : "Leave blank to use the provider's default coding model for OpenCode dispatch."}
                       </p>
+                      {openCodeDescription.isLocal && <ServedContextSummary refreshKey={endpointCheck} />}
                       {openCodeDescription.isLocal && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
