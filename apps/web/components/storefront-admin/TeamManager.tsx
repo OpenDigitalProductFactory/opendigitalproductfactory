@@ -45,6 +45,10 @@ type BookableItem = {
   ctaType: string;
 };
 
+function titleCase(s: string): string {
+  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
+}
+
 function StatusBadge({ active }: { active: boolean }) {
   return (
     <span
@@ -62,17 +66,33 @@ function StatusBadge({ active }: { active: boolean }) {
   );
 }
 
+/**
+ * Manage the bookable-resource rows behind a storefront (`ServiceProvider`).
+ * Two modes so a Restaurant reads coherently (BI-7C95A586):
+ *  - `mode="staff"` — people. Shows contact + routing fields.
+ *  - `mode="table"` — physical tables / capacity resources. Hides person-only
+ *    fields (email/phone/priority/weight/service links) and speaks "table", not
+ *    "provider". Add/edit/delete still hit the shared providers API — a table is
+ *    a provider under the hood until BI-57F34A00 gives it its own model.
+ */
 export function TeamManager({
   providers: initial,
   storefrontId,
   items,
-  teamLabel = "Service Providers",
+  teamLabel = "Staff",
+  singularNoun,
+  mode = "staff",
 }: {
   providers: Provider[];
   storefrontId: string;
   items: BookableItem[];
   teamLabel?: string;
+  /** Singular resource noun ("staff member" / "table"). Defaults from mode. */
+  singularNoun?: string;
+  mode?: "staff" | "table";
 }) {
+  const noun = singularNoun ?? (mode === "table" ? "table" : "staff member");
+  const isTable = mode === "table";
   const [providers, setProviders] = useState<Provider[]>(initial);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -126,7 +146,7 @@ export function TeamManager({
       });
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
-        setAddError(data.error ?? "Failed to add provider");
+        setAddError(data.error ?? `Failed to add ${noun}`);
         return;
       }
       const data = (await res.json()) as { provider: Provider };
@@ -194,8 +214,8 @@ export function TeamManager({
   async function deleteProvider(p: Provider) {
     if (
       !(await confirmDialog({
-        title: "Delete provider",
-        message: `Delete provider "${p.name}"? This cannot be undone.`,
+        title: `Delete ${noun}`,
+        message: `Delete ${noun} "${p.name}"? This cannot be undone.`,
         tone: "danger",
         confirmLabel: "Delete",
       }))
@@ -209,6 +229,7 @@ export function TeamManager({
   }
 
   const bookableItems = items.filter((i) => i.ctaType === "booking");
+  const addLabel = `+ Add ${noun}`;
 
   return (
     <div>
@@ -219,35 +240,39 @@ export function TeamManager({
           className={`border border-[var(--dpf-border)] ${showAddForm ? "text-white" : ""}`}
           style={{ padding: "6px 14px", borderRadius: 5, background: showAddForm ? "var(--dpf-accent)" : "none", cursor: "pointer", fontSize: 13 }}
         >
-          {showAddForm ? "Cancel" : "+ Add Provider"}
+          {showAddForm ? "Cancel" : addLabel}
         </button>
       </div>
 
       {showAddForm && (
         <div className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]" style={{ padding: 16, borderRadius: 8, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>New Provider</div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>New {noun}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <input
-              placeholder="Full name *"
+              placeholder={isTable ? "Table name (e.g. Table 5) *" : "Full name *"}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
               style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
             />
-            <EmailInput
-              placeholder="Email"
-              value={newEmail}
-              onValueChange={setNewEmail}
-              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-              style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
-            />
-            <PhoneInput
-              placeholder="Phone"
-              value={newPhone}
-              onValueChange={setNewPhone}
-              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-              style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
-            />
+            {!isTable && (
+              <>
+                <EmailInput
+                  placeholder="Email"
+                  value={newEmail}
+                  onValueChange={setNewEmail}
+                  className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                  style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
+                />
+                <PhoneInput
+                  placeholder="Phone"
+                  value={newPhone}
+                  onValueChange={setNewPhone}
+                  className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                  style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
+                />
+              </>
+            )}
             {addError && <div className="text-[var(--dpf-error)]" style={{ fontSize: 12 }}>{addError}</div>}
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -256,7 +281,7 @@ export function TeamManager({
                 className="bg-[var(--dpf-accent)] text-white"
                 style={{ padding: "7px 16px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
               >
-                {adding ? "Adding…" : "Add Provider"}
+                {adding ? "Adding…" : `Add ${noun}`}
               </button>
             </div>
           </div>
@@ -264,7 +289,11 @@ export function TeamManager({
       )}
 
       {providers.length === 0 && !showAddForm && (
-        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>No providers yet. Add a provider to start managing availability.</p>
+        <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>
+          {isTable
+            ? "No tables yet. Add tables so guests can book and you can track capacity."
+            : "No staff yet. Add a team member to start managing availability."}
+        </p>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -281,10 +310,12 @@ export function TeamManager({
               >
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{p.name}</div>
-                  {p.email && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.email}</div>}
+                  {!isTable && p.email && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.email}</div>}
                 </div>
                 <StatusBadge active={p.isActive} />
-                <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.services.length} service{p.services.length !== 1 ? "s" : ""}</span>
+                {!isTable && (
+                  <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.services.length} service{p.services.length !== 1 ? "s" : ""}</span>
+                )}
                 <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{expanded ? "▲" : "▼"}</span>
               </div>
 
@@ -295,26 +326,30 @@ export function TeamManager({
                     <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Details</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <input
-                        placeholder="Name *"
+                        placeholder={isTable ? "Table name *" : "Name *"}
                         value={edit.name}
                         onChange={(e) => patchEdit(p.id, { name: e.target.value })}
                         className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
                         style={{ flex: 1, minWidth: 140, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
                       />
-                      <EmailInput
-                        placeholder="Email"
-                        value={edit.email}
-                        onValueChange={(v) => patchEdit(p.id, { email: v })}
-                        className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                        style={{ flex: 1, minWidth: 140, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
-                      />
-                      <PhoneInput
-                        placeholder="Phone"
-                        value={edit.phone}
-                        onValueChange={(v) => patchEdit(p.id, { phone: v })}
-                        className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                        style={{ flex: 1, minWidth: 120, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
-                      />
+                      {!isTable && (
+                        <>
+                          <EmailInput
+                            placeholder="Email"
+                            value={edit.email}
+                            onValueChange={(v) => patchEdit(p.id, { email: v })}
+                            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                            style={{ flex: 1, minWidth: 140, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
+                          />
+                          <PhoneInput
+                            placeholder="Phone"
+                            value={edit.phone}
+                            onValueChange={(v) => patchEdit(p.id, { phone: v })}
+                            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                            style={{ flex: 1, minWidth: 120, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
+                          />
+                        </>
+                      )}
                     </div>
                     <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
                       <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
@@ -324,28 +359,32 @@ export function TeamManager({
                           onChange={(e) => patchEdit(p.id, { isActive: e.target.checked })}
                           className="accent-[var(--dpf-accent)]"
                         />
-                        Active
+                        {isTable ? "In service" : "Active"}
                       </label>
-                      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                        Priority
-                        <input
-                          type="number"
-                          value={edit.priority}
-                          onChange={(e) => patchEdit(p.id, { priority: parseInt(e.target.value) || 0 })}
-                          className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                          style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
-                        />
-                      </label>
-                      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                        Weight
-                        <input
-                          type="number"
-                          value={edit.weight}
-                          onChange={(e) => patchEdit(p.id, { weight: parseInt(e.target.value) || 0 })}
-                          className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                          style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
-                        />
-                      </label>
+                      {!isTable && (
+                        <>
+                          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                            Priority
+                            <input
+                              type="number"
+                              value={edit.priority}
+                              onChange={(e) => patchEdit(p.id, { priority: parseInt(e.target.value) || 0 })}
+                              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                              style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
+                            />
+                          </label>
+                          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                            Weight
+                            <input
+                              type="number"
+                              value={edit.weight}
+                              onChange={(e) => patchEdit(p.id, { weight: parseInt(e.target.value) || 0 })}
+                              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                              style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
+                            />
+                          </label>
+                        </>
+                      )}
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <button
@@ -360,8 +399,8 @@ export function TeamManager({
                     </div>
                   </div>
 
-                  {/* Service assignment */}
-                  {bookableItems.length > 0 && (
+                  {/* Service assignment (staff only — a table is not assigned to menu items) */}
+                  {!isTable && bookableItems.length > 0 && (
                     <div style={{ marginTop: 16 }}>
                       <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
                         Services
@@ -385,7 +424,7 @@ export function TeamManager({
                     </div>
                   )}
 
-                  {/* Schedule editor */}
+                  {/* Schedule editor — when the resource is bookable */}
                   <ScheduleEditor providerId={p.id} availability={p.availability} />
 
                   {/* Delete */}
@@ -395,7 +434,7 @@ export function TeamManager({
                       className="border border-[var(--dpf-error)] text-[var(--dpf-error)]"
                       style={{ padding: "6px 14px", borderRadius: 5, background: "none", cursor: "pointer", fontSize: 13 }}
                     >
-                      Delete Provider
+                      Delete {titleCase(noun)}
                     </button>
                   </div>
                 </div>

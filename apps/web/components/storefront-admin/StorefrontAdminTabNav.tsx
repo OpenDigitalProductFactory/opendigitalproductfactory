@@ -13,6 +13,10 @@ type Props = {
   showDispatch?: boolean;
   /** Show the Intake tab — only for healthcare and dental practice storefronts. */
   showIntake?: boolean;
+  /** Show the Tables & Capacity tab — only for capacity archetypes (Restaurant FLOOR). */
+  showTables?: boolean;
+  /** Label for the Tables & Capacity tab (e.g. "Tables & Capacity"). */
+  tablesLabel?: string;
 };
 
 // Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper owns
@@ -25,6 +29,8 @@ export function StorefrontAdminTabNav({
   showUnits = false,
   showDispatch = false,
   showIntake = false,
+  showTables = false,
+  tablesLabel = "Tables & Capacity",
 }: Props) {
   const path = usePathname();
 
@@ -32,6 +38,7 @@ export function StorefrontAdminTabNav({
     { label: "Dashboard", href: "/storefront" },
     { label: "Sections", href: "/storefront/sections" },
     { label: vocabulary.itemsLabel, href: "/storefront/items" },
+    ...(showTables ? [{ label: tablesLabel, href: "/storefront/tables" }] : []),
     ...(showUnits ? [{ label: "Units", href: "/storefront/units" }] : []),
     ...(showAnimals ? [{ label: "Animals", href: "/storefront/animals" }] : []),
     { label: vocabulary.teamLabel, href: "/storefront/team" },

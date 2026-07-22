@@ -11,6 +11,7 @@ export const STOREFRONT_ROUTES: ReadonlyArray<{ label: string; href: string }> =
   { label: "Dashboard", href: "/storefront" },
   { label: "Sections", href: "/storefront/sections" },
   { label: "Items", href: "/storefront/items" },
+  { label: "Tables & Capacity", href: "/storefront/tables" },
   { label: "Units", href: "/storefront/units" },
   { label: "Animals", href: "/storefront/animals" },
   { label: "Team", href: "/storefront/team" },

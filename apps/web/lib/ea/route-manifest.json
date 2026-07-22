@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 574,
+  "routeCount": 575,
   "routes": [
     {
       "routePath": "/",
@@ -6629,6 +6629,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/storefront/setup/page.tsx"
+    },
+    {
+      "routePath": "/storefront/tables",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "tables"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/tables/page.tsx"
     },
     {
       "routePath": "/storefront/team",
