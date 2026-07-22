@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { promptDialog } from "@/components/ui/Dialog";
+import { reservationActionLabel } from "@/lib/storefront/booking-summary";
 
 type Entry = {
   id: string;
@@ -13,6 +14,13 @@ type Entry = {
   providerName: string | null;
   status: string;
   backlogItemId?: string | null;
+  // Reservation handoff fields (bookings only).
+  itemName?: string | null;
+  covers?: number | null;
+  dietaryNotes?: string | null;
+  whenLabel?: string;
+  timeLabel?: string;
+  nextAction?: string;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -213,7 +221,29 @@ export function StorefrontInbox({
               </span>
             </div>
             <div style={{ fontSize: 13 }}>{e.name ?? "Anonymous"} · {e.email}</div>
-            {e.detail && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 2 }}>{e.detail}</div>}
+            {e.type === "booking" ? (
+              <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                  {e.itemName ?? "Reservation"}
+                  {e.whenLabel && <span className="text-[var(--dpf-muted)]" style={{ fontWeight: 400 }}> · {e.whenLabel}</span>}
+                  {typeof e.covers === "number" && (
+                    <span className="text-[var(--dpf-muted)]" style={{ fontWeight: 400 }}> · {e.covers} {e.covers === 1 ? "guest" : "guests"}</span>
+                  )}
+                </div>
+                {e.dietaryNotes && (
+                  <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>
+                    Dietary: {e.dietaryNotes}
+                  </div>
+                )}
+                {e.nextAction && (
+                  <div style={{ fontSize: 12, color: "var(--dpf-accent)" }}>
+                    Next: {e.nextAction}
+                  </div>
+                )}
+              </div>
+            ) : (
+              e.detail && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 2 }}>{e.detail}</div>
+            )}
             {e.type === "inquiry" && (() => {
               // A successful send stores the created itemId (BI-…); anything
               // else stored is an error message to surface for a retry.
@@ -279,6 +309,11 @@ export function StorefrontInbox({
                 {e.status === "pending" && (
                   <button
                     onClick={() => confirmBooking(e.id)}
+                    aria-label={reservationActionLabel("Confirm", {
+                      guestName: e.name,
+                      itemName: e.itemName,
+                      timeLabel: e.timeLabel,
+                    })}
                     className="border border-[var(--dpf-success)] text-[var(--dpf-success)]"
                     style={{ padding: "3px 10px", borderRadius: 4, background: "none", cursor: "pointer", fontSize: 12 }}
                   >
@@ -288,6 +323,11 @@ export function StorefrontInbox({
                 {e.status !== "cancelled" && e.status !== "completed" && (
                   <button
                     onClick={() => cancelBooking(e.id)}
+                    aria-label={reservationActionLabel("Cancel", {
+                      guestName: e.name,
+                      itemName: e.itemName,
+                      timeLabel: e.timeLabel,
+                    })}
                     className="border border-[var(--dpf-error)] text-[var(--dpf-error)]"
                     style={{ padding: "3px 10px", borderRadius: 4, background: "none", cursor: "pointer", fontSize: 12 }}
                   >

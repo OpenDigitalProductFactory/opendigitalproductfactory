@@ -17,6 +17,7 @@ import {
   type CoworkerMemoryAttentionDb,
 } from "./sources/coworker-memory";
 import { loadProviderCredentialItems, loadProviderSuitabilityDriftItems } from "./sources/provider-credential";
+import { loadReservationExceptionItems } from "./sources/reservation-exception";
 import {
   loadOutboundItems,
   loadBillItems,
@@ -95,6 +96,7 @@ export async function loadAttentionItems(
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
+    { source: "reservation-exception", load: () => loadReservationExceptionItems(db) },
     {
       source: "provider-credential",
       load: async () => [

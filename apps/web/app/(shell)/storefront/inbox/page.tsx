@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import { StorefrontInbox } from "@/components/storefront-admin/StorefrontInbox";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
+import { formatReservationWhen, nextActionForReservation } from "@/lib/storefront/booking-summary";
 
 export default async function InboxPage() {
-  const config = await prisma.storefrontConfig.findFirst({ select: { id: true } });
+  const config = await prisma.storefrontConfig.findFirst({ select: { id: true, timezone: true } });
   if (!config) redirect("/storefront/setup");
 
   const [inquiries, bookings, orders, donations, providerList, digitalProducts, orgSettings] = await Promise.all([
@@ -29,9 +30,12 @@ export default async function InboxPage() {
       select: {
         id: true,
         bookingRef: true,
+        itemId: true,
         customerName: true,
         customerEmail: true,
         scheduledAt: true,
+        covers: true,
+        dietaryNotes: true,
         status: true,
         createdAt: true,
         provider: { select: { name: true } },
@@ -81,6 +85,19 @@ export default async function InboxPage() {
 
   const currencySymbol = getCurrencySymbol(orgSettings.baseCurrency);
 
+  // Resolve the booked item's display name (e.g. "Table for 2") so the owner sees
+  // WHAT was reserved, not just a ref (BI-3DA1DFDC). booking.itemId is the
+  // StorefrontItem cuid.
+  const bookingItemIds = [...new Set(bookings.map((b) => b.itemId))];
+  const itemNameById = new Map(
+    (
+      await prisma.storefrontItem.findMany({
+        where: { id: { in: bookingItemIds } },
+        select: { id: true, name: true },
+      })
+    ).map((item) => [item.id, item.name]),
+  );
+
   type InboxEntry = {
     id: string;
     ref: string;
@@ -92,6 +109,13 @@ export default async function InboxPage() {
     providerName: string | null;
     status: string;
     backlogItemId?: string | null;
+    // Reservation handoff fields (bookings only).
+    itemName?: string | null;
+    covers?: number | null;
+    dietaryNotes?: string | null;
+    whenLabel?: string;
+    timeLabel?: string;
+    nextAction?: string;
   };
 
   const inquiryBacklogItemIds = new Map(
@@ -125,17 +149,26 @@ export default async function InboxPage() {
           `BI-SFI-${inquiry.inquiryRef.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}`,
         ) ?? null,
     })),
-    ...bookings.map((booking) => ({
-      id: booking.id,
-      ref: booking.bookingRef,
-      name: booking.customerName,
-      email: booking.customerEmail,
-      type: "booking",
-      detail: booking.scheduledAt.toLocaleDateString("en-GB"),
-      createdAt: booking.createdAt.toISOString(),
-      providerName: booking.provider?.name ?? null,
-      status: booking.status,
-    })),
+    ...bookings.map((booking) => {
+      const when = formatReservationWhen(booking.scheduledAt, config.timezone);
+      return {
+        id: booking.id,
+        ref: booking.bookingRef,
+        name: booking.customerName,
+        email: booking.customerEmail,
+        type: "booking",
+        detail: when.whenLabel,
+        createdAt: booking.createdAt.toISOString(),
+        providerName: booking.provider?.name ?? null,
+        status: booking.status,
+        itemName: itemNameById.get(booking.itemId) ?? null,
+        covers: booking.covers,
+        dietaryNotes: booking.dietaryNotes,
+        whenLabel: when.whenLabel,
+        timeLabel: when.timeLabel,
+        nextAction: nextActionForReservation(booking.status),
+      };
+    }),
     ...orders.map((order) => ({
       id: order.id,
       ref: order.orderRef,

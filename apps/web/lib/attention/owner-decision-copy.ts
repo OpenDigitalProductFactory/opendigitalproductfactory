@@ -15,6 +15,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "ai-readiness-blocker": "Choose an intelligence setup fix?",
   "platform-health": "Choose how to handle this outage?",
   "provider-credential": "Reconnect this service?",
+  "reservation-exception": "Handle this reservation?",
 };
 
 const SPECIALIST: Record<AttentionSource, string> = {
@@ -32,6 +33,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "ai-readiness-blocker": "Technology",
   "platform-health": "Platform operations",
   "provider-credential": "Technology",
+  "reservation-exception": "Front of house",
 };
 
 export function specialistFor(source: AttentionSource): string {
@@ -88,6 +90,8 @@ export function whyItMattersFor(item: AttentionItem): string {
       return "This research may improve how your team serves customers.";
     case "coworker-memory":
       return "Your digital team is accumulating working memory from completed work.";
+    case "reservation-exception":
+      return "A guest booked through your storefront and is waiting to hear back.";
     default:
       return "This technical issue matters only if it changes customer or business work.";
   }
@@ -98,6 +102,9 @@ export function whyItMattersFor(item: AttentionItem): string {
 const GENERIC_BLAST_RADIUS = new Set(["a coworker task", "a coworker waiting on approval"]);
 
 export function consequenceFor(item: AttentionItem): string {
+  if (item.source === "reservation-exception") {
+    return "If you do nothing, the guest is left without a confirmed reservation.";
+  }
   const blastRadius = item.triage.blastRadius;
   if (
     blastRadius &&
@@ -143,6 +150,8 @@ export function recommendationFor(item: AttentionItem): string {
       return "keep this in the weekly review unless it affects a decision due sooner.";
     case "coworker-memory":
       return "scan it in the digest and open the memory page only if it looks stale, too broad, or unsafe.";
+    case "reservation-exception":
+      return "check the date, time, and party size, then confirm the table or offer another time.";
     default:
       return "keep this with the specialist unless it forces a business choice from you.";
   }

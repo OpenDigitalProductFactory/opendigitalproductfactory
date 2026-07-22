@@ -6,6 +6,9 @@ import { submitBooking } from "@/lib/storefront-actions";
 import { EmailInput } from "@/components/ui/EmailInput";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { slotFlowExtraFields, type FormField } from "./slot-booking-fields";
+// booking-summary owns the structured-role mapping + handoff vocabulary;
+// slot-booking-fields (above) owns which schema fields the flow still renders.
+import { parseCovers, structuredBookingFieldRole } from "@/lib/storefront/booking-summary";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -332,15 +335,23 @@ export function SlotBookingFlow({
     const durationMinutes = computeDurationMinutes(slot.startTime, slot.endTime);
     const providerId = selectedProvider?.id ?? slot.providerId;
 
-    // Collect archetype-specific fields and prepend to notes
-    const STANDARD_FIELDS = ["name", "email", "phone", "notes"];
+    // slotFlowExtraFields already drops the contact + slot-derived (date/time)
+    // fields the flow owns, so the selected slot stays the single source of the
+    // date/time. Of what remains: covers + dietary become structured booking facts
+    // (BI-3DA1DFDC); anything else is preserved as free-text notes.
+    let covers: number | undefined;
+    let dietaryNotes: string | undefined;
     const extraLines: string[] = [];
-    if (formSchema) {
-      for (const field of formSchema) {
-        if (!STANDARD_FIELDS.includes(field.name)) {
-          const val = fd.get(field.name) as string | null;
-          if (val) extraLines.push(`${field.label}: ${val}`);
-        }
+    for (const field of slotFlowExtraFields(formSchema)) {
+      const val = (fd.get(field.name) as string | null)?.trim();
+      if (!val) continue;
+      const role = structuredBookingFieldRole(field.name);
+      if (role === "covers") {
+        covers = parseCovers(val) ?? undefined;
+      } else if (role === "dietary") {
+        dietaryNotes = val;
+      } else {
+        extraLines.push(`${field.label}: ${val}`);
       }
     }
     const userNotes = (fd.get("notes") as string) || "";
@@ -357,6 +368,8 @@ export function SlotBookingFlow({
       customerEmail: fd.get("email") as string,
       customerName: fd.get("name") as string,
       customerPhone: (fd.get("phone") as string) || undefined,
+      covers,
+      dietaryNotes,
       notes: notes || undefined,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -817,8 +830,11 @@ function FormStep({
         ‹ Back to slots
       </button>
 
-      {/* Booking summary */}
+      {/* Reservation summary — the fixed slot is the single source of truth for
+          date/time. The contact step below never re-asks for them (BI-3DA1DFDC). */}
       <div
+        role="group"
+        aria-label="Your reservation"
         style={{
           padding: 16,
           background: "var(--dpf-surface-2)",
@@ -829,11 +845,14 @@ function FormStep({
           gap: 6,
         }}
       >
+        <div style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--dpf-muted)" }}>
+          Your reservation
+        </div>
         <div style={{ fontWeight: 600, fontSize: 15, color: "var(--dpf-text)" }}>{itemName}</div>
-        <div style={{ fontSize: 14, color: "var(--dpf-muted)" }}>
+        <div style={{ fontSize: 14, color: "var(--dpf-text)" }}>
           {formatDisplayDate(selectedDate)}
         </div>
-        <div style={{ fontSize: 14, color: "var(--dpf-muted)" }}>
+        <div style={{ fontSize: 14, color: "var(--dpf-text)" }}>
           {formatTime(selectedSlot.startTime)} — {formatTime(selectedSlot.endTime)}
         </div>
         {providerName && (
@@ -841,6 +860,9 @@ function FormStep({
             with {providerName}
           </div>
         )}
+        <div style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
+          To change the date or time, go back and pick another slot.
+        </div>
       </div>
 
       {/* Contact form */}
@@ -850,42 +872,46 @@ function FormStep({
         )}
 
         <div style={fieldStyle}>
-          <label style={labelStyle}>Full name *</label>
-          <input type="text" name="name" required style={inputStyle} autoComplete="name" />
+          <label htmlFor="booking-name" style={labelStyle}>Full name *</label>
+          <input id="booking-name" type="text" name="name" required style={inputStyle} autoComplete="name" />
         </div>
 
         <div style={fieldStyle}>
-          <label style={labelStyle}>Email address *</label>
-          <EmailInput name="email" required style={inputStyle} />
+          <label htmlFor="booking-email" style={labelStyle}>Email address *</label>
+          <EmailInput id="booking-email" name="email" required style={inputStyle} />
         </div>
 
         <div style={fieldStyle}>
-          <label style={labelStyle}>Phone (optional)</label>
-          <PhoneInput name="phone" style={inputStyle} />
+          <label htmlFor="booking-phone" style={labelStyle}>Phone (optional)</label>
+          <PhoneInput id="booking-phone" name="phone" style={inputStyle} />
         </div>
 
-        {slotFlowExtraFields(formSchema).map((field) => (
-          <div key={field.name} style={fieldStyle}>
-            <label style={labelStyle}>{field.label}{field.required ? " *" : " (optional)"}</label>
-            {field.type === "textarea" ? (
-              <textarea name={field.name} required={field.required} rows={3}
-                placeholder={field.placeholder}
-                style={{ ...inputStyle, resize: "vertical" }} />
-            ) : field.type === "select" ? (
-              <select name={field.name} required={field.required} style={inputStyle}>
-                <option value="">Select…</option>
-                {field.options?.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-            ) : (
-              <input type={field.type} name={field.name} required={field.required}
-                placeholder={field.placeholder} style={inputStyle} />
-            )}
-          </div>
-        ))}
+        {slotFlowExtraFields(formSchema).map((field) => {
+          const fieldId = `booking-field-${field.name}`;
+          return (
+            <div key={field.name} style={fieldStyle}>
+              <label htmlFor={fieldId} style={labelStyle}>{field.label}{field.required ? " *" : " (optional)"}</label>
+              {field.type === "textarea" ? (
+                <textarea id={fieldId} name={field.name} required={field.required} rows={3}
+                  placeholder={field.placeholder}
+                  style={{ ...inputStyle, resize: "vertical" }} />
+              ) : field.type === "select" ? (
+                <select id={fieldId} name={field.name} required={field.required} style={inputStyle}>
+                  <option value="">Select…</option>
+                  {field.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <input id={fieldId} type={field.type} name={field.name} required={field.required}
+                  placeholder={field.placeholder} style={inputStyle} />
+              )}
+            </div>
+          );
+        })}
 
         <div style={fieldStyle}>
-          <label style={labelStyle}>Notes (optional)</label>
+          <label htmlFor="booking-notes" style={labelStyle}>Notes (optional)</label>
           <textarea
+            id="booking-notes"
             name="notes"
             rows={3}
             style={{ ...inputStyle, resize: "vertical" }}

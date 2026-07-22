@@ -9392,6 +9392,10 @@ model StorefrontBooking {
   customerPhone        String?
   scheduledAt          DateTime
   durationMinutes      Int
+  // Structured reservation context (BI-3DA1DFDC): party size and dietary notes are
+  // first-class facts so the owner handoff is traceable, not buried in `notes`.
+  covers               Int?
+  dietaryNotes         String?
   notes                String?
   status               String              @default("pending")
   providerId           String?
