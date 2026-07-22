@@ -11,6 +11,10 @@ import {
 } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
+import SelfUpgradeJobEngineHealthAlert, {
+  shouldPollForJobEngineRecovery,
+  type JobEngineHealth,
+} from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
 import { UpgradeScopeRibbon } from "@/components/ops/UpgradeScopeRibbon";
 import { StatusBadge } from "@/components/ui/report-kit";
@@ -122,11 +126,7 @@ type Props = {
   quiescence?: QuiescenceActivity | null;
   admission?: AdmissionSnapshot | null;
   cooldownUntil?: string | null;
-  jobEngine?: {
-    status: "healthy" | "degraded" | "unknown";
-    detail: string | null;
-    checkedAt: string | null;
-  };
+  jobEngine?: JobEngineHealth;
   history?: LatestRun[];
   historyNextCursor?: string | null;
   initialImpactSummary?: SummaryResult | null;
@@ -422,6 +422,12 @@ export default function SelfUpgradeClient({
     return () => clearInterval(interval);
   }, [justQueued, upgradeInFlight, restarting, router]);
 
+  useEffect(() => {
+    if (!shouldPollForJobEngineRecovery(jobEngine)) return;
+    const interval = setInterval(() => router.refresh(), 15_000);
+    return () => clearInterval(interval);
+  }, [jobEngine, router]);
+
   // Drop the reconnect banner once the swapped-in portal actually answers with
   // fresh data. We snapshot the server-derived signature at the moment the swap
   // severs the request (enterRestarting), then clear as soon as any of those
@@ -624,23 +630,7 @@ export default function SelfUpgradeClient({
           need to refresh.
         </div>
       )}
-      {jobEngine?.status === "degraded" && (
-        <div
-          className="p-3 rounded-lg bg-[var(--dpf-warning)]/15 border border-[var(--dpf-warning)]/40 text-sm"
-          role="alert"
-          data-job-engine-health="degraded"
-        >
-          <div className="font-medium text-[var(--dpf-warning)]">
-            ⚠ Background job engine isn’t dispatching
-          </div>
-          <div className="mt-1 text-[var(--dpf-muted)]">
-            The portal couldn’t register its jobs with Inngest, so background work
-            — self-upgrade, evals, backups, watchdogs — won’t run until this is
-            fixed.{jobEngine.detail ? ` (${jobEngine.detail})` : ""} Restart the
-            portal or check the Inngest service.
-          </div>
-        </div>
-      )}
+      <SelfUpgradeJobEngineHealthAlert jobEngine={jobEngine} />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
