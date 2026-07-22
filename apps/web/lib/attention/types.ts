@@ -123,6 +123,20 @@ export type AttentionProactivity = {
   policyId?: string;
 };
 
+/** Honest attribution for an agent-authored item (BI-AB12B3D3, ratified contract
+ * BI-7D29937E). The byline attributes to the accountable (human × client × session)
+ * identity, presented via a thin ROLE label — NEVER a persona name, and never
+ * implying a human accountable party the attribution spine can't produce. Always
+ * AI-labeled at render (see formatAttentionByline in ./attribution). */
+export type AttentionAuthor = {
+  /** Role-based presentation label (via resolveAgentRoleLabel), never a persona name. */
+  roleLabel: string;
+  /** The AI client that produced the work (Claude / Codex / Grok), when known. */
+  aiClient?: string;
+  /** Trust level (L0–L3) at which it was produced, when known. */
+  trustLevel?: string;
+};
+
 export type AttentionItem = {
   /** Stable per source row, e.g. "escalation:PIR-…", "ai-decision:DI-…". */
   id: string;
@@ -152,4 +166,7 @@ export type AttentionItem = {
   proactivity?: AttentionProactivity;
   /** Builder-grade facts preserved for progressive disclosure. */
   technical?: AttentionTechnicalMetadata;
+  /** Honest attribution when an AI coworker produced this item (BI-AB12B3D3).
+   * Absent for items with no single AI author (e.g. a bill awaiting approval). */
+  author?: AttentionAuthor;
 };

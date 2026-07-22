@@ -35,7 +35,7 @@ const entry: OwnerAttentionEntry = {
     whyItMatters: "Paying the right bills on time keeps your business supplied.",
     ifYouDoNothing: "If you do nothing, the bill may become late.",
     recommendation: {
-      lead: "Your COO recommends",
+      lead: "AI recommendation",
       text: "review the amount and recipient, then approve it if both are right.",
       specialistByline: "Finance",
     },
@@ -71,7 +71,7 @@ describe("OwnerDecisionCards", () => {
     expect(screen.getByText(/Paying the right bills/)).toBeTruthy();
     expect(screen.getByText(/If you do nothing/)).toBeTruthy();
     expect(screen.getByText(/the bill may become late/)).toBeTruthy();
-    expect(screen.getByText("Your COO recommends")).toBeTruthy();
+    expect(screen.getByText("AI recommendation")).toBeTruthy();
     expect(screen.getByText("Finance")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Review bill" }).getAttribute("href")).toBe(
       "/finance/bills",

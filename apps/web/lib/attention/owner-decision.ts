@@ -8,6 +8,7 @@ import {
   whyItMattersFor,
 } from "./owner-decision-copy";
 import { builderActions, technicalFields } from "./owner-technical-detail";
+import { formatAttentionByline } from "./attribution";
 
 export type OwnerDecisionTag = {
   label: string;
@@ -30,10 +31,17 @@ export type OwnerDecisionCard = {
   whyItMatters: string;
   ifYouDoNothing: string;
   recommendation: {
-    lead: "Your COO recommends";
+    /** Honest, AI-labeled lead (BI-AB12B3D3 / ratified BI-7D29937E): the platform
+     *  recommends, presented as AI — NOT "your COO decided". A role is a thin
+     *  presentation label (specialistByline), never the accountable actor. */
+    lead: "AI recommendation";
     text: string;
     specialistByline: string;
   };
+  /** Honest attribution byline for an AI-authored item — AI-labeled, role as a
+   *  thin label over the accountable identity (BI-AB12B3D3). Absent when the item
+   *  has no single AI author. */
+  byline?: string;
   choices: OwnerDecisionChoice[];
   tags: OwnerDecisionTag[];
   technical: {
@@ -54,10 +62,11 @@ export function translateAttentionToOwnerDecision(
     whyItMatters: whyItMattersFor(item),
     ifYouDoNothing: consequenceFor(item),
     recommendation: {
-      lead: "Your COO recommends",
+      lead: "AI recommendation",
       text: recommendationFor(item),
       specialistByline: specialistFor(item.source),
     },
+    ...(item.author ? { byline: formatAttentionByline(item.author) } : {}),
     choices: ownerChoices(item),
     tags: tagsFor(item, nowMs),
     technical: {

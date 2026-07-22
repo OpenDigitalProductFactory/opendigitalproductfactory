@@ -48,7 +48,7 @@ const entry = {
     whyItMatters: "This may improve customer work.",
     ifYouDoNothing: "If you do nothing, it waits.",
     recommendation: {
-      lead: "Your COO recommends",
+      lead: "AI recommendation",
       text: "review this with the weekly batch.",
       specialistByline: "Research",
     },
