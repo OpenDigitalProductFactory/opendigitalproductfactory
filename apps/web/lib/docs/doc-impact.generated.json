@@ -247,6 +247,9 @@
     "/storefront/setup": [
       "docs/user-guide/storefront/setup-and-launch.md"
     ],
+    "/storefront/tables": [
+      "docs/user-guide/storefront/team-and-fulfilment.md"
+    ],
     "/storefront/team": [
       "docs/user-guide/storefront/team-and-fulfilment.md"
     ],
@@ -462,6 +465,7 @@
     ],
     "docs/user-guide/storefront/team-and-fulfilment.md": [
       "/admin/storefront/team",
+      "/storefront/tables",
       "/storefront/team"
     ],
     "docs/user-guide/wiki/index.md": [

@@ -150,5 +150,6 @@
 /storefront/settings/business
 /storefront/settings/capabilities
 /storefront/settings/operations
+/storefront/tables
 /storefront/team
 /welcome

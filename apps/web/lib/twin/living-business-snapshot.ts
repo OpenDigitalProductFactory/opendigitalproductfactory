@@ -95,7 +95,9 @@ interface ObligationRow {
 }
 interface BookingRow {
   id: string;
-  providerId: string | null;
+  /** Present on the live query (selected); optional so pure-helper test fixtures
+   *  that exercise only provider-name behaviour need not supply it. */
+  providerId?: string | null;
   scheduledAt: Date | null;
   createdAt: Date | null;
   status: string;
@@ -640,7 +642,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
           bookings: bookings.map(
             (b): CapacityBookingInput => ({
               id: b.id,
-              providerId: b.providerId,
+              providerId: b.providerId ?? null,
               scheduledAt: b.scheduledAt,
               durationMinutes: null, // default turn (90m) applied by the projection
               status: b.status,
