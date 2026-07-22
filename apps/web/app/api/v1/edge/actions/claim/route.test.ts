@@ -11,6 +11,9 @@ const { mockResolveToken, mockResolveMtls, mockClaim, mockLoadSigner, mockFindCa
 
 vi.mock("@/lib/auth/edge-node-token", () => ({ resolveEdgeNodeAuth: mockResolveToken }));
 vi.mock("@/lib/auth/edge-node-mtls", () => ({ resolveEdgeNodeMtls: mockResolveMtls }));
+vi.mock("@/lib/auth/edge-mtls-proxy-secret", () => ({
+  loadEdgeMtlsProxySecret: () => "proxy-secret-with-at-least-32-bytes",
+}));
 vi.mock("@/lib/remote-action/dispatch-orchestrator", () => ({ claimActionsForNode: mockClaim }));
 vi.mock("@/lib/remote-action/action-signing-key", () => ({ loadEdgeActionSigner: mockLoadSigner }));
 vi.mock("@dpf/db", () => ({ prisma: { edgeNodeCapability: { findFirst: mockFindCapability } } }));
@@ -43,7 +46,6 @@ function request(): NextRequest {
 beforeEach(() => {
   vi.resetAllMocks();
   process.env.DPF_REMOTE_ACTION_DISPATCH_ENABLED = "true";
-  process.env.DPF_EDGE_MTLS_PROXY_SECRET = "proxy-secret-with-at-least-32-bytes";
   mockResolveToken.mockResolvedValue(AUTHED);
   mockResolveMtls.mockResolvedValue({ ok: true, certificateId: "cert-1", fingerprintSha256: "a".repeat(64) });
   mockFindCapability.mockResolvedValue({ id: "cap-1" });
