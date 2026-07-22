@@ -148,6 +148,9 @@
     "/ops": [
       "docs/user-guide/operations/index.md"
     ],
+    "/ops/self-upgrade": [
+      "docs/user-guide/operations/self-upgrade.md"
+    ],
     "/platform": [
       "docs/user-guide/platform/index.md"
     ],
@@ -397,6 +400,9 @@
     ],
     "docs/user-guide/operations/index.md": [
       "/ops"
+    ],
+    "docs/user-guide/operations/self-upgrade.md": [
+      "/ops/self-upgrade"
     ],
     "docs/user-guide/platform/ai-operations.md": [
       "/platform/ai/assignments",

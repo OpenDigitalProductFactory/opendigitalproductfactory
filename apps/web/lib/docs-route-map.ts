@@ -84,6 +84,9 @@ const DOCS_ROUTE_MAP: DocsRouteEntry[] = [
   { routePrefix: "/customer", docsPath: "/docs/customers/index" },
   { routePrefix: "/coworker-decisions", docsPath: "/docs/wiki/index" },
   { routePrefix: "/build", docsPath: "/docs/build-studio/index" },
+  // Self-upgrade is high-consequence — give it a dedicated doc rather than
+  // letting it fall through to the generic operations backlog page.
+  { routePrefix: "/ops/self-upgrade", docsPath: "/docs/operations/self-upgrade" },
   { routePrefix: "/ops", docsPath: "/docs/operations/index" },
   { routePrefix: "/portfolio/product", docsPath: "/docs/products/index" },
   { routePrefix: "/portfolio", docsPath: "/docs/portfolios/index" },

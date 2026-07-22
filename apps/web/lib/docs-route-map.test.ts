@@ -25,6 +25,13 @@ describe("resolveDocsPath", () => {
     expect(resolveDocsPath("/storefront/settings/business")).toBe("/docs/storefront/settings-business-and-operations");
   });
 
+  it("gives self-upgrade its own doc instead of the generic operations backlog page", () => {
+    expect(resolveDocsPath("/ops/self-upgrade")).toBe("/docs/operations/self-upgrade");
+    // Sibling ops routes still fall through to the operations index.
+    expect(resolveDocsPath("/ops/promotions")).toBe("/docs/operations/index");
+    expect(resolveDocsPath("/ops")).toBe("/docs/operations/index");
+  });
+
   it("maps setup to a setup-specific getting-started doc", () => {
     expect(resolveDocsPath("/setup")).toBe("/docs/getting-started/setup-and-first-login");
   });
@@ -49,6 +56,21 @@ describe("docs exposure policy", () => {
     expect(shouldShowDocsLink("/finance/reports/cash-flow")).toBe(true);
     expect(buildContextualDocsHref("/finance/reports/cash-flow")).toBe(
       "/docs/finance/reporting-and-close?sourceRoute=%2Ffinance%2Freports%2Fcash-flow",
+    );
+  });
+
+  it("builds a contextual href carrying the source route for the required workflow surfaces", () => {
+    expect(buildContextualDocsHref("/storefront/inbox")).toBe(
+      "/docs/storefront/inbox-and-enquiries?sourceRoute=%2Fstorefront%2Finbox",
+    );
+    expect(buildContextualDocsHref("/storefront/settings/business")).toBe(
+      "/docs/storefront/settings-business-and-operations?sourceRoute=%2Fstorefront%2Fsettings%2Fbusiness",
+    );
+    expect(buildContextualDocsHref("/ops/self-upgrade")).toBe(
+      "/docs/operations/self-upgrade?sourceRoute=%2Fops%2Fself-upgrade",
+    );
+    expect(buildContextualDocsHref("/customer/marketing")).toBe(
+      "/docs/customers/marketing?sourceRoute=%2Fcustomer%2Fmarketing",
     );
   });
 
