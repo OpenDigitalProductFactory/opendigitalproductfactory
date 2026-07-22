@@ -4,6 +4,9 @@ import { confirmDialog } from "@/components/ui/Dialog";
 import { ItemFormDialog, type ItemFormData } from "./ItemFormDialog";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { useRowActions, assertOk, RowStatus } from "./use-row-action";
+
+const REORDER_KEY = "__reorder__";
 
 type Item = {
   id: string;
@@ -45,6 +48,8 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [orderBeforeDrag, setOrderBeforeDrag] = useState<Item[] | null>(null);
+  const { statuses, runRowAction } = useRowActions();
 
   // Derive unique categories from items
   const categories = [...new Set(items.map((i) => i.category).filter(Boolean))] as string[];
@@ -110,19 +115,29 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
     }
   }
 
-  async function toggleActive(id: string, isActive: boolean) {
-    await fetch(`/api/storefront/admin/items/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive }),
+  function toggleActive(id: string, isActive: boolean, name: string) {
+    void runRowAction(id, {
+      savingMessage: "Saving…",
+      successMessage: isActive ? "Shown on your public page" : "Hidden from your public page",
+      run: async () => {
+        const res = await fetch(`/api/storefront/admin/items/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isActive }),
+        });
+        await assertOk(res, `Couldn't update ${name}. Try again.`);
+        // Apply only after the server confirms — never leave the UI showing an unsaved change.
+        setItems((prev) => prev.map((i) => (i.id === id ? { ...i, isActive } : i)));
+      },
     });
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, isActive } : i));
   }
 
   // ─── Drag-to-Reorder ─────────────────────────────────────────────────
 
   function handleDragStart(idx: number) {
     setDragIdx(idx);
+    // Snapshot so a failed save can restore the owner's original order.
+    setOrderBeforeDrag(items);
   }
 
   function handleDragOver(e: React.DragEvent, idx: number) {
@@ -138,14 +153,30 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
     setDragIdx(idx);
   }
 
-  async function handleDragEnd() {
+  function handleDragEnd() {
     setDragIdx(null);
-    // Persist new order
+    const snapshot = orderBeforeDrag;
+    setOrderBeforeDrag(null);
+    // No net movement — nothing to persist.
+    if (!snapshot || snapshot.map((i) => i.id).join() === items.map((i) => i.id).join()) return;
     const reorderData = items.map((item, idx) => ({ id: item.id, sortOrder: idx }));
-    await fetch("/api/storefront/admin/items/reorder", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: reorderData }),
+    void runRowAction(REORDER_KEY, {
+      savingMessage: "Saving new order…",
+      successMessage: "Order saved",
+      run: async () => {
+        const res = await fetch("/api/storefront/admin/items/reorder", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: reorderData }),
+        });
+        try {
+          await assertOk(res, "Couldn't save the new order. Try again.");
+        } catch (err) {
+          // Reorder is applied live during drag, so restore the owner's original order on failure.
+          setItems(snapshot);
+          throw err;
+        }
+      },
     });
   }
 
@@ -277,8 +308,9 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
                   and a 44px hit area so they are safe to tap on a phone. */}
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={() => toggleActive(item.id, !item.isActive)}
-                  className={`inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-[10px] px-2 rounded border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)] transition-colors ${item.isActive ? "text-[var(--dpf-success)]" : "text-[var(--dpf-muted)]"}`}
+                  onClick={() => toggleActive(item.id, !item.isActive, item.name)}
+                  disabled={statuses[item.id]?.kind === "saving"}
+                  className={`inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-[10px] px-2 rounded border border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)] transition-colors disabled:opacity-60 ${item.isActive ? "text-[var(--dpf-success)]" : "text-[var(--dpf-muted)]"}`}
                   aria-label={
                     item.isActive
                       ? `Hide ${item.name} from your public page`
@@ -305,10 +337,24 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
                   Del
                 </button>
               </div>
+
+              {/* Row-specific result of the last publish-affecting change. */}
+              {statuses[item.id] && (
+                <div className="basis-full">
+                  <RowStatus status={statuses[item.id]} />
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+
+      {/* Reorder save state — the whole list moved, so this belongs to the list, not one row. */}
+      {statuses[REORDER_KEY] && (
+        <div className="mt-2">
+          <RowStatus status={statuses[REORDER_KEY]} />
+        </div>
+      )}
 
       {filtered.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)] py-8 text-center">
