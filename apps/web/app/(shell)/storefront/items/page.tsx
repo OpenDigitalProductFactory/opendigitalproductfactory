@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 import { redirect } from "next/navigation";
 import { ItemsManager } from "@/components/storefront-admin/ItemsManager";
 import { getVocabulary, getCategorySuggestions } from "@/lib/storefront/archetype-vocabulary";
+import { loadStorefrontContentFit } from "@/lib/storefront/content-fit.server";
 
 export default async function ItemsPage() {
   const [config, orgSettings] = await Promise.all([
@@ -25,6 +26,18 @@ export default async function ItemsPage() {
   );
   const categorySuggestions = getCategorySuggestions(config.archetype.archetypeId);
 
+  const fit = await loadStorefrontContentFit({
+    storefrontId: config.id,
+    currentCategory: config.archetype.category,
+    vocabulary,
+    items: items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      isActive: item.isActive,
+    })),
+  });
+
   return (
     <ItemsManager
       storefrontId={config.id}
@@ -37,6 +50,8 @@ export default async function ItemsPage() {
       categorySuggestions={categorySuggestions}
       defaultCtaType={config.archetype.ctaType}
       defaultCurrency={orgSettings?.baseCurrency ?? "USD"}
+      isPublished={config.isPublished}
+      residueGroups={fit.groups.filter((g) => g.itemIds.length > 0)}
     />
   );
 }
