@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
-import { saveBuildStudioConfig, checkLocalEndpoint, applyLocalModelContext } from "@/lib/actions/build-studio";
+import { saveBuildStudioConfig, checkLocalEndpoint, applyLocalModelContext, getLocalServedContextInfo } from "@/lib/actions/build-studio";
 import { probeBuildEnginesAction } from "@/lib/actions/build-engine-actions";
 import type { LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
@@ -50,6 +50,16 @@ export function BuildStudioConfigForm({
   const [contextTokens, setContextTokens] = useState("");
   const [applyingContext, setApplyingContext] = useState(false);
   const [contextResult, setContextResult] = useState<{ ok: boolean; reason: string | null } | null>(null);
+  // Resource-aware served-context summary (BI-3E614946): makes the previously-
+  // invisible hardware ceiling + the reasoning-phase cloud-only SPOF legible.
+  const [ctxInfo, setCtxInfo] = useState<{
+    served: number | null;
+    ceiling: number;
+    reasoningEnvelope: number;
+    reasoningEligible: boolean;
+    vramGb: number | null;
+    selectedModel: string | null;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +149,8 @@ export function BuildStudioConfigForm({
       try {
         const result = await checkLocalEndpoint(opencodeModel, opencodeProviderId);
         setEndpointCheck(result);
+        // Resource-aware summary — the hardware ceiling + reasoning-phase SPOF.
+        getLocalServedContextInfo().then(setCtxInfo).catch(() => setCtxInfo(null));
         // Prefill the context input with the real served size (or the floor) so
         // the operator edits from the truth, not a blank box.
         if (typeof result.servedContextTokens === "number" && result.servedContextTokens > 0) {
@@ -712,6 +724,29 @@ export function BuildStudioConfigForm({
                           ? <>Leave blank to use the first <strong>coding</strong> model your endpoint serves (embedding models are skipped). ≥22k context recommended.</>
                           : "Leave blank to use the provider's default coding model for OpenCode dispatch."}
                       </p>
+                      {openCodeDescription.isLocal && ctxInfo && (
+                        <p role="status" style={{ fontSize: 10, color: "var(--dpf-muted)", margin: 0 }}>
+                          Local serves{" "}
+                          <strong style={{ color: "var(--dpf-text)" }}>
+                            {ctxInfo.served != null ? `${Math.round(ctxInfo.served / 1000)}k` : "—"}
+                          </strong>{" "}
+                          · hardware ceiling{" "}
+                          <strong style={{ color: "var(--dpf-text)" }}>{Math.round(ctxInfo.ceiling / 1000)}k</strong>
+                          {ctxInfo.vramGb != null ? ` (${ctxInfo.vramGb} GB VRAM` : " (VRAM unknown"}
+                          {ctxInfo.selectedModel ? `, ${ctxInfo.selectedModel})` : ")"} ·{" "}
+                          {ctxInfo.reasoningEligible ? (
+                            <span style={{ color: "var(--dpf-success)" }}>
+                              local can run reasoning phases (plan/review)
+                            </span>
+                          ) : (
+                            <span style={{ color: "var(--dpf-warning, var(--dpf-muted))" }}>
+                              reasoning phases (plan/review, ~{Math.round(ctxInfo.reasoningEnvelope / 1000)}k) run in the
+                              cloud on this hardware — raise VRAM or run a smaller model to make local a fallback
+                            </span>
+                          )}
+                          .
+                        </p>
+                      )}
                       {openCodeDescription.isLocal && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
@@ -720,10 +755,12 @@ export function BuildStudioConfigForm({
                             type="number"
                             min={1024}
                             step={1024}
+                            max={ctxInfo?.ceiling}
                             value={contextTokens}
                             onChange={e => setContextTokens(e.target.value)}
                             disabled={!canWrite}
                             placeholder="auto"
+                            title={ctxInfo ? `This hardware can serve at most ${Math.round(ctxInfo.ceiling / 1000)}k tokens for its model.` : undefined}
                             style={{ width: 110, fontSize: 11, padding: "2px 6px", border: "1px solid var(--dpf-border)", borderRadius: 4, background: "var(--dpf-bg)", color: "var(--dpf-text)" }}
                           />
                           <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>tokens</span>

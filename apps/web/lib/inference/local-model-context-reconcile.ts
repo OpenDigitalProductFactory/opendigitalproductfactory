@@ -24,9 +24,34 @@ import { getOllamaBaseUrl, getOllamaApiRoot } from "./ollama-url";
 import {
   isEmbeddingModelId,
   RECOMMENDED_BUILD_CONTEXT_TOKENS,
-  clampServedContextTokens,
+  REASONING_PHASE_CONTEXT_ENVELOPE_TOKENS,
+  computeServedContextCeiling,
+  isLocalServedContextEligibleForReasoning,
+  parseHostMemory,
+  recommendServedContextTokens,
+  estimateModelVramGb,
+  type HostMemory,
 } from "./local-model-policy";
 import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-config";
+
+/**
+ * The host memory profile + installer-selected model, normalized from the
+ * persisted `PlatformConfig.host_profile` (written at install by
+ * detect-hardware.ts). This is the runtime VRAM/RAM source the served-context
+ * sizing needs — Docker Model Runner does NOT report VRAM (`getOllamaHardwareInfo`
+ * returns null), which is why sizing silently degraded to the flat floor before.
+ * Best-effort: any read/parse failure returns null → callers degrade to the floor.
+ */
+export async function resolveHostMemoryProfile(): Promise<
+  { host: HostMemory; selectedModel: string | null } | null
+> {
+  try {
+    const row = await prisma.platformConfig.findUnique({ where: { key: "host_profile" } });
+    return parseHostMemory(row?.value ?? null);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * PlatformConfig key holding the operator-chosen served context (tokens) for the
@@ -40,12 +65,22 @@ import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-co
 export const LOCAL_SERVED_CONTEXT_CONFIG_KEY = "local.servedContextTokens";
 
 /**
- * The reconcile target: the operator override from PlatformConfig (clamped to the
- * supported band) when present, else the build floor. Best-effort — any read
- * error falls back to the floor so a DB hiccup never lowers a healthy install
- * below where it was.
+ * The reconcile target, RESOURCE-AWARE (BI-3E614946):
+ *   - operator override present → clamped to `[floor, resource-aware ceiling]`,
+ *     so a pinned value can never over-commit a known GPU (the ceiling is what the
+ *     host can actually serve; unknown host → MAX, trusting the operator);
+ *   - no override → the resource-aware default sized to the host's VRAM/RAM budget
+ *     minus model weights + headroom (`recommendServedContextTokens`), which itself
+ *     returns the build floor when the host is unknown — a safe degrade.
+ * Best-effort — any read error falls back to the floor so a DB hiccup never lowers
+ * a healthy install below where it was.
  */
 export async function resolveServedContextTarget(): Promise<number> {
+  const profile = await resolveHostMemoryProfile();
+  const host = profile?.host ?? null;
+  const selectedModel = profile?.selectedModel ?? null;
+  const ceiling = computeServedContextCeiling(host, selectedModel);
+
   try {
     const row = await prisma.platformConfig.findUnique({
       where: { key: LOCAL_SERVED_CONTEXT_CONFIG_KEY },
@@ -56,11 +91,54 @@ export async function resolveServedContextTarget(): Promise<number> {
         : typeof row?.value === "string"
           ? Number(row.value)
           : null;
-    if (raw != null && Number.isFinite(raw)) return clampServedContextTokens(raw);
+    if (raw != null && Number.isFinite(raw)) {
+      // Operator override, bounded by the resource-aware ceiling (never below the
+      // build floor, never above what the host can serve).
+      return Math.min(ceiling, Math.max(RECOMMENDED_BUILD_CONTEXT_TOKENS, Math.floor(raw)));
+    }
   } catch {
-    // best-effort — fall through to the floor
+    // best-effort — fall through to the resource-aware default
   }
-  return RECOMMENDED_BUILD_CONTEXT_TOKENS;
+
+  // No override → resource-aware default (floor when the host is unknown).
+  return host
+    ? recommendServedContextTokens(host, selectedModel ? estimateModelVramGb(selectedModel) : null)
+    : RECOMMENDED_BUILD_CONTEXT_TOKENS;
+}
+
+/**
+ * Everything the Platform > AI surface needs to make the (previously invisible)
+ * local served-context limit legible: the LIVE served window, the reconcile
+ * target, the resource-aware ceiling, and — the SPOF flag — whether local clears
+ * the reasoning-phase envelope or those phases are cloud-only on this
+ * hardware/model. Best-effort; the served read has its own short timeouts.
+ */
+export async function resolveServedContextInfo(fetchImpl: typeof fetch = fetch): Promise<{
+  served: number | null;
+  target: number;
+  ceiling: number;
+  reasoningEnvelope: number;
+  reasoningEligible: boolean;
+  host: HostMemory | null;
+  selectedModel: string | null;
+}> {
+  const profile = await resolveHostMemoryProfile();
+  const host = profile?.host ?? null;
+  const selectedModel = profile?.selectedModel ?? null;
+  const [target, served] = await Promise.all([
+    resolveServedContextTarget(),
+    resolveLocalServedContextTokens(fetchImpl),
+  ]);
+  return {
+    served,
+    target,
+    ceiling: computeServedContextCeiling(host, selectedModel),
+    reasoningEnvelope: REASONING_PHASE_CONTEXT_ENVELOPE_TOKENS,
+    // Reflect reality when the live window is known; else the intended target.
+    reasoningEligible: isLocalServedContextEligibleForReasoning(served ?? target),
+    host,
+    selectedModel,
+  };
 }
 
 export type ContextReconcileStatus =

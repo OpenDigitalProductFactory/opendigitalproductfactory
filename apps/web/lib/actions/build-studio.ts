@@ -160,6 +160,30 @@ export async function applyLocalModelContext(
     );
   }
 
+  // Resource-aware over-commit guard (BI-3E614946): never let a pin exceed what
+  // this host can actually serve for this model — a larger served window needs
+  // more VRAM (KV cache), and DMR would reject it or spill to system RAM and
+  // thrash. When the host memory is unknown we cannot verify, so we trust the
+  // operator (DMR's own POST is the remaining guard).
+  {
+    const { resolveHostMemoryProfile } = await import("@/lib/inference/local-model-context-reconcile");
+    const { computeServedContextCeiling, normaliseModelId } = await import("@/lib/inference/local-model-policy");
+    const profile = await resolveHostMemoryProfile();
+    if (profile) {
+      const ceiling = computeServedContextCeiling(profile.host, normaliseModelId(trimmed));
+      if (contextTokens > ceiling) {
+        return {
+          ok: false,
+          reason:
+            `This hardware can serve at most ${Math.round(ceiling / 1000)}k tokens for ` +
+            `${normaliseModelId(trimmed)} after the model weights + a safety margin. ` +
+            `Choose ${Math.round(ceiling / 1000)}k or less, or run a smaller model to free VRAM for a larger context.`,
+          preflight: null,
+        };
+      }
+    }
+  }
+
   const apiRoot = getOllamaApiRoot();
   const applied = await setServedContextTokens(apiRoot, trimmed, contextTokens);
   if (!applied.ok) {
@@ -177,6 +201,39 @@ export async function applyLocalModelContext(
   const portalBaseUrl = getOllamaBaseUrl().replace(/\/$/, "");
   const preflight = await preflightLocalEndpoint(portalBaseUrl, trimmed, fetch, { checkServedContext: true });
   return { ok: true, reason: null, preflight };
+}
+
+/**
+ * Resource-aware served-context summary for the Platform > AI surface
+ * (BI-3E614946): the live served window, the reconcile target, the hardware
+ * ceiling (the most this box can serve for its model without over-committing
+ * VRAM), and — the SPOF flag — whether local clears the reasoning-phase envelope
+ * or those phases run cloud-only on this hardware. Flattened + serializable for
+ * the client form. Read-only; gated on manage-providers.
+ */
+export async function getLocalServedContextInfo(): Promise<{
+  served: number | null;
+  target: number;
+  ceiling: number;
+  reasoningEnvelope: number;
+  reasoningEligible: boolean;
+  vramGb: number | null;
+  gpuArchitecture: "discrete" | "unified" | "cpu" | null;
+  selectedModel: string | null;
+}> {
+  await requireManageProviders();
+  const { resolveServedContextInfo } = await import("@/lib/inference/local-model-context-reconcile");
+  const info = await resolveServedContextInfo();
+  return {
+    served: info.served,
+    target: info.target,
+    ceiling: info.ceiling,
+    reasoningEnvelope: info.reasoningEnvelope,
+    reasoningEligible: info.reasoningEligible,
+    vramGb: info.host?.vramGb ?? null,
+    gpuArchitecture: info.host?.architecture ?? null,
+    selectedModel: info.selectedModel,
+  };
 }
 
 /** Read the local-only inference (cloud-disabled) switch. */
