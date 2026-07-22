@@ -54,7 +54,25 @@ export function classifyOwnerAttentionLane(
   if (item.source === "coworker-memory") {
     return decision("weekly-digest", "New coworker learning is visible in the digest.", false, appliedLevel);
   }
-  if (item.source === "ai-decision" || item.triage.decideEffort === "judgment") {
+  if (item.source === "ai-decision") {
+    // Generic corpus-fallback residue — the kernel simply had no applicable
+    // principle (coverage-gap) and nothing concrete is blocked (no blastRadius).
+    // These flood the primary count with near-identical cards, so group them into
+    // the advanced/weekly review BEHIND concrete operational work rather than let
+    // them outrank a guest reservation (BI-348766E5 fix 4).
+    const isGenericCorpusFallback =
+      item.triage.residueReason === "coverage-gap" && !item.triage.blastRadius;
+    if (isGenericCorpusFallback) {
+      return decision(
+        "weekly-digest",
+        "Grouped for advanced review — no customer or build outcome is blocked.",
+        false,
+        appliedLevel,
+      );
+    }
+    return decision("needs-you-now", "A real human judgment is still required.", false, appliedLevel);
+  }
+  if (item.triage.decideEffort === "judgment") {
     return decision("needs-you-now", "A real human judgment is still required.", false, appliedLevel);
   }
   if (item.source === "agent-proposal" || item.source === "paused-ai") {

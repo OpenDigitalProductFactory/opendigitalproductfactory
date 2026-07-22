@@ -112,6 +112,31 @@ describe("classifyOwnerAttentionLane", () => {
     expect(classifyOwnerAttentionLane(paused, "balanced").lane).toBe("custodian");
   });
 
+  it("demotes generic corpus-fallback decisions (coverage-gap, nothing blocked) to the digest", () => {
+    const generic = item("ai-decision", {
+      triage: {
+        timeToAct: "none",
+        residueReason: "coverage-gap",
+        decideEffort: "judgment",
+        irreversible: false,
+      },
+    });
+    expect(classifyOwnerAttentionLane(generic, "balanced").lane).toBe("weekly-digest");
+  });
+
+  it("keeps a coverage-gap decision that blocks a concrete outcome in needs-you", () => {
+    const blocking = item("ai-decision", {
+      triage: {
+        timeToAct: "none",
+        residueReason: "coverage-gap",
+        blastRadius: "build FB-123",
+        decideEffort: "judgment",
+        irreversible: false,
+      },
+    });
+    expect(classifyOwnerAttentionLane(blocking, "balanced").lane).toBe("needs-you-now");
+  });
+
   it("uses source-carried per-coworker proactivity before the fallback", () => {
     const research = item("research-proposal", {
       proactivity: { level: "quiet", actorId: "research-coworker" },

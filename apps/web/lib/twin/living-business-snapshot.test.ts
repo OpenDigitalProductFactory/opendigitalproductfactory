@@ -6,10 +6,13 @@ import {
   buildQuests,
   financeToUtility,
   humanizeWait,
+  isReservationQueueKey,
+  isUpcomingReservation,
   liveCapacityChips,
   loadLivingBusinessSnapshot,
   longestWaitMs,
   proposeCogAllocation,
+  reservationsToQueueItems,
   resourceUnits,
   rosterToPresence,
   statusIntent,
@@ -145,6 +148,33 @@ describe("living-business-snapshot — pure helpers", () => {
     const queue = bookingsToQueueItems(bookings, NOW);
     expect(queue[0].meta).toBe("awaiting schedule");
     expect(queue[0].waiting).toBe("3h");
+  });
+
+  it("reservationsToQueueItems surfaces upcoming reservations soonest-first (BI-348766E5)", () => {
+    const bookings = [
+      { id: "later", scheduledAt: new Date("2026-07-20T19:00:00Z"), createdAt: new Date("2026-07-15T09:00:00Z"), status: "confirmed", provider: { name: "Table 5" } },
+      { id: "soon", scheduledAt: new Date("2026-07-16T19:00:00Z"), createdAt: new Date("2026-07-15T09:00:00Z"), status: "pending", provider: null },
+      { id: "past", scheduledAt: new Date("2026-07-14T19:00:00Z"), createdAt: new Date("2026-07-13T09:00:00Z"), status: "pending", provider: null },
+      { id: "gone", scheduledAt: new Date("2026-07-18T19:00:00Z"), createdAt: new Date("2026-07-15T09:00:00Z"), status: "cancelled", provider: null },
+    ];
+    const queue = reservationsToQueueItems(bookings, NOW);
+    // Only future, non-cancelled bookings; soonest first; a cancelled one is excluded.
+    expect(queue.map((q) => q.key)).toEqual(["soon", "later"]);
+    expect(queue[0]).toMatchObject({ label: "Reservation", meta: "booked for 07-16" });
+    expect(queue[1].label).toBe("With Table 5");
+  });
+
+  it("isUpcomingReservation excludes past, cancelled and completed bookings", () => {
+    expect(isUpcomingReservation({ id: "a", scheduledAt: new Date("2026-07-20T09:00:00Z"), createdAt: null, status: "pending", provider: null }, NOW)).toBe(true);
+    expect(isUpcomingReservation({ id: "b", scheduledAt: new Date("2026-07-10T09:00:00Z"), createdAt: null, status: "pending", provider: null }, NOW)).toBe(false);
+    expect(isUpcomingReservation({ id: "c", scheduledAt: new Date("2026-07-20T09:00:00Z"), createdAt: null, status: "cancelled", provider: null }, NOW)).toBe(false);
+    expect(isUpcomingReservation({ id: "d", scheduledAt: null, createdAt: null, status: "pending", provider: null }, NOW)).toBe(false);
+  });
+
+  it("isReservationQueueKey matches the FLOOR/YARD reservations queue keys", () => {
+    expect(isReservationQueueKey("reservations")).toBe(true);
+    expect(isReservationQueueKey("waitlist")).toBe(false);
+    expect(isReservationQueueKey("dispatch")).toBe(false);
   });
 
   it("longestWaitMs ignores scheduled reservations — only walk-ins wait", () => {
@@ -300,8 +330,11 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     expect(snap!.presence.some((p) => p.kind === "human")).toBe(true);
     // finance renders the ORG currency (USD), not the legacy GBP bill row
     expect(snap!.utility.find((m) => m.key === "bills")!.value).toContain("$500");
-    // a pending booking becomes queue demand + a cog proposal
-    expect(snap!.queues[0].items.length).toBeGreaterThan(0);
+    // an upcoming pending booking becomes RESERVATIONS-queue demand (BI-348766E5:
+    // the restaurant Reservations queue is populated, not hardcoded-empty) + a cog proposal
+    const reservationsQueue = snap!.queues.find((q) => isReservationQueueKey(q.key));
+    expect(reservationsQueue).toBeTruthy();
+    expect(reservationsQueue!.items.length).toBeGreaterThan(0);
     expect(snap!.cog).toBeTruthy();
     // A restaurant (FLOOR) headlines capacity in its own words — tables/seats/
     // waitlist — not the archetype-agnostic Workforce/AI counters (BI-7C95A586).
