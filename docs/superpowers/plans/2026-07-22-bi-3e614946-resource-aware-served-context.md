@@ -46,5 +46,10 @@ Extend the served-context action return; `BuildStudioConfigForm` read-only resou
 ## 5. Definition of done
 Build gate: unit tests (Phases 1–2, + action assembly), production build via sandbox/CI, no migration. UX-fit decision recorded. The surface makes the previously-invisible served-context limit + reasoning SPOF visible and the override over-commit-safe.
 
-## 6. Backlog coverage
-Single atomic BI (BI-3E614946); phases are sequencing (Phase 2 needs Phase 1's engine; Phase 3 surfaces Phase 2's values). One PR. Recorded via `record_plan_backlog_coverage` (`atomic`).
+## Backlog coverage
+
+- Decision: atomic
+- Parent: BI-3E614946
+- Receipt: cmrvh3e7v04u201p8vnsvlyw2
+- Rationale: Phase 2's wiring has no value without Phase 1's pure engine, and Phase 3 only surfaces the values Phase 2 computes, so no phase is independently shippable; the whole feature ships as one PR.
+- Dependencies: none
