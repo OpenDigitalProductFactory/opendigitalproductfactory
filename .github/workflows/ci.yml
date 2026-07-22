@@ -196,6 +196,23 @@ jobs:
       - name: Run guard
         run: node scripts/check-diagram-dependency-pins.mjs
 
+  override-provenance-guard:
+    name: Override Provenance Guard
+    runs-on: ubuntu-latest
+    # Every security-floor entry in pnpm-workspace.yaml overrides must carry a
+    # machine-readable advisory tag (Dependabot #NN / GHSA / CVE) so the stale-
+    # override audit (BI-CDB2E8AB) can check whether the alert is still open.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-override-comments.mjs
+      - name: Run guard unit tests
+        run: node --test scripts/check-override-comments.test.mjs
+
   bundle-boundary-guard:
     name: Bundle Boundary Guard
     runs-on: ubuntu-latest
