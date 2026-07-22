@@ -15,9 +15,19 @@ class NotFoundError extends Error {
     super("NEXT_NOT_FOUND");
   }
 }
+class RedirectError extends Error {
+  url: string;
+  constructor(url: string) {
+    super("NEXT_REDIRECT");
+    this.url = url;
+  }
+}
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new NotFoundError();
+  },
+  redirect: (url: string) => {
+    throw new RedirectError(url);
   },
 }));
 vi.mock("next/link", () => ({
@@ -170,19 +180,34 @@ describe("order journey gating", () => {
 });
 
 // ── checkout confirmation (inquiry does not look like plumbing) ──────────────
+// Success now lives at result-named routes (BI-F20763F5). `/checkout` is a
+// back-compat shim that redirects an inquiry to `/inquiry/received`, so the
+// customer never lands on a "checkout" URL for a non-purchase action. The rich
+// what-happens-next / recovery content is asserted in
+// components/storefront/SubmissionResultView.test.tsx.
 describe("confirmation page", () => {
-  it("explains what happens next after an inquiry and offers customer recovery", async () => {
-    prismaMock.storefrontConfig.findFirst.mockResolvedValue({ id: "sf1" });
-    prismaMock.storefrontInquiry.findFirst.mockResolvedValue({ id: "inq1" });
+  it("redirects an inquiry checkout to its named result route (not checkout plumbing)", async () => {
     const Page = (await import("./checkout/page")).default;
-    const html = await renderPage(
-      Page({ params: params({ slug: "copper-kettle" }), searchParams: params({ ref: "INQ-1", type: "inquiry" }) }),
-    );
-    expect(html).toContain("Enquiry received");
-    expect(html).toContain("INQ-1");
-    expect(html).toContain("reply as soon as we can");
-    expect(html).toContain("/s/copper-kettle/inquire");
-    expect(html).not.toContain("/workspace");
+    let redirectUrl: string | null = null;
+    try {
+      await Page({
+        params: params({ slug: "copper-kettle" }),
+        searchParams: params({ ref: "INQ-1", type: "inquiry" }),
+      });
+    } catch (err) {
+      if (err instanceof RedirectError) redirectUrl = err.url;
+      else throw err;
+    }
+    expect(redirectUrl).toBe("/s/copper-kettle/inquiry/received?ref=INQ-1");
+    expect(redirectUrl).not.toContain("checkout");
+    expect(redirectUrl).not.toContain("/workspace");
+  });
+
+  it("404s a checkout hit with a missing or unknown type", async () => {
+    const Page = (await import("./checkout/page")).default;
+    await expect(
+      Page({ params: params({ slug: "copper-kettle" }), searchParams: params({ ref: "INQ-1" }) }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 
