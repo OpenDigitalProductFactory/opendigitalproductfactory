@@ -180,13 +180,14 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
           </label>
           <select
             id="op-hours-tz"
+            name="operatingHoursTimezone"
             value={tz}
             onChange={(e) => {
               setTz(e.target.value);
               setSaved(false);
             }}
-            aria-label="Operating hours timezone"
-            className="px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm"
+            aria-label="Business timezone — bookings and the maintenance window use this zone"
+            className="min-h-[44px] max-w-full px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm"
           >
             {zones.map((z) => (
               <option key={z.value} value={z.value} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
@@ -219,49 +220,60 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
           return (
             <div
               key={day}
-              className="flex items-center gap-3 p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]"
+              className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]"
             >
-              {/* Toggle */}
+              {/* Open/closed toggle — 44px hit area wraps the small visual switch. */}
               <button
                 type="button"
+                role="switch"
+                aria-checked={d.enabled}
+                aria-label={`Open on ${DAY_LABELS[day]}`}
                 onClick={() => updateDay(day, { enabled: !d.enabled })}
-                className={`w-10 h-5 rounded-full transition-colors relative shrink-0 ${
-                  d.enabled
-                    ? "bg-[var(--dpf-accent)]"
-                    : "bg-[var(--dpf-muted-foreground)]/30"
-                }`}
+                className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] shrink-0 rounded-md"
               >
                 <span
-                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                    d.enabled ? "left-5" : "left-0.5"
+                  className={`relative block h-5 w-10 rounded-full transition-colors ${
+                    d.enabled ? "bg-[var(--dpf-accent)]" : "bg-[var(--dpf-border-strong)]"
                   }`}
-                />
+                >
+                  <span
+                    className={`absolute top-0.5 h-4 w-4 rounded-full bg-[var(--dpf-surface-1)] transition-transform ${
+                      d.enabled ? "left-5" : "left-0.5"
+                    }`}
+                  />
+                </span>
               </button>
 
               {/* Day label */}
               <span
-                className={`w-24 text-sm font-medium ${
+                className={`w-20 shrink-0 text-sm font-medium sm:w-24 ${
                   d.enabled ? "text-[var(--dpf-text)]" : "text-[var(--dpf-muted)]"
                 }`}
               >
                 {DAY_LABELS[day]}
               </span>
 
-              {/* Time pickers */}
+              {/* Time pickers — each labelled by owner outcome so assistive tech and
+                  the mobile audit read "Monday opens" / "Monday closes", not two
+                  anonymous 09:00 fields. Wraps to its own line on narrow phones. */}
               {d.enabled ? (
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
                   <input
                     type="time"
+                    name={`${day}-opens`}
                     value={d.open}
                     onChange={(e) => updateDay(day, { open: e.target.value })}
-                    className="px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm"
+                    aria-label={`${DAY_LABELS[day]} opens`}
+                    className="min-h-[44px] px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm"
                   />
                   <span className="text-[var(--dpf-muted)]">to</span>
                   <input
                     type="time"
+                    name={`${day}-closes`}
                     value={d.close}
                     onChange={(e) => updateDay(day, { close: e.target.value })}
-                    className="px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm"
+                    aria-label={`${DAY_LABELS[day]} closes`}
+                    className="min-h-[44px] px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm"
                   />
                 </div>
               ) : (

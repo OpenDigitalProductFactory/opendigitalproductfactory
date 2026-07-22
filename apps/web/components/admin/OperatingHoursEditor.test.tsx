@@ -28,7 +28,7 @@ describe("OperatingHoursEditor save feedback", () => {
 describe("OperatingHoursEditor timezone options", () => {
   it("labels zones with a UTC-offset prefix and a de-underscored name", () => {
     render(<OperatingHoursEditor defaultSchedule={schedule} timezone="America/New_York" onSave={vi.fn()} />);
-    const select = screen.getByLabelText("Operating hours timezone") as HTMLSelectElement;
+    const select = screen.getByLabelText(/Business timezone/i) as HTMLSelectElement;
     const selected = Array.from(select.options).find((o) => o.value === "America/New_York");
     // Orthodox: "(UTC−05:00) America/New York" — offset prefix, no underscore.
     expect(selected?.textContent).toMatch(/^\(UTC[+−±]\d{2}:\d{2}\) America\/New York$/);
@@ -37,7 +37,7 @@ describe("OperatingHoursEditor timezone options", () => {
 
   it("orders options by UTC offset, not raw alphabetical", () => {
     render(<OperatingHoursEditor defaultSchedule={schedule} timezone="America/Chicago" onSave={vi.fn()} />);
-    const select = screen.getByLabelText("Operating hours timezone") as HTMLSelectElement;
+    const select = screen.getByLabelText(/Business timezone/i) as HTMLSelectElement;
     const offsets = Array.from(select.options).map((o) => {
       const m = o.textContent?.match(/^\(UTC([+−±])(\d{2}):(\d{2})\)/);
       if (!m) return 0;
