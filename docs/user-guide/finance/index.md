@@ -27,14 +27,36 @@ The Finance area handles your organization's core financial operations: billing 
 
 ## Owner-first overview (food & hospitality)
 
-For restaurants, cafés, bakeries, and caterers (the **food-hospitality** archetype), the `/finance` overview opens with **"what money needs attention today?"** instead of an accountant-shaped dashboard. It foregrounds the money jobs an owner runs day to day:
+For restaurants, bakeries, and caterers (the **food-hospitality** archetype), the `/finance` overview opens with **"what money needs attention today?"** instead of an accountant-shaped dashboard, and the money jobs it shows are matched to your specific business.
 
-- **Deposits & event balances** — booking deposits and catering/event balances still to collect
-- **Order & ticket payments** — money coming in from orders, tickets, and covers
-- **Overdue payments** — guest, catering, and event payments past their due date
+**Restaurant**
+
+- **Deposits & event balances** — booking deposits and private-dining balances still to collect
+- **Order & ticket payments** — money coming in from table orders, tickets, and covers
+- **Overdue payments** — guest and private-dining payments past their due date
 - **Supplier bills** — food, drink, and supplier bills waiting to be paid
 - **Payouts & reconciliation** — card payouts landing in the bank, matched back to sales
 - **No-show & cancellation fees** — charge a fee when a guest no-shows or cancels late
+
+**Catering**
+
+- **Event deposits & balances** — deposits securing dates, and balances due after events are delivered
+- **Event payments received** — money in from catering jobs and events
+- **Overdue event payments** — corporate and event invoices past their due date
+- **Ingredient & staffing bills** — food, drink, and staffing costs for upcoming events
+- **Payouts & reconciliation**
+- **Quote a catering job** — price a corporate, wedding, or private event before you commit
+
+**Bakery**
+
+- **Custom order deposits & balances** — deposits and balances on celebration and wedding cakes
+- **Counter & order takings** — money in from counter sales and collected orders
+- **Overdue order payments** — custom and wholesale orders past their due date
+- **Ingredient & supplier bills** — flour, dairy, packaging, and supplier bills
+- **Payouts & reconciliation**
+- **Bill a custom order** — take a deposit on a celebration or wedding cake
+
+A food-hospitality business that isn't one of those three sees a neutral food/drink set of the same jobs.
 
 Accounting internals — VAT/tax remittance, dunning reminders, payment runs, ledger and P&L reports, bank rules, and AI spend — are kept one tap away under a collapsed **"Accounting & admin"** section. Every other business type keeps the standard finance overview.
 
