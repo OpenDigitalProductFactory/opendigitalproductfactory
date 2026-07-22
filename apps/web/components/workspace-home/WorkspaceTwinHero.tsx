@@ -28,6 +28,13 @@ export interface WorkspaceTwinHeroProps {
   /** Platform tiles / area launcher, demoted below the hero (navigation, not a
    *  rival dashboard). */
   platformBody: ReactNode;
+  /** Rail nav-mode density (BI-BF53A701). In "simple" the hero condenses to the
+   *  essential "what needs you now" surface: builder chrome (the "Living business"
+   *  eyebrow, the operator "worker arrives asking" line) and the full
+   *  operational-twin body are hidden by default. The full view is one click away
+   *  via the Full toggle in the rail, so nothing is lost — it is disclosed on
+   *  demand. Defaults to "full". */
+  density?: "simple" | "full";
 }
 
 export function WorkspaceTwinHero({
@@ -35,7 +42,9 @@ export function WorkspaceTwinHero({
   presentation,
   contribution,
   platformBody,
+  density = "full",
 }: WorkspaceTwinHeroProps) {
+  const simple = density === "simple";
   const operatingQuestion = contribution?.primaryOperatingQuestion ?? null;
 
   return (
@@ -46,17 +55,19 @@ export function WorkspaceTwinHero({
       >
         {/* HUD rail — identity + the single attention surface. */}
         <header className="border-b border-[var(--dpf-border)] px-4 pb-3 pt-4">
-          <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)]">
-            <Activity size={15} aria-hidden="true" />
-            Living business
-          </div>
+          {!simple && (
+            <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)]">
+              <Activity size={15} aria-hidden="true" />
+              Living business
+            </div>
+          )}
           <h1
             id="workspace-twin-hero-title"
             className="text-xl font-bold text-[var(--dpf-text)]"
           >
             {presentation.archetypeName}
           </h1>
-          {operatingQuestion ? (
+          {!simple && operatingQuestion ? (
             <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">
               The worker arrives asking: {operatingQuestion}
             </p>
@@ -64,12 +75,15 @@ export function WorkspaceTwinHero({
         </header>
 
         {/* The one "what needs you now" surface, folded in as the hero HUD. */}
-        <div className="px-4 pt-4">{cockpit}</div>
+        <div className={simple ? "px-4 py-4" : "px-4 pt-4"}>{cockpit}</div>
 
-        {/* The operational twin — the main workspace view. */}
-        <div className="px-4 pb-4">
-          <WorkspaceTwinPanel presentation={presentation} />
-        </div>
+        {/* The operational twin — the main workspace view in Full mode; hidden in
+            Simple mode as technical detail (reachable via the Full rail toggle). */}
+        {!simple && (
+          <div className="px-4 pb-4">
+            <WorkspaceTwinPanel presentation={presentation} />
+          </div>
+        )}
       </section>
 
       {/* Demoted: platform areas / navigation, below the hero. */}
