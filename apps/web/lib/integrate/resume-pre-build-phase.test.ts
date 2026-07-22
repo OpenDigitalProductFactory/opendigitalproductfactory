@@ -44,6 +44,10 @@ vi.mock("@/lib/integrate/plan-on-approval", () => ({
 vi.mock("@/lib/mcp-tools", () => ({
   executeTool: (...args: unknown[]) => executeToolMock(...args),
 }));
+const performPlanToBuildTransitionMock = vi.fn();
+vi.mock("@/lib/integrate/plan-to-build-transition", () => ({
+  performPlanToBuildTransition: (...args: unknown[]) => performPlanToBuildTransitionMock(...args),
+}));
 
 import {
   resumePreBuildPhase,
@@ -64,6 +68,7 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     // the operator-driven behavior; governed autopilot tests override this.
     platformDevConfigFindUniqueMock.mockReset().mockResolvedValue({ governedBacklogEnabled: false });
     autoResolveDecomposeMock.mockReset().mockResolvedValue({ action: "park" });
+    performPlanToBuildTransitionMock.mockReset().mockResolvedValue({ kind: "advanced" });
   });
 
   it("re-queues review verification for a stranded review-phase build", async () => {
@@ -99,6 +104,48 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(dispatchPlanMock).toHaveBeenCalledWith({ buildId: "FB-3F", userId: "u3", forceRegenerate: true });
     expect(executeToolMock).not.toHaveBeenCalled();
     expect(out).toMatchObject({ kind: "resumed", via: "dispatchPlanForApprovedBuild:repair" });
+  });
+
+  // ── Plan→build reconciler (BI-05208DE5) ──────────────────────────────────
+  // A build with a COMPLETE plan whose review already PASSED is stranded only
+  // because the transition side-effect (startBuildBranch) failed — the WWMD
+  // decision already recommends. Resume must perform the transition DIRECTLY,
+  // NOT re-run the expensive reviewBuildPlan (which re-mints a deliberation that
+  // stalls and floods).
+  it("reconciles a complete + passed plan straight to build without re-running reviewBuildPlan", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "pass" },
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-RC", phase: "plan", userId: "uRC" });
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledWith({ buildId: "FB-RC", userId: "uRC" });
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: "resumed", via: "performPlanToBuildTransition" });
+  });
+
+  it("returns skipped (auto-resume paused) once the plan→build transition has escalated", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "pass" },
+      parentEpicId: "cmr-epic",
+    });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "escalated", failures: 3, reason: "startBuildBranch failed" });
+    const out = await resumePreBuildPhase({ buildId: "FB-ESC", phase: "plan", userId: "uESC" });
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledOnce();
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toContain("escalated");
+  });
+
+  it("still runs the canonical plan review (not the reconciler) when no review verdict exists yet", async () => {
+    findUniqueMock.mockResolvedValue({ designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] } });
+    const out = await resumePreBuildPhase({ buildId: "FB-NOREV", phase: "plan", userId: "uNR" });
+    expect(performPlanToBuildTransitionMock).not.toHaveBeenCalled();
+    expect(executeToolMock).toHaveBeenCalledWith("reviewBuildPlan", { buildId: "FB-NOREV" }, "uNR", { featureBuildId: "FB-NOREV" });
+    expect(out).toMatchObject({ kind: "resumed", via: "executeTool:reviewBuildPlan" });
   });
 
   it("re-dispatches ideate research when no design doc exists yet", async () => {
