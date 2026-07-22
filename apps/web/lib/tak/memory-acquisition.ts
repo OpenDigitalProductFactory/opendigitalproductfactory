@@ -42,14 +42,17 @@ const STOP_WORDS = new Set([
   "into",
   "is",
   "it",
+  "keep",
   "no",
   "of",
   "on",
   "or",
+  "that",
   "the",
   "this",
   "to",
   "use",
+  "would",
   "with",
 ]);
 
