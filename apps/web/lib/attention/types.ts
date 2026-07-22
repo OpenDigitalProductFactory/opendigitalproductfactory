@@ -20,6 +20,7 @@ export type AttentionSource =
   | "approval-expense" // ExpenseClaim submitted
   | "compliance-submission" // RegulatorySubmission draft (carries a dueDate)
   | "research-proposal" // ResearchProposal pending
+  | "coworker-memory" // Newly distilled CoworkerMemoryNote rows for digest visibility
   | "ai-readiness-blocker" // AI Readiness blocked domain requiring operator action
   | "platform-health" // PortfolioQualityIssue issueType=health_alert, status=open (BI-2F778C13)
   | "provider-credential"; // an enabled AI provider whose saved sign-in has EXPIRED — reconnect (BI-282C39D5)
@@ -55,6 +56,7 @@ export type ResidueReason =
   | "input-required" // a coworker needs human input to continue (TaskRun)
   | "needs-credential" // missing credential / authority, NOT judgment (TaskRun auth-required)
   | "policy-approval" // an agent action awaits approval (AgentActionProposal)
+  | "new-memory-note" // a coworker's role-local memory gained a new distilled note
   | "no-self-heal"; // a platform service is degraded and has no automated repair path (health_alert)
 
 /** How much the human must do. The human_cognitive_load cost axis. */

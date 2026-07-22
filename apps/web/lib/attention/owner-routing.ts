@@ -46,6 +46,9 @@ export function classifyOwnerAttentionLane(
       ? decision("needs-you-now", "Reactive mode asks before low-risk research.", false, appliedLevel)
       : decision("weekly-digest", "Low-urgency research can be reviewed together.", false, appliedLevel);
   }
+  if (item.source === "coworker-memory") {
+    return decision("weekly-digest", "New coworker learning is visible in the digest.", false, appliedLevel);
+  }
   if (item.source === "ai-decision" || item.triage.decideEffort === "judgment") {
     return decision("needs-you-now", "A real human judgment is still required.", false, appliedLevel);
   }

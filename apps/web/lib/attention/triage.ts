@@ -104,6 +104,7 @@ const RESIDUE_LABEL: Record<ResidueReason, string> = {
   "input-required": "a coworker needs your input to continue",
   "needs-credential": "a credential or authority is missing",
   "policy-approval": "an agent action is awaiting your approval",
+  "new-memory-note": "a coworker gained a new working-memory note",
   "no-self-heal": "a platform service is degraded and cannot repair itself",
 };
 

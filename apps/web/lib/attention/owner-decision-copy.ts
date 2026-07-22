@@ -11,6 +11,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "approval-expense": "Approve this expense?",
   "compliance-submission": "File this report?",
   "research-proposal": "Approve this research?",
+  "coworker-memory": "Review what your coworker learned?",
   "ai-readiness-blocker": "Choose an intelligence setup fix?",
   "platform-health": "Choose how to handle this outage?",
   "provider-credential": "Reconnect this service?",
@@ -27,6 +28,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "approval-expense": "Finance",
   "compliance-submission": "Compliance",
   "research-proposal": "Research",
+  "coworker-memory": "Digital workforce",
   "ai-readiness-blocker": "Technology",
   "platform-health": "Platform operations",
   "provider-credential": "Technology",
@@ -84,6 +86,8 @@ export function whyItMattersFor(item: AttentionItem): string {
       return "Your team cannot finish this work without a choice from you.";
     case "research-proposal":
       return "This research may improve how your team serves customers.";
+    case "coworker-memory":
+      return "Your digital team is accumulating working memory from completed work.";
     default:
       return "This technical issue matters only if it changes customer or business work.";
   }
@@ -113,6 +117,8 @@ export function consequenceFor(item: AttentionItem): string {
       return "If you do nothing, the report stays unfiled and may miss its due date.";
     case "research-proposal":
       return "If you do nothing, the research waits for the weekly review.";
+    case "coworker-memory":
+      return "If you do nothing, the note remains available to that coworker and can be reviewed later.";
     case "paused-ai":
     case "ai-decision":
     case "agent-proposal":
@@ -135,6 +141,8 @@ export function recommendationFor(item: AttentionItem): string {
       return "accept only the stated boundary; this does not give the coworker new authority.";
     case "research-proposal":
       return "keep this in the weekly review unless it affects a decision due sooner.";
+    case "coworker-memory":
+      return "scan it in the digest and open the memory page only if it looks stale, too broad, or unsafe.";
     default:
       return "keep this with the specialist unless it forces a business choice from you.";
   }

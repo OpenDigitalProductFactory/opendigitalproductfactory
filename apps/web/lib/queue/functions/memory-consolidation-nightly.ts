@@ -21,6 +21,10 @@ import {
   pruneSummarizedThreadMessages,
 } from "@/lib/tak/memory-expiry-runner";
 import { promoteOrgFactsToCorpus } from "@/lib/tak/memory-corpus-promotion";
+import {
+  runMemoryAcquisitionSweep,
+  runThreadCheckpointSweep,
+} from "@/lib/tak/memory-acquisition-runner";
 
 /** 04:20 UTC daily — off-peak, clear of the 03:00 backup + 04:00 retention slots. */
 export const MEMORY_CONSOLIDATION_CRON = "20 4 * * *";
@@ -35,6 +39,15 @@ export interface MemoryConsolidationResult {
   threadsPruned: number;
   messagesPruned: number;
   factsPromotedToCorpus: number;
+  experiencesScanned: number;
+  notesAcquired: number;
+  notesUpdated: number;
+  notesUnchanged: number;
+  notesRejected: number;
+  alreadyDistilledSources: number;
+  checkpointThreadsChecked: number;
+  checkpointAdvanceAttempts: number;
+  checkpointAdvanceFailures: number;
 }
 
 /**
@@ -53,7 +66,40 @@ export async function runMemoryConsolidationSweep(): Promise<MemoryConsolidation
     threadsPruned: 0,
     messagesPruned: 0,
     factsPromotedToCorpus: 0,
+    experiencesScanned: 0,
+    notesAcquired: 0,
+    notesUpdated: 0,
+    notesUnchanged: 0,
+    notesRejected: 0,
+    alreadyDistilledSources: 0,
+    checkpointThreadsChecked: 0,
+    checkpointAdvanceAttempts: 0,
+    checkpointAdvanceFailures: 0,
   };
+
+  // BI-4B0A1C1F: acquire role-local coworker memory from completed work before
+  // consolidation/decay, using the existing note writer as the dedupe governor.
+  try {
+    const acquisition = await runMemoryAcquisitionSweep();
+    result.experiencesScanned += acquisition.experiencesScanned;
+    result.notesAcquired += acquisition.notesCreated;
+    result.notesUpdated += acquisition.notesUpdated;
+    result.notesUnchanged += acquisition.notesUnchanged;
+    result.notesRejected += acquisition.notesRejected;
+    result.alreadyDistilledSources += acquisition.skippedAlreadyDistilled;
+  } catch (err) {
+    console.warn("[autoDream] coworker memory acquisition failed:", err);
+  }
+
+  // Make the rolling thread checkpoint actually run outside the active chat path.
+  try {
+    const checkpoint = await runThreadCheckpointSweep();
+    result.checkpointThreadsChecked += checkpoint.threadsChecked;
+    result.checkpointAdvanceAttempts += checkpoint.advanceAttempts;
+    result.checkpointAdvanceFailures += checkpoint.advanceFailures;
+  } catch (err) {
+    console.warn("[autoDream] thread checkpoint sweep failed:", err);
+  }
 
   // Coworkers with at least one active note.
   const noteAgents = await prisma.coworkerMemoryNote.findMany({

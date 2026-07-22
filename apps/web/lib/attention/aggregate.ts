@@ -12,6 +12,10 @@ import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import { loadPlatformHealthItems } from "./sources/platform-health";
+import {
+  loadCoworkerMemoryItems,
+  type CoworkerMemoryAttentionDb,
+} from "./sources/coworker-memory";
 import { loadProviderCredentialItems, loadProviderSuitabilityDriftItems } from "./sources/provider-credential";
 import {
   loadOutboundItems,
@@ -89,6 +93,7 @@ export async function loadAttentionItems(
     { source: "approval-expense", load: () => loadExpenseItems(db) },
     { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
     { source: "research-proposal", load: () => loadResearchItems(db) },
+    { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
     {
       source: "provider-credential",
