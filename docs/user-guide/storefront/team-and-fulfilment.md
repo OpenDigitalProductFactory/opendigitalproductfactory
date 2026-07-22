@@ -27,6 +27,16 @@ their own **Tables & Capacity** page (`/storefront/tables`):
   turning soon, blocked), how many parties are waiting, and one clear next
   action for the next service period. Add or block tables here, not under Team.
 
+Under "Tables right now" you can switch between two views of the same live
+capacity:
+
+- **Floor plan** (the default) — a graphical layout of your tables, each shaped
+  by its seats and coloured by its state, so you can see at a glance which tables
+  are open and which are turning soon (with the minutes until they free up).
+  Tables cluster into sections (window, bar, booths, patio) inferred from their
+  names, so the plan is legible without any extra setup. Pan and zoom to explore.
+- **List** — the same tables as a scannable list.
+
 Tables are never shown as "providers" and never mixed into the Staff list.
 
 ## What To Watch
