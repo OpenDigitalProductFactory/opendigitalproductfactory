@@ -109,6 +109,20 @@ body {
   option:checked {
     background: color-mix(in srgb, var(--dpf-accent) 15%, var(--dpf-surface-1));
   }
+
+  /* Common Shell Action-Result Contract (BI-9C0954D0) — mobile tap-safe control.
+     Guarantees the WCAG 2.2 AA 2.5.8 minimum 44×44px target for interactive shell
+     chrome (health badge, Feedback, Sign out, Simple/Full, coworker close/overflow)
+     without forcing the visible glyph/label to grow. Keyed off SHELL_TAP_TARGET_CLASS
+     in apps/web/lib/shell/shell-action-contract.ts. See
+     docs/platform-usability-standards.md ("Common Shell Action-Result Contract"). */
+  .dpf-tap-target {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
 }
 
 /* Build Studio v2 — bubble entrance animation */

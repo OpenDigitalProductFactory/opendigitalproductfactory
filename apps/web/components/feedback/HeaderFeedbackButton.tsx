@@ -7,6 +7,7 @@ import {
   createManualFeedbackEventDetail,
   type FeedbackEventDetail,
 } from "@/lib/feedback/feedback-event";
+import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
 
 type Props = {
   userId?: string | null;
@@ -48,7 +49,12 @@ export function HeaderFeedbackButton({ userId }: Props) {
         onClick={handleClick}
         aria-haspopup="dialog"
         aria-expanded={showForm}
-        className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
+        className={[
+          SHELL_TAP_TARGET_CLASS,
+          "rounded-full px-3 text-xs text-[var(--dpf-muted)] transition-colors",
+          "hover:text-[var(--dpf-text)]",
+          "focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)]",
+        ].join(" ")}
       >
         Feedback
       </button>

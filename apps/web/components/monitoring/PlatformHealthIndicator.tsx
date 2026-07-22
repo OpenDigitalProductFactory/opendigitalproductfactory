@@ -16,6 +16,7 @@ import {
   humanizeHealthAlert,
 } from "./alert-humanize";
 import { useAlertQuery } from "./useAlertQuery";
+import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
 
 type HealthState = "healthy" | "warning" | "critical" | "offline";
 
@@ -35,9 +36,11 @@ export function PlatformHealthIndicator() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[var(--dpf-surface-2)] transition-colors"
+        className={`${SHELL_TAP_TARGET_CLASS} gap-1.5 px-2 py-1 rounded hover:bg-[var(--dpf-surface-2)] transition-colors`}
         title={label}
         aria-label={`Platform health: ${label}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
       >
         <span
           className={`h-2 w-2 rounded-full ${health === "critical" ? "animate-pulse" : ""}`}
