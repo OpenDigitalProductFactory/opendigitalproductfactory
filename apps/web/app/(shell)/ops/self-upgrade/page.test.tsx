@@ -75,7 +75,8 @@ vi.mock("@/components/ops/LocalChangesLedger", () => ({
 }));
 
 // The page reads the Simple/Full nav-mode cookie to decide the Advanced default.
-const mockCookieGet = vi.fn().mockReturnValue(undefined);
+// vi.hoisted so the (hoisted) vi.mock factory can reference the fn without a TDZ.
+const { mockCookieGet } = vi.hoisted(() => ({ mockCookieGet: vi.fn() }));
 vi.mock("next/headers", () => ({
   cookies: vi.fn().mockResolvedValue({ get: mockCookieGet }),
 }));
