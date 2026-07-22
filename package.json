@@ -41,8 +41,6 @@
     "check:substrate:runtime": "node scripts/measure-platform-substrate-runtime.mjs",
     "check:mcp-tool-pack": "node scripts/check-mcp-tool-pack.mjs",
     "check:guards": "node scripts/check-guards.mjs",
-    "route:manifest": "node scripts/generate-route-manifest.mjs",
-    "check:route-classification": "node scripts/check-no-unclassified-routes.mjs",
     "check:seed-fit": "node scripts/check-seed-fit-decision.mjs",
     "check:architecture-parity": "pnpm --filter web exec tsx scripts/audit-architecture-parity.ts --baseline docs/superpowers/audits/2026-06-14-architecture-parity-baseline.json",
     "sbom": "node scripts/sbom/generate-platform-sbom.mjs",
