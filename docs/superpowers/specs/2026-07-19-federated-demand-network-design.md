@@ -200,6 +200,43 @@ For `same-organization`, the default contract offers continuous sync of share-sa
 
 Discovery alone never starts data exchange. This preserves zero-trust behavior while making normal operation effectively hands-off.
 
+### 5.4 No-shell organization trust join
+
+Nearby discovery cannot bootstrap certificate-valid HTTPS by itself. A normal
+operator joins another installation to the organization trust from the existing
+Connections page without copying certificates, editing environment variables,
+supplying installer flags, or opening a shell:
+
+1. On the organization-authority installation, **Create join file** asks for
+   the intended installation identity and a short expiry, shows exactly what
+   the file authorizes, and requires local confirmation.
+2. The portal records an approved `ChangeRequest` and queues the explicit
+   `organization.join.issue` action to the authority host's native Edge Node.
+   The host invokes the existing PKI bootstrap owner and returns one expiring,
+   intended-peer-bound `.dpfjoin` package. It never returns a CA private key or
+   password.
+3. The operator downloads the package once and moves it to the other
+   installation using the organization's normal secure file-transfer practice.
+4. On the joining installation, **Join an organization** uses a file picker.
+   The portal validates and previews issuer, intended peer, fingerprint, and
+   expiry before a second local confirmation. It then queues only
+   `organization.join.import` to that host's native Edge Node.
+5. The host consumes the package through the existing cross-platform bootstrap
+   script, restarts the persisted member TLS overlays, and reports redacted
+   evidence. The portal independently verifies certificate-valid HTTPS,
+   portal health, and Edge heartbeat before showing the join as complete.
+
+These are privileged host actions, not browser or server shell calls. They use
+the convergent `RemoteAction` control plane and are unavailable until the
+machine-bound P2a channel in `BI-F12A8D0D` is proven. Each action additionally
+requires an active per-device certificate, the node's explicit action-type
+allow-list, a parameter-specific local approval, single-use signed dispatch,
+and rollback/recovery declaration. `script.run` is never enabled. Detailed
+authority is in
+`docs/superpowers/specs/2026-06-26-remote-action-edge-auth-and-dispatch-design.md`;
+delivery is decomposed by
+`docs/superpowers/plans/2026-07-21-federation-no-shell-organization-join.md`.
+
 ## 6. Demand exchange contract
 
 DPF exchanges a versioned **Demand Envelope**, not a `BacklogItem` serialization.

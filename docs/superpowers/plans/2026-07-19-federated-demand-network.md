@@ -26,6 +26,16 @@
 - Founder Hub shared portfolio -> `BI-D25A0C31`
 - Future routed federation reach -> `BI-D43D3D76`
 
+Task 2's remaining no-shell and installed two-host closure was decomposed after
+the organization PKI and installer slices merged:
+
+- Machine-bound signed Edge action channel -> `BI-F12A8D0D`
+- Governed organization join issue/import host actions -> `BI-A8399604`
+- Connections no-shell workflow -> `BI-87B0DBD7`
+- Physical Founder Hub Mac/Windows acceptance -> `BI-05EB708F`
+- Coverage receipt -> `cmrvft9zf0mj301qkdb9e44w2`
+- Detailed plan -> `docs/superpowers/plans/2026-07-21-federation-no-shell-organization-join.md`
+
 ---
 
 ## Task 1: Establish protocol, relationship, projection, and Hive-boundary contracts
