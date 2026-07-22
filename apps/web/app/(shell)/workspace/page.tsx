@@ -86,6 +86,7 @@ export default async function WorkspacePage() {
               ? workspaceHomeResolution.contribution
               : null
           }
+          density={simpleHome ? "simple" : "full"}
           platformBody={
             <PlatformWorkspaceHome
               data={platformHomeData}

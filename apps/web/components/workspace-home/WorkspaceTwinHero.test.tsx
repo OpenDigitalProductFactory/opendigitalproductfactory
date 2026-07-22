@@ -45,3 +45,47 @@ describe("WorkspaceTwinHero", () => {
     expect(html).toContain("Nothing needs you right now");
   });
 });
+
+describe("WorkspaceTwinHero density (BI-BF53A701)", () => {
+  const contribution = {
+    primaryOperatingQuestion: "are we ready for the next service period?",
+  } as never;
+
+  function renderDensity(density: "simple" | "full") {
+    return renderToStaticMarkup(
+      <WorkspaceTwinHero
+        cockpit={<div data-testid="cockpit-slot">What needs you now</div>}
+        presentation={presentation}
+        contribution={contribution}
+        platformBody={<div data-testid="platform-slot">All workspace areas</div>}
+        density={density}
+      />,
+    );
+  }
+
+  it("full mode shows builder chrome and the operational-twin body", () => {
+    const html = renderDensity("full");
+    expect(html).toContain("Living business");
+    expect(html).toContain("The worker arrives asking");
+    expect(html).toContain(presentation.snapshot.capacityChips[0].label);
+    expect(html).toContain("Demo data — live business projection pending");
+  });
+
+  it("simple mode condenses to the next-action surface and hides builder detail", () => {
+    const html = renderDensity("simple");
+    // Essential owner surfaces stay: next actions + area launcher + identity.
+    expect(html).toContain("cockpit-slot");
+    expect(html).toContain("platform-slot");
+    expect(html).toContain(presentation.archetypeName);
+    // Builder terminology and the full twin body are hidden — materially less
+    // content than Full mode.
+    expect(html).not.toContain("Living business");
+    expect(html).not.toContain("The worker arrives asking");
+    expect(html).not.toContain(presentation.snapshot.capacityChips[0].label);
+    expect(html).not.toContain("Demo data — live business projection pending");
+  });
+
+  it("Simple and Full render materially different content", () => {
+    expect(renderDensity("simple")).not.toEqual(renderDensity("full"));
+  });
+});
