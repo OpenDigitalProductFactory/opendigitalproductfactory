@@ -5,7 +5,7 @@
     "AgentSurfaceReadiness: operational readiness telemetry, one latest-heartbeat row per build surface. No personal, customer, or business-record data — only which build tool (Claude Code / Codex / Grok / Antigravity / Build Studio) on which machine is currently wired to this instance's durable memory."
   ],
   "migration": {
-    "name": "20260721190000_add_agent_surface_readiness",
+    "name": "20260721210000_add_agent_surface_readiness",
     "backfill": "none — additive CREATE TABLE of a brand-new relation; no existing rows exist to backfill or violate any constraint."
   },
   "tests": [
