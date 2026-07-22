@@ -13,6 +13,10 @@ import {
 } from "@/lib/marketing/agentic-operations";
 import { getPlaybook } from "@/lib/tak/marketing-playbooks";
 import { buildMarketingOwnerDecision } from "@/lib/marketing/next-decision";
+import {
+  buildMarketingDisclosure,
+  buildMarketingOwnerQuestion,
+} from "@/lib/marketing/disclosure";
 
 export default async function CustomerMarketingPage() {
   const snapshot = await getMarketingWorkspaceSnapshot();
@@ -75,61 +79,74 @@ export default async function CustomerMarketingPage() {
   });
   const playbook = getPlaybook(snapshot.storefront.category, snapshot.storefront.ctaType);
   const ownerDecision = buildMarketingOwnerDecision(snapshot, playbook);
+  const ownerQuestion = buildMarketingOwnerQuestion(snapshot.storefront.category, playbook);
+  const disclosure = buildMarketingDisclosure(snapshot);
+  const archetypeName = snapshot.storefront.archetypeName ?? "your business";
 
   return (
     <div className="space-y-6">
+      {/* First viewport: ONE owner-first question, then the single recommended
+          next step. Strategy / campaign / publish machinery is deferred below. */}
       <section
         data-testid="marketing-owner-decision"
         data-decision-id={ownerDecision.id}
         className="rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-6"
       >
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dpf-accent)]">
-              Your next decision
-            </p>
-            <h2 className="mt-2 text-xl font-bold text-[var(--dpf-text)]">
-              {ownerDecision.headline}
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm text-[var(--dpf-muted)]">
-              {ownerDecision.detail}
-            </p>
-            <p className="mt-3 text-xs text-[var(--dpf-muted)]">
-              Moves: <span className="font-medium text-[var(--dpf-text)]">{ownerDecision.metricFocus}</span>
-            </p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dpf-accent)]">
+          Start here
+        </p>
+        <h1
+          data-testid="marketing-owner-question"
+          className="mt-2 text-xl font-bold text-[var(--dpf-text)]"
+        >
+          {ownerQuestion}
+        </h1>
+        <div className="mt-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                Recommended next step
+              </p>
+              <p className="mt-1 text-base font-semibold text-[var(--dpf-text)]">
+                {ownerDecision.headline}
+              </p>
+              <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
+                {ownerDecision.detail}
+              </p>
+              <p className="mt-2 text-xs text-[var(--dpf-muted)]">
+                Moves:{" "}
+                <span className="font-medium text-[var(--dpf-text)]">
+                  {ownerDecision.metricFocus}
+                </span>
+              </p>
+            </div>
+            <Link
+              href={ownerDecision.ctaHref}
+              className="shrink-0 rounded-full bg-[var(--dpf-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              {ownerDecision.ctaLabel}
+            </Link>
           </div>
-          <Link
-            href={ownerDecision.ctaHref}
-            className="shrink-0 rounded-full bg-[var(--dpf-accent)] px-5 py-2 text-sm font-medium text-white hover:opacity-90"
-          >
-            {ownerDecision.ctaLabel}
-          </Link>
         </div>
       </section>
 
-      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
-              Customer Marketing
-            </p>
-            <h1 className="mt-2 text-2xl font-bold text-[var(--dpf-text)]">
-              Work with your Marketing Strategist
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm text-[var(--dpf-muted)]">
-              Use the AI Coworker to shape the market, choose campaigns, and turn
-              rough business context into work that can acquire customers.
-            </p>
-          </div>
-          <Link
-            href="/customer/marketing/strategy"
-            className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-2 text-sm font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
-          >
-            View current assumptions
-          </Link>
-        </div>
-
-      </div>
+      {disclosure.quarantinedCount > 0 ? (
+        <section
+          data-testid="marketing-quarantine-banner"
+          className="rounded-lg border border-[var(--dpf-warning)] bg-[var(--dpf-surface-1)] p-4"
+        >
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">
+            {disclosure.quarantinedCount}{" "}
+            {disclosure.quarantinedCount === 1 ? "saved item does not" : "saved items do not"} fit{" "}
+            {archetypeName}
+          </p>
+          <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
+            This looks like imported or test marketing data (for example software-platform copy). It
+            is blocked from publishing and does not count as real campaign work. Reset or replace it
+            with {archetypeName}-fit campaigns before you launch.
+          </p>
+        </section>
+      ) : null}
 
       <div id="marketing-launcher" className="scroll-mt-24">
         <AgentWorkLauncher
@@ -140,137 +157,201 @@ export default async function CustomerMarketingPage() {
         />
       </div>
 
-      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+      {/* Progressive disclosure: strategy, assumptions, and proof stay collapsed
+          until the owner asks for them, so the first screen is one decision. */}
+      <details
+        data-testid="marketing-advanced-strategy"
+        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+      >
+        <summary className="cursor-pointer list-none rounded-lg px-6 py-4 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]">
+          Strategy, assumptions &amp; proof
+          <span className="ml-2 font-normal text-[var(--dpf-muted)]">
+            Market, buyer, channels, latest recommendation, and proof
+          </span>
+        </summary>
+
+        <div className="space-y-6 border-t border-[var(--dpf-border)] p-6">
           <div>
-            <h2 className="text-base font-semibold text-[var(--dpf-text)]">
-              Current working focus
+            <h2 className="text-lg font-bold text-[var(--dpf-text)]">
+              Work with your Marketing Strategist
             </h2>
-            <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
-              These are starting assumptions for the strategist to challenge,
-              refine, and turn into campaigns.
+            <p className="mt-2 max-w-3xl text-sm text-[var(--dpf-muted)]">
+              Use the AI Coworker to shape the market, choose campaigns, and turn
+              rough business context into work that can acquire customers.
             </p>
+            <Link
+              href="/customer/marketing/strategy"
+              className="mt-3 inline-block rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-2 text-sm font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
+            >
+              View current assumptions
+            </Link>
           </div>
-          <p className="text-sm font-medium text-[var(--dpf-accent)]">
-            {snapshot.latestReview
-              ? formatMarketingLabel(snapshot.latestReview.reviewType)
-              : "First review pending"}
-          </p>
-        </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-              Market
-            </p>
-            <p className="mt-2 text-sm text-[var(--dpf-text)]">{marketFocus}</p>
-          </div>
-          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-              Buyer
-            </p>
-            <p className="mt-2 text-sm text-[var(--dpf-text)]">{audienceFocus}</p>
-          </div>
-          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-              Motion
-            </p>
-            <p className="mt-2 text-sm text-[var(--dpf-text)]">{routeFocus}</p>
-          </div>
-          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-              Channels
-            </p>
-            <p className="mt-2 text-sm text-[var(--dpf-text)]">{recommendedChannels}</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-[var(--dpf-text)]">
-              Latest strategist recommendation
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
-              Saved recommendations make the current plan visible outside the chat.
-            </p>
-          </div>
-          <p className="text-sm font-medium text-[var(--dpf-accent)]">
-            {snapshot.latestReview
-              ? formatMarketingLabel(snapshot.latestReview.reviewType)
-              : "Not saved yet"}
-          </p>
-        </div>
-        {snapshot.latestReview ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-                Do next
-              </p>
-              <p className="mt-2 text-sm text-[var(--dpf-text)]">
-                {snapshot.latestReview.summary}
+          <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+                  Current working focus
+                </h2>
+                <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
+                  These are starting assumptions for the strategist to challenge,
+                  refine, and turn into campaigns.
+                </p>
+              </div>
+              <p className="text-sm font-medium text-[var(--dpf-accent)]">
+                {snapshot.latestReview
+                  ? formatMarketingLabel(snapshot.latestReview.reviewType)
+                  : "First review pending"}
               </p>
             </div>
-            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-                Skip for now
-              </p>
-              <p className="mt-2 text-sm text-[var(--dpf-text)]">{skippedChannels}</p>
-            </div>
-            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-                KPI stack
-              </p>
-              <p className="mt-2 text-sm text-[var(--dpf-text)]">{kpiStack}</p>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-[var(--dpf-muted)]">
-            No saved strategist recommendation yet. Ask the Marketing Strategist
-            for a plan and it should persist the recommendation here.
-          </p>
-        )}
-      </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
-        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                  Market
+                </p>
+                <p className="mt-2 text-sm text-[var(--dpf-text)]">{marketFocus}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                  Buyer
+                </p>
+                <p className="mt-2 text-sm text-[var(--dpf-text)]">{audienceFocus}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                  Motion
+                </p>
+                <p className="mt-2 text-sm text-[var(--dpf-text)]">{routeFocus}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                  Channels
+                </p>
+                <p className="mt-2 text-sm text-[var(--dpf-text)]">{recommendedChannels}</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+                  Latest strategist recommendation
+                </h2>
+                <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
+                  Saved recommendations make the current plan visible outside the chat.
+                </p>
+              </div>
+              <p className="text-sm font-medium text-[var(--dpf-accent)]">
+                {snapshot.latestReview
+                  ? formatMarketingLabel(snapshot.latestReview.reviewType)
+                  : "Not saved yet"}
+              </p>
+            </div>
+            {snapshot.latestReview ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                    Do next
+                  </p>
+                  <p className="mt-2 text-sm text-[var(--dpf-text)]">
+                    {snapshot.latestReview.summary}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                    Skip for now
+                  </p>
+                  <p className="mt-2 text-sm text-[var(--dpf-text)]">{skippedChannels}</p>
+                </div>
+                <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                    KPI stack
+                  </p>
+                  <p className="mt-2 text-sm text-[var(--dpf-text)]">{kpiStack}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-[var(--dpf-muted)]">
+                No saved strategist recommendation yet. Ask the Marketing Strategist
+                for a plan and it should persist the recommendation here.
+              </p>
+            )}
+          </section>
+
+          <section className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+              <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+                What to clarify with the strategist
+              </h2>
+              <ul className="mt-4 space-y-2 text-sm text-[var(--dpf-text)]">
+                {suggestions.map((suggestion) => (
+                  <li key={suggestion} className="rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2">
+                    {suggestion}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+              <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+                Proof before promotion
+              </h2>
+              <p className="mt-2 text-sm text-[var(--dpf-muted)]">
+                Campaigns will perform better when the offer is backed by credible
+                evidence. The strategist should help decide what proof to collect,
+                write, or publish first.
+              </p>
+              <p className="mt-4 rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)]">
+                {proofFocus}
+              </p>
+            </div>
+          </section>
+
+          <MarketingStrategyOverview snapshot={snapshot} />
+        </div>
+      </details>
+
+      {/* Publish/review queues are deferred until there is an archetype-fit
+          campaign or real review work, so a fresh workspace is not overloaded
+          with empty publish surfaces (BI-8AB9C904). */}
+      {disclosure.showPublishReview ? (
+        <details
+          data-testid="marketing-publish-review"
+          open={disclosure.publishReviewOpenByDefault}
+          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+        >
+          <summary className="cursor-pointer list-none rounded-lg px-6 py-4 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]">
+            Review &amp; publish queue
+            <span className="ml-2 font-normal text-[var(--dpf-muted)]">
+              Drafts awaiting approval, ready-to-publish, and inbound replies
+            </span>
+          </summary>
+          <div className="border-t border-[var(--dpf-border)] p-6">
+            <ApprovalQueuePanel
+              pendingDrafts={snapshot.pendingDrafts}
+              approvedDrafts={snapshot.approvedDrafts}
+              connectedChannels={snapshot.connectedChannels}
+              inboundMessages={snapshot.inboundMessages}
+              category={snapshot.storefront.category}
+            />
+          </div>
+        </details>
+      ) : (
+        <section
+          data-testid="marketing-publish-deferred"
+          className="rounded-lg border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6"
+        >
           <h2 className="text-base font-semibold text-[var(--dpf-text)]">
-            What to clarify with the strategist
+            Review &amp; publish unlock with your first campaign
           </h2>
-          <ul className="mt-4 space-y-2 text-sm text-[var(--dpf-text)]">
-            {suggestions.map((suggestion) => (
-              <li key={suggestion} className="rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2">
-                {suggestion}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-          <h2 className="text-base font-semibold text-[var(--dpf-text)]">
-            Proof before promotion
-          </h2>
-          <p className="mt-2 text-sm text-[var(--dpf-muted)]">
-            Campaigns will perform better when the offer is backed by credible
-            evidence. The strategist should help decide what proof to collect,
-            write, or publish first.
+          <p className="mt-2 max-w-2xl text-sm text-[var(--dpf-muted)]">
+            Once you have a {archetypeName}-fit campaign with drafts to approve, the review and
+            publish queues appear here. Start a marketing review above to shape that first campaign.
           </p>
-          <p className="mt-4 rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)]">
-            {proofFocus}
-          </p>
-        </div>
-      </section>
-
-      <MarketingStrategyOverview snapshot={snapshot} />
-
-      <ApprovalQueuePanel
-        pendingDrafts={snapshot.pendingDrafts}
-        approvedDrafts={snapshot.approvedDrafts}
-        connectedChannels={snapshot.connectedChannels}
-        inboundMessages={snapshot.inboundMessages}
-        category={snapshot.storefront.category}
-      />
+        </section>
+      )}
     </div>
   );
 }
