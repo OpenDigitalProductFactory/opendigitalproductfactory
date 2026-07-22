@@ -19,7 +19,7 @@
 //
 // Design: docs/superpowers/specs/2026-07-22-restaurant-capacity-legibility-design.md
 
-import type { Intent } from "@/components/ui/report-kit";
+import { resolveIntent, type Intent } from "@/components/ui/report-kit/statusColors";
 
 // ── Canonical capacity vocabulary ───────────────────────────────────────────
 
@@ -141,13 +141,6 @@ export function seatsFromName(name: string): number | null {
 
 // ── State + intent mapping ───────────────────────────────────────────────────
 
-const STATE_INTENT: Record<TableCapacityState, Intent> = {
-  available: "success",
-  occupied: "info",
-  "turning-soon": "warning",
-  blocked: "danger",
-};
-
 const STATE_LABEL: Record<TableCapacityState, string> = {
   available: "Available",
   occupied: "Occupied",
@@ -155,8 +148,10 @@ const STATE_LABEL: Record<TableCapacityState, string> = {
   blocked: "Blocked",
 };
 
+// Colors resolve through the central statusColors registry (domain
+// "restaurantCapacity"), never a local status→color map (AGENTS.md §12).
 export function capacityStateIntent(state: TableCapacityState): Intent {
-  return STATE_INTENT[state];
+  return resolveIntent("restaurantCapacity", state);
 }
 
 export function capacityStateLabel(state: TableCapacityState): string {
@@ -227,15 +222,8 @@ function makePeriod(now: Date, dayOffset: number, startMin: number, endMin: numb
   return { key: `period-${startMin}`, label: periodLabel(startMin), startsAt, endsAt };
 }
 
-const READINESS_INTENT: Record<ServicePeriodReadiness, Intent> = {
-  ready: "success",
-  attention: "warning",
-  "not-ready": "danger",
-  closed: "neutral",
-};
-
 export function readinessIntent(readiness: ServicePeriodReadiness): Intent {
-  return READINESS_INTENT[readiness];
+  return resolveIntent("servicePeriodReadiness", readiness);
 }
 
 // ── Booking-status helpers ───────────────────────────────────────────────────

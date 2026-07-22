@@ -56,6 +56,21 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // Restaurant table capacity state (BI-7C95A586). Tables & Capacity page,
+  // Workspace chips, and public booking all resolve here — one registry.
+  restaurantCapacity: {
+    available: "success",
+    occupied: "info",
+    "turning-soon": "warning",
+    blocked: "danger",
+  },
+  // Service-period readiness — "are we ready for the next service?" (BI-7C95A586).
+  servicePeriodReadiness: {
+    ready: "success",
+    attention: "warning",
+    "not-ready": "danger",
+    closed: "neutral",
+  },
   // Owner attention cards: impact words, never raw risk scores.
   ownerDecisionImpact: {
     money: "warning",
