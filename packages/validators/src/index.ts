@@ -10,4 +10,5 @@ export * from "./field-dispatch-warranty";
 export * from "./field-dispatch-assignment";
 export * from "./field-dispatch-policy";
 export * from "./readability";
+export * from "./setup-ux";
 export * from "./storefront";
