@@ -1,5 +1,5 @@
 {
-  "bootstrapped": true,
+  "bootstrapped": false,
   "generator": "apps/web/scripts/ux-route-sweep.ts",
   "routes": {
     "/admin": {
