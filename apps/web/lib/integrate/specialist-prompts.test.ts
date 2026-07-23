@@ -3,6 +3,8 @@
 // The drift shipped once (shadow-dpf-*/animate-fade-in taught as "tokens",
 // hand-rolled animate-pulse skeletons taught while the guard bans them);
 // this test makes the reconciliation permanent.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 // specialist-prompts.ts pulls the DB-backed prompt loader (and transitively
@@ -15,14 +17,42 @@ import { SPECIALIST_PROMPTS } from "./specialist-prompts";
 const FRONTEND_ENGINEER_PROMPT = SPECIALIST_PROMPTS["frontend-engineer"];
 
 describe("specialist prompt vs enforced-guard consistency (BI-8213E88B)", () => {
-  it("does not advertise utilities the Tailwind v4 setup never generates", () => {
-    // These classes only exist in the stale v3 tailwind.config.ts (unread by
-    // v4 — no @config directive) and silently no-op at runtime. Teaching
-    // them is allowed only inside an explicit do-NOT-use warning.
-    for (const dead of ["shadow-dpf-xs", "shadow-dpf-sm", "shadow-dpf-md"]) {
-      expect(FRONTEND_ENGINEER_PROMPT).not.toContain(`- ${dead}`);
+  it("only advertises dpf utilities the generated token CSS actually defines", () => {
+    // BI-CD81FF7C inverted this check. It used to be a hardcoded deny-list of
+    // classes the stale v3 config declared and v4 never generated. Now that the
+    // L0 scales are generated from design/tokens.json, the durable guard is
+    // grounded in the generated output instead: every dpf utility the prompt
+    // teaches must correspond to a real @theme entry. A deny-list would have to
+    // be re-edited every time the scales grow; this cannot drift.
+    const generated = readFileSync(
+      resolve(__dirname, "../../app/tokens.generated.css"),
+      "utf8",
+    );
+    // Utility class -> the @theme namespace that must define it.
+    const NAMESPACE: Record<string, string> = {
+      shadow: "--shadow-dpf-",
+      rounded: "--radius-dpf-",
+      animate: "--animate-dpf-",
+      duration: "--duration-dpf-",
+      ease: "--ease-dpf-",
+    };
+    const taught = FRONTEND_ENGINEER_PROMPT.matchAll(
+      /\b(shadow|rounded|animate|duration|ease)-dpf-([a-z0-9-]+)/g,
+    );
+    const undefinedUtilities: string[] = [];
+    for (const [utility, prefix, step] of taught) {
+      if (!generated.includes(`${NAMESPACE[prefix]}${step}:`)) undefinedUtilities.push(utility);
     }
-    expect(FRONTEND_ENGINEER_PROMPT).not.toMatch(/animate-(fade-in|slide-up|scale-in) \(\d+ms/);
+    expect(
+      undefinedUtilities,
+      `prompt teaches utilities with no @theme entry in tokens.generated.css:\n${undefinedUtilities.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("still refuses the pre-L0 spellings that never generated anything", () => {
+    // The unprefixed animate-fade-in / animate-slide-up / animate-scale-in were
+    // the v3-config ghosts. They are gone; the canonical spellings carry -dpf-.
+    expect(FRONTEND_ENGINEER_PROMPT).not.toMatch(/\banimate-(fade-in|slide-up|scale-in)\b/);
   });
 
   it("does not teach hand-rolled loading patterns the CI guard blocks", () => {

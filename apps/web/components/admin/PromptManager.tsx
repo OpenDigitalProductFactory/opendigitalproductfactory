@@ -293,7 +293,7 @@ export function PromptManager({
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-4 right-4 z-50 rounded bg-[var(--dpf-surface-2)] px-4 py-2 text-sm text-[var(--dpf-text)] shadow-dpf-md animate-fade-in">
+        <div className="fixed bottom-4 right-4 z-50 rounded bg-[var(--dpf-surface-2)] px-4 py-2 text-sm text-[var(--dpf-text)] shadow-dpf-md animate-dpf-fade-in">
           {toast}
         </div>
       )}

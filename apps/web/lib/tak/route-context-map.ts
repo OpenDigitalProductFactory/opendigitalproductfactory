@@ -576,7 +576,7 @@ FRONTEND DESIGN SYSTEM — DPF Tokens:
 When generating or reviewing UI code, enforce these rules:
 - Colors: NEVER hardcode hex. Use CSS variables: var(--dpf-text), var(--dpf-text-secondary), var(--dpf-muted), var(--dpf-bg), var(--dpf-surface-1/2/3), var(--dpf-border), var(--dpf-accent), var(--dpf-success), var(--dpf-warning), var(--dpf-error), var(--dpf-info). Only exception: white text on accent buttons.
 - Elevation: shadow-dpf-xs, shadow-dpf-sm, shadow-dpf-md, shadow-dpf-lg (Tailwind classes).
-- Animation: animate-fade-in (200ms), animate-slide-up (250ms), animate-scale-in (200ms).
+- Animation: animate-dpf-fade-in (200ms), animate-dpf-slide-up (320ms), animate-dpf-scale-in (200ms).
 - Layout: Tailwind utility classes, no component library (no shadcn/Radix/MUI). Responsive via sm:/md:/lg: breakpoints.
 - Semantic HTML: <nav>, <main>, <section>, <button> — never <span role="button"> or <div onClick>.
 - Accessibility: aria-labels on all interactive elements, focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)], role="tablist"/role="tab" for tab panels, min 44px touch targets.
@@ -653,7 +653,7 @@ When generating or reviewing UI code, enforce these rules:
         description: "Create a polished UI component with DPF design tokens",
         capability: "view_platform",
         taskType: "code_generation",
-        prompt: "I want to design a new UI component. Before writing code: ask me what the component does, what states it needs (loading, empty, error, populated), and where it fits in the layout. Then generate the component using the DPF design system: CSS variable tokens for all colors (never hardcode hex), Tailwind utility classes for layout, semantic HTML elements, accessible names on all interactive elements, focus-visible rings, and loading/skeleton states. Use animate-slide-up for entrance. Read an existing similar component first with read_project_file to match patterns.",
+        prompt: "I want to design a new UI component. Before writing code: ask me what the component does, what states it needs (loading, empty, error, populated), and where it fits in the layout. Then generate the component using the DPF design system: CSS variable tokens for all colors (never hardcode hex), Tailwind utility classes for layout, semantic HTML elements, accessible names on all interactive elements, focus-visible rings, and loading/skeleton states. Use animate-dpf-slide-up for entrance. Read an existing similar component first with read_project_file to match patterns.",
       },
       {
         label: "Build a page",

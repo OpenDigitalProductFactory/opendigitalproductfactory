@@ -13,7 +13,9 @@
     "build:route-manifest": "tsx scripts/build-route-manifest.ts",
     "check:route-manifest": "tsx scripts/build-route-manifest.ts --check",
     "build:route-audience": "tsx scripts/build-route-audience.ts",
-    "check:route-audience": "tsx scripts/build-route-audience.ts --check"
+    "check:route-audience": "tsx scripts/build-route-audience.ts --check",
+    "build:design-tokens": "tsx scripts/build-design-tokens.ts",
+    "check:design-tokens": "tsx scripts/build-design-tokens.ts --check"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.12.1",

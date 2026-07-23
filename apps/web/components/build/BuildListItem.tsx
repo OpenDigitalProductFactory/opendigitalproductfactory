@@ -66,7 +66,7 @@ export function BuildListItem({
   return (
     <div
       data-testid={BUILD_STUDIO_TEST_IDS.buildListItem}
-      className="group mb-1 flex max-h-[128px] min-h-[88px] min-w-0 rounded-md border transition-all duration-150 hover:bg-[var(--dpf-surface-2)] hover:shadow-dpf-xs animate-slide-up"
+      className="group mb-1 flex max-h-[128px] min-h-[88px] min-w-0 rounded-md border transition-all duration-150 hover:bg-[var(--dpf-surface-2)] hover:shadow-dpf-xs animate-dpf-slide-up"
       style={{
         animationDelay: `${index * 30}ms`,
         animationFillMode: "backwards",
@@ -229,7 +229,7 @@ function FleetDensityRow({
         "py-0.5",
         "hover:bg-[var(--dpf-surface-2)]",
         FLEET_ROW_HEIGHT_CLASS,
-        "animate-slide-up",
+        "animate-dpf-slide-up",
       ].join(" ")}
       style={{
         animationDelay: `${index * 30}ms`,

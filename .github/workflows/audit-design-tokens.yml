@@ -1,0 +1,63 @@
+name: Design Token Freshness
+
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+# Read-only freshness check; needs no write surface.
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/web/design/tokens.json"
+      - "apps/web/app/tokens.generated.css"
+      - "apps/web/scripts/build-design-tokens.ts"
+      - ".github/workflows/audit-design-tokens.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: audit-design-tokens-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this guard does
+# --------------------
+# Regenerates apps/web/app/tokens.generated.css in-memory from the DTCG source
+# (apps/web/design/tokens.json) and fails if it differs from the committed file.
+# Mirrors audit-route-manifest.yml — same generated-artifact-freshness pattern.
+#
+# This is the L0 leg of EP-UX-SYSTEM
+# (docs/superpowers/specs/2026-07-22-holistic-ux-system-and-agent-codification-design.md,
+# §6 L0, BI-CD81FF7C). The token scales are the substrate the L4 token lint and the
+# route budget sweep both measure against, so a hand-edited or stale generated file
+# would quietly desynchronise every downstream gate.
+#
+# BELT AND BRACES: staleness is ALSO asserted by a unit test
+# (apps/web/scripts/build-design-tokens.test.ts, "the committed CSS is in sync with
+# the DTCG source"), which runs under the required Unit check. So a stale commit
+# fails a blocking gate even before this advisory workflow is added to branch
+# protection.
+#
+# To fix a STALE failure: pnpm --filter web build:design-tokens && commit the result.
+
+jobs:
+  freshness:
+    name: Design Token Freshness
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check design tokens are up to date
+        run: pnpm --filter web check:design-tokens

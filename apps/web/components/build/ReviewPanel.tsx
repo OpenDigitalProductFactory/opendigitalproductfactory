@@ -113,7 +113,7 @@ function Section({
         )}
       </button>
       {open && (
-        <div className="px-3 pb-3 pt-1 border-t border-[var(--dpf-border)] animate-fade-in">
+        <div className="px-3 pb-3 pt-1 border-t border-[var(--dpf-border)] animate-dpf-fade-in">
           {children}
         </div>
       )}
@@ -414,7 +414,7 @@ function TaskResultsSection({ results }: { results: NormalizedTaskResults }) {
               </button>
 
               {isExpanded && (
-                <div className="ml-9 mt-1 mb-2 space-y-2 animate-fade-in">
+                <div className="ml-9 mt-1 mb-2 space-y-2 animate-dpf-fade-in">
                   {/* Orchestrator shape: outcome + specialist */}
                   <div className="text-xs flex gap-3">
                     <span>
@@ -828,7 +828,7 @@ function UxTestsSection({
               </span>
             </button>
             {expandedStep === i && (
-              <div className="mt-1 ml-4 p-2 rounded bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] animate-fade-in">
+              <div className="mt-1 ml-4 p-2 rounded bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] animate-dpf-fade-in">
                 {s.screenshotUrl && (
                   <img src={s.screenshotUrl} alt={`Step ${i + 1}`} className="rounded border border-[var(--dpf-border)] mb-2 max-w-full" />
                 )}

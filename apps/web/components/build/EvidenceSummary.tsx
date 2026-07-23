@@ -12,7 +12,7 @@ type Props = {
 export function EvidenceSummary({ build, loading }: Props) {
   if (loading) {
     return (
-      <div className="space-y-2 animate-fade-in" aria-busy="true">
+      <div className="space-y-2 animate-dpf-fade-in" aria-busy="true">
         <Skeleton width={112} height={12} />
         {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="flex items-center gap-2 px-3 py-2.5 rounded bg-[var(--dpf-surface-2)]">
