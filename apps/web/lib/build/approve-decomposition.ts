@@ -94,6 +94,12 @@ export type ApproveDecompositionResult =
       ok: false;
       error: string;
       code: ApproveDecompositionErrorCode;
+      /**
+       * For `backlog-item-already-decomposed`: the semantic id of the Epic that
+       * already owns this backlog item, when it could be read. Null when the
+       * conflict surfaced as a write-time race rather than a precondition.
+       */
+      existingEpicId?: string | null;
     };
 
 /**
@@ -119,6 +125,7 @@ export type ApproveDecompositionErrorCode =
   | "build-missing-design-doc"
   | "build-design-review-not-passed"
   | "build-already-decomposed"
+  | "backlog-item-already-decomposed"
   | "candidate-validation-failed"
   | "invariant-violation";
 
@@ -127,6 +134,17 @@ export type ApproveDecompositionErrorCode =
 export type ApproveDecompositionDb = {
   featureBuild: {
     findUnique: typeof prisma.featureBuild.findUnique;
+  };
+  /**
+   * Reads the at-most-one Epic already anchored to a BacklogItem.
+   * Epic.originatingBacklogItemId is `@unique` (spec Q5 hybrid FK), so this is a
+   * genuine findUnique — see the one-epic-per-backlog-item precondition below.
+   */
+  epic: {
+    findUnique: (args: {
+      where: { originatingBacklogItemId: string };
+      select: { epicId: true };
+    }) => Promise<{ epicId: string } | null>;
   };
   $transaction: <T>(
     fn: (tx: TxShape) => Promise<T>,
@@ -157,6 +175,52 @@ export type TxShape = {
 };
 
 // ---------------------------------------------------------------------------
+// One-epic-per-backlog-item conflict (BI-1D0CA7A0)
+// ---------------------------------------------------------------------------
+
+/**
+ * True for the Prisma unique-constraint error raised when a second Epic is
+ * inserted for a BacklogItem that already has one
+ * (`Epic.originatingBacklogItemId @unique`). Duck-typed rather than
+ * `instanceof PrismaClientKnownRequestError` so this module stays unit-testable
+ * with a fake db and free of a Prisma runtime import.
+ *
+ * `meta.target` is the field-name array on most connectors and the constraint
+ * name (`Epic_originatingBacklogItemId_key`) on some, so match on substring.
+ */
+function isEpicBacklogItemUniqueConflict(err: unknown): boolean {
+  const e = err as { code?: unknown; meta?: { target?: unknown } } | null | undefined;
+  if (!e || e.code !== "P2002") return false;
+  const target = e.meta?.target;
+  const fields = Array.isArray(target)
+    ? target.map((t) => String(t))
+    : typeof target === "string"
+      ? [target]
+      : [];
+  return fields.some((field) => field.includes("originatingBacklogItemId"));
+}
+
+/**
+ * The typed, NON-THROWING result for "this backlog item is already decomposed".
+ * Callers (autoResolveDecomposeRequiredGate, the MCP tool, the operator UI) get
+ * a code they can branch on instead of a raw P2002.
+ */
+function backlogItemAlreadyDecomposed(
+  itemLabel: string,
+  existingEpicId: string | null,
+): ApproveDecompositionResult {
+  return {
+    ok: false,
+    code: "backlog-item-already-decomposed",
+    existingEpicId,
+    error:
+      `Backlog item ${itemLabel} is already decomposed into Epic ${existingEpicId ?? "(unknown)"}. ` +
+      `Epic.originatingBacklogItemId is unique — a backlog item has at most one decomposition epic, ` +
+      `and that epic's child builds already carry this work. Decompose this build no further.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -166,6 +230,11 @@ export async function approveDecomposition(
   const now = args.now ?? (() => new Date());
   const db: ApproveDecompositionDb = args.db ?? {
     featureBuild: { findUnique: prisma.featureBuild.findUnique.bind(prisma.featureBuild) },
+    epic: {
+      findUnique: prisma.epic.findUnique.bind(
+        prisma.epic,
+      ) as unknown as ApproveDecompositionDb["epic"]["findUnique"],
+    },
     $transaction: ((fn) => prisma.$transaction(fn as never)) as ApproveDecompositionDb["$transaction"],
   };
   const idGen = args.idGen ?? {
@@ -238,6 +307,38 @@ export async function approveDecomposition(
       };
     }
     throw err;
+  }
+
+  // 3b. One originating BacklogItem → at most one decomposition Epic (BI-1D0CA7A0).
+  //
+  // Epic.originatingBacklogItemId is `@unique` (spec Q5 hybrid FK). A BI whose
+  // first build was decomposed keeps that link forever, but supersession clears
+  // BacklogItem.activeBuildId — so the daily governed tee-up happily re-promotes
+  // the SAME item into a second top-level build, which design-reviews to the same
+  // `decompose-required` verdict and arrives right here.
+  //
+  // Before this guard the epic INSERT below raised a raw P2002 that escaped
+  // approveDecomposition -> autoResolveDecomposeRequiredGate (skipping its own
+  // monolithic-override fallback entirely) -> the resume path's catch-all. Net
+  // effect on the live install: every portal restart/swap logged an unactionable
+  // `prisma:error ... Unique constraint failed on the fields:
+  // (originatingBacklogItemId)` — the exact channel operators scan after a
+  // self-upgrade — and the build made no progress either way.
+  //
+  // Detect it up front and return a typed result. Note this is a precondition,
+  // not a lock; the write-time backstop around the transaction below closes the
+  // check-then-act race.
+  if (build.originatingBacklogItemId) {
+    const existingEpic = await db.epic.findUnique({
+      where: { originatingBacklogItemId: build.originatingBacklogItemId },
+      select: { epicId: true },
+    });
+    if (existingEpic) {
+      return backlogItemAlreadyDecomposed(
+        build.originator?.itemId ?? build.originatingBacklogItemId,
+        existingEpic.epicId,
+      );
+    }
   }
 
   // 4. Candidate validation — pure, against the parent designDoc.
@@ -342,7 +443,7 @@ export async function approveDecomposition(
     })),
   };
 
-  const txResult = await db.$transaction(async (tx) => {
+  const runTransaction = () => db.$transaction(async (tx) => {
     if ("$queryRaw" in tx && "platformCapability" in tx && "runtimeCapabilityTransition" in tx) {
       await admitRuntimeGuardedWork(tx as never, "build-studio-active");
     }
@@ -545,6 +646,23 @@ export async function approveDecomposition(
       unblockedChildBuildIds,
     };
   });
+
+  // Write-time backstop for the precondition above (BI-1D0CA7A0): two resume
+  // ticks — or a resume racing the operator's Approve — can both pass the read
+  // and only one INSERT wins. Map that P2002 to the SAME typed result instead of
+  // letting it escape as a `prisma:error`. Any other failure still throws.
+  let txResult: Awaited<ReturnType<typeof runTransaction>>;
+  try {
+    txResult = await runTransaction();
+  } catch (err) {
+    if (isEpicBacklogItemUniqueConflict(err)) {
+      return backlogItemAlreadyDecomposed(
+        build.originator?.itemId ?? build.originatingBacklogItemId ?? args.buildId,
+        null,
+      );
+    }
+    throw err;
+  }
 
   // BI-E49DDE47: children land in plan with designDoc copied, but nothing
   // previously fired plan_dispatch — they sat "gone quiet" forever. Kick

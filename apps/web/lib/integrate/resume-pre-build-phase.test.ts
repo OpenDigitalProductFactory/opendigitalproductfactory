@@ -249,6 +249,46 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect(out).toMatchObject({ kind: "resumed", via: "autoResolveDecomposeRequiredGate" });
   });
 
+  // BI-1D0CA7A0 — the duplicate-promotion strand. Live symptom: two builds off
+  // the same BacklogItem (the tee-up re-promoted it after the first was
+  // superseded into an Epic) meant every restart/swap re-attempted decomposition
+  // and logged `prisma:error ... Unique constraint failed on the fields:
+  // (originatingBacklogItemId)`. Resume must report it and stop, NOT re-attempt
+  // and NOT fall through to ideate re-dispatch or a review re-run.
+  it("stops without re-attempting when the backlog item is already decomposed", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: {
+        decision: "pass",
+        sizeAssessment: { decision: "decompose-required" },
+        decompositionCandidates: { latest: [{ candidateId: "candidate-1", childScopes: [] }] },
+      },
+      originatingBacklogItemId: "bi-1",
+      parentEpicId: null,
+    });
+    platformDevConfigFindUniqueMock.mockResolvedValue({ governedBacklogEnabled: true });
+    autoResolveDecomposeMock.mockResolvedValue({
+      action: "already-decomposed",
+      existingEpicId: "EP-5F45F138",
+      detail: "Backlog item BI-C47A568C is already decomposed into Epic EP-5F45F138.",
+    });
+
+    const first = await resumePreBuildPhase({ buildId: "FB-DUP", phase: "ideate", userId: "uD" });
+    const second = await resumePreBuildPhase({ buildId: "FB-DUP", phase: "ideate", userId: "uD" });
+
+    for (const out of [first, second]) {
+      expect(out.kind).toBe("skipped");
+      expect(out).toMatchObject({
+        reason: expect.stringContaining("EP-5F45F138"),
+      });
+    }
+    // No expensive re-work on either pass: no ideate re-dispatch, no review
+    // re-run, no propose_build_decomposition.
+    expect(dispatchIdeateMock).not.toHaveBeenCalled();
+    expect(executeToolMock).not.toHaveBeenCalled();
+  });
+
   it("advances a parked governed-autopilot build after an auto-override (re-runs review, does not park)", async () => {
     findUniqueMock.mockResolvedValue({
       designDoc: { problemStatement: "p" },

@@ -173,6 +173,36 @@ describe("autoResolveDecomposeRequiredGate", () => {
     expect(result).toMatchObject({ action: "overridden", reason: "approve-failed" });
   });
 
+  // BI-1D0CA7A0 — the one approval failure that must NOT become a monolithic
+  // override. The backlog item's existing Epic is already delivering this work
+  // through its children; overriding would build the feature a second time.
+  it("stops at already-decomposed instead of overriding when the BI already owns an Epic", async () => {
+    const deps = makeDeps({
+      approveDecomposition: vi.fn(async () => ({
+        ok: false as const,
+        code: "backlog-item-already-decomposed" as const,
+        existingEpicId: "EP-5F45F138",
+        error: "Backlog item BI-C47A568C is already decomposed into Epic EP-5F45F138.",
+      })),
+    });
+    const result = await autoResolveDecomposeRequiredGate({
+      build: {
+        buildId: "FB-DUPLICATE",
+        parentEpicId: null,
+        originatingBacklogItemId: "bi-1",
+        designReview: reviewWith([candidate()]),
+      },
+      userId: "u",
+      governedBacklogEnabled: true,
+      deps,
+    });
+    expect(result).toMatchObject({
+      action: "already-decomposed",
+      existingEpicId: "EP-5F45F138",
+    });
+    expect(deps.recordDecompositionOverride).not.toHaveBeenCalled();
+  });
+
   it("auto-overrides a decomposed child without attempting decomposition", async () => {
     const deps = makeDeps();
     const result = await autoResolveDecomposeRequiredGate({

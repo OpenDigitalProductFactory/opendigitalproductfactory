@@ -310,6 +310,19 @@ export async function resumePreBuildPhase(params: {
               detail: `auto-decomposed into ${auto.childBuildIds.length} child build(s) under Epic ${auto.epicId}`,
             };
           }
+          if (auto.action === "already-decomposed") {
+            // Duplicate promotion of a BacklogItem whose decomposition Epic
+            // already exists (BI-1D0CA7A0). Re-attempting used to raise a raw
+            // P2002 here on EVERY restart/swap. Report it and stop; the pre-build
+            // age-out cap retires the duplicate build.
+            return {
+              kind: "skipped",
+              phase,
+              reason: `backlog item already decomposed into Epic ${
+                auto.existingEpicId ?? "(unknown)"
+              } — this build duplicates work its children already carry; not re-attempting decomposition.`,
+            };
+          }
           if (auto.action === "overridden") {
             // Monolithic override recorded — the gate no longer blocks. Fall
             // through to the normal review re-run below, which now advances

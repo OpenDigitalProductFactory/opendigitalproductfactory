@@ -33,7 +33,11 @@
 //   `park`, and the caller keeps the existing "wait for the operator" behavior.
 //
 // Contract: this module NEVER parks an eligible autopilot build. Every eligible
-// path returns `decomposed` or `overridden` so the pipeline keeps moving.
+// path returns `decomposed` or `overridden` so the pipeline keeps moving — with
+// one terminal exception (BI-1D0CA7A0): when the originating BacklogItem ALREADY
+// has a decomposition Epic, `already-decomposed` is returned. Moving that build
+// forward is not "keeping the pipeline moving", it is duplicating work the
+// existing epic's children are already delivering.
 
 import type { DecompositionCandidate } from "./decomposition-candidates";
 import type { ProposeDecompositionResult } from "./propose-decomposition";
@@ -86,6 +90,13 @@ export type AutoOverrideReason = "child" | "no-candidates" | "approve-failed";
 export type AutoResolveDecomposeResult =
   /** Not an autopilot build (or not governed) — caller keeps the park behavior. */
   | { action: "park" }
+  /**
+   * The originating BacklogItem is ALREADY decomposed into an Epic whose child
+   * builds carry this work (BI-1D0CA7A0). This build is a duplicate promotion —
+   * there is nothing to auto-resolve, and a monolithic override would rebuild
+   * work already in flight. Terminal: the caller stops re-attempting.
+   */
+  | { action: "already-decomposed"; existingEpicId: string | null; detail: string }
   /** Superseded into an Epic + child builds; parent is no longer live. */
   | {
       action: "decomposed";
@@ -193,6 +204,19 @@ export async function autoResolveDecomposeRequiredGate(
       epicId: approved.epicId,
       childBuildIds: approved.childBuildIds,
       candidateId: chosen.candidateId,
+    };
+  }
+
+  // The BI already has a decomposition Epic (BI-1D0CA7A0). This is the ONE
+  // approval failure that must NOT fall through to a monolithic override: the
+  // work is already being delivered by that epic's children, so overriding would
+  // push a duplicate build through plan → build and ship the feature twice.
+  // Stop here — the pre-build age-out cap (BI-A009313E) retires the duplicate.
+  if (approved.code === "backlog-item-already-decomposed") {
+    return {
+      action: "already-decomposed",
+      existingEpicId: approved.existingEpicId ?? null,
+      detail: approved.error,
     };
   }
 
