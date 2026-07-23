@@ -104,6 +104,16 @@ export async function recordKernelConsultInteraction(input: {
     agentId?: string | null;
     threadId?: string | null;
   } | null;
+  /**
+   * Caller-side view of how scoreable this consult actually was (BI-E0151DB2).
+   * Optional so existing callers keep compiling; when absent the fields persist
+   * as null rather than as a misleading zero.
+   */
+  signalQuality?: {
+    usable: boolean;
+    optionsWithFeatures: number;
+    optionCount: number;
+  } | null;
 }): Promise<KernelConsultLedgerOutcome> {
   try {
     const profileId = input.callerContext.governingProfileId;
@@ -189,6 +199,17 @@ export async function recordKernelConsultInteraction(input: {
         insufficientSignal: input.result.flags.insufficientSignal === true,
         commandmentConflictPrinciples: input.result.flags.commandmentConflictPrinciples,
         structuredCoverage: input.result.flags.structuredCoverage,
+        // BI-E0151DB2. Signal quality must be QUERYABLE, not just inferable.
+        // Before this, answering "how often does the kernel abstain, and why?"
+        // meant inferring it from outcomeType='escalate' — which conflates
+        // insufficient signal (an agent supplied no scoreable features) with a
+        // commandment conflict (genuine doctrine collision needing a human).
+        // Those need opposite responses, so the ledger names them apart.
+        commandmentConflict: input.result.flags.commandmentConflict === true,
+        semanticFallbackRatio: input.result.flags.semanticFallbackRatio ?? null,
+        optionsWithFeatures: input.signalQuality?.optionsWithFeatures ?? null,
+        optionCount: input.signalQuality?.optionCount ?? null,
+        signalUsable: input.signalQuality?.usable ?? null,
         optionDescriptions: input.optionDescriptions,
         topContributors,
       },

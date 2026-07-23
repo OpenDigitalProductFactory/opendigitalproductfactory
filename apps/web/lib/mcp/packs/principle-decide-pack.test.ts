@@ -29,7 +29,13 @@ vi.mock("@dpf/db", () => ({
     semanticFallbackWarnRatio: 0.5,
   },
 }));
-vi.mock("@dpf/db/wiki-taxonomy", () => ({
+// Spread the ACTUAL taxonomy rather than hand-listing it: the pack now imports
+// PRINCIPLE_DIMENSIONS / PRINCIPLE_COST_DIMENSIONS (via the dimension catalogue,
+// BI-E0151DB2), and a hand-maintained fake registry here would drift from the
+// real one — reintroducing the class of defect the catalogue exists to prevent.
+// The ring scopes stay pinned because these tests assert on them directly.
+vi.mock("@dpf/db/wiki-taxonomy", async (importActual) => ({
+  ...(await importActual<typeof import("@dpf/db/wiki-taxonomy")>()),
   PRINCIPLE_RING_SCOPES: [
     "ring-1-coworker",
     "ring-2-workflow",
@@ -168,5 +174,183 @@ describe("principle-decide pack — handler behavior (delegation preserved)", ()
     expect(res.success).toBe(false);
     expect(res.error).toBe("Invalid ringScope value");
     expect(db.listPrinciplesByTier).not.toHaveBeenCalled();
+  });
+});
+
+// ── BI-E0151DB2: signal visibility + feature-key consistency ────────────────
+//
+// principle_decide ran 165 consults with a 16.7% insufficient-signal rate
+// because its `features` parameter was documented as "Optional" with the valid
+// key set named only by source-file path, and the cost-axis sign convention
+// surfaced nowhere. These tests pin the three fixes plus the unreported fourth
+// defect: an unknown feature key was silently never read.
+
+describe("principle-decide pack — feature key validation", () => {
+  const base = {
+    context: "x",
+    callingPopulation: "human" as const,
+  };
+
+  it("REJECTS an unknown dimension key before any lookup, like ringScope does", async () => {
+    const res = await principleDecidePack.handlers.principle_decide(
+      {
+        ...base,
+        options: [{ id: "a", description: "A", features: { maintainability: 0.9 } }],
+      },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("Invalid option features");
+    // Never reached retrieval — the same fail-fast posture as ringScope.
+    expect(db.listPrinciplesByTier).not.toHaveBeenCalled();
+  });
+
+  it("names the offending option and suggests the nearest real dimension", async () => {
+    const res = await principleDecidePack.handlers.principle_decide(
+      {
+        ...base,
+        options: [{ id: "opt-two", description: "B", features: { blast_radius_score: 0.4 } }],
+      },
+      "u1",
+    );
+    expect(res.message).toContain("opt-two");
+    expect(res.message).toContain("blast_radius");
+  });
+
+  it("rejects an out-of-range feature value", async () => {
+    const res = await principleDecidePack.handlers.principle_decide(
+      { ...base, options: [{ id: "a", description: "A", features: { reusability: 4 } }] },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("Invalid option features");
+  });
+
+  it("accepts a valid feature map and proceeds to scoring", async () => {
+    wiki.decide.mockReturnValue({
+      recommendation: { optionId: "a", composite: 1, margin: 0.5, confidence: "high" },
+      scores: [],
+      flags: { insufficientSignal: false, structuredCoverage: "strong", semanticFallbackRatio: 0 },
+      reasoning: "ok",
+    });
+    const res = await principleDecidePack.handlers.principle_decide(
+      {
+        ...base,
+        options: [{ id: "a", description: "A", features: { blast_radius: 0.2, reusability: 0.8 } }],
+      },
+      "u1",
+    );
+    expect(res.success).toBe(true);
+    expect(db.listPrinciplesByTier).toHaveBeenCalled();
+  });
+});
+
+describe("principle-decide pack — abstention is machine-checkable", () => {
+  it("marks signalQuality.usable=false and says so in the first clause when signal is insufficient", async () => {
+    wiki.decide.mockReturnValue({
+      recommendation: null,
+      scores: [],
+      flags: { insufficientSignal: true, structuredCoverage: "strong", semanticFallbackRatio: 0 },
+      reasoning: "Insufficient signal.",
+    });
+    const res = await principleDecidePack.handlers.principle_decide(
+      {
+        context: "x",
+        callingPopulation: "human",
+        options: [{ id: "a", description: "A" }, { id: "b", description: "B" }],
+      },
+      "u1",
+    );
+    expect(res.success).toBe(true); // advisory tool stays advisory
+    expect(res.message).toMatch(/^NO RECOMMENDATION/);
+    expect(res.data).toMatchObject({
+      recommendation: null,
+      signalQuality: { usable: false, insufficientSignal: true, optionsWithFeatures: 0, optionCount: 2 },
+    });
+  });
+
+  it("tells a caller who supplied NO features exactly why the score was zero", async () => {
+    wiki.decide.mockReturnValue({
+      recommendation: null,
+      scores: [],
+      flags: { insufficientSignal: true, structuredCoverage: "strong", semanticFallbackRatio: 0 },
+      reasoning: "Insufficient signal.",
+    });
+    const res = await principleDecidePack.handlers.principle_decide(
+      { context: "x", callingPopulation: "human", options: [{ id: "a", description: "A" }] },
+      "u1",
+    );
+    const advisory = (res.data as { signalQuality: { advisory: string } }).signalQuality.advisory;
+    expect(advisory).toMatch(/NO OPTION SUPPLIED/);
+    expect(advisory).toMatch(/not a neutral or tie result/);
+  });
+
+  it("marks usable=true and leaves no advisory on a healthy recommendation", async () => {
+    wiki.decide.mockReturnValue({
+      recommendation: { optionId: "a", composite: 2, margin: 1, confidence: "high" },
+      scores: [],
+      flags: { insufficientSignal: false, structuredCoverage: "strong", semanticFallbackRatio: 0 },
+      reasoning: "ok",
+    });
+    const res = await principleDecidePack.handlers.principle_decide(
+      {
+        context: "x",
+        callingPopulation: "human",
+        options: [{ id: "a", description: "A", features: { reusability: 0.9 } }],
+      },
+      "u1",
+    );
+    expect(res.message).toMatch(/^Recommends a/);
+    expect(res.data).toMatchObject({ signalQuality: { usable: true, advisory: null, optionsWithFeatures: 1 } });
+  });
+
+  it("persists signal quality to the ledger so the abstention rate is queryable", async () => {
+    wiki.decide.mockReturnValue({
+      recommendation: null,
+      scores: [],
+      flags: { insufficientSignal: true, structuredCoverage: "strong", semanticFallbackRatio: 0 },
+      reasoning: "Insufficient signal.",
+    });
+    await principleDecidePack.handlers.principle_decide(
+      { context: "x", callingPopulation: "human", options: [{ id: "a", description: "A" }] },
+      "u1",
+    );
+    expect(decision.recordKernelConsultInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signalQuality: { usable: false, optionsWithFeatures: 0, optionCount: 1 },
+      }),
+    );
+  });
+});
+
+describe("principle-decide pack — the dimension registry travels with the schema", () => {
+  const featuresSchema = (
+    principleDecidePack.definitions[0].inputSchema as {
+      properties: { options: { items: { properties: { features: Record<string, unknown> } } } };
+    }
+  ).properties.options.items.properties.features;
+
+  it("constrains feature keys machine-readably, so a coworker needs no repo access", () => {
+    const names = featuresSchema.propertyNames as { enum: string[] };
+    expect(names.enum).toEqual(expect.arrayContaining(["blast_radius", "reusability", "data_privacy"]));
+    expect(names.enum.length).toBeGreaterThanOrEqual(18);
+  });
+
+  it("bounds values to 0..1 in the schema itself", () => {
+    expect(featuresSchema.additionalProperties).toMatchObject({ type: "number", minimum: 0, maximum: 1 });
+  });
+
+  it("no longer points at a source file the caller cannot read", () => {
+    expect(featuresSchema.description as string).not.toContain("packages/db");
+  });
+
+  it("states that omitting features is not a neutral result", () => {
+    expect(featuresSchema.description as string).toMatch(/REQUIRED IN PRACTICE/);
+  });
+
+  it("surfaces the cost-axis sign convention at call time", () => {
+    const text = featuresSchema.description as string;
+    expect(text).toMatch(/HIGHER IS WORSE/);
+    expect(text).toContain("blast_radius");
   });
 });
