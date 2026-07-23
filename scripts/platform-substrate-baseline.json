@@ -1,9 +1,9 @@
 {
   "changeRationale": {
-    "prismaModelCount": "One AgentSurfaceReadiness heartbeat table (BI-D6DFC0E7) makes each build surface's already-computed toolchain readiness fleet-observable; it reuses the bootstrap's computeReadinessState rather than adding a parallel readiness concept."
+    "prismaModelCount": "One PartnerProgramEnrollment side table (BI-DE47EC0B) persists partner-only commercial terms (tier, territory, agreement ref, margin, deal-registration) for an account that resells/delivers DPF. The schema audit (docs/superpowers/specs/2026-07-23-partner-identity-schema-audit.md, kernel decision DI-CD377B58CA99) explicitly REJECTED the higher-substrate option — a parallel PartnerAccount duplicating the CustomerAccount commercial spine — in favour of reusing CustomerAccount as the canonical party row with this thin 1:1 side table, mirroring the existing Principal+EdgeNode / Principal+FederationLink pattern. Partner IDENTITY adds no model at all: it reuses Principal/PrincipalAlias string columns."
   },
-  "generatedAt": "2026-07-22T03:26:05.986Z",
-  "gitSha": "055fdc09b05430b79411abcbe6f9842c038163c8",
+  "generatedAt": "2026-07-23T01:22:22.336Z",
+  "gitSha": "cb5933b4051d90582ddd089755a8de7544676859",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -20,11 +20,11 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 522
+      "value": 523
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 14367
+      "value": 14411
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
