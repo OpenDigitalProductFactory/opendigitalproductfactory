@@ -353,6 +353,31 @@ jobs:
       - name: Run guard
         run: node scripts/check-archetype-completeness.mjs
 
+  stewardship-scope-guard:
+    name: Stewardship Scope Guard
+    runs-on: ubuntu-latest
+    # BI-C34E09B0 — architecture grows, stewardship scope does not, and nothing
+    # notices. A new Prisma model absent from TABLE_CLASSIFICATION falls through
+    # to DEFAULT_SENSITIVITY="confidential" (a guess presented as a decision),
+    # and absent from PURGE_POLICIES/RETAINED_DATASETS it is never swept,
+    # forever, silently. This gate makes a new model declare BOTH a
+    # classification and exactly one retention disposition — purge policy,
+    # retained dataset, or a typed exemption in scripts/stewardship-exemptions.txt
+    # for reference data that legitimately has no retention window. Integrity
+    # errors (dangling registry entries, unknown reasons, two dispositions) never
+    # grandfather; pre-existing coverage gaps ratchet down from
+    # scripts/stewardship-scope-baseline.txt. Kernel decision DI-F10DB4681452.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Gate logic unit tests
+        run: node --test scripts/check-stewardship-scope.test.mjs
+      - name: Run guard
+        run: node scripts/check-stewardship-scope.mjs
+
   finding-substrate-guard:
     name: Finding Substrate Guard
     runs-on: ubuntu-latest
