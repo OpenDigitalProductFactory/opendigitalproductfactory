@@ -82,7 +82,7 @@ jobs:
         run: pnpm --filter @dpf/db exec prisma migrate deploy
 
       - name: Seed the fixture organisation
-        run: pnpm --filter @dpf/db exec tsx prisma/seed.ts
+        run: pnpm --filter @dpf/db seed
 
       - name: Build the portal
         run: pnpm --filter web build
@@ -90,15 +90,24 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      # Poll with curl rather than adding a wait-on dependency just for this job
+      # (the New Dependency Gate exists to stop exactly that kind of drive-by).
       - name: Start the portal
         run: |
           pnpm --filter web start &
-          npx wait-on http://localhost:3000 --timeout 120000
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/login > /dev/null; then
+              echo "portal up after ${i}s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "portal did not become ready within 120s"; exit 1
 
-      # Reuses the existing e2e auth bootstrap so the sweep sees authenticated
-      # surfaces rather than freezing a login page as every route's baseline.
+      # Reuses the existing e2e login bootstrap verbatim so the sweep measures real
+      # owner surfaces instead of freezing the login page as every route's baseline.
+      # One login path, not two.
       - name: Establish an authenticated session
-        run: pnpm exec playwright test --config playwright.config.ts --grep @auth-setup || true
+        run: pnpm exec tsx e2e/auth-only.ts
 
       - name: Run the sweep
         run: pnpm --filter web ux:sweep
