@@ -383,6 +383,19 @@ fi
 echo "  Provider: $PROVIDER  Pull mode: $PULL_MODE  Base URL: $EMB_BASE_URL"
 echo "  Embedding model: $EMB_MODEL"
 
+# Re-list the provider's models and confirm the embedding model is actually
+# present. Returns 0 when present, non-zero otherwise. Used AFTER a pull so
+# success is reported on the model EXISTING — not on the pull request's exit
+# code, which returns 0 even when the download later fails or times out. That
+# false-success is how an install booted "healthy" with no embedding model and
+# the governance kernel silently ran on commandments only (BI-A95A4CB7 /
+# BI-512FBD20). POSIX sh: no `local`; a failed wget emits nothing so grep
+# returns non-zero, which is the correct "not present" answer.
+verify_embedding_present() {
+  # $1 = models listing URL, $2 = grep pattern
+  wget -qO- --timeout=10 "$1" 2>/dev/null | grep -q "$2"
+}
+
 # Skip path: do nothing, log explicitly.
 if [ "$PULL_MODE" = "skip" ]; then
   echo "  SKIP DPF_MODEL_PULL_MODE=skip; not verifying or pulling embedding model"
@@ -408,9 +421,17 @@ else
         echo "  Pulling ${EMB_MODEL} via Docker Model Runner (first run only)..."
         wget -qO- --timeout=120 --post-data "{\"model\":\"${EMB_MODEL}\"}" \
           --header="Content-Type: application/json" \
-          "${EMB_BASE_URL%/v1}/models/create" 2>/dev/null \
-          && echo "  OK Embedding model pulled" \
-          || echo "  WARN Could not auto-pull. Run: docker model pull ${EMB_MODEL}"
+          "${EMB_BASE_URL%/v1}/models/create" 2>/dev/null || true
+        # Verify the model is actually present now — the create request returns
+        # 0 even when the pull later fails, so re-list before claiming success.
+        if verify_embedding_present "${EMB_BASE_URL}/models" "nomic-embed-text"; then
+          echo "  OK Embedding model pulled and verified present (Docker Model Runner)"
+        else
+          echo "  ERROR '${EMB_MODEL}' is STILL NOT present after the pull attempt."
+          echo "        Semantic retrieval (wiki_query, principle_decide core/contextual) will be"
+          echo "        DEGRADED until it is available; the platform surfaces this at query time"
+          echo "        (BI-512FBD20). Fix: docker model pull ${EMB_MODEL}"
+        fi
       fi
       ;;
     ollama)
@@ -424,9 +445,17 @@ else
         echo "  Pulling '${EMB_MODEL}' via Ollama (first run; can take several minutes)..."
         wget -qO- --timeout=300 --post-data "{\"name\":\"${EMB_MODEL}\"}" \
           --header="Content-Type: application/json" \
-          "${OLLAMA_HOST}/api/pull" 2>/dev/null \
-          && echo "  OK Embedding model pulled (Ollama)" \
-          || echo "  WARN Could not auto-pull. Run: ollama pull ${EMB_MODEL}"
+          "${OLLAMA_HOST}/api/pull" 2>/dev/null || true
+        # Verify presence via /api/tags — the pull stream can return 0 while the
+        # model never finished landing, so confirm before claiming success.
+        if verify_embedding_present "${OLLAMA_HOST}/api/tags" "$EMB_MODEL"; then
+          echo "  OK Embedding model '${EMB_MODEL}' pulled and verified present (Ollama)"
+        else
+          echo "  ERROR '${EMB_MODEL}' is STILL NOT present after the pull attempt."
+          echo "        Semantic retrieval (wiki_query, principle_decide core/contextual) will be"
+          echo "        DEGRADED until it is available; the platform surfaces this at query time"
+          echo "        (BI-512FBD20). Fix: ollama pull ${EMB_MODEL}"
+        fi
       fi
       ;;
     *)
