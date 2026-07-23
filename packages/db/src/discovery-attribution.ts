@@ -162,6 +162,9 @@ function findRuleMatch(
   } else if (
     itemType.includes("network") || itemType === "subnet" || itemType === "gateway" || itemType === "router"
     || itemType === "vlan" || itemType === "switch" || itemType === "firewall" || itemType === "load_balancer"
+    // The internet uplink (gateway -> ISP) is network connectivity in the most
+    // literal sense — and the hop the whole estate depends on.
+    || itemType === "wan_uplink"
   ) {
     node = matchByNodeId((nodeId) => nodeId.includes("network_connectivity"))
         ?? matchByNodeId((nodeId) => nodeId.includes("network_management"));

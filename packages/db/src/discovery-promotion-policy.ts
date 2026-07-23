@@ -27,6 +27,10 @@ export const LEGACY_PROMOTABLE_TYPES: readonly string[] = [
   "ai_service",
   "application",
   "service",
+  // The internet uplink is a first-class managed dependency, not a runtime
+  // instance: it is the single hop the entire estate rides on, it has a vendor
+  // (the ISP), a service level, and an outage blast radius of "everything".
+  "wan_uplink",
 ];
 
 // Name patterns that indicate "this is a runtime instance / device / host
@@ -41,7 +45,13 @@ const NON_PRODUCT_NAME_PATTERNS: readonly RegExp[] = [
   /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/,     // raw IPv4 addresses
   /^[a-f0-9]{12}$/i,                     // bare Docker container IDs (short SHA)
   /^arp:/,                               // arp-discovered host placeholders
-  /\(WAN\d*\)/,                          // VLAN-shape names from unifi
+  // NOTE: `(WAN\d*)` was here, rejecting names like "Primary Starlink (WAN1)" as
+  // "VLAN-shape names from unifi". That was backwards: the WAN uplink is the
+  // single most critical dependency in the estate — the hop the whole business
+  // rides on — and this pattern kept it out of the portfolio entirely while
+  // Docker bridge rows sailed through. WAN uplinks are now first-class managed
+  // infrastructure (see discovery-collectors/unifi.ts `wan_uplink`), so the
+  // pattern is deliberately gone rather than narrowed.
   /^subnet:/,                            // bootstrap subnet placeholders
 ];
 
