@@ -1,5 +1,8 @@
 # Situational-Aware Decision Weighting — Design
 
+> **Amended 2026-07-23** by [`2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md`](2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md).
+> REINFORCED. RC2 is not only a situational-weighting blocker — it invalidates structured scoring for 70 of 95 principles (60 core + 9 contextual + 1 heuristic) and is the prerequisite for the tier rebalance. A corpus-wide dimension census is provided there. `cost_efficiency` remains used by zero principles, as this spec predicted.
+
 - **Status:** draft (Layer 1 implemented in the originating PR; Layer 2 design-review-gated)
 - **Date:** 2026-06-05
 - **Owning epic:** [`EP-REDUCTION-GEAR-ARCH`](../../../) — Reduction Gear Architecture / founder-kernel evolution
@@ -85,6 +88,7 @@ Layer 2 ships behind design review because it mutates the closed dimension regis
 ## 6. Acceptance criteria (Layer 1)
 
 - Committed back-test drives the real `decide()` engine with the real commandment vectors and asserts: (a) baseline reproduces the shortcut winning; (b) after promotion the proper fix wins with margin > tieMargin; (c) the cheap-sound-vs-rebuild anti-maximalism guard holds.
+
 - `wiki_lint` clean on the promoted principle (commandment requires direction + vector + ≥1 source; no new similarity/coherence blocker).
 - `pnpm typecheck` + the decision/wiki vitest suites pass.
 - Functional (post-merge / turnover): after the kernel reseeds, a live `principle_decide` on the §1 scenario recommends the proper fix.

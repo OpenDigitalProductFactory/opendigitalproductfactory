@@ -1,5 +1,8 @@
 # WSID (What Should I Do) — Per-Coworker Professional Corpus & Knowledge Graph
 
+> **Amended 2026-07-23** by [`2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md`](2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md).
+> DELIVERED (PR #2016). This spec did not address back-migration of kernel content authored before WSID existed, nor profession-local decision axes. Both are added there; the provenance invariant defined here is inherited unchanged.
+
 - **Date:** 2026-06-09
 - **Backlog:** BI-48B3CEC4 (epic EP-WSID)
 - **Status:** Draft for review

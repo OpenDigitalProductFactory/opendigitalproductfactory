@@ -19,6 +19,9 @@ relatedPrinciples:
   - docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md
 ---
 
+> **Amended 2026-07-23** by [`2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md`](2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md).
+> The promotion/retirement contract here governs SPINE axes. A second, lighter path is introduced there for profession-local axes: they require provenance and a declared projection onto a spine axis, not the full orthogonality argument. This is an explicit, recorded relaxation.
+
 # Founder kernel evolution discipline
 
 ## Summary
@@ -197,6 +200,7 @@ implements:
 - `decide(options, principles, config)` — composite scoring with three
   guardrails: `tieMargin` (low-confidence when margin < 0.2),
   `semanticFallbackWarnRatio` (weak coverage when > 40% semantic),
+
   `commandmentConflictThreshold` (flag when a commandment contributes
   < -0.5 to the winning option).
 

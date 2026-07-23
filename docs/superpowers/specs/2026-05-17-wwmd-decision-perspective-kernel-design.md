@@ -1,5 +1,8 @@
 # WWMD Decision Perspective Kernel Design
 
+> **Amended 2026-07-23** by [`2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md`](2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md).
+> The kernel assumed a single authoring tier. Tier-scoped axis ownership is added there: this registry is retained as the **spine**, not as the total vector space.
+
 | Field | Value |
 | --- | --- |
 | Date | 2026-05-17 |
@@ -367,6 +370,7 @@ Surface-specific routing:
 | Surface | Use WWMD when | Avoid WWMD when |
 | --- | --- | --- |
 | Build Studio | A deterministic phase gate has passed but the next phase still requires judgment, such as plan -> build readiness. | The plan fails structural review; deterministic feedback is enough. |
+
 | A2A / coworker handoff | A `TaskRun` or handoff artifact has competing recommendations, unresolved risk, or no accountable next step. | The handoff is a straightforward task transfer with clear input, output, owner, and authority. |
 | Deliberation | Deliberation has produced structured disagreement and the system must decide whether to synthesize, escalate, or defer. | Deliberation has already reached a low-risk consensus and no authority boundary is crossed. |
 | Skills | Creating, assigning, or granting tools to a skill changes coworker authority, risk, or reusable behavior. | A user needs one-off help or a missing UI affordance; use direct chat or improve the surface. |
