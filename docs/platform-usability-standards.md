@@ -105,6 +105,35 @@ Pre-migration routes carry recorded exemptions (`next-action-marker`, `lead-band
 they adopt their shell. The exemption list is checked in and shrinks visibly as the
 redesign lands — debt recorded, never hidden.
 
+**The gate that enforces this is the route budget sweep** (`.github/workflows/ux-route-sweep.yml`).
+It boots the real portal against an ephemeral database, drives every static page route with
+Playwright, and measures the **served DOM** — not an SSR string, which has neither client
+components nor honest visibility. Computed-invisible nodes are pruned in the page first, so
+a `hidden md:block` utility is resolved by the browser that actually applied it.
+
+Three enforcement modes, decided by `lib/ux-budget/ratchet.ts`:
+
+1. **Pre-existing route → regression ratchet.** A changed route may not exceed its own
+   frozen baseline on words, controls, fields, choices, sub-legible controls or axe
+   violations. Existing debt is reported every run but never blocks a PR that did not make
+   it worse. That restraint is deliberate: a gate that fails unrelated PRs on legacy debt
+   forces a blind mass-rewrite and gets switched off.
+2. **Net-new route → absolute budgets block.** No baseline to hide behind.
+3. **Structure → the ARIA snapshot must not drift.** Heading levels, landmarks and
+   accessible names, as a diffable YAML projection. "This PR flattened the h2/h3 structure
+   into a run of divs" is now visible in review.
+
+Arming it is one mechanical step. The baseline ships `bootstrapped: false`, so the sweep
+reports without blocking until a measured baseline is committed:
+
+```bash
+pnpm --filter web ux:sweep -- --update-baseline
+```
+
+The routes present at that moment become "pre-existing"; anything added later is net-new
+and must meet the absolutes. axe runs in the same job — necessary, never sufficient; its
+green is not a claim that a surface is accessible.
+
 ## Contrast Requirements
 
 All color pairs must meet WCAG 2.2 Level AA minimum contrast ratios:

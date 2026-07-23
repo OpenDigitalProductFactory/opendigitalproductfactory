@@ -1,0 +1,146 @@
+name: UX Route Budget Sweep
+
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ux-route-sweep-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this gate does
+# -------------------
+# EP-UX-SYSTEM spec §6 L4 / §7.1 (BI-BD81682A) — the wall-of-text gate.
+#
+# Boots the real portal against an ephemeral Postgres, drives every static page route
+# with Playwright, measures the SERVED DOM with the L2 budget module, and applies three
+# enforcement modes (apps/web/lib/ux-budget/ratchet.ts):
+#
+#   1. Pre-existing route -> REGRESSION RATCHET. A changed route may not exceed its own
+#      frozen baseline on words, controls, fields, choices, sub-legible controls or axe
+#      violations. Existing debt is reported every run but never blocks a PR that did
+#      not make it worse — otherwise the gate forces a blind mass-rewrite and gets
+#      disabled within a week.
+#   2. Net-new route -> ABSOLUTE BUDGETS BLOCK (spec rev 2 D1). A pure ratchet freezes
+#      whatever ships first, so a brand-new route would become its own baseline and
+#      could be born as a wall of text. New code has no legacy excuse.
+#   3. Structure -> the ARIA snapshot must not drift (rev 2 D2). Hierarchy is the
+#      dominant AI failure mode and was previously unmeasured.
+#
+# NOT an SSR-string shortcut: a string render has neither client components nor honest
+# visibility, so computed-invisible nodes are pruned in the page before measuring.
+#
+# BOOTSTRAP: route-budget-baseline.json ships with `bootstrapped: false`, so the sweep
+# REPORTS without blocking until a measured baseline is committed. Arming it is one
+# mechanical step, not a calibration debate:
+#   pnpm --filter web ux:sweep -- --update-baseline   # against a running portal
+#   git add apps/web/lib/ux-budget/route-budget-baseline.json && commit
+# The set of routes present at that moment defines "pre-existing"; anything added later
+# is net-new and meets the absolutes.
+
+jobs:
+  sweep:
+    name: UX Route Budget Sweep
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: dpf
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: dpf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dpf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://dpf:ci_test_password@localhost:5432/dpf
+      ADMIN_PASSWORD: ci_admin_changeme
+      NEXTAUTH_SECRET: ci_sweep_secret
+      NEXTAUTH_URL: http://localhost:3000
+      UX_SWEEP_BASE_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Generate Prisma client
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Apply migrations
+        run: pnpm --filter @dpf/db exec prisma migrate deploy
+
+      # The seed exits 1 if ANY step fails, by design ("surfaced, not swallowed").
+      # `eaReferenceModels` currently fails in a clean CI environment with "invalid
+      # zip data" — a real pre-existing defect (BI-98D19DF2), not something this job
+      # introduced, and one the sweep does not depend on: it needs a portal with a
+      # seeded org, not EA reference models. So tolerate THAT step specifically and
+      # fail on anything else, rather than blanket continue-on-error which would
+      # hide a genuinely broken seed.
+      - name: Seed the fixture organisation
+        run: |
+          set +e
+          pnpm --filter @dpf/db seed 2>&1 | tee /tmp/seed.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          failed=$(grep -oE '^  - [a-zA-Z]+:' /tmp/seed.log | sed 's/^  - //; s/:$//' | sort -u)
+          echo "Seed reported failed step(s): ${failed:-<none parsed>}"
+          if [ "$failed" = "eaReferenceModels" ]; then
+            echo "::warning::Seed completed except eaReferenceModels (known: invalid zip data). Continuing — the sweep does not use EA reference models."
+            exit 0
+          fi
+          echo "::error::Seed failed on step(s) beyond the known eaReferenceModels issue."
+          exit "$status"
+
+      # The seed alone leaves isFirstRun() true, so every authenticated surface
+      # redirects to /setup and the sweep measures nothing (proved: 208/226 routes).
+      - name: Mark platform setup complete for the fixture org
+        run: pnpm --filter web ux:sweep-fixture
+
+      - name: Build the portal
+        run: pnpm --filter web build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Poll with curl rather than adding a wait-on dependency just for this job
+      # (the New Dependency Gate exists to stop exactly that kind of drive-by).
+      - name: Start the portal
+        run: |
+          pnpm --filter web start &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/login > /dev/null; then
+              echo "portal up after ${i}s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "portal did not become ready within 120s"; exit 1
+
+      # Reuses the existing e2e login bootstrap verbatim so the sweep measures real
+      # owner surfaces instead of freezing the login page as every route's baseline.
+      # One login path, not two.
+      - name: Establish an authenticated session
+        run: pnpm exec tsx e2e/auth-only.ts
+
+      - name: Run the sweep
+        run: pnpm --filter web ux:sweep
+
+      - name: Upload the budget report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ux-route-budget-report
+          path: apps/web/lib/ux-budget/route-budget-report.json
+          if-no-files-found: ignore
