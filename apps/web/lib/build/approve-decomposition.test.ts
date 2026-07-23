@@ -51,9 +51,33 @@ type RecordedWrites = {
   activities: Array<Record<string, unknown>>;
 };
 
-function makeFakeDb(build: FakeBuild | null): {
+/**
+ * Prisma-shaped P2002 for `Epic.originatingBacklogItemId @unique`, so the fake
+ * db can enforce the real constraint instead of silently accepting a second
+ * epic row for the same backlog item.
+ */
+function epicBacklogItemUniqueError(): Error & { code: string; meta: { target: string[] } } {
+  const err = new Error(
+    "Invalid `prisma.epic.create()` invocation: Unique constraint failed on the fields: (`originatingBacklogItemId`)",
+  ) as Error & { code: string; meta: { target: string[] } };
+  err.code = "P2002";
+  err.meta = { target: ["originatingBacklogItemId"] };
+  return err;
+}
+
+function makeFakeDb(
+  build: FakeBuild | null,
+  /**
+   * Backlog items that already own an Epic — the fake's stand-in for the unique
+   * index. Seeded rows are visible to the precondition read; rows written by
+   * epic.create are added, so a second approve in the SAME test hits the
+   * constraint exactly as Postgres would.
+   */
+  epicsByBacklogItemId: Map<string, string> = new Map(),
+): {
   db: ApproveDecompositionDb;
   writes: RecordedWrites;
+  epicsByBacklogItemId: Map<string, string>;
 } {
   const writes: RecordedWrites = {
     epicCreates: [],
@@ -72,7 +96,12 @@ function makeFakeDb(build: FakeBuild | null): {
   const tx: TxShape = {
     epic: {
       create: vi.fn(async ({ data }) => {
+        const originating = data.originatingBacklogItemId as string | undefined;
+        if (originating && epicsByBacklogItemId.has(originating)) {
+          throw epicBacklogItemUniqueError();
+        }
         writes.epicCreates.push(data);
+        if (originating) epicsByBacklogItemId.set(originating, data.epicId as string);
         return { id: `epic-row-${++epicRowSeq}`, epicId: data.epicId as string };
       }),
     },
@@ -120,10 +149,16 @@ function makeFakeDb(build: FakeBuild | null): {
     featureBuild: {
       findUnique: vi.fn(async () => build) as unknown as ApproveDecompositionDb["featureBuild"]["findUnique"],
     },
+    epic: {
+      findUnique: vi.fn(async ({ where }) => {
+        const epicId = epicsByBacklogItemId.get(where.originatingBacklogItemId);
+        return epicId ? { epicId } : null;
+      }),
+    },
     $transaction: vi.fn(async (fn) => fn(tx)) as unknown as ApproveDecompositionDb["$transaction"],
   };
 
-  return { db, writes };
+  return { db, writes, epicsByBacklogItemId };
 }
 
 function makeBuild(overrides: Partial<FakeBuild> = {}): FakeBuild {
@@ -312,6 +347,140 @@ describe("approveDecomposition — eligibility checks", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.code).toBe("candidate-validation-failed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BI-1D0CA7A0 — one originating BacklogItem, at most one decomposition Epic.
+//
+// Live symptom: the daily governed tee-up re-promoted a BacklogItem whose first
+// build had already been decomposed (supersession clears
+// BacklogItem.activeBuildId, so the item looks promotable again). The duplicate
+// build parked at the decompose-required gate, and EVERY portal restart/swap
+// re-ran the resume path -> autoResolveDecomposeRequiredGate ->
+// approveDecomposition -> epic.create, which raised an unhandled
+// `prisma:error ... Unique constraint failed on the fields:
+// (originatingBacklogItemId)` in the portal log.
+// ---------------------------------------------------------------------------
+describe("approveDecomposition — backlog item already decomposed (BI-1D0CA7A0)", () => {
+  it("returns a typed result (no throw) when an Epic already owns the backlog item", async () => {
+    const { db, writes } = makeFakeDb(
+      makeBuild(),
+      new Map([["bi-row-001", "EP-ALREADY"]]),
+    );
+    const result = await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: makeCandidate(),
+      userId: "user-1",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.code).toBe("backlog-item-already-decomposed");
+    expect(result.existingEpicId).toBe("EP-ALREADY");
+    expect(result.error).toContain("EP-ALREADY");
+    // Nothing was written — the precondition short-circuits before the tx.
+    expect(writes.epicCreates).toHaveLength(0);
+    expect(writes.childBuildCreates).toHaveLength(0);
+    expect(writes.buildUpdates).toHaveLength(0);
+  });
+
+  it("re-running the resume path against the same BacklogItem does not throw and leaves ONE Epic", async () => {
+    // Same db (and therefore the same unique index) across both attempts, exactly
+    // like two portal restarts hitting the same live row.
+    const { db, writes } = makeFakeDb(makeBuild());
+
+    const first = await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: makeCandidate(),
+      userId: "user-1",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+    });
+    expect(first.ok).toBe(true);
+
+    const second = await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: makeCandidate(),
+      userId: "user-1",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+    });
+
+    expect(second.ok).toBe(false);
+    if (second.ok) throw new Error("unreachable");
+    expect(second.code).toBe("backlog-item-already-decomposed");
+    // The load-bearing assertion: exactly one Epic row for the backlog item.
+    expect(writes.epicCreates).toHaveLength(1);
+  });
+
+  it("maps a write-time P2002 race to the same typed result instead of throwing", async () => {
+    // Precondition read sees nothing (empty seed), but the INSERT loses the race —
+    // the concurrent-resume case the read alone cannot cover.
+    const { db, epicsByBacklogItemId } = makeFakeDb(makeBuild());
+    const epicFindUnique = db.epic.findUnique as unknown as ReturnType<typeof vi.fn>;
+    epicFindUnique.mockImplementationOnce(async () => {
+      // Another approve commits between our read and our write.
+      epicsByBacklogItemId.set("bi-row-001", "EP-RACER");
+      return null;
+    });
+
+    const result = await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: makeCandidate(),
+      userId: "user-1",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.code).toBe("backlog-item-already-decomposed");
+    expect(result.existingEpicId).toBeNull();
+  });
+
+  it("still decomposes a build with no originating BacklogItem (nothing to conflict with)", async () => {
+    const { db, writes } = makeFakeDb(
+      makeBuild({ originatingBacklogItemId: null, originator: null }),
+      new Map([["bi-row-001", "EP-ALREADY"]]),
+    );
+    const result = await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: makeCandidate(),
+      userId: "user-1",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(writes.epicCreates).toHaveLength(1);
+    expect(writes.epicCreates[0]!.originatingBacklogItemId).toBeUndefined();
+  });
+
+  it("rethrows unrelated failures rather than swallowing them as a duplicate", async () => {
+    const { db } = makeFakeDb(makeBuild());
+    const txCreate = vi.fn(async () => {
+      throw new Error("connection reset");
+    });
+    (db.$transaction as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(txCreate);
+
+    await expect(
+      approveDecomposition({
+        buildId: "FB-PARENT",
+        candidate: makeCandidate(),
+        userId: "user-1",
+        db,
+        now: fixedNow,
+        idGen: makeIdGen(),
+      }),
+    ).rejects.toThrow("connection reset");
   });
 });
 

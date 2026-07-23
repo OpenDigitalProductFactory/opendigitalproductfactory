@@ -1335,6 +1335,19 @@ export async function executeTool(
               };
             }
 
+            if (auto.action === "already-decomposed") {
+              // Duplicate promotion: the BI already has a decomposition Epic
+              // whose children carry this work (BI-1D0CA7A0). Block the advance —
+              // never override to monolithic, which would ship it twice.
+              const epic = auto.existingEpicId ?? "(unknown)";
+              logBuildActivity(buildId, "phase:gate-blocked", `decompose-required gate fired, but the backlog item is already decomposed into Epic ${epic}; advance blocked as a duplicate promotion.`);
+              return {
+                success: true,
+                message: `Design review: ${review.decision}, but this build's backlog item is already decomposed into Epic ${epic}, whose child builds already carry the work. This build is a duplicate promotion — retire it rather than decomposing or overriding it.`,
+                data: { review, blocked: true, action: "duplicate_promotion", existingEpicId: auto.existingEpicId ?? null },
+              };
+            }
+
             if (auto.action === "park") {
               logBuildActivity(
                 buildId,
