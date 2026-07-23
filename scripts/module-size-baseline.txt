@@ -39,6 +39,8 @@ apps/web/lib/inference/ai-provider-internals.ts	1228
 apps/web/lib/integrate/build-agent-prompts.ts	1064
 apps/web/lib/integrate/build-orchestrator.ts	1751
 apps/web/lib/integrate/sandbox/build-branch.ts	870
+apps/web/lib/integrate/build-orchestrator.ts	1796
+apps/web/lib/integrate/sandbox/build-branch.ts	852
 apps/web/lib/marketing.ts	1369
 apps/web/lib/mcp-tools-backlog.test.ts	874
 apps/web/lib/mcp-tools.ts	1910

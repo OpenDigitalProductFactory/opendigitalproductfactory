@@ -26,6 +26,7 @@ import {
   SPECIALIST_TOOLS,
 } from "./specialist-prompts";
 import { isMissingSandboxToolSurfaceOutput } from "./sandbox-tool-surface-detector";
+import { classifyBlockedCause } from "./blocked-cause";
 import type { SpecialistRole } from "./task-dependency-graph";
 import type {
   BuildPlanDoc,
@@ -800,13 +801,18 @@ async function dispatchSpecialist(params: {
       ? [selectedCandidate, ...config.selection!.fallbackChain.slice(0, 1)]
       : [];
     let cliResult: CodexResult | ClaudeResult | null = null;
-    for (let attemptIndex = 0; attemptIndex < Math.max(1, cliAttempts.length); attemptIndex += 1) {
-      const candidate = cliAttempts[attemptIndex];
-      if (candidate?.engine === "agentic") {
-        agenticFallbackProviderId = candidate.providerId;
-        break;
-      }
+    // One bounded same-engine re-dispatch per task when the CLI dies on
+    // infrastructure (BI-2B9E16CC). The agentic path has always retried failures
+    // MAX_SPECIALIST_RETRIES times; the CLI path retried nothing after dispatch,
+    // so a timeout or a 503 stranded the whole build in `build` phase forever.
+    let infraRedispatchUsed = false;
+    const dispatchOnce = async (
+      candidate: BuildEngineCandidate | undefined,
+    ): Promise<(CodexResult | ClaudeResult) & { exitCode: number }> => {
       const engine = candidate?.engine ?? config.provider;
+      // The loop diverts "agentic" to the legacy path before ever calling this;
+      // the guard is here to narrow the union for resolveBuildProviderRunner.
+      if (engine === "agentic") throw new Error("dispatchOnce received the agentic engine");
       const { provider, runner } = resolveBuildProviderRunner({ agentId: engine });
       const runResult = await runner.run(
         provider,
@@ -824,12 +830,51 @@ async function dispatchSpecialist(params: {
           onProgress,
         },
       );
-      cliResult = {
+      return {
         content: runResult.stdout || runResult.stderr,
         success: runResult.exitCode === 0,
         executedTools: [],
         durationMs: runResult.durationMs,
+        exitCode: runResult.exitCode,
       };
+    };
+    for (let attemptIndex = 0; attemptIndex < Math.max(1, cliAttempts.length); attemptIndex += 1) {
+      const candidate = cliAttempts[attemptIndex];
+      if (candidate?.engine === "agentic") {
+        agenticFallbackProviderId = candidate.providerId;
+        break;
+      }
+      const engine = candidate?.engine ?? config.provider;
+      let dispatched = await dispatchOnce(candidate);
+      cliResult = dispatched;
+
+      // Infrastructure death → retry the SAME engine once. A substantive block
+      // ("I need a decision on X") matches nothing and is not retried, because
+      // re-running will not answer it.
+      if (
+        !dispatched.success
+        && !infraRedispatchUsed
+        && classifyBlockedCause({ content: dispatched.content, exitCode: dispatched.exitCode }) === "infrastructure"
+      ) {
+        infraRedispatchUsed = true;
+        agentEventBus.emit(parentThreadId, {
+          type: "orchestrator:specialist_retry",
+          buildId,
+          specialist: ROLE_LABELS[role],
+          reason: `The ${engine} session died on infrastructure (not a decision it needed from you); retrying the same task once.`,
+          attempt: 1,
+        });
+        await prisma.buildActivity.create({
+          data: {
+            buildId,
+            tool: "engine_selection",
+            summary: `Build dispatch ${engine} failed on infrastructure after ${dispatched.durationMs}ms; re-dispatching the same engine once for task "${task.title}".`,
+          },
+        }).catch(() => {});
+        dispatched = await dispatchOnce(candidate);
+        cliResult = dispatched;
+      }
+
       if (cliResult.success) break;
       const retryClass = classifyRetrySafePreDispatchFailure({
         message: cliResult.content,
