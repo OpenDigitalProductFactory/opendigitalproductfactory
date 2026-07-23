@@ -209,7 +209,10 @@ function profileToManifest(
         : mp.provider.status)) as EndpointManifest["status"],
     providerTier: classifyProviderTier(mp.providerId),
     sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
-    supportsToolUse: resolveToolUse(mp) ?? false,
+    // Keep null (UNKNOWN) distinct from false (an explicit floor). Coercing to
+    // false here made every undiscoverable-capability endpoint permanently
+    // ineligible for tool work with no recovery path (BI-DFC30977).
+    supportsToolUse: resolveToolUse(mp),
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,
     supportsStreaming: mp.provider.supportsStreaming,
     maxContextTokens: mp.maxContextTokens ?? mp.provider.maxContextTokens,

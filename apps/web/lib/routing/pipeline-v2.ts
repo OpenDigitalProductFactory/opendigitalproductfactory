@@ -129,7 +129,13 @@ export function getExclusionReasonV2(
   // deriveLocalModelCapabilityPrior (@dpf/db/local-model-capabilities) — the same
   // prior the seed uses — so a coder model (qwen3-coder) resolves supportsToolUse: true
   // and an embedding model (nomic-embed) resolves false.
-  if (contract.requiresTools && !ep.supportsToolUse) {
+  // Tri-state: exclude ONLY on an explicit false (a real per-transport floor —
+  // e.g. the chatgpt subscription backend, which supports Codex built-in tools
+  // but not custom function tools). A null (UNKNOWN) endpoint is attempted and
+  // then calibrated to true/false by the tool_call eval, so a capable model on
+  // a provider whose discovery cannot report tool support is no longer excluded
+  // outright with no recovery path (BI-DFC30977).
+  if (contract.requiresTools && ep.supportsToolUse === false) {
     return "Missing required capability: toolUse";
   }
 

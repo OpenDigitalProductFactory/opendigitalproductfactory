@@ -436,7 +436,10 @@ export async function routeAndCall(
     // Build the "how to fix" suggestion from actually-configured tool-capable
     // endpoints rather than hardcoded model names.
     const toolCapableEndpoints = manifests
-      .filter((m) => m.supportsToolUse && m.status === "active")
+      // `=== true` deliberately: this list is a user-facing "switch to one of
+      // these" suggestion, so only KNOWN tool-capable endpoints belong in it —
+      // an unknown (null) endpoint is routable but must not be recommended.
+      .filter((m) => m.supportsToolUse === true && m.status === "active")
       .map((m) => m.name)
       .slice(0, 3); // cap at 3 to keep the message concise
     const toolCapableSuggestion = toolCapableEndpoints.length > 0

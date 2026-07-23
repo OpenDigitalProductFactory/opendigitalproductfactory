@@ -38,7 +38,21 @@ export interface EndpointManifest {
 
   // Hard constraints
   sensitivityClearance: SensitivityLevel[];
-  supportsToolUse: boolean;
+  /**
+   * Tri-state tool capability (BI-DFC30977):
+   *   true  — known tool-capable.
+   *   false — an EXPLICIT floor (provider backend, admin capabilityOverrides,
+   *           or a catalog entry) that must never be routed tool work.
+   *   null  — UNKNOWN; discovery could not determine it (metadata-extractor
+   *           only derives toolUse for ollama/gemini/openrouter).
+   *
+   * Capability is a property of (model x transport), not model identity — the
+   * same model can be tool-capable on one backend and not another (e.g.
+   * chatgpt/gpt-5.4 false vs codex/gpt-5.4 true). Gates must therefore exclude
+   * only on `=== false`, so a genuinely unknown endpoint is attempted and then
+   * calibrated by the eval, while an explicit floor stays excluded.
+   */
+  supportsToolUse: boolean | null;
   supportsStructuredOutput: boolean;
   supportsStreaming: boolean;
   maxContextTokens: number | null;

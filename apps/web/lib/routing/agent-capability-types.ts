@@ -42,7 +42,9 @@ export function satisfiesMinimumCapabilities(
   endpoint: Pick<EndpointManifest, "supportsToolUse" | "capabilities">,
   floor: AgentMinimumCapabilities,
 ): { satisfied: boolean; missingCapability?: keyof AgentMinimumCapabilities } {
-  if (floor.toolUse && !endpoint.supportsToolUse) {
+  // Only an EXPLICIT false fails the floor; null (unknown) is attempted and
+  // then calibrated by the eval (BI-DFC30977).
+  if (floor.toolUse && endpoint.supportsToolUse === false) {
     return { satisfied: false, missingCapability: "toolUse" };
   }
   const caps = endpoint.capabilities as unknown as Record<string, unknown> | null | undefined;
