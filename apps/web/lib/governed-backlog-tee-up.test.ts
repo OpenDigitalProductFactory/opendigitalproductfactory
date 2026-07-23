@@ -125,6 +125,7 @@ describe("governed backlog tee-up", () => {
           triageOutcome: "build",
           effortSize: "medium",
           activeBuildId: null,
+          activeEpicId: null,
           digitalProductId: null,
           epicId: null,
           createdAt: new Date("2026-04-24T12:00:00.000Z"),
@@ -139,6 +140,7 @@ describe("governed backlog tee-up", () => {
           triageOutcome: "build",
           effortSize: "large",
           activeBuildId: null,
+          activeEpicId: null,
           digitalProductId: null,
           epicId: "epic-1",
           createdAt: new Date("2026-04-24T13:00:00.000Z"),
@@ -153,6 +155,7 @@ describe("governed backlog tee-up", () => {
           triageOutcome: "build",
           effortSize: "small",
           activeBuildId: null,
+          activeEpicId: null,
           digitalProductId: null,
           epicId: "epic-2",
           createdAt: new Date("2026-04-24T11:00:00.000Z"),
@@ -167,6 +170,7 @@ describe("governed backlog tee-up", () => {
           triageOutcome: "build",
           effortSize: "xlarge",
           activeBuildId: null,
+          activeEpicId: null,
           digitalProductId: null,
           epicId: "epic-3",
           createdAt: new Date("2026-04-24T10:00:00.000Z"),
@@ -181,20 +185,43 @@ describe("governed backlog tee-up", () => {
           triageOutcome: "build",
           effortSize: "medium",
           activeBuildId: "build-row-1",
+          activeEpicId: null,
           digitalProductId: null,
           epicId: null,
           createdAt: new Date("2026-04-24T09:00:00.000Z"),
           epic: null,
         },
+        {
+          // BI-1D0CA7A0: a prior build for this item was decomposed, so its
+          // activeEpicId points at a live Epic whose children carry the work.
+          // Re-promoting it would mint the duplicate build that collides on
+          // Epic.originatingBacklogItemId — it MUST be excluded even though its
+          // activeBuildId is null and it is otherwise the oldest candidate.
+          id: "already-decomposed",
+          itemId: "BI-DECOMPOSED",
+          title: "Already decomposed",
+          body: null,
+          status: "open",
+          triageOutcome: "build",
+          effortSize: "medium",
+          activeBuildId: null,
+          activeEpicId: "epic-decomposed-1",
+          digitalProductId: null,
+          epicId: "epic-4",
+          createdAt: new Date("2026-04-24T08:00:00.000Z"),
+          epic: { status: "open" },
+        },
       ],
       3,
     );
 
+    // BI-DECOMPOSED is excluded despite being the oldest and otherwise eligible.
     expect(selected.map((item) => item.itemId)).toEqual([
       "BI-EPIC-OLDER",
       "BI-EPIC-NEWER",
       "BI-BOOT-OLDER",
     ]);
+    expect(selected.map((item) => item.itemId)).not.toContain("BI-DECOMPOSED");
   });
 
   it("creates draft builds for the selected items and auto-approves them under governed flow (BI-52022707 axis D)", async () => {
