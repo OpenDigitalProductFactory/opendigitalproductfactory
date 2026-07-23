@@ -342,25 +342,6 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // Reads field-service jobs and customer contact data, updates job status, and
   // proposes customer notifications for approval.
   dispatcher: ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],
-};
-
-// onboarding-coo is created by bootstrap-first-run.ts during portal startup.
-// Keep its grants here too so reseeding an initialized install stays consistent.
-export const ONBOARDING_AGENT_GRANTS: Record<string, readonly string[]> = {
-  "onboarding-coo": [
-    "file_read",
-    "web_search",
-    "data_governance_validate",
-    "registry_read",
-    // WWWD elicitation (BI-44526F3E Phase C): the onboarding COO interviews the
-    // operator about how the business runs and captures confirmed answers into
-    // the org corpus (record_org_business_answer → draft pages for review).
-    "registry_write",
-    "backlog_read",
-    "portfolio_read",
-    "admin_write",
-    "thread_write",
-  ],
   // UX Design Critic (AGT-906) — READ-AND-DRAFT ONLY, deliberately.
   //
   // Absent by design: backlog_write / backlog_triage (cannot file its own
@@ -390,6 +371,25 @@ export const ONBOARDING_AGENT_GRANTS: Record<string, readonly string[]> = {
     "deliberation_create",
     "deliberation_read",
     "decision_record_create",
+  ],
+};
+
+// onboarding-coo is created by bootstrap-first-run.ts during portal startup.
+// Keep its grants here too so reseeding an initialized install stays consistent.
+export const ONBOARDING_AGENT_GRANTS: Record<string, readonly string[]> = {
+  "onboarding-coo": [
+    "file_read",
+    "web_search",
+    "data_governance_validate",
+    "registry_read",
+    // WWWD elicitation (BI-44526F3E Phase C): the onboarding COO interviews the
+    // operator about how the business runs and captures confirmed answers into
+    // the org corpus (record_org_business_answer → draft pages for review).
+    "registry_write",
+    "backlog_read",
+    "portfolio_read",
+    "admin_write",
+    "thread_write",
   ],
 };
 
