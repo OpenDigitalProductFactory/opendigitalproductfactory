@@ -14,6 +14,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { CollectorContext, CollectorOutput } from "../discovery-types";
+import { normalizeMac } from "../discovery-mac-classification";
 
 const execFileAsync = promisify(execFile);
 
@@ -131,15 +132,19 @@ export async function collectArpScanDiscovery(
       },
     });
 
-    // Create host entities for each discovered IP
+    // Create host entities for each discovered host
     for (const host of hosts) {
-      const hostRef = `arp-host:${host.ip}`;
+      // Identity anchor: MAC is stable across DHCP lease changes, IP is not —
+      // see discovery-collectors/network.ts. nmap/arp give the MAC when the host
+      // answers on the local segment; fall back to the IP only when it did not.
+      const hostIdentity = normalizeMac(host.mac) ?? host.ip;
+      const hostRef = `arp-host:${hostIdentity}`;
       items.push({
         sourceKind: source,
         itemType: "host",
         name: host.hostname ?? `LAN Host ${host.ip}`,
         externalRef: hostRef,
-        naturalKey: `arp:${host.ip}`,
+        naturalKey: `arp:${hostIdentity}`,
         confidence: 0.70,
         attributes: {
           address: host.ip,

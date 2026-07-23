@@ -46,6 +46,15 @@ describe("isDockerOriginEntityKey (server-side)", () => {
     expect(isDockerOriginEntityKey("host:arp:192.168.0.5")).toBe(false);
   });
 
+  it("matches a container: segment anywhere in the key, not just as a prefix", () => {
+    // Collectors emit `container:` as a later segment too; a startsWith check
+    // missed these and they opened a permanent stale_entity per recreation.
+    expect(isDockerOriginEntityKey("monitoring_service:container:06cc859f0e76")).toBe(true);
+    expect(isDockerOriginEntityKey("container:dpf-portal-1")).toBe(true);
+    // Must not false-match a non-container token that merely starts with it.
+    expect(isDockerOriginEntityKey("service:container-registry")).toBe(false);
+  });
+
   it("matches Docker 172.16/12 bridge NIC shapes the specific matches miss", () => {
     // The self-scan's bridge NIC rows and their quarantined wrappers leaked past
     // the host:arp:/host:hostname: matches and opened permanent stale_entity issues.

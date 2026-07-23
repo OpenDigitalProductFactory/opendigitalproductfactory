@@ -1,4 +1,8 @@
 import { isDockerOriginEntityKey, isDockerOriginRelationshipKey } from "./docker-origin";
+import {
+  classifyEntityObservation,
+  classifyRelationshipObservation,
+} from "./estate-observation-class";
 
 const LOW_CONFIDENCE_THRESHOLD = 0.55;
 const STOP_WORDS = new Set([
@@ -366,7 +370,14 @@ export function evaluateInventoryQuality(
       });
     }
 
-    if (entity.attributionStatus === "stale") {
+    // Only the MANAGED estate raises an issue when it vanishes. An ARP
+    // neighbour, a UniFi client (phone/laptop), or a platform Prometheus target
+    // disappearing is normal churn, not an operator-actionable gap — surfacing
+    // it produces a permanently-open row nobody can resolve.
+    if (
+      entity.attributionStatus === "stale"
+      && classifyEntityObservation(entity.entityKey) === "managed"
+    ) {
       issues.push({
         issueKey: `inventory_entity:${entity.entityKey}:stale`,
         issueType: "stale_entity",
@@ -422,6 +433,12 @@ export function evaluateInventoryQuality(
     // per orphan that never resolves. Skip issue generation for them, exactly as
     // the entity loop above skips isDockerOriginEntityKey rows.
     if (isDockerOriginRelationshipKey(relationship.relationshipKey)) {
+      continue;
+    }
+    // A relationship is only as durable as its least-durable endpoint: a
+    // transient client attached to a managed AP vanishes the moment that client
+    // leaves. Managed<->managed topology (AP uplink to switch) still raises.
+    if (classifyRelationshipObservation(relationship.relationshipKey) === "observed") {
       continue;
     }
     if (relationship.status === "stale") {

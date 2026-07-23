@@ -2,6 +2,7 @@ import os from "node:os";
 import { spawnSync } from "node:child_process";
 
 import type { CollectorContext, CollectorOutput } from "../discovery-types";
+import { normalizeMac } from "../discovery-mac-classification";
 
 // ─── Dependency Injection Types ────────────────────────────────────────────
 
@@ -419,13 +420,20 @@ export async function collectNetworkDiscovery(
   // ── ARP Neighbors (L3) ────────────────────────────────────────
   const neighbors = discoverArpNeighbors(deps);
   for (const neighbor of neighbors) {
-    const neighborRef = `arp-host:${neighbor.ip}`;
+    // Identity anchor: a host's MAC is stable across DHCP lease changes; its IP
+    // is not. Keying on the IP mints a NEW entity every time the lease moves and
+    // strands the old one as permanently `stale` — one orphan per re-lease. ARP
+    // inherently yields the IP<->MAC pair, so anchor on the MAC when the
+    // neighbour reported one and fall back to the IP only when it did not. This
+    // matches the UniFi collector's `unifi:${mac}` convention.
+    const neighborIdentity = normalizeMac(neighbor.mac) ?? neighbor.ip;
+    const neighborRef = `arp-host:${neighborIdentity}`;
     items.push({
       sourceKind: source,
       itemType: "host",
       name: `LAN Host ${neighbor.ip}`,
       externalRef: neighborRef,
-      naturalKey: `arp:${neighbor.ip}`,
+      naturalKey: `arp:${neighborIdentity}`,
       confidence: 0.6,
       attributes: {
         address: neighbor.ip,
