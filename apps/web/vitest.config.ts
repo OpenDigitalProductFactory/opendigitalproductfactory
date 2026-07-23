@@ -7,6 +7,30 @@ import { buildNodeModuleAliases } from "./vitest.path-aliases";
 const rootDir = resolve(__dirname, "../..");
 const webDir = resolve(__dirname);
 
+// Node >=25 (a host toolchain that outran CI's pinned Node 24) exposes
+// experimental host localStorage/sessionStorage globals even with no backing
+// store configured. Those undefined host accessors SHADOW the web storage jsdom
+// installs in each fork worker, which corrupts the jsdom environment enough that
+// React Testing Library's act-environment detection fails and component renders
+// throw "Cannot read properties of null (reading 'useContext')" — a cascade that
+// looks like a code bug but is a Node-version mismatch (BI-C89E471F). It turned
+// the whole component-test surface red on any Node >=25 host (~115 failures on
+// the local-CI pregate) while CI on Node 24 stayed green, which trained
+// contributors to override the pre-push gate.
+//
+// `--no-experimental-webstorage` disables Node's host implementation so jsdom
+// owns storage again. The flag must reach the FORK WORKER at launch (it is a
+// node CLI flag, not a runtime toggle, and vitest's poolOptions.forks.execArgv
+// does not reliably propagate it in v4). Fork workers inherit the parent env, so
+// prepending it to NODE_OPTIONS here — before vitest spawns any worker — reaches
+// every worker on every entry point: the pregate, CI, and a developer's direct
+// `pnpm --filter web exec vitest`. The flag exists on Node 24 too and is a
+// harmless no-op there, so it is applied unconditionally rather than sniffing the
+// version. Idempotent: skipped when already present.
+if (!/(^|\s)--no-experimental-webstorage(\s|$)/.test(process.env.NODE_OPTIONS ?? "")) {
+  process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} --no-experimental-webstorage`.trim();
+}
+
 loadEnv({ path: resolve(rootDir, ".env") });
 loadEnv({ path: resolve(webDir, ".env.local"), override: true });
 
