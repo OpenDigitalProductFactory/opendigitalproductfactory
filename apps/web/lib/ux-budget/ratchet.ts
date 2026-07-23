@@ -79,6 +79,30 @@ export const RATCHET_AXES = [
 ] as const;
 export type RatchetAxis = (typeof RATCHET_AXES)[number];
 
+/**
+ * Measured noise floor per axis — the residue that survives normalisation.
+ *
+ * Determined empirically, not guessed: two independent freezes of the SAME commit
+ * were diffed. Every count axis agreed exactly, and the ONLY residue was word counts
+ * moving by ±2 on list surfaces, from relative-time phrasing whose length varies with
+ * the clock ("less than a minute ago" is five words, "3 minutes ago" is three).
+ *
+ * So word axes get a 2-word floor and every count axis stays EXACT. This is a noise
+ * floor, not a tolerance for sloppiness: the regressions this gate exists to catch are
+ * hundreds of words, two orders of magnitude above it. Tighten it if the fixture is
+ * ever made clock-deterministic.
+ */
+const NOISE_FLOOR: Record<RatchetAxis, number> = {
+  defaultVisibleWords: 2,
+  leadBandWords: 2,
+  primaryActions: 0,
+  visibleFields: 0,
+  maxChoicesPerControl: 0,
+  subLegibleControls: 0,
+  buriedPrimaryAction: 0,
+  axeViolations: 0,
+};
+
 const AXIS_LABEL: Record<RatchetAxis, string> = {
   defaultVisibleWords: "words visible on arrival",
   leadBandWords: "lead-band words",
@@ -134,7 +158,7 @@ export function verdictForRoute(
       // the scan works — 0 > -1 is not an increase in violations, it is a scan that
       // recovered. Skip the axis and let the run that measured it decide.
       if (now < 0 || was < 0) continue;
-      if (now > was) {
+      if (now > was + NOISE_FLOOR[axis]) {
         regressions.push(`${AXIS_LABEL[axis]}: ${was} → ${now}`);
       }
     }
@@ -215,10 +239,19 @@ const VOLATILE_PATTERNS: [RegExp, string][] = [
  * Each pattern collapses to a single stable token, so both the text and its word
  * count stop moving. Applied to the served HTML before measuring (BI-EA221325).
  */
+const RELATIVE_UNIT = "(?:second|minute|hour|day|week|month|year)s?";
+// Qualifier + quantity are BOTH optional and variable-length, which is exactly what
+// moved the word count: "less than a minute ago" (5 words) vs "3 minutes ago" (3).
+// Each optional group carries its OWN trailing space — a shared leading `\s*` would
+// swallow the space before the phrase and glue it to the preceding word
+// ("updated 3 minutes ago" -> "updated<ago>", one token instead of two).
+const RELATIVE_QUALIFIER = "(?:(?:about|almost|over|under|nearly|roughly|approximately|less than|more than|just)\\s+)?";
+const RELATIVE_QUANTITY = "(?:(?:an?|\\d+)\\s+)?";
+
 const VOLATILE_TEXT_PATTERNS: [RegExp, string][] = [
-  [/\b\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago\b/gi, "<ago>"],
-  [/\b(?:just now|a moment ago|moments ago|an?\s+(?:second|minute|hour|day|week|month|year)\s+ago)\b/gi, "<ago>"],
-  [/\bin\s+\d+\s+(?:second|minute|hour|day|week|month|year)s?\b/gi, "<in>"],
+  [new RegExp(`\\b${RELATIVE_QUALIFIER}${RELATIVE_QUANTITY}${RELATIVE_UNIT}\\s+ago\\b`, "gi"), "<ago>"],
+  [/\b(?:just now|a moment ago|moments ago)\b/gi, "<ago>"],
+  [new RegExp(`\\bin\\s+${RELATIVE_QUALIFIER}${RELATIVE_QUANTITY}${RELATIVE_UNIT}\\b`, "gi"), "<in>"],
   [/\b\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AaPp]\.?[Mm]\.?)?/g, "<time>"],
   [/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, "<date>"],
   [/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,\s*\d{4})?\b/g, "<date>"],
@@ -233,6 +266,36 @@ export function normaliseVolatileText(text: string): string {
 
 // A property line inside the tree, e.g. `- /url: /workspace`. Carries data, not shape.
 const PROPERTY_LINE = /^\/[\w-]+:/;
+
+/**
+ * Live-region roles. These announce transient state (a toast, a polling status) and
+ * come and go with timing, not with the page's structure — one measured run had an
+ * `alert` node its twin did not. They are excluded so a transient announcement is
+ * never reported as "the hierarchy changed shape".
+ */
+const TRANSIENT_ROLES = new Set(["alert", "status", "log", "marquee", "timer"]);
+
+/**
+ * Document-level landmarks. Once `main` has been seen, a TOP-LEVEL node that is not
+ * one of these is portal chrome (toasts, dialogs) that React appends to the end of
+ * <body> — it comes and goes with timing and is not page structure.
+ *
+ * This is what finally made the comparison exact. The measured case: one run's tail
+ * was `alert`, its twin's was `button` then `alert` — the toast's dismiss control is
+ * a SIBLING of the alert, sometimes emitted before it, so neither subtree-skipping
+ * nor "stop at the first live region" catches it. Ending the projection where the
+ * page's own landmarks end does.
+ */
+const DOCUMENT_LANDMARKS = new Set([
+  "main",
+  "banner",
+  "contentinfo",
+  "complementary",
+  "navigation",
+  "region",
+  "search",
+  "form",
+]);
 
 /**
  * Project an ARIA snapshot down to STRUCTURE: nesting depth, role, and structural
@@ -253,15 +316,34 @@ export function normaliseSnapshot(snapshot: string): string {
   for (const [re, placeholder] of VOLATILE_PATTERNS) out = out.replace(re, placeholder);
 
   const lines: string[] = [];
+  // Depth of a transient subtree currently being skipped, or null. A live region's
+  // CHILDREN are transient too — the measured case was an `alert` whose dismiss
+  // `button` also appeared in only one of the two runs — so the whole subtree goes.
+  let skipDeeperThan: number | null = null;
+  let seenMain = false;
+
   for (const raw of out.split("\n")) {
     const line = raw.replace(/\s+$/, "");
     if (!line.trim()) continue;
     const indent = line.slice(0, line.length - line.trimStart().length);
+    if (skipDeeperThan !== null) {
+      if (indent.length > skipDeeperThan) continue;
+      skipDeeperThan = null;
+    }
     // Strip the list marker, then any wrapping quotes around the whole node.
     const body = line.trimStart().replace(/^-\s*/, "").replace(/^['"]|['"]$/g, "");
     if (PROPERTY_LINE.test(body)) continue;
     const role = /^([a-zA-Z][\w-]*)/.exec(body)?.[1];
     if (!role) continue;
+    const lower = role.toLowerCase();
+    // Past the page's own landmarks, top-level nodes are portal chrome — stop.
+    if (indent.length === 0 && seenMain && !DOCUMENT_LANDMARKS.has(lower)) break;
+    if (lower === "main") seenMain = true;
+    if (TRANSIENT_ROLES.has(lower)) {
+      if (indent.length === 0) break;
+      skipDeeperThan = indent.length;
+      continue;
+    }
     const attrs = [...body.matchAll(/\[([^\]]+)\]/g)].map((m) => `[${m[1]}]`).join(" ");
     lines.push(`${indent}- ${role}${attrs ? ` ${attrs}` : ""}`);
   }

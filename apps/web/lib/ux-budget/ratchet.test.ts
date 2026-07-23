@@ -175,6 +175,26 @@ describe("structural hierarchy snapshot (rev 2 D2)", () => {
     );
   });
 
+  it("drops the toast portal — top-level chrome after the page's own landmarks", () => {
+    // The measured case: one run's tail was `alert`, its twin's was `button` then
+    // `alert`. The dismiss control is a SIBLING of the alert and can precede it, so
+    // neither subtree-skipping nor "stop at the first live region" catches it.
+    const withToast = ["- banner:", "- main:", '  - heading "x" [level=1]', "- button", "- alert"].join("\n");
+    const withoutToast = ["- banner:", "- main:", '  - heading "x" [level=1]', "- alert"].join("\n");
+    expect(normaliseSnapshot(withToast)).toBe(normaliseSnapshot(withoutToast));
+    expect(normaliseSnapshot(withToast)).toBe(["- banner", "- main", "  - heading [level=1]"].join("\n"));
+  });
+
+  it("keeps real landmarks that legitimately follow main", () => {
+    const snap = ["- main:", '  - heading "x" [level=1]', "- contentinfo:", "  - link"].join("\n");
+    expect(normaliseSnapshot(snap)).toContain("- contentinfo");
+  });
+
+  it("excludes a nested live region's whole subtree", () => {
+    const snap = ["- main:", "  - status:", '    - button "Retry"', '  - heading "x" [level=1]'].join("\n");
+    expect(normaliseSnapshot(snap)).toBe(["- main", "  - heading [level=1]"].join("\n"));
+  });
+
   it("two runs that differ ONLY in rendered text project identically", () => {
     // The measured cause of the drift: seeded rows render "updated <now>". This is
     // the case that made 91 of 200 routes look structurally changed between runs.
