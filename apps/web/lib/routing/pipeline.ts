@@ -151,7 +151,9 @@ export function getExclusionReason(
   // Required capabilities
   const caps = req.requiredCapabilities;
 
-  if (caps.supportsToolUse && !ep.supportsToolUse) {
+  // Only an EXPLICIT false excludes; null (unknown) is attempted and then
+  // calibrated by the eval. Mirrors pipeline-v2 (BI-DFC30977).
+  if (caps.supportsToolUse && ep.supportsToolUse === false) {
     return "Missing required capability: supportsToolUse";
   }
 

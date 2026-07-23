@@ -233,6 +233,54 @@ interface DimensionEvalResult {
   inconclusive: boolean;    // >50% of tests failed to run
 }
 
+/**
+ * Minimum measured toolFidelity for an endpoint to count as tool-capable.
+ *
+ * Calibrated against the local-model capability priors
+ * (@dpf/db/local-model-capabilities): magistral — a reasoning model that
+ * fabricates answers instead of emitting tool_calls — sits at 30 and is
+ * explicitly `avoidFor: ["tool-use"]`, while the weakest genuinely
+ * tool-calling tiers (mistral/llama) sit at 50 and the "unknown" prior at 40.
+ * 35 therefore separates "fabricates" from "actually calls tools".
+ */
+export const TOOL_USE_MIN_FIDELITY = 35;
+
+/**
+ * Decide the `supportsToolUse` boolean an eval should persist — the "calibrate"
+ * half of attempt-and-calibrate (BI-DFC30977). Pure + exported for unit tests.
+ *
+ * Why this exists: the routing gates read the `supportsToolUse` BOOLEAN, but the
+ * eval previously only ever wrote the `toolFidelity` SCORE. So once the gates
+ * began attempting `null` (unknown) endpoints, nothing could ever resolve that
+ * unknown — an endpoint that cannot actually emit tool_calls would be selected
+ * again on every turn. This closes the loop.
+ *
+ * Returns `undefined` to mean "write nothing" (leave the stored value alone):
+ *   - `capabilityOverrides.toolUse` is set — an admin pin is authoritative in
+ *     BOTH directions and a measurement must never clobber it.
+ *   - the toolFidelity dimension was inconclusive (infrastructure/config
+ *     failure, not a model verdict) — preserving the previous value is what
+ *     stops a broken probe path from mass-demoting a healthy fleet.
+ *
+ * Writing in both directions is deliberate and does NOT reintroduce the
+ * "sticky false" trap (BI-B6DEBFFE): an eval-owned value is re-measured by the
+ * next eval, so a demotion is always recoverable — unlike the old discovery
+ * `?? false` coercion, which had no path back.
+ */
+export function resolveEvaluatedToolUse(input: {
+  toolFidelity: Pick<DimensionEvalResult, "newScore" | "inconclusive"> | undefined;
+  capabilityOverrides: unknown;
+}): boolean | undefined {
+  const overrides = input.capabilityOverrides as Record<string, unknown> | null | undefined;
+  if (overrides && typeof overrides === "object" && "toolUse" in overrides) {
+    return undefined;
+  }
+  if (!input.toolFidelity || input.toolFidelity.inconclusive) {
+    return undefined;
+  }
+  return input.toolFidelity.newScore >= TOOL_USE_MIN_FIDELITY;
+}
+
 /** Resolve the best modelId for a provider (same as fallback.ts). */
 async function resolveModelId(providerId: string): Promise<string> {
   const profile = await prisma.modelProfile.findFirst({
@@ -544,10 +592,32 @@ export async function runDimensionEval(
   const allInconclusive = dimensions.every((d) => d.inconclusive);
   const hasRealScores = Object.keys(scoreUpdates).length > 0;
 
+  // Calibrate half of attempt-and-calibrate (BI-DFC30977): the routing gates read
+  // the supportsToolUse BOOLEAN, so a measured toolFidelity must be projected onto
+  // it — otherwise an endpoint attempted as `null` (unknown) could never resolve.
+  // capabilities.toolUse is written in lockstep so the two representations can
+  // never disagree (the original defect surfaced as capabilities.toolUse=false on
+  // a row with toolFidelity=100).
+  const evaluatedToolUse = resolveEvaluatedToolUse({
+    toolFidelity: dimensions.find((d) => d.dimension === "toolFidelity"),
+    capabilityOverrides: modelProfile.capabilityOverrides,
+  });
+  const toolUseUpdate =
+    evaluatedToolUse === undefined
+      ? {}
+      : {
+          supportsToolUse: evaluatedToolUse,
+          capabilities: {
+            ...((modelProfile.capabilities as Record<string, unknown> | null) ?? {}),
+            toolUse: evaluatedToolUse,
+          },
+        };
+
   await prisma.modelProfile.update({
     where: { providerId_modelId: { providerId, modelId } },
     data: {
       ...scoreUpdates,
+      ...toolUseUpdate,
       ...(hasRealScores ? { profileSource: "evaluated" as const } : {}),
       profileConfidence: (currentEvalCount + 1) >= 5 ? "high" : "medium",
       evalCount: { increment: 1 },

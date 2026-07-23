@@ -75,9 +75,73 @@ import {
   errorLooksLikeInfrastructure,
   errorLooksLikeConfigGap,
   errorEndsEvalCycle,
+  resolveEvaluatedToolUse,
   runDimensionEval,
+  TOOL_USE_MIN_FIDELITY,
   type DriftResult,
 } from "./eval-runner";
+
+describe("resolveEvaluatedToolUse — calibrate half (BI-DFC30977)", () => {
+  const dim = (newScore: number, inconclusive = false) => ({ newScore, inconclusive });
+
+  it("promotes to true when measured fidelity clears the bar", () => {
+    expect(
+      resolveEvaluatedToolUse({
+        toolFidelity: dim(TOOL_USE_MIN_FIDELITY),
+        capabilityOverrides: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("demotes to false when the model measurably cannot call tools", () => {
+    // This is what closes the attempt-and-calibrate loop: without it, an
+    // endpoint attempted as null would be reselected on every single turn.
+    expect(
+      resolveEvaluatedToolUse({
+        toolFidelity: dim(TOOL_USE_MIN_FIDELITY - 1),
+        capabilityOverrides: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("writes NOTHING when the dimension was inconclusive", () => {
+    // Inconclusive means the probe path broke (timeout, rotated key), not that
+    // the model failed — mass-demoting a healthy fleet on infra failure is the
+    // exact trap this guards.
+    expect(
+      resolveEvaluatedToolUse({
+        toolFidelity: dim(0, true),
+        capabilityOverrides: null,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("writes NOTHING when the toolFidelity dimension never ran", () => {
+    expect(
+      resolveEvaluatedToolUse({ toolFidelity: undefined, capabilityOverrides: null }),
+    ).toBeUndefined();
+  });
+
+  it("never clobbers an admin capabilityOverrides pin, in either direction", () => {
+    for (const pin of [true, false]) {
+      expect(
+        resolveEvaluatedToolUse({
+          toolFidelity: dim(pin ? 0 : 100),
+          capabilityOverrides: { toolUse: pin },
+        }),
+      ).toBeUndefined();
+    }
+  });
+
+  it("ignores unrelated capabilityOverrides keys", () => {
+    expect(
+      resolveEvaluatedToolUse({
+        toolFidelity: dim(90),
+        capabilityOverrides: { structuredOutput: false },
+      }),
+    ).toBe(true);
+  });
+});
 
 describe("computeNewScore", () => {
   it("uses raw score on first eval (evalCount=0)", () => {

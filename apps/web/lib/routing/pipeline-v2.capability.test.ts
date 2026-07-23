@@ -109,3 +109,62 @@ describe("getExclusionReasonV2 — capability floor (EP-AGENT-CAP-002)", () => {
     expect(reason).toContain("imageInput");
   });
 });
+
+describe("getExclusionReasonV2 — tri-state toolUse (BI-DFC30977)", () => {
+  // Capability is a property of (model x transport), not model identity. An
+  // explicit `false` is a REAL per-transport floor and must always exclude;
+  // `null` only means discovery could not determine capability, so it is
+  // attempted and later calibrated by the toolFidelity eval.
+
+  it("excludes on an EXPLICIT false when the contract requires tools", () => {
+    const ep = activeEp({ supportsToolUse: false });
+    const c = contract({ requiresTools: true });
+    expect(getExclusionReasonV2(ep, c)).toBe("Missing required capability: toolUse");
+  });
+
+  it("attempts an UNKNOWN (null) endpoint when the contract requires tools", () => {
+    const ep = activeEp({ supportsToolUse: null });
+    const c = contract({ requiresTools: true });
+    expect(getExclusionReasonV2(ep, c)).toBeNull();
+  });
+
+  it("passes a known tool-capable endpoint when the contract requires tools", () => {
+    const ep = activeEp({ supportsToolUse: true });
+    const c = contract({ requiresTools: true });
+    expect(getExclusionReasonV2(ep, c)).toBeNull();
+  });
+
+  it("ignores toolUse entirely when the contract does not require tools", () => {
+    for (const supportsToolUse of [true, false, null] as const) {
+      const ep = activeEp({ supportsToolUse });
+      expect(getExclusionReasonV2(ep, contract({ requiresTools: false }))).toBeNull();
+    }
+  });
+
+  it("REGRESSION: the chatgpt-subscription transport stays excluded from tool work", () => {
+    // chatgpt/gpt-5.4 is deliberately toolUse:false — the ChatGPT subscription
+    // backend (/codex/responses) supports only Codex built-in tools, not the
+    // custom function tools every DPF tool uses. codex/gpt-5.4 is the SAME
+    // model on a transport that does support them. Attempt-and-calibrate must
+    // never route tool work to the subscription transport.
+    const chatgptSub = activeEp({
+      providerId: "chatgpt",
+      modelId: "gpt-5.4",
+      supportsToolUse: false,
+    });
+    const codex = activeEp({
+      providerId: "codex",
+      modelId: "gpt-5.4",
+      supportsToolUse: true,
+    });
+    const c = contract({ requiresTools: true });
+    expect(getExclusionReasonV2(chatgptSub, c)).toBe("Missing required capability: toolUse");
+    expect(getExclusionReasonV2(codex, c)).toBeNull();
+  });
+
+  it("agent capability floor also treats null as attemptable but false as failing", () => {
+    const c = contract({ minimumCapabilities: { toolUse: true } });
+    expect(getExclusionReasonV2(activeEp({ supportsToolUse: null }), c)).toBeNull();
+    expect(getExclusionReasonV2(activeEp({ supportsToolUse: false }), c)).toContain("toolUse");
+  });
+});

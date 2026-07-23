@@ -106,7 +106,7 @@ async function runProbe(): Promise<void> {
 
           // Check 2: required capabilities present
           const reqCaps = req.requiredCapabilities ?? {};
-          if (reqCaps.supportsToolUse && !selected.supportsToolUse) {
+          if (reqCaps.supportsToolUse && selected.supportsToolUse === false) {
             violations.push("MISSING supportsToolUse");
           }
           if (reqCaps.supportsStructuredOutput && selected.capabilities.structuredOutput !== true) {
