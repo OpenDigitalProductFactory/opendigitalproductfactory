@@ -5,6 +5,7 @@ import {
   deriveBuildProcessSize,
 } from "@/lib/explore/build-process-matrix";
 import { warrantForBacklogItem } from "@/lib/decision/warrant-for-item";
+import { loadOrgWarrantContext } from "@/lib/decision/org-warrant-context";
 import {
   attachBuildStudioWorkCapsule,
   type BuildStudioCapsuleDb,
@@ -147,6 +148,15 @@ type GovernedBacklogTeeUpTx = {
     findUnique(args: any): Promise<any>;
     findFirst?(args: any): Promise<any>;
     update?(args: any): Promise<any>;
+  };
+  // WWWD context read (BI-EE211BFA). Optional so existing test doubles — which
+  // model only the write path — keep satisfying this type; loadOrgWarrantContext
+  // degrades to a null context when they're absent.
+  organization?: {
+    findFirst(args: any): Promise<any>;
+  };
+  storefrontConfig?: {
+    findFirst(args: any): Promise<any>;
   };
   workCapsuleActivity: {
     create(args: any): Promise<any>;
@@ -314,10 +324,16 @@ export async function promoteBacklogItemToBuildDraft(
   // blast-radius, not effort size alone. deliverableSensitivity/qualityFirst are
   // what the gate reads (rightsizingOptsFromEvidence); workWarrant carries the
   // fuller object (lane/model tier/evidence/reporting) for downstream consumers.
+  // WWWD context (BI-EE211BFA): the org's industry + chosen archetype. deriveWarrant
+  // already escalates evidence to "compliance" when a vertical/jurisdiction
+  // obligation is present — this is what finally feeds it, so a regulated install
+  // demands compliance evidence without the operator re-stating it per build.
+  const warrantContext = await loadOrgWarrantContext(tx);
   const { warrant: workWarrant, opts: rightsizingOpts } = warrantForBacklogItem({
     effortSize: item.effortSize ?? null,
     workType: item.workType ?? null,
     text: `${item.title} ${item.body ?? ""}`,
+    context: warrantContext,
   });
   const plan = {
     ...planBase,
