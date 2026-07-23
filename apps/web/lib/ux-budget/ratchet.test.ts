@@ -125,6 +125,26 @@ describe("net-new routes cannot be born ugly (rev 2 D1)", () => {
   });
 });
 
+describe("buried primary action is a ratchet regression (BI-D77BF495)", () => {
+  const reachable = `<main data-dpf-lead><h1>Self-Upgrade</h1><p>status</p><button data-dpf-primary-action data-owner-first-next-action>Upgrade now</button></main>`;
+  const buried = `<main data-dpf-lead><h1>Self-Upgrade</h1><p>status</p><details><summary>Advanced</summary><button data-dpf-primary-action data-owner-first-next-action>Upgrade now</button></details></main>`;
+
+  it("catches a pre-existing route that MOVES its primary action behind a collapse", () => {
+    const before = measurement({ routePath: "/ops/self-upgrade", shell: "detail", html: reachable });
+    const after = measurement({ routePath: "/ops/self-upgrade", shell: "detail", html: buried });
+    const v = verdictForRoute(after, baselineFrom(before).routes["/ops/self-upgrade"]);
+    expect(v.ok).toBe(false);
+    expect(v.regressions.join(" ")).toMatch(/buried primary action/);
+  });
+
+  it("does not fail an unrelated PR on a route whose action was ALREADY buried", () => {
+    const m = measurement({ routePath: "/ops/self-upgrade", shell: "detail", html: buried });
+    // Baseline already has it buried (1); measuring it again is not a new regression.
+    const v = verdictForRoute(m, baselineFrom(m).routes["/ops/self-upgrade"]);
+    expect(v.regressions.join(" ")).not.toMatch(/buried primary action/);
+  });
+});
+
 describe("structural hierarchy snapshot (rev 2 D2)", () => {
   it("flags a changed accessibility tree as a regression", () => {
     const before = measurement();

@@ -315,19 +315,25 @@ describe("SelfUpgradePage", () => {
     );
   });
 
-  it("expands the advanced controls in Full mode and collapses them in Simple mode", async () => {
+  it("keeps the deploy controls (holding the primary trigger) visible on arrival in BOTH nav modes (BI-D77BF495)", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
 
-    // Full (operator) — default cookie unset → details open.
+    // Full (operator) — default cookie unset → open.
     const fullHtml = renderToStaticMarkup(await SelfUpgradePage());
     expect(fullHtml).toMatch(/<details[^>]*\sopen/);
 
-    // Simple (worker) — details collapsed by default.
+    // Simple (worker) — ALSO open now. Collapsing it hid the one control this
+    // high-frequency operator page exists for; the primary action must be reachable
+    // on arrival regardless of nav mode. The section stays collapsible via the toggle.
     mockCookieGet.mockReturnValue({ value: "worker" });
     const simpleHtml = renderToStaticMarkup(await SelfUpgradePage());
-    expect(simpleHtml).not.toMatch(/<details[^>]*\sopen/);
-    // The disclosure toggle is still present so it can be opened.
+    expect(simpleHtml).toMatch(/<details[^>]*\sopen/);
     expect(simpleHtml).toContain('data-component="self-upgrade-advanced-toggle"');
   });
+
+  // The trigger's primary/next-action markers live inside SelfUpgradeClient, which
+  // this page test mocks to a stub — so they are asserted in the client's own test
+  // (SelfUpgradeClient.test.tsx), not here. This page test owns the page-level
+  // concern: the section holding the trigger is reachable on arrival in both modes.
 });

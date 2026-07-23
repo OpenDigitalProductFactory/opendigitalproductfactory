@@ -93,17 +93,24 @@ export default async function SelfUpgradePage() {
         <OwnerReleaseCard summary={ownerSummary} />
       </div>
 
-      {/* Advanced: the technical deploy controls, run history, runtime/security
-          ledgers and logs. Collapsed by default in Simple mode so a non-technical
-          owner sees the release status first, expanded in Full mode for operators. */}
-      <details className="mt-6 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]" open={!simple}>
+      {/* Deploy controls + run history, runtime/security ledgers and logs.
+          BI-D77BF495: this section holds the primary "Upgrade now" trigger, so it
+          defaults OPEN in BOTH nav modes — collapsing it in Simple mode hid the one
+          control this high-frequency operator page exists for, and the word budgets
+          could not see that regression because hiding the trigger REDUCES the counts.
+          The owner-first status card still leads; the section stays collapsible for
+          anyone who wants to tuck the detail away, but the action is reachable on
+          arrival. (Fuller fix — a prominent trigger co-located in the card with only
+          logs/history collapsible — tracked in BI-D77BF495; it needs the trigger
+          extraction plus live upgrade-flow verification.) */}
+      <details className="mt-6 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]" open>
         <summary
           data-component="self-upgrade-advanced-toggle"
           className="cursor-pointer select-none rounded-xl px-4 py-3 text-sm font-medium text-[var(--dpf-text)] marker:text-[var(--dpf-muted)]"
         >
-          Advanced controls &amp; history
+          Deploy controls &amp; history
           <span className="ml-2 text-xs font-normal text-[var(--dpf-muted)]">
-            Deploy controls, run logs, runtime and security checks
+            Upgrade trigger, run logs, runtime and security checks
           </span>
         </summary>
 

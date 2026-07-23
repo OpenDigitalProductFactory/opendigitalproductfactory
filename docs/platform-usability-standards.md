@@ -76,6 +76,18 @@ read, the CI checkers, and the migration league table. Intended shell per route 
 | Sub-legible controls | Always 0 — WCAG 2.2 AA 2.5.8 |
 | Reading level | Flesch–Kincaid tier per shell |
 | Deferred detail | Above a per-shell word threshold the surface **must** use disclosure |
+| Primary action reachable | A marked primary action (`data-dpf-primary-action` / `data-owner-first-next-action`) may not be buried behind a collapsed disclosure on action shells (cockpit/detail/settings/form) |
+
+**Hiding the primary action is a regression the word budgets cannot see.** Moving a
+trigger behind an "Advanced" collapse *reduces* the default-visible word and control
+counts, so the volume budgets read it as an improvement. The reachability axis is the
+answer: a primary action that is marked but not present in the default-visible scope
+fails — blocking on net-new routes, and caught by the ratchet's `buriedPrimaryAction`
+axis (a 0→1 transition) on pre-existing ones, so a route that was *already* buried does
+not fail an unrelated PR while a route you *just* buried does. This is why marking the
+one action a surface most wants the user to take is worth doing: the gate can then tell
+"tucked away detail" (good) from "hid the main verb" (bad). The self-upgrade trigger
+regression is the motivating case.
 
 **Progressive disclosure is rewarded, never taxed.** Measurement excises
 `<details>` without `open`, `[data-dpf-disclosure]` without `open`, `[hidden]` and

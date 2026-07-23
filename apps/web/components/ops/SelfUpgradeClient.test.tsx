@@ -118,9 +118,12 @@ describe("SelfUpgradeClient – enabled", () => {
     expect(html).toContain("stable");
   });
 
-  it("renders the Upgrade now button when enabled", () => {
+  it("renders the Upgrade now button, marked as the primary / next action (BI-D77BF495)", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
     expect(html).toContain("Upgrade now");
+    // The UX budget reachability axis keys off these markers.
+    expect(html).toContain("data-dpf-primary-action");
+    expect(html).toContain("data-owner-first-next-action");
   });
 
   it("shows the deployed and target SHA values", () => {

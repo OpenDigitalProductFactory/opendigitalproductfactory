@@ -81,15 +81,37 @@ export type UxBudgetMetrics = {
   subLegibleControls: number;
   disclosureRegions: number;
   hasNextActionMarker: boolean;
+  /**
+   * 1 when the surface HAS a marked primary action somewhere in the DOM but it is
+   * NOT in the default-visible scope — i.e. the primary action is buried behind a
+   * collapsed disclosure. 0 otherwise (visible, or no marked primary action at all).
+   *
+   * This is the axis that catches "the trigger button is hard to find": moving a
+   * primary action behind Advanced REDUCES word/control counts, so the volume
+   * budgets read it as an improvement. This does not — a buried verb is a
+   * regression whatever the word count says. Numeric (not boolean) so the ratchet
+   * catches a 0→1 transition on a pre-existing route.
+   */
+  buriedPrimaryAction: number;
   /** Flesch–Kincaid grade of the default-visible prose. */
   readingGradeLevel: number;
 };
+
+/** Attributes that mark the one action a surface most wants the user to take. */
+const PRIMARY_ACTION_MARKERS = [PRIMARY_ACTION_ATTR, OWNER_FIRST_NEXT_ACTION_ATTR];
+
+function hasMarkedPrimaryAction(html: string): boolean {
+  return PRIMARY_ACTION_MARKERS.some((m) => html.includes(m));
+}
 
 /** Measure a served-DOM HTML string against every budget axis at once. */
 export function measureUxBudget(html: string): UxBudgetMetrics {
   const visible = defaultVisibleHtml(html);
   const lead = leadBandHtml(html);
   const prose = visibleText(visible);
+  // Compare the FULL DOM against the visible scope: a marker present in one but not
+  // the other means the primary action exists yet the owner cannot see it on arrival.
+  const buried = hasMarkedPrimaryAction(html) && !hasMarkedPrimaryAction(visible);
   return {
     defaultVisibleWords: countWords(visible),
     leadBandWords: countWords(lead),
@@ -100,6 +122,7 @@ export function measureUxBudget(html: string): UxBudgetMetrics {
     subLegibleControls: countSmallControls(visible),
     disclosureRegions: countDisclosureRegions(html),
     hasNextActionMarker: visible.includes(OWNER_FIRST_NEXT_ACTION_ATTR),
+    buriedPrimaryAction: buried ? 1 : 0,
     // An empty surface has no prose to grade; report 0 rather than a fabricated score.
     readingGradeLevel: prose.length === 0 ? 0 : analyzeReadability(prose).gradeLevel,
   };

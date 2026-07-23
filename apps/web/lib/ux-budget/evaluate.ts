@@ -156,6 +156,21 @@ export function evaluateUxBudget(
         ? "owner-first next action present"
         : "no owner-first next action marker",
     },
+    {
+      // The self-upgrade lesson (BI-D77BF495): a primary action hidden behind a
+      // collapsed disclosure is a findability regression the word budgets cannot
+      // see — hiding it makes the counts LOOK better. This is blocking on net-new
+      // routes; on pre-existing routes the ratchet's buriedPrimaryAction axis
+      // catches the 0→1 transition (newly buried), so an already-buried legacy
+      // route does not fail an unrelated PR.
+      check: "primary-action-reachable",
+      ok: budget.requirePrimaryActionReachable ? metrics.buriedPrimaryAction === 0 : true,
+      severity: "blocking",
+      detail:
+        metrics.buriedPrimaryAction === 0
+          ? "primary action reachable on arrival"
+          : "primary action is marked but buried behind a collapsed disclosure — not visible on arrival",
+    },
   ];
 
   const findings = raw

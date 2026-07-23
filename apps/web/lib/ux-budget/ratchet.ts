@@ -54,6 +54,7 @@ export type RouteBaseline = {
   visibleFields: number;
   maxChoicesPerControl: number;
   subLegibleControls: number;
+  buriedPrimaryAction: number;
   axeViolations: number;
   ariaSnapshot: string;
 };
@@ -73,6 +74,7 @@ export const RATCHET_AXES = [
   "visibleFields",
   "maxChoicesPerControl",
   "subLegibleControls",
+  "buriedPrimaryAction",
   "axeViolations",
 ] as const;
 export type RatchetAxis = (typeof RATCHET_AXES)[number];
@@ -84,6 +86,7 @@ const AXIS_LABEL: Record<RatchetAxis, string> = {
   visibleFields: "visible fields",
   maxChoicesPerControl: "choices in one control",
   subLegibleControls: "sub-legible controls",
+  buriedPrimaryAction: "buried primary action (was reachable, now behind a collapse)",
   axeViolations: "axe violations",
 };
 
@@ -229,6 +232,7 @@ export function freezeBaseline(measurements: RouteMeasurement[], generator: stri
       visibleFields: m.metrics.visibleFields,
       maxChoicesPerControl: m.metrics.maxChoicesPerControl,
       subLegibleControls: m.metrics.subLegibleControls,
+      buriedPrimaryAction: m.metrics.buriedPrimaryAction,
       axeViolations: m.axeViolations,
       ariaSnapshot: normaliseSnapshot(m.ariaSnapshot),
     };

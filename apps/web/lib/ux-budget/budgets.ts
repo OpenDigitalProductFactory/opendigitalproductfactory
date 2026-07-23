@@ -57,6 +57,14 @@ export type UxBudget = {
   readingLevel: ReadingLevel;
   requireNextActionMarker: boolean;
   /**
+   * When true, a marked primary action may not be buried behind a collapsed
+   * disclosure — it must be reachable in the default-visible scope. Set for shells
+   * where the user comes to DO something (cockpit/detail/settings/form), so hiding
+   * the primary verb behind "Advanced" is a finding rather than a word-count win.
+   * The self-upgrade regression (BI-D77BF495) is the motivating case.
+   */
+  requirePrimaryActionReachable: boolean;
+  /**
    * Above this many default-visible words the surface must defer detail into at
    * least one disclosure region. This is the anti-wall-of-text rule with teeth:
    * "long" is allowed, "long AND undifferentiated" is not.
@@ -81,6 +89,7 @@ export const UX_BUDGETS: Record<UxShell, UxBudget> = {
     maxSubLegibleControls: 0,
     readingLevel: "high-school",
     requireNextActionMarker: true,
+    requirePrimaryActionReachable: true,
     deferredDetailRequiredAboveWords: 250,
   },
   // Scanning many rows: the rows carry the words, so the chrome must stay thin.
@@ -94,6 +103,7 @@ export const UX_BUDGETS: Record<UxShell, UxBudget> = {
     maxSubLegibleControls: 0,
     readingLevel: "high-school",
     requireNextActionMarker: true,
+    requirePrimaryActionReachable: false,
     deferredDetailRequiredAboveWords: 400,
   },
   // One thing in depth — the shell where disclosure earns its keep.
@@ -107,6 +117,7 @@ export const UX_BUDGETS: Record<UxShell, UxBudget> = {
     maxSubLegibleControls: 0,
     readingLevel: "high-school",
     requireNextActionMarker: true,
+    requirePrimaryActionReachable: true,
     deferredDetailRequiredAboveWords: 300,
   },
   // Config surfaces were the worst offenders in the audit: everything, all at once.
@@ -120,6 +131,7 @@ export const UX_BUDGETS: Record<UxShell, UxBudget> = {
     maxSubLegibleControls: 0,
     readingLevel: "high-school",
     requireNextActionMarker: false,
+    requirePrimaryActionReachable: true,
     deferredDetailRequiredAboveWords: 250,
   },
   // Filling something in: fields are the point, prose is not.
@@ -133,6 +145,7 @@ export const UX_BUDGETS: Record<UxShell, UxBudget> = {
     maxSubLegibleControls: 0,
     readingLevel: "high-school",
     requireNextActionMarker: false,
+    requirePrimaryActionReachable: true,
     deferredDetailRequiredAboveWords: 250,
   },
   // Customer-facing. Strictest prose budget; the reader owes us no patience.
@@ -146,6 +159,7 @@ export const UX_BUDGETS: Record<UxShell, UxBudget> = {
     maxSubLegibleControls: 0,
     readingLevel: "high-school",
     requireNextActionMarker: false,
+    requirePrimaryActionReachable: false,
     deferredDetailRequiredAboveWords: 250,
   },
   // Not yet migrated. Generous on purpose — the RATCHET is what holds these routes,
@@ -160,6 +174,7 @@ export const UX_BUDGETS: Record<UxShell, UxBudget> = {
     maxSubLegibleControls: 0,
     readingLevel: "college",
     requireNextActionMarker: false,
+    requirePrimaryActionReachable: false,
     deferredDetailRequiredAboveWords: 700,
   },
 };
