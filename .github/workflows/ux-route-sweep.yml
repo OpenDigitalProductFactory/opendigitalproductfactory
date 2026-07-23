@@ -81,8 +81,28 @@ jobs:
       - name: Apply migrations
         run: pnpm --filter @dpf/db exec prisma migrate deploy
 
+      # The seed exits 1 if ANY step fails, by design ("surfaced, not swallowed").
+      # `eaReferenceModels` currently fails in a clean CI environment with "invalid
+      # zip data" — a real pre-existing defect (BI-98D19DF2), not something this job
+      # introduced, and one the sweep does not depend on: it needs a portal with a
+      # seeded org, not EA reference models. So tolerate THAT step specifically and
+      # fail on anything else, rather than blanket continue-on-error which would
+      # hide a genuinely broken seed.
       - name: Seed the fixture organisation
-        run: pnpm --filter @dpf/db seed
+        run: |
+          set +e
+          pnpm --filter @dpf/db seed 2>&1 | tee /tmp/seed.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then exit 0; fi
+          failed=$(grep -oE '^  - [a-zA-Z]+:' /tmp/seed.log | sed 's/^  - //; s/:$//' | sort -u)
+          echo "Seed reported failed step(s): ${failed:-<none parsed>}"
+          if [ "$failed" = "eaReferenceModels" ]; then
+            echo "::warning::Seed completed except eaReferenceModels (known: invalid zip data). Continuing — the sweep does not use EA reference models."
+            exit 0
+          fi
+          echo "::error::Seed failed on step(s) beyond the known eaReferenceModels issue."
+          exit "$status"
 
       - name: Build the portal
         run: pnpm --filter web build
