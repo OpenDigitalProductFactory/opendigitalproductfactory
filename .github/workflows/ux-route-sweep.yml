@@ -9,6 +9,12 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      update_baseline:
+        description: "Measure and emit a fresh route-budget-baseline.json artifact to arm the ratchet"
+        type: boolean
+        default: false
 
 concurrency:
   group: ux-route-sweep-${{ github.ref }}
@@ -135,7 +141,24 @@ jobs:
         run: pnpm exec tsx e2e/auth-only.ts
 
       - name: Run the sweep
+        if: ${{ github.event.inputs.update_baseline != 'true' }}
         run: pnpm --filter web ux:sweep
+
+      # Manual arming path: measure the running portal and emit the baseline as an
+      # artifact for a human to commit via PR. Deliberately NOT committed from CI —
+      # the baseline is a reviewed engineering act, and this job has read-only
+      # contents permission.
+      - name: Measure and emit a fresh baseline
+        if: ${{ github.event.inputs.update_baseline == 'true' }}
+        run: pnpm --filter web ux:sweep -- --update-baseline
+
+      - name: Upload the fresh baseline
+        if: ${{ github.event.inputs.update_baseline == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ux-route-budget-baseline
+          path: apps/web/lib/ux-budget/route-budget-baseline.json
+          if-no-files-found: error
 
       - name: Upload the budget report
         if: always()
