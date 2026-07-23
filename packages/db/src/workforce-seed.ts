@@ -371,6 +371,13 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "deliberation_create",
     "deliberation_read",
     "decision_record_create",
+    // registry_read is what makes evaluate_profession_decision reachable — the
+    // WSID craft-decision path. Without it this coworker could read its own
+    // profession corpus but never weigh a craft call THROUGH it, which is the
+    // whole point of grounding design critique in WSID rather than in taste.
+    // Load-bearing once WSID decisions carry dimension vectors: that scored
+    // path runs through this tool.
+    "registry_read",
   ],
 };
 

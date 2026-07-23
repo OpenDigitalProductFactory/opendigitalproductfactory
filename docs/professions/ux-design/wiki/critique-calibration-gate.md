@@ -55,6 +55,22 @@ Deterministic measurement does not need this gate, and conflating the two would 
 
 The ladder governs **judgment**, not measurement. A useful test when in doubt: *would two runs on identical input give the same answer?* If yes, ratchet it now. If no, it climbs the stages.
 
+## When WSID decisions carry dimension vectors
+
+WSID craft decisions are weighed through `evaluate_profession_decision`, which grounds a technique call in the profession's recorded corpus rather than in unaided judgment. As that path gains **dimension vectors** — the same machinery that lets kernel principles be scored rather than merely quoted — two things change here, and one must not.
+
+**What improves.** The per-critique call ("is this finding worth raising, and which lens dominates when hierarchy and density disagree?") stops being a prose judgment and becomes a scored one with a recorded contribution ledger. That is a real gain: it makes the *reasoning* auditable, not just the verdict, and it lets disagreement between lenses be resolved by weighting rather than by whoever writes the most confident sentence.
+
+**What also improves.** The stage promotions above become recordable as scored decisions with their evidence attached, instead of a founder's call remembered in a commit message.
+
+**What must not change.** A scorable decision path is not a substitute for the corpus authority contract. Specifically:
+
+- **The critic may not score its own promotion.** Running the promotion decision through the scored path with the critic as the caller is self-certification wearing a ledger. The promotion decision is the founder's, recorded; the machinery makes it auditable, not automatic.
+- **Vectors weigh options; they do not establish thresholds.** The agreement threshold that governs promotion is a founder-set number stated in advance. A scoring system can tell you which option wins given weights — it cannot tell you that 0.7 agreement is good enough, because that is a risk-appetite question, not a trade-off.
+- **Corpus entries still need an attached human verdict.** A vector-scored proposal is still a proposal. Nothing about better decision machinery makes an agent-authored verdict calibration-eligible.
+
+The short version: vectors make this gate's *reasoning* legible and its *promotions* auditable. They do not move where the authority sits.
+
 ## Scope boundary
 
 This gate governs **compositional** critique: is this screen well designed, judged before anyone uses it. It does not govern **behavioural** findings — where real users actually struggled, drawn from usage telemetry. That is a different question with a different evidence base, a different coworker, and its own governance. When a finding is behavioural, hand it over rather than speculating about users that were never observed.
