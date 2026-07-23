@@ -175,8 +175,30 @@ export function verdictForRoute(
   };
 }
 
+/**
+ * Volatile values that appear inside accessible names — deploy SHAs, record ids,
+ * timestamps, counts. They must be redacted before a snapshot is stored or compared,
+ * for two reasons:
+ *   1. The structural ratchet asks "did the hierarchy change shape?" — a heading whose
+ *      text is "Deployed: abc1234" would look changed on every deploy even when the
+ *      structure is identical, firing noisy false regressions that get the gate
+ *      disabled.
+ *   2. The stored snapshot is committed to git; raw SHAs and ids are secret-shaped
+ *      content that trips secret scanning and should not be persisted verbatim.
+ * Each pattern collapses to a stable placeholder so structure (roles, heading levels,
+ * nesting) is preserved while the volatile value is not.
+ */
+const VOLATILE_PATTERNS: [RegExp, string][] = [
+  [/\b[0-9a-f]{7,40}\b/gi, "<hex>"], // git SHAs (short and full)
+  [/\bc[a-z0-9]{24,}\b/gi, "<id>"], // cuid-style record ids
+  [/\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?/g, "<timestamp>"], // ISO date/time
+  [/\b\d[\d,]{2,}\b/g, "<num>"], // multi-digit counts (4+ chars incl. separators)
+];
+
 export function normaliseSnapshot(snapshot: string): string {
-  return snapshot
+  let out = snapshot;
+  for (const [re, placeholder] of VOLATILE_PATTERNS) out = out.replace(re, placeholder);
+  return out
     .split("\n")
     .map((l) => l.trimEnd())
     .filter((l) => l.trim().length > 0)

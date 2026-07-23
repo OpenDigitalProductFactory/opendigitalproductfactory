@@ -163,6 +163,22 @@ describe("structural hierarchy snapshot (rev 2 D2)", () => {
   it("normalises trailing whitespace and blank lines", () => {
     expect(normaliseSnapshot("a  \n\n b \n")).toBe("a\n b");
   });
+
+  it("redacts volatile values so a deploy does not read as a structure change", () => {
+    // Same heading structure, different deploy SHA / count / timestamp / id.
+    const a = normaliseSnapshot('- heading "Deployed: abc1234 · 1,234 runs · 2026-07-23" [level=2]');
+    const b = normaliseSnapshot('- heading "Deployed: def5678 · 9,001 runs · 2026-07-22" [level=2]');
+    expect(a).toBe(b);
+    // The structural level is preserved (single digit, not a volatile token).
+    expect(a).toContain("[level=2]");
+    // And no raw SHA survives to trip secret scanning.
+    expect(a).not.toContain("abc1234");
+  });
+
+  it("is idempotent — normalising a normalised snapshot changes nothing", () => {
+    const once = normaliseSnapshot('- heading "build cafef00d, 4321 items"');
+    expect(normaliseSnapshot(once)).toBe(once);
+  });
 });
 
 describe("sweep-level verdict", () => {
