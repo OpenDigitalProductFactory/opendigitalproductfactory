@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "PortfolioQualityIssue rows (open stale_entity / stale_relationship for merely-observed estate)",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260723020000_resolve_observed_estate_stale_issues",
+    "backfill": "status flip only — no row is created or deleted, no id, scope FK, summary, or detection timestamp is changed. Open stale_entity / stale_relationship rows whose issueKey carries a positional observed token (arp:, arp-host:, unifi-client:, prom:, prom-target:) or a positional container: segment are set status open->resolved with resolvedAt=NOW(). These describe things discovery merely observed (ARP neighbours, UniFi clients, platform Prometheus targets) or Docker containers that bypassed the prefix-only guard — none is resolvable by operator action. Managed infrastructure that genuinely vanished (UniFi devices, servers, services) is deliberately left OPEN because it is real signal. Tokens match positionally so managed names containing the letters (promotions-engine, sharp-imaging) are never matched. Non-destructive and idempotent: already-resolved rows are not re-selected."
+  },
+  "tests": [
+    "packages/db/src/estate-observation-class.test.ts",
+    "packages/db/src/docker-origin.test.ts",
+    "packages/db/src/discovery-attribution.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:portfolio-quality-issue#observed-estate-stale-resolve",
+      "prismaModel": "PortfolioQualityIssue",
+      "lifecycleDisposition": "no lifecycle change to the underlying InventoryEntity / InventoryRelationship or any operator-facing record: only the derived quality-issue status transitions open->resolved for issues describing merely-observed (non-managed) estate. firstDetectedAt, lastDetectedAt, scope FKs, and summary are preserved; rows remain for audit.",
+      "fields": [
+        {
+          "fieldId": "data:portfolio-quality-issue#status",
+          "resolution": "governed",
+          "reason": "resolve permanently-open stale issues raised for transient observations (ARP neighbours, UniFi clients) and platform-internal Prometheus targets, which vanish as a matter of course and can never be resolved by operator action; going forward evaluateInventoryQuality only emits stale issues for the managed estate",
+          "provenance": "live-DB analysis after the #3418/#3424 migrations applied: stale_relationship 146 open (137 observed / 9 managed) and stale_entity 108 open (86 observed + 11 positional-container / 11 managed); this migration resolves 234 and leaves the 20 genuinely-managed rows open, which resolve to a single coherent signal (the operator's UniFi gateway, switch and 4 APs plus their topology links stopped reporting)"
+        },
+        {
+          "fieldId": "data:portfolio-quality-issue#resolvedAt",
+          "resolution": "governed",
+          "reason": "stamp the resolution time for the audit trail on the same open->resolved transition",
+          "provenance": "set to NOW() only on rows matching the positional observed/container token predicate; managed-estate rows are untouched"
+        }
+      ]
+    }
+  ]
+}

@@ -51,7 +51,12 @@ export function isDockerOriginEntityKey(
 ): boolean {
   if (entityKey.startsWith("subnet:docker-")) return true;
   if (entityKey.startsWith("gateway:docker-gw:")) return true;
-  if (entityKey.startsWith("container:")) return true;
+  // `container:` is matched POSITIONALLY, not just as a prefix: collectors also
+  // emit it as a later segment (e.g. `monitoring_service:container:06cc859f0e76`),
+  // which a startsWith check missed — those leaked past this guard and opened a
+  // permanent stale_entity issue per recreated container. Mirrors the same
+  // positional rule already used by isDockerOriginRelationshipKey.
+  if (DOCKER_CONTAINER_ENDPOINT_RE.test(entityKey)) return true;
   if (entityKey.startsWith("runtime:docker")) return true;
   if (entityKey.startsWith("docker_host:")) return true;
 

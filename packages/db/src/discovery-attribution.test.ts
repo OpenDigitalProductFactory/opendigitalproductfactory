@@ -316,12 +316,17 @@ describe("evaluateInventoryQuality", () => {
   });
 
   it("emits a stale_relationship issue for a stale real-estate relationship", () => {
+    // Real-estate topology still raises, unlike Docker-origin churn. The
+    // exemplar is managed<->managed (gateway uplink to switch): an
+    // `arp:<host>-> unifi:<ap>` link is a TRANSIENT client attachment and is
+    // now classified observed — see the managed-vs-observed test below.
     const result = evaluateInventoryQuality(
       [],
       [
         {
-          relationshipKey: "organization:internal:edge_node:MEMBER_OF:arp:192.168.0.58->unifi:fc:ec:da:bc:a5:49",
-          relationshipType: "MEMBER_OF",
+          relationshipKey:
+            "organization:internal:edge_node:HOSTS:unifi:9c:05:d6:de:8d:3f->unifi:d0:21:f9:df:56:92",
+          relationshipType: "HOSTS",
           status: "stale",
         },
       ],
@@ -356,6 +361,66 @@ describe("evaluateInventoryQuality", () => {
     );
 
     expect(result.issues).toHaveLength(0);
+  });
+
+  it("emits stale_entity for MANAGED infrastructure but not for merely-observed things", () => {
+    const result = evaluateInventoryQuality([
+      // Managed: a UniFi access point vanishing is real, actionable signal.
+      {
+        entityKey: "organization:internal:access_point:unifi:ac:8b:a9:3f:1b:29",
+        entityType: "access_point",
+        attributionStatus: "stale",
+      },
+      // Observed: an ARP neighbour and a UniFi client leaving is normal churn.
+      {
+        entityKey: "organization:internal:host:arp:00A0C9123456",
+        entityType: "host",
+        attributionStatus: "stale",
+      },
+      {
+        entityKey: "organization:internal:host:unifi-client:aa:bb:cc:dd:ee:ff",
+        entityType: "host",
+        attributionStatus: "stale",
+      },
+      // Observed: the platform's own Prometheus scrape target.
+      {
+        entityKey: "application:prom:portal:portal:3000",
+        entityType: "application",
+        attributionStatus: "stale",
+      },
+    ]);
+
+    const stale = result.issues.filter((issue) => issue.issueType === "stale_entity");
+    expect(stale).toHaveLength(1);
+    expect(stale[0].inventoryEntityKey).toBe(
+      "organization:internal:access_point:unifi:ac:8b:a9:3f:1b:29",
+    );
+  });
+
+  it("suppresses stale_relationship when either endpoint is merely observed", () => {
+    const result = evaluateInventoryQuality(
+      [],
+      [
+        // Managed<->managed topology (gateway uplink to switch) — real signal.
+        {
+          relationshipKey:
+            "organization:internal:edge_node:HOSTS:unifi:9c:05:d6:de:8d:3f->unifi:d0:21:f9:df:56:92",
+          relationshipType: "HOSTS",
+          status: "stale",
+        },
+        // Transient client attached to a managed AP — vanishes when it leaves.
+        {
+          relationshipKey:
+            "organization:internal:edge_node:MEMBER_OF:arp:00A0C9123456->unifi:fc:ec:da:bc:a5:49",
+          relationshipType: "MEMBER_OF",
+          status: "stale",
+        },
+      ],
+    );
+
+    const stale = result.issues.filter((issue) => issue.issueType === "stale_relationship");
+    expect(stale).toHaveLength(1);
+    expect(stale[0].inventoryRelationshipKey).toContain("unifi:9c:05:d6:de:8d:3f");
   });
 
   it("does not emit for active (non-stale) relationships regardless of origin", () => {

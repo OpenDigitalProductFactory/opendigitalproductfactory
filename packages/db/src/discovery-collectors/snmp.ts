@@ -13,6 +13,7 @@
 // This file runs inside Docker containers, not in the browser.
 import snmp from "net-snmp";
 import type { CollectorContext, CollectorOutput, DiscoverySourceKind } from "../discovery-types";
+import { normalizeMac } from "../discovery-mac-classification";
 
 // ─── SNMP OIDs ──────────────────────────────────────────────────────────────
 
@@ -289,13 +290,17 @@ async function discoverSnmpDevice(
         : "";
       if (!ip || ip === "0.0.0.0" || ip === target.address) continue;
 
-      const hostRef = `arp-host:${ip}`;
+      // Identity anchor: MAC is stable across DHCP lease changes, IP is not —
+      // see the same reasoning in discovery-collectors/network.ts. The SNMP ARP
+      // table gives both, so anchor on the MAC when present.
+      const hostIdentity = normalizeMac(mac) ?? ip;
+      const hostRef = `arp-host:${hostIdentity}`;
       items.push({
         sourceKind: source,
         itemType: "host",
         name: `LAN Host ${ip}`,
         externalRef: hostRef,
-        naturalKey: `arp:${ip}`,
+        naturalKey: `arp:${hostIdentity}`,
         confidence: 0.60,
         attributes: {
           address: ip,
