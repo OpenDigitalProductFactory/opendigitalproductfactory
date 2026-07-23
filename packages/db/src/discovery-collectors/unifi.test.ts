@@ -114,11 +114,30 @@ function makeClients() {
   };
 }
 
+function makeHealth() {
+  return {
+    data: [
+      {
+        subsystem: "wan",
+        status: "ok",
+        wan_ip: "98.97.96.95",
+        isp_name: "Starlink",
+        isp_organization: "SpaceX Services, Inc.",
+        latency: 42,
+        uptime: 864000,
+        gw_mac: "aa:bb:cc:dd:ee:01",
+      },
+      { subsystem: "wlan", status: "ok" },
+    ],
+  };
+}
+
 function makeDeps(overrides: Partial<UnifiDeps> = {}): UnifiDeps {
   const responses: Record<string, unknown> = {
     "stat/device": makeDevices(),
     "rest/networkconf": makeNetworkConf(),
     "stat/sta": makeClients(),
+    "stat/health": makeHealth(),
   };
 
   return {
@@ -225,6 +244,56 @@ describe("collectUnifiDiscovery", () => {
   });
 
   // ─── VLAN Discovery ───────────────────────────────────────────
+
+  it("models the internet uplink and links the gateway to it (the WAN hop)", async () => {
+    const result = await collectUnifiDiscovery({ sourceKind: "unifi" }, makeDeps());
+
+    const wan = result.items.find((item) => item.itemType === "wan_uplink");
+    expect(wan).toBeDefined();
+    // Named after the ISP so the operator sees the dependency they actually have.
+    expect(wan!.name).toBe("Starlink (WAN)");
+    // Identity anchored on site + WAN designation, NEVER the public IP — a
+    // Starlink CGNAT address rotates and would mint a new entity each time.
+    expect(wan!.naturalKey).toBe("unifi-wan:default:wan");
+    expect(wan!.externalRef).toBe("unifi-wan:default:wan");
+    expect(wan!.attributes).toMatchObject({
+      ispName: "Starlink",
+      wanIp: "98.97.96.95",
+      linkStatus: "ok",
+      latencyMs: 42,
+    });
+
+    // The chain now reaches the internet: gateway -> WAN uplink.
+    const uplink = result.relationships.find((r) => r.relationshipType === "UPLINKS_TO");
+    expect(uplink).toBeDefined();
+    expect(uplink!.fromExternalRef).toBe("unifi-device:aa:bb:cc:dd:ee:01");
+    expect(uplink!.toExternalRef).toBe("unifi-wan:default:wan");
+  });
+
+  it("omits the uplink (without failing the sweep) when health has no wan subsystem", async () => {
+    const deps = makeDeps({
+      fetchFn: async (url: string | URL) => {
+        const urlStr = String(url);
+        if (urlStr.includes("stat/health")) {
+          return new Response(JSON.stringify({ data: [{ subsystem: "wlan", status: "ok" }] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (urlStr.includes("stat/device")) {
+          return new Response(JSON.stringify(makeDevices()), { status: 200 });
+        }
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      },
+    });
+
+    const result = await collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
+
+    expect(result.items.find((item) => item.itemType === "wan_uplink")).toBeUndefined();
+    expect(result.relationships.find((r) => r.relationshipType === "UPLINKS_TO")).toBeUndefined();
+    // Devices still collected — a missing WAN subsystem must not fail the sweep.
+    expect(result.items.some((item) => item.itemType === "router")).toBe(true);
+  });
 
   it("discovers VLANs from networkconf", async () => {
     const result = await collectUnifiDiscovery(undefined, makeDeps());

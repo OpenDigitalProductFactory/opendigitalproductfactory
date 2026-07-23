@@ -167,7 +167,11 @@ describe("looksLikeRuntimeArtifact", () => {
     ["Docker GW dpf_default (172.18.0.1)", true],
     ["192.168.0.109", true],
     ["abc123def456", true],
-    ["Primary Starlink (WAN1)", true],
+    // The WAN uplink is the estate's most critical dependency, NOT a runtime
+    // artifact. The `(WAN\d*)` pattern used to reject these, keeping the
+    // internet connection out of the portfolio while Docker rows sailed through.
+    ["Primary Starlink (WAN1)", false],
+    ["Starlink (WAN)", false],
     ["Digital Product Factory Portal", false],
     ["postgres", false],
     ["qdrant", false],
@@ -331,6 +335,10 @@ describe("LEGACY_PROMOTABLE_TYPES", () => {
       "ai_service",
       "application",
       "service",
+      // The internet uplink is a managed dependency with a vendor (the ISP), a
+      // service level, and an outage blast radius of "everything" — product-
+      // shaped, not a runtime instance.
+      "wan_uplink",
     ]);
   });
 

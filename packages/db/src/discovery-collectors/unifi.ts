@@ -52,6 +52,24 @@ type UnifiDevice = {
   num_sta?: number;
 };
 
+// `stat/health` returns one entry per subsystem (wan, wlan, lan, www, vpn).
+// The `wan` entry is the only place the controller reports the INTERNET uplink:
+// which ISP is upstream, the public address, and whether the link is healthy.
+// Everything else the collector models stops at the LAN edge.
+type UnifiHealthSubsystem = {
+  subsystem: string;
+  status?: string; // "ok" | "warning" | "error"
+  wan_ip?: string;
+  isp_name?: string;
+  isp_organization?: string;
+  latency?: number; // ms to the ISP
+  uptime?: number; // seconds
+  xput_down?: number;
+  xput_up?: number;
+  gw_mac?: string; // the gateway that owns this uplink
+  gw_name?: string;
+};
+
 type UnifiNetworkConf = {
   _id: string;
   name: string;
@@ -353,6 +371,75 @@ export async function collectUnifiDiscovery(
           },
         });
       }
+    }
+  }
+
+  // ── Internet Uplink (the WAN hop) ─────────────────────────────
+  // Everything above stops at the LAN edge: AP -> switch -> gateway. The hop the
+  // business actually depends on — gateway -> ISP (Starlink here) — was never
+  // modelled, so "are we online, and which hop broke?" was unanswerable. The
+  // `wan` health subsystem is the only place the controller reports it.
+  //
+  // Identity is anchored on the site + WAN designation, never on `wan_ip`: a
+  // Starlink CGNAT address changes routinely, and keying on it would mint a new
+  // uplink entity per address change (the churn pattern that produced thousands
+  // of orphaned rows elsewhere in discovery).
+  const healthResult = await unifiGet<UnifiHealthSubsystem>("stat/health", resolvedDeps);
+  if (healthResult.error) {
+    warnings.push("unifi_partial:health");
+  }
+
+  const wanHealth = (healthResult.data ?? []).find(
+    (subsystem) => subsystem.subsystem === "wan",
+  );
+
+  if (wanHealth) {
+    const ispName = wanHealth.isp_name ?? wanHealth.isp_organization ?? null;
+    const wanRef = `unifi-wan:${resolvedDeps.site}:wan`;
+    items.push({
+      sourceKind: source,
+      itemType: "wan_uplink",
+      // Name the uplink after the ISP so the operator sees the dependency they
+      // actually have ("Starlink (WAN)") rather than an opaque port label.
+      name: ispName ? `${ispName} (WAN)` : "Internet Uplink (WAN)",
+      externalRef: wanRef,
+      naturalKey: wanRef,
+      confidence: 0.95,
+      attributes: {
+        ispName,
+        ispOrganization: wanHealth.isp_organization ?? null,
+        wanIp: wanHealth.wan_ip ?? null,
+        linkStatus: wanHealth.status ?? null,
+        latencyMs: wanHealth.latency ?? null,
+        uptimeSeconds: wanHealth.uptime ?? null,
+        throughputDownBps: wanHealth.xput_down ?? null,
+        throughputUpBps: wanHealth.xput_up ?? null,
+        osiLayer: 3,
+        osiLayerName: "network",
+        protocolFamily: "ipv4",
+      },
+    });
+
+    // Complete the chain: gateway -> internet uplink. Prefer the gateway the
+    // controller itself attributes the uplink to (`gw_mac`); fall back to the
+    // routing device when the controller omits it.
+    const gatewayRef = (wanHealth.gw_mac && macToRef.get(wanHealth.gw_mac.toLowerCase()))
+      ?? macToRef.get(
+        devices.find((device) => mapDeviceType(device.type).itemType === "router")?.mac ?? "",
+      );
+
+    if (gatewayRef) {
+      relationships.push({
+        sourceKind: source,
+        relationshipType: "UPLINKS_TO",
+        fromExternalRef: gatewayRef,
+        toExternalRef: wanRef,
+        confidence: 0.95,
+        attributes: {
+          ispName,
+          linkStatus: wanHealth.status ?? null,
+        },
+      });
     }
   }
 
