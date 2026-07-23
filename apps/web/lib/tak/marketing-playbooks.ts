@@ -461,6 +461,30 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Capacity-available campaign", "Peak-season readiness outreach", "Forwarder referral outreach", "Client performance review"],
   },
 
+  "fabric-care-services": {
+    primaryGoal: "Drive repeat garment care and fill plant capacity through trust, convenience, and ready-promise reliability",
+    stakeholders: "Households, local professionals, small business accounts, route customers, satellite-store customers",
+    campaignTypes: [
+      "Ready-for-the-season campaigns (winter coats, wedding season, back-to-school uniforms)",
+      "Pickup and delivery route promotions",
+      "Repeat-customer reminders for shirts, suits, linens, and comforters",
+      "Alterations and repair service awareness",
+      "Commercial account outreach for uniforms, salons, restaurants, and offices",
+      "Ready-notification and claim-ticket confidence messaging",
+      "Specialty-care campaigns for wedding gowns and delicate garments",
+    ],
+    contentTone: "Trustworthy, convenient, careful, local",
+    keyMetrics: [
+      "Repeat customer rate",
+      "Ready-promise hit rate",
+      "Average ticket value",
+      "Pickup and delivery adoption",
+      "Commercial account growth",
+    ],
+    ctaLanguage: ["Start an order", "Schedule pickup", "Request service", "Open a laundry account"],
+    agentSkills: ["Pickup route campaign", "Ready-promise notice", "Commercial account outreach", "Seasonal garment-care promotion"],
+  },
+
   "security-services": {
     primaryGoal: "Win and renew recurring contracts — built on credibility, a response track record, and compliance assurance",
     stakeholders: "Businesses, property managers, event organizers, residents, insurers",

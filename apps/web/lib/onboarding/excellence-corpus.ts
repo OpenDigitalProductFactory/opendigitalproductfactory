@@ -42,6 +42,11 @@ const CATEGORY_OPERATOR_MOVES: Partial<Record<ArchetypeCategory, string[]>> = {
     "Fill cancellations from a standby list, never leave a gap",
     "Track colour/repeat clients and prompt their next visit",
   ],
+  "fabric-care-services": [
+    "Tag every order at intake and reconcile exceptions before it leaves the counter",
+    "Watch promised-ready risk daily and tell customers before they ask",
+    "Balance plant capacity across dry cleaning, laundry, alterations, and pickup routes",
+  ],
   "food-hospitality": [
     "Turn tables without rushing — seat from the waitlist as they clear",
     "Keep the pass moving; expedite before it backs up",

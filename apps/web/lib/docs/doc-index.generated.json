@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 535,
+  "pageCount": 536,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -540,7 +540,7 @@
         "4-the-bridge-value-stream-stage-platform-surface-audit-phase",
         "5-the-value-stream-stages-map-onto-substrate-the-platform-already-carries",
         "51-architecture-and-usability-invariants",
-        "6-per-category-value-stream-profiles-all-95-archetypes-across-21-categories",
+        "6-per-category-value-stream-profiles-all-103-archetypes-across-23-categories",
         "61-trades-maintenance-run-1-plumber-electrician-facilities-maintenance-landscaping-cleaning-service",
         "62-beauty-personal-care-run-2-hair-salon-barber-shop-nail-salon-beauty-spa-personal-trainer-mobile-beauty",
         "63-healthcare-wellness-run-3-veterinary-clinic-dental-practice-medical-practice-physiotherapy-counselling-optician-plus-medical-mobile-leaves-in-102",
@@ -563,6 +563,7 @@
         "620-media-production-film-video-production-post-production-studio-event-production-staging",
         "621-live-events-venues-event-venue-tour-promoter-talent-booking-agency",
         "622-warehousing-fulfilment-third-party-logistics-ecommerce-fulfilment-cold-chain-storage-cross-dock-transload",
+        "623-fabric-care-services-dry-cleaning-plant-network-wash-and-fold-laundry-alterations-tailoring",
         "7-demandcapacity-dynamics-at-the-load-bearing-stage",
         "71-the-model-capacity-unit-demand-signature-two-sided-risk",
         "72-per-archetype-demandcapacity-matrix",
@@ -5360,6 +5361,17 @@
         "see-also"
       ]
     },
+    "docs/professions/operations/wiki/fabric-care-garment-custody-and-ready-promise.md": {
+      "publicHref": "/professions/operations/wiki/fabric-care-garment-custody-and-ready-promise/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "why-it-matters",
+        "source"
+      ]
+    },
     "docs/professions/operations/wiki/incident-response-lifecycle.md": {
       "publicHref": "/professions/operations/wiki/incident-response-lifecycle/",
       "portalHref": null,
@@ -6562,8 +6574,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "archetype-audit-plan-all-95-archetypes",
-        "0-what-changed-since-the-2026-06-12-baseline-56-15-95-21",
+        "archetype-audit-plan-all-103-archetypes",
+        "0-what-changed-since-the-2026-06-12-baseline-56-15-103-23",
         "1-purpose",
         "1a-audit-perspective-first-run-expectations",
         "2-constraints",
@@ -6573,7 +6585,7 @@
         "archetype-specific-dimensions-evaluated-on-every-archetype",
         "operator-persona-accessibility-a-ux-fit-dimension-not-a-passfail-gate",
         "3-audit-run-strategy",
-        "3b-representative-quality-bar-21-category-sentinels-must-all-pass-before-audit-is-considered-representative",
+        "3b-representative-quality-bar-23-category-sentinels-must-all-pass-before-audit-is-considered-representative",
         "3a-run-0-pilot-calibration-platform-core-mechanics-mandatory-before-run-1",
         "4-pre-audit-backup-restore",
         "4a-0-authoritative-backup-perform-once-before-run-0s-first-wipe",

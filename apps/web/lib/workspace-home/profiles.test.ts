@@ -90,4 +90,25 @@ describe("default workspace home profiles", () => {
       expect(resolution.contribution?.topConcerns).toContain("clinical handoffs awaiting acknowledgement");
     }
   });
+
+  it("uses a fabric-care category home for garment custody and ready-promise operations", () => {
+    const resolution = resolveWorkspaceHomeContribution({
+      storefrontConfig: {
+        archetype: {
+          archetypeId: "dry-cleaning-plant-network",
+          category: "fabric-care-services",
+          name: "Dry Cleaning Plant & Store Network",
+        },
+      },
+    });
+
+    expect(resolution.match).toBe("category");
+    expect(resolution.contribution?.id).toBe("home-fabric-care-services");
+    expect(resolution.contribution?.topConcerns).toContain(
+      "claim tickets with missing or exception items",
+    );
+    expect(resolution.contribution?.components.map((component) => component.key)).toEqual(
+      expect.arrayContaining(["plant-capacity", "ticket-exceptions", "garment-tracking"]),
+    );
+  });
 });

@@ -268,6 +268,31 @@ export const DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS: WorkspaceHomeContribution[] =
     ],
   }),
   profile({
+    id: "home-fabric-care-services",
+    label: "Fabric care operations home",
+    description:
+      "Claim tickets, plant capacity, ready promises, pickup routes, and customer exceptions for dry-cleaning and laundry operations.",
+    primaryOperatingQuestion: "which garment order is at risk of missing its ready promise today?",
+    topConcerns: [
+      "orders due or promised today",
+      "claim tickets with missing or exception items",
+      "plant and workroom capacity",
+      "pickup and delivery route timing",
+      "customer ready-notice or delay communication failures",
+    ],
+    archetypeCategories: ["fabric-care-services"],
+    primitives: ["capacity-lanes", "decision-queue", "inventory-watch", "communication-exceptions", "handoff-queue"],
+    requiredCanonicalData: ["customer-account", "work-item", "work-schedule"],
+    requiredSignals: ["scheduled-work", "urgent-exception", "communication-failed", "coworker-handoff"],
+    components: [
+      { key: "plant-capacity", slotId: "today-now", primitiveKey: "capacity-lanes", title: "Plant, counter, and workroom capacity", dataRefs: [workSchedule, scheduledWork] },
+      { key: "ticket-exceptions", slotId: "exceptions-needs-review", primitiveKey: "decision-queue", title: "Claim tickets and garment exceptions", dataRefs: [workItem, urgentException] },
+      { key: "garment-tracking", slotId: "exceptions-needs-review", primitiveKey: "inventory-watch", title: "Orders at risk of missing ready promise", dataRefs: [workItem] },
+      { key: "customer-callbacks", slotId: "exceptions-needs-review", primitiveKey: "communication-exceptions", title: "Ready notices and delay follow-up", dataRefs: [customerAccount, failedCommunication] },
+      { key: "coworker-handoffs", slotId: "coworker-handoffs", primitiveKey: "handoff-queue", title: "Counter, plant, and route handoffs", dataRefs: [coworkerHandoff] },
+    ],
+  }),
+  profile({
     id: "home-food-hospitality",
     label: "Service period home",
     description:

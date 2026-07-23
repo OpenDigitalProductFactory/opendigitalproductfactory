@@ -13,3 +13,4 @@
 # until their corpus lands; they do not need a line here yet.
 
 warehousing-fulfilment	new-planned:BI-A94DA462
+fabric-care-services	extends:dispatcher

@@ -74,6 +74,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our supply chain centres on professional product distributors plus a curated set of retail brands we resell. Inventory turns matter alongside trust — clients notice when a favourite product is missing, and back-bar consumables drive a real share of unit cost.",
   },
+  "fabric-care-services": {
+    missionTheme:
+      "care for customers' garments and textiles with reliable cleaning, careful handling, and convenient pickup",
+    businessModel:
+      "Point-of-sale service with some recurring and account work: customers drop off or schedule pickup, the business processes garments through a plant or workroom, and repeat trust depends on item tracking, quality, and ready promises.",
+    whoWeServe:
+      "We serve households and local businesses who trust us with garments, uniforms, linens, and textiles they need cleaned, pressed, repaired, and returned on time.",
+    howWeDecide:
+      "We decide for garment care, custody accuracy, and promise reliability: tag every item, respect care instructions, communicate delays early, and fix mistakes quickly. A ready promise we cannot meet becomes a customer update, not a surprise at the counter.",
+    supplyChain:
+      "We rely on cleaning consumables, tags, packaging, hangers, plant equipment maintenance, route/delivery partners, and specialty repair vendors. Supply continuity and equipment uptime protect ready promises and customer trust.",
+  },
   "fitness-recreation": {
     missionTheme:
       "help our members move, train, and live healthier, more active lives",
@@ -357,6 +369,12 @@ const ARCHETYPE_PROFILES: Record<string, Partial<ArchetypeBusinessProfile>> = {
     missionTheme:
       "help our members get stronger, healthier, and more confident — and keep coming back",
   },
+  "dry-cleaning-plant-network": {
+    businessModel:
+      "A counter, plant, and sometimes delivery-route network: satellite stores capture orders, the plant processes work, and customer trust lives in the ticket/tag chain plus clear ready notifications.",
+    supplyChain:
+      "The operating backbone is cleaning chemistry, tags/tickets, bags, hangers, presses, washers, dryers, boilers, conveyors, and repair relationships. The plant is the bottleneck, so equipment uptime and consumable supply are service quality, not merely purchasing.",
+  },
   "ecommerce-general": {
     businessModel:
       "Online transactional sales with repeat custom; product quality, fast fulfilment, and easy support turn first orders into loyal customers.",
@@ -529,6 +547,30 @@ const INDUSTRY_STANCE_VECTORS: Record<string, Partial<ArchetypeStanceVectors>> =
       title: "Parts and van stock without asking",
       stance:
         "Parts and materials needed to finish a booked job proceed without the owner up to the ceiling — a second trip costs more than the part. Tools, equipment, and new suppliers are the owner's call.",
+      ceilingUsd: 300,
+    },
+  },
+  "fabric-care-services": {
+    "customer-goodwill": {
+      title: "When a garment order goes wrong",
+      stance:
+        "If we lose, damage, delay, or misroute a customer's garment through our mistake, we respond quickly, explain plainly, and make it right with redo, repair, credit, or refund within the ceiling. Anything involving a high-value or sentimental item goes to the owner.",
+      ceilingUsd: 150,
+    },
+    "growth-vs-stability": {
+      title: "New volume vs ready promises",
+      stance:
+        "Existing claim tickets and ready promises get first call on plant capacity. We take new volume at the pace the plant and workroom can process accurately, not faster.",
+    },
+    "quality-bar": {
+      title: "Our garment-care standard",
+      stance:
+        "A garment does not leave below our standard. If cleaning, pressing, folding, repair, tagging, or packaging is wrong, we fix it before handoff or tell the customer early.",
+    },
+    "spend-authority": {
+      title: "Spending without asking",
+      stance:
+        "Routine cleaning supplies, tags, hangers, bags, and urgent minor equipment fixes can proceed without the owner up to the ceiling. New equipment, new vendors, or anything above it goes to the owner.",
       ceilingUsd: 300,
     },
   },

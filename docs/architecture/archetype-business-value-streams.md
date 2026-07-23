@@ -1,18 +1,18 @@
 # Archetype Business Value Streams
 
-**Status:** Draft — 2026-07-18 (catalog sweep applied; 95/21 source catalog reflected)
+**Status:** Draft — 2026-07-22 (fabric-care archetype added; 103/23 source catalog reflected)
 **Kind:** Planning artefact (architecture + testing + archetype documentation)
 **Owner surface:** Architecture feature (`/ea`), archetype documentation, and the archetype audit.
 **Consumed by:** [archetype-audit-plan.md](../testing/archetype-audit-plan.md) · the EA / architecture feature · per-archetype documentation.
 **Implemented by:** [2026-06-12-value-stream-architecture-platform-design.md](../superpowers/specs/2026-06-12-value-stream-architecture-platform-design.md) — platform design that captures these value streams as architecture, measures/optimizes each archetype's business model, and drives coworker facilitation + proactivity (the *how*).
-**Grounded in:** `packages/storefront-templates/src/archetypes/` (95 seeded archetypes across 21 categories as of 2026-07-18) and `packages/storefront-templates/src/types.ts` (operating-model axes, commercial models, activation profiles).
+**Grounded in:** `packages/storefront-templates/src/archetypes/` (103 seeded archetypes across 23 categories as of 2026-07-22) and `packages/storefront-templates/src/types.ts` (operating-model axes, commercial models, activation profiles).
 **Decision authority:** Defines value-stream interpretation, audit severity rationale, EA rendering semantics, and archetype documentation language. It does **not** override seed data, create new runtime tables, or authorize WWMD/WWWD perspective blending.
 
 ---
 
 ## 0. Why this document exists
 
-The archetype audit drives 95 seeded archetypes through a browser-realistic experience and records gaps. The risk it names in its own Section 1 — *"The platform must behave correctly for each organizational model"* — is that **testing becomes arbitrary**: we click through phases A–H because the checklist says so, not because each click defends something the business actually depends on.
+The archetype audit drives 103 seeded archetypes through a browser-realistic experience and records gaps. The risk it names in its own Section 1 — *"The platform must behave correctly for each organizational model"* — is that **testing becomes arbitrary**: we click through phases A–H because the checklist says so, not because each click defends something the business actually depends on.
 
 This artefact removes the arbitrariness. It states, for every archetype, **the operational value stream the business runs in the real world** — the end-to-end sequence of value-adding stages that turns a stranger into a served, paid, retained customer. Every test phase then exists to validate a *named stage of a real value stream*, and every finding can be tied to *the stage of the business it threatens*. A vet booking form that drops the pet fields is not "an important finding because the checklist says pet fields" — it is a **break in the Capture-Demand → Deliver-Care handoff** that makes the clinic's core value stream non-functional.
 
@@ -44,13 +44,13 @@ This document is about the other sense: the **operational value stream of the cu
 
 This distinction matters. A value stream is not a click path, process map, or implementation workflow. A value-stream stage may be realized by multiple UI flows and processes, and one UI flow may touch multiple stages. The stage names therefore stay stable even when the portal design changes.
 
-The bridge: the customer's operational value stream lives almost entirely in IT4IT's **Consume** stream (request → fulfilment → customer-facing experience). DPF's job is to make a non-technical operator run their whole operational value stream *through* the platform's Consume surface. So this document is the detailed expansion of "Consume" for each of the 95 businesses we ship.
+The bridge: the customer's operational value stream lives almost entirely in IT4IT's **Consume** stream (request → fulfilment → customer-facing experience). DPF's job is to make a non-technical operator run their whole operational value stream *through* the platform's Consume surface. So this document is the detailed expansion of "Consume" for each of the 103 businesses we ship.
 
 ---
 
 ## 2. The universal small-business value stream
 
-Across all 95 archetypes, the same backbone recurs. Differences are not *which* stages exist — every business attracts, captures, delivers, settles, and retains — but **which stage is load-bearing, what "value delivered" means, and which trust gate governs it.** The backbone:
+Across all 103 archetypes, the same backbone recurs. Differences are not *which* stages exist — every business attracts, captures, delivers, settles, and retains — but **which stage is load-bearing, what "value delivered" means, and which trust gate governs it.** The backbone:
 
 ```
                  ┌─────────────────── TRUST & COMPLIANCE (cross-cutting) ───────────────────┐
@@ -154,7 +154,7 @@ These invariants keep this artefact useful to architecture, UX, testing, and bus
 
 ---
 
-## 6. Per-category value-stream profiles (all 95 archetypes across 21 categories)
+## 6. Per-category value-stream profiles (all 103 archetypes across 23 categories)
 
 > The field-dispatch leaves folded into existing categories on 2026-06-13 (e.g. `hvac-contractor`, `home-health-care`, `mobile-pet-grooming`) share their category's value-stream profile below and are catalogued — with their cross-category pattern — in §10.2. The three dispatch-native categories are §6.16–6.18; `media-production` and `live-events-venues` are now first-class profiles in §6.20–§6.21.
 
@@ -485,6 +485,25 @@ Related: `freight-brokerage` joins `moving-and-logistics` in the same change —
 
 ---
 
+### 6.23 Fabric Care Services — `dry-cleaning-plant-network`, `wash-and-fold-laundry`, `alterations-tailoring`
+
+> Added 2026-07-22. The garment/textile custody-and-return category: the operator accepts customer-owned garments or laundry, issues a claim ticket, processes work through a plant, counter, workroom, or pickup route, and returns the same property against a ready promise. It is distinct from `beauty-personal-care` because the customer is not the work surface, from `warehousing-fulfilment` because the custody is household/local service work rather than B2B inventory storage, and from `trades-maintenance` because the work happens primarily inside the operator's counter/plant network. Design: [`docs/superpowers/specs/2026-07-22-fabric-care-services-archetype-design.md`](../superpowers/specs/2026-07-22-fabric-care-services-archetype-design.md).
+
+- **Value delivered:** a customer's garment, bag, textile, or alteration item is cleaned, pressed, repaired, folded, or preserved, then returned to the same customer on or before the ready promise.
+- **Commercial model:** `point-of-sale` with `account-with-billing` readiness for recurring laundry plans, pickup routes, and small commercial accounts. Payment is usually at counter or pickup; account billing is prepared, not prescribed.
+- **Load-bearing stage:** **S4 Deliver the Value** — plant/workroom throughput, item tracking, and ready-promise discipline determine whether the customer receives the right property at the right time.
+- **Distinctive stage:** the claim-ticket/tag chain is the custody control from drop-off/pickup through plant, satellite store, and return. Missing, mixed, damaged, or delayed garments are exceptions, not generic inbox notes.
+- **Trust gate:** care-label respect, existing-damage capture, high-value/sentimental item escalation, and early delay communication. Specialty leaves may later add preservation, solvent, or environmental compliance overlays.
+- **Value-stream-critical assertions:** the catalog renders "Services" and "Orders"; forms capture preferred location, service mode, needed-by date, and garment notes; item templates mention claim tickets and ready notifications; the BAYS twin shows station/work-order throughput rather than a retail stock floor.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `dry-cleaning-plant-network` | Central plant plus satellite stores/routes; dry cleaning, pressing, laundry, alterations, and specialty care under one claim-ticket flow. |
+| `wash-and-fold-laundry` | Bagged laundry, recurring plans, household textiles, commercial laundry, and route pickup/delivery. |
+| `alterations-tailoring` | Fittings and workroom routing around event deadlines; repairs and fit changes tracked as ticketed garment work. |
+
+---
+
 ## 7. Demand–capacity dynamics at the load-bearing stage
 
 The load-bearing stage (Section 6) is not only where the main transaction interface between stakeholders sits — it is also **where demand meets finite capacity.** That is not a coincidence: a stage is load-bearing precisely because the business lives or dies on its ability to match demand against a scarce resource there. Managing that match — *neither starving demand nor paying for idle capacity* — is the operator's hardest recurring decision, and it is where a typical operator most needs the platform's help.
@@ -501,7 +520,7 @@ This section characterises those dynamics per archetype so the platform can late
 | **Physical-unit capacity (hard cap)** | a fixed number of physical places | barely — building-limited | kennels, restaurant tables, gym floor/class mats, shelter beds, condo amenity rooms |
 | **Perishable inventory** | stock that spoils if unsold | yes, but spoils → asymmetric loss | flowers, fresh bakery, restaurant produce |
 | **Durable inventory** | stock/parts that hold value | yes, but ties up cash | retail goods, plumbing/HVAC parts, wholesale stock |
-| **Throughput / processing capacity** | how many cases can be worked per period | slowly (skilled labour) | loan underwriting, permit/inspection processing, accounting returns, MSP tickets |
+| **Throughput / processing capacity** | how many cases can be worked per period | slowly (skilled labour) | loan underwriting, permit/inspection processing, accounting returns, MSP tickets, dry-cleaning plant work |
 | **Mobile labour + route capacity** | technician-hours × drive-time geography | seasonally (temp crews) | trades, landscaping, dog-walking, field service |
 
 **Demand has a signature.** The shape of the peak dictates how far ahead the operator must plan:
@@ -561,6 +580,7 @@ Severity note for the audit: a capacity/demand surface (calendar, inventory, ros
 | `law-enforcement-agency` | records/admin throughput | records/FOIA steady; community-concern event-driven; must-serve | n/a commercial; under-capacity = statutory delay | records-request queue/throughput; no commercial capacity lever |
 | `new-home-builder`, `custom-home-builder` | **build slots** (crews + subcontractor pool + working capital tied in WIP) + design/sales throughput | interest-rate + housing-season sensitive (spring purchase peak); production builder smooths via inventory homes, custom is pipeline-lumpy | overcommitted crews/subs → slipped completion + carrying cost on unsold spec homes; idle crews between contracts | project-pipeline capacity + subcontractor scheduling; milestone-draw cadence to keep WIP financed; model-home/design-centre throughput (production) vs consultative pipeline (custom) |
 | Field-dispatch leaves (Gap-A/Gap-B: `automotive-services`, `moving-and-logistics`, `security-services`, and the folded trades/healthcare/pet/professional/beauty/nonprofit/retail leaves) | **mobile labour × route/drive-time geography** (crew/technician/officer-hours) | per-vertical: emergency-reactive (roadside, HVAC no-heat, lockout), seasonal (moving, pest), steady-recurring (guard coverage, monitoring, pool service) | idle crews between geographically scattered jobs; emergency under-coverage; over-routed days that slip appointments | see §10.2 — route/assignment (skill×proximity×availability), emergency-reserve blocking, recurring-route capture; the horizontal Field Dispatch capability is the platform lever |
+| `dry-cleaning-plant-network`, `wash-and-fold-laundry`, `alterations-tailoring` | **plant/workroom throughput** + counter/route capacity | weekly repeat laundry rhythm; weather and event spikes (coats, gowns, uniforms, back-to-school); commercial accounts smooth the baseline | idle plant labour in troughs; over-accepted work misses ready promises or causes garment mix-ups | promised-ready board; ticket/tag reconciliation; plant capacity lanes; recurring route/account smoothing; early delay notifications |
 
 ### 7.3 What this means for platform functionality (requirements implication)
 
@@ -712,6 +732,7 @@ read from `consumptionChannel: onsite-plus-portal` (and `episode-of-care` provis
 
 ## 11. Changelog
 
+- **2026-07-22** — Added **§6.23 `fabric-care-services`** (`dry-cleaning-plant-network`, `wash-and-fold-laundry`, `alterations-tailoring`) and updated the source catalog baseline to **103 archetypes / 23 categories**. The category models garment custody and ready-promise throughput without adding a new provisioning enum in this slice.
 - **2026-07-18** — Re-grounded the active text against the current source catalog: **95 archetypes / 21 categories**. Added §6.20 `media-production` and §6.21 `live-events-venues`, moved `medical-practice`/`optician` under healthcare-wellness, corrected fitness/education/nonprofit category headings, and added `production-equipment-rental` to the rental/shared-asset loop.
 - **2026-07-17** — Closed the **`real-estate-construction`** coverage gap: added **§6.19** (`new-home-builder`, `custom-home-builder`) and a §7.2 demand–capacity row for the builders + a field-dispatch capacity row. These two builders (EP-GRID-BUILDER) were seeded but never given a value-stream profile — the 2026-06-13 "87 archetypes" count folded in the 17 Gap-A + 12 Gap-B leaves (= 85) and silently omitted them. Inventory re-grounded against `origin/main` `packages/storefront-templates/src/archetypes/` (enumerated `ALL_ARCHETYPES`, cross-checked `archetypes.test.ts`): **87 archetypes / 19 categories** confirmed (real-estate-construction is the 19th category, 2 leaves). Surfaced by the [archetype audit plan](../testing/archetype-audit-plan.md) 87/19 re-grounding (BI-186FFCA7, EP-ARCH-8D4F2A).
 - **2026-06-13** — Folded the **field-dispatch archetypes** from the 2026-06-13 gap analysis into the catalog: 17 Gap-A leaves across 7 existing categories (trades, healthcare, pet, professional, beauty, nonprofit, retail) and 3 new dispatch-native categories — `automotive-services` (§6.16), `moving-and-logistics` (§6.17), `security-services` (§6.18). Added §10.2 recognizing the **field-dispatch (mobile-resource-to-customer) loop** as a value-stream pattern that spans categories and is derived from the operating-model axes (`onsite-plus-portal`). Seed count is now **87 archetypes across 19 categories**. Each leaf carries the axes that let the forthcoming horizontal Field Dispatch capability derive dispatch via `needsFieldDispatch()`; the capability itself is a parallel effort.

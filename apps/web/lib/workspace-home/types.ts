@@ -82,7 +82,12 @@ export type WorkspaceHomeComponentKey =
   // reorder; this watches count variances against a client's stock held in
   // custody, where the discrepancy itself is the reportable event.
   | "stock-accuracy"
-  | "dock-capacity";
+  | "dock-capacity"
+  // Fabric care services: claim-ticket custody and ready-promise throughput
+  // across counter, plant, workroom, and pickup/delivery route flow.
+  | "plant-capacity"
+  | "ticket-exceptions"
+  | "garment-tracking";
 
 export type WorkspaceHomeDataRefKind = "projection" | "canonical-data" | "signal";
 

@@ -1,18 +1,18 @@
-# Archetype Audit Plan — All 95 Archetypes
+# Archetype Audit Plan — All 103 Archetypes
 
-**Status:** Revised — 2026-07-18 (inventory re-grounded to 95 archetypes / 21 categories; media-production, live-events-venues, production-equipment-rental, and medical-practice coverage added)
+**Status:** Source-count reconciliation — 2026-07-22 (catalog is now 103 archetypes / 23 categories after warehousing and fabric-care additions; full browser-run matrix still needs a dedicated audit-plan refresh)
 **Scope:** Full audit of every seeded archetype via browser-driven fresh installs. Produces gap backlog items for post-audit execution.  
 **Related:** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) (value-stream rationale — read first), [archetype-owner-positioning.md](../architecture/archetype-owner-positioning.md) (owner-facing marketing promise and test emphasis), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
 
-> **Inventory ground truth (verified 2026-07-18 against `origin/main` `packages/storefront-templates/src/archetypes/`):** **95 seeded archetypes across 21 categories.** Derived by enumerating `ALL_ARCHETYPES` in [`index.ts`](../../packages/storefront-templates/src/archetypes/index.ts) and cross-checking per-file `archetypeId` counts. Per-category counts: asset-rental 3, automotive-services 6, banking-financial-services 3, beauty-personal-care 6, education-training 4, fitness-recreation 3, food-hospitality 3, healthcare-wellness 9, hoa-property-management 3, live-events-venues 3, media-production 3, moving-and-logistics 4, nonprofit-community 8, pet-services 5, professional-services 8, public-sector 3, real-estate-construction 2, retail-goods 5, security-services 2, software-platform 1, trades-maintenance 11 (= **95**).
+> **Inventory ground truth (verified 2026-07-22 against this branch's `packages/storefront-templates/src/archetypes/`):** **103 seeded archetypes across 23 categories.** Derived by enumerating `archetypeId` and `category` declarations in [`index.ts`](../../packages/storefront-templates/src/archetypes/index.ts) and per-category files. Newly reconciled categories since the prior 95/21 text: `warehousing-fulfilment` (+4) and `fabric-care-services` (+3).
 >
 > There is **no** separate `medical` or `dental` category — `medical-practice`, `dental-practice`, `optician`, and the medical-mobile leaves are archetypes *under* `healthcare-wellness`. `media-production` and `live-events-venues` are now real source categories and must be audited as first-class categories.
 
 ---
 
-## 0. What changed since the 2026-06-12 baseline (56 / 15 → 95 / 21)
+## 0. What changed since the 2026-06-12 baseline (56 / 15 -> 103 / 23)
 
-The prior revision of this plan ("All 56 Archetypes", inventory verified 2026-06-12) covered **56 archetypes across 15 categories** in Runs 0–17 (+ composition Run 18). The registry has since grown to **95 / 21** — a delta of **+39 archetypes and +6 categories**. The 2026-07-17 pass assigned the field-dispatch, real-estate-construction, automotive/logistics/security, banking/public-sector, and rental tranche. This 2026-07-18 sweep adds the eight leaves that drifted after that pass: `medical-practice`, `production-equipment-rental`, all three `media-production` leaves, and all three `live-events-venues` leaves.
+The prior revision of this plan ("All 56 Archetypes", inventory verified 2026-06-12) covered **56 archetypes across 15 categories** in Runs 0-17 (+ composition Run 18). The registry first grew to **95 / 21** on the 2026-07-18 reconciliation, then to **103 / 23** after `warehousing-fulfilment` (+4) and `fabric-care-services` (+3) were added. The 2026-07-17 pass assigned the field-dispatch, real-estate-construction, automotive/logistics/security, banking/public-sector, and rental tranche. The 2026-07-18 sweep added the eight leaves that drifted after that pass: `medical-practice`, `production-equipment-rental`, all three `media-production` leaves, and all three `live-events-venues` leaves. The 2026-07-22 count update is source-count reconciliation only; a dedicated audit-plan refresh still needs to assign browser runs for warehousing and fabric care.
 
 **The +31, by origin (all three tranches trace to the 2026-06-13 field-dispatch gap analysis + the EP-GRID-BUILDER home-builder work):**
 
@@ -31,7 +31,7 @@ The prior revision of this plan ("All 56 Archetypes", inventory verified 2026-06
 
 **Methodology is unchanged.** Every new archetype gets its own fresh install (DB-only reset from the golden dump, Section 5) and the full Phase A–F checklist plus Phases G/H/O/K, driven browser-only at `http://localhost:3000`. Common `[C]` mechanics remain proven once in Run 0; only archetype-specific `[A]` dimensions are re-evaluated per leaf. Severity is still derived from the value stream (Section 4 rule), and the operator-persona lens (WWWD / business-owner experience, not developer) still governs grading.
 
-**Touchpoints for the 6 new categories (adding-an-ArchetypeCategory checklist):** the new categories are already seeded with coverage tests (`archetypes.test.ts`: dispatch-native categories, home builder archetypes, media/live categories, and equipment-rental support assertions) and the Seed-Fit CI gate already applies to them. **No new audit scaffolding is required** — this revision is docs-only.
+**Touchpoints for new categories (adding-an-ArchetypeCategory checklist):** the new categories are already seeded with coverage tests (`archetypes.test.ts`: dispatch-native categories, home builder archetypes, media/live categories, equipment-rental support assertions, warehousing, and fabric care) and the Seed-Fit CI gate already applies to them. **The source catalog is reconciled; the browser-run scaffolding still needs the follow-up matrix refresh named above.**
 
 **Regulated calibration (Phase O):** the medical-mobile leaves (`home-health-care`, `mobile-phlebotomy`, `dme-delivery`), the security leaves (`guard-patrol`, `alarm-cctv-install`), and the licensed professional leaf `land-surveying` are newly-regulated. Their per-run scripts (Runs 20, 26, 22) name the specific licensing/regulatory obligation an operator would get wrong, per the plan's existing rule: **silence on a mandatory license = Level 0.**
 
@@ -39,7 +39,7 @@ The prior revision of this plan ("All 56 Archetypes", inventory verified 2026-06
 
 ## 1. Purpose
 
-DPF ships 95 archetypes across 21 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
+DPF ships 103 archetypes across 23 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
 
 **Out of scope for this plan:** executing the gap items. This thread produces the plan, the backlog snapshot, and the per-run scripts. Execution follows in a separate thread.
 
@@ -110,7 +110,7 @@ Checklist items tagged `[C]` below fall in this category. In Runs 1–29, execut
 |---------|------------------|
 | Brand URL scrape engine | Returns meaningful suggestions; handles `.co`, `.co.uk`, `.com` variants |
 | Setup wizard step mechanics | Each step saves, next/back navigation works, financial step pre-fills correctly |
-| Archetype grid | All 95 archetypes visible; grid navigable; card renders name + category + CTA type |
+| Archetype grid | All 103 archetypes visible; grid navigable; card renders name + category + CTA type |
 | `/storefront/team` CRUD | Add/edit/delete provider; availability day-of-week grid saves and syncs |
 | `/storefront/settings/operations` | Operating hours editor: all 7 days toggleable, open/close time pickers, timezone selector, save triggers ProviderAvailability sync |
 | `/storefront/items` CRUD | Add/edit/delete/reorder items; priceAmount field accepts decimal; ctaType selector works |
@@ -175,7 +175,7 @@ events (PR #1810)** = W-CAL.
 
 ### Archetype-specific dimensions — evaluated on every archetype
 
-These are the reasons we run 95 evaluations. If they are wrong they indicate an archetype gap, not a platform mechanics bug.
+These are the reasons we run one evaluation per seeded archetype. If they are wrong they indicate an archetype gap, not a platform mechanics bug.
 
 | Dimension | What changes per archetype |
 |-----------|---------------------------|
@@ -208,7 +208,7 @@ Any step where the auditor had to think "a real operator would struggle here" �
 
 ## 3. Audit Run Strategy
 
-95 archetypes across **Run 0 (pilot) + grouped install runs**. **Every archetype gets its own fresh install** and the full Phase A–F checklist. Archetypes are grouped into runs by category only for scheduling and findings organization — each archetype in a run still begins from a clean DB state (DB-only reset from golden dump, see Section 5). Runs 0–17 cover the original 56 plus corrected in-category leaves; Runs 19–27 cover the field-dispatch and real-estate-construction tranche; Runs 28–29 cover the media/live-events categories added after the 87/19 plan; Run 18 is composition (no additional fresh installs).
+103 archetypes across **Run 0 (pilot) + grouped install runs**. **Every archetype gets its own fresh install** and the full Phase A–F checklist. Archetypes are grouped into runs by category only for scheduling and findings organization — each archetype in a run still begins from a clean DB state (DB-only reset from golden dump, see Section 5). Runs 0–17 cover the original 56 plus corrected in-category leaves; Runs 19–27 cover the field-dispatch and real-estate-construction tranche; Runs 28–29 cover the media/live-events categories added after the 87/19 plan; Run 18 is composition (no additional fresh installs). The current run table still reflects the 95/21 matrix and must be extended for `warehousing-fulfilment` and `fabric-care-services` before a full 103-run browser audit starts.
 
 > **Why full installs, not API swaps:** using `archetype-reset` to swap between archetypes leaves prior company identity (name, slug, hero copy, inbox history) in place. A real operator always installs fresh; an audit that swaps via API tests a different — and rarer — path. Run 1 swap testing (2026-06-12) confirmed this: all swap archetypes presented as the lead archetype's business identity to customers. Per-archetype fresh installs eliminate this class of false and misleading findings.
 
@@ -249,11 +249,11 @@ Any step where the auditor had to think "a real operator would struggle here" �
 | 28 | Media Production (new category) | film-video-production, post-production-studio, event-production-staging | inquiry (pipeline/timeline) |
 | 29 | Live Events & Venues (new category) | event-venue, tour-promoter, talent-booking-agency | inquiry (venue/holds) |
 
-Total fresh installs: 95 (one per archetype — 58 in Runs 0–17 after the `medical-practice` and `production-equipment-rental` reconciliation, 31 in Runs 19–27, and 6 in Runs 28–29). Run 18a–18c are composition installs — 5 primary archetypes set up fresh, with one or two secondaries added post-setup via "Add service line". No additional fresh installs are needed for secondaries. See Section 3c.
+Current scheduled fresh installs: 95 in the existing matrix (one per archetype — 58 in Runs 0–17 after the `medical-practice` and `production-equipment-rental` reconciliation, 31 in Runs 19–27, and 6 in Runs 28–29). The source catalog is now 103, so the follow-up matrix refresh must add 8 more fresh installs for `warehousing-fulfilment` and `fabric-care-services`. Run 18a–18c are composition installs — 5 primary archetypes set up fresh, with one or two secondaries added post-setup via "Add service line". No additional fresh installs are needed for secondaries. See Section 3c.
 
-### 3b. Representative Quality Bar (21 category sentinels — must all Pass before audit is considered representative)
+### 3b. Representative Quality Bar (23 category sentinels — must all Pass before audit is considered representative)
 
-A related acceptance test plan (`docs/superpowers/plans/2026-06-06-archetype-acceptance-test-plan.md`) now identifies a representative **21-category sentinel batch** for the current 95/21 catalog. These sentinels are the **minimum viable quality bar** — if any of them `Fail` (Section 8 verdict system), the platform is not ready for broader rollout regardless of the remaining archetypes.
+A related acceptance test plan (`docs/superpowers/plans/2026-06-06-archetype-acceptance-test-plan.md`) identifies a representative **21-category sentinel batch** for the prior 95/21 catalog. The sentinel set must be refreshed to 23 categories for the current 103/23 catalog, adding warehousing and fabric care. These sentinels are the **minimum viable quality bar** — if any of them `Fail` (Section 8 verdict system), the platform is not ready for broader rollout regardless of the remaining archetypes.
 
 Treat these as priority-1 within their runs. If time or resets run short, the current category sentinels are non-negotiable. The historical 12-row list below is retained only as the original operating-model seed; expand it with the acceptance plan's newer sentinels for banking, public sector, asset rental, real estate/construction, automotive, logistics, security, media production, and live events.
 
@@ -281,7 +281,7 @@ Run 0 serves two goals: (a) validate the audit harness so the remaining resets t
 **Harness validation steps:**
 
 1. **Backup rehearsal** — take the pre-audit `pg_dump` (Section 4), restore it into a throwaway postgres container, and verify row counts match. Do not proceed to any wipe until the restore is proven.
-2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 95 seeded archetypes; reconcile against the per-category counts in this doc's header (Inventory ground truth). File a BI for any mismatch.
+2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 103 seeded archetypes; reconcile against the per-category counts in this doc's header (Inventory ground truth). File a BI for any mismatch.
 3. **Provider bootstrap check** — verify Anthropic is auto-configured from the environment on a fresh install. If providers need manual re-entry, document the exact re-setup steps and time; add that time to every run's budget.
 4. **Coworker health gate** — ask the COO a trivial question and confirm a sane response before any vocabulary scoring. Routing failures get misattributed as archetype gaps in every run if this gate is skipped.
 5. **Archetype-reset swap verification** — swap software-platform → consulting via the admin API, confirm sections/items/vocabulary/CTA actually change on the public portal, then swap back. Empirically validates the Tier-B/E/F strategy for all multi-archetype runs.
@@ -523,7 +523,7 @@ while ((Get-Date) -lt $deadline) {
 
 1. Navigate to `http://localhost:3000`
 2. Confirm redirect to `/welcome` (no organization exists)
-3. Confirm archetype grid renders with all 95 archetypes visible
+3. Confirm archetype grid renders with all 103 archetypes visible
 4. Navigate to `/platform/ai/providers` → confirm providers show healthy status (restored from golden dump — no re-entry needed)
 
 **Step 5 — Coworker health gate**
@@ -553,7 +553,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 > **Validity:** every archetype gets a fresh install and all phases. There are no "swap-only" or "partial" archetypes. Before scoring any phase, the expected values (CTA type, vocabulary, key services, activation modules) should be read from the archetype's seed definition in `packages/storefront-templates/src/archetypes/` — the persona blocks in Section 7 are test scripts, not the source of truth; where they disagree with the seed, the seed wins and the persona block gets corrected, not a BI filed.
 >
-> **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–29, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run 95 iterations.**
+> **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–29, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run one fresh install per leaf.**
 
 ### Phase A — Onboarding (SETUP)
 - [ ] **A1** Navigate to `/welcome` → Setup wizard loads (SETUP step 1)
@@ -3357,7 +3357,7 @@ Value stream §6.18. Both `account-with-billing`; recurring-agreement-heavy. **R
 
 **Fresh install per archetype.** New `real-estate-construction` category (EP-GRID-BUILDER). Both leaves sell **physical goods to households** (`form=goods`, `primaryConsumer=household`, `delivery=physical`) with **milestone billing** (`billingReadinessMode: prepared-not-prescribed`, `modules` include `billing-readiness` + `projects`), and each carries a **booking item** with `schedulingDefaults` (model-home tour / design consultation) even though the top-level CTA is `inquiry` — so both additionally run the P-BOOKING scheduling-defaults check. These invariants are guarded by the `archetypes.test.ts` "home builder archetypes" assertion (verify no divergence). CTA: inquiry.
 
-> **Value-streams doc reconciliation (2026-07-18):** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) now carries the current 95/21 active baseline, including first-class `media-production` and `live-events-venues` profiles plus `medical-practice` and `production-equipment-rental` leaf coverage. If future source counts drift again, update that doc and this plan together.
+> **Value-streams doc reconciliation (2026-07-22):** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) now carries the current 103/23 active baseline, including first-class `media-production`, `live-events-venues`, `warehousing-fulfilment`, and `fabric-care-services` profiles plus `medical-practice` and `production-equipment-rental` leaf coverage. If future source counts drift again, update that doc and this plan together.
 
 **`new-home-builder`** — Maplewood Homes (`maplewoodhomes.com`) · Operator: Sales Manager Karen Blythe · **Production/spec builder**: model homes open 7 days (seed gives Sunday hours), plan-book selling, design-centre options. CTA: inquiry (+ Model Home Tour booking). Key services (seed): Model Home Tour, Design Centre Appointment, 3-Bedroom Home Plans, 4-Bedroom Home Plans, Community Information Pack. Provisioning: `account-with-billing`. Vocabulary: category default (no leaf override). **Load-bearing stages:** S1 Attract (model-home tour / community pack) → S2 Capture (plan selection) → S4/S5 milestone-billed build. **Special:** verify the Model Home Tour is a bookable slot (scheduling-defaults present incl. Sunday); milestone payments should read as prepared-not-prescribed, not a single invoice. **Phase O:** O5 should name state contractor/home-builder license + new-home warranty obligations.
 **`custom-home-builder`** — Maplewood Custom Homes (`maplewoodcustomhomes.com`) · Operator: **Build Consultant** (agentName override) · **Bespoke builder**: business-hours only (no weekend model homes — seed omits Sat/Sun), consultative design→contract→build, active subcontractor coordination (`service-operations` module). CTA: inquiry (+ Initial Design Consultation booking). Key services: Initial Design Consultation, Custom Home Design, Full Build Contract, Knockdown & Rebuild, Renovation & Extension. Provisioning: `account-with-billing`. **Vocabulary (leaf override — verify):** stakeholders = **"Clients"**, team = **"Build Team"**, coworker = **"Build Consultant"** (asserted in `archetypes.test.ts`; a leak to "Customers"/generic agent → `important`). **Special:** the Initial Design Consultation is the booking front door; Full Build Contract + Renovation are multi-milestone projects — confirm project + billing-readiness framing and that no Saturday/Sunday tour slots are offered (business-hours-only is intentional). **Phase O:** O5 should name state contractor license + design/architectural sign-off obligations.

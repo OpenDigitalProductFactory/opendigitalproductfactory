@@ -56,13 +56,8 @@ const PRIVATE_HOST_PATTERNS = [
 
 function extractTextExcerpt(html: string): string | null {
   const stripped = html
-    // CodeQL #56-#58 (js/bad-tag-filter): `</script>` (no spaces) was
-    // too narrow — browsers accept `</script >`, `</script\n>`, etc.
-    // Match a closing tag with optional whitespace before the `>`.
-    // CodeQL #56-#58 (js/bad-tag-filter): browsers accept any chars
-    // between `</script` and `>` (including whitespace, attributes,
-    // newlines). Match the full browser-compatible form so HTML
-    // can't sneak script content past the strip.
+    // Browsers accept whitespace, attributes, and newlines between `</script`
+    // and `>`, so match the full compatible close tag before stripping HTML.
     .replace(/<script[\s\S]*?<\/script[^>]*>/gi, " ")
     .replace(/<style[\s\S]*?<\/style[^>]*>/gi, " ")
     .replace(/<[^<>]+>/g, " ")
@@ -489,7 +484,6 @@ function extractColorCandidates(html: string): string[] {
       }
     }
   }
-  // Sort by frequency, take top 3
   const sortedCss = [...hexInCss.entries()].sort((a, b) => b[1] - a[1]);
   for (const [hex] of sortedCss.slice(0, 3)) {
     addCandidate(hex);
@@ -511,6 +505,9 @@ const ARCHETYPE_CATALOG: Array<{ id: string; name: string; keywords: string[]; c
   { id: "hair-salon", name: "Hair Salon", keywords: ["hair salon", "hairdresser", "haircut", "hairstylist", "blow dry", "colouring", "barbershop", "barber shop"] },
   { id: "beauty-salon", name: "Beauty Salon", keywords: ["beauty salon", "nail salon", "spa treatments", "facials", "waxing", "eyelash", "eyebrow threading", "beauty clinic"] },
   { id: "tattoo-studio", name: "Tattoo Studio", keywords: ["tattoo", "piercing studio", "body art", "ink studio"] },
+  { id: "dry-cleaning-plant-network", name: "Dry Cleaning Plant & Store Network", keywords: ["dry cleaner", "dry cleaning", "laundry service", "laundromat", "wash and fold", "shirt laundry", "garment care", "alterations", "claim ticket", "pickup and delivery"], category: "fabric-care-services" },
+  { id: "wash-and-fold-laundry", name: "Wash & Fold Laundry", keywords: ["wash and fold", "laundry pickup", "laundry delivery", "bag wash", "commercial laundry", "linen laundry"], category: "fabric-care-services" },
+  { id: "alterations-tailoring", name: "Alterations & Tailoring", keywords: ["alterations", "tailoring", "hemming", "zip repair", "clothing repair", "garment repair"], category: "fabric-care-services" },
   { id: "fitness-gym", name: "Fitness Gym", keywords: ["gym", "fitness centre", "fitness center", "crossfit", "weightlifting", "personal training", "workout", "health club"] },
   { id: "yoga-pilates-studio", name: "Yoga / Pilates Studio", keywords: ["yoga", "pilates", "mindfulness", "meditation studio", "barre"] },
   { id: "restaurant", name: "Restaurant", keywords: ["restaurant", "bistro", "brasserie", "dining", "cuisine", "fine dining", "casual dining", "eatery"] },
@@ -751,6 +748,8 @@ export const ARCHETYPE_TO_INDUSTRY: Record<string, string> = {
   "ecommerce-general": "retail-goods",
   "nonprofit": "nonprofit-community",
 };
+
+for (const { id, category } of ARCHETYPE_CATALOG) if (category) ARCHETYPE_TO_INDUSTRY[id] ??= category;
 
 /** Maps ISO 3166-1 alpha-2 country code → primary IANA timezone. */
 // Canonical home is @/lib/timezone-from-location (dependency-light, importable

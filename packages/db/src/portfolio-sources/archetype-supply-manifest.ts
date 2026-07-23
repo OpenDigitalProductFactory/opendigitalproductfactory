@@ -135,4 +135,35 @@ export const ARCHETYPE_SUPPLY_MANIFEST: Partial<
     // belongs to its clients and must never be projected as its own.
     goods: [],
   },
+  "fabric-care-services": {
+    suppliers: [
+      {
+        name: "Cleaning Supplies & Solvents Distributor",
+        description:
+          "Detergents, spotting agents, wet-cleaning chemistry, and plant consumables. Supply continuity protects ready promises and garment quality.",
+      },
+      {
+        name: "Tags Tickets & Packaging Supplier",
+        description:
+          "Claim tickets, barcode tags, garment covers, hangers, and bags that keep every item tied to the customer's order.",
+      },
+      {
+        name: "Equipment Maintenance Vendor",
+        description:
+          "Washer, dryer, press, boiler, conveyor, and spotting-table maintenance. Plant downtime turns into delayed customer orders.",
+      },
+      {
+        name: "Delivery Route Provider",
+        description:
+          "In-house drivers, courier partners, or route software used for home, office, and satellite-store pickup and return.",
+      },
+    ],
+    goods: [
+      {
+        name: "Garment Covers Hangers & Laundry Bags",
+        description:
+          "Packaging and reusable bags sold or issued alongside cleaning and pickup services.",
+      },
+    ],
+  },
 };

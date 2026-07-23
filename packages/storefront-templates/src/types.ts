@@ -84,7 +84,15 @@ export type ArchetypeCategory =
    *  `moving-and-logistics` (custody is transient and in-transit, with no
    *  facility inventory of record). See
    *  docs/superpowers/specs/2026-07-21-warehousing-fulfilment-archetype-design.md. */
-  | "warehousing-fulfilment";
+  | "warehousing-fulfilment"
+  /** Fabric-care services: dry cleaners, laundries, and alterations shops take
+   *  custody of customer garments/textiles, issue a claim ticket, process work
+   *  through a plant or counter network, and return the same customer property
+   *  against a ready promise. Distinct from beauty-personal-care appointments
+   *  (the customer is not the work surface), warehousing-fulfilment B2B stock
+   *  custody, and trades-maintenance site work. See
+   *  docs/superpowers/specs/2026-07-22-fabric-care-services-archetype-design.md. */
+  | "fabric-care-services";
 
 export interface FormField {
   name: string;

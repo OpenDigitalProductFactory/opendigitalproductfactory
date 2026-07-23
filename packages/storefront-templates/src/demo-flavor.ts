@@ -223,6 +223,7 @@ export const CATEGORY_FLAVOR_DEFAULTS: Partial<Record<ArchetypeCategory, Pick<De
   "security-services": { notes: "Every post and patrol is covered, incidents are logged and answered fast, and contracts renew on trust." },
   "hoa-property-management": { notes: "Requests are actioned, dues stay current, and the community sees the place well kept." },
   "warehousing-fulfilment": { notes: "Goods booked in the day they land, stock counts that match the shelf, and every order out before cut-off." },
+  "fabric-care-services": { notes: "Every garment tagged, every ready promise visible, and customers notified before they have to ask." },
 };
 
 /** Resolve the default flavor for an archetype: its own entry merged over its

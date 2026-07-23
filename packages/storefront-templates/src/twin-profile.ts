@@ -400,6 +400,9 @@ function chooseTemplate(
     return { template: "FLOOR" };
   }
   if (category === "retail-goods" || commercialModel === "point-of-sale") {
+    if (category === "fabric-care-services") {
+      return { template: "BAYS" };
+    }
     return { template: "STORE" };
   }
   if (category === "live-events-venues") {

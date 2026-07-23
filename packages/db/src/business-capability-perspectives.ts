@@ -296,6 +296,69 @@ const TRADES_MAINTENANCE: BusinessCapabilityPerspective = {
   ],
 };
 
+const FABRIC_CARE_SERVICES: BusinessCapabilityPerspective = {
+  perspectiveId: "fabric-care-services",
+  label: "Fabric Care Services",
+  source: "DPF fabric-care overlay informed by dry-cleaning POS, claim-ticket custody, plant/workroom flow, ready notifications, pickup routes, and garment-care operating patterns",
+  capabilities: [
+    l1(
+      "fabric-care-operations",
+      "Fabric Care Operations",
+      100,
+      "Operate garment and textile care across intake, claim tickets, plant/workroom processing, pickup and delivery, customer notices, and account billing readiness.",
+      ["consume", "operate"],
+    ),
+    l2(
+      "fabric-care-intake-claim-ticket",
+      "fabric-care-operations",
+      "Intake Claim Ticket And Tagging",
+      10,
+      "Capture customer, garment count, care instructions, stains, existing damage, special handling, and claim-ticket/tag evidence at drop-off or pickup.",
+      ["consume", "operate"],
+    ),
+    l2(
+      "fabric-care-plant-workroom-flow",
+      "fabric-care-operations",
+      "Plant Workroom And Route Flow",
+      20,
+      "Coordinate dry cleaning, laundry, pressing, alterations, commercial account work, and route handoffs through the plant or satellite-store network.",
+      ["operate"],
+    ),
+    l2(
+      "fabric-care-ready-promise-notices",
+      "fabric-care-operations",
+      "Ready Promise Notices And Exceptions",
+      30,
+      "Track promised-ready dates, send ready notices, escalate delays, and keep customer communication attached to the ticket.",
+      ["integrate", "operate"],
+    ),
+    l2(
+      "fabric-care-garment-custody-exceptions",
+      "fabric-care-operations",
+      "Garment Custody Exceptions",
+      40,
+      "Handle missing, damaged, mixed, delayed, or ambiguous garments as custody exceptions with manager visibility and resolution evidence.",
+      ["operate"],
+    ),
+    l2(
+      "fabric-care-supplies-equipment",
+      "fabric-care-operations",
+      "Supplies Equipment And Plant Readiness",
+      50,
+      "Track cleaning chemistry, tags, hangers, bags, equipment maintenance, and consumable purchasing that protect ready promises.",
+      ["operate"],
+    ),
+    l2(
+      "fabric-care-pos-account-billing",
+      "fabric-care-operations",
+      "POS Account And Billing Readiness",
+      60,
+      "Prepare point-of-sale payment, route delivery charges, recurring laundry plans, commercial account billing, and reconciliation evidence.",
+      ["consume", "operate", "integrate"],
+    ),
+  ],
+};
+
 const BIAN_BANKING_V14: BusinessCapabilityPerspective = {
   perspectiveId: "bian-banking-v14",
   label: "Banking (BIAN v14)",
@@ -432,6 +495,10 @@ export function resolveBusinessCapabilityPerspective(
 
   if (input.category === "trades-maintenance") {
     perspectives.push(TRADES_MAINTENANCE);
+  }
+
+  if (input.category === "fabric-care-services") {
+    perspectives.push(FABRIC_CARE_SERVICES);
   }
 
   if (input.category === "banking-financial-services") {

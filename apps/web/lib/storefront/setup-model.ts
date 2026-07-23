@@ -123,6 +123,7 @@ const RESOURCE_LABELS: Record<string, { plural: string; singular: string }> = {
   "beauty-personal-care": { plural: "Chairs & rooms", singular: "Station" },
   "healthcare-wellness": { plural: "Rooms", singular: "Room" },
   "fitness-recreation": { plural: "Spaces", singular: "Space" },
+  "fabric-care-services": { plural: "Counters & stations", singular: "Station" },
 };
 
 /** Categories where the storefront is booking/availability-shaped. */
@@ -133,6 +134,7 @@ const BOOKING_CATEGORIES = new Set([
   "fitness-recreation",
   "pet-services",
   "professional-services",
+  "fabric-care-services",
 ]);
 
 export function resolveSetupCapabilities(
