@@ -350,11 +350,23 @@ export async function updateBusinessBuildBrief(input: {
 
 // ─── Advance Phase ───────────────────────────────────────────────────────────
 
+/**
+ * Outcome of a phase advance. The two "no releasable source changes" states are
+ * EXPECTED operational conditions the operator must be able to read and act on —
+ * not invariant violations. Thrown Server Action errors have their messages
+ * stripped in production (the operator sees only a digest), which is how a build
+ * that passed every gate surfaced as an unexplained render error in BI-8C6AA60E.
+ * So those two are RETURNED as values, per the #2758 pattern. The remaining
+ * throws in this function are genuine invariant violations where a digest is the
+ * correct operator experience.
+ */
+export type AdvanceBuildPhaseResult = { ok: true } | { ok: false; message: string };
+
 export async function advanceBuildPhase(
   buildId: string,
   targetPhase: BuildPhase,
   options?: { overrideUxFailure?: { reason: string } },
-): Promise<void> {
+): Promise<AdvanceBuildPhaseResult> {
   const userId = await requireBuildAccess();
 
   const build = await prisma.featureBuild.findUnique({
@@ -560,9 +572,11 @@ export async function advanceBuildPhase(
     const { clientBranch } = await getClientIdentity();
     const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
     if (releasableFiles.length === 0) {
-      throw new Error(
-        "No releasable source changes are present in the sandbox. Tasks are marked complete but no code was written. Resume implementation and make real code changes before advancing to review.",
-      );
+      return {
+        ok: false,
+        message:
+          "No releasable source changes are present in the sandbox. Tasks are marked complete but no code was written. Resume implementation and make real code changes before advancing to review.",
+      };
     }
   }
 
@@ -574,9 +588,11 @@ export async function advanceBuildPhase(
     const { clientBranch } = await getClientIdentity();
     const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
     if (releasableFiles.length === 0) {
-      throw new Error(
-        "No releasable source changes are present in the sandbox. Resume implementation and make a real code change before continuing to release.",
-      );
+      return {
+        ok: false,
+        message:
+          "No releasable source changes are present in the sandbox. Resume implementation and make a real code change before continuing to release.",
+      };
     }
   }
 
@@ -713,6 +729,8 @@ export async function advanceBuildPhase(
   if (targetPhase === "review") {
     await queueBuildReviewVerification(buildId);
   }
+
+  return { ok: true };
 }
 
 /**

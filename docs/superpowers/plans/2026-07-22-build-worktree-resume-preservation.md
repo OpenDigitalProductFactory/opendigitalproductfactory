@@ -73,3 +73,60 @@ already-provisioned worktree is a no-op instead of an error.
   committed file and one **uncommitted** file, re-run the identical command.
   Before: the uncommitted file is gone. After: both survive, and the symlink
   re-assert is clean.
+
+## Addendum — part (c): the stripped ship error (same BI)
+
+BI-8C6AA60E named three fixes. (a) is delegated to BI-53C14D19; (b) is the
+worktree/branch preservation above. (c) is this: the release path should RETURN
+the "no releasable source changes" domain error as a value rather than throw it.
+
+`advanceBuildPhase` is a `"use server"` action. A thrown Server Action error has
+its message stripped in production — the operator sees only a digest. That is why
+FB-041879CD, which passed every gate, surfaced as an unexplained render error
+(digest 200317269) instead of a readable explanation. Same class as #2758.
+
+- `advanceBuildPhase` now returns `AdvanceBuildPhaseResult = {ok: true} | {ok: false; message}`.
+  The **two** "no releasable source changes" states — build→review and review→ship —
+  are returned as values. They are expected operational conditions the operator must
+  read and act on.
+- The other **nine** throws in the function are left alone. They are genuine
+  invariant violations (missing sandbox, gate refusals); a digest is the correct
+  operator experience there, and converting them would dilute the signal.
+- `BuildStudioWorkflowActionCard` surfaces `outcome.message` via the existing
+  `setError` path already used by `rerunPlanReview`.
+
+Note the inline `export type AdvanceBuildPhaseResult = …` declaration is safe in a
+`"use server"` module; it was the `export type { A, B }` **re-export** form that
+broke SSR in #2758.
+
+Evidence: 45 existing tests green; the two build-governed assertions converted from
+`.rejects.toThrow` to a returned-value equality; one new UI regression test proving
+the operator actually sees the message. `tsc --noEmit` clean across touched files.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - BI-8C6AA60E fix (c) — the originating diagnosis, which names "the release/ship
+    server action should RETURN the 'no releasable changes' domain error as a value
+    (not throw) so the operator sees the real message, not a digest".
+  - PR #2758 — the established `"use server"` error-surfacing pattern, including the
+    distinction between a safe inline `export type X = …` declaration and the
+    `export type { A, B }` re-export form that broke SSR.
+- Current code substrate reviewed:
+  - `apps/web/lib/actions/build.ts` — `advanceBuildPhase` (11 throws; only 2 are
+    operator-facing domain states) and `createFeatureBuild`, which already returns a
+    discriminated result for exactly this reason.
+  - `apps/web/components/build/BuildStudioWorkflowActionCard.tsx` — the sole
+    production caller; already surfaces `outcome.message` via `setError` for
+    `rerunPlanReview`.
+  - `apps/web/lib/build/release-decision.ts` — confirms the ship-side message is
+    matched by string, so the wording must not change.
+- Source of truth:
+  - BI-8C6AA60E fix (c), plus the #2758 Server Action error contract. No spec
+    artifact governs this surface; this plan doc is the durable record.
+- Decision:
+  - Extend an existing contract shape rather than introduce one. No new UX, no
+    routing change, no queue or process-spine change: the card reuses its existing
+    error-rendering path, and the two converted throws keep their exact wording.
+    The other nine throws stay throws deliberately — they are invariant violations
+    where a digest is the correct operator experience.
