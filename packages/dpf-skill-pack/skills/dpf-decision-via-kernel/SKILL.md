@@ -68,9 +68,12 @@ When you face an open question with 2+ architecturally-distinct options inside t
 
 1. **Enumerate the options.** 2-4 options is the sweet spot; more than 4 dilutes the weighing. Each option needs a clear `id` (short slug) and a `description` (1-2 sentences naming what makes it distinct).
 
-2. **Map each option to PRINCIPLE_DIMENSIONS.** Read the closed list and pick the 3-5 dimensions most relevant to the decision class. Score each option on each dimension from 0.0 to 1.0 — how strongly does this option deliver on this axis?
+2. **Map each option to PRINCIPLE_DIMENSIONS.** Pick the 3-5 dimensions most relevant to the decision class. Score each option 0.0 to 1.0 on the question **"how much does this option EXHIBIT this axis?"** — a magnitude, *never* a goodness rating. You no longer need to read the registry file: the tool schema enumerates every valid key and says what a high score asserts on each.
+   - **On a COST axis, higher is WORSE.** `blast_radius`, `human_cognitive_load`, `vendor_lock_in`, `business_disruption` are costs: the governing principle carries a *negative* weight, so a high score **penalises** the option. Scoring your preferred option `blast_radius: 0.9` because it is "safe" inverts the meaning and argues against it. Score the *reach*, not the safety.
    - This is the **structured-alignment** path. Even crude scores produce much stronger signal than the semantic fallback.
-   - If you genuinely cannot score the options against any dimension, supply `features: {}` and let the server-side semantic fallback fire (wired by BI-3C1A6451 on 2026-05-24 — it embeds your option `description` and the principle direction text). The fallback is weaker but non-degenerate.
+   - **`features: {}` is NOT a safe default — it usually produces a null result.** The semantic fallback only fires for a principle whose `dimensionVector` is empty. Commandments load from Postgres *with* full vectors, so they always take the structured path, and a commandment-dominated consult with no features scores **exactly zero on every principle** → `insufficientSignal: true`, `recommendation: null`. Measured: 16.7% of the first 156 recorded consults landed there. Reserve `features: {}` for the rare case where core/contextual principles carry the decision.
+   - **Read `data.signalQuality.usable` before acting on `data.recommendation`.** `usable: false` means the kernel abstained, not that the options tied. `signalQuality.advisory` names the remediation.
+   - Unknown feature keys are **rejected**, not ignored — a typo used to score silently as zero.
    - **Interface-surface changes are NOT eligible for the `features: {}` escape.** When an option adds or changes a button, fillable field, form, or route, you must score it — interface surface is governed by [`remove-avoidable-failure-opportunities`](../../../../docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md) (§"Interface surface is failure surface"): a new control must *earn its surface*. Derive features the way [`apps/web/lib/decision/ui-surface-features.ts`](../../../../apps/web/lib/decision/ui-surface-features.ts) does — `human_cognitive_load` is a **cost** axis (negative-weighted since #1904), bought down by **justification/research**, **long-term reuse across multiple internal outcomes**, and **clarification value**. An unjustified new surface scores against the principle; a net **removal** scores favorably. "We might want it" is not justification — score it `low`, not no-op.
 
 3. **Invoke `principle_decide`.**
@@ -87,7 +90,8 @@ When you face an open question with 2+ architecturally-distinct options inside t
    })
    ```
 
-4. **Read the contribution ledger.** The result contains `scores` (per-option composite + per-principle contribution rows), `flags` (tie-margin confidence, semantic-fallback ratio, commandment-conflict signal), and `reasoning` (one-sentence human-readable summary).
+4. **Read the contribution ledger.** The result contains `signalQuality` (**check this first**), `scores` (per-option composite + per-principle contribution rows), `flags` (tie-margin confidence, semantic-fallback ratio, commandment-conflict signal), and `reasoning` (one-sentence human-readable summary).
+   - **`signalQuality.usable: false`** → there is NO verdict. Do not read `recommendation` (it is `null`) and do not treat it as a tie or a neutral outcome. Follow `signalQuality.advisory`: usually "supply a features map and re-call". This is your error to fix, not the operator's.
    - **High confidence + no commandment conflict** → proceed with the recommendation.
    - **Low confidence (margin below tieMargin)** → surface to the operator with the ledger; the decision is close enough that human judgment beats math.
    - **Commandment conflict flag set** → defer. A commandment opposing the top-scored option means a hard-rule violation; either reframe the option or escalate.
@@ -130,6 +134,8 @@ The Build Studio design-time decomposition spec ended with 7 open questions. The
 **Features against PRINCIPLE_DIMENSIONS:**
 - `eager`: `{ schema_grounding: 0.8, long_term_maintainability: 0.7, blast_radius: 0.3, speed_to_value: 0.6 }`
 - `lazy`: `{ schema_grounding: 0.4, long_term_maintainability: 0.4, blast_radius: 0.6, speed_to_value: 0.7 }`
+
+Note the cost axis: the *recommended* option carries the **lower** `blast_radius` (0.3 vs 0.6). That is the correct orientation — the score states how much of the estate the option reaches, not how safe it feels. Scoring the option you favour *high* on a cost axis argues against it.
 
 **`principle_decide` returned:**
 - Recommendation: `eager` (composite 0.62, margin 0.18, confidence high)

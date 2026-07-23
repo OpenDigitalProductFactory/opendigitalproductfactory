@@ -13,6 +13,13 @@
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import {
+  DIMENSION_KEYS,
+  buildFeaturesDescription,
+  validateOptionFeatures,
+  featureErrorRemedy,
+  type FeatureValidationError,
+} from "@/lib/decision/dimension-catalog";
 
 const definitions: ToolDefinition[] = [
   {
@@ -36,9 +43,13 @@ const definitions: ToolDefinition[] = [
               description: { type: "string", description: "Short prose description." },
               features: {
                 type: "object",
-                description:
-                  "Optional map of dimension key -> 0..1 score. Dimensions must come from the registry in packages/db/src/wiki-taxonomy.ts. Options that supply features get structured alignment; otherwise the math falls back to semantic alignment.",
-                additionalProperties: { type: "number" },
+                description: buildFeaturesDescription(),
+                // Keys are constrained machine-readably as well as described in
+                // prose: a caller that cannot read repo source (every
+                // in-platform coworker) still gets the closed set from the
+                // schema itself. BI-E0151DB2.
+                propertyNames: { enum: [...DIMENSION_KEYS] },
+                additionalProperties: { type: "number", minimum: 0, maximum: 1 },
               },
             },
             required: ["id", "description"],
@@ -126,6 +137,37 @@ async function principleDecide(
       success: false,
       message: "options must be a non-empty array.",
       error: "Empty options",
+    };
+  }
+
+  // BI-E0151DB2. Validate option features against the closed dimension
+  // registry, the same way ringScope is validated below. An unknown key is NOT
+  // harmless: computeStructuredAlignment iterates the PRINCIPLE's dimensions
+  // and reads option.features[dim], so a key that is not a real dimension is
+  // never read and the axis the caller thought they scored silently counts as
+  // zero. Silent skip on bad input is the failure mode
+  // `make-silent-failures-observable` forbids.
+  const featureErrors: FeatureValidationError[] = [];
+  for (const raw of optionsParam) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const o = raw as Record<string, unknown>;
+    const f = o["features"];
+    if (typeof f !== "object" || f === null || Array.isArray(f)) continue;
+    featureErrors.push(
+      ...validateOptionFeatures(
+        String(o["id"] ?? "(unnamed option)"),
+        f as Record<string, unknown>,
+      ),
+    );
+  }
+  if (featureErrors.length > 0) {
+    return {
+      success: false,
+      message:
+        `principle_decide rejected ${featureErrors.length} option feature(s): ` +
+        featureErrors.map((e) => `[${e.optionId}] ${e.detail}`).join(" ") +
+        ` ${featureErrorRemedy()}`,
+      error: "Invalid option features",
     };
   }
 
@@ -448,12 +490,33 @@ async function principleDecide(
     agentId: context?.agentId ?? null,
   });
 
-  // When there is no recommendation, result.reasoning names why —
-  // insufficient signal (zero contributions, BI-5CE7CF0B) vs no
-  // applicable principles vs no options — instead of a one-size message.
-  const summary = result.recommendation
-    ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
-    : result.reasoning;
+  // BI-E0151DB2. The abstention must be impossible to mistake for a verdict.
+  // Previously an insufficient-signal consult returned success:true with
+  // recommendation:null and a prose `reasoning` string — a caller that read
+  // only `message` or only `recommendation` proceeded as if governed. 16.7% of
+  // the first 156 recorded consults landed here. `signalQuality.usable` is the
+  // machine-checkable field; the message says so in the first clause.
+  const optionsWithFeatures = decisionOptions.filter(
+    (o) => Object.keys(o.features ?? {}).length > 0,
+  ).length;
+  const usable = !result.flags.insufficientSignal && result.recommendation !== null;
+  const signalQuality = {
+    usable,
+    insufficientSignal: result.flags.insufficientSignal,
+    structuredCoverage: result.flags.structuredCoverage,
+    semanticFallbackRatio: result.flags.semanticFallbackRatio,
+    optionsWithFeatures,
+    optionCount: decisionOptions.length,
+    advisory: usable
+      ? null
+      : optionsWithFeatures === 0
+        ? "NO OPTION SUPPLIED `features`, so every principle scored exactly 0. Governance commandments carry full dimension vectors, so scoring takes the structured path and the semantic fallback never fires for them. Re-call with a features map per option — this is not a neutral or tie result."
+        : "Signal was too weak to recommend. Widen per-option `features` coverage across the dimensions the applied principles actually weigh (see each contribution's missingDimensions), or decide by human judgement.",
+  };
+
+  const summary = usable
+    ? `Recommends ${result.recommendation!.optionId} (confidence: ${result.recommendation!.confidence}, composite ${result.recommendation!.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
+    : `NO RECOMMENDATION — signalQuality.usable=false. ${result.reasoning} ${signalQuality.advisory}`;
 
   // Persist the consult to the DecisionInteraction ledger so the decision
   // governance hub can audit that the gate is in use (per-tier log at
@@ -485,6 +548,11 @@ async function principleDecide(
       agentId: context?.agentId ?? null,
       threadId: context?.threadId ?? null,
     },
+    signalQuality: {
+      usable: signalQuality.usable,
+      optionsWithFeatures: signalQuality.optionsWithFeatures,
+      optionCount: signalQuality.optionCount,
+    },
   });
 
   return {
@@ -492,6 +560,8 @@ async function principleDecide(
     message: summary,
     data: {
       recommendation: result.recommendation,
+      // BI-E0151DB2: read this BEFORE acting on `recommendation`.
+      signalQuality,
       scores: result.scores,
       flags: result.flags,
       reasoning: result.reasoning,
