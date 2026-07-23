@@ -60,6 +60,12 @@ A food-hospitality business that isn't one of those three sees a neutral food/dr
 
 Accounting internals — VAT/tax remittance, dunning reminders, payment runs, ledger and P&L reports, bank rules, and AI spend — are kept one tap away under a collapsed **"Accounting & admin"** section. Every other business type keeps the standard finance overview.
 
+### Readiness notes
+
+**Draft readiness note** asks the Finance Specialist coworker to write up the position shown on the overview: 3–5 bullets covering what needs attention, why it matters, and the safest next action. The note is drafted from the figures on screen — the coworker is instructed not to invent numbers, and to omit anything it has no figure for.
+
+It is a **draft for you to review**. Nothing is sent to anyone, no action is taken on your behalf, and the note will not claim money has been paid or moved — recording a payment in DPF is not a bank transfer. If your finances aren't set up yet, the note explains what to set up first instead.
+
 ## Recording a payment run
 
 A payment run (`/finance/payment-runs`) **records the selected approved bills as paid in DPF** and writes a matching outbound payment. It is **not a draft** and does **not** initiate a real bank transfer — pay your suppliers through your bank as usual, then use a payment run to keep your books settled. The action is labelled **"Record as Paid"** to make this explicit.

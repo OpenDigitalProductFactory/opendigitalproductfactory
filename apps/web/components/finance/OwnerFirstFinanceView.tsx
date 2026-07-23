@@ -4,6 +4,8 @@ import type {
   FinanceMoneyJob,
   FinanceSurfaceModel,
 } from "@/lib/finance/finance-surface";
+import { buildFinanceReadinessNotePrompt } from "@/lib/finance/readiness-note";
+import { AiFinanceCoworkerAskButton } from "@/components/finance/AiFinanceCoworkerAskButton";
 
 export type MoneyJobMetric = {
   /** Pre-formatted display value, e.g. "£1,250.00" or "3". */
@@ -69,7 +71,36 @@ export function OwnerFirstFinanceView({ surface, metrics, advancedChildren }: Pr
         </div>
       </section>
 
-      {/* Restaurant-context invoice entry points */}
+      {/* Coworker-drafted readiness note, grounded in the figures above */}
+      {surface.subtype && (
+        <section aria-label="Readiness note" className="mb-8">
+          <div className="flex flex-col gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--dpf-text)]">
+                Want this written up?
+              </p>
+              <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
+                The Finance Specialist can draft a short readiness note from the figures above —
+                what needs attention, why it matters, and the safest next action. It is a draft for
+                you to review; nothing is sent and no money moves.
+              </p>
+            </div>
+            <div className="shrink-0">
+              <AiFinanceCoworkerAskButton
+                prompt={buildFinanceReadinessNotePrompt({
+                  subtype: surface.subtype,
+                  moneyJobs: surface.moneyJobs,
+                  metrics,
+                })}
+                routeContext="/finance"
+                label="Draft readiness note"
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Subtype invoice entry points */}
       {surface.invoiceEntryPoints.length > 0 && (
         <section aria-label="Start a bill" className="mb-8">
           <h2 className="mb-3 text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
