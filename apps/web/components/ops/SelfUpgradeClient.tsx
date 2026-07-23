@@ -753,8 +753,8 @@ export default function SelfUpgradeClient({
                   disabled={triggerBusy}
                   aria-busy={triggerBusy}
                   aria-label="Upgrade now"
-                  data-override={override ? "true" : "false"}
-                  className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
+                  data-override={override ? "true" : "false"} data-owner-first-next-action data-dpf-primary-action
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-[var(--dpf-accent)] text-white border border-[var(--dpf-accent)] hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
                   {isPending
                     ? "Upgrading..."

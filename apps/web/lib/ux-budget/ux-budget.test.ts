@@ -189,6 +189,46 @@ describe("enforcement splits by route age (spec rev 2 D1)", () => {
   });
 });
 
+describe("primary action reachability (BI-D77BF495 — the self-upgrade lesson)", () => {
+  // A page with its primary action inside a collapsed <details> — the exact shape
+  // of the self-upgrade regression: the trigger is present but not visible on arrival.
+  const buried = `<main data-dpf-lead><h1>Self-Upgrade</h1><p>Status here.</p><details><summary>Advanced</summary><button data-dpf-primary-action data-owner-first-next-action>Upgrade now</button></details></main>`;
+  const reachable = `<main data-dpf-lead><h1>Self-Upgrade</h1><p>Status here.</p><button data-dpf-primary-action data-owner-first-next-action>Upgrade now</button><details><summary>Advanced</summary><p>logs</p></details></main>`;
+
+  it("flags a primary action that is marked but hidden behind a collapse", () => {
+    expect(measureUxBudget(buried).buriedPrimaryAction).toBe(1);
+    expect(measureUxBudget(reachable).buriedPrimaryAction).toBe(0);
+  });
+
+  it("the word budget alone would REWARD burying it — this is why the axis exists", () => {
+    // Fewer default-visible words when the action is hidden. The volume budget reads
+    // that as an improvement; only the reachability axis catches the regression.
+    expect(measureUxBudget(buried).defaultVisibleWords).toBeLessThan(
+      measureUxBudget(reachable).defaultVisibleWords,
+    );
+  });
+
+  it("blocks a net-new detail route whose primary action is buried", () => {
+    const v = auditUxBudget(buried, "detail", { routeStatus: "net-new" });
+    expect(v.ok).toBe(false);
+    expect(v.findings.find((f) => f.check === "primary-action-reachable")?.ok).toBe(false);
+  });
+
+  it("passes the same route once the action is lifted into view", () => {
+    const v = auditUxBudget(reachable, "detail", { routeStatus: "net-new" });
+    expect(v.findings.find((f) => f.check === "primary-action-reachable")?.ok).toBe(true);
+  });
+
+  it("does not require reachability on shells where it does not apply (list/public)", () => {
+    expect(auditUxBudget(buried, "list", { routeStatus: "net-new" }).findings.find((f) => f.check === "primary-action-reachable")?.ok).toBe(true);
+    expect(auditUxBudget(buried, "public", { routeStatus: "net-new" }).findings.find((f) => f.check === "primary-action-reachable")?.ok).toBe(true);
+  });
+
+  it("a page with no marked primary action at all is not penalised", () => {
+    expect(measureUxBudget(`<main><p>just content, no action</p></main>`).buriedPrimaryAction).toBe(0);
+  });
+});
+
 describe("route → intended shell derivation", () => {
   it("derives shells from the existing audience/destination-kind registry", () => {
     expect(shellForRoute({ audience: "owner", destinationKind: "section-home" })).toBe("cockpit");
