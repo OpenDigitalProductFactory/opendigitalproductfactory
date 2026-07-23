@@ -54,6 +54,8 @@ The AI Coworker creates an implementation plan listing the files to create or mo
 
 The AI Coworker generates code inside the isolated Build runtime. You can see the live preview update in real time. It runs tests and typecheck after generating code. If tests fail, it attempts to fix them automatically. You can ask for changes at any time.
 
+If a task stops before it finishes, Build Studio distinguishes *why*. When the coding session died on infrastructure — a timeout, a provider outage, a rate limit, the process being killed — that is not a verdict on your feature, so the same task is re-run once automatically and you see a "retrying" note in the activity feed. When the session instead stopped because it needs something only you can supply — an unresolved product question, a contradiction in the spec — it is **not** retried, because re-running will not answer the question. That one surfaces as a blocked task for you to resolve.
+
 ### Review
 
 Quality gates verify the feature is ready: documentation evidence is present, all tests pass, typecheck is clean, acceptance criteria are met, and accessibility checks pass. The AI Coworker presents a plain-language summary of the results.
