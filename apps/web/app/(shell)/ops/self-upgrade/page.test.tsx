@@ -333,10 +333,20 @@ describe("SelfUpgradePage", () => {
   });
 
   it("marks the upgrade trigger as the primary / next action so the UX gate can see it", async () => {
-    vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
+    // The trigger only renders when there is something to do — enabled with an
+    // available update. (When idle there is no primary action, which is correct:
+    // nothing to bury, nothing to mark.)
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      enabled: true,
+      isFresh: false,
+      targetSha: "b".repeat(40),
+    });
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
     const html = renderToStaticMarkup(await SelfUpgradePage());
     expect(html).toContain("data-dpf-primary-action");
     expect(html).toContain("data-owner-first-next-action");
+    // And it must be reachable on arrival — inside the OPEN section, not collapsed away.
+    expect(html).toMatch(/<details[^>]*\sopen/);
   });
 });
