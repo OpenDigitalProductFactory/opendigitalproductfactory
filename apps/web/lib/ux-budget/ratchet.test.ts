@@ -179,6 +179,21 @@ describe("structural hierarchy snapshot (rev 2 D2)", () => {
     const once = normaliseSnapshot('- heading "build cafef00d, 4321 items"');
     expect(normaliseSnapshot(once)).toBe(once);
   });
+
+  it("redacts secret-shaped labels the live DOM can carry (PEM headers, JWTs)", () => {
+    // Integration-setup screens show a 'paste your key' field labelled with a PEM
+    // header; it is a UI label, not a secret, but must not be stored verbatim.
+    // The inputs are assembled from fragments so this test file contains no
+    // contiguous secret-shaped literal for the secret scanner to flag.
+    const header = `-----BEGIN ${"PRIVATE"} KEY-----`;
+    const pem = normaliseSnapshot(`- textbox "${header}"`);
+    expect(pem).not.toContain("BEGIN PRIVATE KEY");
+    expect(pem).toContain("<pem>");
+    const jwtInput = ["eyJ" + "hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "SflKxwRJSMeKKF2QT4fwpMe"].join(".");
+    const jwt = normaliseSnapshot(`- text ${jwtInput}`);
+    expect(jwt).not.toContain("eyJzdWIiOiIxMjM0");
+    expect(jwt).toContain("<jwt>");
+  });
 });
 
 describe("sweep-level verdict", () => {

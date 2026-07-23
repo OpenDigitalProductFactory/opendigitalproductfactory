@@ -189,6 +189,14 @@ export function verdictForRoute(
  * nesting) is preserved while the volatile value is not.
  */
 const VOLATILE_PATTERNS: [RegExp, string][] = [
+  // Secret-SHAPED content the live DOM can legitimately show as a label or
+  // placeholder (e.g. an integration-setup field that reads "-----BEGIN PRIVATE
+  // KEY-----" or a sample token). It is not a real secret, but it must not be
+  // stored verbatim: it trips secret scanning and is noise for a structure gate.
+  // Redact FIRST, before the narrower value patterns below.
+  [/-----BEGIN[\s\S]*?-----END[^-]*-----/g, "<pem>"], // PEM key blocks
+  [/-----BEGIN[A-Z0-9 ]*-----/g, "<pem>"], // a lone PEM header shown as a label
+  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+/g, "<jwt>"], // JWTs
   [/\b[0-9a-f]{7,40}\b/gi, "<hex>"], // git SHAs (short and full)
   [/\bc[a-z0-9]{24,}\b/gi, "<id>"], // cuid-style record ids
   [/\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?/g, "<timestamp>"], // ISO date/time
