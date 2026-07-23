@@ -55,6 +55,54 @@ export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
 ];
 
 export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
+  // Sensitivity MUST match ROUTE_AGENT_MAP["/coworker-decisions/craft"] — the
+  // LIFE-007 conformance check fails on divergence, because the
+  // USE_UNIFIED_COWORKER flag would otherwise flip this route's data boundary.
+  "/coworker-decisions/craft": {
+    routePrefix: "/coworker-decisions/craft",
+    domain: "Craft (WSID)",
+    sensitivity: "internal",
+    domainContext:
+      "This page is the WSID craft surface: the professions the platform grounds its coworkers in — the competent-professional answer for each role — and where a business adds its own local overrides. For ux-design it carries the design-critique technique, the lens set, the corpus authority contract, and the calibration gate that governs when design critique may carry any weight.",
+    domainTools: [
+      "wiki_query",
+      "search_knowledge",
+      "search_knowledge_base",
+      "doc_search",
+      "doc_load",
+      "evaluate_profession_decision",
+    ],
+    docsPath: "/docs/wiki/index",
+    skills: [
+      {
+        label: "Capture a critique",
+        description: "Turn a UX review note into a corpus entry",
+        capability: "view_platform",
+        prompt:
+          "I want to record a UX review note into the critique corpus. Ask me for the route, what specifically is wrong, and my verdict — then draft the entry.",
+      },
+      {
+        label: "Corpus gaps",
+        description: "Entries still missing a founder verdict",
+        capability: "view_platform",
+        prompt:
+          "Show me critique corpus entries that are still missing a founder verdict, and cluster them so I can work through them quickly.",
+      },
+      {
+        label: "Explain a lens",
+        description: "How the hierarchy and density lenses apply here",
+        capability: "view_platform",
+        prompt:
+          "Explain how the information-hierarchy and content-density lenses apply to this profession's craft guidance.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
   "/portfolio": {
     routePrefix: "/portfolio",
     domain: "Portfolio Management",

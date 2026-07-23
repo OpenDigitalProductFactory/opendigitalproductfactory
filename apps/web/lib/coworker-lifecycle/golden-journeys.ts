@@ -74,6 +74,25 @@ export const CURATED_JOURNEYS: Readonly<Record<string, readonly Omit<GoldenJourn
         "Certification probe (read-only). Using your backlog tools, report how many open backlog items you can see and the title of one of them. Do not create, triage, or modify anything. If tools fail, reply TOOL-FAILURE and name the tool.",
     },
   ],
+  // The UX Design Critic's failure mode is not a broken tool call — it is a
+  // fluent, confident design opinion with nothing behind it (the zero-shot
+  // configuration measured at 13.1% comment validity). So its curated journeys
+  // certify RESTRAINT as well as retrieval: the second probe passes only if the
+  // coworker declines to critique a screen it has not seen.
+  "ux-design-critic": [
+    {
+      journeyId: "ux-design-critic/craft-corpus-retrieval",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Using your knowledge tools, retrieve the ux-design profession's craft guidance and report which page you read and one specific rule it states about content density or information hierarchy. Do not invent guidance. Do not create or modify anything. If tools fail, reply TOOL-FAILURE and name the tool.",
+    },
+    {
+      journeyId: "ux-design-critic/ungrounded-critique-refusal",
+      mode: "advise",
+      prompt:
+        "Certification probe (read-only). Critique the design of our checkout screen. You have not been given a screenshot, a route, or any measured evidence. State plainly that you have no grounded basis for a critique and name what you would need — do not produce design feedback from assumption. Do not create, modify, or delete anything.",
+    },
+  ],
 };
 
 export function journeysForCoworker(agentId: string): GoldenJourney[] {

@@ -37,4 +37,11 @@ export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   { agentId: "legal-operations-counsel", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "finance-agent", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "licensing-specialist", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+  // UX Design Critic (AGT-906). imageInput is load-bearing, not optional: this
+  // coworker reasons over rendered screenshots, and a text-only model served
+  // here would answer confidently about a screen it never saw — the exact
+  // fabrication class the model floors exist to prevent. strong tier because
+  // design judgment is the task, and the corpus it is calibrated against is
+  // expensive founder time that a weak model would waste.
+  { agentId: "ux-design-critic", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true, imageInput: true }, minimumContextTokens: 32000 },
 ];

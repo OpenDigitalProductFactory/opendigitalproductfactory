@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 536,
+  "pageCount": 539,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -6214,6 +6214,23 @@
         "see-also"
       ]
     },
+    "docs/professions/ux-design/wiki/critique-calibration-gate.md": {
+      "publicHref": "/professions/ux-design/wiki/critique-calibration-gate/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-decision-this-page-settles",
+        "the-rule-authority-is-a-measured-promotion-in-three-stages",
+        "stage-1-curate-no-authority",
+        "stage-2-advise-visible-non-blocking",
+        "stage-3-gate-blocking",
+        "what-the-criterion-may-not-be",
+        "what-may-skip-the-ladder",
+        "scope-boundary",
+        "see-also"
+      ]
+    },
     "docs/professions/ux-design/wiki/design-accessibility-from-the-start-pour.md": {
       "publicHref": "/professions/ux-design/wiki/design-accessibility-from-the-start-pour/",
       "portalHref": null,
@@ -6223,6 +6240,20 @@
         "rule",
         "why",
         "how-to-apply",
+        "see-also"
+      ]
+    },
+    "docs/professions/ux-design/wiki/design-critique-corpus-method.md": {
+      "publicHref": "/professions/ux-design/wiki/design-critique-corpus-method/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "why-a-corpus-exists-at-all",
+        "what-an-entry-is",
+        "the-authority-contract",
+        "capture-in-practice",
+        "anti-patterns",
         "see-also"
       ]
     },
@@ -6247,6 +6278,20 @@
         "method",
         "why-multiple-evaluators",
         "how-dpf-coworkers-use-it",
+        "see-also"
+      ]
+    },
+    "docs/professions/ux-design/wiki/information-hierarchy-and-density.md": {
+      "publicHref": "/professions/ux-design/wiki/information-hierarchy-and-density/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "why-these-two-axes",
+        "hierarchy-read-it-from-the-accessibility-tree",
+        "density-count-the-default-visible-view",
+        "the-classical-lenses-and-what-each-is-actually-for",
+        "how-the-critique-is-expected-to-read",
         "see-also"
       ]
     },

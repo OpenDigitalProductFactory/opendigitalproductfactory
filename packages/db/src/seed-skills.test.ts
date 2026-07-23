@@ -362,3 +362,46 @@ describe("dpf-platform mirror-field invariant", () => {
     ]));
   });
 });
+
+describe("SKILL_WILDCARD_AGENT_IDS uniqueness", () => {
+  // Regression guard. reconcileSkillAssignments snapshots the existing
+  // assignments ONCE before its create loop, so a duplicate inside
+  // targetAgents makes the second create violate @@unique([skillId, agentId])
+  // and fails the whole "skills" seed step. That is a long way from the actual
+  // mistake, which is simply adding a coworker to two source maps — exactly
+  // what happened when ux-design-critic was first appended to
+  // ONBOARDING_AGENT_GRANTS instead of HARDCODED_COWORKER_GRANTS. The symptom
+  // was a Prisma unique-constraint error in an unrelated file; this asserts the
+  // cause instead.
+  it("contains no duplicate agent ids", () => {
+    const counts = new Map<string, number>();
+    for (const agentId of SKILL_WILDCARD_AGENT_IDS) {
+      counts.set(agentId, (counts.get(agentId) ?? 0) + 1);
+    }
+    const duplicates = [...counts.entries()].filter(([, n]) => n > 1).map(([id]) => id);
+    expect(duplicates).toEqual([]);
+  });
+
+  it("reconcileSkillAssignments would throw on a duplicate target", async () => {
+    // Pins the failure mode the guard above protects against, so the coupling
+    // between "duplicate id" and "seed step dies" stays documented in code.
+    const created: string[] = [];
+    const prisma = {
+      skillAssignment: {
+        findMany: async () => [],
+        create: async ({ data }: { data: { agentId: string } }) => {
+          if (created.includes(data.agentId)) {
+            throw new Error("Unique constraint failed on the fields: (`skillId`, `agentId`)");
+          }
+          created.push(data.agentId);
+          return data;
+        },
+        deleteMany: async () => ({ count: 0 }),
+      },
+    } as never;
+
+    await expect(
+      reconcileSkillAssignments(prisma, "some-skill", ["agent-a", "agent-a"]),
+    ).rejects.toThrow(/Unique constraint failed/);
+  });
+});

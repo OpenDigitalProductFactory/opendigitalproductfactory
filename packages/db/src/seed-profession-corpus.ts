@@ -679,6 +679,61 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "Licensed; cited by reference.",
     retrievedAt: "2026-06-13",
   },
+  // EP-UX-SYSTEM L6 (BI-3880DA1D): the evidence base for design-critique
+  // grounding and the calibration gate. Cited by reference; not reproduced.
+  "acm/computation-of-interface-aesthetics": {
+    sourceType: "academic-paper",
+    title: "Computation of Interface Aesthetics (Miniukovich & De Angeli, CHI 2015)",
+    url: "https://dl.acm.org/doi/10.1145/2702123.2702575",
+    license: "ACM-copyright-cite-by-reference",
+    abstract:
+      "Devises and validates eight computational GUI aesthetic metrics — visual " +
+      "clutter, colour range, dominant colours, figure-ground contrast, contour " +
+      "congestion, symmetry, grid quality, white space — explaining up to 49% of " +
+      "variance in webpage aesthetic ratings and 32% for mobile apps, under both " +
+      "immediate and deliberate viewing. The evidence that visual quality is " +
+      "measurable deterministically rather than only judgeable.",
+    retrievedAt: "2026-07-22",
+  },
+  "arxiv/uicrit": {
+    sourceType: "academic-paper",
+    title: "UICrit: Enhancing Automated Design Evaluation with a UI Critique Dataset (UIST 2024)",
+    url: "https://arxiv.org/html/2407.08850v2",
+    license: "arXiv-open",
+    abstract:
+      "Natural-language UI critiques and ratings for 983 screens. Zero-shot model " +
+      "design comments were valid only 13.1% of the time per professional " +
+      "designers; retrieval-augmented few-shot grounding in a curated human " +
+      "critique corpus plus visual prompting improved critique quality 55%, still " +
+      "below the human ceiling. The basis for grounding design critique in a " +
+      "corpus rather than a bare rubric prompt.",
+    retrievedAt: "2026-07-22",
+  },
+  "arxiv/designer-feedback-ui-generation": {
+    sourceType: "academic-paper",
+    title: "Improving User Interface Generation Models from Designer Feedback (Apple, CHI 2026)",
+    url: "https://arxiv.org/html/2509.16779",
+    license: "arXiv-open",
+    abstract:
+      "~1,460 annotations from 21 designers distilled into reward models; a small " +
+      "model plus expert-feedback reward outperformed a much larger proprietary " +
+      "model on expert-judged UI generation. Also reports that six researchers " +
+      "ranking UI preference pairs had very low agreement with expert designers — " +
+      "the basis for the corpus authority contract.",
+    retrievedAt: "2026-07-22",
+  },
+  "aalto/interface-metrics": {
+    sourceType: "web-article",
+    title: "Aalto Interface Metrics (AIM) — a service and codebase for computational GUI evaluation",
+    url: "https://github.com/aalto-ui/aim",
+    license: "MIT",
+    abstract:
+      "Open-source implementation of 17 empirically-grounded perceptual GUI " +
+      "metrics (clutter, colour variability, contrast, symmetry, grid quality, " +
+      "white space, saliency) computed from a screenshot or URL. The runnable " +
+      "form of the CHI-2015 metric family.",
+    retrievedAt: "2026-07-22",
+  },
   "webaim/contrast": {
     sourceType: "web-article",
     title: "Contrast and Color Accessibility (WebAIM)",

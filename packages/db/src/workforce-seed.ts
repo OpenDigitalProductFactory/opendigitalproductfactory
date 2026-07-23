@@ -234,6 +234,26 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     valueStream: "operate",
     sensitivity: "confidential",
   },
+  // AGT-906 revived through the enforced lifecycle (EP-UX-SYSTEM L6, BI-42892849
+  // / BI-3880DA1D). Deliberately established in its CURATION stage: it owns the
+  // founder-authored UX critique corpus and holds NO gating authority. Its
+  // grants are read-and-draft only — no backlog_write, no build_phase_advance,
+  // no release_gate_create — because an ungrounded design critic is the
+  // zero-shot judge UICrit measured at 13.1% comment validity, and a critic that
+  // can block on invalid findings teaches the org to ignore the UX signal.
+  // Critic authority is a later staged grant, gated on measured agreement
+  // against a held-out corpus slice (see the WSID decision-gate page).
+  {
+    agentId: "ux-design-critic",
+    slugId: "ux-design-critic",
+    name: "UX Design Critic",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Curates the founder-authored UX critique corpus and, once calibrated against it, critiques owner-facing surfaces for information hierarchy, content density, and cognitive load",
+    valueStream: "evaluate",
+    sensitivity: "internal",
+  },
 ];
 
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
@@ -322,6 +342,36 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // Reads field-service jobs and customer contact data, updates job status, and
   // proposes customer notifications for approval.
   dispatcher: ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],
+  // UX Design Critic (AGT-906) — READ-AND-DRAFT ONLY, deliberately.
+  //
+  // Absent by design: backlog_write / backlog_triage (cannot file its own
+  // work), build_phase_advance / build_promote / release_gate_create (cannot
+  // block or advance a build). The curation stage carries NO gating authority
+  // because an ungrounded design critic is the zero-shot judge UICrit measured
+  // at 13.1% comment validity — a critic that can block on invalid findings
+  // trains the org to ignore the UX signal, which is how the checkers in the
+  // EP-UX-SYSTEM spec §2 died. Critic authority is a later staged grant, gated
+  // on measured agreement against a held-out founder-corpus slice.
+  //
+  // NOT the HX UX Analyst (EP-HX-LOOP BI-4A1B34E1): that coworker reasons over
+  // UxAnalysisRun briefs — real user telemetry, post-usage — and emits
+  // ImprovementSignal rows. This one reasons over rendered screenshots and the
+  // founder critique corpus, pre-merge. Posterior vs prior; different inputs,
+  // different clocks. The HX spec anticipates both (it tells its analyst to
+  // reference AGT-906 output where scope overlaps).
+  "ux-design-critic": [
+    "browser_read",
+    "coworker_screen_read",
+    "document_read",
+    "document_write",
+    "spec_plan_read",
+    "backlog_read",
+    "portfolio_read",
+    "code_graph_read",
+    "deliberation_create",
+    "deliberation_read",
+    "decision_record_create",
+  ],
 };
 
 // onboarding-coo is created by bootstrap-first-run.ts during portal startup.

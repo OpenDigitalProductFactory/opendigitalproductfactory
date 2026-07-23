@@ -2335,6 +2335,56 @@
       }
     },
     {
+      "agent_id": "AGT-906",
+      "agent_name": "ux-design-critic",
+      "tier": "cross-cutting",
+      "value_stream": "evaluate",
+      "role": "reviewer",
+      "capability_domain": "Curates the founder-authored UX critique corpus and, once calibrated against it, critiques owner-facing surfaces for information hierarchy, content density, and cognitive load. Grounded in the ux-design profession corpus (WSID), not in a bare rubric — ungrounded design critique measures 13.1% valid. Established in its curation stage with NO gating authority: it may draft, cluster, and propose verdicts, but never attach one, and it cannot file backlog work, advance a build, or block a merge. Distinct from AGT-903 (WCAG/accessibility compliance) and from the HX UX Analyst (behavioural findings over user telemetry).",
+      "human_supervisor_id": "HR-300",
+      "hitl_tier_default": 3,
+      "delegates_to": [],
+      "escalates_to": "HR-300",
+      "it4it_sections": [],
+      "status": "defined",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-opus-4-6",
+          "temperature": 0.2,
+          "max_tokens": 8192,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 180
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 20000
+        },
+        "tool_grants": [
+          "browser_read",
+          "coworker_screen_read",
+          "document_read",
+          "document_write",
+          "spec_plan_read",
+          "backlog_read",
+          "portfolio_read",
+          "code_graph_read",
+          "deliberation_create",
+          "deliberation_read",
+          "decision_record_create"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 2
+      }
+    },
+    {
       "agent_id": "AGT-904",
       "agent_name": "documentation-specialist",
       "tier": "cross-cutting",
