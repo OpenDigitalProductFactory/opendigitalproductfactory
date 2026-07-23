@@ -223,3 +223,40 @@ Remaining for BI-22250BA2: the A-PRIORI half — predict blast radius at promote
 the design's declared surfaces via a code-graph dependents traversal + the EA model
 (EaElement/EaFrameworkMapping), replacing the interim keyword heuristic in
 `warrantForBacklogItem`. It lands behind that same seam with no gate-site changes.
+
+## WWWD context (feat/wwwd-context-evidence, BI-EE211BFA) — the plane learns where it lives
+
+`deriveWarrant` has carried a context overlay since the pure core landed: when the
+warrant's `contextScope` names a vertical (`archetype`) or a `jurisdiction`, it
+escalates `evidenceProfile` to `compliance` and records the reason. It had never
+fired in production — the promote path passed `context: {}`, so the company /
+industry / location dimension of WWWD was inert. This is the wiring that feeds it.
+
+- `decision/org-warrant-context.ts` — `loadOrgWarrantContext(db)` reads the org's
+  WWWD scope: `Organization.industry` + `StorefrontConfig.archetypeId`. Structural
+  db type (not the Prisma client) so it is unit-testable and callable from inside
+  the promote transaction.
+- `governed-backlog-tee-up.ts` awaits it and passes the result as
+  `warrantForBacklogItem({..., context})`. The two read delegates are **optional**
+  on `GovernedBacklogTeeUpTx`, so existing write-path test doubles keep satisfying
+  the type.
+- Best-effort by construction: a missing row, an absent delegate, or a failing read
+  yields a null field rather than throwing. Promote must never fail because the
+  org's stance is not yet configured, and an unconfigured org derives exactly the
+  warrant it did before — no phantom compliance burden.
+
+`jurisdiction` stays null: it is not modelled on `Organization` today. The overlay
+already consumes it, so adding the column is the whole of that follow-up.
+
+Effect: on a regulated install (an archetype-bearing org — clinic, field-service,
+finance), every promoted build demands compliance evidence at the gate without the
+operator restating it per build. `industry` is carried on `contextScope` for the
+ledger/reporting profile even where it does not itself escalate — `archetype` is
+the platform's own deliberate vertical selection and is the right escalation lever
+(consistent with the compliance-archetype gate matching id OR category).
+
+Evidence before merge:
+
+```bash
+pnpm --filter web exec vitest run lib/decision/org-warrant-context.test.ts lib/governed-backlog-tee-up.test.ts
+```
