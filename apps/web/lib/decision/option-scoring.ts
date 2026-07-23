@@ -141,15 +141,55 @@ export function computeSemanticAlignment(
   };
 }
 
+// ─── Mode selection ─────────────────────────────────────────────────────────
+
+/**
+ * True when structured alignment has anything to say about this pair: the
+ * principle declares at least one dimension AND the option scores at least one
+ * of those same dimensions.
+ *
+ * When it returns false, `computeStructuredAlignment` is arithmetically pinned
+ * to 0 (every term of the numerator is a missing feature), so a structured row
+ * would report a confident-looking `alignment: 0` that carries no information.
+ * The semantic path at least has a chance of signal.
+ */
+export function hasScoreableOverlap(
+  option: DecisionOption,
+  principle: DecisionPrinciple,
+): boolean {
+  const dims = Object.keys(principle.dimensionVector);
+  if (dims.length === 0) return false;
+  return dims.some((dim) => typeof option.features[dim] === "number");
+}
+
 // ─── Composite scoring + contribution ledger ────────────────────────────────
 
 /**
  * For each option, compute the composite decision score across all
  * principles and return the contribution ledger.
  *
- * Selection of structured vs. semantic alignment is per-principle:
- * - If `principle.dimensionVector` has at least one entry → structured.
+ * Selection of structured vs. semantic alignment considers BOTH sides:
+ * - Structured when the principle declares a dimension vector AND the option
+ *   scores at least one of those same dimensions — i.e. there is something to
+ *   compare.
  * - Otherwise → semantic (uses both embeddings; zero if either is missing).
+ *
+ * The both-sides rule is load-bearing for the kernel-evolution discipline's
+ * overlap scan (spec 2026-05-24 §4.3, BI-85341A52), which calls this engine with
+ * a candidate principle's direction as a FEATURELESS option and reads the ledger
+ * to find the closest existing principles. Selecting mode from the principle
+ * side alone made that scan return an all-zero ledger against every vectored
+ * principle — which is nearly the whole kernel — so the governed promotion gate
+ * for a new principle could not be run at all. BI-3C1A6451 had already added
+ * server-side embedding of the option description for exactly this case; the
+ * embedding was computed and then never consulted, because the row had already
+ * been routed to structured mode.
+ *
+ * Callers that DO supply overlapping features are unaffected: partial coverage
+ * (one or more shared dimensions) still scores structured and still reports
+ * `missingDimensions`. Only the zero-overlap case — where structured alignment
+ * is arithmetically guaranteed to be 0 and says nothing — now falls through to
+ * the semantic path.
  *
  * Tasks 2.6 (guardrails: tie-margin, commandment-conflict, semantic-
  * fallback coverage) consume this output downstream.
@@ -361,7 +401,7 @@ export function buildOptionScores(
 ): DecisionOptionScore[] {
   return options.map((option) => {
     const contributions: PrincipleContribution[] = principles.map((p) => {
-      const useStructured = Object.keys(p.dimensionVector).length > 0;
+      const useStructured = hasScoreableOverlap(option, p);
       const aln = useStructured
         ? computeStructuredAlignment(option, p)
         : computeSemanticAlignment(option, p);
