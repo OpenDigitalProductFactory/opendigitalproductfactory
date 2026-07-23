@@ -202,3 +202,24 @@ warrant's `budget.tokenCeiling` enforceable rather than advisory.
 Follow-on: the build phase's coding-agent path (`coding-agent.ts` routeAndCall) has
 no buildId in scope — threading it needs a param through its callers; tracked as
 the remainder of BI-0A6B8B38.
+
+## Blast-radius provider, a-posteriori half (BI-22250BA2 / BI-CFEB2B22 P3)
+
+`blastRadiusFromChangeImpact(report)` maps the EXISTING `ChangeImpactReport`
+(`analyzeChangeImpact`, which already parses a diff into routes / schemaChanges /
+impactedRoles / riskLevel + a code-graph coverage summary) onto the warrant's
+`BlastRadius` — so the verify-time signal can CONFIRM or CORRECT the promote-time
+altitude. One blast-radius core, not two.
+
+- `downstreamCount` = files touched + distinct impacted roles. (The code-graph
+  summary reports index COVERAGE, not a dependents count, so it cannot supply a
+  reach number today — a real dependents traversal is the remaining a-priori half.)
+- `touchesCoreContract` = schema change OR a DELETED route (both break existing
+  consumers). New/modified routes are additive and do not qualify alone.
+- `riskLevel` passes through — `ChangeImpactReport` and the warrant share the same
+  low|medium|high|critical union.
+
+Remaining for BI-22250BA2: the A-PRIORI half — predict blast radius at promote from
+the design's declared surfaces via a code-graph dependents traversal + the EA model
+(EaElement/EaFrameworkMapping), replacing the interim keyword heuristic in
+`warrantForBacklogItem`. It lands behind that same seam with no gate-site changes.
