@@ -114,6 +114,13 @@ export type GovernedBacklogTeeUpCandidate = {
   triageOutcome: string | null;
   effortSize: string | null;
   activeBuildId: string | null;
+  /**
+   * Set to the decomposition Epic when a prior build for this item was
+   * decomposed (approve-decomposition swaps activeBuildId → activeEpicId). Its
+   * child builds already carry the work, so the item must NOT be re-promoted.
+   * Distinct from `epicId`, which is only the grouping epic. See BI-1D0CA7A0.
+   */
+  activeEpicId: string | null;
   digitalProductId: string | null;
   epicId: string | null;
   createdAt: Date;
@@ -215,6 +222,13 @@ function isEligibleCandidate(item: GovernedBacklogTeeUpCandidate): boolean {
     item.status === "open"
     && item.triageOutcome === "build"
     && item.activeBuildId == null
+    // Do not re-promote an item whose prior build was decomposed: its
+    // activeEpicId points at a live Epic whose child builds already deliver the
+    // work. Re-promoting mints a duplicate build that parks at the
+    // decompose-required gate and collides on Epic.originatingBacklogItemId,
+    // spamming a restart-path prisma:error (BI-1D0CA7A0). This is the generator
+    // of that duplicate; the approve-decomposition guard is the safety net.
+    && item.activeEpicId == null
     && item.effortSize != null
     && ELIGIBLE_EFFORT_SIZES.has(item.effortSize)
   );
@@ -592,6 +606,8 @@ export async function runGovernedBacklogTeeUp(input: {
       triageOutcome: "build",
       effortSize: { in: [...ELIGIBLE_EFFORT_SIZES] },
       activeBuildId: null,
+      // Exclude items already being delivered by a decomposition Epic (BI-1D0CA7A0).
+      activeEpicId: null,
     },
     orderBy: { createdAt: "asc" },
     select: {
@@ -603,6 +619,7 @@ export async function runGovernedBacklogTeeUp(input: {
       triageOutcome: true,
       effortSize: true,
       activeBuildId: true,
+      activeEpicId: true,
       digitalProductId: true,
       epicId: true,
       createdAt: true,
