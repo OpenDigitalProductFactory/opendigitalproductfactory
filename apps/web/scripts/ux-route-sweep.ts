@@ -80,15 +80,40 @@ const PRUNE_INVISIBLE = `() => {
   return body ? body.innerHTML : '';
 }`;
 
-async function measureRoute(page: Page, row: ShellRow, baseUrl: string): Promise<RouteMeasurement | null> {
+/** Why a route produced no measurement — reported, never silently dropped. */
+export type SkipReason = { routePath: string; reason: string };
+
+async function measureRoute(
+  page: Page,
+  row: ShellRow,
+  baseUrl: string,
+  skipped: SkipReason[],
+): Promise<RouteMeasurement | null> {
+  // NOT networkidle: this portal holds long-lived connections (activity streams,
+  // polling), so networkidle never settles and every route would time out.
   const response = await page.goto(`${baseUrl}${row.routePath}`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
     timeout: 30_000,
   });
+  // Give client components a beat to hydrate; the whole point is the served DOM.
+  await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {});
+
   // A route that errors or redirects to auth is not a surface to budget; recording a
   // measurement for it would freeze a login page as the route's baseline.
-  if (!response || response.status() >= 400) return null;
-  if (new URL(page.url()).pathname !== row.routePath) return null;
+  if (!response) {
+    skipped.push({ routePath: row.routePath, reason: "no response" });
+    return null;
+  }
+  if (response.status() >= 400) {
+    skipped.push({ routePath: row.routePath, reason: `http ${response.status()}` });
+    return null;
+  }
+  const landed = new URL(page.url()).pathname.replace(/\/$/, "") || "/";
+  const wanted = row.routePath.replace(/\/$/, "") || "/";
+  if (landed !== wanted) {
+    skipped.push({ routePath: row.routePath, reason: `redirected to ${landed}` });
+    return null;
+  }
 
   const html = await page.evaluate(PRUNE_INVISIBLE);
   const ariaSnapshot = await page.locator("body").ariaSnapshot();
@@ -125,7 +150,10 @@ async function main(): Promise<void> {
   const statePath = join(ROOT, storageState);
   let browser: Browser | undefined;
   const measurements: RouteMeasurement[] = [];
-  const skipped: string[] = [];
+  const skipped: SkipReason[] = [];
+  if (!existsSync(statePath)) {
+    console.error(`[ux-sweep] WARNING: no storage state at ${storageState} — every authenticated route will redirect to login and be skipped.`);
+  }
 
   try {
     browser = await chromium.launch();
@@ -137,12 +165,12 @@ async function main(): Promise<void> {
 
     for (const row of rows) {
       try {
-        const m = await measureRoute(page, row, baseUrl);
+        const m = await measureRoute(page, row, baseUrl, skipped);
         if (m) measurements.push(m);
-        else skipped.push(row.routePath);
-      } catch {
+      } catch (err) {
         // One unreachable route must not abort the sweep; it is reported as skipped.
-        skipped.push(row.routePath);
+        const first = (err as Error).message.split(/\r?\n/)[0];
+        skipped.push({ routePath: row.routePath, reason: `error: ${first}` });
       }
     }
   } finally {
@@ -150,7 +178,34 @@ async function main(): Promise<void> {
   }
 
   console.error(`[ux-sweep] measured ${measurements.length} routes, skipped ${skipped.length}`);
-  if (skipped.length) console.error(`[ux-sweep] skipped: ${skipped.slice(0, 20).join(", ")}`);
+  if (skipped.length) {
+    const byReason = new Map<string, string[]>();
+    for (const s of skipped) {
+      const key = s.reason.replace(/\d+/g, "N");
+      byReason.set(key, [...(byReason.get(key) ?? []), s.routePath]);
+    }
+    for (const [reason, routes] of [...byReason].sort((a, b) => b[1].length - a[1].length)) {
+      console.error(`[ux-sweep]   ${routes.length}x ${reason} — e.g. ${routes.slice(0, 5).join(", ")}`);
+    }
+  }
+
+  // CAPABILITY PROBE (spec §6 L5): a checker that measures nothing must be RED.
+  // A sweep that skips every route and reports OK is the silent-empty failure this
+  // epic exists to remove — it would sit green forever while measuring no UX at all.
+  // The threshold is deliberately blunt: any run that cannot measure a majority of
+  // the routes it was asked to measure has not done its job.
+  const attempted = measurements.length + skipped.length;
+  if (measurements.length === 0 || measurements.length * 2 < attempted) {
+    console.error(
+      [
+        "",
+        `[ux-sweep] FAILED CAPABILITY PROBE — measured ${measurements.length} of ${attempted} routes.`,
+        "A sweep that cannot see the portal is not evidence of a healthy portal.",
+        `Check the authenticated session (${storageState}) and that ${baseUrl} is serving.`,
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
 
   if (updateBaseline) {
     writeFileSync(
