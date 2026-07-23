@@ -216,7 +216,7 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
 
   it("creates an isolated worktree on the build branch with shared node_modules symlinks", () => {
     const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
-    // idempotent: clears any stale worktree first, then prunes the registry
+    // clears any stale worktree first, then prunes the registry
     expect(cmd).toContain(
       "git worktree remove --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
     );
@@ -225,18 +225,39 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     expect(cmd).toContain(
       "git worktree add --force /workspace/.builds/FB-ABCD1234 build/FB-ABCD1234",
     );
-    // node_modules shared by symlink — NOT reinstalled (verified live in dpf-sandbox-1)
+    // node_modules shared by symlink — NOT reinstalled (verified live in dpf-sandbox-1).
+    // -sfn so re-linking an already-provisioned worktree is a no-op, not an error.
     expect(cmd).toContain(
-      "ln -s /workspace/node_modules /workspace/.builds/FB-ABCD1234/node_modules",
+      "ln -sfn /workspace/node_modules /workspace/.builds/FB-ABCD1234/node_modules",
     );
     expect(cmd).toContain(
-      "ln -s /workspace/apps/web/node_modules /workspace/.builds/FB-ABCD1234/apps/web/node_modules",
+      "ln -sfn /workspace/apps/web/node_modules /workspace/.builds/FB-ABCD1234/apps/web/node_modules",
     );
     expect(cmd).toContain(
-      "ln -s /workspace/packages/db/node_modules /workspace/.builds/FB-ABCD1234/packages/db/node_modules",
+      "ln -sfn /workspace/packages/db/node_modules /workspace/.builds/FB-ABCD1234/packages/db/node_modules",
     );
     // never runs an install in the worktree — the symlinks are the whole point
     expect(cmd).not.toContain("pnpm install");
+  });
+
+  // BI-8C6AA60E (isolation-ON half): the destructive `worktree remove --force`
+  // must be reachable ONLY when the worktree is absent or has drifted onto
+  // another branch. A resume onto this build's own branch reuses the live tree.
+  it("reuses an existing worktree already on the build branch instead of force-removing it", () => {
+    const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
+    // guarded on both the directory existing AND its HEAD matching this build's branch
+    expect(cmd).toContain(
+      '[ -d /workspace/.builds/FB-ABCD1234 ] && [ "$(git -C /workspace/.builds/FB-ABCD1234 rev-parse --abbrev-ref HEAD 2>/dev/null)" = "build/FB-ABCD1234" ]',
+    );
+    // the reuse branch re-asserts symlinks only — it must not destroy the tree
+    const reuseBranch = cmd.slice(cmd.indexOf("; then "), cmd.indexOf("; else "));
+    expect(reuseBranch).toContain("ln -sfn");
+    expect(reuseBranch).not.toContain("worktree remove");
+    expect(reuseBranch).not.toContain("worktree add");
+    // and the destructive path is behind the else
+    const recreateBranch = cmd.slice(cmd.indexOf("; else "));
+    expect(recreateBranch).toContain("git worktree remove --force");
+    expect(recreateBranch).toContain("git worktree add --force");
   });
 
   it("tears down a build's worktree best-effort without touching the shared install", () => {

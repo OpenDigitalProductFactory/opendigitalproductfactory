@@ -191,15 +191,33 @@ export function buildSandboxWorktreeAddCommand(
   workspace: string = WORKSPACE,
 ): string {
   const path = buildWorktreePath(buildId, workspace);
+  // `ln -sfn` so re-linking an already-provisioned worktree is a no-op rather
+  // than an error — the reuse branch below relies on it.
   const symlinks = WORKTREE_SHARED_NODE_MODULES.map(
-    (rel) => `ln -s ${workspace}/${rel} ${path}/${rel}`,
+    (rel) => `ln -sfn ${workspace}/${rel} ${path}/${rel}`,
   ).join(" && ");
-  return [
-    `cd ${workspace}`,
+  const recreate = [
     `git worktree remove --force ${path} 2>/dev/null || true`,
     `git worktree prune`,
     `git worktree add --force ${path} ${branchRef}`,
     symlinks,
+  ].join(" && ");
+  // RESUME SAFETY (BI-8C6AA60E, isolation-ON half). `git worktree remove --force`
+  // deletes the working tree wholesale, and the Phase-1 commit-in-flight
+  // mitigation (buildSandboxCommitInFlightWorkCommand) only ever runs against
+  // /workspace — it never reaches .builds/<buildId>. So every re-entry into
+  // startBuildBranch for a build that already had a worktree (review-phase
+  // resume, a retried phase, a second start_build) silently destroyed that
+  // build's UNCOMMITTED source. Committed work survived on the branch ref, which
+  // is exactly why the loss looked intermittent.
+  //
+  // If the worktree is already present AND checked out on this build's own
+  // branch, it is this build's live tree: REUSE it, and only re-assert the
+  // symlinks. Recreate only when it is absent or has drifted onto another branch
+  // (a stale/corrupt state where a reset is the right answer).
+  return [
+    `cd ${workspace}`,
+    `if [ -d ${path} ] && [ "$(git -C ${path} rev-parse --abbrev-ref HEAD 2>/dev/null)" = "${branchRef}" ]; then ${symlinks}; else ${recreate}; fi`,
   ].join(" && ");
 }
 
