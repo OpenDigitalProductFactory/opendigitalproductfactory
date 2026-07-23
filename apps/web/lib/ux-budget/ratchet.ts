@@ -309,6 +309,67 @@ const DOCUMENT_LANDMARKS = new Set([
  * it: when two runs differed, the LINE COUNTS matched exactly (141 vs 141) — only
  * the text payloads moved.
  */
+type ProjectedNode = { line: string; children: ProjectedNode[] };
+
+/**
+ * Build a tree from indentation-ordered projected lines. Stack-based so an
+ * unexpected indentation jump re-parents rather than dropping the subtree.
+ */
+function toTree(lines: string[]): ProjectedNode[] {
+  const root: ProjectedNode = { line: "", children: [] };
+  const stack: { indent: number; node: ProjectedNode }[] = [{ indent: -1, node: root }];
+  for (const line of lines) {
+    const indent = line.length - line.trimStart().length;
+    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) stack.pop();
+    const node: ProjectedNode = { line, children: [] };
+    stack[stack.length - 1].node.children.push(node);
+    stack.push({ indent, node });
+  }
+  return root.children;
+}
+
+function serialiseNode(n: ProjectedNode): string {
+  return `${n.line.trim()}(${n.children.map(serialiseNode).join(",")})`;
+}
+
+function flatten(nodes: ProjectedNode[], out: string[]): void {
+  for (const n of nodes) {
+    out.push(n.line);
+    flatten(n.children, out);
+  }
+}
+
+/**
+ * Collapse consecutive sibling subtrees that project identically.
+ *
+ * A list of N identically-shaped rows IS the same shape as one row — and N varies
+ * with seeded data. /build/work was the measured case: a table whose row count
+ * differed between two runs of the same commit, which no amount of text
+ * normalisation can fix because the ROWS are structure.
+ *
+ * The trade-off is deliberate and bounded: the projection becomes insensitive to
+ * COUNT (how many rows, how many cells) while staying sensitive to KIND, nesting and
+ * structural state — a new sort of node inside a row, a flattened heading, a missing
+ * landmark are all still caught. Count is not lost from the gate: it is exactly what
+ * the numeric axes (words, controls, fields) already ratchet.
+ */
+function collapseRepeatedSiblings(lines: string[]): string[] {
+  if (lines.length === 0) return lines;
+  const dedupe = (nodes: ProjectedNode[]): ProjectedNode[] => {
+    const out: ProjectedNode[] = [];
+    for (const n of nodes) {
+      n.children = dedupe(n.children);
+      const prev = out[out.length - 1];
+      if (prev && serialiseNode(prev) === serialiseNode(n)) continue;
+      out.push(n);
+    }
+    return out;
+  };
+  const flat: string[] = [];
+  flatten(dedupe(toTree(lines)), flat);
+  return flat;
+}
+
 export function normaliseSnapshot(snapshot: string): string {
   let out = snapshot;
   // Defense in depth: redact before projecting, so anything that survives into a
@@ -347,7 +408,7 @@ export function normaliseSnapshot(snapshot: string): string {
     const attrs = [...body.matchAll(/\[([^\]]+)\]/g)].map((m) => `[${m[1]}]`).join(" ");
     lines.push(`${indent}- ${role}${attrs ? ` ${attrs}` : ""}`);
   }
-  return lines.join("\n");
+  return collapseRepeatedSiblings(lines).join("\n");
 }
 
 export type SweepVerdict = {
