@@ -183,7 +183,14 @@ export function BuildStudioWorkflowActionCard({
       } else if (action.kind === "run-review-verification") {
         await runBuildReviewVerification(build.buildId);
       } else if (action.kind === "advance-phase" && action.targetPhase) {
-        await advanceBuildPhase(build.buildId, action.targetPhase);
+        // BI-8C6AA60E: "no releasable source changes" is an expected operational
+        // state, returned as a value so the operator reads the real message
+        // instead of a stripped production digest.
+        const outcome = await advanceBuildPhase(build.buildId, action.targetPhase);
+        if (!outcome.ok) {
+          setError(outcome.message);
+          return;
+        }
       } else if (action.kind === "retry-inference") {
         // BI-F0005EB0 — the AI call errored. Re-drive the failed coworker turn
         // (the same recovery the user does by re-prompting today) by opening the

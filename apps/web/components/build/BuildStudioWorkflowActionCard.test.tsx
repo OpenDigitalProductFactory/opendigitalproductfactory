@@ -50,6 +50,9 @@ vi.mock("@/lib/actions/decision-perspective", () => ({
 
 beforeEach(() => {
   mockAdvanceBuildPhase.mockReset();
+  // advanceBuildPhase returns AdvanceBuildPhaseResult (BI-8C6AA60E) — default the
+  // mock to the success shape so the card's !outcome.ok check reflects reality.
+  mockAdvanceBuildPhase.mockResolvedValue({ ok: true });
   mockCaptureDecisionInteraction.mockReset();
   mockRerunPlanReview.mockReset();
   mockResumeBuildImplementation.mockReset();
@@ -220,6 +223,25 @@ describe("BuildStudioWorkflowActionCard WWMD visibility", () => {
       expect(screen.getByText("WWMD requires escalation before implementation starts.")).toBeInTheDocument();
     });
     expect(onCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  // BI-8C6AA60E: the regression guard. Before this, "no releasable source changes"
+  // was THROWN from a Server Action, so production stripped it to a digest and a
+  // build that had passed every gate failed with an unexplained render error.
+  it("surfaces a returned no-releasable-changes message to the operator", async () => {
+    const message =
+      "No releasable source changes are present in the sandbox. Resume implementation and make a real code change before continuing to release.";
+    mockAdvanceBuildPhase.mockResolvedValueOnce({ ok: false, message });
+
+    render(
+      <BuildStudioWorkflowActionCard build={makeBuild()} action={implementationAction()} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Implementation" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(message)).toBeInTheDocument();
+    });
   });
 
   it("persists WWMD human direction from the action card", async () => {
@@ -539,7 +561,7 @@ describe("BuildStudioWorkflowActionCard compact rendering", () => {
   });
 
   it("compact=true exposes a primary action wired to handlePrimaryAction (delegation, not new dispatch)", async () => {
-    mockAdvanceBuildPhase.mockResolvedValue({ buildId: "FB-9B19098C" });
+    mockAdvanceBuildPhase.mockResolvedValue({ ok: true });
     const onCompleted = vi.fn();
     render(
       <BuildStudioWorkflowActionCard

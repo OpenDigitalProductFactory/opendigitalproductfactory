@@ -19,8 +19,8 @@ apps/web/lib/actions/agent-coworker-external.test.ts	867
 apps/web/lib/actions/agent-coworker.ts	2759
 apps/web/lib/actions/agent-task-scheduler.test.ts	1124
 apps/web/lib/actions/ai-providers.ts	914
-apps/web/lib/actions/build-governed.test.ts	1143
-apps/web/lib/actions/build.ts	1729
+apps/web/lib/actions/build-governed.test.ts	1149
+apps/web/lib/actions/build.ts	1747
 apps/web/lib/actions/compliance.ts	867
 apps/web/lib/actions/crm.ts	1256
 apps/web/lib/actions/ea.ts	918

@@ -1087,9 +1087,13 @@ describe("governed build start approvals", () => {
     });
     mockListReleasableSandboxFiles.mockResolvedValue([]);
 
-    await expect(advanceBuildPhase("FB-123", "review")).rejects.toThrow(
-      "No releasable source changes are present in the sandbox. Tasks are marked complete but no code was written. Resume implementation and make real code changes before advancing to review.",
-    );
+    // BI-8C6AA60E: RETURNED as a value, not thrown — a thrown Server Action
+    // message is stripped to a digest in production and the operator sees nothing.
+    expect(await advanceBuildPhase("FB-123", "review")).toEqual({
+      ok: false,
+      message:
+        "No releasable source changes are present in the sandbox. Tasks are marked complete but no code was written. Resume implementation and make real code changes before advancing to review.",
+    });
 
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1128,9 +1132,11 @@ describe("governed build start approvals", () => {
     });
     mockListReleasableSandboxFiles.mockResolvedValue([]);
 
-    await expect(advanceBuildPhase("FB-123", "ship")).rejects.toThrow(
-      "No releasable source changes are present in the sandbox. Resume implementation and make a real code change before continuing to release.",
-    );
+    expect(await advanceBuildPhase("FB-123", "ship")).toEqual({
+      ok: false,
+      message:
+        "No releasable source changes are present in the sandbox. Resume implementation and make a real code change before continuing to release.",
+    });
 
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalledWith(
       expect.objectContaining({
