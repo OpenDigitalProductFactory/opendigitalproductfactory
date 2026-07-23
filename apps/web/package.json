@@ -52,7 +52,7 @@
     "libphonenumber-js": "^1.13.8",
     "lucide-react": "^1.24.0",
     "mammoth": "^1.12.0",
-    "next": "^16.2.10",
+    "next": "^16.2.11",
     "next-auth": "5.0.0-beta.31",
     "nodemailer": "^9.0.3",
     "papaparse": "^5.5.4",
