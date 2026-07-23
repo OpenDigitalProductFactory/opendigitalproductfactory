@@ -1,5 +1,5 @@
 ---
-title: "Agent Development Environments — Claude, Codex, Grok"
+title: "Agent Development Environments — Claude, Codex, Grok, Antigravity"
 area: getting-started
 order: 7
 relatedCode:
@@ -7,26 +7,26 @@ relatedCode:
   - scripts/dpf-bootstrap-agent-toolchain.ps1
 ---
 
-## Agent Development Environments — Claude, Codex, Grok
+## Agent Development Environments — Claude, Codex, Grok, Antigravity
 
-This guide is for contributors who want to develop the platform with a **dedicated AI coding agent** — Claude, Codex, or Grok — instead of (or alongside) the in-portal **Build Studio**. Each agent ships in more than one form, and **all of them are valid options**:
+This guide is for contributors who want to develop the platform with a **dedicated AI coding agent** — Claude, Codex, Grok, or Google Antigravity — instead of (or alongside) the in-portal **Build Studio**. Each agent ships in more than one form, and **all of them are valid options**:
 
 | Agent | Available as | Notes |
 | ----- | ------------ | ----- |
 | **Claude** | Desktop app (Mac/Windows), IDE extension (VS Code / JetBrains), **or** CLI (Claude Code) | Use whichever client you prefer; they share the same `~/.claude` config |
 | **Codex** | Desktop / IDE client app **or** CLI | Both read the same `~/.codex/config.toml` |
 | **Grok** | **CLI only** | No GUI client yet — the Grok CLI is the only surface today |
-| **Antigravity** (`agy`) | **Agentic IDE + CLI** — in **opt-in onboarding** | Google's Antigravity. The bootstrap can install it opt-in (`--install-antigravity` / `-InstallAntigravity`) and wire the DPF MCP token; `agy` handles its own Google sign-in (a device-code URL on a headless server). **Host CLI only** — supported as a contributor CLI, but **not** as a Build Studio in-sandbox dispatch engine ([why](../build-studio/sandbox.md#why-google-antigravity-is-not-a-dispatch-engine-yet)). See the [Antigravity onboarding runbook](../../operations/antigravity-cli-onboarding.md). |
+| **Antigravity** (`agy`) | **Agentic IDE + CLI** — opt-in install through the bootstrap | Google's Antigravity. The bootstrap can install `agy` opt-in (`--install-antigravity` / `-InstallAntigravity`) and wire the DPF MCP token; `agy` handles its own Google sign-in (a device-code URL on a headless server). **Host contributor surface only** — supported for external DPF development, but **not** as a Build Studio in-sandbox dispatch engine ([why](../build-studio/sandbox.md#why-google-antigravity-is-not-a-dispatch-engine-yet)). See the [Antigravity onboarding runbook](../../operations/antigravity-cli-onboarding.md). |
 
 Whether you run the **desktop app** or the **CLI**, the DPF setup is the same: install the **`dpf-platform` plugin** (which bundles the **skill pack**, the **DPF MCP server** wiring, and the **governance hooks**), load the **AGENTS.md** operating doctrine, and adjust a few **local client settings** so the agent follows the portal's processes. These agents are the more advanced surface — they let an experienced contributor run **multiple concurrent threads of work** (one branch and one git worktree per thread) while still adhering to every process the portal establishes.
 
 If you only want the guided experience, use [Build Studio](../build-studio/index.md) and stop here. If you want to drive the platform from a full agent client, read on.
 
-> **One process, four surfaces.** Build Studio, Claude, Codex, and Grok are interchangeable adapters behind one contract: the evidence-gated lifecycle (`ideate → plan → build → review → ship`), the DPF MCP coordination plane, documentation impact checks, and the worktree/lease isolation model. Governance reads the *evidence*, never *which surface produced it*. See the [Unified Delivery Surfaces spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md).
+> **One process, five surfaces.** Build Studio, Claude, Codex, Grok, and Antigravity are interchangeable adapters behind one contract wherever each surface's host capabilities are available: the evidence-gated lifecycle (`ideate → plan → build → review → ship`), the DPF MCP coordination plane, documentation impact checks, and the worktree/lease isolation model. Governance reads the *evidence*, never *which surface produced it*. See the [Unified Delivery Surfaces spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) and the [Antigravity first-class support design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-17-antigravity-first-class-support-design.md).
 
 ### How the pieces fit together
 
-Every surface — the three agent clients and Build Studio — plugs into the same coordination plane and the same governed lifecycle. The diagram below is the mental model for the rest of this guide:
+Every surface — the four external agent clients and Build Studio — plugs into the same coordination plane and the same governed lifecycle. The diagram below is the mental model for the rest of this guide:
 
 ```mermaid
 flowchart TB
@@ -34,6 +34,7 @@ flowchart TB
         claude["Claude<br/>(app / IDE / CLI)"]
         codex["Codex<br/>(app / CLI)"]
         grok["Grok<br/>(CLI)"]
+        antigravity["Antigravity<br/>(IDE / agy CLI)"]
         bs["Build Studio<br/>(in-portal)"]
     end
 
@@ -52,6 +53,7 @@ flowchart TB
     claude --- plugin
     codex --- plugin
     grok --- plugin
+    antigravity --- plugin
     plugin --> mcp
     bs --> mcp
     mcp --> lifecycle
@@ -70,7 +72,7 @@ Three things are worth calling out up front, because they recur throughout this 
 
 ### Why a dedicated agent client instead of Build Studio?
 
-| | Build Studio (in-portal) | Agent clients (Claude / Codex / Grok) |
+| | Build Studio (in-portal) | Agent clients (Claude / Codex / Grok / Antigravity) |
 | --- | --- | --- |
 | Audience | Non-technical operators; guided authoring | Experienced contributors comfortable with git |
 | Concurrency | One guided build at a time per operator | **Many concurrent threads** — one branch + one worktree each |
@@ -90,8 +92,9 @@ You need the base developer environment first — see [Developer Setup](develope
 | **Claude** (desktop app, IDE extension, or Claude Code CLI) | [code.claude.com/docs](https://code.claude.com/docs) |
 | **Codex** (desktop/IDE app or CLI) | [developers.openai.com/codex](https://developers.openai.com/codex) |
 | **Grok** (CLI — no GUI yet) | xAI Grok Build CLI (`grok`) |
+| **Google Antigravity** (IDE and `agy` CLI) | [antigravity.google](https://antigravity.google/) |
 
-You do not have to install all three, or pick one form over another. The setup is symmetric: install whatever you like, run the bootstrap, and add more later by re-running it.
+You do not have to install all four, or pick one form over another. The setup is symmetric: install whatever you like, run the bootstrap, and add more later by re-running it.
 
 ---
 
@@ -107,11 +110,11 @@ bash scripts/dpf-bootstrap-agent-toolchain.sh
 .\scripts\dpf-bootstrap-agent-toolchain.ps1
 ```
 
-The bootstrap is **idempotent** (re-running on a converged install is a no-op) and writes the **shared client configuration that both the desktop app and the CLI read** (`~/.claude`, `~/.codex/config.toml`, `~/.grok/config.toml`). It:
+The bootstrap is **idempotent** (re-running on a converged install is a no-op) and writes the **shared client configuration that both the desktop app and the CLI read** (`~/.claude`, `~/.codex/config.toml`, `~/.grok/config.toml`, and the Antigravity MCP config it can detect/write). It:
 
-1. **Detects** which of Claude / Codex / Grok are installed — resolving GUI-app and non-PATH install locations, not just `which`.
+1. **Detects** which of Claude / Codex / Grok / Antigravity are installed — resolving GUI-app and non-PATH install locations, not just `which`.
 2. **Mints and persists a DPF MCP token** if one isn't present (issued inside the portal container, persisted to `~/.dpf/agent-toolchain.env` and your shell profile, never logged). Default scope is `write` so the agent can use side-effecting MCP tools (backlog, evidence, Build Studio handoff). On macOS it also injects the token via `launchctl` so GUI-launched apps — which don't read your shell profile — still pick it up.
-3. **Connects the DPF MCP server** in each client (`.mcp.json` / `.vscode/mcp.json` for Claude, `[mcp_servers.dpf]` in Codex/Grok config), all referencing `${DPF_MCP_BEARER_TOKEN}`.
+3. **Connects the DPF MCP server** in each client (`.mcp.json` / `.vscode/mcp.json` for Claude, `[mcp_servers.dpf]` in Codex/Grok config, and Antigravity's `mcpServers.dpf` config when available), all referencing `${DPF_MCP_BEARER_TOKEN}`.
 4. **Installs the `dpf-platform` plugin** for each client from the repo-local marketplace — this is the single package that carries the **skill pack**, the **MCP connector contract**, and the **governance hooks** (see [The plugin](#the-plugin-skills-hooks-and-mcp-in-one-package) below).
 5. **Seeds kernel-tier memory** so the agent is kernel-aware from the first turn, before any MCP retrieval round-trip.
 6. **Runs read-only MCP + kernel smoke probes**, checks whether the DPF-native process-spine replacement skills are installed and visible to the current session, and prints a single **readiness banner**.
@@ -126,7 +129,7 @@ After it finishes, **restart the client** (desktop app or CLI) so it reloads the
 | ----- | ------- | ----------- |
 | `ready` | Client(s) wired, MCP reachable, kernel principle fired | Start working |
 | `partial` | One client is ready; another needs setup | Repair toolchain (re-run bootstrap) |
-| `missing_cli` | No supported agent detected | Install Claude / Codex / Grok |
+| `missing_cli` | No supported agent detected | Install Claude / Codex / Grok / Antigravity |
 | `missing_token` | No DPF MCP token | Issue a development token (Admin → Platform Development → MCP) |
 | `needs_refresh` | Token exists but the running client hasn't picked it up | Restart the client / refresh the binding |
 | `failed_smoke` | Installed but did not apply a kernel principle | View evidence under `--show-substrate` |
@@ -141,19 +144,19 @@ The banner reports **DPF-native replacement skills installed** separately from *
 
 ### The plugin: skills, hooks, and MCP in one package
 
-The bootstrap doesn't copy loose files around — it installs one **plugin**, `dpf-platform`, into each client. A plugin is the Claude Code (and Codex / Grok) packaging format that lets a single artifact declare **skills**, **hooks**, and **MCP servers** together. DPF ships all three from `packages/dpf-skill-pack` so one install makes any client fully DPF-native.
+The bootstrap doesn't copy loose files around — it installs one **plugin**, `dpf-platform`, into each client. A plugin is the Claude Code (and Codex / Grok / Antigravity) packaging format that lets a single artifact declare **skills**, **hooks**, and **MCP servers** together. DPF ships all three from `packages/dpf-skill-pack` so one install makes any client fully DPF-native.
 
 ```mermaid
 flowchart LR
     subgraph pkg["packages/dpf-skill-pack"]
-        manifest[".claude-plugin/plugin.json<br/>(+ .codex-plugin / .grok-plugin)"]
+        manifest[".claude-plugin/plugin.json<br/>(+ .codex-plugin / .grok-plugin / .antigravity-plugin)"]
         sk["skills/<br/>27 SKILL.md workflows"]
         hk["hooks/hooks.json<br/>governance guards"]
         mc["claude.mcp.json<br/>dpf connector contract"]
     end
 
     market["Repo-local marketplace<br/>.claude-plugin/marketplace.json"]
-    client["Your client<br/>Claude / Codex / Grok"]
+    client["Your client<br/>Claude / Codex / Grok / Antigravity"]
 
     manifest --> market
     market -->|bootstrap installs| client
@@ -162,7 +165,7 @@ flowchart LR
     mc --> client
 ```
 
-The manifest (`plugin.json`) is what ties it together — its `skills`, `hooks`, and `mcpServers` keys point at the three folders above. Codex and Grok get parallel manifests (`.codex-plugin/plugin.json`, `.grok-plugin/plugin.json`) so the **same source of truth** installs on every surface.
+The manifest (`plugin.json`) is what ties it together — its `skills`, `hooks`, and `mcpServers` keys point at the three folders above. Codex, Grok, and Antigravity get parallel manifests (`.codex-plugin/plugin.json`, `.grok-plugin/plugin.json`, `.antigravity-plugin/plugin.json`) so the **same source of truth** installs on every surface.
 
 > **One file per skill, two surfaces.** Each skill's `SKILL.md` is a superset that feeds **both** the external agent client (as the `dpf-platform:*` plugin namespace) **and** the in-portal coworker (seeded as a `SkillDefinition` row). You never maintain two copies.
 
@@ -203,7 +206,7 @@ The plugin also ships **hooks**: local, deterministic guards the client runs *be
 
 Don't loosen these. There is one narrow, documented escape hatch — the lease guard only — for a genuine local emergency: prefix the command with `DPF_ALLOW_UNGATED_SERVER=1`. Everything else is meant to hold.
 
-> **Codex and Grok inherit the same guards.** The `dpf-platform` plugin ships `hooks/hooks.json` for all three clients, and Codex and Grok adopted the Claude `PreToolUse` protocol, so the guards travel to them too (functional confirmation on those surfaces is pending). Either way, comply **by construction**: claim a lease before launching any shared runtime, claim a Work Capsule before you start, record evidence as you go.
+> **Codex, Grok, and Antigravity inherit the same guard contract.** The `dpf-platform` plugin ships `hooks/hooks.json` and surface manifests for the external clients. Where a client's hook plane is not yet proven to enforce a guard, comply **by construction**: claim a lease before launching any shared runtime, claim a Work Capsule before you start, record evidence as you go.
 
 ---
 
@@ -222,6 +225,7 @@ In your client's GitHub / PR settings, **disable any "create pull requests as dr
 After restarting, verify the `dpf` connector is present:
 - **Claude** — run `/mcp`; you should see the `dpf` server and its tools.
 - **Codex / Grok** — the `[mcp_servers.dpf]` block is in your config; the server appears once the client restarts with the token in its environment.
+- **Antigravity** — confirm `agy` can see an MCP server named `dpf`; if not, use the [Antigravity onboarding runbook](../../operations/antigravity-cli-onboarding.md) to let `agy` add the server from the active session.
 
 If it's missing, the token probably isn't in the running client's environment yet — restart the client (GUI apps need a full restart to pick up a freshly minted token), or re-run the bootstrap.
 
@@ -251,6 +255,13 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 - **CLI only — no GUI client yet.** Reads the DPF MCP server block from `~/.grok/config.toml` (HTTP transport, same `${DPF_MCP_BEARER_TOKEN}` pattern); the plugin installs from `.grok-plugin/plugin.json`.
 - **Authentication to xAI** is separate from the DPF MCP token. Preferred path is the OAuth **device-code** flow — `grok login --device-auth` opens `accounts.x.ai/oauth2/device`; you sign in with Google / X / Apple and the credential lands in `~/.grok/auth.json`. An `XAI_API_KEY` is the fallback. (Build Studio's containerized Grok dispatch uses the same credential model — see the [Grok device-code OAuth spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-07-grok-device-code-oauth-design.md).)
 
+#### Antigravity
+
+- **IDE plus `agy` CLI.** DPF supports Google Antigravity as a host contributor surface. The bootstrap detects `agy`; if it is missing, opt in to the vendor installer with `--install-antigravity` (macOS/Linux) or `-InstallAntigravity` (Windows). DPF does not silently install it.
+- **Authentication to Google** is owned by Antigravity itself. `agy` handles Google sign-in and stores its own credential; DPF only wires the DPF MCP token so Antigravity can see backlog, capsule, evidence, and lease tools.
+- **MCP can be session-sensitive.** At the start of an Antigravity thread, confirm `agy` can see the `dpf` MCP server. If it cannot, use the [Antigravity onboarding runbook](../../operations/antigravity-cli-onboarding.md) to add the server from inside `agy` and start a fresh session.
+- **Not a Build Studio dispatch engine yet.** Antigravity is supported for external contributor work, but the Build Studio sandbox does not dispatch builds to it until the remaining in-sandbox capability gate is proven.
+
 ---
 
 ### The DPF MCP token (all clients)
@@ -271,7 +282,7 @@ All clients authenticate to the DPF MCP server with the same `DPF_MCP_BEARER_TOK
 | --- | --- | --- |
 | What it distributes | The `dpf-platform` **plugin** (skills + hooks + MCP wiring) | Governed **MCP tools and skills** an agent or coworker can adopt |
 | Where it lives | `.claude-plugin/marketplace.json` in the repo (`dpf-platform-local`) | The portal catalog, reached via MCP (`search_tool_marketplace`) and the in-portal UI |
-| Who installs from it | The bootstrap, into your Claude / Codex / Grok client | An agent requesting a capability it doesn't yet have granted |
+| Who installs from it | The bootstrap, into your Claude / Codex / Grok / Antigravity client | An agent requesting a capability it doesn't yet have granted |
 | When you touch it | Once, at setup (the bootstrap does it for you) | When a thread needs a tool/skill that isn't in its current grant |
 
 The **plugin marketplace** is repo-local and boring by design — a single JSON manifest that names one plugin (`dpf-platform`) and points at `packages/dpf-skill-pack`. The bootstrap runs the equivalent of `claude plugin install dpf-platform@dpf-platform-local --scope local`; you rarely interact with it directly.
@@ -410,7 +421,7 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 | New worktree has no `dpf` connector | Run `scripts/dpf-bootstrap-agent-toolchain.sh` inside the worktree, then restart |
 | Dev-server launch refused (a hook blocked it) | Use a lease for the shared runtime, or run in an isolated worktree compose stack |
 | Pushed branch isn't triggering promotion | That's the server-side webhook — confirm the GitHub repo webhook and `DPF_GIT_WEBHOOK_SECRET` are configured (operator task), not a per-session step |
-| Codex/Grok missing a hook guard | Expected on some surfaces — comply by construction: claim the lease before launching |
+| Codex/Grok/Antigravity missing a hook guard | Expected on some surfaces — comply by construction: claim the lease before launching |
 
 ---
 

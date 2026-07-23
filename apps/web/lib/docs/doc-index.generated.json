@@ -8754,7 +8754,7 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "agent-development-environments-claude-codex-grok",
+        "agent-development-environments-claude-codex-grok-antigravity",
         "how-the-pieces-fit-together",
         "why-a-dedicated-agent-client-instead-of-build-studio",
         "prerequisites",
@@ -8772,6 +8772,7 @@
         "claude",
         "codex",
         "grok",
+        "antigravity",
         "the-dpf-mcp-token-all-clients",
         "marketplaces-two-different-catalogs",
         "managing-multiple-threads",

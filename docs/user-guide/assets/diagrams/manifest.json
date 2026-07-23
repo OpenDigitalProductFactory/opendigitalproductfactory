@@ -2,8 +2,8 @@
   "generatedBy": "scripts/render-doc-diagrams.mjs",
   "diagrams": {
     "development-workspace/0": "2d9cafaaedd6e316",
-    "getting-started/agent-dev-environments/0": "6756136b4a9d7ce3",
-    "getting-started/agent-dev-environments/1": "5b2271207fd46ce2",
+    "getting-started/agent-dev-environments/0": "633afbe3f256fa24",
+    "getting-started/agent-dev-environments/1": "1ad992dbabe50357",
     "getting-started/agent-dev-environments/2": "94e90c086b9d9e79",
     "getting-started/agent-dev-environments/3": "84945e497683c136"
   }
