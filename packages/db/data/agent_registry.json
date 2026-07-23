@@ -2375,7 +2375,8 @@
           "code_graph_read",
           "deliberation_create",
           "deliberation_read",
-          "decision_record_create"
+          "decision_record_create",
+          "registry_read"
         ],
         "memory": {
           "type": "session",
