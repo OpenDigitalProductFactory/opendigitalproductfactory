@@ -1,0 +1,2117 @@
+{
+  "apps/web/app/(portal)/layout.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/backups/BackupsClient.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/backups/RestoreConfirmModal.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/backups/RestoreHistorySection.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/cockpit/CockpitEventsTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/cockpit/page.tsx": {
+    "type": 10,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/data-stewardship/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/diagnostics/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/page.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/scheduled-jobs/ScheduledJobsClient.tsx": {
+    "type": 11,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/scheduled-jobs/SchedulingTimeline.tsx": {
+    "type": 5,
+    "spacing": 3,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/twin-gallery/[archetypeId]/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/twin-gallery/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/admin/wiki/lint/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/actions/[id]/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/actions/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/audits/[id]/page.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/audits/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/controls/[id]/page.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/evidence/[id]/page.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/evidence/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/gaps/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/incidents/[id]/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/incidents/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/licensing/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/obligations/[id]/page.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/obligations/page.tsx": {
+    "type": 11,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/policies/[id]/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/policies/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/regulations/[id]/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/risks/[id]/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/risks/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/compliance/submissions/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/coworker-decisions/craft/[professionKey]/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/coworker-decisions/decisions/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/coworker-decisions/matrix/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/coworker-decisions/review/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/coworker-decisions/stance/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/(crm)/[id]/page.tsx": {
+    "type": 30,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/(crm)/engagements/page.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/(crm)/funnel/page.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/(crm)/opportunities/[id]/page.tsx": {
+    "type": 13,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/(crm)/opportunities/page.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/(crm)/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/(crm)/quotes/[id]/page.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/(crm)/quotes/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/(crm)/sales-orders/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/customer/marketing/campaigns/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/docs/[[...slug]]/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/ea/data-model/page.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/ea/models/[slug]/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/ea/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/ea/value-streams/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/ea/views/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/employee/page.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/error.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/assets/AssetsTable.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/assets/[id]/page.tsx": {
+    "type": 24,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/assets/page.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/banking/[id]/page.tsx": {
+    "type": 10,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/banking/page.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/bills/BillsTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/bills/[id]/page.tsx": {
+    "type": 20,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/bills/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/expense-claims/ExpenseClaimsTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/expense-claims/[id]/page.tsx": {
+    "type": 14,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/expense-claims/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/invoices/InvoicesTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/invoices/[id]/page.tsx": {
+    "type": 18,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/invoices/new/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/invoices/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/my-expenses/MyExpensesTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/page.tsx": {
+    "type": 10,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/payment-runs/PaymentRunsTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/payment-runs/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/purchase-orders/PurchaseOrdersTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/purchase-orders/[id]/page.tsx": {
+    "type": 17,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/purchase-orders/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/recurring/RecurringTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/recurring/[id]/page.tsx": {
+    "type": 16,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/recurring/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/reports/aged-creditors/page.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/reports/aged-debtors/page.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/reports/cash-flow/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/reports/general-ledger/page.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/reports/outstanding/page.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/reports/profit-loss/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/reports/revenue-by-customer/page.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/reports/vat-summary/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/settings/currency/page.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/settings/dunning/page.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/settings/page.tsx": {
+    "type": 32,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/settings/setup/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/settings/tax/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/suppliers/SuppliersTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/finance/suppliers/[id]/page.tsx": {
+    "type": 17,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/inventory/entity/[entityId]/page.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/knowledge/[articleId]/page.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/knowledge/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/ops/patches/page.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/ai/skills/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/identity/federation/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/identity/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/page.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/tools/built-ins/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/tools/catalog/page.tsx": {
+    "type": 12,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/google-business-profile/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/page.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/whatsapp-business/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/platform/tools/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/architecture/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/backlog/page.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/changes/page.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/health/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/inventory/page.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/offerings/page.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/team/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/versions/page.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/workspace/documents/[documentId]/page.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/app/(shell)/workspace/documents/page.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/AdminUserAccessPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/ArchetypeCatalogTable.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/BrandingQuickEdit.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/BrandingWizard.tsx": {
+    "type": 16,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/ContributionProvenanceTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/DataStewardPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/EmailSettingsPanel.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/HiveContributionsPanel.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/IssueReportPanel.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/MatchConfigCard.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/McpTokenManager.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/OperatingHoursEditor.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/PlatformKeysPanel.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/PromptManager.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/SeedContributionReviewTable.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/SkillsCatalogView.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/SocialAuthPanel.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/admin/WorkLocationPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/agent/AgentAttachmentCard.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/agent/ConversationParticipantRail.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/agent/HandoffCard.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/attention/OwnerDecisionCards.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/ArtifactPane.tsx": {
+    "type": 0,
+    "spacing": 1,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/ArtifactTabs.tsx": {
+    "type": 1,
+    "spacing": 1,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/Bubble.tsx": {
+    "type": 5,
+    "spacing": 1,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/BusinessBriefPanel.tsx": {
+    "type": 19,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/Composer.tsx": {
+    "type": 4,
+    "spacing": 1,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/HeaderBar.tsx": {
+    "type": 7,
+    "spacing": 1,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/PreviewFrame.tsx": {
+    "type": 5,
+    "spacing": 2,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/StepTracker.tsx": {
+    "type": 3,
+    "spacing": 1,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/cards/ChoiceCard.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/cards/DecisionCard.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/cards/FilesTouchedCard.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/cards/PlanSummaryCard.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/cards/StepRefCard.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build-studio/cards/VerificationStripCard.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/ActionBanner.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/AgentActivityStrip.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/AgentSessionFeed.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/AgentSessionFeedLive.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildAssuranceGateCard.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildChangeSummaryBand.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildCustomerStatusBand.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildDecisionLedgerBand.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildDispatchHistoryCard.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildListItem.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildPhaseCostCard.tsx": {
+    "type": 11,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildProgressOperationalPanel.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildSandboxCard.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildSolutionSummaryBand.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildStudio.tsx": {
+    "type": 22,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildStudioWorkflowActionCard.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/BuildVerificationScopedCard.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/ClaimBadge.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/DecisionPerspectiveGatePanel.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/DecompositionAssistantPanel.tsx": {
+    "type": 11,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/DecompositionCoordinator.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/DecompositionGateBanner.tsx": {
+    "type": 12,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/EnvironmentStatusSummary.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/EpicRollupListItem.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/EvidenceSummary.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/FeatureBriefPanel.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/FleetRail.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/ForkNode.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/ParentDesignAmendmentCoordinator.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/PhaseIndicator.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/ReleaseDecisionPanel.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/ReviewPanel.tsx": {
+    "type": 36,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/TestRunnerPanel.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/TruthSourceBadge.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/build/UnifiedEvidenceTimeline.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/civic/CivicMeetingsPanel.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/civic/FundBudgetPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/civic/MemberEquityPanel.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/civic/RecordsRequestsPanel.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/civic/ServiceRequestsPanel.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/cockpit/GraduationVetoButton.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/LinkControlForm.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/LinkObligationForm.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/LinkPolicyObligationForm.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/LinkRiskControlForm.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/ObligationLibraryPanel.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/OnboardingWizard.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/RegulationLibraryPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/RegulatoryAlerts.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/ScanStatus.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/licensing/CreateOrganizationLicenseRecordForm.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/licensing/CreatePersonLicenseRecordForm.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/compliance/licensing/LicensingWorkspacePanel.tsx": {
+    "type": 15,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer-marketing/ApprovalQueuePanel.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer-marketing/ArchetypeFitNotice.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer-marketing/MarketingStrategyOverview.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/AccountLifecycleActions.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/AcquisitionSignalRouter.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/BillableTimeSection.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/CustomerLifecycleReviewQueues.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/CustomerSiteTree.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/EditCustomerConfigurationItemButton.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/EngagementTriageActions.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/NewCustomerConfigurationItemButton.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/NewCustomerSiteNodeButton.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/NextStepControl.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/PipelineStageInspector.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/QuoteShareLink.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/customer/RevenueCockpit.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/deliberation/DeliberationDrilldown.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/deliberation/DeliberationSummaryCard.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/docs/ContextualQuickHelp.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/docs/DocsLayout.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/docs/DocsSidebar.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/docs/HelpLink.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ea/AgentGovernanceCard.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ea/GenerateDataModelButton.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ea/It4itConformanceCard.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ea/It4itCoverageHeatmap.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ea/It4itParticipationGrid.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ea/ReferenceModelDirectory.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ea/ReferenceModelElementTree.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ea/ReferenceModelSummary.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ea/ReferenceProposalQueue.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/AddressSection.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/CompensationPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/EmployeeDirectoryPanel.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/EmployeeFormPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/EmployeeProfilePanel.tsx": {
+    "type": 14,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/LeavePanel.tsx": {
+    "type": 10,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/LifecycleEventPanel.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/MyPoliciesView.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/OnboardingPanel.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/OrgAssignmentPanel.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/OrgChartView.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/ReviewPanel.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/TimesheetApprovalPanel.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/TimesheetGrid.tsx": {
+    "type": 14,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/WorkforceActivityPanel.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/employee/WorkforceRosterPanel.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/feedback/FeedbackButton.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/AccountantWorkLanePanel.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/AiProviderFinancePanel.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/AiSupplierFinancePanel.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/AssetDisposalForm.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/BankRulesManager.tsx": {
+    "type": 14,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/BaseCurrencySelector.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/CreateAssetForm.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/CreateBankAccountForm.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/CreateBillForm.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/CreateExpenseForm.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/CreateInvoiceForm.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/CreatePOForm.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/CreateRecurringForm.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/FetchRatesButton.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/FinanceSummaryCard.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/ImportCSVForm.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/InvoiceSendButton.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/InvoiceSignatureToggle.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/ManualRateForm.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/OwnerFirstFinanceView.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/PaymentRunBuilder.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/RateCardManager.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/ReconciliationFeed.tsx": {
+    "type": 10,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/TaxAuthorityCredentialPanel.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/TaxExecutionPanel.tsx": {
+    "type": 12,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/TaxLiabilityLedgerCard.tsx": {
+    "type": 10,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/TaxObligationPeriodsTable.tsx": {
+    "type": 16,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/TaxRegistrationEditor.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/finance/TaxRemittanceSettingsPanel.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/golden-triangle/GoldenTriangleControl.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/golden-triangle/GoldenTrianglePriorityPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/integrations/EntraConnectPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/ConfigureConnectionInline.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/DiscoveryOperationsPage.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/DiscoveryRunSummary.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/EstateItemCard.tsx": {
+    "type": 15,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/InventoryEntityPanel.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/InventoryExceptionQueue.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/PortfolioQualityIssuesPanel.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/RelationshipGraph.tsx": {
+    "type": 11,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/SavedConnectionRow.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/SavedConnectionsPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/SubnetGroupedInventoryPanel.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/inventory/TopologyGraph.tsx": {
+    "type": 22,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/knowledge/KnowledgeArticleActions.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/knowledge/KnowledgeArticleCard.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/knowledge/KnowledgeArticleForm.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/knowledge/KnowledgeCategoryBadge.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/knowledge/StalenessIndicator.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/monitoring/CapabilityServiceHealth.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/monitoring/LogIssuesPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/monitoring/MetricGauge.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/monitoring/MetricStat.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/monitoring/MetricTimeSeries.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/monitoring/PlatformHealthIndicator.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/monitoring/PortalHealthSummary.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/monitoring/RecentAlertsPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/monitoring/ServiceStatusGrid.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/BacklogItemRow.tsx": {
+    "type": 19,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/BacklogPanel.tsx": {
+    "type": 11,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/DemandBoard.tsx": {
+    "type": 14,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/EpicCard.tsx": {
+    "type": 12,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/EpicPanel.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/EscalationDismiss.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/EscalationsAttention.tsx": {
+    "type": 10,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/FounderSharedPortfolioPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/ImprovementsClient.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/NetworkDemandPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/OperatorTriageBand.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/OpsClient.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/SelfUpgradeClient.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ops/UpgradeImpactPanel.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/A2aInteractionsPanel.tsx": {
+    "type": 15,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/ActivityRoutingPresentation.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/ActivityRoutingWorkbench.tsx": {
+    "type": 22,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/AgentCardSupervisorPanel.tsx": {
+    "type": 14,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/AiOperationsMap.tsx": {
+    "type": 43,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/AiReadinessSummaryPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/DelegationGrantPanel.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/DeliberationLensPanel.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/DetectedServicesBanner.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/EndpointPerformancePanel.tsx": {
+    "type": 15,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/GovernanceOverviewPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/OperationsTopologyCanvas.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/PlatformSummaryCard.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/ProviderCostSourcePanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/ProviderSuitabilityGuide.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/SkillsObservatoryPanel.tsx": {
+    "type": 14,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/StalledTaskRecoveryActions.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/authority/CreateDraftBindingButton.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/coworker-service-catalog/CoworkerCatalogView.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/development/change-lanes/ChangeLaneSourceSummary.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/development/change-lanes/ChangeLaneTable.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/development/change-lanes/ChangeLanesDashboard.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/development/change-lanes/LocalRepositoryHealthCard.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/development/change-lanes/RefreshContributorInventoryButton.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/identity/AgentIdentityPanel.tsx": {
+    "type": 10,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/identity/ApplicationAssignmentsPanel.tsx": {
+    "type": 8,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/identity/AuthorizationBundlePanel.tsx": {
+    "type": 16,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/identity/DirectoryAuthoritiesPanel.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/identity/FederationAuthorityCard.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/identity/GroupMembershipPanel.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/identity/IdentityPlaceholderPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/identity/IdentityProjectionSummaryGrid.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/platform/identity/PrincipalDirectoryPanel.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/CoveragePanel.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/DigitalProductDetail.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/PlatformHealthStrip.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/PortfolioNodeDetail.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/PortfolioOverview.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/PortfolioTree.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/PortfolioTreeNode.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/ProductList.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/architecture/BusinessCapabilityForms.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/architecture/BusinessCapabilityMap.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/architecture/BusinessCapabilityMapClient.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/architecture/CapabilityDetailPanel.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/architecture/CapabilityMapTiles.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/portfolio/architecture/OptimizationCockpitSection.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/product/ProductHeader.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/rental/RentalDeskPanel.tsx": {
+    "type": 10,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/setup/CooNameSetupCard.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/setup/SetupActionButtons.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/shell/AppRail.tsx": {
+    "type": 4,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/shell/Header.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/shell/SectionNav.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/shell/WorkspaceTiles.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/storefront-admin/BrandExtractionSection.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/storefront-admin/CapabilityActivationToggle.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/storefront-admin/ItemFormDialog.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/storefront-admin/ItemsManager.tsx": {
+    "type": 6,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/storefront-admin/SectionsManager.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/storefront-admin/content-editing-ui.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/ActorMark.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/AttributedFeed.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/CapacityChips.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/CogBanner.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/NeedsYouQuests.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/OutcomesStrip.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/PresenceRow.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/ResourceUnit.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/TwinKitShowcase.tsx": {
+    "type": 3,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/TwinQueue.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/TwinZone.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/UtilityBand.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/ValueStreamStrip.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/twin/WorkItem.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ui/DataSourceBadge.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/ui/TrustBadge.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/wiki/DecisionDisciplineHub.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/wiki/LintFindingCard.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/wiki/VoiceProfileSetup.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/wiki/WikiPageKindBadge.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/wiki/WikiPageList.tsx": {
+    "type": 7,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/wiki/WikiPageViewer.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/workspace-home/VerticalWorkspaceHome.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/workspace-home/WorkspaceAreaLauncher.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/workspace-home/WorkspaceTwinPanel.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/workspace/ActivityFeed.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/workspace/BusinessAgenda.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/workspace/BusinessCommandCenter.tsx": {
+    "type": 2,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/workspace/CalendarSyncPanel.tsx": {
+    "type": 9,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/components/workspace/WorkspaceCalendar.tsx": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  },
+  "apps/web/lib/owner-first/ux-audit.ts": {
+    "type": 5,
+    "spacing": 0,
+    "motion": 0
+  }
+}

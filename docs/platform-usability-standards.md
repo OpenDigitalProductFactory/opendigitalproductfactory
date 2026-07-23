@@ -41,6 +41,17 @@ properties above, so dark mode and runtime branding overrides still win. The pre
 `bg-[var(--dpf-accent)]` spelling remains legal and resolves to the identical property; the
 generated utilities are canonical for new code.
 
+**Off-scale values are ratcheted.** `scripts/check-style-drift.mjs` carries a second
+per-file baseline (`token-drift-baseline.json`) alongside the hardcoded-hex one, covering
+three axes: arbitrary font sizes (`text-[13px]` — the type scale carries line-heights),
+spacing off the 4-pt grid (`p-[7px]`; on-grid arbitrary values like `p-[8px]` stay legal),
+and off-token motion (`duration-[250ms]`, inline `animate-[…]`). Same contract as the hex
+ratchet: a file may never gain off-scale values, and the baseline shrinks as surfaces are
+migrated — no blind mass-rewrite. Current debt is overwhelmingly type (~1,962 arbitrary
+sizes, most of them the sub-legible `text-[9px]/[10px]/[11px]` the live UX audit flagged);
+spacing and motion are already near-clean. For a genuine exception add a trailing
+`// style-drift-allow`; after migrating a file, run `--update` to retighten.
+
 > **Why this is enforced by a compile test, not a lint.** The platform previously shipped a
 > `tailwind.config.ts` declaring `shadow-dpf-*` that Tailwind v4 never read (CSS-first setup, no
 > `@config` directive), leaving ~50 call sites styling themselves with class names that resolved
