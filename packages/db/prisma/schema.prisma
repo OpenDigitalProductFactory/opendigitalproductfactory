@@ -3191,12 +3191,52 @@ model CustomerAccount {
   qualityIssues          PortfolioQualityIssue[]     @relation("QualityIssueCustomerAccount")
   serviceTickets         ServiceTicket[]             @relation("ServiceTicketCustomerAccount")
   memberEquityEntries    MemberEquityEntry[]
+  // EP-PARTNER-CHANNEL · Phase 2 (BI-DE47EC0B) — a partner org (e.g. a local
+  // IT MSP that resells and operates installs) is the SAME party model as any
+  // other account; partnership is a thin side table, exactly as EdgeNode and
+  // FederationLink are side tables on Principal. Its presence marks the
+  // partnership — there is deliberately no exclusive accountKind discriminator,
+  // because an MSP is routinely BOTH a customer (buys its own install) and a
+  // partner (resells). Schema audit: docs/superpowers/specs/2026-07-23-partner-identity-schema-audit.md
+  partnerEnrollment      PartnerProgramEnrollment?
 
   @@index([status])
   @@index([parentAccountId])
   @@index([nameNormalized])
   @@index([domainNormalized])
   @@index([mergedIntoId])
+}
+
+/// Partner-program side table for a CustomerAccount that resells / delivers DPF
+/// (EP-PARTNER-CHANNEL Phase 2, BI-DE47EC0B). Carries ONLY partner-specific
+/// commercial attributes; every shared commercial fact (invoices, quotes,
+/// subscriptions, opportunities, sites, tickets) stays on CustomerAccount so the
+/// commercial spine is never forked. Tiering and territory are recorded as
+/// *prepared-not-prescribed*: the fields exist, the policy is deliberately not
+/// hardcoded until real local-partner deals shape it.
+model PartnerProgramEnrollment {
+  id                      String          @id @default(cuid())
+  enrollmentId            String          @unique
+  /// 1:1 with the party row — the side-table convergence pattern.
+  accountId               String          @unique
+  /// prospect | active | suspended | ended
+  status                  String          @default("prospect")
+  /// Free-form tier label; intentionally not an enum (prepared-not-prescribed).
+  tier                    String?
+  /// Soft local-area designation for the local-MSP channel. NOT an exclusivity
+  /// grant — exclusivity is a founder decision deferred until partner density.
+  territory               String?
+  agreementRef            String?
+  marginPercent           Decimal?
+  dealRegistrationEnabled Boolean         @default(false)
+  enrolledAt              DateTime?
+  endedAt                 DateTime?
+  notes                   String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  account                 CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([status])
 }
 
 model CustomerSite {

@@ -169,6 +169,98 @@ export function resolveField(
 
 const SEED_ASSETS: readonly DataAssetDefinition[] = [
   {
+    // BI-DE47EC0B: partner-program commercial terms for an account that resells
+    // / delivers DPF (the local-MSP channel). No data subject — this describes a
+    // BUSINESS relationship, not a person; the partner's people are contacts on
+    // the account and are governed there. Margin and tier are confidential
+    // commercial terms: disclosure across partners damages the relationship.
+    id: "data:partner-program-enrollment",
+    physical: { prismaModel: "PartnerProgramEnrollment" },
+    domain: "partner-channel",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["operational", "financial", "configuration"],
+    sensitivity: "confidential",
+    criticality: "standard",
+    subjectLocators: [],
+    lifecycleClass: "business-record",
+    purposeCapabilities: ["service-delivery", "billing-and-payments", "platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-23" },
+    fields: [
+      {
+        id: "data:partner-program-enrollment#marginPercent",
+        physicalName: "marginPercent",
+        resolution: "governed",
+        resolutionReason:
+          "Confidential partner margin from the signed agreement. Never rendered on partner-visible or customer-visible surfaces without an explicit disclosure decision.",
+        categories: ["financial"],
+        sensitivity: "confidential",
+        collectionRule: "minimize",
+        protection: "mask-on-read",
+        projectionOverride: "structure",
+        provenance: {
+          source: "manual",
+          state: "confirmed",
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-23",
+        },
+      },
+      ...["tier", "agreementRef"].map((physicalName) => ({
+        id: `data:partner-program-enrollment#${physicalName}` as DataFieldId,
+        physicalName,
+        resolution: "governed" as const,
+        resolutionReason:
+          "Commercial standing of a business partner — organization-scoped terms visible to the operator and the partner they describe, never to other partners or customer-facing surfaces.",
+        categories: ["operational"] as DataCategory[],
+        sensitivity: "confidential" as DataSensitivity,
+        collectionRule: "minimize" as const,
+        protection: "mask-on-read" as ProtectionProfileKey,
+        projectionOverride: "metadata" as ProjectionClass,
+        provenance: {
+          source: "manual" as const,
+          state: "confirmed" as const,
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-23",
+        },
+      })),
+      ...["status", "territory", "dealRegistrationEnabled", "enrolledAt", "endedAt"].map(
+        (physicalName) => ({
+          id: `data:partner-program-enrollment#${physicalName}` as DataFieldId,
+          physicalName,
+          resolution: "inherited" as const,
+          resolutionReason:
+            "Enrolment lifecycle and channel-configuration facts with the same scope and lifecycle as the enrolment itself; no personal data, and territory is a soft designation rather than an exclusivity grant.",
+          provenance: {
+            source: "manual" as const,
+            state: "confirmed" as const,
+            assertedBy: "data-steward",
+            effectiveFrom: "2026-07-23",
+          },
+        }),
+      ),
+      {
+        id: "data:partner-program-enrollment#notes",
+        physicalName: "notes",
+        resolution: "governed",
+        resolutionReason:
+          "Free-text operator notes on the partner relationship — unbounded content that must stay operator-scoped and out of any partner- or customer-visible projection.",
+        categories: ["content"],
+        sensitivity: "confidential",
+        collectionRule: "minimize",
+        protection: "mask-on-read",
+        projectionOverride: "structure",
+        provenance: {
+          source: "manual",
+          state: "confirmed",
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-23",
+        },
+      },
+    ],
+  },
+  {
     id: "data:federation-pairing-session",
     physical: { prismaModel: "FederationPairingSession" },
     domain: "federated-demand",

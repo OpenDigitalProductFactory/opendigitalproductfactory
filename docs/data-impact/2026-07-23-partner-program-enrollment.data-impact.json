@@ -1,0 +1,64 @@
+{
+  "version": "1",
+  "accountableOwner": "partner-channel",
+  "affectedCopies": [
+    "PartnerProgramEnrollment: partner-program commercial terms for an account that resells/delivers DPF (tier, territory, agreement reference, margin, deal-registration flag). Single persisted copy; no read-model duplicates the commercial terms. The partner PRINCIPAL identity derived from it lives on the existing Principal/PrincipalAlias spine, which stores no commercial terms."
+  ],
+  "migration": {
+    "name": "20260723010000_partner_program_enrollment",
+    "backfill": "none — purely additive new table. No existing account is enrolled by this migration; accounts remain non-partners until an enrollment row is explicitly created."
+  },
+  "tests": [
+    "apps/web/lib/identity/partner-principal.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:partner-program-enrollment",
+      "prismaModel": "PartnerProgramEnrollment",
+      "lifecycleDisposition": "retained for the life of the partner relationship and cascade-deleted with its CustomerAccount; ended partnerships are retained with endedAt set so historical deal-registration and margin terms stay auditable rather than being erased",
+      "fields": [
+        {
+          "fieldId": "data:partner-program-enrollment#tier",
+          "resolution": "governed",
+          "reason": "commercial standing of a business partner — organization-scoped commercial term that must not leak to other partners or to customer-facing surfaces",
+          "provenance": "operator-set when enrolling or re-tiering a partner",
+          "fieldPolicy": "organization-scoped; visible to the operator and the partner it describes; never exposed on customer-facing or cross-partner surfaces"
+        },
+        {
+          "fieldId": "data:partner-program-enrollment#marginPercent",
+          "resolution": "governed",
+          "reason": "partner margin is confidential commercial terms; disclosure across partners or to customers would damage the commercial relationship",
+          "provenance": "operator-set from the signed partner agreement",
+          "flags": ["sensitive"],
+          "fieldPolicy": "organization-scoped and confidential; operator-only, never rendered on any partner-visible or customer-visible surface without an explicit disclosure decision"
+        },
+        {
+          "fieldId": "data:partner-program-enrollment#agreementRef",
+          "resolution": "governed",
+          "reason": "pointer to the executed partner agreement; scoped to the partner relationship it documents",
+          "provenance": "operator-entered reference to the signed agreement record",
+          "fieldPolicy": "organization-scoped; operator and the referenced partner only"
+        },
+        {
+          "fieldId": "data:partner-program-enrollment#territory",
+          "resolution": "inherited",
+          "reason": "soft local-area designation for the local-MSP channel with the same scope and lifecycle as the enrolment it belongs to; carries no personal data and is not an exclusivity grant",
+          "provenance": "operator-set when enrolling a local partner"
+        },
+        {
+          "fieldId": "data:partner-program-enrollment#status",
+          "resolution": "inherited",
+          "reason": "lifecycle state of the enrolment itself (prospect/active/suspended/ended); inherits the account's existing governance",
+          "provenance": "operator-set through the partner enrolment lifecycle"
+        },
+        {
+          "fieldId": "data:partner-program-enrollment#dealRegistrationEnabled",
+          "resolution": "inherited",
+          "reason": "feature flag for whether this partner may register deals; operational switch with no personal data, scoped to the enrolment",
+          "provenance": "operator-set per partner agreement"
+        }
+      ]
+    }
+  ]
+}
