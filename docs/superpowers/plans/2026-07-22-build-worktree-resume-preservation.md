@@ -102,3 +102,31 @@ broke SSR in #2758.
 Evidence: 45 existing tests green; the two build-governed assertions converted from
 `.rejects.toThrow` to a returned-value equality; one new UI regression test proving
 the operator actually sees the message. `tsc --noEmit` clean across touched files.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - BI-8C6AA60E fix (c) — the originating diagnosis, which names "the release/ship
+    server action should RETURN the 'no releasable changes' domain error as a value
+    (not throw) so the operator sees the real message, not a digest".
+  - PR #2758 — the established `"use server"` error-surfacing pattern, including the
+    distinction between a safe inline `export type X = …` declaration and the
+    `export type { A, B }` re-export form that broke SSR.
+- Current code substrate reviewed:
+  - `apps/web/lib/actions/build.ts` — `advanceBuildPhase` (11 throws; only 2 are
+    operator-facing domain states) and `createFeatureBuild`, which already returns a
+    discriminated result for exactly this reason.
+  - `apps/web/components/build/BuildStudioWorkflowActionCard.tsx` — the sole
+    production caller; already surfaces `outcome.message` via `setError` for
+    `rerunPlanReview`.
+  - `apps/web/lib/build/release-decision.ts` — confirms the ship-side message is
+    matched by string, so the wording must not change.
+- Source of truth:
+  - BI-8C6AA60E fix (c), plus the #2758 Server Action error contract. No spec
+    artifact governs this surface; this plan doc is the durable record.
+- Decision:
+  - Extend an existing contract shape rather than introduce one. No new UX, no
+    routing change, no queue or process-spine change: the card reuses its existing
+    error-rendering path, and the two converted throws keep their exact wording.
+    The other nine throws stay throws deliberately — they are invariant violations
+    where a digest is the correct operator experience.
