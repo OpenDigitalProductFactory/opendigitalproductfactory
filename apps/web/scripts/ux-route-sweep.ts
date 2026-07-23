@@ -64,21 +64,28 @@ function arg(name: string, fallback: string): string {
 /**
  * Prune what the reader genuinely cannot see, using the browser's own layout.
  * Runs in the page: only here is `display:none` from a utility class knowable.
+ *
+ * Passed to page.evaluate as a REAL FUNCTION, not a string. A string argument is
+ * evaluated as an expression, so `"() => {...}"` yields a function object rather than
+ * calling it, and the return value serialises to undefined — which then blew up in
+ * scope.ts as "Cannot read properties of undefined (reading 'slice')" on 200 routes.
  */
-const PRUNE_INVISIBLE = `() => {
-  const doc = document.cloneNode(true);
-  // Walk the LIVE tree for computed styles, and mark the corresponding clone nodes.
-  const live = document.querySelectorAll('body *');
-  const clone = doc.querySelectorAll('body *');
-  const drop = [];
+function pruneInvisible(): string {
+  const doc = document.cloneNode(true) as Document;
+  // Walk the LIVE tree for computed styles, and drop the matching clone nodes.
+  const live = document.querySelectorAll("body *");
+  const clone = doc.querySelectorAll("body *");
+  const drop: Element[] = [];
   for (let i = 0; i < live.length; i++) {
     const cs = getComputedStyle(live[i]);
-    if (cs.display === 'none' || cs.visibility === 'hidden') drop.push(clone[i]);
+    if (cs.display === "none" || cs.visibility === "hidden") {
+      const node = clone[i];
+      if (node) drop.push(node);
+    }
   }
   for (const node of drop) node.remove();
-  const body = doc.querySelector('body');
-  return body ? body.innerHTML : '';
-}`;
+  return doc.querySelector("body")?.innerHTML ?? "";
+}
 
 /** Why a route produced no measurement — reported, never silently dropped. */
 export type SkipReason = { routePath: string; reason: string };
@@ -115,8 +122,14 @@ async function measureRoute(
     return null;
   }
 
-  const html = await page.evaluate(PRUNE_INVISIBLE);
-  const ariaSnapshot = await page.locator("body").ariaSnapshot();
+  const html = await page.evaluate(pruneInvisible);
+  if (typeof html !== "string" || html.length === 0) {
+    // Never hand an empty/undefined document to the measurer: it would score as a
+    // perfectly compliant zero-word surface and freeze that as the route's baseline.
+    skipped.push({ routePath: row.routePath, reason: "empty document after pruning" });
+    return null;
+  }
+  const ariaSnapshot = await page.locator("body").ariaSnapshot({ timeout: 15_000 });
 
   // Necessary, never sufficient — axe green is not "accessible" (spec §5.4).
   // A failing SCAN must not cost us the whole route's budget measurement: axe threw
