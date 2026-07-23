@@ -19,6 +19,7 @@
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { handleUpdateBacklogItem } from "@/lib/mcp-handlers/update-backlog-item";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
+import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import {
   BACKLOG_SOURCE_VALUES,
   BACKLOG_STATUS_VALUES,
@@ -589,35 +590,6 @@ async function processBacklogForBuildStudio(
   };
 }
 
-// Read caps. These exist to bound a single response, not to hide rows: every
-// capped list reports `total` and `truncated` so a caller can tell the
-// difference between "that is all of them" and "you only got the first page".
-// Silent truncation at 100 previously made a present-but-older epic look
-// absent, which is worse than a large response.
-const BACKLOG_LIST_LIMIT_MAX = 1000;
-const BACKLOG_LIST_LIMIT_DEFAULT = 100;
-
-function resolveListLimit(raw: unknown): number {
-  return typeof raw === "number" && Number.isFinite(raw)
-    ? Math.min(Math.max(1, Math.floor(raw)), BACKLOG_LIST_LIMIT_MAX)
-    : BACKLOG_LIST_LIMIT_DEFAULT;
-}
-
-// `BacklogItem.epicId` is the internal cuid FK, NOT the semantic `EP-*` id.
-// Filtering it by the semantic id matches nothing and returns an empty list
-// with no error, so callers must resolve the row first. Returns undefined when
-// no epic id was supplied, or null when one was supplied but matched nothing.
-type DbPrisma = (typeof import("@dpf/db"))["prisma"];
-
-async function resolveEpicRowId(prisma: DbPrisma, raw: unknown): Promise<string | null | undefined> {
-  if (typeof raw !== "string" || !raw.trim()) return undefined;
-  const epicRow = await prisma.epic.findFirst({
-    where: { OR: [{ epicId: raw.trim() }, { id: raw.trim() }] },
-    select: { id: true },
-  });
-  return epicRow ? epicRow.id : null;
-}
-
 async function queryBacklog(params: Record<string, unknown>): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const where: Record<string, unknown> = {};
@@ -629,7 +601,7 @@ async function queryBacklog(params: Record<string, unknown>): Promise<ToolResult
   if (epicRowId !== undefined) where["epicId"] = epicRowId;
   const limit = resolveListLimit(params["limit"]);
 
-  const [items, matching, epics, epicTotal, totalOpen, totalInProgress, totalDone] = await Promise.all([
+  const [items, matching, epics, epicTotal, open, inProgress, done] = await Promise.all([
     prisma.backlogItem.findMany({
       where,
       orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
@@ -637,23 +609,18 @@ async function queryBacklog(params: Record<string, unknown>): Promise<ToolResult
       select: { itemId: true, title: true, status: true, type: true, priority: true, updatedAt: true, epic: { select: { epicId: true } } },
     }),
     prisma.backlogItem.count({ where }),
-    prisma.epic.findMany({
-      select: { id: true, epicId: true, title: true, status: true },
-      orderBy: { createdAt: "desc" },
-      take: limit,
-    }),
+    prisma.epic.findMany({ select: { id: true, epicId: true, title: true, status: true }, orderBy: { createdAt: "desc" }, take: limit }),
     prisma.epic.count(),
     prisma.backlogItem.count({ where: { status: "open" } }),
     prisma.backlogItem.count({ where: { status: "in-progress" } }),
     prisma.backlogItem.count({ where: { status: "done" } }),
   ]);
 
-  const summary = `Backlog: ${totalOpen} open, ${totalInProgress} in-progress, ${totalDone} done. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`;
   return {
     success: true,
-    message: summary,
+    message: `Backlog: ${open} open, ${inProgress} in-progress, ${done} done. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
     data: {
-      summary: { open: totalOpen, inProgress: totalInProgress, done: totalDone },
+      summary: { open, inProgress, done },
       total: matching,
       truncated: items.length < matching,
       epicTotal,
@@ -724,9 +691,8 @@ async function listEpics(params: Record<string, unknown>): Promise<ToolResult> {
       void _hasOpen;
       return rest;
     });
-  // `truncated` reflects the DB-side cap only. The hasOpenItems filter runs in
-  // memory over the fetched page, so data.length can be below epics.length
-  // without anything having been cut off by the limit.
+  // `truncated` reflects the DB-side cap only — hasOpenItems filters the
+  // fetched page in memory, so data.length < epics.length is not truncation.
   return {
     success: true,
     message: `Listed ${data.length} epic(s) (${epics.length} of ${epicTotal} fetched).`,
@@ -743,11 +709,7 @@ async function listBacklogItems(params: Record<string, unknown>): Promise<ToolRe
   if (typeof params["source"] === "string") where["source"] = params["source"];
   const epicRowId = await resolveEpicRowId(prisma, params["epicId"]);
   if (epicRowId === null) {
-    return {
-      success: false,
-      error: "epic_not_found",
-      message: `No epic matched ${String(params["epicId"])}`,
-    };
+    return { success: false, error: "epic_not_found", message: `No epic matched ${String(params["epicId"])}` };
   }
   if (epicRowId !== undefined) where["epicId"] = epicRowId;
   if (params["unclaimed"] === true) {
