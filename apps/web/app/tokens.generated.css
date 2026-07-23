@@ -1,0 +1,115 @@
+/* GENERATED FILE — DO NOT EDIT.
+ * Source: apps/web/design/tokens.json
+ * Generator: apps/web/scripts/build-design-tokens.ts
+ * Regenerate: pnpm --filter web build:design-tokens
+ */
+
+@theme {
+  /* Spacing — 4-pt progression. Tailwind's numeric p-1..p-96 stays legal. */
+  --spacing-dpf-2xs: 4px;
+  --spacing-dpf-xs: 8px;
+  --spacing-dpf-sm: 12px;
+  --spacing-dpf-md: 16px;
+  --spacing-dpf-lg: 24px;
+  --spacing-dpf-xl: 32px;
+  --spacing-dpf-2xl: 48px;
+  --spacing-dpf-3xl: 64px;
+
+  /* Radius */
+  --radius-dpf-sm: 4px;
+  --radius-dpf-md: 6px;
+  --radius-dpf-lg: 10px;
+  --radius-dpf-xl: 16px;
+
+  /* Elevation — defines the shadow-dpf-* utilities the codebase already calls. */
+  --shadow-dpf-xs: 0px 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-dpf-sm: 0px 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-dpf-md: 0px 4px 6px rgba(0, 0, 0, 0.2);
+  --shadow-dpf-lg: 0px 10px 15px rgba(0, 0, 0, 0.25);
+
+  /* Type scale — each step carries its own paired line-height. */
+  --text-dpf-caption: 0.75rem;
+  --text-dpf-caption--line-height: 1.4;
+  --text-dpf-body: 0.875rem;
+  --text-dpf-body--line-height: 1.5;
+  --text-dpf-body-lg: 1rem;
+  --text-dpf-body-lg--line-height: 1.5;
+  --text-dpf-title: 1.125rem;
+  --text-dpf-title--line-height: 1.4;
+  --text-dpf-heading: 1.5rem;
+  --text-dpf-heading--line-height: 1.3;
+  --text-dpf-display: 2rem;
+  --text-dpf-display--line-height: 1.2;
+
+  /* Font weight */
+  --font-weight-dpf-regular: 400;
+  --font-weight-dpf-medium: 500;
+  --font-weight-dpf-semibold: 600;
+
+  /* Easing. NOTE: durations are deliberately NOT here — Tailwind v4 has no --duration-*
+     theme namespace (duration-* only takes bare numbers), so a --duration-dpf-base entry
+     would generate no utility at all. That is the exact dead-token failure this BI exists
+     to remove, so durations are emitted as plain properties below instead. */
+  --ease-dpf-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-dpf-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-dpf-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Animations — keyframes are emitted inside @theme so v4 tree-shakes them with the utility. */
+  --animate-dpf-fade-in: dpf-fade-in 200ms cubic-bezier(0, 0, 0.2, 1);
+  @keyframes dpf-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  --animate-dpf-slide-up: dpf-slide-up 320ms cubic-bezier(0, 0, 0.2, 1);
+  @keyframes dpf-slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  --animate-dpf-scale-in: dpf-scale-in 200ms cubic-bezier(0, 0, 0.2, 1);
+  @keyframes dpf-scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+  /* Color aliases — value stays var(--dpf-*) so dark mode and runtime branding still win. */
+  --color-dpf-bg: var(--dpf-bg);
+  --color-dpf-surface-1: var(--dpf-surface-1);
+  --color-dpf-surface-2: var(--dpf-surface-2);
+  --color-dpf-surface-3: var(--dpf-surface-3);
+  --color-dpf-text: var(--dpf-text);
+  --color-dpf-text-secondary: var(--dpf-text-secondary);
+  --color-dpf-accent: var(--dpf-accent);
+  --color-dpf-accent-soft: var(--dpf-accent-soft);
+  --color-dpf-border: var(--dpf-border);
+  --color-dpf-border-strong: var(--dpf-border-strong);
+  --color-dpf-muted: var(--dpf-muted);
+  --color-dpf-success: var(--dpf-success);
+  --color-dpf-warning: var(--dpf-warning);
+  --color-dpf-error: var(--dpf-error);
+  --color-dpf-info: var(--dpf-info);
+  --color-dpf-state-success: var(--dpf-state-success);
+  --color-dpf-state-warning: var(--dpf-state-warning);
+  --color-dpf-state-error: var(--dpf-state-error);
+  --color-dpf-state-info: var(--dpf-state-info);
+}
+
+/* Motion durations. Plain properties, not @theme: Tailwind v4 exposes no --duration-*
+   namespace, so these can never become duration-dpf-* utilities. Consume them in CSS,
+   or as an arbitrary value: duration-[var(--dpf-duration-base)]. */
+:root {
+  --dpf-duration-fast: 150ms;
+  --dpf-duration-base: 200ms;
+  --dpf-duration-slow: 320ms;
+}
+
+/* Density contexts. Also not @theme entries: these are meant to cascade so a page shell
+   can set data-dpf-density on a subtree and the controls inside re-resolve. @theme
+   variables are emitted once at :root and cannot express that. */
+:root {
+  --dpf-density-control: 36px;
+  --dpf-density-row: 44px;
+  --dpf-density-gap: 16px;
+}
+
+[data-dpf-density="comfortable"] {
+  --dpf-density-control: 36px;
+  --dpf-density-row: 44px;
+  --dpf-density-gap: 16px;
+}
+
+[data-dpf-density="compact"] {
+  --dpf-density-control: 28px;
+  --dpf-density-row: 32px;
+  --dpf-density-gap: 8px;
+}

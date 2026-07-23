@@ -18,6 +18,35 @@ Every UI component uses CSS custom properties for all color roles. These propert
 | `--dpf-font-body` | Body font family | `font-family: var(--dpf-font-body)` |
 | `--dpf-font-heading` | Heading font family | `font-family: var(--dpf-font-heading)` |
 
+## Design Token Scales (L0)
+
+Color is only one axis. Spacing, type, elevation, radius and motion are tokens too, and they
+generate **real Tailwind utilities**. Source of truth is `apps/web/design/tokens.json` (DTCG);
+`apps/web/app/tokens.generated.css` is generated from it and must never be hand-edited —
+run `pnpm --filter web build:design-tokens` and commit. A freshness gate enforces this
+(EP-UX-SYSTEM spec §6 L0, BI-CD81FF7C).
+
+| Axis | Utilities | Notes |
+|------|-----------|-------|
+| Spacing | `p-dpf-*`, `gap-dpf-*`, `m-dpf-*` — `2xs` 4px → `3xl` 64px | 4-pt progression. Tailwind's numeric `p-4` stays legal; the semantic steps are what the UX budgets measure against. |
+| Type | `text-dpf-caption\|body\|body-lg\|title\|heading\|display` | **Each step carries its own line-height.** Do not stack `text-3xl font-bold leading-tight` to invent a hierarchy step. |
+| Weight | `font-dpf-regular\|medium\|semibold` | |
+| Elevation | `shadow-dpf-xs\|sm\|md\|lg` | |
+| Radius | `rounded-dpf-sm\|md\|lg\|xl` | `rounded-dpf-md` matches the form-control radius. |
+| Motion | `animate-dpf-fade-in\|slide-up\|scale-in`, `ease-dpf-standard\|out\|in` | Durations are **properties, not utilities** — Tailwind v4 has no `--duration-*` namespace. Use `duration-[var(--dpf-duration-base)]`. |
+| Density | `--dpf-density-control\|row\|gap` | A context, not a utility: set `data-dpf-density="compact"` on a container and controls inside re-resolve. |
+
+Colour utilities (`bg-dpf-accent`, `text-dpf-muted`, `border-dpf-border`) alias the `--dpf-*`
+properties above, so dark mode and runtime branding overrides still win. The pre-existing
+`bg-[var(--dpf-accent)]` spelling remains legal and resolves to the identical property; the
+generated utilities are canonical for new code.
+
+> **Why this is enforced by a compile test, not a lint.** The platform previously shipped a
+> `tailwind.config.ts` declaring `shadow-dpf-*` that Tailwind v4 never read (CSS-first setup, no
+> `@config` directive), leaving ~50 call sites styling themselves with class names that resolved
+> to nothing. `apps/web/design/tokens-utilities.test.ts` runs the real compiler and asserts each
+> promised utility emits a rule, so a token under a namespace v4 does not expose fails loudly.
+
 ## Contrast Requirements
 
 All color pairs must meet WCAG 2.2 Level AA minimum contrast ratios:

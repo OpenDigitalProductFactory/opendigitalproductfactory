@@ -50,7 +50,7 @@ export function FeatureBriefPanel({ brief, phase, changeNarrative, attachments, 
 
   if (loading) {
     return (
-      <div className="p-4 flex flex-col gap-3 animate-fade-in">
+      <div className="p-4 flex flex-col gap-3 animate-dpf-fade-in">
         <Skeleton width={128} height={16} />
         <div className="flex flex-col gap-3">
           {[1, 2, 3, 4].map((i) => (

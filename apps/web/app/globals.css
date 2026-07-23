@@ -1,4 +1,11 @@
 @import "tailwindcss";
+/* L0 token scales (spacing/radius/elevation/type/motion/density) — generated from
+   design/tokens.json by scripts/build-design-tokens.ts. This is what turns --dpf-*
+   from a set of inert custom properties into real Tailwind utilities. The color
+   VALUES below stay hand-authored: DTCG cannot express a prefers-color-scheme
+   branch or a color-mix() derivation, and runtime BrandingConfig overrides these
+   same properties live. See EP-UX-SYSTEM spec §6 L0. */
+@import "./tokens.generated.css";
 
 /* Light mode defaults (fallback when no BrandingConfig exists) */
 :root {

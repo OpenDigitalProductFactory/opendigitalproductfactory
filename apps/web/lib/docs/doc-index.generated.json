@@ -4228,6 +4228,7 @@
       "anchors": [
         "platform-usability-standards",
         "color-system",
+        "design-token-scales-l0",
         "contrast-requirements",
         "form-elements",
         "user-facing-form-contract-mandatory",

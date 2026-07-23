@@ -97,7 +97,7 @@ export function SkillsObservatoryPanel({
 
       {/* Skills Catalog */}
       {tab === "catalog" && (
-        <div className="space-y-3 animate-fade-in">
+        <div className="space-y-3 animate-dpf-fade-in">
           <div className="flex gap-2 flex-wrap">
             <FilterButton label="All" active={!audienceFilter} onClick={() => setAudienceFilter(null)} />
             <FilterButton label="User-Facing" active={audienceFilter === "user"} onClick={() => setAudienceFilter("user")} />
@@ -129,7 +129,7 @@ export function SkillsObservatoryPanel({
 
       {/* Finishing Passes */}
       {tab === "passes" && (
-        <div className="space-y-2 animate-fade-in">
+        <div className="space-y-2 animate-dpf-fade-in">
           {finishingPasses.length === 0 ? (
             <p className="text-sm text-[var(--dpf-muted)] text-center py-8">No finishing pass activity recorded yet.</p>
           ) : (
@@ -167,7 +167,7 @@ export function SkillsObservatoryPanel({
 
       {/* Specialist Executions */}
       {tab === "executions" && (
-        <div className="space-y-2 animate-fade-in">
+        <div className="space-y-2 animate-dpf-fade-in">
           {specialistExecutions.length === 0 ? (
             <p className="text-sm text-[var(--dpf-muted)] text-center py-8">No specialist executions recorded yet.</p>
           ) : (
@@ -231,7 +231,7 @@ export function SkillsObservatoryPanel({
 
 function StatCard({ label, value, accent }: { label: string; value: number | string; accent?: string }) {
   return (
-    <div className="px-4 py-3 rounded-lg bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] shadow-dpf-xs animate-slide-up">
+    <div className="px-4 py-3 rounded-lg bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] shadow-dpf-xs animate-dpf-slide-up">
       <div className="text-xl font-bold" style={{ color: accent ?? "var(--dpf-text)" }}>{value}</div>
       <div className="text-xs text-[var(--dpf-muted)]">{label}</div>
     </div>
@@ -278,7 +278,7 @@ function SkillRow({ skill, style }: { skill: SkillEntry; style: { bg: string; te
         <span className="text-[10px] text-[var(--dpf-muted)]">{expanded ? "\u25B2" : "\u25BC"}</span>
       </button>
       {expanded && (
-        <div className="px-3 pb-2 pt-0 border-t border-[var(--dpf-border)] animate-fade-in">
+        <div className="px-3 pb-2 pt-0 border-t border-[var(--dpf-border)] animate-dpf-fade-in">
           <p className="text-xs text-[var(--dpf-text-secondary)] mt-2">{skill.description}</p>
           {skill.capability && (
             <p className="text-[10px] text-[var(--dpf-muted)] mt-1">

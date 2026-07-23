@@ -28,7 +28,7 @@ export function EpicRollupListItem({
     <div
       data-testid="build-studio-epic-rollup"
       data-active-epic={activeChildCount > 0 ? "true" : "false"}
-      className="animate-slide-up"
+      className="animate-dpf-slide-up"
       style={{
         animationDelay: `${index * 30}ms`,
         animationFillMode: "backwards",

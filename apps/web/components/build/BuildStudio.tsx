@@ -1474,7 +1474,7 @@ function BuildFailedBanner({ execState }: { execState: BuildExecutionState | nul
   const hint = RECOVERY_HINTS[failedStep] ?? "Ask your AI Coworker for help diagnosing this failure.";
 
   return (
-    <div className="mx-4 mt-3 p-3 rounded-lg border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_8%,var(--dpf-surface-1))] animate-fade-in" role="alert">
+    <div className="mx-4 mt-3 p-3 rounded-lg border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_8%,var(--dpf-surface-1))] animate-dpf-fade-in" role="alert">
       <div className="flex items-start gap-2">
         <span className="w-5 h-5 rounded-full bg-[var(--dpf-error)] text-white text-xs font-bold grid place-items-center shrink-0 mt-0.5">!</span>
         <div className="flex-1 min-w-0">
