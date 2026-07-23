@@ -1,5 +1,8 @@
 # Design: Onboarding-seeded, continuously enriched org WWWD corpus
 
+> **Amended 2026-07-23** by [`2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md`](2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md).
+> The confirmation ladder defined here (unconfirmed/confirmed/ruled) is extended there from *material authority* to *dimension weight* — reuse of this mechanism, not a second authority model.
+
 - **Epic:** EP-CORPUS-BOOTSTRAP
 - **Status:** DRAFT - founder review before execution
 - **Date:** 2026-05-31

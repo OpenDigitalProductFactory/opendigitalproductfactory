@@ -1,5 +1,8 @@
 # Principles as a Wiki Kind - Design
 
+> **Amended 2026-07-23** by [`2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md`](2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md).
+> `principleConsumerArchetype: route-domain-specific` was intended as a routing hint but has become the de-facto migration label (50 of 95 kernel principles carry it, 39 of them software-engineering). Recommend renaming or splitting the tag once migration completes.
+
 | Field | Value |
 |-------|-------|
 | **Date** | 2026-05-12 (re-baselined 2026-05-15) |
@@ -106,6 +109,7 @@ The canonical flow is:
 ```mermaid
 flowchart LR
   A["Kernel Markdown<br/>docs/founder-kernel/wiki/principles"] --> B["Seed Pipeline<br/>RawSource + WikiPage"]
+
   B --> C["Postgres<br/>WikiPage + revisions + lint"]
   C --> D["Qdrant<br/>wiki-pages semantic index"]
   C --> E["Portal UI<br/>/wiki and /admin/wiki/lint"]
