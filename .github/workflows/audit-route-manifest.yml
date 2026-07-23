@@ -22,6 +22,11 @@ on:
       - "apps/web/lib/navigation/route-audience.generated.json"
       - "apps/web/lib/navigation/route-audience.ts"
       - "apps/web/scripts/build-route-audience.ts"
+      # The intended-shell registry (BI-B9BE9A29) derives from both of the above.
+      - "apps/web/lib/ux-budget/route-shells.generated.json"
+      - "apps/web/lib/ux-budget/route-shells.ts"
+      - "apps/web/lib/ux-budget/budgets.ts"
+      - "apps/web/scripts/build-route-shells.ts"
       - ".github/workflows/audit-route-manifest.yml"
   push:
     branches: [main]
@@ -74,3 +79,12 @@ jobs:
       # override in apps/web/lib/navigation/route-audience.ts.
       - name: Check route audience registry is up to date
         run: pnpm --filter web check:route-audience
+
+      # BI-B9BE9A29 (EP-UX-SYSTEM L2): intended-shell classification is DERIVED from
+      # the manifest above plus the audience registry — it is not a second hand-kept
+      # list of routes. A new page route makes it stale (fix: pnpm --filter web
+      # build:route-shells && commit). The registry is the classification source for
+      # per-shell UX budgets, the §7.1 migration league table, and the route budget
+      # sweep (BI-BD81682A).
+      - name: Check route→shell registry is up to date
+        run: pnpm --filter web check:route-shells

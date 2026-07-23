@@ -1,0 +1,69 @@
+// apps/web/lib/ux-budget/index.ts
+//
+// L2 UX budget module — EP-UX-SYSTEM spec §6 L2 (BI-B9BE9A29).
+//
+// One source, three consumers: the numbers agents are told (L3), the CI checkers
+// (L4/L4.5/L5), and the migration league table (§7.1). Import from here.
+
+export {
+  DISCLOSURE_ATTR,
+  LEAD_ATTR,
+  countDisclosureRegions,
+  defaultVisibleHtml,
+  extractSubtrees,
+  isDisclosureRegion,
+  isStructurallyHidden,
+  leadBandHtml,
+  removeSubtrees,
+  type TagToken,
+} from "./scope";
+
+export {
+  PRIMARY_ACTION_ATTR,
+  countPrimaryActions,
+  countVisibleFields,
+  maxChoicesPerControl,
+  measureUxBudget,
+  meetsReadingLevel,
+  type UxBudgetMetrics,
+} from "./measure";
+
+export {
+  UX_BUDGETS,
+  UX_SHELLS,
+  budgetFor,
+  type UxBudget,
+  type UxShell,
+} from "./budgets";
+
+export {
+  MIGRATED_ROUTES,
+  PRE_MIGRATION_EXEMPT_CHECKS,
+  shellForRoute,
+  shellPolicyFor,
+  type ExemptCheck,
+  type RouteShellPolicy,
+  type ShellClassifiable,
+} from "./route-shells";
+
+export {
+  evaluateUxBudget,
+  type BudgetFinding,
+  type BudgetReport,
+  type BudgetSeverity,
+  type RouteStatus,
+} from "./evaluate";
+
+import { measureUxBudget } from "./measure";
+import { evaluateUxBudget, type BudgetReport, type RouteStatus } from "./evaluate";
+import type { UxShell } from "./budgets";
+import type { ExemptCheck } from "./route-shells";
+
+/** Convenience: measure and evaluate a served-DOM HTML string in one call. */
+export function auditUxBudget(
+  html: string,
+  shell: UxShell,
+  options: { exemptChecks?: readonly ExemptCheck[]; routeStatus?: RouteStatus } = {},
+): BudgetReport {
+  return evaluateUxBudget(measureUxBudget(html), shell, options);
+}

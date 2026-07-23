@@ -1,0 +1,3086 @@
+{
+  "generator": "apps/web/scripts/build-route-shells.ts",
+  "pageRouteCount": 307,
+  "migratedCount": 0,
+  "summary": {
+    "cockpit": 15,
+    "list": 6,
+    "detail": 234,
+    "settings": 12,
+    "form": 19,
+    "public": 21,
+    "unclassified": 0
+  },
+  "routes": [
+    {
+      "routePath": "/admin",
+      "shell": "list",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/archetypes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/backups",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/branding",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/build-studio/stall-thresholds",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/business-models",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/cockpit",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/data-stewardship",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/diagnostics",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/hive",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/issue-reports",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/platform-development",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/reference-data",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/research",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/scheduled-jobs",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/settings",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/twin-gallery",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/twin-gallery/[archetypeId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/twin-kit",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/wiki/lint",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/build",
+      "shell": "list",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/build/work",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/build/work/[capsuleId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/complaints",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/actions",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/actions/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/audits",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/audits/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/controls",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/controls/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/evidence",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/evidence/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/gaps",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/incidents",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/incidents/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/licensing",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/obligations",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/obligations/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/onboard",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/policies",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/policies/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/posture",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/regulations",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/regulations/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/risks",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/risks/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/submissions",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/compliance/submissions/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/[...slug]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/craft",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/craft/[professionKey]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/decisions",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/decisions/[interactionId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/edit/[...slug]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/matrix",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/perspectives",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/perspectives/[profileId]/voice",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/proactivity",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/review",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/coworker-decisions/stance",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer-complete-profile",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer-link-account",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer-login",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer-signup",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/engagements",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/funnel",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/marketing",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/marketing/automation",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/marketing/campaigns",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/marketing/funnel",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/marketing/strategy",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/opportunities",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/opportunities/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/quotes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/quotes/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/customer/sales-orders",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/delivery",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/docs/[[...slug]]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ea",
+      "shell": "list",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ea/capabilities",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ea/data-model",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ea/models",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ea/models/[slug]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ea/value-streams",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ea/views",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ea/views/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/employee",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/assets",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/assets/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/assets/new",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/banking",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/banking/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/banking/[id]/import",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/banking/[id]/reconcile",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/banking/new",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/banking/rules",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/bills",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/bills/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/bills/new",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/close",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/configuration",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/expense-claims",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/expense-claims/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/funds",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/invoices",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/invoices/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/invoices/new",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/my-expenses",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/my-expenses/new",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/payment-runs",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/payments",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/purchase-orders",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/purchase-orders/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/purchase-orders/new",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/recurring",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/recurring/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/recurring/new",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/reports",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/reports/aged-creditors",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/reports/aged-debtors",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/reports/cash-flow",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/reports/general-ledger",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/reports/outstanding",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/reports/profit-loss",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/reports/revenue-by-customer",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/reports/vat-summary",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/revenue",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/settings",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/settings/currency",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/settings/dunning",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/settings/rate-card",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/settings/setup",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/settings/tax",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/spend",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/spend/ai",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/suppliers",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/suppliers/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/finance/suppliers/new",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/forgot-password",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/governance",
+      "shell": "list",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/governance/records-requests",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/inventory",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/inventory/entity/[entityId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/knowledge",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/knowledge/[articleId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/knowledge/new",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/login",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/member-equity",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops",
+      "shell": "list",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/changes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/demand",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/dev-loop",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/health",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/patches",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/promotions",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/security",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/self-upgrade",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform",
+      "shell": "list",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/agent/[agentId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/assignments",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/assignments/bindings/[bindingId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/browser-sessions",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/browser-sessions/setup",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/build-studio",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/capacity-continuity",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/catalog",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/decisions/[interactionId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/founder-review",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/memory",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/operations-map",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/overview",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/priority/outcomes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/prompts",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/providers",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/providers/[providerId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/readiness",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/runtime-health",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/skills",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/audit",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/audit/authority",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/audit/journal",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/audit/ledger",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/audit/metrics",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/audit/operations",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/audit/routes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/development/change-lanes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/device-catalog",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/edge-nodes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/federation-links",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/federation-proposals",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/identity",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/identity/agents",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/identity/applications",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/identity/authorization",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/identity/authorization/bindings/[bindingId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/identity/directory",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/identity/federation",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/identity/groups",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/identity/principals",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/schedule",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/service-desk",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/services/[serverId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/built-ins",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/catalog",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/catalog/sync",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/discovery",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/discovery/promotion-audit",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/adp",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/communications",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/email-postmark",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/facebook-lead-ads",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/facebook-pages",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/google-business-profile",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/google-marketing-intelligence",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/hubspot",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/instagram-business",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/linkedin-personal-social",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/mailchimp",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/microsoft365-communications",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/quickbooks",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/stripe",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/integrations/whatsapp-business",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/inventory",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/services",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/services/[serverId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/tools/services/activate",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/account",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/cases",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/cases/[caseKey]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/health",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/health/intake/[packetId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/orders",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/services",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/sign-in",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/support",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/[[...slug]]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/architecture",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/backlog",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/changes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/health",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/inventory",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/knowledge",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/offerings",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/supply-chain",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/team",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/versions",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/products/[productId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/rental",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/reset-password",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/book/[itemId]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/booking/confirmed",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/checkout",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/donate",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/donation/received",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/inquire",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/inquire/[itemId]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/inquiry/received",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/item/[itemId]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/order/[itemId]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/order/received",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/policies",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/sign-in",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/[slug]/sign-up",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/approve/[token]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/expense-approve/[token]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/pay/[token]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/s/quote/[token]",
+      "shell": "public",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/sandbox-restricted",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/service-requests",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/setup",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/animals",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/dispatch",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/inbox",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/intake",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/items",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/sections",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/settings",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/settings/business",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/settings/capabilities",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/settings/operations",
+      "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/setup",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/tables",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/team",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/units",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/welcome",
+      "shell": "form",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/wiki/[...slug]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workbooks",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workbooks/[workbookId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workbooks/system/[entityType]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace",
+      "shell": "cockpit",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/calendar",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/cases/[caseKey]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/documents",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/documents/[documentId]",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/inbox",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/workspace/my-queue",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    }
+  ]
+}
