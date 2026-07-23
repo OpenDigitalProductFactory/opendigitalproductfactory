@@ -332,21 +332,8 @@ describe("SelfUpgradePage", () => {
     expect(simpleHtml).toContain('data-component="self-upgrade-advanced-toggle"');
   });
 
-  it("marks the upgrade trigger as the primary / next action so the UX gate can see it", async () => {
-    // The trigger only renders when there is something to do — enabled with an
-    // available update. (When idle there is no primary action, which is correct:
-    // nothing to bury, nothing to mark.)
-    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
-      ...baseStatus,
-      enabled: true,
-      isFresh: false,
-      targetSha: "b".repeat(40),
-    });
-    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
-    const html = renderToStaticMarkup(await SelfUpgradePage());
-    expect(html).toContain("data-dpf-primary-action");
-    expect(html).toContain("data-owner-first-next-action");
-    // And it must be reachable on arrival — inside the OPEN section, not collapsed away.
-    expect(html).toMatch(/<details[^>]*\sopen/);
-  });
+  // The trigger's primary/next-action markers live inside SelfUpgradeClient, which
+  // this page test mocks to a stub — so they are asserted in the client's own test
+  // (SelfUpgradeClient.test.tsx), not here. This page test owns the page-level
+  // concern: the section holding the trigger is reachable on arrival in both modes.
 });

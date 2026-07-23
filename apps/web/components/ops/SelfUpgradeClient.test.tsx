@@ -123,6 +123,15 @@ describe("SelfUpgradeClient – enabled", () => {
     expect(html).toContain("Upgrade now");
   });
 
+  it("marks the Upgrade now trigger as the primary / next action (BI-D77BF495)", () => {
+    // The UX budget reachability axis keys off these markers; without them the gate
+    // cannot tell the primary action from any other button, so it cannot catch the
+    // trigger being buried behind a collapse.
+    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
+    expect(html).toContain("data-dpf-primary-action");
+    expect(html).toContain("data-owner-first-next-action");
+  });
+
   it("shows the deployed and target SHA values", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
     expect(html).toContain("abc1234");
