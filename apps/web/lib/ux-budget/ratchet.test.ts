@@ -10,6 +10,7 @@ import {
   formatSweepReport,
   freezeBaseline,
   normaliseSnapshot,
+  normaliseVolatileText,
   verdictForRoute,
   type BaselineFile,
   type RouteMeasurement,
@@ -160,8 +161,25 @@ describe("structural hierarchy snapshot (rev 2 D2)", () => {
     expect(verdictForRoute(after, baselineFrom(before).routes["/workspace"]).structureChanged).toBe(false);
   });
 
-  it("normalises trailing whitespace and blank lines", () => {
-    expect(normaliseSnapshot("a  \n\n b \n")).toBe("a\n b");
+  it("projects to structure only — nesting + role + structural state", () => {
+    const snap = [
+      "- banner:",
+      '  - link "OD Open Digital Product Factory":',
+      "    - /url: /workspace",
+      '  - heading "Your day" [level=1]',
+      "  - text: · updated 7/23/2026, 7:37:21 PM (seeded)",
+    ].join("\n");
+    // Names, URLs and text payloads are dropped; nesting, role and [level] survive.
+    expect(normaliseSnapshot(snap)).toBe(
+      ["- banner", "  - link", "  - heading [level=1]", "  - text"].join("\n"),
+    );
+  });
+
+  it("two runs that differ ONLY in rendered text project identically", () => {
+    // The measured cause of the drift: seeded rows render "updated <now>". This is
+    // the case that made 91 of 200 routes look structurally changed between runs.
+    const at = (t: string) => `- main:\n  - text: · updated 7/23/2026, ${t} (seeded)`;
+    expect(normaliseSnapshot(at("7:37:21 PM"))).toBe(normaliseSnapshot(at("8:27:13 PM")));
   });
 
   it("redacts volatile values so a deploy does not read as a structure change", () => {
@@ -187,12 +205,36 @@ describe("structural hierarchy snapshot (rev 2 D2)", () => {
     // contiguous secret-shaped literal for the secret scanner to flag.
     const header = `-----BEGIN ${"PRIVATE"} KEY-----`;
     const pem = normaliseSnapshot(`- textbox "${header}"`);
+    // Projection drops the accessible name entirely — stronger than redacting it.
     expect(pem).not.toContain("BEGIN PRIVATE KEY");
-    expect(pem).toContain("<pem>");
+    expect(pem).toBe("- textbox");
     const jwtInput = ["eyJ" + "hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "SflKxwRJSMeKKF2QT4fwpMe"].join(".");
     const jwt = normaliseSnapshot(`- text ${jwtInput}`);
     expect(jwt).not.toContain("eyJzdWIiOiIxMjM0");
-    expect(jwt).toContain("<jwt>");
+    expect(jwt).toBe("- text");
+  });
+});
+
+describe("volatile text normalisation stabilises word counts (BI-EA221325)", () => {
+  const words = (s: string) => normaliseVolatileText(s).split(/\s+/).filter(Boolean).length;
+
+  it("collapses relative times to one token, so the count stops moving", () => {
+    // The ±2 word deltas: "2 hours ago" (3 words) vs "just now" (2 words).
+    expect(words("updated 2 hours ago")).toBe(words("updated just now"));
+    expect(words("updated 11 minutes ago")).toBe(words("updated a moment ago"));
+  });
+
+  it("collapses clock times and dates regardless of digit width", () => {
+    expect(normaliseVolatileText("7:37:21 PM")).toBe(normaliseVolatileText("11:05:03 AM"));
+    expect(normaliseVolatileText("7/23/2026")).toBe(normaliseVolatileText("11/1/26"));
+    expect(words("· updated 7/23/2026, 7:37:21 PM (seeded)")).toBe(
+      words("· updated 11/1/26, 11:05:03 AM (seeded)"),
+    );
+  });
+
+  it("leaves ordinary prose alone", () => {
+    const prose = "Two things need your attention today";
+    expect(normaliseVolatileText(prose)).toBe(prose);
   });
 });
 

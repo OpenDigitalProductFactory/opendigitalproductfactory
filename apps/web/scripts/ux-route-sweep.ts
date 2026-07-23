@@ -28,6 +28,7 @@ import {
   evaluateSweep,
   formatSweepReport,
   freezeBaseline,
+  normaliseVolatileText,
   type BaselineFile,
   type RouteMeasurement,
 } from "../lib/ux-budget/ratchet";
@@ -147,7 +148,9 @@ async function measureRoute(
   return {
     routePath: row.routePath,
     shell: row.shell,
-    metrics: measureUxBudget(html),
+    // Collapse wall-clock text first: seeded records render "updated <now>", so a
+    // raw measurement moves with the clock (BI-EA221325).
+    metrics: measureUxBudget(normaliseVolatileText(html)),
     ariaSnapshot,
     axeViolations,
     exemptChecks: row.exemptChecks,

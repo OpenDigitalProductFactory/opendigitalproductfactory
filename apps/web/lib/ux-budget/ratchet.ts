@@ -203,14 +203,69 @@ const VOLATILE_PATTERNS: [RegExp, string][] = [
   [/\b\d[\d,]{2,}\b/g, "<num>"], // multi-digit counts (4+ chars incl. separators)
 ];
 
+/**
+ * Wall-clock text the UI renders — the measured cause of run-to-run drift.
+ *
+ * Two independent sweep runs of identical code differed on 91/200 ARIA snapshots
+ * and 38/200 word counts. The diff was always the same shape: seeded records carry
+ * `updatedAt = now`, and the UI renders it — "· updated 7/23/2026, 7:37:21 PM" in
+ * one run, "8:27:13 PM" in the next. Relative phrasings ("2 hours ago" vs "just
+ * now") also change the WORD COUNT, which is where the ±2 deltas came from.
+ *
+ * Each pattern collapses to a single stable token, so both the text and its word
+ * count stop moving. Applied to the served HTML before measuring (BI-EA221325).
+ */
+const VOLATILE_TEXT_PATTERNS: [RegExp, string][] = [
+  [/\b\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago\b/gi, "<ago>"],
+  [/\b(?:just now|a moment ago|moments ago|an?\s+(?:second|minute|hour|day|week|month|year)\s+ago)\b/gi, "<ago>"],
+  [/\bin\s+\d+\s+(?:second|minute|hour|day|week|month|year)s?\b/gi, "<in>"],
+  [/\b\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AaPp]\.?[Mm]\.?)?/g, "<time>"],
+  [/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, "<date>"],
+  [/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,\s*\d{4})?\b/g, "<date>"],
+];
+
+/** Collapse wall-clock text so a measurement does not move with the clock. */
+export function normaliseVolatileText(text: string): string {
+  let out = text;
+  for (const [re, placeholder] of VOLATILE_TEXT_PATTERNS) out = out.replace(re, placeholder);
+  return out;
+}
+
+// A property line inside the tree, e.g. `- /url: /workspace`. Carries data, not shape.
+const PROPERTY_LINE = /^\/[\w-]+:/;
+
+/**
+ * Project an ARIA snapshot down to STRUCTURE: nesting depth, role, and structural
+ * state ([level=2], [pressed], [checked], …). Accessible names, URLs and text
+ * payloads are DROPPED.
+ *
+ * This is the whole point of the gate — "did the hierarchy change shape?", not "did
+ * a label's text change". Names are where the volatile data lives (timestamps, ids,
+ * counts) and also where secret-shaped labels appear, so dropping them makes the
+ * comparison both deterministic and safe to commit. The measured evidence supports
+ * it: when two runs differed, the LINE COUNTS matched exactly (141 vs 141) — only
+ * the text payloads moved.
+ */
 export function normaliseSnapshot(snapshot: string): string {
   let out = snapshot;
+  // Defense in depth: redact before projecting, so anything that survives into a
+  // role or attribute is still scrubbed.
   for (const [re, placeholder] of VOLATILE_PATTERNS) out = out.replace(re, placeholder);
-  return out
-    .split("\n")
-    .map((l) => l.trimEnd())
-    .filter((l) => l.trim().length > 0)
-    .join("\n");
+
+  const lines: string[] = [];
+  for (const raw of out.split("\n")) {
+    const line = raw.replace(/\s+$/, "");
+    if (!line.trim()) continue;
+    const indent = line.slice(0, line.length - line.trimStart().length);
+    // Strip the list marker, then any wrapping quotes around the whole node.
+    const body = line.trimStart().replace(/^-\s*/, "").replace(/^['"]|['"]$/g, "");
+    if (PROPERTY_LINE.test(body)) continue;
+    const role = /^([a-zA-Z][\w-]*)/.exec(body)?.[1];
+    if (!role) continue;
+    const attrs = [...body.matchAll(/\[([^\]]+)\]/g)].map((m) => `[${m[1]}]`).join(" ");
+    lines.push(`${indent}- ${role}${attrs ? ` ${attrs}` : ""}`);
+  }
+  return lines.join("\n");
 }
 
 export type SweepVerdict = {
