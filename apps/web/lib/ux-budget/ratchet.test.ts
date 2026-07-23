@@ -195,6 +195,29 @@ describe("structural hierarchy snapshot (rev 2 D2)", () => {
     expect(normaliseSnapshot(snap)).toBe(["- main", "  - heading [level=1]"].join("\n"));
   });
 
+  it("collapses repeated sibling subtrees — a list's LENGTH is data, not shape", () => {
+    // /build/work was the measured case: a table whose row count differed between two
+    // runs of the same commit. Rows ARE structure, so no text normalisation fixes it;
+    // N identically-shaped rows must project as one.
+    const oneRow = "- table:\n  - row:\n    - cell";
+    const manyRows = "- table:\n  - row:\n    - cell\n  - row:\n    - cell\n  - row:\n    - cell";
+    expect(normaliseSnapshot(manyRows)).toBe(normaliseSnapshot(oneRow));
+  });
+
+  it("stays sensitive to the hierarchy questions the gate exists to ask", () => {
+    const n = normaliseSnapshot;
+    // A new KIND of node inside a row (e.g. an action button appears).
+    expect(n("- row:\n  - cell")).not.toBe(n("- row:\n  - cell\n  - button"));
+    // A heading flattened into plain text — the Design2Code failure mode.
+    expect(n("- main:\n  - heading [level=2]")).not.toBe(n("- main:\n  - text"));
+    // A landmark disappears.
+    expect(n("- banner\n- main")).not.toBe(n("- main"));
+    // Nesting depth changes (a list item promoted out of its list).
+    expect(n("- main:\n  - list:\n    - listitem")).not.toBe(n("- main:\n  - list\n  - listitem"));
+    // Structural state changes.
+    expect(n("- main:\n  - button [pressed]")).not.toBe(n("- main:\n  - button"));
+  });
+
   it("two runs that differ ONLY in rendered text project identically", () => {
     // The measured cause of the drift: seeded rows render "updated <now>". This is
     // the case that made 91 of 200 routes look structurally changed between runs.
