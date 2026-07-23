@@ -104,6 +104,11 @@ jobs:
           echo "::error::Seed failed on step(s) beyond the known eaReferenceModels issue."
           exit "$status"
 
+      # The seed alone leaves isFirstRun() true, so every authenticated surface
+      # redirects to /setup and the sweep measures nothing (proved: 208/226 routes).
+      - name: Mark platform setup complete for the fixture org
+        run: pnpm --filter web ux:sweep-fixture
+
       - name: Build the portal
         run: pnpm --filter web build
 

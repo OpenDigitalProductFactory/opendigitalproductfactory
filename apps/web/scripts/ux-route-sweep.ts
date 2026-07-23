@@ -117,15 +117,26 @@ async function measureRoute(
 
   const html = await page.evaluate(PRUNE_INVISIBLE);
   const ariaSnapshot = await page.locator("body").ariaSnapshot();
-  const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag22aa"]).analyze();
+
+  // Necessary, never sufficient — axe green is not "accessible" (spec §5.4).
+  // A failing SCAN must not cost us the whole route's budget measurement: axe threw
+  // on nine public pages in the first run and took their measurements with it. Record
+  // the axe count as unavailable (-1) rather than a fake 0, so the ratchet cannot read
+  // a broken scan as an improvement.
+  let axeViolations = -1;
+  try {
+    const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag22aa"]).analyze();
+    axeViolations = axe.violations.filter((v) => v.impact === "serious" || v.impact === "critical").length;
+  } catch (err) {
+    console.error(`[ux-sweep] axe scan failed on ${row.routePath}: ${(err as Error).message.split(/\r?\n/)[0]}`);
+  }
 
   return {
     routePath: row.routePath,
     shell: row.shell,
     metrics: measureUxBudget(html),
     ariaSnapshot,
-    // Necessary, never sufficient — axe green is not "accessible" (spec §5.4).
-    axeViolations: axe.violations.filter((v) => v.impact === "serious" || v.impact === "critical").length,
+    axeViolations,
     exemptChecks: row.exemptChecks,
   };
 }

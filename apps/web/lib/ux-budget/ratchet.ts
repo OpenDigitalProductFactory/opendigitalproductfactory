@@ -126,6 +126,11 @@ export function verdictForRoute(
     for (const axis of RATCHET_AXES) {
       const now = measurementValue(measurement, axis);
       const was = baseline[axis];
+      // A negative value means the measurement was UNAVAILABLE this run (e.g. the axe
+      // scan threw). Comparing it would manufacture a phantom regression the next time
+      // the scan works — 0 > -1 is not an increase in violations, it is a scan that
+      // recovered. Skip the axis and let the run that measured it decide.
+      if (now < 0 || was < 0) continue;
       if (now > was) {
         regressions.push(`${AXIS_LABEL[axis]}: ${was} → ${now}`);
       }
