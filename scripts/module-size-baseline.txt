@@ -44,7 +44,7 @@ apps/web/lib/integrate/sandbox/build-branch.ts	852
 apps/web/lib/marketing.ts	1369
 apps/web/lib/mcp-tools-backlog.test.ts	874
 apps/web/lib/mcp-tools.ts	1910
-apps/web/lib/mcp/packs/backlog-pack.ts	1318
+apps/web/lib/mcp/packs/backlog-pack.ts	1320
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	858
 apps/web/lib/mcp/packs/sandbox-pack.ts	920
 apps/web/lib/navigation/portal-navigation-model.ts	940

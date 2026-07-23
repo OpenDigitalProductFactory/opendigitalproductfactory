@@ -123,6 +123,37 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
     expect(db.queryRawUnsafe).not.toHaveBeenCalled();
   });
 
+  // REGRESSION: the row cap was applied as `sql + " LIMIT 1000"`, so any query
+  // that supplied its own LIMIT produced `... LIMIT 30 LIMIT 1000` — a
+  // Postgres syntax error rather than a capped result.
+  it("admin_query_db respects a caller-supplied LIMIT instead of appending a second one", async () => {
+    db.queryRawUnsafe.mockResolvedValue([]);
+    await adminPack.handlers.admin_query_db({ sql: 'SELECT * FROM "Epic" LIMIT 30' }, "u1");
+    expect(db.queryRawUnsafe).toHaveBeenCalledWith('SELECT * FROM "Epic" LIMIT 30');
+  });
+
+  it("admin_query_db strips a trailing semicolon before appending the row cap", async () => {
+    db.queryRawUnsafe.mockResolvedValue([]);
+    await adminPack.handlers.admin_query_db({ sql: 'SELECT * FROM "Epic";' }, "u1");
+    expect(db.queryRawUnsafe).toHaveBeenCalledWith('SELECT * FROM "Epic" LIMIT 1000');
+  });
+
+  // REGRESSION: Postgres returns COUNT() as BigInt and JSON.stringify throws on
+  // it, so every aggregate query failed with "Do not know how to serialize a
+  // BigInt" before it could be returned or audit-logged.
+  it("admin_query_db serializes BigInt aggregate results instead of throwing", async () => {
+    db.queryRawUnsafe.mockResolvedValue([{ epics: BigInt(137), items: BigInt(1799) }]);
+    const res = await adminPack.handlers.admin_query_db({ sql: 'SELECT COUNT(*) AS epics FROM "Epic"' }, "u1");
+    expect(res.success).toBe(true);
+    expect((res.data as { rows: unknown[] }).rows).toEqual([{ epics: 137, items: 1799 }]);
+  });
+
+  it("admin_query_db keeps BigInt values beyond Number.MAX_SAFE_INTEGER as strings", async () => {
+    db.queryRawUnsafe.mockResolvedValue([{ big: BigInt("9007199254740993") }]);
+    const res = await adminPack.handlers.admin_query_db({ sql: "SELECT 1" }, "u1");
+    expect((res.data as { rows: unknown[] }).rows).toEqual([{ big: "9007199254740993" }]);
+  });
+
   it("admin_run_command blocks a command outside the allowlist", async () => {
     const res = await adminPack.handlers.admin_run_command({ command: "rm -rf /" }, "u1");
     expect(res.success).toBe(false);

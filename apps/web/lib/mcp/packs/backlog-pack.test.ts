@@ -8,6 +8,7 @@ const db = vi.hoisted(() => ({
   backlogItemCount: vi.fn(),
   epicFindMany: vi.fn(),
   epicFindFirst: vi.fn(),
+  epicCount: vi.fn(),
   platformDevConfigFindUnique: vi.fn(),
   transaction: vi.fn(),
 }));
@@ -23,6 +24,7 @@ vi.mock("@dpf/db", () => ({
     epic: {
       findMany: (...a: unknown[]) => db.epicFindMany(...a),
       findFirst: (...a: unknown[]) => db.epicFindFirst(...a),
+      count: (...a: unknown[]) => db.epicCount(...a),
     },
     platformDevConfig: {
       findUnique: (...a: unknown[]) => db.platformDevConfigFindUnique(...a),
@@ -168,10 +170,66 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     db.backlogItemFindMany.mockResolvedValue([]);
     db.epicFindMany.mockResolvedValue([]);
     db.backlogItemCount.mockResolvedValue(0);
+    db.epicCount.mockResolvedValue(0);
     const res = await backlogPack.handlers.query_backlog({}, "u1");
     expect(res.success).toBe(true);
     expect(res.message).toContain("Backlog:");
     expect(res.data).toMatchObject({ summary: { open: 0, inProgress: 0, done: 0 } });
+  });
+
+  // REGRESSION: `BacklogItem.epicId` is the internal cuid FK, so passing the
+  // semantic "EP-*" id straight into the where-clause matched nothing and
+  // returned an empty item list under success:true — a silent wrong answer
+  // that reads as "this epic has no items".
+  it("query_backlog resolves a semantic epic id to the row id before filtering", async () => {
+    db.epicFindFirst.mockResolvedValue({ id: "ckepicrow1" });
+    db.backlogItemFindMany.mockResolvedValue([]);
+    db.epicFindMany.mockResolvedValue([]);
+    db.backlogItemCount.mockResolvedValue(0);
+    db.epicCount.mockResolvedValue(0);
+
+    const res = await backlogPack.handlers.query_backlog({ epicId: "EP-0AF96937" }, "u1");
+
+    expect(res.success).toBe(true);
+    expect(db.backlogItemFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { epicId: "ckepicrow1" } }),
+    );
+  });
+
+  it("query_backlog reports epic_not_found instead of an empty list for an unknown epic", async () => {
+    db.epicFindFirst.mockResolvedValue(null);
+    const res = await backlogPack.handlers.query_backlog({ epicId: "EP-NOPE" }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("epic_not_found");
+    expect(db.backlogItemFindMany).not.toHaveBeenCalled();
+  });
+
+  // REGRESSION: a silently-truncated list is indistinguishable from a complete
+  // one, which is how a present-but-older epic got reported as non-existent.
+  it("list_epics reports the true total and flags truncation", async () => {
+    db.epicCount.mockResolvedValue(137);
+    db.epicFindMany.mockResolvedValue([
+      { id: "e1", epicId: "EP-1", title: "One", status: "open", priority: 1, updatedAt: new Date(), items: [] },
+    ]);
+    const res = await backlogPack.handlers.list_epics({ limit: 1 }, "u1");
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ total: 137, fetched: 1, truncated: true });
+  });
+
+  it("list_epics accepts a limit above the old 100 cap", async () => {
+    db.epicCount.mockResolvedValue(0);
+    db.epicFindMany.mockResolvedValue([]);
+    await backlogPack.handlers.list_epics({ limit: 1000 }, "u1");
+    expect(db.epicFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 1000 }));
+  });
+
+  it("list_backlog_items reports the true total and flags truncation", async () => {
+    db.backlogItemCount.mockResolvedValue(678);
+    db.backlogItemFindMany.mockResolvedValue([]);
+    const res = await backlogPack.handlers.list_backlog_items({ limit: 500 }, "u1");
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ total: 678, truncated: true });
+    expect(db.backlogItemFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 500 }));
   });
 
   it("process_backlog_for_build_studio refuses when governed mode is disabled", async () => {

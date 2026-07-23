@@ -42,7 +42,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "admin_query_db",
-    description: "Run a read-only SQL query against the portal database. Only SELECT statements are permitted. Max 1000 rows.",
+    description: "Run a read-only SQL query against the portal database. Only SELECT statements are permitted. Capped at 1000 rows; a LIMIT you supply yourself is respected. Aggregates (COUNT/SUM) are supported — BigInt results are returned as numbers.",
     inputSchema: {
       type: "object",
       properties: {
@@ -150,6 +150,35 @@ async function adminViewLogs(params: Record<string, unknown>, userId: string): P
   }
 }
 
+const ADMIN_QUERY_ROW_CAP = 1000;
+
+// The row cap used to be applied as `sql + " LIMIT 1000"`, which is a syntax
+// error for any query that already ends in its own LIMIT or a trailing
+// semicolon. Strip the terminator, and only append the cap when the caller
+// has not already bounded the result themselves.
+function applyRowCap(sql: string): string {
+  const stripped = sql.replace(/;\s*$/, "").trim();
+  return /\blimit\s+\d+\s*$/i.test(stripped) ? stripped : `${stripped} LIMIT ${ADMIN_QUERY_ROW_CAP}`;
+}
+
+// Postgres returns COUNT()/SUM() as BigInt and Prisma hands it straight
+// through; JSON.stringify throws on BigInt, so an unsanitized aggregate query
+// fails before it can be returned or audit-logged. Numbers beyond the safe
+// integer range degrade to a string rather than losing precision silently.
+function toJsonSafe(value: unknown): unknown {
+  if (typeof value === "bigint") {
+    return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER)
+      ? Number(value)
+      : value.toString();
+  }
+  if (Array.isArray(value)) return value.map(toJsonSafe);
+  if (value instanceof Date) return value;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, toJsonSafe(v)]));
+  }
+  return value;
+}
+
 async function adminQueryDb(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const sql = String(params.sql ?? "").trim();
   if (!sql) return { success: false, error: "sql is required.", message: "Provide a SQL query." };
@@ -173,10 +202,14 @@ async function adminQueryDb(params: Record<string, unknown>, userId: string): Pr
     return { success: false, error: "Query contains forbidden keywords (INSERT, UPDATE, DELETE, DROP, etc).", message: "This tool is read-only." };
   }
   try {
-    const result = await prisma.$queryRawUnsafe(sql + " LIMIT 1000") as unknown[];
-    const preview = JSON.stringify(result).slice(0, 500);
-    await logAdminActivity(userId, "admin_query_db", { sql }, "success", 1, `${result.length} rows. ${preview}`);
-    return { success: true, message: `Query returned ${result.length} row(s).`, data: { sql, rows: result, rowCount: result.length } };
+    const result = await prisma.$queryRawUnsafe(applyRowCap(normalized)) as unknown[];
+    // Postgres COUNT()/SUM() come back as BigInt, which JSON.stringify throws
+    // on. Sanitize before both the preview and the returned payload, or every
+    // aggregate query fails with "Do not know how to serialize a BigInt".
+    const rows = toJsonSafe(result) as unknown[];
+    const preview = JSON.stringify(rows).slice(0, 500);
+    await logAdminActivity(userId, "admin_query_db", { sql }, "success", 1, `${rows.length} rows. ${preview}`);
+    return { success: true, message: `Query returned ${rows.length} row(s).`, data: { sql, rows, rowCount: rows.length } };
   } catch (err) {
     const msg = (err as Error).message?.slice(0, 500) ?? "Query failed";
     await logAdminActivity(userId, "admin_query_db", { sql }, "error", 1, msg);

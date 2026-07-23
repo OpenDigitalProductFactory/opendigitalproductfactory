@@ -19,6 +19,7 @@
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { handleUpdateBacklogItem } from "@/lib/mcp-handlers/update-backlog-item";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
+import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import {
   BACKLOG_SOURCE_VALUES,
   BACKLOG_STATUS_VALUES,
@@ -147,8 +148,8 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Filter by status (optional)" },
-        epicId: { type: "string", description: "Filter by epic ID (optional)" },
-        limit: { type: "number", description: "Max results (default 20)" },
+        epicId: { type: "string", description: "Filter by semantic epic id (EP-*) or internal epic row id (optional). Returns epic_not_found rather than an empty list when it matches nothing." },
+        limit: { type: "number", description: "Max results (default 100, max 1000). Responses always report `total` and `truncated`." },
       },
       required: [],
     },
@@ -207,7 +208,7 @@ const definitions: ToolDefinition[] = [
       properties: {
         status: { type: "string", enum: ["open", "in-progress", "done"], description: "Filter by epic status" },
         hasOpenItems: { type: "boolean", description: "Only return epics that have at least one non-done item" },
-        limit: { type: "number", description: "Max results (default 25, max 100)" },
+        limit: { type: "number", description: "Max results (default 100, max 1000). Responses always report `total` and `truncated`, so a short list is never mistaken for a complete one." },
       },
       required: [],
     },
@@ -228,7 +229,7 @@ const definitions: ToolDefinition[] = [
         epicId: { type: "string", description: "Semantic epic id (EP-*) to filter to" },
         unclaimed: { type: "boolean", description: "Only items with no user/agent claim" },
         hasActiveBuild: { type: "boolean", description: "Only items currently linked to a Build Studio build" },
-        limit: { type: "number", description: "Max results (default 25, max 100)" },
+        limit: { type: "number", description: "Max results (default 100, max 1000). Responses always report `total` and `truncated`, so a short list is never mistaken for a complete one." },
       },
       required: [],
     },
@@ -593,34 +594,39 @@ async function queryBacklog(params: Record<string, unknown>): Promise<ToolResult
   const { prisma } = await import("@dpf/db");
   const where: Record<string, unknown> = {};
   if (typeof params["status"] === "string") where["status"] = params["status"];
-  if (typeof params["epicId"] === "string") where["epicId"] = params["epicId"];
-  const limit = typeof params["limit"] === "number" ? Math.min(params["limit"], 50) : 20;
+  const epicRowId = await resolveEpicRowId(prisma, params["epicId"]);
+  if (epicRowId === null) {
+    return { success: false, error: "epic_not_found", message: `No epic matched ${String(params["epicId"])}` };
+  }
+  if (epicRowId !== undefined) where["epicId"] = epicRowId;
+  const limit = resolveListLimit(params["limit"]);
 
-  const [items, epics, totalOpen, totalInProgress, totalDone] = await Promise.all([
+  const [items, matching, epics, epicTotal, open, inProgress, done] = await Promise.all([
     prisma.backlogItem.findMany({
       where,
       orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
       take: limit,
-      select: { itemId: true, title: true, status: true, type: true, priority: true, epicId: true, updatedAt: true },
+      select: { itemId: true, title: true, status: true, type: true, priority: true, updatedAt: true, epic: { select: { epicId: true } } },
     }),
-    prisma.epic.findMany({
-      select: { id: true, epicId: true, title: true, status: true },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
+    prisma.backlogItem.count({ where }),
+    prisma.epic.findMany({ select: { id: true, epicId: true, title: true, status: true }, orderBy: { createdAt: "desc" }, take: limit }),
+    prisma.epic.count(),
     prisma.backlogItem.count({ where: { status: "open" } }),
     prisma.backlogItem.count({ where: { status: "in-progress" } }),
     prisma.backlogItem.count({ where: { status: "done" } }),
   ]);
 
-  const summary = `Backlog: ${totalOpen} open, ${totalInProgress} in-progress, ${totalDone} done. ${epics.length} epic(s).`;
   return {
     success: true,
-    message: summary,
+    message: `Backlog: ${open} open, ${inProgress} in-progress, ${done} done. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
     data: {
-      summary: { open: totalOpen, inProgress: totalInProgress, done: totalDone },
+      summary: { open, inProgress, done },
+      total: matching,
+      truncated: items.length < matching,
+      epicTotal,
+      epicsTruncated: epics.length < epicTotal,
       epics: epics.map((e) => ({ epicId: e.epicId, title: e.title, status: e.status })),
-      items: items.map((i) => ({ itemId: i.itemId, title: i.title, status: i.status, type: i.type, priority: i.priority, epicId: i.epicId })),
+      items: items.map((i) => ({ itemId: i.itemId, title: i.title, status: i.status, type: i.type, priority: i.priority, epicId: i.epic?.epicId ?? null })),
     },
   };
 }
@@ -643,7 +649,8 @@ async function listEpics(params: Record<string, unknown>): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const where: Record<string, unknown> = {};
   if (typeof params["status"] === "string") where["status"] = params["status"];
-  const limit = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
+  const limit = resolveListLimit(params["limit"]);
+  const epicTotal = await prisma.epic.count({ where });
   const epics = await prisma.epic.findMany({
     where,
     take: limit,
@@ -684,10 +691,12 @@ async function listEpics(params: Record<string, unknown>): Promise<ToolResult> {
       void _hasOpen;
       return rest;
     });
+  // `truncated` reflects the DB-side cap only — hasOpenItems filters the
+  // fetched page in memory, so data.length < epics.length is not truncation.
   return {
     success: true,
-    message: `Listed ${data.length} epic(s).`,
-    data: { epics: data },
+    message: `Listed ${data.length} epic(s) (${epics.length} of ${epicTotal} fetched).`,
+    data: { epics: data, total: epicTotal, fetched: epics.length, truncated: epics.length < epicTotal },
   };
 }
 
@@ -698,19 +707,11 @@ async function listBacklogItems(params: Record<string, unknown>): Promise<ToolRe
   if (typeof params["type"] === "string") where["type"] = params["type"];
   if (typeof params["workType"] === "string") where["workType"] = params["workType"];
   if (typeof params["source"] === "string") where["source"] = params["source"];
-  if (typeof params["epicId"] === "string" && params["epicId"].trim()) {
-    const epicRow = await prisma.epic.findFirst({
-      where: { OR: [{ epicId: params["epicId"].trim() }, { id: params["epicId"].trim() }] },
-      select: { id: true },
-    });
-    if (epicRow) where["epicId"] = epicRow.id;
-    else
-      return {
-        success: false,
-        error: "epic_not_found",
-        message: `No epic matched ${params["epicId"]}`,
-      };
+  const epicRowId = await resolveEpicRowId(prisma, params["epicId"]);
+  if (epicRowId === null) {
+    return { success: false, error: "epic_not_found", message: `No epic matched ${String(params["epicId"])}` };
   }
+  if (epicRowId !== undefined) where["epicId"] = epicRowId;
   if (params["unclaimed"] === true) {
     where["claimedById"] = null;
     where["claimedByAgentId"] = null;
@@ -718,7 +719,8 @@ async function listBacklogItems(params: Record<string, unknown>): Promise<ToolRe
   if (params["hasActiveBuild"] === true) where["activeBuildId"] = { not: null };
   else if (params["hasActiveBuild"] === false) where["activeBuildId"] = null;
 
-  const limit = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
+  const limit = resolveListLimit(params["limit"]);
+  const matching = await prisma.backlogItem.count({ where });
   const items = await prisma.backlogItem.findMany({
     where,
     take: limit,
@@ -769,8 +771,8 @@ async function listBacklogItems(params: Record<string, unknown>): Promise<ToolRe
   }));
   return {
     success: true,
-    message: `Listed ${data.length} backlog item(s).`,
-    data: { items: data },
+    message: `Listed ${data.length} of ${matching} backlog item(s).`,
+    data: { items: data, total: matching, truncated: data.length < matching },
   };
 }
 
