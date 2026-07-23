@@ -323,6 +323,94 @@ export async function syncCustomerPrincipal(
   });
 }
 
+/**
+ * Sync the Principal for a PARTNER contact — a person at a partner org (e.g. a
+ * local IT MSP that resells and operates installs for its local customers).
+ * EP-PARTNER-CHANNEL Phase 2 (BI-DE47EC0B).
+ *
+ * Convergence contract (AGENTS §11): there is NO parallel partner identity
+ * table. A partner contact is the same CustomerContact party row as any other
+ * contact; what makes them a partner is that their ACCOUNT carries a live
+ * PartnerProgramEnrollment. So:
+ *
+ *   - `kind` is DERIVED from the account's enrolment, never passed in. That
+ *     makes the value deterministic and prevents two callers flapping the same
+ *     principal between "customer" and "partner".
+ *   - A contact whose account has no live enrolment is rejected outright rather
+ *     than silently promoted to partner.
+ *   - The `partner_contact` alias sits ALONGSIDE the shared `email` alias, so a
+ *     person who was already synced as a customer contact converges onto the
+ *     SAME principal (found by email) and is re-kinded, rather than gaining a
+ *     second identity.
+ *
+ * An org that is both a customer and a partner is expected and supported — the
+ * enrolment is additive, not an exclusive discriminator.
+ */
+export async function syncPartnerPrincipal(
+  customerContactId: string,
+  db: PrincipalDb = prisma,
+): Promise<SyncedPrincipal> {
+  const contact = await db.customerContact.findUnique({
+    where: { id: customerContactId },
+    select: {
+      id: true,
+      email: true,
+      isActive: true,
+      account: {
+        select: {
+          accountId: true,
+          partnerEnrollment: { select: { status: true, endedAt: true } },
+        },
+      },
+    },
+  });
+
+  if (!contact) {
+    throw new Error(`CustomerContact ${customerContactId} not found.`);
+  }
+
+  const enrollment = contact.account?.partnerEnrollment;
+  const enrolled = Boolean(enrollment) && enrollment!.status !== "ended" && enrollment!.endedAt == null;
+  if (!enrolled) {
+    throw new Error(
+      `CustomerContact ${customerContactId} is not a partner contact: account ${contact.account?.accountId ?? "(none)"} has no live PartnerProgramEnrollment.`,
+    );
+  }
+
+  const lowercaseEmail = contact.email.toLowerCase();
+
+  return upsertPrincipalForAliases(db, {
+    kind: "partner",
+    status: contact.isActive ? "active" : "inactive",
+    displayName: contact.email,
+    aliases: [
+      {
+        aliasType: "partner_contact",
+        aliasValue: contact.id,
+        issuer: INTERNAL_ISSUER,
+      },
+      {
+        aliasType: "email",
+        aliasValue: lowercaseEmail,
+        issuer: INTERNAL_ISSUER,
+      },
+    ],
+  });
+}
+
+/**
+ * Resolve the principal kind a contact should carry, from its account's partner
+ * enrolment. Exported so callers that sync a contact generically (customer OR
+ * partner) apply the SAME derivation rule instead of guessing.
+ */
+export function principalKindForContact(input: {
+  partnerEnrollment?: { status: string; endedAt: Date | null } | null;
+}): "customer" | "partner" {
+  const e = input.partnerEnrollment;
+  if (e && e.status !== "ended" && e.endedAt == null) return "partner";
+  return "customer";
+}
+
 export async function ensureAgentPrincipalIdentity(
   agentId: string,
   db: PrincipalDb = prisma,
