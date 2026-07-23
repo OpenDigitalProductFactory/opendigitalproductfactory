@@ -46,15 +46,34 @@ Keep unknown capability alive to the gate, and change the four gates from "falsy
 
 Live DB has **two** non-retired `local/docker.io/ai/qwen3-coder:latest` rows: `cmqem1jz…` (`evaluated`, toolFidelity 100, `capabilityOverrides={toolUse:true}`) and `cmrlkwpqx…` (`seed`, toolFidelity 80, no override). `RouteDecisionLog` shows the **stale seed row is the one actually routing** — the measured profile is being shadowed. Two rows sharing `(providerId, modelId)` means the `@@unique([providerId, modelId])` the upsert relies on is not enforced in this DB.
 
-- **Reconcile migration/script** (extend `packages/db/scripts/reconcile-catalog-capabilities.ts` or a new one): for any `(providerId, modelId)` with >1 non-retired row, keep the highest-precedence row (`evaluated` > `seed`; tie-break higher `evalCount`/`toolFidelity`, and merge a present `capabilityOverrides`), retire/delete the rest. One-time, idempotent, safe to re-run.
-- **Verify the constraint:** confirm `@@unique([providerId, modelId])` exists in `packages/db/prisma/schema.prisma`; if the DB has drifted, add a hand-authored migration that dedups then (re)creates the unique index so the upsert's dedup is actually enforced going forward.
+> **WITHDRAWN 2026-07-23 — superseded by the upstream collation-drift repair; not shipped in this PR.**
+>
+> Re-checked against live data after the portal returned: the duplicates are gone and
+> `ModelProfile_providerId_modelId_key` exists. The repair came from an established
+> upstream program for **collation-drift index corruption**, not from a missing
+> constraint as this phase assumed — see `docs/runbooks/2026-07-20-collation-drift-index-corruption.md`,
+> `docs/data-impact/2026-07-21-retire-quarantined-duplicate-rows.data-impact.json`,
+> and the `repair_*_index_integrity` migrations. That mechanism frees the unique pair
+> by renaming losers to `__dpf_quarantined__<id>__<modelId>` rather than deleting them,
+> so the migration drafted here would now match zero rows. Shipping it would add a
+> competing dedup path over a solved problem.
+>
+> **Residual defect, split out rather than fixed here:** the upstream repair kept the
+> *wrong* survivor for `local/qwen3-coder:latest` — the stale `seed` row (toolFidelity 40,
+> no overrides) survived while the `evaluated` row (toolFidelity 100,
+> `capabilityOverrides {"toolUse":true}`) was quarantined, losing both the measured
+> calibration and the admin pin. Precedence + override-preservation on survivor choice
+> belongs in the quarantine-triage path, not in a separate migration.
+
+- ~~**Reconcile migration/script**: for any `(providerId, modelId)` with >1 non-retired row, keep the highest-precedence row (`evaluated` > `seed`; tie-break higher `evalCount`/`toolFidelity`, and merge a present `capabilityOverrides`), retire/delete the rest.~~
+- ~~**Verify the constraint:** confirm `@@unique([providerId, modelId])` exists in `packages/db/prisma/schema.prisma`.~~ Confirmed present and enforced live.
 
 ## Verification (functional — structural pass is not verification)
 
 1. **`resolve_model_selection`** before/after: a tool-requiring phase whose only eligible endpoint has `supportsToolUse=null` goes from "no eligible endpoint" → routed.
 2. **Live tool-call turn** against a null-capability endpoint: the model is attempted and, on repeated tool-call failure, is demoted (`supportsToolUse=false`) after the eval — confirm via `ModelProfile` + `RouteDecisionLog.excludedReason` on the next turn.
 3. **Explicit-false invariant, live:** with the same config, `chatgpt/gpt-5.4` stays excluded from tool-requiring turns (never routed for a tool task).
-4. **Dedup:** `SELECT providerId, modelId, count(*) … GROUP BY 1,2 HAVING count(*)>1` returns zero rows; survives a provider re-sync.
+4. ~~**Dedup**~~ — withdrawn with Phase 3; already zero duplicate rows live.
 
 ### Automated
 - `pnpm --filter @dpf/db test`
@@ -64,4 +83,4 @@ Live DB has **two** non-retired `local/docker.io/ai/qwen3-coder:latest` rows: `c
 ## Blast radius / risks
 - The gate change touches the hot routing path for every turn — the false-stays-excluded tests are the guardrail; land them first (TDD).
 - Phase 2 without Phase 1 is inert; Phase 1 without Phase 2 risks a null incapable model looping until the circuit breaker cools it — **ship Phases 1+2 together.**
-- Phase 3 is independent and can land first (pure cleanup); doing so also de-risks routing telemetry during Phases 1-2.
+- ~~Phase 3 is independent and can land first.~~ Withdrawn — see the Phase 3 note above.
