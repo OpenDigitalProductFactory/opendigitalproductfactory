@@ -47,6 +47,53 @@ generated utilities are canonical for new code.
 > to nothing. `apps/web/design/tokens-utilities.test.ts` runs the real compiler and asserts each
 > promised utility emits a rule, so a token under a namespace v4 does not expose fails loudly.
 
+## UX Budgets (L2)
+
+Every owner-facing surface has a measurable budget. `apps/web/lib/ux-budget/` is the one
+module that defines them, and the same numbers feed three consumers: the guidance agents
+read, the CI checkers, and the migration league table. Intended shell per route is
+**derived** from the existing audience/destination-kind registry
+(`lib/navigation/route-audience.ts`) — there is no second hand-kept route list.
+
+| Axis | Budgeted as |
+|------|-------------|
+| Default-visible words | Words on arrival, **collapsed disclosure excised** |
+| Lead band | Presence + word count of `data-dpf-lead` |
+| Primary actions | `data-dpf-primary-action` (falls back to submit buttons) |
+| Visible fields | Fields the owner must fill (not hidden/submit inputs) |
+| Choices per control | Largest single control's option count (Hick's law) |
+| Sub-legible controls | Always 0 — WCAG 2.2 AA 2.5.8 |
+| Reading level | Flesch–Kincaid tier per shell |
+| Deferred detail | Above a per-shell word threshold the surface **must** use disclosure |
+
+**Progressive disclosure is rewarded, never taxed.** Measurement excises
+`<details>` without `open`, `[data-dpf-disclosure]` without `open`, `[hidden]` and
+`[aria-hidden="true"]` — matching close tags by depth, so nested markup cannot leak a
+collapsed subtree back into the measured scope. Moving professional detail behind
+disclosure is the sanctioned fix for a surface over budget, and the budget measures it
+that way.
+
+**Enforcement splits by route age, not by axis.**
+
+- **Net-new routes — absolute budgets block from day one.** A pure ratchet freezes
+  whatever ships first, so a brand-new route would become its own baseline and could be
+  born as a wall of text without ever failing. Legacy debt earns a ratchet; new code has
+  no legacy excuse.
+- **Pre-existing routes — the same budgets are advisory**, reported on the PR, plus the
+  regression ratchet. Retrofitting absolutes onto them keeps the flip contract.
+- **WCAG and the deferred-detail rule block regardless of age** — those are standards
+  and structure, not calibration.
+
+Text-mass numbers are **platform-owned calibration, not science** — no evidence
+validates words-per-screen against user outcomes. They are versioned in
+`lib/ux-budget/budgets.ts` for a founder to adjust from lived review, and they only move
+downward. (Visual/perceptual metrics are a different case — those *are* validated and
+ratchet independently.)
+
+Pre-migration routes carry recorded exemptions (`next-action-marker`, `lead-band`) until
+they adopt their shell. The exemption list is checked in and shrinks visibly as the
+redesign lands — debt recorded, never hidden.
+
 ## Contrast Requirements
 
 All color pairs must meet WCAG 2.2 Level AA minimum contrast ratios:
