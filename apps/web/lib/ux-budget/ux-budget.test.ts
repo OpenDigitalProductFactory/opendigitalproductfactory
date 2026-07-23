@@ -13,6 +13,7 @@ import {
   countPrimaryActions,
   countVisibleFields,
   defaultVisibleHtml,
+  extractSubtrees,
   leadBandHtml,
   maxChoicesPerControl,
   measureUxBudget,
@@ -68,6 +69,32 @@ describe("disclosure scoping — collapsed detail is excised, never taxed", () =
     expect(out).toContain("<p>a</p>");
     expect(out).toContain("<p>b</p>");
     expect(out).not.toContain("<img");
+  });
+
+  it("treats XHTML-style self-closing tags as void", () => {
+    // The trailing slash lands in the captured attribute text now that the tag
+    // pattern is greedy, so it must be detected there.
+    const out = removeSubtrees(`<p>a</p><br/><p>b</p>`, (t) => t.name === "br");
+    expect(out).toContain("<p>a</p>");
+    expect(out).toContain("<p>b</p>");
+    const found = extractSubtrees(`<img src="x" />`, (t) => t.name === "img");
+    expect(found).toHaveLength(1);
+  });
+
+  it("does not backtrack exponentially on adjacent empty attribute values", () => {
+    // CodeQL js/redos: an earlier `[^>]` catch-all let `""` match two ways, so this
+    // input took exponential time. The branches are now mutually exclusive.
+    const pathological = `<a${'""'.repeat(60)}>text</a>`;
+    const started = performance.now();
+    defaultVisibleHtml(pathological);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it("still tolerates > inside a quoted attribute value", () => {
+    const html = `<div title="a > b"><p>kept</p></div><details><p>gone</p></details>`;
+    const visible = defaultVisibleHtml(html);
+    expect(visible).toContain("kept");
+    expect(visible).not.toContain("gone");
   });
 });
 

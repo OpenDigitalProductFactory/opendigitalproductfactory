@@ -45,8 +45,24 @@ export type TagToken = {
 };
 
 // Matches a tag while tolerating `>` inside quoted attribute values.
-const TAG_RE = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^>])*?)(\/?)>/g;
+//
+// The alternation branches are mutually exclusive BY CONSTRUCTION: the catch-all
+// excludes both quote characters, so a `"` can only ever be consumed by the quoted
+// branch. An earlier version used `[^>]` there, which let `""` be matched two
+// different ways and made the pattern exponentially backtrack on input like
+// `<a""""""…` (CodeQL js/redos). Unambiguous branches also mean the quantifier can be
+// greedy rather than lazy, which is what removes the backtracking entirely.
+//
+// Self-closing syntax is detected from the captured attribute text rather than a
+// trailing `(\/?)` group, because with a greedy catch-all the `/` of `<br/>` is
+// consumed as attribute text before such a group could see it.
+const TAG_RE = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/g;
 const ATTR_RE = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
+
+/** `<br/>` and `<img … />`: the trailing slash lands in the captured attribute text. */
+function hasSelfClosingSlash(rawAttrs: string): boolean {
+  return /\/\s*$/.test(rawAttrs);
+}
 
 function parseAttrs(raw: string): Record<string, string> {
   const attrs: Record<string, string> = {};
@@ -74,10 +90,10 @@ export function removeSubtrees(
   TAG_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = TAG_RE.exec(html)) !== null) {
-    const [full, closeSlash, rawName, rawAttrs, endSlash] = m;
+    const [full, closeSlash, rawName, rawAttrs] = m;
     const name = rawName.toLowerCase();
     const isClose = closeSlash === "/";
-    const isVoid = VOID_ELEMENTS.has(name) || endSlash === "/";
+    const isVoid = VOID_ELEMENTS.has(name) || hasSelfClosingSlash(rawAttrs);
 
     if (skipping) {
       // Only same-name tags move the depth counter; everything else is swallowed.
@@ -128,10 +144,10 @@ export function extractSubtrees(
   TAG_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = TAG_RE.exec(html)) !== null) {
-    const [full, closeSlash, rawName, rawAttrs, endSlash] = m;
+    const [full, closeSlash, rawName, rawAttrs] = m;
     const name = rawName.toLowerCase();
     const isClose = closeSlash === "/";
-    const isVoid = VOID_ELEMENTS.has(name) || endSlash === "/";
+    const isVoid = VOID_ELEMENTS.has(name) || hasSelfClosingSlash(rawAttrs);
 
     if (capture) {
       if (name === capture.name && !isVoid) {
