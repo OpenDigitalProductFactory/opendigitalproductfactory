@@ -32,6 +32,9 @@ export interface RouteAndCallOptions {
   agentMinimumContextTokens?: number;
   agentId?: string;
   agentMessageId?: string;
+  /** FeatureBuild this call belongs to. Threaded into AdapterRunTelemetry so
+   *  completeBuildPhaseRun can aggregate per-phase tokens/cost (BI-0A6B8B38). */
+  buildId?: string;
   routingActor?: RouteDecisionActor;
   effort?: "low" | "medium" | "high" | "max";
   previousResponseId?: string;

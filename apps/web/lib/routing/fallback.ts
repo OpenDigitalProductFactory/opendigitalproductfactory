@@ -36,6 +36,8 @@ type RouteOutcomeAttribution = {
    * adapter rows are written inside each iteration).
    */
   agentMessageId?: string | null;
+  /** FeatureBuild this call belongs to (BI-0A6B8B38 per-phase metering). */
+  buildId?: string | null;
 };
 
 function buildFallbackProviderSettings(
@@ -217,6 +219,7 @@ export async function callWithFallbackChain(
   let authRefreshRetried = false;
   const agentId = outcomeAttribution?.agentId?.trim() || mcpSession?.agentId?.trim() || null;
   const agentMessageId = outcomeAttribution?.agentMessageId?.trim() || null;
+  const buildId = outcomeAttribution?.buildId?.trim() || null;
 
   // Small local fallback models (Docker Model Runner / 7-13B class) reliably
   // handle ~10-15 tools before tool-selection accuracy collapses. When the
@@ -279,7 +282,7 @@ export async function callWithFallbackChain(
         entryPlan,
         i === 0 ? previousResponseId : undefined,
         mcpSession,
-        { agentId, agentMessageId },
+        { agentId, agentMessageId, buildId },
       );
 
       // EP-INF-004: Record successful request for rate tracking

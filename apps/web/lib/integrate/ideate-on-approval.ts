@@ -197,6 +197,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
         + `(provider=${attempt.providerId}, model=${attempt.modelId || "default"})`,
       );
       ideateResult = await dispatchIdeateResearch({
+        buildId,
         featureTitle,
         featureDescription,
         reusabilityScope: requestedReusabilityScope || "parameterizable",

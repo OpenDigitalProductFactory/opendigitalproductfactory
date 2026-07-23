@@ -450,6 +450,9 @@ export async function dispatchIdeateResearch(params: {
    *  "local"/undefined keeps it on the on-box model. */
   modelTier?: "local" | "robust";
   sensitivity?: "public" | "internal" | "confidential" | "restricted";
+  /** FeatureBuild this research belongs to — threaded into AdapterRunTelemetry
+   *  so completeBuildPhaseRun can meter the ideate phase (BI-0A6B8B38). */
+  buildId?: string;
   onProgress?: (message: string) => void;
 }): Promise<IdeateResult> {
   const dispatchEngine = params.dispatchEngine ?? "codex";
@@ -488,6 +491,7 @@ export async function dispatchIdeateResearch(params: {
             budgetClass: "quality_first",
             ...(providerId ? { allowedProviders: [providerId] } : {}),
             ...(params.modelTier ? { modelTier: params.modelTier } : {}),
+            ...(params.buildId ? { buildId: params.buildId } : {}),
           });
           return response.content ?? "";
         },

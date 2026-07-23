@@ -552,7 +552,7 @@ export async function routeAndCall(
       decision.executionPlan,
       options?.previousResponseId,
       options?.mcpSession,
-      { agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null },
+      { agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
     );
     applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
@@ -620,7 +620,7 @@ export async function routeAndCall(
     decision.executionPlan,
     options?.previousResponseId,
     options?.mcpSession,
-    { agentId: options?.agentId ?? null },
+    { agentId: options?.agentId ?? null, buildId: options?.buildId ?? null },
   );
   applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 

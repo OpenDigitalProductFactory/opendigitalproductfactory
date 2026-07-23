@@ -174,3 +174,34 @@ describe("writeAdapterTelemetry", () => {
     warn.mockRestore();
   });
 });
+
+// BI-0A6B8B38 — per-phase token/cost metering. completeBuildPhaseRun aggregates
+// AdapterRunTelemetry by buildId; before this every row had buildId NULL, so the
+// aggregate matched nothing and BuildPhaseRun tokens/cost were always 0/null.
+describe("writeAdapterTelemetry — buildId attribution (BI-0A6B8B38)", () => {
+  const base = {
+    adapterKind: "claude-code-cli" as const,
+    adapterVersion: "claude-code/1.2.3",
+    providerId: "anthropic-sub",
+    modelId: "claude-opus-4-7",
+    executionMode: "single" as const,
+    startedAt: new Date("2026-07-17T10:00:00.000Z"),
+    status: "success" as const,
+  };
+
+  it("persists buildId so completeBuildPhaseRun can aggregate the phase", async () => {
+    await writeAdapterTelemetry({ ...base, buildId: "FB-ABCD1234", inputTokens: 120, outputTokens: 45 });
+    expect(writeOverride).toHaveBeenCalledTimes(1);
+    const row = writeOverride.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row.buildId).toBe("FB-ABCD1234");
+    expect(row.inputTokens).toBe(120);
+    expect(row.outputTokens).toBe(45);
+  });
+
+  it("omits buildId when the call is not build-scoped (unchanged behaviour)", async () => {
+    await writeAdapterTelemetry({ ...base });
+    const row = writeOverride.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row.buildId).toBeUndefined();
+  });
+});
+

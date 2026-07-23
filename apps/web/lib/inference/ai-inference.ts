@@ -443,7 +443,7 @@ export async function callProvider(
   plan?: RoutedExecutionPlan,
   previousResponseId?: string,
   mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession,
-  attribution?: { agentId?: string | null; threadId?: string | null; skillId?: string | null; agentMessageId?: string | null },
+  attribution?: { agentId?: string | null; threadId?: string | null; skillId?: string | null; agentMessageId?: string | null; buildId?: string | null },
 ): Promise<InferenceResult> {
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
@@ -621,6 +621,7 @@ export async function callProvider(
         : (err instanceof Error ? err.message : undefined),
       agentId: attribution?.agentId ?? undefined,
       threadId: attribution?.threadId ?? undefined,
+      buildId: attribution?.buildId ?? undefined,
       skillId: attribution?.skillId ?? undefined,
       agentMessageId: attribution?.agentMessageId ?? undefined,
     });
@@ -672,6 +673,7 @@ export async function callProvider(
     toolCallsTotal: result.toolCalls.length,
     agentId: attribution?.agentId ?? undefined,
     threadId: attribution?.threadId ?? undefined,
+    buildId: attribution?.buildId ?? undefined,
     skillId: attribution?.skillId ?? undefined,
     agentMessageId: attribution?.agentMessageId ?? undefined,
   });
