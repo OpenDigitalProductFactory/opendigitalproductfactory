@@ -188,6 +188,9 @@ async function generateNormalizedPlan(args: {
   priorReviewIssues?: ReadonlyArray<PlanReviewIssue>;
   /** EP-MODEL-TIER-ROUTING: capability tier for plan generation. */
   modelTier?: "local" | "robust";
+  /** FeatureBuild this generation belongs to — threaded into AdapterRunTelemetry
+   *  so completeBuildPhaseRun can meter the plan phase (BI-0A6B8B38). */
+  buildId?: string;
   log: (summary: string) => Promise<void>;
 }): Promise<{ plan: { fileStructure?: unknown[]; tasks?: unknown[] } } | { error: string }> {
   const { routeAndCall } = await import("@/lib/inference/routed-inference");
@@ -211,7 +214,7 @@ async function generateNormalizedPlan(args: {
       [{ role: "user" as const, content: prompt }],
       systemPrompt,
       "internal",
-      { budgetClass: "quality_first", ...(args.modelTier ? { modelTier: args.modelTier } : {}) },
+      { budgetClass: "quality_first", ...(args.modelTier ? { modelTier: args.modelTier } : {}), ...(args.buildId ? { buildId: args.buildId } : {}) },
     );
     planObj = parsePlanJson(response.content);
     if (!planObj) {
@@ -376,6 +379,7 @@ export async function dispatchPlanForApprovedBuild(params: {
 
     // 3-7. Generate the initial plan (helper handles parse-retry + validate + normalize).
     const gen = await generateNormalizedPlan({
+      buildId,
       title: build.title,
       designDoc: build.designDoc as Record<string, unknown>,
       biTitle,
@@ -410,6 +414,7 @@ export async function dispatchPlanForApprovedBuild(params: {
       round++;
       await log(`Plan review failed — revising (round ${round}/${PLAN_FIX_MAX_ROUNDS}) against ${review.issues.length} blocking issue(s)`);
       const revised = await generateNormalizedPlan({
+        buildId,
         title: build.title,
         designDoc: build.designDoc as Record<string, unknown>,
         biTitle,

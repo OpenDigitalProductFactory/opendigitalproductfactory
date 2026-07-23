@@ -180,3 +180,25 @@ when effort size is "small"; a small doc/chore stays light. Monotonic — can on
 raise rigor above the matrix baseline. When the code-graph + EA provider
 (BI-22250BA2) lands it swaps the interim keyword blast radius for the graph-derived
 one behind the same `warrantForBacklogItem` seam; no gate-site changes.
+
+## Token/cost metering (BI-0A6B8B38) — feat/build-token-metering
+
+Root cause found by inspection: `completeBuildPhaseRun` already aggregates
+`AdapterRunTelemetry` by `buildId`, and routed inference already returns
+`tokenUsage` — but **`buildId` was NULL on all 27,043 telemetry rows** (and
+`threadId` too), so the aggregate matched nothing and every `BuildPhaseRun` showed
+`inputTokens=0, outputTokens=0, costUsd=null, inferenceCount=0`. The writer already
+accepted `buildId`; no caller ever passed it.
+
+Fix threads build attribution end-to-end:
+`RouteAndCallOptions.buildId` → `routeAndCall` → `callWithFallbackChain`
+(`RouteOutcomeAttribution.buildId`) → `callProvider` attribution → `ai-inference`
+→ `writeAdapterTelemetry({ buildId })`. Phase call sites now pass it:
+`dispatchIdeateResearch` (ideate) and `generateNormalizedPlan` (plan).
+
+Effect: per-phase tokens/cost/inferenceCount populate, which is what makes the
+warrant's `budget.tokenCeiling` enforceable rather than advisory.
+
+Follow-on: the build phase's coding-agent path (`coding-agent.ts` routeAndCall) has
+no buildId in scope — threading it needs a param through its callers; tracked as
+the remainder of BI-0A6B8B38.
