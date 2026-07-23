@@ -3,7 +3,7 @@
 // Qdrant, runs the decide() math, and returns a complete contribution
 // ledger + flags + reasoning.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
@@ -16,6 +16,7 @@ const { mockPrisma } = vi.hoisted(() => ({
 const listPrinciplesByTier = vi.fn();
 const searchWikiPages = vi.fn();
 const generateEmbedding = vi.fn();
+const isEmbeddingAvailable = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -35,6 +36,7 @@ vi.mock("@/lib/wiki/embeddings", () => ({
 
 vi.mock("@/lib/inference/embedding", () => ({
   generateEmbedding: (...args: unknown[]) => generateEmbedding(...args),
+  isEmbeddingAvailable: (...args: unknown[]) => isEmbeddingAvailable(...args),
 }));
 
 import { executeTool } from "./mcp-tools";
@@ -44,6 +46,15 @@ afterEach(() => {
   listPrinciplesByTier.mockReset();
   searchWikiPages.mockReset();
   generateEmbedding.mockReset();
+  isEmbeddingAvailable.mockReset();
+});
+
+// Provider healthy by default — these tests predate BI-512FBD20 and assert on
+// retrieval + scoring, not on the degradation path. The pack only probes
+// isEmbeddingAvailable when BOTH retrieval passes are empty; a default of true
+// keeps a genuinely-empty consult classified as "no match", not "provider down".
+beforeEach(() => {
+  isEmbeddingAvailable.mockResolvedValue(true);
 });
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
