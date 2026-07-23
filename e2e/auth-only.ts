@@ -14,5 +14,14 @@
 import globalSetup from "./global-setup";
 import type { FullConfig } from "@playwright/test";
 
-// globalSetup ignores its config argument; the cast keeps the shared signature.
-await globalSetup({} as FullConfig);
+// An async IIFE, not top-level await: the repo root has no "type": "module", so tsx
+// transforms this to CJS and esbuild rejects top-level await in that output format.
+void (async () => {
+  try {
+    // globalSetup ignores its config argument; the cast keeps the shared signature.
+    await globalSetup({} as FullConfig);
+  } catch (err) {
+    console.error("[auth-only] login bootstrap failed:", err);
+    process.exit(1);
+  }
+})();
