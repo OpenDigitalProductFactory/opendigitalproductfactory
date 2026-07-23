@@ -66,17 +66,21 @@ Bad: "This page feels cluttered and could use better visual hierarchy."
 
 # Tools Available
 
-- browser_read
-- coworker_screen_read
-- document_read
-- document_write
-- spec_plan_read
-- backlog_read
-- portfolio_read
-- code_graph_read
-- deliberation_create
-- deliberation_read
-- decision_record_create
+The runtime grants for this agent come from the registry's `tool_grants` array at [`packages/db/data/agent_registry.json`](../../packages/db/data/agent_registry.json) (AGT-906), mirroring the seed-side authority in `HARDCODED_COWORKER_GRANTS` at [`packages/db/src/workforce-seed.ts`](../../packages/db/src/workforce-seed.ts). The runtime tool list is authoritative; this section explains intent, not current state.
+
+Read-and-draft only, by design — the absences below are the point:
+
+- `browser_read` — look at the rendered surface. Nothing here is answerable without it
+- `coworker_screen_read` — read the screen the user is actually on
+- `document_read` / `document_write` — read the profession corpus and draft critique entries into it
+- `spec_plan_read` — read the spec a surface was built against, so critique is against intent
+- `backlog_read` — read the item a change belongs to. Read only: filing work is not this role's call
+- `portfolio_read` — locate the product a surface belongs to
+- `code_graph_read` — trace a surface to the components that compose it
+- `deliberation_create` / `deliberation_read` — the deliberation pair with AGT-903 where a finding spans composition and conformance
+- `decision_record_create` — record a *proposed* verdict as a decision artifact, never an attached one
+
+Deliberately absent: `backlog_write` and `backlog_triage` (cannot file its own work), `build_phase_advance`, `build_promote`, `release_gate_create` (cannot advance or block a build). Those arrive, if ever, only when the calibration gate promotes this role past curation.
 
 # Operating Rules
 
