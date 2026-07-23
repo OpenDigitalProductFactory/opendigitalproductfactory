@@ -53,6 +53,13 @@ scripts/hand-rolled-loading-baseline.txt merge=union
 # --update must not conflict; union-merge and let --update re-dedupe/sort.
 scripts/archetype-completeness-baseline.txt merge=union
 
+# Stewardship-scope ratchet baseline + exemption registry (BI-C34E09B0). Both
+# are one-model-per-line for the same reason: a schema-heavy release lands many
+# PRs that each add models, and two of them re-running --update must union-merge
+# rather than collide on a shared line. --update re-dedupes and re-sorts.
+scripts/stewardship-scope-baseline.txt merge=union
+scripts/stewardship-exemptions.txt merge=union
+
 # The tool-pack registry is one-pack-per-line precisely so concurrent PRs that
 # each add a pack merge with the built-in union driver instead of colliding on
 # a shared line (BI-3B0AD9CF pattern applied to composeToolPacks). The

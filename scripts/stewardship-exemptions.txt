@@ -1,0 +1,48 @@
+# Stewardship retention exemptions (BI-C34E09B0).
+#
+# The third disposition. A persistent Prisma model normally declares itself
+# either purgeable (PURGE_POLICIES) or regulated-retained (RETAINED_DATASETS) in
+# apps/web/lib/operate/retention/policies.ts. Some models legitimately belong to
+# NEITHER — and before this file, that was expressed only by ABSENCE, which is
+# indistinguishable from the silent omission the gate exists to catch.
+#
+# Format:  ModelName  reason-slug  # rationale
+#
+# Valid reason slugs (closed set — packages: scripts/lib/stewardship-scope.mjs):
+#   reference-data            Reference / lookup data. Superseded by
+#                             replacement, never aged out.
+#   config-singleton          Single-row (or per-org) configuration. Lifetime is
+#                             the install's lifetime.
+#   domain-lifecycle-managed  Rows are created and removed by their own domain
+#                             lifecycle, so a time-based sweep races that owner.
+#   derived-projection        Derived from a source of record; rebuilt or
+#                             cascaded, never independently aged.
+#
+# DO NOT use this file to park a model you have not thought about — that is what
+# the ratchet baseline (stewardship-scope-baseline.txt) is for. An entry here is
+# a positive assertion that no retention window applies.
+#
+# Equally: do NOT resolve a gap by inventing a purge window. The retention engine
+# EXECUTES PURGE_POLICIES; a fabricated window on reference data deletes it.
+
+# ── Reference / lookup data ──────────────────────────────────────────────────
+# Every model below is already declared "public" in
+# packages/db/src/table-classification.ts, whose own tier definition reads
+# "Reference / lookup data safe for any environment". These entries record that
+# existing decision on the retention axis; they do not introduce a new judgement.
+
+TaxonomyNode         reference-data  # Canonical product/skill taxonomy tree.
+EaElementType        reference-data  # ArchiMate element type catalogue.
+EaRelationshipType   reference-data  # ArchiMate relationship type catalogue.
+EaRelationshipRule   reference-data  # ArchiMate legal-relationship matrix.
+EaDqRule             reference-data  # EA data-quality rule definitions.
+EaNotation           reference-data  # EA notation/rendering reference.
+EaStructureRule      reference-data  # EA structural validity rules.
+ViewpointDefinition  reference-data  # ArchiMate viewpoint catalogue.
+StorefrontArchetype  reference-data  # Storefront archetype catalogue.
+PlatformCapability   reference-data  # Platform capability catalogue.
+Country              reference-data  # ISO country reference data.
+Region               reference-data  # Sub-national region reference data.
+City                 reference-data  # City reference data.
+EmploymentType       reference-data  # HR employment-type lookup.
+WorkLocation         reference-data  # HR work-location lookup.
