@@ -223,7 +223,21 @@ export async function deleteWikiPageVector(pageId: string): Promise<void> {
  */
 export async function searchWikiPages(input: SearchWikiPagesInput): Promise<WikiSearchResult[]> {
   const vector = await generateEmbedding(input.query);
-  if (!vector) return [];
+  if (!vector) {
+    // BI-512FBD20. A null vector means the query could not be embedded — the
+    // provider is down or the model is missing. Returning [] here is
+    // indistinguishable, to the caller, from "no page matched", which is how
+    // wiki_query and principle_decide silently degraded to empty results while
+    // reporting themselves healthy. The [] contract stays (callers expect it),
+    // but the failure is now loud in the logs with a distinct, greppable marker
+    // and the exact fix. `make-silent-failures-observable`.
+    console.error(
+      "[searchWikiPages] embedding-provider-unavailable — query could not be " +
+        "embedded, returning no results (NOT an empty match). " +
+        "Fix: docker model pull ai/nomic-embed-text-v1.5",
+    );
+    return [];
+  }
 
   const limit = input.limit ?? 5;
   const scoreThreshold = input.scoreThreshold ?? 0.55;

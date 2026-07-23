@@ -9,6 +9,7 @@ const wiki = vi.hoisted(() => ({
   decide: vi.fn(),
   principleMatchesRingScope: vi.fn(),
   generateEmbedding: vi.fn(),
+  isEmbeddingAvailable: vi.fn(),
 }));
 const decision = vi.hoisted(() => ({
   resolveDecisionCallerContext: vi.fn(),
@@ -57,6 +58,7 @@ vi.mock("@/lib/wiki/calling-ring-map", () => ({
 }));
 vi.mock("@/lib/inference/embedding", () => ({
   generateEmbedding: (...a: unknown[]) => wiki.generateEmbedding(...a),
+  isEmbeddingAvailable: (...a: unknown[]) => wiki.isEmbeddingAvailable(...a),
 }));
 vi.mock("@/lib/decision/caller-context", () => ({
   resolveDecisionCallerContext: (...a: unknown[]) => decision.resolveDecisionCallerContext(...a),
@@ -76,6 +78,8 @@ beforeEach(() => {
   db.organizationFindFirst.mockResolvedValue({ id: "org-1" });
   wiki.searchWikiPages.mockResolvedValue([]);
   wiki.generateEmbedding.mockResolvedValue(undefined);
+  // Provider healthy by default; the degradation tests flip this to false.
+  wiki.isEmbeddingAvailable.mockResolvedValue(true);
   wiki.principleMatchesRingScope.mockReturnValue(true);
   decision.resolveDecisionCallerContext.mockResolvedValue({
     governingProfileId: "prof-1",
@@ -320,6 +324,90 @@ describe("principle-decide pack — abstention is machine-checkable", () => {
         signalQuality: { usable: false, optionsWithFeatures: 0, optionCount: 1 },
       }),
     );
+  });
+});
+
+describe("principle-decide pack — retrieval degradation is loud (BI-512FBD20)", () => {
+  // The failure this pins: on 2026-07-22 the embedding provider was 404ing, so
+  // both semantic-retrieval passes came back empty and the consult ran on
+  // commandments alone — while reporting structuredCoverage "strong". A consult
+  // must never again imply full coverage when core/contextual retrieval was
+  // structurally impossible.
+
+  it("flags retrievalDegraded and refuses to be usable when the provider is down", async () => {
+    // Both passes empty (searchWikiPages default) AND the provider is down.
+    wiki.isEmbeddingAvailable.mockResolvedValue(false);
+    wiki.decide.mockReturnValue({
+      // Even if the commandment-only field produced a nominal winner, a
+      // degraded consult is not a verdict.
+      recommendation: { optionId: "a", composite: 2, margin: 1, confidence: "high" },
+      scores: [],
+      flags: { insufficientSignal: false, structuredCoverage: "strong", semanticFallbackRatio: 0 },
+      reasoning: "commandment-only winner",
+    });
+    const res = await principleDecidePack.handlers.principle_decide(
+      {
+        context: "x",
+        callingPopulation: "human",
+        options: [{ id: "a", description: "A", features: { reusability: 0.9 } }],
+      },
+      "u1",
+    );
+    expect(res.success).toBe(true); // advisory tool stays advisory
+    expect(res.message).toMatch(/^NO RECOMMENDATION — signalQuality\.retrievalDegraded=true/);
+    const sq = (res.data as { signalQuality: { usable: boolean; retrievalDegraded: boolean; advisory: string } })
+      .signalQuality;
+    expect(sq.retrievalDegraded).toBe(true);
+    expect(sq.usable).toBe(false);
+    expect(sq.advisory).toMatch(/EMBEDDING PROVIDER UNAVAILABLE/);
+    expect(sq.advisory).toMatch(/docker model pull ai\/nomic-embed-text-v1\.5/);
+  });
+
+  it("does NOT flag degradation when both passes are empty but the provider is up (a genuine no-match)", async () => {
+    wiki.isEmbeddingAvailable.mockResolvedValue(true);
+    wiki.decide.mockReturnValue({
+      recommendation: { optionId: "a", composite: 2, margin: 1, confidence: "high" },
+      scores: [],
+      flags: { insufficientSignal: false, structuredCoverage: "strong", semanticFallbackRatio: 0 },
+      reasoning: "ok",
+    });
+    const res = await principleDecidePack.handlers.principle_decide(
+      {
+        context: "x",
+        callingPopulation: "human",
+        options: [{ id: "a", description: "A", features: { reusability: 0.9 } }],
+      },
+      "u1",
+    );
+    expect(res.message).toMatch(/^Recommends a/);
+    const sq = (res.data as { signalQuality: { usable: boolean; retrievalDegraded: boolean } }).signalQuality;
+    expect(sq.retrievalDegraded).toBe(false);
+    expect(sq.usable).toBe(true);
+  });
+
+  it("does NOT probe the provider when retrieval actually returned principles", async () => {
+    // A populated core pass means retrieval ran — no reason to probe, and no
+    // degradation regardless of provider state.
+    wiki.searchWikiPages.mockResolvedValueOnce([
+      { pageId: "p1", title: "Some Core Principle", principleTier: "core", contentPreview: "direction" },
+    ]);
+    wiki.decide.mockReturnValue({
+      recommendation: { optionId: "a", composite: 2, margin: 1, confidence: "high" },
+      scores: [],
+      flags: { insufficientSignal: false, structuredCoverage: "strong", semanticFallbackRatio: 0 },
+      reasoning: "ok",
+    });
+    const res = await principleDecidePack.handlers.principle_decide(
+      {
+        context: "x",
+        callingPopulation: "human",
+        options: [{ id: "a", description: "A", features: { reusability: 0.9 } }],
+      },
+      "u1",
+    );
+    expect(wiki.isEmbeddingAvailable).not.toHaveBeenCalled();
+    const sq = (res.data as { signalQuality: { retrievalDegraded: boolean } }).signalQuality;
+    expect(sq.retrievalDegraded).toBe(false);
   });
 });
 

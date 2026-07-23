@@ -185,7 +185,9 @@ async function principleDecide(
   // Used both for principle direction text (Qdrant-sourced principles
   // have empty dimensionVector) and for option descriptions when the
   // caller passes empty features. Pre-fix, both produced alignment=0.
-  const { generateEmbedding } = await import("@/lib/inference/embedding");
+  const { generateEmbedding, isEmbeddingAvailable } = await import(
+    "@/lib/inference/embedding"
+  );
 
   // Validate ringScope per the closed taxonomy registry. Unknown values
   // fail fast instead of silently degrading to universal — silent skip
@@ -499,24 +501,60 @@ async function principleDecide(
   const optionsWithFeatures = decisionOptions.filter(
     (o) => Object.keys(o.features ?? {}).length > 0,
   ).length;
-  const usable = !result.flags.insufficientSignal && result.recommendation !== null;
+
+  // BI-512FBD20. When BOTH semantic-retrieval passes come back empty, the
+  // consult ran on commandments alone — and that is indistinguishable, from
+  // the scores, between "no core/contextual principle was relevant" and "the
+  // embedding provider is down, so retrieval could not run at all". The second
+  // case is the silent kernel degradation this BI exists to kill: on
+  // 2026-07-22 the provider was 404ing and every consult applied ~18
+  // commandments out of 162 principles while flagging structuredCoverage
+  // "strong". So when both passes are empty we PROBE the provider once and, if
+  // it is unavailable, say so loudly — a consult must never again imply full
+  // coverage while core/contextual retrieval was structurally impossible.
+  // `make-silent-failures-observable`, applied to the kernel's own recall.
+  let retrievalDegraded = false;
+  if (core.length === 0 && contextual.length === 0) {
+    retrievalDegraded = !(await isEmbeddingAvailable());
+    if (retrievalDegraded) {
+      console.error(
+        "[principle_decide] retrieval degraded — embedding provider unavailable; " +
+          "consulted commandments only. Fix: docker model pull ai/nomic-embed-text-v1.5",
+      );
+    }
+  }
+
+  const usable =
+    !result.flags.insufficientSignal &&
+    result.recommendation !== null &&
+    !retrievalDegraded;
+  const degradedAdvisory =
+    "EMBEDDING PROVIDER UNAVAILABLE — only commandment-tier principles were consulted; " +
+    "core and contextual retrieval returned nothing because the query could not be embedded, " +
+    "NOT because no relevant principle exists. Treat this as an incomplete consult, not a verdict. " +
+    "Restore the provider (docker model pull ai/nomic-embed-text-v1.5), then re-run.";
   const signalQuality = {
     usable,
     insufficientSignal: result.flags.insufficientSignal,
+    retrievalDegraded,
     structuredCoverage: result.flags.structuredCoverage,
     semanticFallbackRatio: result.flags.semanticFallbackRatio,
     optionsWithFeatures,
     optionCount: decisionOptions.length,
     advisory: usable
       ? null
-      : optionsWithFeatures === 0
-        ? "NO OPTION SUPPLIED `features`, so every principle scored exactly 0. Governance commandments carry full dimension vectors, so scoring takes the structured path and the semantic fallback never fires for them. Re-call with a features map per option — this is not a neutral or tie result."
-        : "Signal was too weak to recommend. Widen per-option `features` coverage across the dimensions the applied principles actually weigh (see each contribution's missingDimensions), or decide by human judgement.",
+      : retrievalDegraded
+        ? degradedAdvisory
+        : optionsWithFeatures === 0
+          ? "NO OPTION SUPPLIED `features`, so every principle scored exactly 0. Governance commandments carry full dimension vectors, so scoring takes the structured path and the semantic fallback never fires for them. Re-call with a features map per option — this is not a neutral or tie result."
+          : "Signal was too weak to recommend. Widen per-option `features` coverage across the dimensions the applied principles actually weigh (see each contribution's missingDimensions), or decide by human judgement.",
   };
 
   const summary = usable
     ? `Recommends ${result.recommendation!.optionId} (confidence: ${result.recommendation!.confidence}, composite ${result.recommendation!.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
-    : `NO RECOMMENDATION — signalQuality.usable=false. ${result.reasoning} ${signalQuality.advisory}`;
+    : retrievalDegraded
+      ? `NO RECOMMENDATION — signalQuality.retrievalDegraded=true. ${degradedAdvisory}`
+      : `NO RECOMMENDATION — signalQuality.usable=false. ${result.reasoning} ${signalQuality.advisory}`;
 
   // Persist the consult to the DecisionInteraction ledger so the decision
   // governance hub can audit that the gate is in use (per-tier log at
