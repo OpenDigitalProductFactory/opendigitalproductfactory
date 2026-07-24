@@ -1,11 +1,16 @@
 #!/bin/sh
 #
-# pre-commit: runs before every local commit. Four guards:
+# pre-commit: runs before every local commit. Guards:
 #
 #   1. Migration immutability — reject commits that modify previously-committed
 #      Prisma migration .sql files (drift prevention).
 #   2. Stale Prisma client refresh — regenerate when schema.prisma is newer
 #      than the generated client.
+#   2b. Derived-artifact registry — regenerate + stage any registered derived
+#      artifact (doc index, doc-impact manifest, doc diagrams, capability
+#      catalog, ...) whose sources are staged. Same "regenerate transparently"
+#      shape as Guard 2, generalized via scripts/derived-artifacts-gate.mjs +
+#      scripts/lib/derived-artifacts-registry.mjs (BI-48768E05).
 #   3. Secret scan gate — scan the staged snapshot with gitleaks before bytes
 #      enter Git history.
 #   4. Typecheck gate — when TypeScript files are staged, run `pnpm typecheck`
@@ -85,6 +90,23 @@ if [ -f "$SCHEMA" ] && [ -f "$CLIENT" ] && [ "$SCHEMA" -nt "$CLIENT" ]; then
     exit 1
   fi
   echo "[pre-commit] Prisma client refreshed."
+fi
+
+# ─── Guard 2b: derived-artifact registry ────────────────────────────────────
+# If a check can compute its own fix, apply it at commit time, not report it
+# at CI time (BI-48768E05). scripts/derived-artifacts-gate.mjs consults the
+# single-source-of-truth registry (scripts/lib/derived-artifacts-registry.mjs)
+# for every registered derived artifact (doc index, doc-impact manifest, doc
+# diagrams, capability/service catalog, ...), regenerates and `git add`s any
+# whose sources are among the staged files, and prints exactly what it did.
+# An artifact whose generator embeds a deliberate human judgment call (the
+# SBOM drift baseline) is advised, never auto-staged — see the registry's
+# per-entry `autoStage` comment.
+
+if [ -f "scripts/derived-artifacts-gate.mjs" ]; then
+  if ! node scripts/derived-artifacts-gate.mjs regenerate-staged; then
+    exit 1
+  fi
 fi
 
 # ─── Guard 3: staged secret scan ────────────────────────────────────────────
