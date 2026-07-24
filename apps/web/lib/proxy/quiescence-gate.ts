@@ -19,6 +19,7 @@
  *   /api/health
  *   /api/v1/edge/*          (edge-node heartbeats)
  *   /api/internal/quiescence-state   (we'd recurse otherwise)
+ *   /api/mcp/v1             (route enforces read/write tool policy)
  *
  * Fail-open / fail-closed (§12 Q6 decision):
  *
@@ -52,6 +53,9 @@ const ALLOW_LISTED_PREFIXES = [
   "/api/health",
   "/api/v1/edge/",
   "/api/internal/quiescence-state",
+  // MCP is POST-only transport even for read-only tools. Let the route inspect
+  // the tool name and refuse only mutating calls during quiescence.
+  "/api/mcp/v1",
   // The Inngest serve endpoint IS the control plane that DRIVES quiescence —
   // the coordinator function executes via callbacks to this route. Gating it
   // would deadlock the very function that transitions draining→ready-to-swap

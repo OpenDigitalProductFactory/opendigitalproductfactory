@@ -282,6 +282,8 @@ esac
     .split("\n")
     .map((line) => JSON.parse(line).params.name);
   assert.deepEqual(calls, [
+    "get_quiescence_status",
+    "list_nonprod_environment_leases",
     "claim_nonprod_environment_lease",
     "release_nonprod_environment_lease",
     "record_local_integration_result",
@@ -367,10 +369,191 @@ esac
     .split("\n")
     .map((line) => JSON.parse(line).params.name);
   assert.deepEqual(calls, [
+    "get_quiescence_status",
+    "list_nonprod_environment_leases",
     "claim_nonprod_environment_lease",
     "release_nonprod_environment_lease",
     "record_local_integration_result",
   ]);
+});
+
+test("gate-worktree.sh preserves a passed gate when evidence recording is quiescence-blocked", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-quiescence-"));
+  const callsFile = join(temp, "calls.ndjson");
+  const gitStub = join(temp, "git");
+  const curlStub = join(temp, "curl");
+
+  writeFileSync(gitStub, `#!/bin/sh
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
+  echo "${temp}/$3"
+  exit 0
+fi
+if [ "$1" = "push" ]; then
+  exit 0
+fi
+echo "unexpected git call: $*" >&2
+exit 1
+`);
+  writeFileSync(curlStub, `#!/bin/sh
+data=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --data) data="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s\\n' "$data" >> "${callsFile}"
+tool="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); console.log(p.params.name)' <<EOF
+$data
+EOF
+)"
+case "$tool" in
+  get_quiescence_status)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"level\\":\\"normal\\",\\"writesRefused\\":false}}"}]}}'
+    ;;
+  claim_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
+    ;;
+  record_local_integration_result)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":false,\\"error\\":\\"portal_quiescing\\",\\"message\\":\\"Mutating MCP write refused during draining.\\",\\"data\\":{\\"level\\":\\"draining\\",\\"runId\\":\\"QR-Q\\",\\"retryAfterSeconds\\":30,\\"writesRefused\\":true}}"}],"structuredContent":{"error":"portal_quiescing","level":"draining","runId":"QR-Q","retryAfterSeconds":30,"writesRefused":true},"isError":true}}'
+    ;;
+  release_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
+    ;;
+  *)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":false,\\"error\\":\\"unexpected_tool\\"}"}]}}'
+    ;;
+esac
+`);
+  chmodSync(gitStub, 0o755);
+  chmodSync(curlStub, 0o755);
+
+  const result = runGate([
+    "--branch",
+    "feat/local-ci-sandbox",
+    "--sha",
+    "abc123",
+    "--worktree",
+    temp,
+    "--no-push",
+  ], {
+    env: {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_LOCAL_CI_COMMAND: "exit 0",
+      DPF_GATE_GIT_BIN: gitStub,
+      DPF_GATE_CURL_BIN: curlStub,
+    },
+  });
+
+  assert.equal(result.status, 4, `expected pending-evidence exit 4, got ${result.status}\n${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /local-CI gate passed but evidence recording is pending/i);
+  assert.match(result.stderr, /--finalize-evidence/);
+
+  const calls = readFileSync(callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line).params.name);
+  assert.deepEqual(calls, [
+    "get_quiescence_status",
+    "list_nonprod_environment_leases",
+    "claim_nonprod_environment_lease",
+    "record_local_integration_result",
+    "release_nonprod_environment_lease",
+  ]);
+
+  const state = JSON.parse(readFileSync(join(temp, "dpf-local-ci-gate.json"), "utf8"));
+  assert.equal(state.gatePassed, true);
+  assert.equal(state.status, "passed");
+  assert.equal(state.evidencePending, true);
+  assert.equal(state.evidencePendingReason, "portal_quiescing");
+  assert.equal(state.leaseId, "NPEL-Q");
+  assert.ok(existsSync(join(temp, "dpf-local-ci-pending-evidence.json")));
+});
+
+test("gate-worktree.sh --finalize-evidence records pending evidence without rerunning the expensive gate", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-finalize-"));
+  const callsFile = join(temp, "calls.ndjson");
+  const gitStub = join(temp, "git");
+  const curlStub = join(temp, "curl");
+
+  writeFileSync(gitStub, `#!/bin/sh
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
+  echo "${temp}/$3"
+  exit 0
+fi
+echo "unexpected git call: $*" >&2
+exit 1
+`);
+  writeFileSync(curlStub, `#!/bin/sh
+data=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --data) data="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s\\n' "$data" >> "${callsFile}"
+tool="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); console.log(p.params.name)' <<EOF
+$data
+EOF
+)"
+case "$tool" in
+  get_quiescence_status)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"level\\":\\"normal\\",\\"writesRefused\\":false}}"}]}}'
+    ;;
+  record_local_integration_result)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"EXT-LATE\\"}"}]}}'
+    ;;
+  *)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":false,\\"error\\":\\"unexpected_tool\\"}"}]}}'
+    ;;
+esac
+`);
+  chmodSync(gitStub, 0o755);
+  chmodSync(curlStub, 0o755);
+
+  writeFileSync(join(temp, "dpf-local-ci-pending-evidence.json"), JSON.stringify({
+    schema: "dpf-local-ci-pending-evidence/v1",
+    branch: "feat/local-ci-sandbox",
+    sha: "abc123",
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    recordArgs: {
+      branch: "feat/local-ci-sandbox",
+      sha: "abc123",
+      status: "passed",
+      summary: "local-CI passed; evidence replay",
+      evidence: { gatePassed: true },
+    },
+  }));
+
+  const result = runGate([
+    "--finalize-evidence",
+    "--branch",
+    "feat/local-ci-sandbox",
+    "--sha",
+    "abc123",
+    "--worktree",
+    temp,
+    "--no-push",
+  ], {
+    env: {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_GATE_GIT_BIN: gitStub,
+      DPF_GATE_CURL_BIN: curlStub,
+    },
+  });
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /recorded pending local-CI evidence/i);
+  const calls = readFileSync(callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line).params.name);
+  assert.deepEqual(calls, [
+    "get_quiescence_status",
+    "record_local_integration_result",
+  ]);
+
+  const state = JSON.parse(readFileSync(join(temp, "dpf-local-ci-gate.json"), "utf8"));
+  assert.equal(state.gatePassed, true);
+  assert.equal(state.evidencePending, false);
+  assert.equal(state.evidenceRecordId, "EXT-LATE");
 });
 
 test("gate-worktree.sh includes content-addressed local integration metadata in evidence (BI-76551B2D)", () => {
@@ -699,6 +882,25 @@ test("pre-push-gate passes with a matching passing gate record for branch+SHA", 
   const result = runGateHook(dir, { input: refsLine(g) });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /local-CI gate passed/);
+});
+
+test("pre-push-gate blocks a matching gate record while evidence publication is pending", () => {
+  const { dir, g } = makeTempRepo();
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-aqm", "runtime change"]);
+  const sha = g(["rev-parse", "HEAD"]);
+  writeFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), JSON.stringify({
+    branch: "feat/topic",
+    sha,
+    gatePassed: true,
+    evidencePending: true,
+    evidencePendingReason: "portal_quiescing",
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  }));
+  const result = runGateHook(dir, { input: refsLine(g) });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /local-CI gate passed but evidence publication is still pending/i);
+  assert.match(result.stderr, /scripts\/gate-worktree\.sh --finalize-evidence/);
 });
 
 test("pre-push-gate blocks an expired matching gate record", () => {

@@ -65,7 +65,7 @@ describe("createLocalIntegrationPlan", () => {
       "node scripts/gen-doc-index.mjs --check",
       "node scripts/check-doc-links.mjs",
       "node scripts/check-guards.mjs",
-      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run",
+      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
@@ -80,8 +80,25 @@ describe("createLocalIntegrationPlan", () => {
     });
 
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
-      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run",
+      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
     ));
+  });
+
+  it("caps Vitest workers in local-CI for repeatable sandbox evidence", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/stabilize-sandbox-vitest",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+    });
+
+    const vitestCommand = plan.commands.map((command) => command.join(" ")).find((command) => (
+      command.includes("pnpm --filter web exec vitest run")
+    ));
+    assert.equal(
+      vitestCommand,
+      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
+    );
   });
 
   it("uses a locally available accepted-base ref without fetching by default (BI-76551B2D)", () => {

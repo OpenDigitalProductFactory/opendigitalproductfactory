@@ -320,7 +320,7 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
       summary: "local-CI gate blocked: sandbox dependency state is stale or not ready. This is a sandbox defect, NOT product build evidence. Run the governed convergence path and re-gate.",
     };
   }
-  if (gateExitCode === EXIT_SANDBOX_DRIFT || gateExitCode === EXIT_SANDBOX_NOT_READY) {
+  if (!freshnessVerdict && (gateExitCode === EXIT_SANDBOX_DRIFT || gateExitCode === EXIT_SANDBOX_NOT_READY)) {
     return {
       status: "blocked_sandbox_drift",
       gatePassed: false,

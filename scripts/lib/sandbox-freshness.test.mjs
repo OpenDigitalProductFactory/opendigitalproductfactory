@@ -313,3 +313,9 @@ test("classifyGateOutcome passes/fails normally when the sandbox is green", () =
   assert.equal(failed.status, "failed");
   assert.equal(failed.productEvidence, true);
 });
+
+test("classifyGateOutcome treats pnpm lifecycle exit 3 as product evidence when freshness is green", () => {
+  const failed = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_SANDBOX_DRIFT });
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.productEvidence, true);
+});

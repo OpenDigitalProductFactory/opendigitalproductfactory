@@ -12,6 +12,14 @@ vi.mock("@/lib/mcp-governed-execute", () => ({
   governedExecuteTool: vi.fn(),
 }));
 
+const { getQuiescenceConfigMock } = vi.hoisted(() => ({
+  getQuiescenceConfigMock: vi.fn(),
+}));
+
+vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  getQuiescenceConfig: getQuiescenceConfigMock,
+}));
+
 vi.mock("@/lib/tak/autonomous-work-run", () => ({
   createAutonomousWorkRun: vi.fn(),
   executeAutonomousAgenticLoop: vi.fn(),
@@ -92,6 +100,7 @@ function makeRequest(opts: {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  getQuiescenceConfigMock.mockResolvedValue({ level: "normal", runId: null, enteredAt: null });
   userMock.mockResolvedValue({
     isSuperuser: true,
     groups: [{ platformRole: { roleId: "HR-000" } }],
@@ -896,6 +905,92 @@ describe("POST — tools/call", () => {
     expect(call.toolName).toBe("create_work_capsule");
     expect(call.context.apiTokenId).toBe("tok_write");
     expect(call.source).toBe("external-jsonrpc");
+  });
+
+  it("refuses mutating MCP tools during active quiescence with retry and implication details", async () => {
+    getQuiescenceConfigMock.mockResolvedValue({
+      level: "draining",
+      runId: "QR-MCP-DRAIN",
+      enteredAt: "2026-07-24T14:00:00.000Z",
+    });
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_write",
+      userId: "u1",
+      agentId: "AGT-CI",
+      scopes: ["backlog_write"],
+      capability: "write",
+      scope: "write",
+    });
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_WRITE",
+        body: {
+          jsonrpc: "2.0",
+          id: 74,
+          method: "tools/call",
+          params: {
+            name: "record_local_integration_result",
+            arguments: { branch: "feat/topic", sha: "abc123", status: "passed" },
+          },
+        },
+      }),
+    );
+
+    const body = await res.json();
+    expect(body.result.isError).toBe(true);
+    expect(body.result.structuredContent).toMatchObject({
+      error: "portal_quiescing",
+      level: "draining",
+      runId: "QR-MCP-DRAIN",
+      retryAfterSeconds: 30,
+      writesRefused: true,
+      cleanupOperationsAllowed: ["release_nonprod_environment_lease"],
+    });
+    expect(body.result.content[0].text).toContain("Mutating MCP write refused");
+    expect(govMock).not.toHaveBeenCalled();
+  });
+
+  it("allows cleanup-safe lease release during active quiescence", async () => {
+    getQuiescenceConfigMock.mockResolvedValue({
+      level: "draining",
+      runId: "QR-MCP-DRAIN",
+      enteredAt: "2026-07-24T14:00:00.000Z",
+    });
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_write",
+      userId: "u1",
+      agentId: "AGT-CI",
+      scopes: ["work_capsule_write"],
+      capability: "write",
+      scope: "write",
+    });
+    govMock.mockResolvedValue({
+      success: true,
+      message: "Released lease NPEL-TEST.",
+      entityId: "NPEL-TEST",
+      data: { leaseId: "NPEL-TEST" },
+    });
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_WRITE",
+        body: {
+          jsonrpc: "2.0",
+          id: 75,
+          method: "tools/call",
+          params: {
+            name: "release_nonprod_environment_lease",
+            arguments: { leaseId: "NPEL-TEST" },
+          },
+        },
+      }),
+    );
+
+    const body = await res.json();
+    expect(body.result.isError).toBe(false);
+    expect(body.result.structuredContent.leaseId).toBe("NPEL-TEST");
+    expect(govMock).toHaveBeenCalledOnce();
   });
 
   it("accepts an implying grant for a finer required grant (build_promote → build_lifecycle)", async () => {

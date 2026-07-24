@@ -71,6 +71,10 @@ describe("isAllowListed", () => {
     expect(isAllowListed("/api/internal/quiescence-state")).toBe(true);
   });
 
+  it("allow-lists MCP transport so route-level tool policy can decide read vs write", () => {
+    expect(isAllowListed("/api/mcp/v1")).toBe(true);
+  });
+
   it("does NOT allow-list normal routes", () => {
     expect(isAllowListed("/portal")).toBe(false);
     expect(isAllowListed("/api/portal/coworker")).toBe(false);
