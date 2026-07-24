@@ -1,13 +1,13 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 307,
+  "pageRouteCount": 306,
   "migratedCount": 0,
   "summary": {
     "cockpit": 15,
     "list": 6,
     "detail": 234,
     "settings": 12,
-    "form": 19,
+    "form": 18,
     "public": 21,
     "unclassified": 0
   },
@@ -664,16 +664,6 @@
     },
     {
       "routePath": "/customer-login",
-      "shell": "form",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
-      "confidence": "high"
-    },
-    {
-      "routePath": "/customer-signup",
       "shell": "form",
       "migrated": false,
       "exemptChecks": [

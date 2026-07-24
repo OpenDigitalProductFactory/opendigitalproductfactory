@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 580,
+  "routeCount": 579,
   "routes": [
     {
       "routePath": "/",
@@ -3975,15 +3975,6 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(customer-auth)/customer-login/page.tsx"
-    },
-    {
-      "routePath": "/customer-signup",
-      "kind": "page",
-      "segments": [
-        "customer-signup"
-      ],
-      "dynamicParams": [],
-      "file": "apps/web/app/(customer-auth)/customer-signup/page.tsx"
     },
     {
       "routePath": "/customer/[id]",
