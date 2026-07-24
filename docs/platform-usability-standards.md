@@ -87,7 +87,11 @@ axis (a 0→1 transition) on pre-existing ones, so a route that was *already* bu
 not fail an unrelated PR while a route you *just* buried does. This is why marking the
 one action a surface most wants the user to take is worth doing: the gate can then tell
 "tucked away detail" (good) from "hid the main verb" (bad). The self-upgrade trigger
-regression is the motivating case.
+regression is the motivating case: the initial fix (BI-D77BF495) force-opened the
+Advanced disclosure in both nav modes as a safe increment; the completed fix extracted
+the trigger into its own `SelfUpgradeTriggerControl` component and co-located it inside
+`OwnerReleaseCard`, so the Advanced section (history/ledgers/logs only) could go back to
+collapsing by default in Simple mode without re-burying the primary action.
 
 **Progressive disclosure is rewarded, never taxed.** Measurement excises
 `<details>` without `open`, `[data-dpf-disclosure]` without `open`, `[hidden]` and

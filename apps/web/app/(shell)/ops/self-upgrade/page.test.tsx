@@ -59,10 +59,29 @@ vi.mock("@/components/ops/SelfUpgradeClient", () => ({
 
 // BI-8D87084D: owner-readable release card fronts the technical ledger. Stub it
 // to surface the derived state; the summary derivation itself is unit-tested in
-// lib/self-upgrade/owner-summary.test.ts.
+// lib/self-upgrade/owner-summary.test.ts. BI-D77BF495: also render the
+// primaryAction slot (unlike the other stubs, which discard their content) so
+// page-level tests can assert the trigger control is co-located INSIDE the
+// card, not merely passed as a prop nobody renders.
 vi.mock("@/components/ops/OwnerReleaseCard", () => ({
-  OwnerReleaseCard: (props: { summary: { state: string } }) => (
-    <div data-testid="owner-release-card" data-release-state={props.summary.state} />
+  OwnerReleaseCard: (props: { summary: { state: string }; primaryAction?: React.ReactNode }) => (
+    <div data-testid="owner-release-card" data-release-state={props.summary.state}>
+      {props.primaryAction}
+    </div>
+  ),
+}));
+
+// BI-D77BF495: the live trigger, stubbed the same way as the other child
+// components — this file owns page-level wiring (is it rendered, is it
+// co-located with the release card), not the trigger's own behavior (covered
+// in SelfUpgradeTriggerControl.test.tsx).
+vi.mock("@/components/ops/SelfUpgradeTriggerControl", () => ({
+  default: (props: { enabled: boolean; channel: string }) => (
+    <div
+      data-testid="self-upgrade-trigger-control"
+      data-enabled={String(props.enabled)}
+      data-channel={props.channel}
+    />
   ),
 }));
 
@@ -315,25 +334,49 @@ describe("SelfUpgradePage", () => {
     );
   });
 
-  it("keeps the deploy controls (holding the primary trigger) visible on arrival in BOTH nav modes (BI-D77BF495)", async () => {
+  it("co-locates the primary trigger with the release status card, reachable on arrival in BOTH nav modes (BI-D77BF495)", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
 
-    // Full (operator) — default cookie unset → open.
+    // The trigger now lives inside OwnerReleaseCard, never inside the
+    // collapsible Advanced <details> — so it is reachable regardless of nav
+    // mode without the details element needing to be forced open.
+    const fullHtml = renderToStaticMarkup(await SelfUpgradePage());
+    expect(fullHtml).toContain('data-testid="owner-release-card"');
+    expect(fullHtml).toContain('data-testid="self-upgrade-trigger-control"');
+    expect(fullHtml.indexOf('data-testid="self-upgrade-trigger-control"')).toBeLessThan(
+      fullHtml.indexOf('data-component="self-upgrade-advanced-toggle"'),
+    );
+
+    mockCookieGet.mockReturnValue({ value: "worker" });
+    const simpleHtml = renderToStaticMarkup(await SelfUpgradePage());
+    expect(simpleHtml).toContain('data-testid="self-upgrade-trigger-control"');
+    expect(simpleHtml.indexOf('data-testid="self-upgrade-trigger-control"')).toBeLessThan(
+      simpleHtml.indexOf('data-component="self-upgrade-advanced-toggle"'),
+    );
+  });
+
+  // BI-D77BF495: now that the trigger is co-located with the release status
+  // card (not gated by this disclosure), the Advanced section holding only
+  // history/ledgers/logs can go back to the ordinary owner-first pattern —
+  // open in Full (operator) mode, collapsed by default in Simple (worker)
+  // mode — instead of being force-held open as the BI-D77BF495 stopgap.
+  it("collapses the Advanced (history/ledgers/logs) section by default in Simple nav mode", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
     const fullHtml = renderToStaticMarkup(await SelfUpgradePage());
     expect(fullHtml).toMatch(/<details[^>]*\sopen/);
 
-    // Simple (worker) — ALSO open now. Collapsing it hid the one control this
-    // high-frequency operator page exists for; the primary action must be reachable
-    // on arrival regardless of nav mode. The section stays collapsible via the toggle.
     mockCookieGet.mockReturnValue({ value: "worker" });
     const simpleHtml = renderToStaticMarkup(await SelfUpgradePage());
-    expect(simpleHtml).toMatch(/<details[^>]*\sopen/);
+    expect(simpleHtml).not.toMatch(/<details[^>]*\sopen/);
     expect(simpleHtml).toContain('data-component="self-upgrade-advanced-toggle"');
   });
 
-  // The trigger's primary/next-action markers live inside SelfUpgradeClient, which
-  // this page test mocks to a stub — so they are asserted in the client's own test
-  // (SelfUpgradeClient.test.tsx), not here. This page test owns the page-level
-  // concern: the section holding the trigger is reachable on arrival in both modes.
+  // The trigger's own primary/next-action markers and behavior live inside
+  // SelfUpgradeTriggerControl, which this page test mocks to a stub — so they
+  // are asserted in that component's own tests, not here. This page test owns
+  // the page-level concern: the trigger is rendered co-located with the
+  // release card, ahead of (outside) the collapsible Advanced section.
 });

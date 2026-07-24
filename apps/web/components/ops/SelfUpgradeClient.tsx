@@ -2,40 +2,17 @@
 
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  rollbackSelfUpgrade,
-  triggerSelfUpgrade,
-  forceActiveRun,
-  abortActiveRun,
-  repairPromoterImage,
-} from "@/lib/actions/promotions";
+import { rollbackSelfUpgrade, repairPromoterImage } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
-import SelfUpgradeJobEngineHealthAlert, {
-  shouldPollForJobEngineRecovery,
-  type JobEngineHealth,
-} from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
 import { UpgradeScopeRibbon } from "@/components/ops/UpgradeScopeRibbon";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
-
-type LatestRun = {
-  runId: string;
-  status: string;
-  trigger: string | null;
-  currentSha: string | null;
-  targetSha: string | null;
-  deployedSha: string | null;
-  reason: string | null;
-  startedAt: Date | string | null;
-  completedAt: Date | string | null;
-  completionEvidence?: unknown;
-  failureLog: string | null;
-  createdAt: Date | string;
-};
+import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 
 type RecoveryPointSummary = {
   status: string;
@@ -44,38 +21,6 @@ type RecoveryPointSummary = {
 };
 
 type ImageVersionSource = "git-sha" | "content-hash" | "unknown";
-
-type QuiescenceBlockerLine = {
-  surface: string;
-  label: string;
-  kind: "hard" | "soft";
-  count: number;
-  estimatedWaitMs: number | null;
-  sampleAgent?: string | null;
-  sampleTitle?: string | null;
-  oldestSignalAt?: string | null;
-  stale?: boolean;
-};
-
-type QuiescenceActivity = {
-  level: "normal" | "draining" | "swapping";
-  runId: string | null;
-  enteredAt: string;
-  run: {
-    runId: string;
-    status: string;
-    trigger: string;
-    targetVersion: string | null;
-    targetBundleHash: string | null;
-    deferSurface: string | null;
-    deferReason: string | null;
-    budgetMs: number | null;
-    drainStartedAt: string | null;
-    lastHeartbeatAt: string | null;
-  } | null;
-  blockersCapturedAt: string | null;
-  blockers: QuiescenceBlockerLine[];
-};
 
 type AdmissionSnapshot = {
   lane: { enabled: boolean; limit: number | null; key: string };
@@ -86,7 +31,6 @@ type AdmissionSnapshot = {
 
 type Props = {
   enabled: boolean;
-  channel: string;
   inMaintenanceWindow: boolean;
   windowConfigured?: boolean;
   /**
@@ -126,7 +70,6 @@ type Props = {
   quiescence?: QuiescenceActivity | null;
   admission?: AdmissionSnapshot | null;
   cooldownUntil?: string | null;
-  jobEngine?: JobEngineHealth;
   history?: LatestRun[];
   historyNextCursor?: string | null;
   initialImpactSummary?: SummaryResult | null;
@@ -290,31 +233,8 @@ function recoveryMemberLabel(member: { target: string; status: string }): string
 const DEFAULT_STATUS_STYLE =
   "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] border-[var(--dpf-border)]";
 
-// A forced upgrade intentionally bypasses the quiescence drain and swaps the
-// portal container out from under the very request that triggered it. When the
-// swap lands mid-flight, the operator's own server-action response never returns
-// intact — Next surfaces a non-RSC transport failure ("An unexpected response
-// was received from the server", error code E394), or the browser reports a bare
-// network error. For the self-upgrade page that is the EXPECTED success path of
-// a force, not a crash: the upgrade is applying and the portal is restarting.
-// Recognising it lets the page hold a calm "reconnecting" state instead of
-// letting the rejection escalate to the global (shell) error boundary and paint
-// a full-page "Something went wrong" over an upgrade that actually succeeded.
-// Exported for unit testing.
-export function isExpectedDuringSwap(err: unknown): boolean {
-  if (!err) return false;
-  // Next stamps server-action transport failures with a stable error code.
-  const code = (err as { __NEXT_ERROR_CODE?: unknown }).__NEXT_ERROR_CODE;
-  if (code === "E394") return true;
-  const message = getErrorMessage(err);
-  return /unexpected response was received|failed to fetch|fetch failed|load failed|networkerror|err_connection|connection (?:refused|reset|closed)|the operation was aborted/i.test(
-    message,
-  );
-}
-
 export default function SelfUpgradeClient({
   enabled,
-  channel,
   inMaintenanceWindow,
   windowConfigured,
   windowSource,
@@ -334,27 +254,21 @@ export default function SelfUpgradeClient({
   quiescence,
   admission,
   cooldownUntil,
-  jobEngine,
   history,
   historyNextCursor,
   initialImpactSummary,
   platformVersion,
 }: Props) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [isRollbackPending, startRollbackTransition] = useTransition();
-  const [override, setOverride] = useState(false);
-  const [justQueued, setJustQueued] = useState(false);
-  const [triggerResult, setTriggerResult] = useState<{ queued: boolean; reason?: string } | null>(null);
-  // BI-4F3B2FA9: mid-flight Force Now / Abort controls for a running drain.
-  const [forceConfirm, setForceConfirm] = useState(false);
-  const [abortConfirm, setAbortConfirm] = useState(false);
-  const [inFlightError, setInFlightError] = useState<string | null>(null);
-  // A forced upgrade can swap this portal out from under the operator's own
-  // request. `restarting` holds a calm reconnect banner (and keeps the status
-  // poll alive) so a *successful* forced upgrade never paints the global crash
-  // screen. See isExpectedDuringSwap. `restartBaselineRef` snapshots the server
-  // signature at swap time so we know when the new container has answered.
+  // A recovery-point restore can swap this portal out from under the
+  // operator's own request (same class of disconnect as a forced upgrade —
+  // see isExpectedDuringSwap). `restarting` holds a calm reconnect banner
+  // (and keeps the status poll alive) instead of painting the global crash
+  // screen. `restartBaselineRef` snapshots the server signature at swap time
+  // so we know when the new container has answered. The trigger/force/abort
+  // actions have their OWN instance of this same pattern in
+  // SelfUpgradeTriggerControl (BI-D77BF495) — this one is scoped to rollback.
   const [restarting, setRestarting] = useState(false);
   const restartBaselineRef = useRef<string | null>(null);
   const [isRepairPending, startRepairTransition] = useTransition();
@@ -398,35 +312,15 @@ export default function SelfUpgradeClient({
       ? new Date(latestRun.startedAt).getTime() + estimatedDurationMs
       : null;
 
-  // The manual trigger only *queues* an upgrade: the server action returns
-  // `{ queued: true }` in well under a second, but the Inngest worker still has
-  // to fetch + compare SHAs before the run flips to "running". Without a held
-  // state the button would snap straight back to "Upgrade now" while nothing
-  // visibly happened — which reads as "broken" and invites repeat clicks (each
-  // one firing another upgrade event). We hold a "Starting…" state until the run
-  // actually appears, poll so progress shows up on its own, and time out as a
-  // safety net if the queued event never materialises (e.g. skipped for cooldown).
+  // Keep the read-only detail panel (Latest Run, run history, activity) in
+  // sync while an upgrade is in flight or a rollback swap is reconnecting —
+  // both are derived server state, not local trigger state, so this poll
+  // needs no dependency on SelfUpgradeTriggerControl's own justQueued.
   useEffect(() => {
-    if (justQueued && upgradeInFlight) setJustQueued(false);
-  }, [justQueued, upgradeInFlight]);
-
-  useEffect(() => {
-    if (!justQueued) return;
-    const timeout = setTimeout(() => setJustQueued(false), 45_000);
-    return () => clearTimeout(timeout);
-  }, [justQueued]);
-
-  useEffect(() => {
-    if (!justQueued && !upgradeInFlight && !restarting) return;
+    if (!upgradeInFlight && !restarting) return;
     const interval = setInterval(() => router.refresh(), 4_000);
     return () => clearInterval(interval);
-  }, [justQueued, upgradeInFlight, restarting, router]);
-
-  useEffect(() => {
-    if (!shouldPollForJobEngineRecovery(jobEngine)) return;
-    const interval = setInterval(() => router.refresh(), 15_000);
-    return () => clearInterval(interval);
-  }, [jobEngine, router]);
+  }, [upgradeInFlight, restarting, router]);
 
   // Drop the reconnect banner once the swapped-in portal actually answers with
   // fresh data. We snapshot the server-derived signature at the moment the swap
@@ -464,11 +358,10 @@ export default function SelfUpgradeClient({
     return () => clearTimeout(timeout);
   }, [restarting]);
 
-  const triggerBusy = isPending || justQueued;
-
   // A compact fingerprint of the server-derived state. When it changes after a
   // swap-induced disconnect, the new container has answered and the reconnect
-  // banner can clear.
+  // banner can clear. Scoped to the rollback restore here — the trigger/force/
+  // abort actions have their own instance in SelfUpgradeTriggerControl.
   function serverSignature(): string {
     return [
       latestRun?.runId ?? "",
@@ -486,83 +379,7 @@ export default function SelfUpgradeClient({
   function enterRestarting() {
     restartBaselineRef.current = serverSignature();
     setRestarting(true);
-    setJustQueued(true);
     router.refresh();
-  }
-
-  function handleTrigger() {
-    setTriggerResult(null);
-    setInFlightError(null);
-    const force = override;
-    startTransition(async () => {
-      try {
-        const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
-        setTriggerResult(result);
-        if (result.queued) setJustQueued(true);
-        router.refresh();
-      } catch (err) {
-        // A forced upgrade can swap the portal out from under this request
-        // before its response returns. That's the upgrade applying — hold the
-        // reconnect state instead of crashing the page; a non-swap failure
-        // (e.g. unauthorized) is surfaced inline.
-        if (isExpectedDuringSwap(err)) {
-          enterRestarting();
-        } else {
-          setTriggerResult({
-            queued: false,
-            reason: err instanceof Error ? err.message : "trigger failed",
-          });
-        }
-      }
-    });
-  }
-
-  // BI-4F3B2FA9: escalate the active drain to forced — coordinator bypasses
-  // all blockers on its next tick (~5s) and swaps, without restarting the run.
-  function handleForceNow() {
-    const runId = quiescence?.run?.runId;
-    if (!runId) return;
-    setInFlightError(null);
-    startTransition(async () => {
-      try {
-        const r = await forceActiveRun(runId);
-        setForceConfirm(false);
-        if (!r.ok) setInFlightError(r.error ?? "Force failed");
-        router.refresh();
-      } catch (err) {
-        // Forcing the swap can sever this very request the moment the
-        // coordinator proceeds — the expected outcome, not an error.
-        setForceConfirm(false);
-        if (isExpectedDuringSwap(err)) {
-          enterRestarting();
-        } else {
-          setInFlightError(err instanceof Error ? err.message : "Force failed");
-        }
-      }
-    });
-  }
-
-  // BI-4F3B2FA9: abort the active drain — level returns to normal so the
-  // operator can immediately start a fresh run.
-  function handleAbortRun() {
-    const runId = quiescence?.run?.runId;
-    if (!runId) return;
-    setInFlightError(null);
-    startTransition(async () => {
-      try {
-        const r = await abortActiveRun(runId);
-        setAbortConfirm(false);
-        if (!r.ok) setInFlightError(r.error ?? "Abort failed");
-        router.refresh();
-      } catch (err) {
-        setAbortConfirm(false);
-        if (isExpectedDuringSwap(err)) {
-          enterRestarting();
-        } else {
-          setInFlightError(err instanceof Error ? err.message : "Abort failed");
-        }
-      }
-    });
   }
 
   // BI-F2C53237: build the promoter engine image in place when self-upgrade
@@ -618,6 +435,11 @@ export default function SelfUpgradeClient({
 
   return (
     <div className="space-y-4">
+      {/* Rollback's own reconnect banner — the trigger/force/abort actions
+          have their own instance of this same "applying the upgrade, portal
+          is restarting" state inside SelfUpgradeTriggerControl (co-located
+          with the release status, BI-D77BF495), which is what fires for a
+          normal upgrade. This one only fires for a recovery-point restore. */}
       {restarting && (
         <div
           className="p-3 rounded-lg bg-[var(--dpf-info)]/10 border border-[var(--dpf-info)]/30 text-sm text-[var(--dpf-text)]"
@@ -625,165 +447,9 @@ export default function SelfUpgradeClient({
           aria-live="polite"
           data-upgrade-restarting="true"
         >
-          <span className="font-medium">Applying the upgrade…</span> the portal is
+          <span className="font-medium">Applying the restore…</span> the portal is
           restarting to finish the swap. This page reconnects automatically — no
           need to refresh.
-        </div>
-      )}
-      <SelfUpgradeJobEngineHealthAlert jobEngine={jobEngine} />
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              enabled ? "bg-[var(--dpf-success)]" : "bg-[var(--dpf-muted)]"
-            }`}
-          />
-          <span className="text-sm font-medium text-[var(--dpf-text)]">
-            Self-Upgrade:{" "}
-            <span data-upgrade-status={enabled ? "enabled" : "disabled"}>
-              {enabled ? "Enabled" : "Disabled"}
-            </span>
-          </span>
-          <span className="text-xs text-[var(--dpf-muted)]">({channel})</span>
-        </div>
-
-        {enabled && (
-          <div className="flex items-center gap-3">
-            {upgradeInFlight ? (
-              // BI-4F3B2FA9: a run is in flight. Never a dead-end disabled
-              // button — when the portal is draining, surface Force Now / Abort
-              // so the operator's emergency lever actually works mid-flight.
-              draining && quiescence?.run?.runId ? (
-                <div className="flex items-center gap-2" role="group" aria-label="In-flight upgrade controls">
-                  {inFlightError && (
-                    <span className="text-xs text-[var(--dpf-warning)]" role="status" aria-live="polite">
-                      {inFlightError}
-                    </span>
-                  )}
-                  {forceConfirm ? (
-                    <div role="alertdialog" aria-describedby="force-now-warning" className="flex items-center gap-2">
-                      <span id="force-now-warning" className="text-xs text-[var(--dpf-warning)]">
-                        ⚠ Bypass all in-flight work and swap now?
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleForceNow}
-                        disabled={isPending}
-                        className="px-2 py-1 text-xs rounded-lg bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border border-[var(--dpf-warning)]/40 disabled:opacity-50"
-                      >
-                        Confirm force
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setForceConfirm(false)}
-                        className="px-2 py-1 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : abortConfirm ? (
-                    <div role="alertdialog" aria-describedby="abort-warning" className="flex items-center gap-2">
-                      <span id="abort-warning" className="text-xs text-[var(--dpf-muted)]">
-                        Abort this drain?
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleAbortRun}
-                        disabled={isPending}
-                        className="px-2 py-1 text-xs rounded-lg bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border border-[var(--dpf-warning)]/40 disabled:opacity-50"
-                      >
-                        Confirm abort
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAbortConfirm(false)}
-                        className="px-2 py-1 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => { setAbortConfirm(false); setForceConfirm(true); }}
-                        aria-label={`Force upgrade run ${quiescence.run.runId} now`}
-                        className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border border-[var(--dpf-warning)]/40 hover:bg-[var(--dpf-warning)]/30 transition-colors"
-                      >
-                        ⚡ Force now
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setForceConfirm(false); setAbortConfirm(true); }}
-                        aria-label={`Abort upgrade run ${quiescence.run.runId}`}
-                        className="px-3 py-1.5 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] transition-colors"
-                      >
-                        Abort
-                      </button>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <span
-                  className="text-xs text-[var(--dpf-muted)]"
-                  aria-live="polite"
-                  data-upgrade-inflight="true"
-                >
-                  {queuedRun
-                    ? "Upgrade queued — waiting for the worker…"
-                    : "Upgrade in progress…"}
-                </span>
-              )
-            ) : (
-              <>
-                <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={override}
-                    onChange={(e) => setOverride(e.target.checked)}
-                    aria-label="Emergency override: bypass the safety drain"
-                    title="Bypass the quiescence safety drain. Only for emergencies — it can interrupt in-flight work."
-                    className="accent-[var(--dpf-warning)]"
-                  />
-                  Emergency override
-                </label>
-                <button
-                  type="button"
-                  onClick={handleTrigger}
-                  disabled={triggerBusy}
-                  aria-busy={triggerBusy}
-                  aria-label="Upgrade now"
-                  data-override={override ? "true" : "false"} data-owner-first-next-action data-dpf-primary-action
-                  className="px-4 py-2 text-sm font-medium rounded-lg bg-[var(--dpf-accent)] text-white border border-[var(--dpf-accent)] hover:opacity-90 transition-opacity disabled:opacity-50"
-                >
-                  {isPending
-                    ? "Upgrading..."
-                    : justQueued
-                      ? "Starting…"
-                      : override
-                        ? "Force upgrade now"
-                        : "Upgrade now"}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {enabled && triggerBusy && latestRun?.status !== "running" && !queuedRun && (
-        <div
-          className="text-xs text-[var(--dpf-muted)]"
-          data-upgrade-starting="true"
-          aria-live="polite"
-        >
-          Upgrade starting — the worker is checking for a new build. This can take
-          a few seconds; progress will appear below. No need to click again.
-        </div>
-      )}
-
-      {!enabled && (
-        <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-sm text-[var(--dpf-muted)]">
-          Self-upgrade is disabled. Enable it in settings to allow automated upgrades.
         </div>
       )}
 
@@ -1439,18 +1105,6 @@ export default function SelfUpgradeClient({
               </button>
             </div>
           )}
-        </div>
-      )}
-
-      {triggerResult && (
-        <div
-          className={`p-3 rounded-lg text-sm ${
-            triggerResult.queued
-              ? "bg-[var(--dpf-success)]/10 text-[var(--dpf-success)] border border-[var(--dpf-success)]/30"
-              : "bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)] border border-[var(--dpf-destructive)]/30"
-          }`}
-        >
-          {triggerResult.queued ? "Upgrade queued." : `Not queued: ${triggerResult.reason}`}
         </div>
       )}
     </div>

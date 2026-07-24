@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 //
-// Regression coverage for the forced-self-upgrade crash: a forced upgrade
-// bypasses the quiescence drain and swaps the portal out from under the
-// operator's own request, so the server-action response comes back as a
-// non-RSC transport failure (Next error code E394, "An unexpected response was
-// received from the server"). Previously the handlers awaited the actions with
-// no try/catch, so that rejection escalated to the global (shell) error
-// boundary and painted a full-page crash over an upgrade that actually
-// succeeded. The page must instead recognise the expected mid-swap disconnect
-// and hold a calm "reconnecting" state.
+// Regression coverage for the forced-self-upgrade crash, migrated (BI-D77BF495)
+// from SelfUpgradeClient.swap-resilience.test.tsx now that the trigger/force/
+// abort actions live in SelfUpgradeTriggerControl: a forced upgrade bypasses
+// the quiescence drain and swaps the portal out from under the operator's own
+// request, so the server-action response comes back as a non-RSC transport
+// failure (Next error code E394, "An unexpected response was received from the
+// server"). The handlers must recognise the expected mid-swap disconnect and
+// hold a calm "reconnecting" state instead of escalating to the (shell) error
+// boundary.
 import "@/components/build-studio/test-setup";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,17 +21,11 @@ vi.mock("@/lib/actions/promotions", () => ({
   triggerSelfUpgrade: vi.fn(),
   forceActiveRun: vi.fn(),
   abortActiveRun: vi.fn(),
-  rollbackSelfUpgrade: vi.fn(),
-}));
-
-// The impact panel loads its own data on mount; keep it out of these behavior
-// tests so they stay focused on the trigger/force handlers.
-vi.mock("@/components/ops/UpgradeImpactPanel", () => ({
-  default: () => null,
 }));
 
 import { triggerSelfUpgrade, forceActiveRun } from "@/lib/actions/promotions";
-import SelfUpgradeClient, { isExpectedDuringSwap } from "./SelfUpgradeClient";
+import SelfUpgradeTriggerControl from "./SelfUpgradeTriggerControl";
+import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 
 const triggerMock = triggerSelfUpgrade as unknown as ReturnType<typeof vi.fn>;
 const forceMock = forceActiveRun as unknown as ReturnType<typeof vi.fn>;
@@ -50,18 +44,7 @@ function makeE394(): Error {
 const baseProps = {
   enabled: true,
   channel: "stable",
-  inMaintenanceWindow: false,
-  nextScheduledCheckAt: "2026-06-18T18:00:00.000Z",
-  deployedSha: "abc1234",
-  targetSha: "def5678",
-  isFresh: false,
   latestRun: null,
-  platformVersion: {
-    version: "1.0.0",
-    publishedAt: "2026-06-18T00:00:00.000Z",
-    gitSha: "9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1098",
-    note: "baseline",
-  },
 } as const;
 
 function makeRun(status: string, overrides: Record<string, unknown> = {}) {
@@ -139,11 +122,11 @@ describe("isExpectedDuringSwap", () => {
 
 // ─── Forced trigger severed by the swap ────────────────────────────────────
 
-describe("SelfUpgradeClient – forced upgrade swap resilience", () => {
+describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
   it("shows a reconnecting state (not the crash boundary) when the forced upgrade swaps the portal mid-request", async () => {
     triggerMock.mockRejectedValue(makeE394());
 
-    render(<SelfUpgradeClient {...baseProps} />);
+    render(<SelfUpgradeTriggerControl {...baseProps} />);
 
     fireEvent.click(screen.getByRole("checkbox", { name: /emergency override/i }));
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
@@ -162,7 +145,7 @@ describe("SelfUpgradeClient – forced upgrade swap resilience", () => {
   it("surfaces a genuine (non-swap) trigger failure inline instead of reconnecting", async () => {
     triggerMock.mockRejectedValue(new Error("Unauthorized"));
 
-    render(<SelfUpgradeClient {...baseProps} />);
+    render(<SelfUpgradeTriggerControl {...baseProps} />);
 
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
 
@@ -170,7 +153,6 @@ describe("SelfUpgradeClient – forced upgrade swap resilience", () => {
       expect(screen.getByText(/Not queued:/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/Unauthorized/i)).toBeInTheDocument();
-    // A real error is not dressed up as a successful "applying" swap.
     expect(screen.queryByText(/Applying the upgrade/i)).not.toBeInTheDocument();
   });
 
@@ -178,7 +160,7 @@ describe("SelfUpgradeClient – forced upgrade swap resilience", () => {
     forceMock.mockRejectedValue(new TypeError("Failed to fetch"));
 
     render(
-      <SelfUpgradeClient
+      <SelfUpgradeTriggerControl
         {...baseProps}
         latestRun={makeRun("running")}
         quiescence={drainingQuiescence}
@@ -198,7 +180,7 @@ describe("SelfUpgradeClient – forced upgrade swap resilience", () => {
   it("clears the reconnecting banner once the swapped-in portal returns fresh data", async () => {
     triggerMock.mockRejectedValue(makeE394());
 
-    const { rerender } = render(<SelfUpgradeClient {...baseProps} />);
+    const { rerender } = render(<SelfUpgradeTriggerControl {...baseProps} />);
 
     fireEvent.click(screen.getByRole("checkbox", { name: /emergency override/i }));
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
@@ -207,13 +189,10 @@ describe("SelfUpgradeClient – forced upgrade swap resilience", () => {
       expect(screen.getByText(/Applying the upgrade/i)).toBeInTheDocument();
     });
 
-    // The poll reaches the new container: a fresh run is now visible, the
-    // deployed SHA has advanced and the install reports up to date.
+    // The poll reaches the new container: a fresh run is now visible.
     rerender(
-      <SelfUpgradeClient
+      <SelfUpgradeTriggerControl
         {...baseProps}
-        deployedSha="def5678"
-        isFresh={true}
         latestRun={makeRun("succeeded", {
           completedAt: new Date("2026-06-18T02:05:00Z"),
         })}
@@ -228,7 +207,7 @@ describe("SelfUpgradeClient – forced upgrade swap resilience", () => {
   it("keeps a normal queued trigger working (no false reconnecting state)", async () => {
     triggerMock.mockResolvedValue({ queued: true, runId: "SUR-9999" });
 
-    render(<SelfUpgradeClient {...baseProps} />);
+    render(<SelfUpgradeTriggerControl {...baseProps} />);
 
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
 
