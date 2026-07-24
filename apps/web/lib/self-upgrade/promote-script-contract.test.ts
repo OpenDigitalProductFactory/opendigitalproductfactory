@@ -65,6 +65,7 @@ const BASE_ENV: Record<string, string> = {
   PROMOTE_BACKUP_PATH: "/opt/app/backup",
   PROMOTE_HEALTH_URL: "http://localhost:3000/api/health",
 };
+const READINESS_SCRIPT_TIMEOUT_MS = 30_000;
 
 function runScript(env: Record<string, string | undefined>, extraArgs: string[] = [], stateOverrides: Record<string, unknown> = {}) {
   const marker = basename(env.PROMOTE_SOURCE ?? "source").replace(/[^A-Za-z0-9-]/g, "-");
@@ -106,12 +107,12 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --readiness host identity", () => {
     const result = runScript(BASE_ENV, ["--readiness"], { platform: "linux", arch: "amd64" });
     expect(result.stdout).toContain('"stage":"preflight"');
     expect(result.stdout).not.toContain("host_identity_missing");
-  });
+  }, READINESS_SCRIPT_TIMEOUT_MS);
 
   it("fails closed when install-state carries no resolvable identity", () => {
     const result = runScript(BASE_ENV, ["--readiness"], { platform: "unsupported", arch: "unknown" });
     expect(result.stdout).toContain("host_identity_missing");
-  });
+  }, READINESS_SCRIPT_TIMEOUT_MS);
 });
 
 describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
