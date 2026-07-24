@@ -3,15 +3,17 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   PRINCIPLE_DIMENSIONS,
+  PRINCIPLE_COST_DIMENSIONS,
+  type PrincipleDimension,
+} from "./wiki-taxonomy";
+import {
   PRINCIPLE_DIMENSION_SCOPE,
   PRINCIPLE_SPINE_DIMENSIONS,
   PRINCIPLE_LOCAL_DIMENSIONS,
-  PRINCIPLE_COST_DIMENSIONS,
   assertDimensionScopeIntegrity,
   isSpineDimension,
   projectVectorOntoSpine,
-  type PrincipleDimension,
-} from "./wiki-taxonomy";
+} from "./dimension-scope";
 
 // BI-AA7D80FE — spine reduction by demotion, not deletion.
 // Spec: docs/superpowers/specs/2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md §2.1.

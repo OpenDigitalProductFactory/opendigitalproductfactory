@@ -36,10 +36,12 @@
 import {
   PRINCIPLE_DIMENSIONS,
   PRINCIPLE_COST_DIMENSIONS,
-  PRINCIPLE_DIMENSION_SCOPE,
   type PrincipleDimension,
-  type PrincipleDimensionScope,
 } from "@dpf/db/wiki-taxonomy";
+import {
+  PRINCIPLE_DIMENSION_SCOPE,
+  type PrincipleDimensionScope,
+} from "@dpf/db/dimension-scope";
 
 export type DimensionKind = "benefit" | "cost";
 
