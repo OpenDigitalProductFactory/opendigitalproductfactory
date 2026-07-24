@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { EXCLUDE_TOMBSTONED } from "@dpf/db/customer-lifecycle";
-import { hasActiveOrgCapability } from "@/lib/storefront/civic-surfaces.server";
+import { hasActiveOrgCapability } from "@/lib/storefront/org-capabilities.server";
 import {
   MemberEquityPanel,
   type MemberEquityMemberRow,

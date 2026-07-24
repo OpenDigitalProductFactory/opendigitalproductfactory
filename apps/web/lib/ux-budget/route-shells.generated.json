@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 306,
+  "pageRouteCount": 307,
   "migratedCount": 0,
   "summary": {
     "cockpit": 15,
     "list": 6,
-    "detail": 234,
+    "detail": 235,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -2414,6 +2414,16 @@
     },
     {
       "routePath": "/portal/sign-in",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portal/sign-up",
       "shell": "detail",
       "migrated": false,
       "exemptChecks": [

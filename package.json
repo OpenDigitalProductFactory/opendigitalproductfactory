@@ -39,6 +39,7 @@
     "check:substrate": "node scripts/measure-platform-substrate.mjs",
     "compile:capability-services": "node scripts/compile-capability-service-catalog.mjs",
     "check:capability-services": "node scripts/compile-capability-service-catalog.mjs --check",
+    "check:capability-consumers": "node scripts/check-capability-consumers.mjs",
     "measure:substrate:runtime": "node scripts/measure-platform-substrate-runtime.mjs --json",
     "check:substrate:runtime": "node scripts/measure-platform-substrate-runtime.mjs",
     "check:mcp-tool-pack": "node scripts/check-mcp-tool-pack.mjs",

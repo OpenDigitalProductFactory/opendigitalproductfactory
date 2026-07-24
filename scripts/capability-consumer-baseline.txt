@@ -1,0 +1,29 @@
+# Capability consumer baseline — capability-registry keys that derive
+# applicability but do NOT yet have a live consumer (no nav orgCapabilityKey, no
+# hasActiveOrgCapability guard, no coworker binding). This list may only SHRINK.
+#
+# A NEW capability must meet the floor (>=1 consumer) and is never added here.
+# Keys marked (setupPrompt) below ALSO declare a setup-wizard question that is not
+# yet wired — the honesty defect BI-5CD43089 tracks: the wizard asks the operator
+# something whose answer changes nothing. They stay here as shrink-only debt until
+# a surface is built to enforce them; do not add a new setupPrompt-without-consumer.
+#
+# Regenerate with: node scripts/check-capability-consumers.mjs --update
+appointment-checkout
+asset-pool
+backup-restore-posture
+billing-readiness
+customer-accounts
+customer-sites
+cybersecurity-posture
+goods-custody
+lifecycle-review-queues
+membership-eligibility
+partner-program  # (setupPrompt)
+point-of-sale
+project-work
+recurring-agreement-billing
+remote-support
+service-agreements
+storage-and-handling-billing  # (setupPrompt)
+warehouse-operations

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 579,
+  "routeCount": 580,
   "routes": [
     {
       "routePath": "/",
@@ -6065,6 +6065,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(portal-auth)/portal/sign-in/page.tsx"
+    },
+    {
+      "routePath": "/portal/sign-up",
+      "kind": "page",
+      "segments": [
+        "portal",
+        "sign-up"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(portal-auth)/portal/sign-up/page.tsx"
     },
     {
       "routePath": "/portal/support",

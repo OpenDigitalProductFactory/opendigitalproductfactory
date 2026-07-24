@@ -18,7 +18,7 @@ import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
 import { getShellNavSections } from "@/lib/permissions";
 import { cookies } from "next/headers";
-import { getActiveOrgCapabilities } from "@/lib/storefront/civic-surfaces.server";
+import { getActiveOrgCapabilities } from "@/lib/storefront/org-capabilities.server";
 import { AppRail } from "@/components/shell/AppRail";
 import { ShellBreadcrumb } from "@/components/shell/ShellBreadcrumb";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";

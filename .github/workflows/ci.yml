@@ -406,6 +406,28 @@ jobs:
       - name: Run guard
         run: node scripts/check-stewardship-scope.mjs
 
+  capability-consumer-guard:
+    name: Capability Consumer Guard
+    runs-on: ubuntu-latest
+    # BI-5CD43089 — the declared-but-inert capability guard. Every key in the
+    # archetype capability registry must have >=1 recognised gate consumer (nav
+    # orgCapabilityKey, hasActiveOrgCapability guard, customer-estate activation
+    # policy, or coworker binding) or be listed in the shrink-only baseline of
+    # known-inert keys. A NEW capability must meet the floor; a key that declares
+    # a setupPrompt but gates nothing is the honesty defect this tracks (the
+    # wizard asks a question whose answer changes nothing).
+    # Spec: docs/superpowers/specs/2026-07-24-capability-enforcement-completion-design.md
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Gate logic unit tests
+        run: node --test scripts/check-capability-consumers.test.mjs
+      - name: Run guard
+        run: node scripts/check-capability-consumers.mjs
+
   finding-substrate-guard:
     name: Finding Substrate Guard
     runs-on: ubuntu-latest
