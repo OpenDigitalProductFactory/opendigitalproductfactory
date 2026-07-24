@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  CRITIQUE_ENTRY_METADATA_KIND,
   awaitingVerdict,
   calibrationSet,
+  critiqueEntryFromWikiPage,
+  critiqueEntryToMetadata,
   isCalibrationEligible,
   routeCoverage,
   splitForCalibration,
@@ -155,5 +158,53 @@ describe("routeCoverage", () => {
     ]);
     expect(coverage.get("/workspace")).toBe(2);
     expect(coverage.has("/finance")).toBe(false);
+  });
+});
+
+describe("metadata round-trip (the storage contract for capture)", () => {
+  it("preserves every field through metadata + page reassembly", () => {
+    const original = entry();
+    const meta = critiqueEntryToMetadata(original);
+    // finding and status live on the page, not in metadata, so they must NOT
+    // be duplicated into the bag (two copies would drift).
+    expect(meta).not.toHaveProperty("finding");
+    expect(meta).not.toHaveProperty("status");
+
+    const restored = critiqueEntryFromWikiPage({
+      body: original.finding,
+      status: original.status,
+      metadata: meta,
+    });
+    expect(restored).toEqual(original);
+  });
+
+  it("carries a schema tag so an unknown payload can be refused", () => {
+    expect(critiqueEntryToMetadata(entry()).metadataKind).toBe(CRITIQUE_ENTRY_METADATA_KIND);
+  });
+
+  it("returns null for a page whose metadata is not a critique entry", () => {
+    expect(
+      critiqueEntryFromWikiPage({ body: "some other craft note", status: "draft", metadata: null }),
+    ).toBeNull();
+    expect(
+      critiqueEntryFromWikiPage({
+        body: "a WSID variant page",
+        status: "published",
+        metadata: { professionCompetencyLevel: "expert" },
+      }),
+    ).toBeNull();
+  });
+
+  it("takes finding and status from the ROW, not the stale metadata", () => {
+    // The page body is the single source of truth for the finding; a later edit
+    // to the body must win over whatever the metadata once held.
+    const meta = critiqueEntryToMetadata(entry({ status: "draft" }));
+    const restored = critiqueEntryFromWikiPage({
+      body: "Edited finding: the lead band now runs to 300 words.",
+      status: "published",
+      metadata: meta,
+    });
+    expect(restored?.finding).toMatch(/Edited finding/);
+    expect(restored?.status).toBe("published");
   });
 });

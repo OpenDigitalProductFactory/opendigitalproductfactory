@@ -50,6 +50,8 @@ The corpus is **not a new store**. A critique entry is a craft-override page und
 
 That means an entry inherits revision history, org scoping, and a place in the UI without anything new being built, and it means the corpus is readable by the same tools that read the rest of the profession corpus.
 
+**Capturing one** goes through a single door: the `captureCritiqueEntry` action writes a **draft** craft-override page with the structured fields in metadata. The page *body* is the finding and the row *status* is the entry status — neither is duplicated into the metadata bag, so the two cannot drift. Capture never publishes; publishing is the human's separate act on the existing overlay path. The action enforces the authority boundary at the point of entry: an agent caller may pass a proposed verdict but is refused if it tries to attach a founder or designer one — the rejection names that reason rather than failing as a shape error downstream.
+
 **The authority contract is code, not etiquette.** An entry is calibration-eligible only when all four hold:
 
 1. it is **published**, not a draft — a draft is a proposal whatever it contains;

@@ -55,6 +55,13 @@ export type SaveWikiOverlayEditInput = {
   overridesKernelPageId?: string;
   /** Optional short description of the change for the revision log. */
   changeSummary?: string;
+  /**
+   * Free-form frontmatter merged into the WikiPage.metadata Json column — the
+   * same bag the WSID variant axes and the UX critique-entry fields use. Passed
+   * straight through to the store, which does not validate shape (callers own
+   * that). Omitted = column left untouched on update.
+   */
+  metadata?: Record<string, unknown> | null;
 };
 
 export type SaveWikiOverlayEditResult =
@@ -239,6 +246,7 @@ export async function saveWikiOverlayEdit(
       status: input.status ?? "draft",
       isKernel: false,
       abstract: input.abstract ?? null,
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
       kernelPageId: input.overridesKernelPageId ?? null,
       derivedFromKernelVersion: input.overridesKernelPageId
         ? readKernelVersionFromManifest()
