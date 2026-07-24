@@ -30,7 +30,6 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/actions/promotions", () => ({
-  triggerSelfUpgrade: vi.fn(),
   rollbackSelfUpgrade: vi.fn(),
 }));
 
@@ -84,48 +83,14 @@ beforeEach(() => {
   shared.triggerResult = null;
 });
 
-// ─── Disabled ─────────────────────────────────────────────────────────────────
-
-describe("SelfUpgradeClient – disabled", () => {
-  it("shows Disabled label when self-upgrade is off", () => {
-    const html = renderToStaticMarkup(
-      <SelfUpgradeClient {...baseStatus} enabled={false} />,
-    );
-    expect(html).toContain("Disabled");
-  });
-
-  it("does not render the Upgrade now button when disabled", () => {
-    const html = renderToStaticMarkup(
-      <SelfUpgradeClient {...baseStatus} enabled={false} />,
-    );
-    expect(html).not.toContain("Upgrade now");
-  });
-
-  it("shows the disabled notice copy", () => {
-    const html = renderToStaticMarkup(
-      <SelfUpgradeClient {...baseStatus} enabled={false} />,
-    );
-    expect(html).toContain("Self-upgrade is disabled");
-  });
-});
+// Trigger/force/abort button behavior (disabled notice, Upgrade now, loading,
+// success/error feedback) moved to SelfUpgradeTriggerControl.test.tsx and
+// SelfUpgradeTriggerControl.swap-resilience.test.tsx (BI-D77BF495) — the
+// trigger now lives there, co-located with OwnerReleaseCard, not here.
 
 // ─── Enabled ──────────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeClient – enabled", () => {
-  it("shows Enabled label with channel", () => {
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Enabled");
-    expect(html).toContain("stable");
-  });
-
-  it("renders the Upgrade now button, marked as the primary / next action (BI-D77BF495)", () => {
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Upgrade now");
-    // The UX budget reachability axis keys off these markers.
-    expect(html).toContain("data-dpf-primary-action");
-    expect(html).toContain("data-owner-first-next-action");
-  });
-
   it("shows the deployed and target SHA values", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
     expect(html).toContain("abc1234");
@@ -426,128 +391,6 @@ describe("SelfUpgradeClient – skipped", () => {
       <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded")} />,
     );
     expect(html).not.toContain("data-skip-reason");
-  });
-});
-
-// ─── Trigger control ──────────────────────────────────────────────────────────
-
-describe("SelfUpgradeClient – trigger control", () => {
-  it("button has type=button attribute", () => {
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain('type="button"');
-  });
-
-  it("button is not disabled when no run is active", () => {
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Upgrade now");
-    expect(html).not.toContain('disabled=""');
-  });
-
-  // BI-4F3B2FA9: a running upgrade no longer leaves a dead-end disabled button.
-  it("shows an in-flight indicator (not a disabled trigger) when a run is running", () => {
-    const html = renderToStaticMarkup(
-      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} />,
-    );
-    expect(html).toContain("Upgrade in progress…");
-    expect(html).not.toContain('aria-label="Upgrade now"');
-  });
-
-  it("surfaces Force now / Abort controls when the portal is draining (BI-4F3B2FA9)", () => {
-    const quiescence = {
-      level: "draining" as const,
-      runId: "QR-2026-06-10-test",
-      enteredAt: "2026-06-10T02:00:00.000Z",
-      run: {
-        runId: "QR-2026-06-10-test",
-        status: "draining",
-        trigger: "self-upgrade",
-        targetVersion: null,
-        targetBundleHash: null,
-        deferSurface: null,
-        deferReason: null,
-        budgetMs: 300000,
-        drainStartedAt: "2026-06-10T02:00:00.000Z",
-        lastHeartbeatAt: null,
-      },
-      blockersCapturedAt: null,
-      blockers: [],
-    };
-    const html = renderToStaticMarkup(
-      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} quiescence={quiescence} />,
-    );
-    expect(html).toContain("Force now");
-    expect(html).toContain("Abort");
-    // Descriptive aria-label names the run; not a dead-end disabled trigger.
-    expect(html).toContain("Force upgrade run QR-2026-06-10-test now");
-  });
-});
-
-// ─── Loading state ────────────────────────────────────────────────────────────
-
-describe("SelfUpgradeClient – loading", () => {
-  it("shows Upgrading... text when pending", () => {
-    shared.isPending = true;
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Upgrading...");
-    // The idle button label ">Upgrade now<" is replaced while pending (the
-    // aria-label "Upgrade now" stays, so assert on the visible button text).
-    expect(html).not.toContain(">Upgrade now<");
-  });
-
-  it("button is disabled while pending", () => {
-    shared.isPending = true;
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain('disabled=""');
-  });
-
-  it("button has aria-busy=true while pending", () => {
-    shared.isPending = true;
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain('aria-busy="true"');
-  });
-
-  it("shows the 'starting' hint while busy and no run is running yet", () => {
-    // The manual trigger only queues the upgrade; the worker takes a few seconds
-    // to flip the run to running. The hint reassures the operator so they don't
-    // re-click thinking it's broken.
-    shared.isPending = true;
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain('data-upgrade-starting="true"');
-    expect(html).toContain("No need to click again");
-  });
-
-  it("does not show the 'starting' hint once a run is already running", () => {
-    shared.isPending = false;
-    const html = renderToStaticMarkup(
-      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} />,
-    );
-    expect(html).not.toContain('data-upgrade-starting="true"');
-  });
-});
-
-// ─── Success feedback ─────────────────────────────────────────────────────────
-
-describe("SelfUpgradeClient – success feedback", () => {
-  it("shows Upgrade queued. when trigger succeeds", () => {
-    shared.triggerResult = { queued: true };
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Upgrade queued.");
-  });
-});
-
-// ─── Error feedback ───────────────────────────────────────────────────────────
-
-describe("SelfUpgradeClient – error feedback", () => {
-  it("shows Not queued message when trigger returns not queued", () => {
-    shared.triggerResult = { queued: false, reason: "disabled" };
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Not queued:");
-  });
-
-  it("shows the specific reason for not queuing", () => {
-    shared.triggerResult = { queued: false, reason: "already-running" };
-    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("already-running");
   });
 });
 

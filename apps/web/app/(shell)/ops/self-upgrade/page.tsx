@@ -4,6 +4,7 @@ import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
 import { loadPersistedImpactSummary } from "@/lib/self-upgrade/impact";
 import { buildOwnerReleaseSummary } from "@/lib/self-upgrade/owner-summary";
 import SelfUpgradeClient from "@/components/ops/SelfUpgradeClient";
+import SelfUpgradeTriggerControl from "@/components/ops/SelfUpgradeTriggerControl";
 import { OwnerReleaseCard } from "@/components/ops/OwnerReleaseCard";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
@@ -90,27 +91,39 @@ export default async function SelfUpgradePage() {
       <OpsTabNav />
 
       <div className="mt-4">
-        <OwnerReleaseCard summary={ownerSummary} />
+        <OwnerReleaseCard
+          summary={ownerSummary}
+          primaryAction={
+            <SelfUpgradeTriggerControl
+              enabled={clientProps.enabled}
+              channel={clientProps.channel}
+              latestRun={clientProps.latestRun}
+              quiescence={clientProps.quiescence}
+              jobEngine={clientProps.jobEngine}
+            />
+          }
+        />
       </div>
 
-      {/* Deploy controls + run history, runtime/security ledgers and logs.
-          BI-D77BF495: this section holds the primary "Upgrade now" trigger, so it
-          defaults OPEN in BOTH nav modes — collapsing it in Simple mode hid the one
-          control this high-frequency operator page exists for, and the word budgets
-          could not see that regression because hiding the trigger REDUCES the counts.
-          The owner-first status card still leads; the section stays collapsible for
-          anyone who wants to tuck the detail away, but the action is reachable on
-          arrival. (Fuller fix — a prominent trigger co-located in the card with only
-          logs/history collapsible — tracked in BI-D77BF495; it needs the trigger
-          extraction plus live upgrade-flow verification.) */}
-      <details className="mt-6 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]" open>
+      {/* Run history, runtime/security ledgers and logs. BI-D77BF495: the
+          primary "Upgrade now" trigger now lives above, co-located with the
+          release status in OwnerReleaseCard — it is reachable on arrival in
+          BOTH nav modes regardless of whether this section is expanded. That
+          lets this section go back to collapsing by default in Simple (worker)
+          nav mode: it holds only detail (history/ledgers/logs), not the
+          primary action, so hiding it there is the correct progressive
+          disclosure the owner-first redesign (BI-8D87084D) intended. */}
+      <details
+        className="mt-6 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+        open={!simple}
+      >
         <summary
           data-component="self-upgrade-advanced-toggle"
           className="cursor-pointer select-none rounded-xl px-4 py-3 text-sm font-medium text-[var(--dpf-text)] marker:text-[var(--dpf-muted)]"
         >
           Deploy controls &amp; history
           <span className="ml-2 text-xs font-normal text-[var(--dpf-muted)]">
-            Upgrade trigger, run logs, runtime and security checks
+            Run logs, runtime and security checks
           </span>
         </summary>
 

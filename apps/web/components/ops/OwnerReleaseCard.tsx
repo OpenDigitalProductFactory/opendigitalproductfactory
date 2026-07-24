@@ -31,7 +31,19 @@ function QuestionRow({ q, a }: { q: string; a: string }) {
   );
 }
 
-export function OwnerReleaseCard({ summary }: { summary: OwnerReleaseSummary }) {
+export function OwnerReleaseCard({
+  summary,
+  primaryAction,
+}: {
+  summary: OwnerReleaseSummary;
+  /**
+   * BI-D77BF495: the live "Upgrade now" trigger, rendered co-located with the
+   * status it acts on instead of buried behind the Advanced disclosure below.
+   * Optional so this card stays a pure/server component — the caller (a
+   * Server Component) passes a Client Component instance through this slot.
+   */
+  primaryAction?: React.ReactNode;
+}) {
   return (
     <section
       aria-label="Release status"
@@ -100,10 +112,14 @@ export function OwnerReleaseCard({ summary }: { summary: OwnerReleaseSummary }) 
               <span className="font-medium">If it fails:</span> {summary.riskNotice.recovery}
             </li>
           </ul>
-          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-            The install control is under “Advanced controls &amp; history” below.
-          </p>
         </Notice>
+      )}
+
+      {/* BI-D77BF495: the live trigger, directly below the risk notice it
+          answers to — visible on arrival, not buried behind the Advanced
+          disclosure (run history / ledgers / logs stay there). */}
+      {primaryAction && (
+        <div data-component="owner-release-primary-action">{primaryAction}</div>
       )}
     </section>
   );
