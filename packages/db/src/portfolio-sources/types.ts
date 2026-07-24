@@ -16,9 +16,16 @@
  * Coverage axis — what relationship the org has to this portfolio entry, ordered
  * most-committed → least. "potential" is the planning surface: catalogued and one
  * governed click from being enabled, never auto-activated.
+ *
+ * "incumbent" is distinct from "used": both are actively in use, but "used" means
+ * DPF's own stack while "incumbent" is a third-party application the customer pays
+ * for today and DPF intends to displace (spec 2026-07-23-incumbent-application-
+ * coverage-design.md §5.1, BI-5B2F5447). It sits beside "used" in the committed
+ * tier because it is real, in-production use — just sourced externally.
  */
 export const PORTFOLIO_COVERAGE_STATUSES = [
-  "used", // actively in use by the org
+  "used", // actively in use by the org (DPF's own stack)
+  "incumbent", // a third-party app the customer runs today and DPF aims to displace
   "sold", // a market offer (revenue-generating)
   "available", // integrated and configurable now (e.g. credential present but idle)
   "potential", // catalogued; one governed click to enable
@@ -39,6 +46,7 @@ export const PORTFOLIO_SOURCE_KINDS = [
   "archetype", // archetype-seeded offers / suppliers / goods
   "coworker_service", // Agent / CoworkerService — AI coworkers as Workforce products (BI-8F9EDD6C)
   "bom_surface", // DOC-1996319D Workforce surfaces (AI Workforce Ops, roster, finance/tax) (BI-D5C9C3F7)
+  "incumbent_intake", // customer's existing app stack: manual entry / spreadsheet import / discovery (BI-5B2F5447)
 ] as const;
 export type PortfolioSourceKind = (typeof PORTFOLIO_SOURCE_KINDS)[number];
 

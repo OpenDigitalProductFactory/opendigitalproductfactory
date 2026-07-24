@@ -31,10 +31,11 @@ const SOURCE_LABELS: Record<string, string> = {
   ai_provider: "AI provider",
   sbom: "Bill of materials",
   archetype: "Archetype",
+  incumbent_intake: "Runs today",
 };
 
-/** Most-committed first. */
-const COVERAGE_ORDER = ["used", "sold", "available", "potential", "planned", "retired"];
+/** Most-committed first. Mirrors PORTFOLIO_COVERAGE_STATUSES ordering. */
+const COVERAGE_ORDER = ["used", "incumbent", "sold", "available", "potential", "planned", "retired"];
 
 function readMarker(cfg: unknown, key: string): string | null {
   if (cfg && typeof cfg === "object" && !Array.isArray(cfg)) {

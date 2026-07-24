@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { PORTFOLIO_COVERAGE_STATUSES } from "@dpf/db";
+
 import {
   intentStyle,
   resolveIntent,
@@ -73,5 +75,21 @@ describe("statusColors", () => {
     expect(resolveIntent("selfUpgradeRun", "succeeded")).toBe("success");
     expect(resolveIntent("selfUpgradeRun", "failed")).toBe("danger");
     expect(resolveIntent("selfUpgradeRun", "skipped")).toBe("neutral");
+  });
+
+  // BI-5B2F5447 (D0): the portfolioCoverage badge map is the render side of the
+  // PORTFOLIO_COVERAGE_STATUSES enum in @dpf/db. A coverage status with no explicit
+  // intent falls through resolveIntent to "neutral" and reads wrong on the coverage
+  // surface. Lock the two sides together so adding a status without a render intent
+  // fails CI — the same class of parity guard as the projector's source↔portfolio check.
+  it("gives every portfolio coverage status an explicit (non-fallback) badge intent", () => {
+    for (const status of PORTFOLIO_COVERAGE_STATUSES) {
+      expect(
+        STATUS_INTENT.portfolioCoverage[status],
+        `coverage status "${status}" has no portfolioCoverage badge intent — it would render neutral`,
+      ).toBeDefined();
+    }
+    // The value this guard was written for.
+    expect(resolveIntent("portfolioCoverage", "incumbent")).toBe("warning");
   });
 });
