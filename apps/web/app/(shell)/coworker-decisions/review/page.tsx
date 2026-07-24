@@ -24,6 +24,8 @@ import {
   type OpenOrgDecision,
 } from "@/components/wiki/OrgDecisionCaptureList";
 import { GapAnswerForm } from "./gap-answer-form";
+import { WeightProposalForm } from "./weight-proposal-form";
+import { listOpenWeightAdjustmentProposals } from "@/lib/decision-perspective/weight-proposal-store";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +40,7 @@ const CLASS_LABEL: Record<ReviewFinding["findingClass"], string> = {
   drift: "drift",
   gap: "gap",
   staleness: "stale",
+  "weight-proposal": "weight proposal",
 };
 
 // Semantic accent per finding class, via theme tokens (no hardcoded colors).
@@ -46,6 +49,7 @@ const CLASS_ACCENT: Record<ReviewFinding["findingClass"], string> = {
   drift: "var(--dpf-error)",
   gap: "var(--dpf-accent)",
   staleness: "var(--dpf-warning)",
+  "weight-proposal": "var(--dpf-accent)",
 };
 
 function toGapClusters(
@@ -88,6 +92,7 @@ export default async function DecisionReviewPage() {
     orgProfile,
     openOrgRows,
     principleRows,
+    weightProposalRows,
   ] = await Promise.all([
       prisma.decisionInteraction.findMany({
         where: { principleConflict: true },
@@ -152,6 +157,7 @@ export default async function DecisionReviewPage() {
           principleWeight: true,
         },
       }),
+      listOpenWeightAdjustmentProposals(prisma),
     ]);
 
   // Re-score the canonical decisions against the current corpus and surface any
@@ -189,6 +195,7 @@ export default async function DecisionReviewPage() {
     drift: driftRows,
     gapClusters: toGapClusters(unresolvedRows, orgProfile?.profileId ?? null),
     staleMaterial: { count: staleCount },
+    weightProposals: weightProposalRows,
   });
 
   return (
@@ -246,7 +253,7 @@ export default async function DecisionReviewPage() {
                     {f.postureLabel}
                   </span>
                 )}
-                {!f.answer && (
+                {!f.answer && !f.weightProposal && (
                   <Link
                     href={f.actionHref}
                     className="rounded-md border border-[var(--dpf-border)] px-2.5 py-1 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] shrink-0"
@@ -263,6 +270,9 @@ export default async function DecisionReviewPage() {
                   domainClass={f.answer.domainClass}
                   question={f.answer.question}
                 />
+              )}
+              {f.weightProposal && (
+                <WeightProposalForm proposalId={f.weightProposal.proposalId} />
               )}
             </li>
           ))}

@@ -226,6 +226,8 @@ export async function persistDecisionInteraction(input: {
       domainClass: input.evaluation.domainClass,
       question: input.evaluation.question,
       options: input.evaluation.options,
+      scoredOptions: input.evaluation.scoredOptions ?? null,
+      recommendedOptionId: input.evaluation.recommendedOptionId ?? null,
       evidenceBundle: {
         materialCount: input.evaluation.materialCount,
         freshnessDistribution: input.evaluation.freshnessDistribution,

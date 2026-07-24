@@ -15,6 +15,7 @@ import { requireUserId } from "@/lib/actions/shared/guards";
 import { captureOrgBusinessAnswer } from "@/lib/wiki/capture-org-answer";
 import { createProductionInference } from "@/lib/wiki/inference-adapter";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ruleWeightAdjustmentProposal } from "@/lib/decision-perspective/weight-proposal-store";
 
 export async function answerGovernanceGap(input: {
   domainClass: string;
@@ -82,4 +83,44 @@ export async function answerGovernanceGap(input: {
   } catch (e) {
     return { ok: false, message: `Could not capture the answer: ${getErrorMessage(e)}` };
   }
+}
+
+// BI-D88DFEEA Phase 3 — rule on a weight-adjustment proposal. Never auto-
+// applied (spec §2.4): accepting reaches `ruled`, the same tier name authored
+// stance material reaches via stance-promotion.ts; rejecting reaches this
+// model's own terminal `rejected` state so it stops resurfacing. This does
+// NOT yet mutate any live composite score — that wiring is JSI Phase 4
+// (founder review of the first real proposals before either is allowed to
+// influence a decision), explicitly out of scope here.
+export async function ruleWeightProposal(input: {
+  proposalId: string;
+  ruling: "accept" | "reject";
+  rejectionReason?: string;
+}): Promise<{ ok: boolean; message: string }> {
+  const userId = await requireUserId();
+  const result = await ruleWeightAdjustmentProposal(prisma, {
+    proposalId: input.proposalId,
+    ruling: input.ruling,
+    ruledByUserId: userId,
+    rejectionReason: input.rejectionReason,
+  });
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      message:
+        result.error === "not-found"
+          ? "That proposal no longer exists."
+          : "Someone already ruled on this proposal.",
+    };
+  }
+
+  revalidatePath("/coworker-decisions/review");
+  return {
+    ok: true,
+    message:
+      result.status === "ruled"
+        ? "Accepted. Recorded at the ruled tier — this does not yet change any live decision score."
+        : "Rejected. This proposal won't resurface.",
+  };
 }

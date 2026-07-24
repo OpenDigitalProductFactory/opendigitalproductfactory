@@ -8,6 +8,7 @@ import type {
   DecisionPerspectiveEvaluationInput,
   DecisionPerspectiveEvaluationResult,
   DecisionRiskTier,
+  DecisionScoredOption,
 } from "./types";
 import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
 import { runVoiceSynthesisJob } from "../voice-synthesis/synthesis-job";
@@ -42,6 +43,55 @@ function planAdvancementOptions(): string[] {
   ];
 }
 
+// BI-D88DFEEA Phase 1. Structural feature vectors for the fixed 3-option
+// menu above, scored on the axes each option genuinely exhibits (not a
+// goodness rating — see the dimension-catalog convention this mirrors):
+// starting now buys speed but commits resources; revising trades speed for
+// maintainability and stays fully reversible; escalating trades speed for
+// governance oversight at the cost of a human's attention. Feeds
+// option-recommendation.ts so the gate can record which of the three the
+// kernel's commandments would pick, alongside what the human actually chose.
+function scoredPlanAdvancementOptions(): DecisionScoredOption[] {
+  return [
+    {
+      id: "proceed",
+      description: "Start implementation",
+      features: {
+        speed_to_value: 0.85,
+        reversibility: 0.4,
+        blast_radius: 0.3,
+        human_cognitive_load: 0.15,
+        long_term_maintainability: 0.5,
+        governance_compliance: 0.3,
+      },
+    },
+    {
+      id: "revise",
+      description: "Revise the implementation plan",
+      features: {
+        speed_to_value: 0.35,
+        reversibility: 0.9,
+        blast_radius: 0.1,
+        human_cognitive_load: 0.35,
+        long_term_maintainability: 0.8,
+        governance_compliance: 0.4,
+      },
+    },
+    {
+      id: "escalate",
+      description: "Escalate to the Build Studio owner",
+      features: {
+        speed_to_value: 0.15,
+        reversibility: 0.95,
+        blast_radius: 0.05,
+        human_cognitive_load: 0.6,
+        long_term_maintainability: 0.3,
+        governance_compliance: 0.85,
+      },
+    },
+  ];
+}
+
 export async function evaluateBuildStudioPlanAdvancementGate(input: {
   db: BuildStudioGateClient;
   build: BuildStudioPlanAdvancementBuild;
@@ -61,6 +111,7 @@ export async function evaluateBuildStudioPlanAdvancementGate(input: {
     profileId: input.profileId,
     question,
     options,
+    scoredOptions: scoredPlanAdvancementOptions(),
     domainClass: PLAN_READINESS_DOMAIN_CLASS,
     riskTier,
     routeContext: "/build",
