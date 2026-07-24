@@ -41,13 +41,6 @@
     "longSentences": 0,
     "textMass": 14
   },
-  "apps/web/app/(customer-auth)/customer-signup/signup-form.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 24
-  },
   "apps/web/app/(portal)/layout.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -103,6 +96,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 3
+  },
+  "apps/web/app/(portal-auth)/portal/sign-up/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
   },
   "apps/web/app/(setup)/setup/AccountBootstrapForm.tsx": {
     "vocabulary": 0,
@@ -1208,7 +1208,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 27
   },
   "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx": {
     "vocabulary": 0,
@@ -5653,7 +5653,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 34
+    "textMass": 24
   },
   "apps/web/components/ops/PromotionsClient.tsx": {
     "vocabulary": 0,
@@ -5674,7 +5674,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 375
+    "textMass": 254
   },
   "apps/web/components/ops/SelfUpgradeJobEngineHealthAlert.tsx": {
     "vocabulary": 0,
@@ -5689,6 +5689,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 20
+  },
+  "apps/web/components/ops/SelfUpgradeTriggerControl.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 125
   },
   "apps/web/components/ops/StandardChangeCatalog.tsx": {
     "vocabulary": 0,
