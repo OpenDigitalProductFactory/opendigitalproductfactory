@@ -4,19 +4,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const repoRoot = new URL("../..", import.meta.url);
-const script = new URL("../../scripts/gate-worktree.sh", import.meta.url);
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const script = fileURLToPath(new URL("../../scripts/gate-worktree.sh", import.meta.url));
+const nativeShellProbe = spawnSync("sh", ["-c", "printf ok"], { encoding: "utf8" });
+const shellContractSkipReason = nativeShellProbe.error
+  ? "native POSIX shell 'sh' is unavailable on this host; shell contracts run in CI/Linux or Git Bash-equipped worktrees"
+  : false;
+const shellContractTest = (name, fn) => test(name, { skip: shellContractSkipReason }, fn);
 
 function runGate(args, options = {}) {
-  return spawnSync("sh", [script.pathname, ...args], {
+  return spawnSync("sh", [script, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
     env: options.env ? { ...options.env } : process.env,
   });
 }
 
-test("gate-worktree.sh parses explicit flags in dry-run mode", () => {
+shellContractTest("gate-worktree.sh parses explicit flags in dry-run mode", () => {
   const result = runGate([
     "--dry-run",
     "--branch",
@@ -40,7 +46,7 @@ test("gate-worktree.sh parses explicit flags in dry-run mode", () => {
   assert.match(result.stdout, /pushBeforeLease=false/);
 });
 
-test("gate-worktree.sh exposes push-before-lease only as an explicit dry-run mode", () => {
+shellContractTest("gate-worktree.sh exposes push-before-lease only as an explicit dry-run mode", () => {
   const result = runGate([
     "--dry-run",
     "--branch",
@@ -56,7 +62,7 @@ test("gate-worktree.sh exposes push-before-lease only as an explicit dry-run mod
   assert.match(result.stdout, /pushBeforeLease=true/);
 });
 
-test("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () => {
+shellContractTest("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () => {
   const env = { ...process.env };
   delete env.DPF_MCP_BEARER_TOKEN;
   env.DPF_ALLOW_LOCAL_CI_STUB = "1";
@@ -74,7 +80,7 @@ test("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () 
   assert.match(result.stderr, /DPF_MCP_BEARER_TOKEN is required/);
 });
 
-test("gate-worktree.sh discovers the checked-in default runner when DPF_LOCAL_CI_COMMAND is unset (BI-157DC9B2)", () => {
+shellContractTest("gate-worktree.sh discovers the checked-in default runner when DPF_LOCAL_CI_COMMAND is unset (BI-157DC9B2)", () => {
   const env = { ...process.env };
   delete env.DPF_ALLOW_LOCAL_CI_STUB;
   delete env.DPF_LOCAL_CI_COMMAND;
@@ -95,7 +101,7 @@ test("gate-worktree.sh discovers the checked-in default runner when DPF_LOCAL_CI
   assert.ok(!result.stdout.includes("localCiCommand=missing"));
 });
 
-test("gate-worktree.sh still refuses to run when neither an explicit command, the stub, nor the checked-in runner exists", () => {
+shellContractTest("gate-worktree.sh still refuses to run when neither an explicit command, the stub, nor the checked-in runner exists", () => {
   // Exercise the refuse path by running a copy of the script from a directory
   // with no sibling local-ci-runner.sh (SCRIPT_DIR discovery finds nothing).
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
@@ -121,7 +127,7 @@ test("gate-worktree.sh still refuses to run when neither an explicit command, th
   assert.match(result.stderr, /refusing to record passing stub evidence/);
 });
 
-test("gate-worktree.sh records blocked_sandbox_drift (exit 3), not a product failure, when the freshness report is red", () => {
+shellContractTest("gate-worktree.sh records blocked_sandbox_drift (exit 3), not a product failure, when the freshness report is red", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -204,7 +210,7 @@ printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\
   assert.equal(state.status, "blocked_sandbox_drift");
 });
 
-test("gate-worktree.sh calls claim_nonprod_environment_lease before recording evidence when stub is explicitly allowed", () => {
+shellContractTest("gate-worktree.sh calls claim_nonprod_environment_lease before recording evidence when stub is explicitly allowed", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -290,7 +296,7 @@ esac
   ]);
 });
 
-test("gate-worktree.sh does not push before claiming the local-CI lease by default (BI-76551B2D)", () => {
+shellContractTest("gate-worktree.sh does not push before claiming the local-CI lease by default (BI-76551B2D)", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -377,7 +383,7 @@ esac
   ]);
 });
 
-test("gate-worktree.sh preserves a passed gate when evidence recording is quiescence-blocked", () => {
+shellContractTest("gate-worktree.sh preserves a passed gate when evidence recording is quiescence-blocked", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-quiescence-"));
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -468,7 +474,7 @@ esac
   assert.ok(existsSync(join(temp, "dpf-local-ci-pending-evidence.json")));
 });
 
-test("gate-worktree.sh --finalize-evidence records pending evidence without rerunning the expensive gate", () => {
+shellContractTest("gate-worktree.sh --finalize-evidence records pending evidence without rerunning the expensive gate", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-finalize-"));
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -556,7 +562,7 @@ esac
   assert.equal(state.evidenceRecordId, "EXT-LATE");
 });
 
-test("gate-worktree.sh includes content-addressed local integration metadata in evidence (BI-76551B2D)", () => {
+shellContractTest("gate-worktree.sh includes content-addressed local integration metadata in evidence (BI-76551B2D)", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -670,7 +676,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   assert.deepEqual(state.resilience, evidenceCall.params.arguments.evidence.resilience);
 });
 
-test("gate-worktree.sh records local-only evidence that pre-push can later publish without network git operations (BI-76551B2D)", () => {
+shellContractTest("gate-worktree.sh records local-only evidence that pre-push can later publish without network git operations (BI-76551B2D)", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -809,9 +815,9 @@ exec "${realGit}" "$@"
 // generates it; postinstall converges it to delegate here), so CI checkouts
 // only carry this file. Shim convergence is covered by
 // scripts/lib/ensure-pre-push-hook.test.mjs.
-const prePushHook = new URL("../../.githooks/lib/pre-push-chained.sh", import.meta.url).pathname;
-const prePushGate = new URL("../../.githooks/pre-push-gate", import.meta.url).pathname;
-const runnerScript = new URL("../../scripts/local-ci-runner.sh", import.meta.url).pathname;
+const prePushHook = fileURLToPath(new URL("../../.githooks/lib/pre-push-chained.sh", import.meta.url));
+const prePushGate = fileURLToPath(new URL("../../.githooks/pre-push-gate", import.meta.url));
+const runnerScript = fileURLToPath(new URL("../../scripts/local-ci-runner.sh", import.meta.url));
 
 function cleanHookEnv(extra = {}) {
   const env = { ...process.env, ...extra };
@@ -858,7 +864,7 @@ function refsLine(g) {
   return `refs/heads/feat/topic ${sha} refs/heads/feat/topic 0000000000000000000000000000000000000000\n`;
 }
 
-test("pre-push-gate blocks a runtime-code push with no gate record and points at pregate", () => {
+shellContractTest("pre-push-gate blocks a runtime-code push with no gate record and points at pregate", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -868,7 +874,7 @@ test("pre-push-gate blocks a runtime-code push with no gate record and points at
   assert.match(result.stderr, /pnpm run pregate/);
 });
 
-test("pre-push-gate passes with a matching passing gate record for branch+SHA", () => {
+shellContractTest("pre-push-gate passes with a matching passing gate record for branch+SHA", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -884,7 +890,7 @@ test("pre-push-gate passes with a matching passing gate record for branch+SHA", 
   assert.match(result.stdout, /local-CI gate passed/);
 });
 
-test("pre-push-gate blocks a matching gate record while evidence publication is pending", () => {
+shellContractTest("pre-push-gate blocks a matching gate record while evidence publication is pending", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -903,7 +909,7 @@ test("pre-push-gate blocks a matching gate record while evidence publication is 
   assert.match(result.stderr, /scripts\/gate-worktree\.sh --finalize-evidence/);
 });
 
-test("pre-push-gate blocks an expired matching gate record", () => {
+shellContractTest("pre-push-gate blocks an expired matching gate record", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -920,7 +926,7 @@ test("pre-push-gate blocks an expired matching gate record", () => {
   assert.match(result.stderr, /pnpm run pregate/);
 });
 
-test("pre-push-gate blocks a matching gate record without expiry metadata", () => {
+shellContractTest("pre-push-gate blocks a matching gate record without expiry metadata", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -932,7 +938,7 @@ test("pre-push-gate blocks a matching gate record without expiry metadata", () =
   assert.match(result.stderr, /pnpm run pregate/);
 });
 
-test("pre-push-gate blocks a stale record (older SHA) and calls out the mismatch", () => {
+shellContractTest("pre-push-gate blocks a stale record (older SHA) and calls out the mismatch", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -942,7 +948,7 @@ test("pre-push-gate blocks a stale record (older SHA) and calls out the mismatch
   assert.match(result.stderr, /does not pass for this HEAD/);
 });
 
-test("pre-push-gate override requires a reason and RECORDS it (no silent skip)", () => {
+shellContractTest("pre-push-gate override requires a reason and RECORDS it (no silent skip)", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -962,7 +968,7 @@ test("pre-push-gate override requires a reason and RECORDS it (no silent skip)",
   assert.equal(state.gatePassed, false);
 });
 
-test("pre-push-gate lets docs-only diffs through without a record", () => {
+shellContractTest("pre-push-gate lets docs-only diffs through without a record", () => {
   const { dir, g } = makeTempRepo();
   mkdirSync(join(dir, "docs"), { recursive: true });
   writeFileSync(join(dir, "docs", "note.md"), "# doc\n");
@@ -973,7 +979,7 @@ test("pre-push-gate lets docs-only diffs through without a record", () => {
   assert.match(result.stdout, /docs-only diff/);
 });
 
-test("pre-push-gate can use a configured local accepted-base ref for docs-only detection", () => {
+shellContractTest("pre-push-gate can use a configured local accepted-base ref for docs-only detection", () => {
   const { dir, g } = makeTempRepo();
   const baseSha = g(["rev-parse", "refs/remotes/origin/main"]);
   g(["update-ref", "refs/dpf/integration/main", baseSha]);
@@ -990,7 +996,7 @@ test("pre-push-gate can use a configured local accepted-base ref for docs-only d
   assert.match(result.stdout, /docs-only diff vs refs\/dpf\/integration\/main/);
 });
 
-test("pre-push-gate requires evidence when the configured docs-only base ref is missing", () => {
+shellContractTest("pre-push-gate requires evidence when the configured docs-only base ref is missing", () => {
   const { dir, g } = makeTempRepo();
   mkdirSync(join(dir, "docs"), { recursive: true });
   writeFileSync(join(dir, "docs", "note.md"), "# doc\n");
@@ -1005,7 +1011,7 @@ test("pre-push-gate requires evidence when the configured docs-only base ref is 
   assert.doesNotMatch(result.stdout, /docs-only diff/);
 });
 
-test("pre-push-gate skips delete-only and tag-only pushes", () => {
+shellContractTest("pre-push-gate skips delete-only and tag-only pushes", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -1017,7 +1023,7 @@ test("pre-push-gate skips delete-only and tag-only pushes", () => {
   assert.equal(tag.status, 0, tag.stderr);
 });
 
-test("pre-push-gate defers to an in-flight gate-worktree run (its push must not deadlock)", () => {
+shellContractTest("pre-push-gate defers to an in-flight gate-worktree run (its push must not deadlock)", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -1026,7 +1032,7 @@ test("pre-push-gate defers to an in-flight gate-worktree run (its push must not 
   assert.match(result.stdout, /gate run in progress/);
 });
 
-test("pre-push-gate skips main (merge queue governs it)", () => {
+shellContractTest("pre-push-gate skips main (merge queue governs it)", () => {
   const { dir, g } = makeTempRepo();
   g(["checkout", "-q", "main"]);
   writeFileSync(join(dir, "code.ts"), "export const x = 3;\n");
@@ -1037,7 +1043,7 @@ test("pre-push-gate skips main (merge queue governs it)", () => {
   assert.match(result.stdout, /merge queue/);
 });
 
-test("pre-push chains BOTH git-lfs and the gate (gate blocks, LFS still ran)", () => {
+shellContractTest("pre-push chains BOTH git-lfs and the gate (gate blocks, LFS still ran)", () => {
   const { dir, g } = makeTempRepo();
   writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
   g(["commit", "-aqm", "runtime change"]);
@@ -1097,7 +1103,7 @@ exit 0
 
 // ── checked-in default runner (BI-157DC9B2) ──────────────────────────────────
 
-test("local-ci-runner.sh --dry-run resolves candidate, root and a non-mutating scratch workspace", () => {
+shellContractTest("local-ci-runner.sh --dry-run resolves candidate, root and a non-mutating scratch workspace", () => {
   const result = spawnSync("sh", [runnerScript, "--dry-run", "--candidate", "feat/topic"], {
     cwd: repoRoot,
     encoding: "utf8",
@@ -1110,7 +1116,7 @@ test("local-ci-runner.sh --dry-run resolves candidate, root and a non-mutating s
   assert.match(result.stdout, /plan=node scripts\/local-integration-ci\.mjs --candidate feat\/topic/);
 });
 
-test("local-ci-runner.sh refuses to gate main or a detached HEAD", () => {
+shellContractTest("local-ci-runner.sh refuses to gate main or a detached HEAD", () => {
   const onMain = spawnSync("sh", [runnerScript, "--dry-run", "--candidate", "main"], {
     cwd: repoRoot,
     encoding: "utf8",
