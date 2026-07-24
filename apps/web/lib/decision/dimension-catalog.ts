@@ -36,7 +36,9 @@
 import {
   PRINCIPLE_DIMENSIONS,
   PRINCIPLE_COST_DIMENSIONS,
+  PRINCIPLE_DIMENSION_SCOPE,
   type PrincipleDimension,
+  type PrincipleDimensionScope,
 } from "@dpf/db/wiki-taxonomy";
 
 export type DimensionKind = "benefit" | "cost";
@@ -46,6 +48,16 @@ export type DimensionGuidance = {
   kind: DimensionKind;
   /** What a HIGH (near 1.0) score asserts about the option. */
   highMeans: string;
+  /**
+   * Spine (shared across every profession) or profession-local (BI-AA7D80FE).
+   * Surfaced to callers because scoring a profession-local axis from outside
+   * that profession is usually a mistake — and because a caller who sees only
+   * a flat list has no way to know that `schema_grounding` is software
+   * vocabulary while `blast_radius` is shared currency.
+   */
+  scope: PrincipleDimensionScope;
+  /** Owning profession, for profession-local axes only. */
+  profession?: string;
 };
 
 const COST_SET = new Set<string>(PRINCIPLE_COST_DIMENSIONS);
@@ -92,11 +104,18 @@ const HIGH_MEANS: Record<PrincipleDimension, string> = {
 
 /** The full caller-facing catalogue, benefits first then costs, stable order. */
 export const DIMENSION_CATALOG: readonly DimensionGuidance[] = PRINCIPLE_DIMENSIONS.map(
-  (key): DimensionGuidance => ({
-    key,
-    kind: COST_SET.has(key) ? "cost" : "benefit",
-    highMeans: HIGH_MEANS[key],
-  }),
+  (key): DimensionGuidance => {
+    const scopeEntry = PRINCIPLE_DIMENSION_SCOPE[key];
+    return {
+      key,
+      kind: COST_SET.has(key) ? "cost" : "benefit",
+      highMeans: HIGH_MEANS[key],
+      scope: scopeEntry.scope,
+      ...(scopeEntry.scope === "profession-local"
+        ? { profession: scopeEntry.profession }
+        : {}),
+    };
+  },
 )
   .slice()
   .sort((a, b) => {
@@ -115,6 +134,7 @@ export const DIMENSION_KEYS: readonly string[] = PRINCIPLE_DIMENSIONS;
 export function buildFeaturesDescription(): string {
   const costs = DIMENSION_CATALOG.filter((d) => d.kind === "cost");
   const benefits = DIMENSION_CATALOG.filter((d) => d.kind === "benefit");
+  const local = DIMENSION_CATALOG.filter((d) => d.scope === "profession-local");
   const line = (d: DimensionGuidance) => `${d.key} — high means ${d.highMeans}`;
   return [
     "REQUIRED IN PRACTICE, despite being schema-optional: governance commandments are",
@@ -133,6 +153,12 @@ export function buildFeaturesDescription(): string {
     "",
     "Score every axis you can judge; partial coverage is reported per principle in",
     "the contribution ledger as missingDimensions.",
+    "",
+    "AXIS SCOPE: most axes are SPINE — shared currency every profession can weigh.",
+    `A few are PROFESSION-LOCAL and roll up onto a spine axis when the decision`,
+    `leaves that profession: ${local.map((d) => `${d.key} (${d.profession})`).join("; ")}.`,
+    "Score a profession-local axis only when you are reasoning inside that",
+    "profession; otherwise score the spine axis it projects onto.",
   ].join(" ");
 }
 

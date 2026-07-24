@@ -40,10 +40,45 @@ describe("dimension catalogue coverage", () => {
       expect(d.highMeans, `${d.key} must read as magnitude`).toMatch(/\bMORE\b/);
     }
   });
+
+  // BI-AA7D80FE. The spine/profession-local split is useless to a caller who
+  // cannot see it — an in-platform coworker has no repo access, so a label that
+  // lives only in the registry may as well not exist for the population that
+  // does most of the scoring.
+  it("carries the spine / profession-local scope for every dimension", () => {
+    for (const d of DIMENSION_CATALOG) {
+      expect(["spine", "profession-local"], `${d.key} scope`).toContain(d.scope);
+    }
+  });
+
+  it("names the owning profession on profession-local axes, and only those", () => {
+    for (const d of DIMENSION_CATALOG) {
+      if (d.scope === "profession-local") {
+        expect(d.profession, `${d.key} needs an owning profession`).toBeTruthy();
+      } else {
+        expect(d.profession, `${d.key} is spine and must not claim one`).toBeUndefined();
+      }
+    }
+  });
+
+  it("keeps both scopes populated — a split with an empty side is not a split", () => {
+    expect(DIMENSION_CATALOG.filter((d) => d.scope === "spine").length).toBeGreaterThan(0);
+    expect(
+      DIMENSION_CATALOG.filter((d) => d.scope === "profession-local").length,
+    ).toBeGreaterThan(0);
+  });
 });
 
 describe("features schema description", () => {
   const text = buildFeaturesDescription();
+
+  it("tells the caller which axes are profession-local and what they roll up to", () => {
+    expect(text).toMatch(/AXIS SCOPE/);
+    expect(text).toMatch(/PROFESSION-LOCAL/);
+    // The two biggest demotions must be named explicitly with their owner.
+    expect(text).toContain("schema_grounding (software-engineer)");
+    expect(text).toContain("reusability (software-engineer)");
+  });
 
   it("states that features are required in practice, not merely optional", () => {
     expect(text).toMatch(/REQUIRED IN PRACTICE/);

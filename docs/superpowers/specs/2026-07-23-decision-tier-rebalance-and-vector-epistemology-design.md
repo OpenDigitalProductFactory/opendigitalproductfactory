@@ -104,6 +104,27 @@ Keep a **spine** of axes that genuinely trade off across every profession. Comma
 
 Reduction is by *demotion, not deletion* — an axis used by ≤6% of principles is a candidate to become profession-local (§2.2), not to vanish. `cost_efficiency` is the exception: it is used by zero principles and BI-E1267C6D already scopes authoring a principle for it.
 
+> **IMPLEMENTED 2026-07-24 (BI-AA7D80FE).** `PRINCIPLE_DIMENSION_SCOPE` in `packages/db/src/wiki-taxonomy.ts` labels all 20 axes — **12 spine, 8 profession-local** — each with a written rationale, and `satisfies Record<PrincipleDimension, …>` makes an unclassified new axis a compile error. Local axes declare `projectsOnto` and roll up via `projectVectorOntoSpine`.
+>
+> **One correction to the rule above.** "≤6% usage ⇒ demotion candidate" turned out to be the wrong criterion and was **not** applied literally. Raw usage measures *who authored the corpus*, and this spec's own §1.1 finding is that the specialist cohort is over-represented (53 of 100 kernel principles are `route-domain-specific`). The better evidence is **specialist-authorship share**:
+>
+> | axis | uses | specialist-authored | call |
+> |---|---|---|---|
+> | `schema_grounding` | 39 (3rd highest) | 51% | **demoted** — software vocabulary |
+> | `reusability` | 22 | 64% | **demoted** |
+> | `capacity_utilization` | 6 | 67% | demoted |
+> | `operational_independence` | 4 | 75% | demoted |
+> | `vendor_lock_in` | 2 | 100% | demoted |
+> | `reversibility` | 2 | 0% | **kept spine** |
+> | `data_privacy` | 1 | 0% | **kept spine** |
+> | `legibility_of_consequence` | 4 | 0% | **kept spine** |
+>
+> So a heavily-used axis was demoted (`schema_grounding`) and several barely-used axes were kept. Two guards were added that the ≤6% rule would have violated:
+> - **Universal obligations outrank frequency.** `public_safety` (3 uses) and `data_privacy` (1 use) stay spine. If a safety objection could not be weighed against a design objection in one ledger, the spine would have failed at its only job.
+> - **Young axes are protected.** `operator_effort` and `legibility_of_consequence` landed 2026-07-23 (BI-B5EA2FB2). Their counts measure their age, not their reach; demoting an axis in its first week would encode "new axes are niche".
+>
+> Projection splits weight evenly across multiple targets, so demoting an axis can never amplify a principle beyond its authored magnitude — otherwise demotion would be a stealth promotion.
+
 ### 2.2 Profession-local axes with mandatory projection (WSID)
 
 A profession may declare its own axes, in its own corpus, subject to three rules:
