@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-import { getActiveOrgCapabilities } from "@/lib/storefront/civic-surfaces.server";
+import { getActiveOrgCapabilities } from "@/lib/storefront/org-capabilities.server";
 import {
   RentalDeskPanel,
   type RentalAgreementRow,

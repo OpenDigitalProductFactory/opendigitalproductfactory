@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-import { hasActiveOrgCapability } from "@/lib/storefront/civic-surfaces.server";
+import { hasActiveOrgCapability } from "@/lib/storefront/org-capabilities.server";
 import {
   RecordsRequestsPanel,
   type RecordsRequestRow,

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-import { getActiveOrgCapabilities } from "@/lib/storefront/civic-surfaces.server";
+import { getActiveOrgCapabilities } from "@/lib/storefront/org-capabilities.server";
 import { CivicMeetingsPanel, type MeetingRow } from "@/components/civic/CivicMeetingsPanel";
 
 // Governance workbench (BI-8D477188 Phase 3; member-owned flavor BI-AFC178F3).
