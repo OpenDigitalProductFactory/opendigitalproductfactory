@@ -13,7 +13,7 @@ principleAppliesTo:
 principleRingScope:
   - ring-2-workflow
   - ring-4-sandbox-prod
-principleConsumerArchetype: route-domain-specific
+principleConsumerArchetype: universal
 principleConsumerContexts:
   - engineering-flow
 principlePublic: true

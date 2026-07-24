@@ -11,7 +11,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: route-domain-specific
+principleConsumerArchetype: universal
 principleConsumerContexts:
   - data-model
   - engineering-flow

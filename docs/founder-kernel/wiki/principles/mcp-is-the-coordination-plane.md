@@ -14,7 +14,7 @@ principleAppliesTo:
 principleRingScope:
   - ring-2-workflow
   - external-coordination
-principleConsumerArchetype: route-domain-specific
+principleConsumerArchetype: universal
 principleConsumerContexts:
   - build-studio
   - engineering-flow

@@ -12,7 +12,7 @@ principleAppliesTo:
   - human
 principleRingScope:
   - ring-2-workflow
-principleConsumerArchetype: route-domain-specific
+principleConsumerArchetype: universal
 principleConsumerContexts:
   - engineering-flow
 principlePublic: true

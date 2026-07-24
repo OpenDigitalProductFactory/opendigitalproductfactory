@@ -13,7 +13,7 @@ principleAppliesTo:
 principleRingScope:
   - ring-2-workflow
   - ring-3-archetype
-principleConsumerArchetype: route-domain-specific
+principleConsumerArchetype: universal
 principleConsumerContexts:
   - ui
   - data-model

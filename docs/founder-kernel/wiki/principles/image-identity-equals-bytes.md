@@ -13,7 +13,7 @@ principleAppliesTo:
   - human
 principleRingScope:
   - ring-4-sandbox-prod
-principleConsumerArchetype: route-domain-specific
+principleConsumerArchetype: universal
 principleConsumerContexts:
   - engineering-flow
   - release
