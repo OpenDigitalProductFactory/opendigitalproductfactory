@@ -9,12 +9,10 @@ principleDimensionVector: {"long_term_maintainability": 0.5, "reusability": 0.4,
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-2-workflow
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - portfolio
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Adopters managing the DPF backlog benefit from the no-parallel-epic discipline — duplicate epics are a real source of confusion.
 sources:

@@ -109,6 +109,17 @@ export const WIKI_SLUG_MIGRATIONS: readonly WikiSlugMigration[] = [
     to: "professions/software-engineer/tools-must-be-self-documenting",
     reason: "mcp cohort -> software-engineer (BI-5FE47130)",
   },
+  // Third cohort: single-context sourced `portfolio` principles.
+  {
+    from: "principles/backlog-lives-in-postgresql",
+    to: "professions/portfolio-management/backlog-lives-in-postgresql",
+    reason: "portfolio cohort -> portfolio-management (BI-5FE47130)",
+  },
+  {
+    from: "principles/check-epic-overlap-before-creating",
+    to: "professions/portfolio-management/check-epic-overlap-before-creating",
+    reason: "portfolio cohort -> portfolio-management (BI-5FE47130)",
+  },
 ];
 
 export type SlugMigrationOutcome = {

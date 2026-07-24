@@ -55,7 +55,7 @@ The sidecars that sessions spawn must be the **DPF MCP** (`/api/mcp/v1` via `DPF
 
 - [`one-common-process-three-surfaces`](one-common-process-three-surfaces.md) — the lifecycle this plane coordinates.
 - [`governance-approves-evidence-not-provenance`](governance-approves-evidence-not-provenance.md) — gates read MCP evidence, not provenance.
-- [`backlog-lives-in-postgresql`](backlog-lives-in-postgresql.md) — the canonical intake substrate.
+- [`backlog-lives-in-postgresql`](../../../professions/portfolio-management/wiki/backlog-lives-in-postgresql.md) — the canonical intake substrate.
 - [`db-fallback-explicit`](db-fallback-explicit.md) — what to do when the connector is offline.
 - [AGENTS.md §17](../../../../AGENTS.md) — operational summary.
 - [Unified Delivery Surfaces spec §3.2](../../../superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) — design context.
