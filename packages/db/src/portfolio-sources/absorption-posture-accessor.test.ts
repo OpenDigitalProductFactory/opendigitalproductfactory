@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { postureForArchetype } from "./absorption-posture.js";
+import { postureForArchetype } from "./absorption-posture";
 
 // P2 accessor test (BI-264FB4D8). The PrismaClient import is type-only (erased
 // at runtime), so a plain mock stands in — this runs in the source-only

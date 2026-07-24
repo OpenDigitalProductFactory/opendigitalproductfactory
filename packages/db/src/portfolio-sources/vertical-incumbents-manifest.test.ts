@@ -11,7 +11,7 @@ import {
   isConnectorTier,
   isIntegrationCategory,
   isVerticalKey,
-} from "./vertical-incumbents-manifest.js";
+} from "./vertical-incumbents-manifest";
 
 // P0 parity test (BI-513AE505). The manifest is the canonical structured home
 // for the ~100 boundary-map incumbents (spec §8). These assertions keep it

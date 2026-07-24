@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SUPPORTED_INTEGRATIONS } from "./supported-integrations-manifest.js";
-import { isPortfolioSlug } from "./types.js";
+import { SUPPORTED_INTEGRATIONS } from "./supported-integrations-manifest";
+import { isPortfolioSlug } from "./types";
 
 // P3 (BI-96BFA984) — the Tier-1 shared connector catalog. Pure manifest checks
 // (no Prisma client), so they run in the source-only worktree. Guards the

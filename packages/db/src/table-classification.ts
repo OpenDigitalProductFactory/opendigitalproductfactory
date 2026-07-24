@@ -13,7 +13,7 @@ export type TableSensitivity = "public" | "internal" | "confidential" | "restric
  * - restricted:   Secrets, credentials, auth tokens — never copy.
  */
 export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
-  // -- public (15) --
+  // -- public (16) --
   TaxonomyNode: "public",
   EaElementType: "public",
   EaRelationshipType: "public",
@@ -29,6 +29,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   City: "public",
   EmploymentType: "public",
   WorkLocation: "public",
+  // Authored vendor-ecosystem absorption doctrine — public vendor/product names,
+  // integration categories, verdicts. Reference data, no PII (BI-ECO-001).
+  AbsorptionPosture: "public",
 
   // -- internal (87) --
   Portfolio: "internal",

@@ -8,8 +8,8 @@ import {
   isAbsorptionStatus,
   isAbsorptionVerdict,
   postureIdFor,
-} from "./absorption-posture.js";
-import { VERTICAL_INCUMBENTS } from "./vertical-incumbents-manifest.js";
+} from "./absorption-posture";
+import { VERTICAL_INCUMBENTS } from "./vertical-incumbents-manifest";
 
 // P1 pure-logic tests (BI-BF909CE6). These exercise the seed-row builder and
 // the enum predicates without the Prisma client, so they run in the source-only

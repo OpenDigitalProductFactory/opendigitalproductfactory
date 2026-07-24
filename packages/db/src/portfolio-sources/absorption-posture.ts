@@ -13,7 +13,7 @@ import {
   archetypeIdsForVertical,
   connectorTierForCategory,
   type ConnectorTier,
-} from "./vertical-incumbents-manifest.js";
+} from "./vertical-incumbents-manifest";
 
 // ─── Verdict vocabulary (== IncumbentCoverageAssessment) ────────────────────
 export const ABSORPTION_VERDICTS = [
