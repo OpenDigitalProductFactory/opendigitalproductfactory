@@ -2013,7 +2013,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 2
+    "textMass": 5
   },
   "apps/web/app/(storefront)/s/[slug]/sign-up/page.tsx": {
     "vocabulary": 0,
@@ -7074,7 +7074,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 16
+    "textMass": 19
   },
   "apps/web/components/storefront/SignUpForm.tsx": {
     "vocabulary": 0,

@@ -3,13 +3,35 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { EmailField, TextField, SubmitButton, FormStatus } from "@/components/ui/form";
+import { sanitizeStorefrontReturnTo } from "@/lib/storefront/return-to";
 
-export function SignInForm({ orgSlug }: { orgSlug?: string }) {
+export function SignInForm({
+  orgSlug,
+  returnTo,
+}: {
+  orgSlug?: string;
+  /**
+   * Where to send the customer after a successful sign-in — captured from the
+   * booking/inquiry/order route they were on (BI-CC4BEB5F). Validated against
+   * open-redirect before use; an absent or unsafe value falls back to the
+   * storefront home (or `/portal` when this form isn't storefront-scoped).
+   */
+  returnTo?: string;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const safeReturnTo = sanitizeStorefrontReturnTo(returnTo, orgSlug);
+  // A customer who signed in FROM this business's storefront belongs back on
+  // that storefront (or the exact page they came from) — never the internal
+  // /portal, which is a different, non-customer-safe destination.
+  const successDestination = safeReturnTo ?? (orgSlug ? `/s/${orgSlug}` : "/portal");
+  const signUpHref = orgSlug
+    ? `/s/${orgSlug}/sign-up${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`
+    : "/portal/sign-up";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,7 +44,7 @@ export function SignInForm({ orgSlug }: { orgSlug?: string }) {
       setLoading(false);
       return;
     }
-    router.push("/portal");
+    router.push(successDestination);
   }
 
   return (
@@ -46,6 +68,13 @@ export function SignInForm({ orgSlug }: { orgSlug?: string }) {
           required
           autoComplete="current-password"
         />
+        <a
+          href="/forgot-password"
+          className="self-end text-xs font-medium text-[var(--dpf-accent)]"
+          style={{ marginTop: -8 }}
+        >
+          Forgot password?
+        </a>
         <SubmitButton pending={loading} pendingLabel="Signing in…">
           Sign in
         </SubmitButton>
@@ -57,14 +86,14 @@ export function SignInForm({ orgSlug }: { orgSlug?: string }) {
           <div className="text-center text-xs text-[var(--dpf-muted)]">or continue with</div>
           <button
             type="button"
-            onClick={() => signIn("google", { callbackUrl: "/portal" })}
+            onClick={() => signIn("google", { callbackUrl: successDestination })}
             className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-5 py-2.5 text-sm text-[var(--dpf-text)]"
           >
             Continue with Google
           </button>
           <button
             type="button"
-            onClick={() => signIn("apple", { callbackUrl: "/portal" })}
+            onClick={() => signIn("apple", { callbackUrl: successDestination })}
             className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-5 py-2.5 text-sm text-[var(--dpf-text)]"
           >
             Continue with Apple
@@ -73,15 +102,18 @@ export function SignInForm({ orgSlug }: { orgSlug?: string }) {
       )}
 
       <div className="text-center text-xs text-[var(--dpf-muted)]">
-        <a
-          href={orgSlug ? `/s/${orgSlug}/sign-up` : "/portal/sign-up"}
-          className="font-medium text-[var(--dpf-accent)]"
-        >
+        <a href={signUpHref} className="font-medium text-[var(--dpf-accent)]">
           Create an account
         </a>
-        {" · "}
-        <a href="/login" className="text-[var(--dpf-muted)]">
-          Staff login
+      </div>
+
+      {/* Staff login is not part of the customer journey — demoted below the
+          fold, small, and visually separated so it never reads as a peer
+          option to "Create an account" (BI-CC4BEB5F). */}
+      <div className="text-center text-[11px] text-[var(--dpf-muted)] opacity-60">
+        Staff member?{" "}
+        <a href="/login" className="underline">
+          Sign in here
         </a>
       </div>
     </div>

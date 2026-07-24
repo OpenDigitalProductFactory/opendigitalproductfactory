@@ -2,7 +2,6 @@
   "apps/web/app/(customer-auth)/customer-complete-profile/complete-profile-client.tsx": 8,
   "apps/web/app/(customer-auth)/customer-link-account/link-account-client.tsx": 3,
   "apps/web/app/(customer-auth)/customer-login/login-form.tsx": 1,
-  "apps/web/app/(customer-auth)/customer-signup/signup-form.tsx": 2,
   "apps/web/app/(portal)/portal/account/page.tsx": 2,
   "apps/web/app/(shell)/admin/backups/BackupsClient.tsx": 9,
   "apps/web/app/(shell)/admin/backups/RestoreConfirmModal.tsx": 7,

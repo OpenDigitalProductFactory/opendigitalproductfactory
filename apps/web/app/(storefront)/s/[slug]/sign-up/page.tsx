@@ -8,10 +8,10 @@ export default async function StorefrontSignUpPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ email?: string }>;
+  searchParams: Promise<{ email?: string; returnTo?: string }>;
 }) {
   const { slug } = await params;
-  const { email: prefillEmail } = await searchParams;
+  const { email: prefillEmail, returnTo } = await searchParams;
   // getPublicStorefront is React-cached, so this reuses the layout's fetch.
   const storefront = await getPublicStorefront(slug, { includeUnpublished: true });
   const orgName = storefront?.orgName;
@@ -27,7 +27,11 @@ export default async function StorefrontSignUpPage({
           Set up an account to {trust.accountPurpose}.
         </p>
       )}
-      <SignUpForm orgSlug={slug} {...(prefillEmail ? { prefillEmail } : {})} />
+      <SignUpForm
+        orgSlug={slug}
+        {...(prefillEmail ? { prefillEmail } : {})}
+        {...(returnTo ? { returnTo } : {})}
+      />
       <p style={{ marginTop: 20, fontSize: 12, color: "var(--dpf-muted)" }}>
         By creating an account you agree to our{" "}
         <Link href={`/s/${slug}/policies#terms`} style={{ color: "var(--dpf-accent)" }}>terms</Link>
