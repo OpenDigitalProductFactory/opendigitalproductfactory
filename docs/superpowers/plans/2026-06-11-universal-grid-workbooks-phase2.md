@@ -277,6 +277,18 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   day bucketing are the pure, unit-tested `grid-calendar.ts` (`monthGrid`/`bucketRowsByDay`/`cellDayKey`;
   ISO date strings are sliced, not `Date`-parsed, so a day never drifts across a timezone). Works on
   every grid (custom + platform). Grouping/sort don't apply in calendar mode.
+- **Slice 28 — visual refinement (POC, operator feedback "most interaction is basic text vs refined
+  graphical") — SHIPPED (calibration slice).** The grid was built functional-first on raw native
+  controls; DPF already carries `lucide-react` (icons), `@floating-ui/react` (popovers) and the
+  `report-kit`/`form` design kit that the grid never adopted. This POC routes it through them for one
+  slice so the operator can calibrate the target polish before a full roll-out: (1) a reusable styled
+  dropdown `GridSelect` (floating-ui listbox — hover/active states, selected check, keyboard nav) that
+  replaces the Group panel's native `<select>`s; (2) an **icon toolbar** (lucide) with active-state
+  colour on the toggles; (3) **single-cell copy/paste** (`onCellCopy`/`onCellPaste`) routed through the
+  existing `onRowsChange`→`persistCell` validation. **Follow-ups after calibration:** roll `GridSelect`
+  + icons across the remaining panels/toolbar; field-type icons in headers/pickers; and the big one —
+  **rectangular range select + block copy/paste + fill-handle** (react-data-grid v7 has no built-in
+  range selection, so it needs custom work atop `onSelectedCellChange`/`FillEvent`).
 - **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
   order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
   schema change — platform tables have no `WorkbookTable` row); richer charts (grouped/stacked/line);
