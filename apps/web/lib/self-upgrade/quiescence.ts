@@ -806,6 +806,30 @@ export type ActiveSessionBlockers = {
   softBlockers: number;
   unobservableSurfaces: string[];
   surfaces: SurfaceBlocker[];
+  /**
+   * Health verdict on the blocker set (BI-12E24186). Non-null when the capture
+   * auto-discounted a provably-empty deliberation loop cohort from the HARD
+   * blockers so the drain proceeds on its own. Per the WWMD decision
+   * (auto-discount + disclose, never silent), the panel renders this as the
+   * hero line so the operator sees a diagnosis — "stuck loop, not live work" —
+   * instead of a raw "AI coworker working ×N" that sends them to an empty page.
+   */
+  verdict?: BlockerVerdict | null;
+};
+
+/**
+ * A one-line health diagnosis surfaced above the blocker list. Today the only
+ * kind is the empty-deliberation-loop (the stub deliberation engine, BI-7B6B3C5C,
+ * makes plan gates loop forever producing no output); the shape is left open for
+ * future pathological patterns.
+ */
+export type BlockerVerdict = {
+  kind: "empty-deliberation-loop";
+  /** How many hard coworker-loop surfaces were reclassified to soft. */
+  discountedCount: number;
+  /** The builds whose plan deliberations are looping empty. */
+  buildIds: string[];
+  message: string;
 };
 
 export type SurfaceBlocker = {
@@ -868,6 +892,21 @@ const DEAD_PHASE_LIVENESS_MS = 15 * 60 * 1000;
  * corpses were never cleared.
  */
 const DEAD_COWORKER_LOOP_LIVENESS_MS = 15 * 60 * 1000;
+
+/**
+ * Fast-empty-churn detection (BI-12E24186). Distinct from the STALE-loop reaper
+ * above: an empty deliberation loop is FRESH — each run heartbeats, completes in
+ * under a second producing no branch output (consensusState=insufficient-evidence,
+ * the stub deliberation engine BI-7B6B3C5C), and a new one respawns seconds later
+ * — so isTaskRunReapable never fires and the loop holds the drain open. The signal
+ * is recurrence of empty outcomes on the SAME build inside this window. Zero branch
+ * output is the ground truth of "empty", so the detector never discounts a
+ * deliberation that actually produced a recommendation, and the minimum-run
+ * threshold keeps a single legitimately-inconclusive deliberation from tripping it.
+ */
+const EMPTY_DELIBERATION_LOOP_WINDOW_MS = 15 * 60 * 1000;
+const MIN_EMPTY_RUNS_FOR_LOOP = 3;
+const DELIBERATION_TITLE_PREFIX = "Deliberation:";
 
 /**
  * True when an in-flight build phase is a corpse: the most recent observable
@@ -1163,10 +1202,65 @@ export async function captureActiveSessionBlockers(opts?: {
     "inngest.in-step-execution",
   ];
 
-  // Counts derived from surfaces array.
-  const totalBlockers = surfaces.length;
-  const hardBlockers = surfaces.filter((s) => s.kind === "hard").length;
-  const softBlockers = surfaces.filter((s) => s.kind === "soft").length;
+  // Fast-empty-churn discount (BI-12E24186). A coworker "reasoning loop" that is
+  // really a plan deliberation on a build whose recent deliberations all land
+  // insufficient-evidence is a stuck EMPTY loop (root cause BI-7B6B3C5C), not live
+  // work — and it's FRESH each iteration, so the stale-loop reaper above never
+  // catches it. Reclassify those hard surfaces to soft so the drain proceeds, and
+  // record a verdict the panel surfaces. Bounded: only queries builds that have a
+  // live deliberation loop in this snapshot.
+  const loopBuildIds = [
+    ...new Set(
+      surfaces
+        .filter((s) => {
+          if (s.surface !== "coworker.reasoning-loop") return false;
+          const ev = s.evidence as Record<string, unknown>;
+          return (
+            typeof ev?.buildId === "string" &&
+            typeof ev?.title === "string" &&
+            ev.title.startsWith(DELIBERATION_TITLE_PREFIX)
+          );
+        })
+        .map((s) => (s.evidence as Record<string, unknown>).buildId as string),
+    ),
+  ];
+  let verdict: BlockerVerdict | null = null;
+  let effectiveSurfaces = surfaces;
+  if (loopBuildIds.length > 0) {
+    const emptyRunsByBuild = new Map<string, number>();
+    try {
+      const emptyRuns = await prisma.deliberationRun.findMany({
+        where: {
+          consensusState: "insufficient-evidence",
+          createdAt: { gte: new Date(now.getTime() - EMPTY_DELIBERATION_LOOP_WINDOW_MS) },
+          taskRun: { buildId: { in: loopBuildIds } },
+        },
+        select: { taskRun: { select: { buildId: true } } },
+      });
+      for (const r of emptyRuns) {
+        const b = r.taskRun?.buildId;
+        if (b) emptyRunsByBuild.set(b, (emptyRunsByBuild.get(b) ?? 0) + 1);
+      }
+    } catch (err) {
+      // Non-fatal: a failed history read must never break blocker capture. Worst
+      // case nothing is discounted and the loop surfaces as a hard blocker (the
+      // pre-BI-12E24186 behaviour), which is safe, just noisier.
+      console.warn("[quiescence] empty-loop history query failed (non-fatal):", err);
+    }
+    const discounted = applyEmptyLoopDiscount(surfaces, emptyRunsByBuild);
+    effectiveSurfaces = discounted.surfaces;
+    verdict = discounted.verdict;
+    if (verdict) {
+      console.warn(
+        `[quiescence] auto-discounted ${verdict.discountedCount} empty deliberation loop(s) on ${verdict.buildIds.length} build(s) from the drain (BI-12E24186).`,
+      );
+    }
+  }
+
+  // Counts derived from the (possibly discounted) surfaces array.
+  const totalBlockers = effectiveSurfaces.length;
+  const hardBlockers = effectiveSurfaces.filter((s) => s.kind === "hard").length;
+  const softBlockers = effectiveSurfaces.filter((s) => s.kind === "soft").length;
 
   return {
     capturedAt: now.toISOString(),
@@ -1175,7 +1269,8 @@ export async function captureActiveSessionBlockers(opts?: {
     hardBlockers,
     softBlockers,
     unobservableSurfaces,
-    surfaces,
+    surfaces: effectiveSurfaces,
+    verdict,
   };
 }
 
@@ -1311,6 +1406,9 @@ export type QuiescenceActivity = {
   /** Capture time of the snapshot the blockers were read from, if any. */
   blockersCapturedAt: string | null;
   blockers: QuiescenceBlockerLine[];
+  /** Health verdict for the panel hero line (BI-12E24186); null when nothing was
+   *  auto-discounted. */
+  verdict?: BlockerVerdict | null;
 };
 
 /** Map an internal surface key to a friendly operator label. */
@@ -1323,6 +1421,49 @@ export function describeBlockerSurface(surface: string): string {
     return `Build Studio — ${phase} phase`;
   }
   return surface;
+}
+
+/**
+ * Reclassify provably-empty deliberation-loop coworker surfaces from hard→soft so
+ * they stop deferring the drain, and produce a disclosure verdict (BI-12E24186).
+ * Pure and unit-tested. `emptyRunsByBuild` is the count of recent
+ * insufficient-evidence deliberations per build (gathered by the capture's history
+ * query). A coworker surface is discounted only when it is a deliberation loop
+ * (title prefix) on a build whose empty-run count meets MIN_EMPTY_RUNS_FOR_LOOP —
+ * so genuinely-live coworker work, and a build with a single inconclusive
+ * deliberation, are never discounted. Soft blockers do not defer the drain, so
+ * the reclassification is exactly the WWMD-chosen "auto-discount"; keeping the
+ * surfaces in the list (rather than dropping them) preserves disclosure.
+ */
+export function applyEmptyLoopDiscount(
+  surfaces: SurfaceBlocker[],
+  emptyRunsByBuild: Map<string, number>,
+): { surfaces: SurfaceBlocker[]; verdict: BlockerVerdict | null } {
+  const discountedBuilds = new Set<string>();
+  let discountedCount = 0;
+  const next = surfaces.map((s) => {
+    if (s.surface !== "coworker.reasoning-loop" || s.kind !== "hard") return s;
+    const ev = (s.evidence ?? {}) as Record<string, unknown>;
+    const title = typeof ev.title === "string" ? ev.title : "";
+    const buildId = typeof ev.buildId === "string" ? ev.buildId : null;
+    if (!buildId || !title.startsWith(DELIBERATION_TITLE_PREFIX)) return s;
+    if ((emptyRunsByBuild.get(buildId) ?? 0) < MIN_EMPTY_RUNS_FOR_LOOP) return s;
+    discountedBuilds.add(buildId);
+    discountedCount += 1;
+    return { ...s, kind: "soft" as const, evidence: { ...ev, emptyLoop: true } };
+  });
+  if (discountedCount === 0) return { surfaces: next, verdict: null };
+  const builds = [...discountedBuilds];
+  const runWord = discountedCount === 1 ? "run" : "runs";
+  const buildWord = builds.length === 1 ? "build" : "builds";
+  const message =
+    `${discountedCount} plan deliberation ${runWord} completing empty and looping on ` +
+    `${builds.length} ${buildWord} — a stuck loop, not live work. Auto-discounted so the ` +
+    `upgrade can proceed. Root cause: the deliberation engine produces no output (BI-7B6B3C5C).`;
+  return {
+    surfaces: next,
+    verdict: { kind: "empty-deliberation-loop", discountedCount, buildIds: builds, message },
+  };
 }
 
 /** Collapse a raw blockers snapshot into one line per surface, with counts. */
@@ -1391,6 +1532,7 @@ export async function getQuiescenceActivity(now: Date = new Date()): Promise<Qui
     run: null,
     blockersCapturedAt: null,
     blockers: [],
+    verdict: null,
   };
 
   if (typeof prisma.quiescenceRun?.findFirst !== "function") return base;
@@ -1423,6 +1565,7 @@ export async function getQuiescenceActivity(now: Date = new Date()): Promise<Qui
     },
     blockersCapturedAt: snapshot?.capturedAt ?? null,
     blockers: summarizeBlockers(snapshot),
+    verdict: snapshot?.verdict ?? null,
   };
 }
 

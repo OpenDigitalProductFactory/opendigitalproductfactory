@@ -7,7 +7,7 @@ apps/web/components/agent/AgentMessageInput.tsx	1034
 apps/web/components/ea/EaCanvas.tsx	1047
 apps/web/components/inventory/TopologyGraph.tsx	1031
 apps/web/components/ops/SelfUpgradeClient.test.tsx	1069
-apps/web/components/ops/SelfUpgradeClient.tsx	1113
+apps/web/components/ops/SelfUpgradeClient.tsx	1127
 apps/web/components/platform/AiOperationsMap.tsx	2881
 apps/web/components/platform/EffectivePermissionsPanel.tsx	851
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
@@ -50,8 +50,8 @@ apps/web/lib/operate/coworker-regression-detector.ts	935
 apps/web/lib/queue/functions/self-upgrade.test.ts	1383
 apps/web/lib/routing/chat-adapter.test.ts	902
 apps/web/lib/routing/fallback.test.ts	1077
-apps/web/lib/self-upgrade/quiescence.test.ts	865
-apps/web/lib/self-upgrade/quiescence.ts	1469
+apps/web/lib/self-upgrade/quiescence.test.ts	951
+apps/web/lib/self-upgrade/quiescence.ts	1612
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	903
 apps/web/lib/tak/agent-grants.ts	851

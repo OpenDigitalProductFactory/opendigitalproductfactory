@@ -519,6 +519,20 @@ export default function SelfUpgradeClient({
             </div>
           )}
 
+          {quiescence?.verdict && (
+            <div
+              className="p-2.5 rounded-lg bg-[var(--dpf-warning)]/15 border border-[var(--dpf-warning)]/40 text-xs space-y-0.5"
+              role="status"
+              aria-live="polite"
+              data-blocker-verdict={quiescence.verdict.kind}
+            >
+              <div className="font-medium text-[var(--dpf-warning)]">
+                Stuck loop, not live work
+              </div>
+              <div className="text-[var(--dpf-muted)]">{quiescence.verdict.message}</div>
+            </div>
+          )}
+
           {quiescence && quiescence.blockers.length > 0 && (
             <div className="text-xs">
               <div className="text-[var(--dpf-muted)] mb-1">

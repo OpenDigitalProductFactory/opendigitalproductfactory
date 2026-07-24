@@ -55,6 +55,7 @@ vi.mock("@/lib/tak/agent-event-bus", () => ({
 }));
 
 import {
+  applyEmptyLoopDiscount,
   captureActiveSessionBlockers,
   escalateQuiescenceToForced,
   isBuildPhaseReapable,
@@ -860,5 +861,90 @@ describe("signalSwapComplete — swap-signal retry", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("applyEmptyLoopDiscount — fast-empty-churn (BI-12E24186)", () => {
+  function coworkerLoop(opts: {
+    buildId?: string | null;
+    title?: string;
+    kind?: "hard" | "soft";
+  }): SurfaceBlocker {
+    return {
+      surface: "coworker.reasoning-loop",
+      detectionClass: "A",
+      kind: opts.kind ?? "hard",
+      blockerSignal: { class: "A", model: "TaskRun", rowId: "TR-x", status: "working" },
+      estimatedWaitMs: 30_000,
+      evidence: {
+        taskRunId: "TR-x",
+        title: opts.title ?? "Deliberation: review",
+        buildId: opts.buildId ?? "FB-AAA",
+        status: "working",
+      },
+    };
+  }
+
+  it("discounts a deliberation loop on a build over the empty-run threshold → soft + verdict", () => {
+    const surfaces = [coworkerLoop({ buildId: "FB-AAA" })];
+    const { surfaces: out, verdict } = applyEmptyLoopDiscount(
+      surfaces,
+      new Map([["FB-AAA", 3]]),
+    );
+    expect(out[0].kind).toBe("soft");
+    expect((out[0].evidence as Record<string, unknown>).emptyLoop).toBe(true);
+    expect(verdict).not.toBeNull();
+    expect(verdict?.discountedCount).toBe(1);
+    expect(verdict?.buildIds).toEqual(["FB-AAA"]);
+  });
+
+  it("does NOT discount below the recurrence threshold (a single inconclusive run)", () => {
+    const surfaces = [coworkerLoop({ buildId: "FB-AAA" })];
+    const { surfaces: out, verdict } = applyEmptyLoopDiscount(
+      surfaces,
+      new Map([["FB-AAA", 2]]),
+    );
+    expect(out[0].kind).toBe("hard");
+    expect(verdict).toBeNull();
+  });
+
+  it("does NOT discount a genuinely-live coworker loop (non-deliberation title)", () => {
+    const surfaces = [coworkerLoop({ buildId: "FB-AAA", title: "Implementing auth flow" })];
+    const { surfaces: out, verdict } = applyEmptyLoopDiscount(
+      surfaces,
+      new Map([["FB-AAA", 9]]),
+    );
+    expect(out[0].kind).toBe("hard");
+    expect(verdict).toBeNull();
+  });
+
+  it("leaves non-coworker surfaces untouched and reports zero when nothing matches", () => {
+    const phase: SurfaceBlocker = {
+      surface: "build-studio.phase.build",
+      detectionClass: "A",
+      kind: "hard",
+      blockerSignal: { class: "A", model: "BuildPhaseRun", rowId: "FB-AAA/build", status: "in-flight" },
+      estimatedWaitMs: 1_800_000,
+      evidence: { buildId: "FB-AAA", phase: "build" },
+    };
+    const { surfaces: out, verdict } = applyEmptyLoopDiscount([phase], new Map([["FB-AAA", 9]]));
+    expect(out[0].kind).toBe("hard");
+    expect(verdict).toBeNull();
+  });
+
+  it("aggregates discounts across multiple builds", () => {
+    const surfaces = [
+      coworkerLoop({ buildId: "FB-AAA" }),
+      coworkerLoop({ buildId: "FB-BBB", title: "Deliberation: debate" }),
+    ];
+    const { verdict } = applyEmptyLoopDiscount(
+      surfaces,
+      new Map([
+        ["FB-AAA", 5],
+        ["FB-BBB", 4],
+      ]),
+    );
+    expect(verdict?.discountedCount).toBe(2);
+    expect(verdict?.buildIds.sort()).toEqual(["FB-AAA", "FB-BBB"]);
   });
 });
