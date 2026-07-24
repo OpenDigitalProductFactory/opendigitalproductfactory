@@ -201,7 +201,7 @@ The paved-road walkthrough is the `dpf-establish-coworker` skill (`packages/dpf-
 
 ## 9. External Tools
 
-→ [kernel principle](docs/founder-kernel/wiki/principles/tool-evaluation-pipeline.md)
+→ [kernel principle](docs/professions/software-engineer/wiki/tool-evaluation-pipeline.md)
 
 External MCP servers, npm packages, and APIs must pass the Tool Evaluation Pipeline (EP-GOVERN-002) before adoption: 6 agents covering security, architecture, compliance, integration. Approved tools are version-pinned in `packages/db/data/approved_tools_registry.json` with re-evaluation scheduled.
 

@@ -3216,36 +3216,6 @@
         "see-also"
       ]
     },
-    "docs/founder-kernel/wiki/principles/tool-evaluation-pipeline.md": {
-      "publicHref": "/founder-kernel/wiki/principles/tool-evaluation-pipeline/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
-      ]
-    },
-    "docs/founder-kernel/wiki/principles/tools-must-be-self-documenting.md": {
-      "publicHref": "/founder-kernel/wiki/principles/tools-must-be-self-documenting/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
-      ]
-    },
     "docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md": {
       "publicHref": "/founder-kernel/wiki/principles/verify-substrate-before-proposing-new/",
       "portalHref": null,
@@ -6215,6 +6185,36 @@
         "why",
         "how-to-apply",
         "see-also"
+      ]
+    },
+    "docs/professions/software-engineer/wiki/tool-evaluation-pipeline.md": {
+      "publicHref": "/professions/software-engineer/wiki/tool-evaluation-pipeline/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
+      ]
+    },
+    "docs/professions/software-engineer/wiki/tools-must-be-self-documenting.md": {
+      "publicHref": "/professions/software-engineer/wiki/tools-must-be-self-documenting/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
       ]
     },
     "docs/professions/strategy-executive/wiki/align-work-to-strategy.md": {

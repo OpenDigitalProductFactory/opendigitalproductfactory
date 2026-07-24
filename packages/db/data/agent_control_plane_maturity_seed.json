@@ -37,7 +37,7 @@
     "maturityGaps": ["Gateway hardening", "Readiness scoring", "External MCP maturity"],
     "evidenceSources": [],
     "hiveMindSignals": [],
-    "kernelPrinciples": ["tool-evaluation-pipeline", "never-ask-user-to-run-commands"],
+    "kernelPrinciples": ["never-ask-user-to-run-commands"],
     "operationalSurface": "/platform/tools/integrations",
     "dependsOnAssessmentIds": ["ACPM-IDENTITY-AUTHORITY"]
   },

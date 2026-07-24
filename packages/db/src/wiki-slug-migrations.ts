@@ -97,6 +97,18 @@ export const WIKI_SLUG_MIGRATIONS: readonly WikiSlugMigration[] = [
     to: "professions/data-architect/trust-the-data-spine",
     reason: "data-model cohort -> data-architect (BI-5FE47130)",
   },
+  // Second cohort: single-context sourced `mcp` principles that are software
+  // engineering practice (evaluating + documenting tools).
+  {
+    from: "principles/tool-evaluation-pipeline",
+    to: "professions/software-engineer/tool-evaluation-pipeline",
+    reason: "mcp cohort -> software-engineer (BI-5FE47130)",
+  },
+  {
+    from: "principles/tools-must-be-self-documenting",
+    to: "professions/software-engineer/tools-must-be-self-documenting",
+    reason: "mcp cohort -> software-engineer (BI-5FE47130)",
+  },
 ];
 
 export type SlugMigrationOutcome = {
