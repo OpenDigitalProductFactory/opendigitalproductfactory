@@ -76,8 +76,39 @@ import {
   errorLooksLikeConfigGap,
   errorEndsEvalCycle,
   runDimensionEval,
+  deriveToolUseFromToolFidelity,
+  TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD,
   type DriftResult,
 } from "./eval-runner";
+
+
+// BI-DFC30977 Phase 2: calibration loop — supportsToolUse derived from toolFidelity score
+describe("deriveToolUseFromToolFidelity (BI-DFC30977 Phase 2 — calibration)", () => {
+  it("returns true when score meets the threshold (capable model)", () => {
+    expect(deriveToolUseFromToolFidelity(TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD)).toBe(true);
+    expect(deriveToolUseFromToolFidelity(70)).toBe(true);
+    expect(deriveToolUseFromToolFidelity(100)).toBe(true);
+  });
+
+  it("returns false when score is below the threshold (incapable model)", () => {
+    expect(deriveToolUseFromToolFidelity(TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD - 1)).toBe(false);
+    expect(deriveToolUseFromToolFidelity(0)).toBe(false);
+    expect(deriveToolUseFromToolFidelity(10)).toBe(false);
+  });
+
+  it("threshold boundary: score at exactly threshold is capable, one below is not", () => {
+    expect(deriveToolUseFromToolFidelity(TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD)).toBe(true);
+    expect(deriveToolUseFromToolFidelity(TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD - 1)).toBe(false);
+  });
+
+  it("threshold is in the expected calibration range (30-50) — guards against accidental mutations", () => {
+    // This test pins the constant so a refactor that accidentally changes the
+    // threshold (e.g. 35 → 0 or → 100) will fail visibly rather than silently
+    // routing all models as tool-capable or all as incapable.
+    expect(TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD).toBeGreaterThanOrEqual(30);
+    expect(TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD).toBeLessThanOrEqual(50);
+  });
+});
 
 describe("computeNewScore", () => {
   it("uses raw score on first eval (evalCount=0)", () => {

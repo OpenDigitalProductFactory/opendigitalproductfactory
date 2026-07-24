@@ -94,7 +94,28 @@ export function errorEndsEvalCycle(error: string | null): boolean {
   return errorLooksLikeInfrastructure(error) || errorLooksLikeConfigGap(error);
 }
 
-// ── Score Computation ────────────────────────────────────────────────────────
+// BI-DFC30977 Phase 2: threshold for deriving supportsToolUse from a measured
+// toolFidelity score. A score >= this value means the model produced a correct
+// tool call on at least ~1 in 3 attempts — sufficient signal to mark it capable.
+// Mirror of the magistral-tier prior boundary in deriveLocalModelCapabilityPrior
+// (@dpf/db/local-model-capabilities). Exported for deterministic unit testing.
+export const TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD = 35;
+
+/**
+ * Derive a supportsToolUse boolean from a measured toolFidelity score.
+ *
+ * Pure function — no DB, no side effects. Called by runDimensionEval when the
+ * toolFidelity dimension produces a conclusive result; exported for direct
+ * unit testing of the threshold boundary.
+ *
+ * Returns `true` when score >= TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD,
+ * `false` otherwise (model tried tool calls but failed consistently).
+ */
+export function deriveToolUseFromToolFidelity(score: number): boolean {
+  return score >= TOOL_FIDELITY_SUPPORTS_TOOLS_THRESHOLD;
+}
+
+
 
 /** Compute new dimension score from eval result and previous score. */
 export function computeNewScore(
@@ -544,10 +565,39 @@ export async function runDimensionEval(
   const allInconclusive = dimensions.every((d) => d.inconclusive);
   const hasRealScores = Object.keys(scoreUpdates).length > 0;
 
+  // BI-DFC30977 Phase 2: Close the calibration loop — write supportsToolUse as
+  // a boolean when the toolFidelity dimension produces a conclusive result.
+  //
+  // Without this write, a null-capability model that passes the routing gate
+  // (Phase 1: null = attempt-and-calibrate) would keep being reselected even
+  // after repeated tool-call failures, because the gate reads `supportsToolUse`
+  // (boolean) from the ModelProfile, not `toolFidelity` (score). The eval runner
+  // wrote the score but never updated the boolean, so the boolean stayed null
+  // and the router kept attempting the model.
+  //
+  // Threshold: ~35/100 mirrors the magistral-tier prior boundary used in
+  // deriveLocalModelCapabilityPrior (@dpf/db/local-model-capabilities).
+  // A score ≥ 35 means at least ~1 in 3 tool calls succeeded — sufficient signal
+  // to treat the model as tool-capable.
+  //
+  // Inconclusive → do not clobber: a noisy or infra-failed probe must not
+  // flip a previously-confirmed true to false. We only write when the dimension
+  // produced conclusive measured results.
+  //
+  // The pipeline-v2 circuit-breaker soft-exclusion provides the short-term
+  // safety net before the eval calibrates: a just-failed null-capability
+  // endpoint is cooled so it is not reselected on every agentic-loop iteration.
+  const toolFidelityDim = dimensions.find((d) => d.dimension === "toolFidelity");
+  const supportsToolUseUpdate: { supportsToolUse?: boolean } = {};
+  if (toolFidelityDim && !toolFidelityDim.inconclusive) {
+    supportsToolUseUpdate.supportsToolUse = deriveToolUseFromToolFidelity(toolFidelityDim.newScore);
+  }
+
   await prisma.modelProfile.update({
     where: { providerId_modelId: { providerId, modelId } },
     data: {
       ...scoreUpdates,
+      ...supportsToolUseUpdate,
       ...(hasRealScores ? { profileSource: "evaluated" as const } : {}),
       profileConfidence: (currentEvalCount + 1) >= 5 ? "high" : "medium",
       evalCount: { increment: 1 },

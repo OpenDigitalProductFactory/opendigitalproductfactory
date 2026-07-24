@@ -70,4 +70,16 @@ describe("satisfiesMinimumCapabilities", () => {
     );
     expect(result).toEqual({ satisfied: true });
   });
+
+  // BI-DFC30977: null = unknown → attempt-and-calibrate (must pass toolUse floor)
+  it("passes toolUse floor when supportsToolUse is null (unknown → attempt-and-calibrate)", () => {
+    const result = satisfiesMinimumCapabilities(ep({ supportsToolUse: null as never }), DEFAULT_MINIMUM_CAPABILITIES);
+    expect(result).toEqual({ satisfied: true });
+  });
+
+  // BI-DFC30977: explicit false must still be excluded (model×transport invariant)
+  it("fails toolUse floor when supportsToolUse is explicitly false (chatgpt/gpt-5.4 invariant)", () => {
+    const result = satisfiesMinimumCapabilities(ep({ supportsToolUse: false }), DEFAULT_MINIMUM_CAPABILITIES);
+    expect(result).toEqual({ satisfied: false, missingCapability: "toolUse" });
+  });
 });

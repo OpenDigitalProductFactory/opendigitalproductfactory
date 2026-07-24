@@ -197,6 +197,25 @@ describe("routeTask — Stage 1: Hard Filter", () => {
     expect(decision.candidates.find((c) => c.endpointId === "ep-active")?.excluded).toBe(false);
     expect(decision.candidates.find((c) => c.endpointId === "ep-degraded")?.excluded).toBe(false);
   });
+
+  // BI-DFC30977: null = unknown → attempt-and-calibrate
+  it("includes endpoint with supportsToolUse:null when task requires tools (attempt-and-calibrate)", () => {
+    const nullToolEps = [
+      ...endpoints,
+      makeEndpoint({ id: "ep-nulltool", name: "Null Tool", supportsToolUse: null as never, qualityTier: "frontier" }),
+    ];
+    const decision = routeTask(nullToolEps, toolTask, "internal", []);
+    const c = decision.candidates.find((c) => c.endpointId === "ep-nulltool")!;
+    expect(c.excluded).toBe(false);
+  });
+
+  // BI-DFC30977: explicit false stays excluded (model×transport invariant)
+  it("still excludes ep-notool (explicit supportsToolUse:false) when task requires tools", () => {
+    const decision = routeTask(endpoints, toolTask, "internal", []);
+    const c = decision.candidates.find((c) => c.endpointId === "ep-notool")!;
+    expect(c.excluded).toBe(true);
+    expect(c.excludedReason).toMatch(/tool support/);
+  });
 });
 
 // ── Stage 2 & 3: Score & Rank ─────────────────────────────────────────────────

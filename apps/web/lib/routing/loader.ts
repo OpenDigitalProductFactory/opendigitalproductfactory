@@ -209,7 +209,7 @@ function profileToManifest(
         : mp.provider.status)) as EndpointManifest["status"],
     providerTier: classifyProviderTier(mp.providerId),
     sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
-    supportsToolUse: resolveToolUse(mp) ?? false,
+    supportsToolUse: resolveToolUse(mp),
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,
     supportsStreaming: mp.provider.supportsStreaming,
     maxContextTokens: mp.maxContextTokens ?? mp.provider.maxContextTokens,

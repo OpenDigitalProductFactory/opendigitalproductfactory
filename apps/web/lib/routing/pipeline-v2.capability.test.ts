@@ -108,4 +108,30 @@ describe("getExclusionReasonV2 — capability floor (EP-AGENT-CAP-002)", () => {
     const reason = getExclusionReasonV2(ep, c);
     expect(reason).toContain("imageInput");
   });
+
+  // BI-DFC30977: null = unknown capability → attempt-and-calibrate (must be eligible)
+  it("passes endpoint when requiresTools and endpoint has supportsToolUse: null (unknown → attempt-and-calibrate)", () => {
+    const ep = activeEp({ supportsToolUse: null as never });
+    const c = contract({ minimumCapabilities: { toolUse: true } });
+    expect(getExclusionReasonV2(ep, c)).toBeNull();
+  });
+
+  it("passes endpoint when requiresTools=true and supportsToolUse: null without minimumCapabilities", () => {
+    const ep = activeEp({ supportsToolUse: null as never });
+    const c = contract({ requiresTools: true });
+    expect(getExclusionReasonV2(ep, c)).toBeNull();
+  });
+
+  // BI-DFC30977: explicit false floor must still be excluded (model×transport invariant)
+  it("still excludes chatgpt/gpt-5.4 with explicit supportsToolUse:false on tool-requiring turn", () => {
+    const ep = activeEp({
+      providerId: "chatgpt",
+      modelId: "gpt-5.4",
+      supportsToolUse: false,
+    });
+    const c = contract({ minimumCapabilities: { toolUse: true } });
+    const reason = getExclusionReasonV2(ep, c);
+    expect(reason).not.toBeNull();
+    expect(reason).toContain("toolUse");
+  });
 });

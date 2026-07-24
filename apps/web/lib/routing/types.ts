@@ -38,7 +38,7 @@ export interface EndpointManifest {
 
   // Hard constraints
   sensitivityClearance: SensitivityLevel[];
-  supportsToolUse: boolean;
+  supportsToolUse: boolean | null;
   supportsStructuredOutput: boolean;
   supportsStreaming: boolean;
   maxContextTokens: number | null;

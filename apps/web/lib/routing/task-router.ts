@@ -138,9 +138,9 @@ export function routeTask(
     } else if (!endpoint.sensitivityClearance.includes(sensitivity)) {
       excluded = true;
       reason = `Excluded: sensitivity clearance insufficient for '${sensitivity}'`;
-    } else if (taskRequirement.requiredCapabilities.supportsToolUse && !endpoint.supportsToolUse) {
+    } else if (taskRequirement.requiredCapabilities.supportsToolUse && endpoint.supportsToolUse === false) {
       excluded = true;
-      reason = "Excluded: task requires tool support";
+      reason = "Excluded: task requires tool support"; // BI-DFC30977: null = attempt-and-calibrate; only false excluded
     } else if (taskRequirement.requiredCapabilities.supportsStructuredOutput && !endpoint.supportsStructuredOutput) {
       excluded = true;
       reason = "Excluded: task requires structured output";

@@ -193,6 +193,24 @@ describe("filterHard", () => {
     const { eligible } = filterHard([degraded], greetingReq, "public");
     expect(eligible.map((e) => e.id)).toContain("ep-degraded");
   });
+
+  // BI-DFC30977: null = unknown → attempt-and-calibrate
+  it("allows endpoint with supportsToolUse:null through when task requires tools (attempt-and-calibrate)", () => {
+    const unknownTool = makeEndpoint({
+      id: "ep-unknown-tool",
+      supportsToolUse: null as never,
+      toolFidelity: 0,
+    });
+    const { eligible } = filterHard([unknownTool], codeGenReq, "public");
+    expect(eligible.map((e) => e.id)).toContain("ep-unknown-tool");
+  });
+
+  // BI-DFC30977: explicit false stays excluded (model×transport invariant)
+  it("excludes endpoint with supportsToolUse:false when task requires tools (explicit floor)", () => {
+    const { eligible, excluded } = filterHard([noTools], codeGenReq, "public");
+    expect(eligible.map((e) => e.id)).not.toContain("ep-no-tools");
+    expect(excluded.some((e) => e.endpointId === "ep-no-tools")).toBe(true);
+  });
 });
 
 // ── filterByPolicy ────────────────────────────────────────────────────────────

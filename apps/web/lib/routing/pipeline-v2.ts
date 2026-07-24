@@ -106,7 +106,12 @@ export function getExclusionReasonV2(
   // deriveLocalModelCapabilityPrior (@dpf/db/local-model-capabilities) — the same
   // prior the seed uses — so a coder model (qwen3-coder) resolves supportsToolUse: true
   // and an embedding model (nomic-embed) resolves false.
-  if (contract.requiresTools && !ep.supportsToolUse) {
+  //
+  // BI-DFC30977: null (unknown capability) is attempt-and-calibrate — do NOT exclude it.
+  // Only an *explicit* false (from provider floor, capabilityOverrides, or catalog) is
+  // excluded. resolveToolUse() in loader.ts already floors every explicit-false source
+  // to false (never null), so === false is the correct and complete exclusion predicate.
+  if (contract.requiresTools && ep.supportsToolUse === false) {
     return "Missing required capability: toolUse";
   }
 

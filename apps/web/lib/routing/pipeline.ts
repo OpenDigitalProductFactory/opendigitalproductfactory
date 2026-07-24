@@ -151,7 +151,8 @@ export function getExclusionReason(
   // Required capabilities
   const caps = req.requiredCapabilities;
 
-  if (caps.supportsToolUse && !ep.supportsToolUse) {
+  // BI-DFC30977: null = unknown capability → attempt-and-calibrate. Only explicit false excludes.
+  if (caps.supportsToolUse && ep.supportsToolUse === false) {
     return "Missing required capability: supportsToolUse";
   }
 
