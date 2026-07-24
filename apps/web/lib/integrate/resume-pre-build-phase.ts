@@ -506,6 +506,17 @@ export async function resumePreBuildPhase(params: {
               phase,
               reason: `plan → build transition failed (attempt ${outcome.failures}); will retry next cycle (${outcome.reason}).`,
             };
+          case "dependency-unsatisfiable":
+            // A dead sibling made this build permanently unrunnable; the
+            // transition already abandoned it, so it leaves the resume candidate
+            // set for good instead of re-queuing the "Waiting on: …" skip forever
+            // (BI-7B6D7661). Report as resumed — a terminal action WAS taken.
+            return {
+              kind: "resumed",
+              phase,
+              via: "performPlanToBuildTransition",
+              detail: `abandoned — dead upstream dependency (${outcome.deadDependencyBuildIds.join(", ") || "unknown"}): ${outcome.reason}`,
+            };
           case "gate-blocked":
           case "wwmd-withheld":
             return { kind: "skipped", phase, reason: `plan → build ${outcome.kind}: ${outcome.reason}` };

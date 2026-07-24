@@ -140,6 +140,27 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     expect((out as { reason: string }).reason).toContain("escalated");
   });
 
+  it("stops re-queuing when the plan→build transition abandons a dependency-deadlocked build (BI-7B6D7661)", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "pass" },
+      parentEpicId: "cmr-epic",
+    });
+    performPlanToBuildTransitionMock.mockResolvedValue({
+      kind: "dependency-unsatisfiable",
+      reason: "Blocked permanently: sibling build(s) Partner team truck were abandoned/failed …",
+      deadDependencyBuildIds: ["FB-DEAD"],
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-DEADLOCK", phase: "plan", userId: "uD" });
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledOnce();
+    // The transition already abandoned it; resume does not re-run review and
+    // reports a terminal action (resumed), not a re-queuing skip.
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: "resumed", via: "performPlanToBuildTransition" });
+    expect((out as { detail: string }).detail).toContain("FB-DEAD");
+  });
+
   it("still runs the canonical plan review (not the reconciler) when no review verdict exists yet", async () => {
     findUniqueMock.mockResolvedValue({ designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] } });
     const out = await resumePreBuildPhase({ buildId: "FB-NOREV", phase: "plan", userId: "uNR" });

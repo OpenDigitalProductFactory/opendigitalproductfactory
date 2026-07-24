@@ -16,15 +16,19 @@ const startBuildPhaseRunMock = vi.fn();
 const completeBuildPhaseRunMock = vi.fn();
 const dispatchBuildMock = vi.fn();
 
-vi.mock("@dpf/db", () => ({
-  prisma: {
+vi.mock("@dpf/db", () => {
+  const prisma = {
     featureBuild: {
       findUnique: (...a: unknown[]) => findUniqueMock(...a),
       update: (...a: unknown[]) => updateMock(...a),
     },
     buildActivity: { create: (...a: unknown[]) => activityCreateMock(...a) },
-  },
-}));
+    // abandonDeadlockedDependent runs its re-check + write in a $transaction;
+    // invoke the callback immediately with the same mocked delegates.
+    $transaction: (fn: (tx: unknown) => unknown) => fn(prisma),
+  };
+  return { prisma };
+});
 vi.mock("@/lib/feature-build-types", () => ({
   checkPhaseGate: (...a: unknown[]) => checkPhaseGateMock(...a),
   canTransitionPhase: (...a: unknown[]) => canTransitionPhaseMock(...a),
@@ -207,5 +211,56 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
     expect(out).toMatchObject({ kind: "transition-failed", failures: 1 });
     expect(startBuildBranchMock).not.toHaveBeenCalled();
+  });
+
+  // BI-7B6D7661: an unsatisfiable dependency (a dead sibling) must terminally
+  // abandon the dependent, not loop as gate-blocked forever.
+  it("abandons the build (not gate-blocked) when a dependency is unsatisfiable", async () => {
+    findUniqueMock
+      // 1st read: the transition's own build fetch (still in plan).
+      .mockResolvedValueOnce(planBuild({ parentEpicId: "epic-1" }))
+      // 2nd read: the re-check inside abandonDeadlockedDependent's transaction.
+      .mockResolvedValueOnce({ phase: "plan", abandonedAt: null });
+    deriveDependencyGateMock.mockReturnValue({
+      allowed: false,
+      blocked: "unsatisfiable",
+      waitingOn: [{ buildId: "FB-DEAD", title: "Dead sibling", phase: "abandoned" }],
+      deadDependencies: [{ buildId: "FB-DEAD", title: "Dead sibling", phase: "abandoned" }],
+      message: "Blocked permanently: sibling build(s) Dead sibling were abandoned/failed …",
+    });
+
+    const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+
+    expect(out).toMatchObject({ kind: "dependency-unsatisfiable", deadDependencyBuildIds: ["FB-DEAD"] });
+    // Terminally abandoned — NOT flipped to build, NOT left in plan.
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ phase: "abandoned" }) }),
+    );
+    expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({ data: { phase: "build" } }));
+    expect(startBuildBranchMock).not.toHaveBeenCalled();
+    // WWMD gate never runs — we bailed at the dependency gate.
+    expect(evaluateWwmdGateMock).not.toHaveBeenCalled();
+  });
+
+  it("does not abandon a build that advanced out of plan between the gate read and the write", async () => {
+    findUniqueMock
+      .mockResolvedValueOnce(planBuild({ parentEpicId: "epic-1" }))
+      // Re-check finds it already moved on — leave it untouched.
+      .mockResolvedValueOnce({ phase: "build", abandonedAt: null });
+    deriveDependencyGateMock.mockReturnValue({
+      allowed: false,
+      blocked: "unsatisfiable",
+      waitingOn: [{ buildId: "FB-DEAD", title: "Dead sibling", phase: "failed" }],
+      deadDependencies: [{ buildId: "FB-DEAD", title: "Dead sibling", phase: "failed" }],
+      message: "Blocked permanently …",
+    });
+
+    const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+
+    expect(out.kind).toBe("dependency-unsatisfiable");
+    // Re-check guard held: no abandon write.
+    expect(updateMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ phase: "abandoned" }) }),
+    );
   });
 });
