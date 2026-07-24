@@ -359,6 +359,27 @@ jobs:
       - name: Run guard
         run: node scripts/check-module-size.mjs
 
+  instruction-plane-guard:
+    name: Instruction Plane Guard
+    runs-on: ubuntu-latest
+    # BI-0020D511, Phase 0. The always-on agent instruction plane (AGENTS.md,
+    # forced by the CLAUDE.md pointer) grew ~4k chars in a day while the audit
+    # that measured it was open — proof it re-accretes without a ratchet. This
+    # guard sums BYTES across the manifest (scripts/instruction-plane-manifest.json)
+    # and lets the plane only SHRINK (scripts/instruction-plane-baseline.txt),
+    # and asserts the pointer forces no file outside the manifest. Structural
+    # per-section/per-line signals are advisory until Phase 1 lands the split.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Guard unit tests
+        run: node --test scripts/check-instruction-plane-size.test.mjs
+      - name: Run guard
+        run: node scripts/check-instruction-plane-size.mjs
+
   archetype-completeness-guard:
     name: Archetype Completeness Guard
     runs-on: ubuntu-latest

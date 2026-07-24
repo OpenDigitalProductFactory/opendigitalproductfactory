@@ -1,0 +1,12 @@
+{
+  "_comment": "Always-on agent instruction plane (BI-0020D511, Phase 0). The ratchet (scripts/check-instruction-plane-size.mjs) sums BYTES across `alwaysOn` and forbids growth past scripts/instruction-plane-baseline.txt; the `pointerFile` may only force files listed in `alwaysOn` (closure check). Design: docs/superpowers/specs/2026-07-24-agent-instruction-plane-split-and-ratchet-design.md §4c.",
+  "pointerFile": "CLAUDE.md",
+  "alwaysOn": [
+    "CLAUDE.md",
+    "AGENTS.md",
+    "CONVENTIONS.md"
+  ],
+  "perSectionCharBudget": 6000,
+  "maxLineChars": 800,
+  "structuralStrict": false
+}
