@@ -467,4 +467,25 @@ export async function seedEaReferenceModels(): Promise<void> {
   });
 
   await seedBianReferenceModel(bianModel.id);
+
+  // BI-98D19DF2: a workbook read that silently yields zero rows (e.g. an
+  // LFS pointer stub masquerading as the real .xlsx, or a JSON schema
+  // change that empties every extracted row) must fail loudly here rather
+  // than let the seed report success while a fresh install imports
+  // nothing. Row-count assertion, not just absence of a thrown error.
+  const [it4itElementCount, bianElementCount] = await Promise.all([
+    prisma.eaReferenceModelElement.count({ where: { modelId: model.id } }),
+    prisma.eaReferenceModelElement.count({ where: { modelId: bianModel.id } }),
+  ]);
+
+  if (it4itElementCount === 0) {
+    throw new Error(
+      `IT4IT reference model imported zero elements from ${IT4IT_WORKBOOK_PATH} — the workbook read did not throw but produced no rows (check for an LFS pointer stub or an empty/relabelled sheet).`
+    );
+  }
+  if (bianElementCount === 0) {
+    throw new Error(
+      "BIAN Service Landscape reference model imported zero elements — the JSON read did not throw but produced no business areas/domains/service domains (check docs/Reference/bian/bian-v14-service-landscape.json)."
+    );
+  }
 }
