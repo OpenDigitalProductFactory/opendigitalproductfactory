@@ -8,14 +8,24 @@
 // collapsed on the next load/refresh (the everyday state is the compact chip, not
 // the open control). Loads and saves THIS coworker's own posture (debounced), so
 // each coworker remembers its priority and that posture tunes its runs.
-import { useEffect, useRef, useState } from "react";
+//
+// BI-20716EA4: posture and proactivity saves now go through the shared
+// `useSaveState` primitive instead of `.catch(() => {})`. A failed save snaps
+// the control back to the last confirmed value and shows Retry/Revert next to
+// the chip; `resetKey={agentId}` keeps the debounce-flush-on-switch and
+// clobber-guard behaviour the hand-rolled refs used to provide, without a
+// dock reused across coworkers leaking one agent's failed/pending status onto
+// the next.
+import { useEffect, useState } from "react";
 
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
 import { getCoworkerGoldenTrianglePosture, saveCoworkerGoldenTrianglePosture } from "@/lib/actions/golden-triangle";
 import { getCoworkerProactivityPreference, saveCoworkerProactivityPreference } from "@/lib/actions/proactivity";
+import { useSaveState } from "@/lib/shared/use-save-state";
 
 import { ProactivityLevelControl } from "@/components/proactivity/ProactivityLevelControl";
+import { SaveStateIndicator } from "@/components/ui/SaveStateIndicator";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
 
 import { GoldenTriangleControl } from "./GoldenTriangleControl";
@@ -23,48 +33,41 @@ import { GoldenTriangleGradient } from "./GoldenTriangleGradient";
 import { postureLabel, preferenceFromPreset } from "./posture-display";
 
 export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
-  const [pref, setPref] = useState<GoldenTrianglePreference>(preferenceFromPreset("balanced"));
-  const [proactivityLevel, setProactivityLevel] = useState<ProactivityLevel>("balanced");
+  // The server-confirmed load, fed into useSaveState's `value`. A later load
+  // response only reconciles into the control when nothing is pending/failed,
+  // so an in-flight edit is never clobbered (replaces the old editedRef guard).
+  const [loadedPref, setLoadedPref] = useState<GoldenTrianglePreference>(preferenceFromPreset("balanced"));
+  const [loadedProactivity, setLoadedProactivity] = useState<ProactivityLevel>("balanced");
   // Collapsed by default: the resting state is the compact colour-graded chip in
   // the header, not the open triangle. Re-initializes collapsed on every load so a
   // refresh never leaves the control hanging open (founder report 2026-06-26).
   const [collapsed, setCollapsed] = useState(true);
-  const savedRef = useRef<string>(JSON.stringify(preferenceFromPreset("balanced")));
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The operator has changed the posture this mount. Guards the async load from
-  // clobbering an edit made while the initial fetch was still in flight, and marks
-  // whether a pending change still needs flushing on unmount.
-  const editedRef = useRef(false);
-  // The latest changed-but-not-yet-persisted posture (the debounce target). Held in
-  // a ref so the unmount cleanup can flush it — cleanup closes over stale `pref`.
-  const pendingRef = useRef<GoldenTrianglePreference | null>(null);
-  // Same clobber guard for the proactivity load (it persists immediately, so no
-  // debounce-flush is needed — only the in-flight-load overwrite to prevent).
-  const proactivityEditedRef = useRef(false);
+
+  const postureSave = useSaveState<GoldenTrianglePreference>({
+    value: loadedPref,
+    onSave: (next) => saveCoworkerGoldenTrianglePosture(agentId, next),
+    // Debounced per-coworker save (drag emits many changes; persist the settled
+    // one) — same 800ms window the hand-rolled timer used.
+    debounceMs: 800,
+    resetKey: agentId,
+    failureMessage: "Couldn't save this coworker's priority. Try again.",
+  });
+  const proactivitySave = useSaveState<ProactivityLevel>({
+    value: loadedProactivity,
+    onSave: (next) => saveCoworkerProactivityPreference(agentId, next),
+    resetKey: agentId,
+    failureMessage: "Couldn't save this coworker's proactivity level. Try again.",
+  });
 
   useEffect(() => {
     let alive = true;
     getCoworkerGoldenTrianglePosture(agentId)
       .then((p) => {
-        // Don't overwrite a value the operator already changed while this load was
-        // in flight (founder report 2026-07-06: Priority snapping back to the middle).
-        if (alive && p && !editedRef.current) {
-          setPref(p);
-          savedRef.current = JSON.stringify(p);
-        }
+        if (alive && p) setLoadedPref(p);
       })
       .catch(() => {});
     return () => {
       alive = false;
-      if (timerRef.current) clearTimeout(timerRef.current);
-      // Flush a pending debounced save so a change made <800ms before navigating away
-      // (switching coworkers, closing the panel) is persisted instead of silently lost
-      // — the primary cause of Priority resetting to the middle on return.
-      const pending = pendingRef.current;
-      if (pending && JSON.stringify(pending) !== savedRef.current) {
-        savedRef.current = JSON.stringify(pending);
-        void saveCoworkerGoldenTrianglePosture(agentId, pending).catch(() => {});
-      }
     };
   }, [agentId]);
 
@@ -72,7 +75,7 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
     let alive = true;
     getCoworkerProactivityPreference(agentId)
       .then((level) => {
-        if (alive && level && !proactivityEditedRef.current) setProactivityLevel(level);
+        if (alive && level) setLoadedProactivity(level);
       })
       .catch(() => {});
     return () => {
@@ -80,31 +83,12 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
     };
   }, [agentId]);
 
+  const pref = postureSave.value;
+  const proactivityLevel = proactivitySave.value;
+
   // Same meaningful label as the expanded control's badge — a dragged posture
   // reads e.g. "Lower Cost" (the corner it sits on), never a bare "Custom".
   const activeLabel = postureLabel(pref);
-
-  function onChange(next: GoldenTrianglePreference) {
-    editedRef.current = true;
-    pendingRef.current = next;
-    setPref(next);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    // Debounced per-coworker save (drag emits many changes; persist the settled one).
-    timerRef.current = setTimeout(() => {
-      const cur = JSON.stringify(next);
-      if (cur !== savedRef.current) {
-        savedRef.current = cur;
-        saveCoworkerGoldenTrianglePosture(agentId, next).catch(() => {});
-      }
-      pendingRef.current = null;
-    }, 800);
-  }
-
-  function onProactivityChange(next: ProactivityLevel) {
-    proactivityEditedRef.current = true;
-    setProactivityLevel(next);
-    saveCoworkerProactivityPreference(agentId, next).catch(() => {});
-  }
 
   return (
     <div style={{ borderTop: "1px solid var(--dpf-border)", background: "color-mix(in srgb, var(--dpf-surface-2) 70%, transparent)" }}>
@@ -138,13 +122,39 @@ export function CoworkerPriorityDock({ agentId }: { agentId: string }) {
             {collapsed ? "▸" : "▾"}
           </span>
         </button>
-        <ProactivityLevelControl value={proactivityLevel} onChange={onProactivityChange} />
+        <ProactivityLevelControl value={proactivityLevel} onChange={proactivitySave.change} />
       </div>
+      {(postureSave.status !== "idle" || proactivitySave.status !== "idle") && (
+        <div style={{ padding: "0 12px", display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {postureSave.status !== "idle" && (
+            <SaveStateIndicator
+              compact
+              status={postureSave.status}
+              error={postureSave.error}
+              onRetry={postureSave.retry}
+              onRevert={postureSave.revert}
+              savedLabel="Priority saved"
+              pendingLabel="Saving priority…"
+            />
+          )}
+          {proactivitySave.status !== "idle" && (
+            <SaveStateIndicator
+              compact
+              status={proactivitySave.status}
+              error={proactivitySave.error}
+              onRetry={proactivitySave.retry}
+              onRevert={proactivitySave.revert}
+              savedLabel="Proactivity saved"
+              pendingLabel="Saving proactivity…"
+            />
+          )}
+        </div>
+      )}
       {!collapsed && (
         <div style={{ padding: "0 12px 10px" }}>
           <GoldenTriangleControl
             value={pref}
-            onChange={onChange}
+            onChange={postureSave.change}
             compact
             taskClass="conversation"
             authorityScopeKind="wsid"

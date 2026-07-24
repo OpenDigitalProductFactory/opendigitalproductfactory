@@ -19,6 +19,7 @@ vi.mock("@/lib/actions/proactivity", () => ({
 }));
 
 import { CoworkerPriorityDock } from "./CoworkerPriorityDock";
+import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
 
 describe("CoworkerPriorityDock", () => {
   beforeEach(() => {
@@ -83,5 +84,67 @@ describe("CoworkerPriorityDock", () => {
 
     await waitFor(() => expect(saveProactivityPreference).toHaveBeenCalledWith("agent-1", "quiet"));
     expect(screen.getByRole("button", { name: /Proactivity quiet/i })).toBeTruthy();
+  });
+
+  // BI-20716EA4 — a swallowed `.catch(() => {})` used to leave the owner with
+  // no signal that a posture/proactivity change never persisted.
+  it("surfaces a failed proactivity save with a plain-language retry (BI-20716EA4)", async () => {
+    getPosture.mockResolvedValueOnce(null);
+    getProactivityPreference.mockResolvedValueOnce("assertive");
+    saveProactivityPreference.mockResolvedValueOnce({ ok: false, error: "Network error" });
+
+    render(<CoworkerPriorityDock agentId="agent-1" />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Proactivity assertive/i })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /Proactivity assertive/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Quiet/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Network error");
+    // Optimistic value snaps back to the last confirmed level.
+    expect(screen.getByRole("button", { name: /Proactivity assertive/i })).toBeTruthy();
+
+    const retryButton = screen.getByRole("button", { name: "Retry" });
+    expect(retryButton).toHaveClass(SHELL_TAP_TARGET_CLASS);
+    expect(screen.getByRole("button", { name: "Revert" })).toHaveClass(SHELL_TAP_TARGET_CLASS);
+
+    saveProactivityPreference.mockResolvedValueOnce({ ok: true });
+    fireEvent.click(retryButton);
+    await screen.findByText("Proactivity saved");
+  });
+
+  it("surfaces a failed posture save (debounced) and reverts on failure (BI-20716EA4)", async () => {
+    getPosture.mockResolvedValueOnce(null);
+    savePosture.mockResolvedValueOnce({ ok: false });
+
+    render(<CoworkerPriorityDock agentId="agent-1" />);
+    await waitFor(() => expect(getPosture).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /Priority/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Assured/ }));
+
+    await waitFor(() => expect(savePosture).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await screen.findByRole("alert");
+    // Snapped back to the pre-edit label (Balanced default).
+    expect(screen.getByRole("button", { name: /Priority.*Balanced/ })).toBeTruthy();
+  });
+
+  it("resets a subject's save state when the dock is reused for a different coworker", async () => {
+    getPosture.mockResolvedValueOnce(null);
+    saveProactivityPreference.mockResolvedValueOnce({ ok: false });
+    getProactivityPreference.mockResolvedValueOnce("assertive");
+
+    const { rerender } = render(<CoworkerPriorityDock agentId="agent-1" />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Proactivity assertive/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Proactivity assertive/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Quiet/i }));
+    await screen.findByRole("alert");
+
+    getPosture.mockResolvedValueOnce(null);
+    getProactivityPreference.mockResolvedValueOnce("balanced");
+    rerender(<CoworkerPriorityDock agentId="agent-2" />);
+
+    // The failed status from agent-1 must not leak onto agent-2's dock.
+    await waitFor(() => expect(screen.getByRole("button", { name: /Proactivity balanced/i })).toBeTruthy());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

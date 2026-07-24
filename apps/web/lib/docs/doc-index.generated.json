@@ -4107,6 +4107,7 @@
         "contrast-requirements",
         "form-elements",
         "user-facing-form-contract-mandatory",
+        "preferencetuning-save-state-contract-bi-20716ea4",
         "prohibited-patterns",
         "allowed-hex-usage",
         "component-checklist",

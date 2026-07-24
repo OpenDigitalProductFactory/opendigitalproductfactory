@@ -20,10 +20,12 @@ import {
   setUpstreamFeedbackOptIn,
   fileUpstreamFeedback,
 } from "@/lib/actions/feedback-escalation";
+import { submitReport } from "@/lib/quality-queue";
 
 const mockConsent = vi.mocked(getUpstreamFeedbackConsent);
 const mockOptIn = vi.mocked(setUpstreamFeedbackOptIn);
 const mockFile = vi.mocked(fileUpstreamFeedback);
+const mockSubmitReport = vi.mocked(submitReport);
 
 async function submitAReport() {
   fireEvent.change(screen.getByPlaceholderText(/describe what happened/i), {
@@ -95,5 +97,73 @@ describe("FeedbackForm — upstream escalation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /report to the project team/i }));
     await screen.findByText(/Couldn.t send to the project team: Relay error: boom/);
+  });
+});
+
+// BI-20716EA4 — the submit path previously had no pending state, no
+// try/catch, and no retry/error UI: `await submitReport(...)` with nothing
+// wrapping it meant a rejection (e.g. the offline-queue write itself
+// throwing) left the owner staring at a form that looked like it did nothing.
+describe("FeedbackForm — submit pending/failed/retry (BI-20716EA4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConsent.mockResolvedValue({ optIn: false, relayConfigured: true, forkOnly: false, paused: false });
+  });
+
+  afterEach(() => cleanup());
+
+  it("disables and relabels Submit while the request is in flight", async () => {
+    let resolveSubmit!: (value: { ok: boolean; reportId?: string }) => void;
+    mockSubmitReport.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSubmit = resolve;
+      }),
+    );
+    render(<FeedbackForm routeContext="/build" />);
+
+    fireEvent.change(screen.getByPlaceholderText(/describe what happened/i), {
+      target: { value: "Dashboard crashed" },
+    });
+    const submit = screen.getByRole("button", { name: /^submit(ting…)?$/i });
+    fireEvent.click(submit);
+
+    expect(screen.getByRole("button", { name: "Submitting…" })).toBeDisabled();
+
+    resolveSubmit({ ok: true, reportId: "PIR-ZZZZZ" });
+    await screen.findByText(/Report PIR-ZZZZZ filed/);
+  });
+
+  it("shows a plain-language retry when submitReport rejects, and keeps the typed report", async () => {
+    mockSubmitReport.mockRejectedValueOnce(new Error("offline queue write failed"));
+    render(<FeedbackForm routeContext="/build" />);
+
+    fireEvent.change(screen.getByPlaceholderText(/describe what happened/i), {
+      target: { value: "Dashboard crashed" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/couldn.t save/i);
+    // The typed report is never lost — the form stays on-screen, editable.
+    expect(screen.getByPlaceholderText(/describe what happened/i)).toHaveValue("Dashboard crashed");
+
+    mockSubmitReport.mockResolvedValueOnce({ ok: true, reportId: "PIR-RETRY" });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await screen.findByText(/Report PIR-RETRY filed/);
+    expect(mockSubmitReport).toHaveBeenCalledTimes(2);
+  });
+
+  it("still treats an offline-queued { ok: false } result as a soft success, not a failure", async () => {
+    mockSubmitReport.mockResolvedValueOnce({ ok: false });
+    render(<FeedbackForm routeContext="/build" />);
+
+    fireEvent.change(screen.getByPlaceholderText(/describe what happened/i), {
+      target: { value: "Dashboard crashed" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    await screen.findByText(/Saved — will be sent when connectivity is restored/);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
