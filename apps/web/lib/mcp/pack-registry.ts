@@ -67,6 +67,7 @@ import { codeIntelligencePack } from "./packs/code-intelligence-pack";
 import { contributionHivePack } from "./packs/contribution-hive-pack";
 import { taxonomyArchetypePack } from "./packs/taxonomy-archetype-pack";
 import { modelProviderPack } from "./packs/model-provider-pack";
+import { aiPlatformPosturePack } from "./packs/ai-platform-posture-pack";
 import { wikiPack } from "./packs/wiki-pack";
 import { discoveryPack } from "./packs/discovery-pack";
 import { coworkerPack } from "./packs/coworker-pack";
@@ -139,6 +140,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   contributionHivePack,
   taxonomyArchetypePack,
   modelProviderPack,
+  aiPlatformPosturePack,
   wikiPack,
   discoveryPack,
   coworkerPack,

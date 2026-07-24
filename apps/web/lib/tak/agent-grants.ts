@@ -463,6 +463,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Provider management
   add_provider: ["agent_control_read"],
   update_provider_category: ["agent_control_read"],
+  // Read-only AI-layer state aggregation for the posture-article refresh task
+  // (BI-5903D447) — same tier as the sibling provider-management tools.
+  get_ai_platform_posture: ["agent_control_read"],
   run_endpoint_tests: ["agent_control_read"],
   activity_harness_confidence_override: ["agent_control_read"],
   // Provision a coworker's tool authority — grant/revoke one grant key. Same
