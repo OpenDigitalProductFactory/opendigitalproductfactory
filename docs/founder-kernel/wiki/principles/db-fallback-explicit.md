@@ -11,7 +11,7 @@ principleAppliesTo:
   - external_coding_agent
 principleRingScope:
   - ring-1-coworker
-principleConsumerArchetype: route-domain-specific
+principleConsumerArchetype: ai-coworker-universal
 principleConsumerContexts:
   - mcp
   - data-model
