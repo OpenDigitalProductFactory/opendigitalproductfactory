@@ -161,6 +161,12 @@ export function createLocalIntegrationPlan(input) {
     ...(input.includeMigrateDeploy
       ? [["pnpm", "--filter", "@dpf/db", "exec", "prisma", "migrate", "deploy"]]
       : []),
+    // Fast PR guard parity: these CI jobs are cheap and fail before the heavy
+    // shards when committed docs/generated indexes or repo-wide guard ratchets
+    // are stale. Run them here so local-CI catches the same failures pre-push.
+    ["node", "scripts/gen-doc-index.mjs", "--check"],
+    ["node", "scripts/check-doc-links.mjs"],
+    ["node", "scripts/check-guards.mjs"],
     ["env", HOST_TEST_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "vitest", "run"],
     // typecheck needs the same heap headroom as the host-next build: with the
     // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)

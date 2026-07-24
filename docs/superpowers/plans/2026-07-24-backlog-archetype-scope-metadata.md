@@ -1,6 +1,6 @@
 # Backlog Archetype Scope Metadata Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Use the DPF-native delivery path (`dpf-tdd`, `dpf-local-merge-ci-before-push`, and `dpf-pr-with-dco`) to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make backlog and epic planning explicitly filterable by platform/common/archetype scope so vertical roadmapping and investment budgeting do not rely on title/body inference.
 
