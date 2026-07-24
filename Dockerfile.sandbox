@@ -8,7 +8,16 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # sandbox. SHELL is also exported so child processes inherit a known shell.
 # gcompat + libstdc++/libgcc let the official (glibc-linked) Grok Build CLI binary run on
 # this Alpine/musl base. Verified: grok 0.2.32 loads and executes under gcompat here.
-RUN apk add --no-cache git postgresql16-client curl bubblewrap bash gcompat libstdc++ libgcc
+# git-lfs (BI-82CB5A7D): belt-and-suspenders alongside the code-level
+# hooksPath override in build-branch.ts. The repo's .githooks/post-checkout,
+# post-commit, and post-merge hooks are LFS-aware and exit 2 whenever
+# `git-lfs` is missing from PATH — the primary fix disables those hooks for
+# the sandbox's own build-tree git operations (they're spurious here since
+# .gitattributes only LFS-tracks *.pdf/*.xlsx/*.docx, never source), but
+# installing the real binary means any future workflow that DOES need an LFS
+# smudge (e.g. checking out a tracked document asset) still works correctly
+# instead of silently skipping it.
+RUN apk add --no-cache git git-lfs postgresql16-client curl bubblewrap bash gcompat libstdc++ libgcc
 ENV SHELL=/bin/bash
 # Codex CLI: OpenAI's coding agent (like Claude Code but for OpenAI models).
 # Used by the Build Studio orchestrator to execute build tasks autonomously.
