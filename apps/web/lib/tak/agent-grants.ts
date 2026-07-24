@@ -268,6 +268,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // (build_promote → build_lifecycle).
   promote_to_build_studio:          ["build_lifecycle"],
   process_backlog_for_build_studio: ["build_lifecycle"],
+  // BI-297863B2: governed self-abandon of an agent's OWN stalled/superseded
+  // build — the lifecycle-mutation sibling of promote, same grant.
+  abandon_stalled_build:            ["build_lifecycle"],
 
   // Deliberation (multi-branch peer review / debate)
   start_deliberation:        ["deliberation_create"],

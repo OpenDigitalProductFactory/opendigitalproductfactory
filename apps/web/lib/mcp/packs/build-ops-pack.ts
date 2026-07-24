@@ -53,6 +53,25 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "abandon_stalled_build",
+    description:
+      "Abandon a build YOU own that has stalled or been superseded, freeing its Build Studio WIP slot. Restricted to builds created by the calling agent; refuses a build with an active task run in progress, an epic-decomposed child, or one that has had recent activity (unless it carries an explicit supersession marker). Requires a reason citing evidence (e.g. \"shipped elsewhere in PR #X\" or \"superseded by FB-Y\") — recorded as the audited abandon reason. Authority-gated via the build_lifecycle grant, the same grant that gates promoting a build into Build Studio.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "The FB-* build to abandon. Must be owned by the calling agent." },
+        reason: {
+          type: "string",
+          description:
+            "Evidence for why this build is stalled or superseded, e.g. \"shipped elsewhere in PR #1981\" or \"superseded by FB-...\". Required — becomes the audited abandon reason.",
+        },
+      },
+      required: ["buildId", "reason"],
+    },
+    requiredCapability: "manage_capabilities",
+    sideEffect: true,
+  },
+  {
     name: "update_lifecycle",
     description: "Update a digital product's lifecycle stage and status",
     inputSchema: {
@@ -247,6 +266,38 @@ async function promoteToBuildStudioHandler(params: Record<string, unknown>, user
       backlogItemId: itemId,
       autoApprovedDispatchEligible: result.autoApprovedDispatchEligible,
     },
+  };
+}
+
+async function abandonStalledBuildHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+  const buildId = String(params["buildId"] ?? "").trim();
+  const reason = String(params["reason"] ?? "").trim();
+  if (!buildId) {
+    return { success: false, error: "missing_build_id", message: "buildId is required." };
+  }
+  if (!reason) {
+    return {
+      success: false,
+      error: "missing_reason",
+      message:
+        "reason is required — cite evidence (e.g. \"shipped elsewhere in PR #X\" or \"superseded by FB-Y\").",
+    };
+  }
+
+  const { abandonOwnStalledBuild } = await import("@/lib/build/self-abandon-eligibility");
+  const result = await abandonOwnStalledBuild({ buildId, callerId: userId, reason });
+
+  if (result.kind === "not_found") {
+    return { success: false, error: "build_not_found", message: `Build ${buildId} not found.` };
+  }
+  if (result.kind === "ineligible") {
+    return { success: false, error: `self_abandon_${result.reason}`, message: result.detail };
+  }
+  return {
+    success: true,
+    entityId: result.buildId,
+    message: `Abandoned ${result.buildId} — freed its Build Studio WIP slot.`,
+    data: { buildId: result.buildId, reason },
   };
 }
 
@@ -489,6 +540,7 @@ async function generateCodeHandler(): Promise<ToolResult> {
 
 const handlers: Record<string, ToolPackHandler> = {
   promote_to_build_studio: (params, userId) => promoteToBuildStudioHandler(params, userId),
+  abandon_stalled_build: (params, userId) => abandonStalledBuildHandler(params, userId),
   update_lifecycle: (params) => updateLifecycleHandler(params),
   verify_live_install_readiness: (params) => verifyLiveInstallReadinessHandler(params),
   run_tool_script: (params, userId, context) => runToolScriptHandler(params, userId, context),
@@ -503,6 +555,7 @@ export const buildOpsPack: ToolPack = {
   handlers,
   grants: {
     promote_to_build_studio: ["build_lifecycle"],
+    abandon_stalled_build: ["build_lifecycle"],
     update_lifecycle: ["backlog_write"],
     verify_live_install_readiness: ["release_plan_read"],
     run_tool_script: ["tool_script_exec"],

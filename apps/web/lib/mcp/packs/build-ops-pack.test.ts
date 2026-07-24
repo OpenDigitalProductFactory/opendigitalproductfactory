@@ -94,11 +94,15 @@ vi.mock("@/lib/git-utils", () => gitUtils);
 const endpointRunner = vi.hoisted(() => ({ runEndpointTests: vi.fn() }));
 vi.mock("@/lib/endpoint-test-runner", () => endpointRunner);
 
+const selfAbandon = vi.hoisted(() => ({ abandonOwnStalledBuild: vi.fn() }));
+vi.mock("@/lib/build/self-abandon-eligibility", () => selfAbandon);
+
 import { buildOpsPack } from "./build-ops-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
 const DEFINITION_TOOLS = [
   "promote_to_build_studio",
+  "abandon_stalled_build",
   "update_lifecycle",
   "verify_live_install_readiness",
   "run_tool_script",
@@ -110,6 +114,7 @@ const HANDLER_TOOLS = [...DEFINITION_TOOLS, "generate_code"];
 
 const EXPECTED_GRANTS: Record<string, string[]> = {
   promote_to_build_studio: ["build_lifecycle"],
+  abandon_stalled_build: ["build_lifecycle"],
   update_lifecycle: ["backlog_write"],
   verify_live_install_readiness: ["release_plan_read"],
   run_tool_script: ["tool_script_exec"],
@@ -140,7 +145,7 @@ beforeEach(() => {
 });
 
 describe("build-ops pack — registration", () => {
-  it("advertises the six build-ops definitions", () => {
+  it("advertises the build-ops definitions", () => {
     expect(buildOpsPack.definitions.map((d) => d.name).sort()).toEqual([...DEFINITION_TOOLS].sort());
     expect(buildOpsPack.packId).toBe("build-ops");
   });
@@ -339,5 +344,59 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
     expect(res.success).toBe(false);
     expect(res.error).toBe("wip_cap_reached");
     expect(teeUp.promoteBacklogItemToBuildDraft).not.toHaveBeenCalled();
+  });
+
+  it("abandon_stalled_build requires a buildId", async () => {
+    const res = await buildOpsPack.handlers.abandon_stalled_build({ reason: "gone" }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("missing_build_id");
+    expect(selfAbandon.abandonOwnStalledBuild).not.toHaveBeenCalled();
+  });
+
+  it("abandon_stalled_build requires a reason", async () => {
+    const res = await buildOpsPack.handlers.abandon_stalled_build({ buildId: "FB-1" }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("missing_reason");
+    expect(selfAbandon.abandonOwnStalledBuild).not.toHaveBeenCalled();
+  });
+
+  it("abandon_stalled_build reports build_not_found", async () => {
+    selfAbandon.abandonOwnStalledBuild.mockResolvedValue({ kind: "not_found" });
+    const res = await buildOpsPack.handlers.abandon_stalled_build(
+      { buildId: "FB-nope", reason: "gone" },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("build_not_found");
+  });
+
+  it("abandon_stalled_build surfaces an ineligibility reason (e.g. not the owner)", async () => {
+    selfAbandon.abandonOwnStalledBuild.mockResolvedValue({
+      kind: "ineligible",
+      reason: "not_owner",
+      detail: "Only the build's own creator may self-abandon it.",
+    });
+    const res = await buildOpsPack.handlers.abandon_stalled_build(
+      { buildId: "FB-1", reason: "gone" },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("self_abandon_not_owner");
+    expect(res.message).toContain("own creator");
+  });
+
+  it("abandon_stalled_build abandons an eligible stalled build owned by the caller", async () => {
+    selfAbandon.abandonOwnStalledBuild.mockResolvedValue({ kind: "abandoned", buildId: "FB-1" });
+    const res = await buildOpsPack.handlers.abandon_stalled_build(
+      { buildId: "FB-1", reason: "shipped elsewhere in PR #1981" },
+      "u1",
+    );
+    expect(res.success).toBe(true);
+    expect(res.entityId).toBe("FB-1");
+    expect(selfAbandon.abandonOwnStalledBuild).toHaveBeenCalledWith({
+      buildId: "FB-1",
+      callerId: "u1",
+      reason: "shipped elsewhere in PR #1981",
+    });
   });
 });

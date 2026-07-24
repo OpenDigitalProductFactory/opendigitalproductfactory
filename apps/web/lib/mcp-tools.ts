@@ -295,6 +295,8 @@ const DESTRUCTIVE_TOOLS = new Set([
   "process_backlog_for_build_studio",
   "approve_decomposition",
   "start_build",
+  // BI-297863B2: flips a FeatureBuild to abandoned — can't quietly take back.
+  "abandon_stalled_build",
 ]);
 
 export type ToolResult = {
