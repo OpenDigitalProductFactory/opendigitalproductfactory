@@ -83,6 +83,7 @@ import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
 import { deriveLocalModelCapabilityPrior, localInputModalities } from "./local-model-capabilities.js";
 import { ensureDefaultProviderConnection } from "./provider-connection.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
+import { seedAbsorptionPosture } from "./seed-absorption-posture.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -2396,6 +2397,7 @@ async function main(): Promise<void> {
   const bootstrapOrganizationId = await ensureBootstrapOrganization();
 
   await step("integrationCoverage", () => seedIntegrationCoverage(prisma, bootstrapOrganizationId));
+  await step("absorptionPosture", () => seedAbsorptionPosture(prisma));
   await step("stallThresholds", () => seedStallThresholds(prisma));
   await step("geographicData", () => seedGeographicData(prisma));
   await step("taxJurisdictions", () => seedTaxJurisdictions(prisma));

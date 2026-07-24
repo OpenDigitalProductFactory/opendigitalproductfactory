@@ -105,6 +105,17 @@ Deliverable -> BacklogItem (all children of BI-ECO-001 under EP-ECOSYSTEM-ABSORP
 - P2 -- Wire posture matrix to boundary-map / incumbent-coverage default / onboarding prefill -> BI-264FB4D8
 - P3 -- Seed Tier-1 shared connector catalog (closes McpIntegration=0) -> BI-96BFA984
 
+## Implementation (2026-07-24)
+
+All four phases landed together (the phases are tightly coupled: manifest → model+seed → accessor → catalog). Files:
+
+- **P0 (BI-513AE505):** `packages/db/src/portfolio-sources/vertical-incumbents-manifest.ts` — 108 incumbents, the closed `integrationCategory→connectorTier` map (category is the unit of tiering per §6.1), and the `verticalKey→archetypeIds` map. `vertical-incumbents-manifest.test.ts` validates every archetypeId against the real `ALL_ARCHETYPES` set, category/tier closure, and no dupes.
+- **P1 (BI-BF909CE6):** `AbsorptionPosture` model (`schema.prisma`) + additive migration `20260724160000_add_absorption_posture` + `portfolio-sources/absorption-posture.ts` (verdict/source/status enums matching `IncumbentCoverageAssessment`, conservative `defaultVerdictForTier` — nothing seeds `native_now`, tier3→`provider_led`, tier1/2→`generic_connector`, all `status=proposed`). `seed-absorption-posture.ts` is idempotent AND non-clobbering (refreshes only rows still `source=seed, status=proposed`), wired into `seed.ts`.
+- **P2 (BI-264FB4D8):** `postureForArchetype(prisma, archetypeId)` accessor (array-containment on `archetypeIds`, shared-first ordering) + mocked-Prisma unit test. The three consumers (boundary-map surface, `IncumbentCoverageAssessment` stage-1 default, onboarding prefill) read it when they build.
+- **P3 (BI-96BFA984):** extended `SUPPORTED_INTEGRATIONS` with 13 Tier-1 connectors filling the categories the original 12 left open (calendar/scheduling, transactional messaging, documents, inventory) — closing the readiness gap without duplication.
+
+Verified: 26 unit tests pass (source-only worktree); `prisma validate` clean; the DB-touching seed/accessor are covered by CI (which regenerates the client).
+
 ## 7. Sequencing
 
 Independent of the `BI-PSC-010` keystone and of the §11 founder questions — it can start now. It is spec §7 priority #3 (after the keystone and Tier-1 connectors) but is the **most immediately buildable** slice because its substrate (the ~100 providers, the verdict vocabulary, the McpIntegration table) is fully in hand. P3 is the concrete first step of the Tier-1 connector priority (#2) and can run in parallel.
