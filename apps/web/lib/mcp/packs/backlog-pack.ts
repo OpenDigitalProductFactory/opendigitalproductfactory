@@ -25,6 +25,7 @@ import {
   backlogScopeUpdateProperties,
   optionalStringParam,
   stringArrayParam,
+  validScopeKind,
 } from "./backlog-scope-metadata";
 import { getBacklogItem, listBacklogItems, listEpics, queryBacklog } from "./backlog-pack-read-tools";
 import {
