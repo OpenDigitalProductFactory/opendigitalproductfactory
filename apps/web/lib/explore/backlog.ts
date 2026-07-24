@@ -11,6 +11,11 @@ export type BacklogItemInput = {
   taxonomyNodeId?: string;
   digitalProductId?: string;
   epicId?: string;
+  scopeKind?: BacklogScopeKind;
+  archetypeCategories?: string[];
+  archetypeIds?: string[];
+  scopeRationale?: string;
+  lifecycleTags?: string[];
 };
 
 export type BacklogItemWithRelations = {
@@ -27,6 +32,11 @@ export type BacklogItemWithRelations = {
   triageOutcome: string | null;
   effortSize: string | null;
   activeBuildId: string | null;
+  scopeKind?: string | null;
+  archetypeCategories?: string[];
+  archetypeIds?: string[];
+  scopeRationale?: string | null;
+  lifecycleTags?: string[];
   activeBuild: { buildId: string; phase: string | null } | null;
   digitalProduct: { id: string; productId: string; name: string } | null;
   taxonomyNode: { id: string; nodeId: string; name: string } | null;
@@ -108,6 +118,9 @@ export function validateBacklogInput(input: BacklogItemInput): string | null {
   if (!input.title.trim()) return "Title is required";
   if (input.type === "product" && !input.digitalProductId) {
     return "A digital product is required for product-type items";
+  }
+  if (input.scopeKind && !BACKLOG_SCOPE_KIND_VALUES.includes(input.scopeKind)) {
+    return "Invalid scope kind";
   }
   return null;
 }
@@ -192,6 +205,19 @@ export type DemandScoreFramework = (typeof DEMAND_SCORE_FRAMEWORKS)[number];
 // Adding a value requires updating this enum AND the mirror in mcp-tools.ts.
 export const INVESTMENT_BUCKET_VALUES = ["run", "grow", "transform"] as const;
 export type InvestmentBucket = (typeof INVESTMENT_BUCKET_VALUES)[number];
+
+// Backlog/epic planning scope (BI-E387A203): lets roadmap and budget views
+// distinguish platform/common work from category/leaf-specific vertical gaps.
+// Adding a value requires updating MCP schema parity tests in the same commit.
+export const BACKLOG_SCOPE_KIND_VALUES = [
+  "platform",
+  "common",
+  "archetype-category",
+  "archetype-leaf",
+  "multi-archetype",
+  "unknown",
+] as const;
+export type BacklogScopeKind = (typeof BACKLOG_SCOPE_KIND_VALUES)[number];
 
 /** Returns null if valid, or an error message if invalid. */
 export function validateEpicInput(input: EpicInput): string | null {

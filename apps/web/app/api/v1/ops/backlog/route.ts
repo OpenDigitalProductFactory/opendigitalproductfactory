@@ -18,6 +18,10 @@ export async function GET(request: Request) {
     const { cursor, limit } = parsePagination(url.searchParams);
     const statusFilter = url.searchParams.get("status");
     const epicIdFilter = url.searchParams.get("epicId");
+    const scopeKindFilter = url.searchParams.get("scopeKind");
+    const archetypeCategoryFilter = url.searchParams.get("archetypeCategory");
+    const archetypeIdFilter = url.searchParams.get("archetypeId");
+    const lifecycleTagFilter = url.searchParams.get("lifecycleTag");
 
     const where: Record<string, unknown> = {};
     if (cursor) {
@@ -28,6 +32,18 @@ export async function GET(request: Request) {
     }
     if (epicIdFilter) {
       where.epicId = epicIdFilter;
+    }
+    if (scopeKindFilter) {
+      where.scopeKind = scopeKindFilter;
+    }
+    if (archetypeCategoryFilter) {
+      where.archetypeCategories = { has: archetypeCategoryFilter };
+    }
+    if (archetypeIdFilter) {
+      where.archetypeIds = { has: archetypeIdFilter };
+    }
+    if (lifecycleTagFilter) {
+      where.lifecycleTags = { has: lifecycleTagFilter };
     }
 
     const items = await prisma.backlogItem.findMany({
@@ -43,6 +59,11 @@ export async function GET(request: Request) {
         body: true,
         priority: true,
         epicId: true,
+        scopeKind: true,
+        archetypeCategories: true,
+        archetypeIds: true,
+        scopeRationale: true,
+        lifecycleTags: true,
         createdAt: true,
         updatedAt: true,
         completedAt: true,
@@ -83,7 +104,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const { title, body: itemBody, type, epicId, priority } = parsed.data;
+    const {
+      title,
+      body: itemBody,
+      type,
+      epicId,
+      priority,
+      scopeKind,
+      archetypeCategories,
+      archetypeIds,
+      scopeRationale,
+      lifecycleTags,
+    } = parsed.data;
 
     const item = await prisma.backlogItem.create({
       data: {
@@ -93,6 +125,11 @@ export async function POST(request: Request) {
         status: "open",
         priority: priority ?? null,
         epicId: epicId ?? null,
+        scopeKind: scopeKind ?? null,
+        archetypeCategories: archetypeCategories ?? [],
+        archetypeIds: archetypeIds ?? [],
+        scopeRationale: scopeRationale?.trim() || null,
+        lifecycleTags: lifecycleTags ?? [],
         submittedById: user.id,
         ...(itemBody !== undefined && { body: itemBody.trim() || null }),
       },

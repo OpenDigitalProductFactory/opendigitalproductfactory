@@ -10,10 +10,12 @@ import {
   BACKLOG_STATUS_VALUES,
   BACKLOG_WORK_TYPE_VALUES,
   BACKLOG_SOURCE_VALUES,
+  BACKLOG_SCOPE_KIND_VALUES,
   type BacklogItemInput,
   type BacklogStatus,
   type BacklogWorkType,
   type BacklogSource,
+  type BacklogScopeKind,
   type EpicInput,
 } from "@/lib/backlog";
 
@@ -24,6 +26,11 @@ async function requireManageBacklog(): Promise<void> {
 async function getSessionUserId(): Promise<string | null> {
   const session = await auth();
   return session?.user?.id ?? null;
+}
+
+function cleanStringArray(values: string[] | undefined): string[] {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
 }
 
 // ─── BacklogItem actions ──────────────────────────────────────────────────────
@@ -46,6 +53,11 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
     digitalProductId: input.digitalProductId ?? null,
     epicId:           input.epicId ?? null,
     submittedById:    await getSessionUserId(),
+    scopeKind:         input.scopeKind ?? null,
+    archetypeCategories: cleanStringArray(input.archetypeCategories),
+    archetypeIds:        cleanStringArray(input.archetypeIds),
+    scopeRationale:      input.scopeRationale?.trim() || null,
+    lifecycleTags:       cleanStringArray(input.lifecycleTags),
     ...(input.body !== undefined && { body: input.body.trim() || null }),
   };
   const created = await prisma.backlogItem.create({ data: createData, select: { id: true } });
@@ -59,7 +71,17 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
   const error = validateBacklogInput(input);
   if (error) throw new Error(error);
 
-  const existing = await prisma.backlogItem.findUnique({ where: { id }, select: { status: true } });
+  const existing = await prisma.backlogItem.findUnique({
+    where: { id },
+    select: {
+      status: true,
+      scopeKind: true,
+      archetypeCategories: true,
+      archetypeIds: true,
+      scopeRationale: true,
+      lifecycleTags: true,
+    },
+  });
   const isNowDone = input.status === "done" || input.status === "deferred";
   const wasDone = existing?.status === "done" || existing?.status === "deferred";
 
@@ -73,6 +95,19 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
     taxonomyNodeId:   input.taxonomyNodeId ?? null,
     digitalProductId: input.digitalProductId ?? null,
     epicId:           input.epicId ?? null,
+    scopeKind:         input.scopeKind ?? existing?.scopeKind ?? null,
+    archetypeCategories: input.archetypeCategories !== undefined
+      ? cleanStringArray(input.archetypeCategories)
+      : existing?.archetypeCategories ?? [],
+    archetypeIds:        input.archetypeIds !== undefined
+      ? cleanStringArray(input.archetypeIds)
+      : existing?.archetypeIds ?? [],
+    scopeRationale:      input.scopeRationale !== undefined
+      ? input.scopeRationale.trim() || null
+      : existing?.scopeRationale ?? null,
+    lifecycleTags:       input.lifecycleTags !== undefined
+      ? cleanStringArray(input.lifecycleTags)
+      : existing?.lifecycleTags ?? [],
     ...(input.body !== undefined && { body: input.body.trim() || null }),
     ...(isNowDone && !wasDone ? { completedAt: new Date() } : {}),
     ...(!isNowDone && wasDone ? { completedAt: null } : {}),
@@ -113,6 +148,11 @@ export type BacklogFieldPatch = {
   workType?: BacklogWorkType;
   source?: BacklogSource;
   body?: string | null;
+  scopeKind?: BacklogScopeKind | null;
+  archetypeCategories?: string[];
+  archetypeIds?: string[];
+  scopeRationale?: string | null;
+  lifecycleTags?: string[];
 };
 
 export async function updateBacklogItemFields(id: string, patch: BacklogFieldPatch): Promise<void> {
@@ -135,6 +175,9 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
   if (patch.source !== undefined && !BACKLOG_SOURCE_VALUES.includes(patch.source)) {
     throw new Error(`Invalid source: ${patch.source}`);
   }
+  if (patch.scopeKind !== undefined && patch.scopeKind !== null && !BACKLOG_SCOPE_KIND_VALUES.includes(patch.scopeKind)) {
+    throw new Error(`Invalid scope kind: ${patch.scopeKind}`);
+  }
   if (patch.type !== undefined && patch.type !== "product" && patch.type !== "portfolio") {
     throw new Error(`Invalid type: ${patch.type}`);
   }
@@ -156,6 +199,11 @@ export async function updateBacklogItemFields(id: string, patch: BacklogFieldPat
   if (patch.workType !== undefined) data.workType = patch.workType;
   if (patch.source !== undefined) data.source = patch.source;
   if (patch.body !== undefined) data.body = patch.body && patch.body.trim() ? patch.body.trim() : null;
+  if (patch.scopeKind !== undefined) data.scopeKind = patch.scopeKind;
+  if (patch.archetypeCategories !== undefined) data.archetypeCategories = cleanStringArray(patch.archetypeCategories);
+  if (patch.archetypeIds !== undefined) data.archetypeIds = cleanStringArray(patch.archetypeIds);
+  if (patch.scopeRationale !== undefined) data.scopeRationale = patch.scopeRationale && patch.scopeRationale.trim() ? patch.scopeRationale.trim() : null;
+  if (patch.lifecycleTags !== undefined) data.lifecycleTags = cleanStringArray(patch.lifecycleTags);
   if (patch.status !== undefined) {
     if (isNowDone && !wasDone) data.completedAt = new Date();
     if (!isNowDone && wasDone) data.completedAt = null;

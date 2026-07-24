@@ -166,6 +166,28 @@ describe("GET /api/v1/ops/epics", () => {
     const res = await epicsListHandler(getRequest("/api/v1/ops/epics"));
     expect(res.status).toBe(401);
   });
+
+  it("applies archetype scope filters", async () => {
+    (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
+    (prisma.epic.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    await epicsListHandler(
+      getRequest(
+        "/api/v1/ops/epics?scopeKind=archetype-leaf&archetypeCategory=fabric-care-services&archetypeId=dry-cleaning-plant-network&lifecycleTag=claim-ticket",
+      ),
+    );
+
+    expect(prisma.epic.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          scopeKind: "archetype-leaf",
+          archetypeCategories: { has: "fabric-care-services" },
+          archetypeIds: { has: "dry-cleaning-plant-network" },
+          lifecycleTags: { has: "claim-ticket" },
+        }),
+      }),
+    );
+  });
 });
 
 // ===========================================================================
@@ -334,6 +356,28 @@ describe("GET /api/v1/ops/backlog", () => {
     expect(prisma.backlogItem.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ epicId: "epic-1" }),
+      }),
+    );
+  });
+
+  it("applies archetype scope filters", async () => {
+    (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
+    (prisma.backlogItem.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    await backlogListHandler(
+      getRequest(
+        "/api/v1/ops/backlog?scopeKind=archetype-leaf&archetypeCategory=fabric-care-services&archetypeId=dry-cleaning-plant-network&lifecycleTag=claim-ticket",
+      ),
+    );
+
+    expect(prisma.backlogItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          scopeKind: "archetype-leaf",
+          archetypeCategories: { has: "fabric-care-services" },
+          archetypeIds: { has: "dry-cleaning-plant-network" },
+          lifecycleTags: { has: "claim-ticket" },
+        }),
       }),
     );
   });
