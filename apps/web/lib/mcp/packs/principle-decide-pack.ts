@@ -345,8 +345,12 @@ async function principleDecide(
   // rank relevance and then fetch the real rows from Postgres by pageId —
   // pageId is the WikiPage id (payload entityId), so this is one keyed
   // findMany with no backfill and no drift surface.
-  const relevanceHits = [...core, ...contextual];
+  let relevanceHits = [...core, ...contextual];
   const hydratedById = new Map<string, Record<string, unknown>>();
+  // Did the rehydration QUERY succeed? Distinct from "did a given id resolve".
+  // The two failures mean opposite things and must not be conflated (see the
+  // phantom-drop below).
+  let rehydrationQueryOk = true;
   if (relevanceHits.length > 0) {
     const hitIds = Array.from(
       new Set(
@@ -364,6 +368,7 @@ async function principleDecide(
           hydratedById.set(String(row["id"] ?? ""), row);
         }
       } catch (err) {
+        rehydrationQueryOk = false;
         // Degrades to the pre-fix behaviour (semantic alignment), which the
         // semanticFallbackRatio flag already surfaces to the caller. Counted
         // in the recall trace below so the degradation is never silent.
@@ -372,6 +377,35 @@ async function principleDecide(
           err,
         );
       }
+    }
+  }
+
+  // BI-6ADB019D — drop phantom hits: Qdrant points whose WikiPage no longer
+  // exists. Postgres is the authoring store, so an id the index returned that
+  // a SUCCESSFUL lookup could not find is a deleted page, not a slow one.
+  //
+  // Observed live: five hits titled "Live State Over Seed Data" when the DB
+  // holds exactly one — four Qdrant points referencing rows that are gone.
+  // Left in place they cost nothing in score (they contribute 0.000) but they
+  // consume `maxPrinciples` slots, so real doctrine gets squeezed out of the
+  // relevance set by principles that do not exist. That is the same starvation
+  // RC6 just fixed, arriving by a different route.
+  //
+  // THE DISTINCTION THAT MATTERS: only drop when the query SUCCEEDED. If the
+  // lookup itself failed, every id is unresolved for a transient reason, and
+  // dropping them would silently delete the entire core/contextual tier from
+  // the decision — a far worse failure than carrying a few phantoms.
+  let phantomHits = 0;
+  if (rehydrationQueryOk && relevanceHits.length > 0) {
+    const kept = relevanceHits.filter((hit) =>
+      hydratedById.has(String(hit["pageId"] ?? "")),
+    );
+    phantomHits = relevanceHits.length - kept.length;
+    if (phantomHits > 0) {
+      console.warn(
+        `[principle_decide] dropped ${phantomHits} retrieval hit(s) whose WikiPage no longer exists — the vector index disagrees with the authoring store (BI-6ADB019D). Reconcile the wiki store.`,
+      );
+      relevanceHits = kept;
     }
   }
 
@@ -399,6 +433,10 @@ async function principleDecide(
         contextualCount: contextual.length,
         hydratedCount: hydratedById.size,
         unhydratedCount: relevanceHits.length - hydratedById.size,
+        // BI-6ADB019D: hits dropped because their WikiPage is gone. A non-zero
+        // value means the vector index disagrees with the authoring store.
+        phantomHitsDropped: phantomHits,
+        rehydrationQueryOk,
         ringScopeExcluded: {
           commandments: commandmentsExcluded,
           core: coreExcluded,
