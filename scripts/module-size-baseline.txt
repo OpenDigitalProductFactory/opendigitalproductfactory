@@ -13,6 +13,8 @@ apps/web/components/platform/EffectivePermissionsPanel.tsx	851
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
 apps/web/components/storefront/SlotBookingFlow.tsx	1010
 apps/web/components/workbooks/Grid.tsx	1585
+apps/web/components/storefront/SlotBookingFlow.tsx	1015
+apps/web/components/workbooks/Grid.tsx	1403
 apps/web/instrumentation.test.ts	897
 apps/web/instrumentation.ts	1442
 apps/web/instrumentation.test.ts	945
