@@ -244,6 +244,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   },
   // ── Editable (operationally tunable) ──────────────────────────────────────
   {
+    jobId: "quality-issue-drift-sweep",
+    inngestId: "governance/quality-issue-drift-sweep-scheduled",
+    name: "Quality-issue drift sweep",
+    purpose:
+      "Runtime half of quality-issue governance. Self-heals the recovery/orphan backstop (closes stale entity/relationship issues whose row is active again or gone) and detects DRIFT — any issue-type open count over its declared steady-state budget — so a newly-accumulating detector is surfaced automatically instead of found by inspection. Reports drift with owners for the auto-processing router to fund and route; does not file work itself.",
+    cron: "23 5 * * *",
+    cadence: "Daily at 05:23",
+    category: "editable",
+    tracksRunData: true,
+    runNowEvent: "governance/quality-issue-drift-sweep.requested",
+  },
+  {
     jobId: "data-retention-sweep",
     inngestId: "ops/data-retention-sweep-scheduled",
     name: "Data retention sweep",

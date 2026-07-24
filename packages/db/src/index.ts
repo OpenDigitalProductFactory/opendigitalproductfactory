@@ -17,6 +17,25 @@ export { WriteGateRequirement } from "../generated/client/client";
 export * from "./healthcare-patient-authority";
 export * from "./healthcare-care-intake";
 
+// Quality-issue lifecycle governance (BI-0B420A1D): the registry is the
+// compile-time contract; the drift sweep is the runtime half.
+export {
+  QUALITY_ISSUE_REGISTRY,
+  QUALITY_ISSUE_TYPES,
+  isKnownQualityIssueType,
+  qualityIssueContract,
+  operatorActionableTypes,
+  qualityIssueDrift,
+  type QualityIssueType,
+  type QualityIssueContract,
+  type QualityIssueResolver,
+} from "./quality-issue-registry";
+export {
+  runQualityIssueDriftSweep,
+  type DriftSweepDb,
+  type QualityIssueDriftReport,
+} from "./quality-issue-drift-sweep";
+
 // Qdrant vector database
 export {
   ensureCollections as ensureQdrantCollections,

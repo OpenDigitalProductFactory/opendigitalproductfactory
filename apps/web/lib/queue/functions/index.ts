@@ -56,6 +56,10 @@ import {
   dataRetentionSweepRequested,
 } from "./data-retention-sweep";
 import {
+  qualityIssueDriftSweepScheduled,
+  qualityIssueDriftSweepRequested,
+} from "./quality-issue-drift-sweep";
+import {
   inngestRetentionSweepScheduled,
   inngestRetentionSweepRequested,
 } from "./inngest-retention-sweep";
@@ -119,6 +123,8 @@ export const scheduledFunctions = [
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
   runtimeArtifactJanitor, // BI-DBF3F426: OBSERVE-ONLY dry-run scan of orphaned CI images + stray compose projects (logs would-reap, never deletes; --apply is founder-gated), daily 05:20, flag-gated DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
+  qualityIssueDriftSweepScheduled, // BI-0B420A1D: runtime governance — self-heal recovery/orphan backstop + detect per-type open-count drift vs registry budgets, daily 05:00
+
   inngestRetentionSweepScheduled, // BI-0AB96FE7: bound db=inngest history + reap Redis-TTL orphans that wedge the executor, every 6h
   mdmStewardSweepScheduled, // EP-4A12A7CB slice 4: autonomous Data Steward — sweep + auto-resolve account dupes, daily 05:00
   logSignatureScanner,   // BI-5FE8656F: EP-FULL-OBS Tier 2 novel-signature log scan, every 15m
@@ -164,6 +170,8 @@ export const eventFunctions = [
   selfUpgradeManual,
   quiescenceRun,
   dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run
+  qualityIssueDriftSweepRequested, // BI-0B420A1D: operator "run now" for the quality-issue drift sweep
+
   inngestRetentionSweepRequested, // BI-0AB96FE7: operator "run now" / dry-run for the Inngest retention sweep
   mdmStewardSweepRequested, // EP-4A12A7CB slice 4: Data Steward "run now" / dry-run
   catalogEnrichmentSweepRequested, // EP-ASSET-INTELLIGENCE: catalog enrichment "run now" (poll-on-request)
