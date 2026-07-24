@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { FeedbackAutoFilePolicy, FeedbackTriggerKind } from "@/lib/feedback/feedback-event";
 import { submitReport } from "@/lib/quality-queue";
+import { useAsyncAction } from "@/lib/shared/use-save-state";
+import { SaveStateIndicator } from "@/components/ui/SaveStateIndicator";
 import { UpstreamEscalation } from "./UpstreamEscalation";
 
 type Props = {
@@ -34,8 +36,30 @@ export function FeedbackForm({
   const [reportId, setReportId] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
 
-  async function handleSubmit() {
-    const result = await submitReport({
+  // BI-20716EA4: submitReport itself already falls back to a local offline
+  // queue on a fetch failure (see lib/operate/quality-queue.ts), so an
+  // `{ ok: false }` result there is a soft "queued" outcome, not a defect —
+  // that business distinction stays local (reportId/queued state below). What
+  // WAS missing is any handling for submitReport rejecting outright (e.g. the
+  // offline-queue write itself throwing) and any visible pending/in-flight
+  // state — both now come from the shared save-state primitive: a genuine
+  // rejection surfaces as "failed" with a plain-language Retry that re-sends
+  // the same typed report (nothing the owner typed is lost), and the Submit
+  // button disables + relabels while a submit is in flight.
+  type ReportInput = Parameters<typeof submitReport>[0];
+  const submitAction = useAsyncAction<ReportInput>(async (input) => {
+    const result = await submitReport(input);
+    if (result.ok && result.reportId) {
+      setReportId(result.reportId);
+    } else {
+      setQueued(true);
+    }
+    setSubmitted(true);
+    return { ok: true };
+  });
+
+  function handleSubmit() {
+    submitAction.run({
       type,
       title: description.slice(0, 100) || "User report",
       description,
@@ -48,12 +72,6 @@ export function FeedbackForm({
       ...(supportSessionId !== undefined && { supportSessionId }),
       ...(autoFilePolicy !== undefined && { autoFilePolicy }),
     });
-    if (result.ok && result.reportId) {
-      setReportId(result.reportId);
-    } else {
-      setQueued(true);
-    }
-    setSubmitted(true);
   }
 
   if (submitted) {
@@ -104,10 +122,11 @@ export function FeedbackForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!description.trim()}
+          disabled={!description.trim() || submitAction.status === "pending"}
+          aria-busy={submitAction.status === "pending"}
           className="flex-1 rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Submit
+          {submitAction.status === "pending" ? "Submitting…" : "Submit"}
         </button>
         {onClose && (
           <button
@@ -119,6 +138,15 @@ export function FeedbackForm({
           </button>
         )}
       </div>
+      {submitAction.status === "failed" && (
+        <div className="mt-2">
+          <SaveStateIndicator
+            status={submitAction.status}
+            error={submitAction.error}
+            onRetry={handleSubmit}
+          />
+        </div>
+      )}
     </div>
   );
 }

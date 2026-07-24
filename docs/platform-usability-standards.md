@@ -204,6 +204,20 @@ consequence banner; a form that re-implements these is a defect (BI-8E74C749).
 
 **Sensitive actions** (create/deactivate a user, reset a password, change pay) carry a `ConsequenceNotice` that answers what changes, who/what is affected, whether it can be undone, and the recovery path — kept behind progressive disclosure so a non-technical owner sees one plain summary line, not a wall of text.
 
+## Preference/tuning save-state contract (BI-20716EA4)
+
+Every owner-visible preference or AI-coworker tuning control (a toggle, a level picker, a debounced drag control) that persists via an async write — as distinct from the *form* contract above, which covers a full submit — composes the shared save-state primitive instead of a hand-rolled `.catch(() => {})`. A live usability audit of `/coworker-decisions/proactivity` found dozens of controls with no visible `Saving`, `Saved`, `Failed`, or `Retry` language; the owner had no way to know whether a click persisted.
+
+**Primitives:**
+
+| Primitive | Location | Responsibility |
+|---|---|---|
+| `useSaveState<T>` | `apps/web/lib/shared/use-save-state.ts` | Optimistic value + `idle \| pending \| saved \| failed` status, debounce, auto-revert-to-last-confirmed on failure, `retry()`/`revert()`, flush-on-unmount and flush-on-subject-switch (`resetKey`) so a pending debounced edit is never silently dropped, and a `beforeunload` warning while a save is queued. |
+| `useAsyncAction<T>` | same module | Built on `useSaveState` — the one-shot variant for a submit-style action with no ongoing optimistic value (e.g. `FeedbackForm`). |
+| `SaveStateIndicator` | `apps/web/components/ui/SaveStateIndicator.tsx` | The visible region: pending (polite), saved (polite), or failed (`role="alert"`) with Retry/Revert buttons at the `SHELL_TAP_TARGET_CLASS` (≥44px) tap size. Renders close to the control it describes, not a global toast. |
+
+**The contract:** a failed save must never be swallowed — the owner gets a plain-language reason plus Retry; the optimistic UI snaps back to the last confirmed value automatically on failure so the control never shows an unsaved value as if it persisted. Applied to `ProactivityRosterList` (per-row), `CoworkerPriorityDock` (posture + proactivity, both debounced/immediate), and `FeedbackForm` (submit pending/failed/retry). See `apps/web/lib/shared/use-save-state.test.ts` for the state-machine contract and each component's `*.test.tsx` for the integration coverage.
+
 ## Prohibited Patterns
 
 These patterns are NOT allowed in component code:
