@@ -43,6 +43,7 @@
     "./edge-node-types": "./src/edge-node-types.ts",
     "./wiki-taxonomy": "./src/wiki-taxonomy.ts",
     "./dimension-scope": "./src/dimension-scope.ts",
+    "./profession-local-axes": "./src/profession-local-axes.ts",
     "./wiki-store": "./src/wiki-store.ts",
     "./wiki-frontmatter": "./src/wiki-frontmatter.ts",
     "./capability-maturity": "./src/capability-maturity.ts",
