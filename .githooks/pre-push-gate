@@ -108,17 +108,30 @@ fi
 # artifact was actually still fresh. scripts/derived-artifacts-gate.mjs
 # derives the exemption from the registry instead of a path regex: it still
 # requires zero non-docs runtime changes, and additionally runs the --check
-# command for every registered artifact whose sources are in the diff. The
-# comparison base defaults to origin/main for GitHub-hosted clones, but can
-# be pointed at a local accepted-base ref by offline/forge-neutral
-# integrations. If the configured base is missing, do NOT fall back
-# silently; require the SHA-bound gate record instead.
+# command for every registered artifact whose sources are in the diff. When
+# this checkout has no such registry (scripts/derived-artifacts-gate.mjs
+# absent), fall back to the plain "diff touches only docs/, memory/, or *.md"
+# rule the registry itself replaced — still zero non-docs changes, just no
+# derived-artifact staleness awareness. The comparison base defaults to
+# origin/main for GitHub-hosted clones, but can be pointed at a local
+# accepted-base ref by offline/forge-neutral integrations. If the configured
+# base is missing, do NOT fall back silently; require the SHA-bound gate
+# record instead.
 base_ref="${DPF_PREPUSH_BASE_REF:-origin/main}"
 if git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
   merge_base="$(git merge-base HEAD "$base_ref" 2>/dev/null || true)"
-  if [ -n "$merge_base" ] && [ -f "scripts/derived-artifacts-gate.mjs" ]; then
-    if node scripts/derived-artifacts-gate.mjs push-exempt "$merge_base"; then
-      exit 0
+  if [ -n "$merge_base" ]; then
+    if [ -f "scripts/derived-artifacts-gate.mjs" ]; then
+      if node scripts/derived-artifacts-gate.mjs push-exempt "$merge_base"; then
+        echo "[pre-push-gate] docs-only diff vs $base_ref — no gate record required."
+        exit 0
+      fi
+    else
+      non_docs="$(git diff --name-only "$merge_base" HEAD 2>/dev/null | grep -Ev '^(docs/|memory/)|\.md$' || true)"
+      if [ -z "$non_docs" ]; then
+        echo "[pre-push-gate] docs-only diff vs $base_ref — no gate record required."
+        exit 0
+      fi
     fi
   fi
 fi
