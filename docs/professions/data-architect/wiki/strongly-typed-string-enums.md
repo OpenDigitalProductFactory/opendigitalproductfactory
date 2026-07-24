@@ -9,7 +9,6 @@ principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-2-workflow
   - ring-3-archetype

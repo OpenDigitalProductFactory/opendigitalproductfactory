@@ -9,7 +9,6 @@ principleDimensionVector: {"evidence_density": 1.0, "schema_grounding": 0.8, "go
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-3-archetype
   - ring-4-sandbox-prod

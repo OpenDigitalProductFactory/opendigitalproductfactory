@@ -51,7 +51,7 @@ On 2026-06-05 the live install ran an image **stamped `e7ef3331` (June 5) but co
 
 - [`runtime-gates-via-shared-lease`](runtime-gates-via-shared-lease.md) — verify before swap; never rebuild the live portal to verify.
 - [`build-gate-mandatory`](build-gate-mandatory.md) — the live-portal refresh rule and self-upgrade path.
-- [`fix-the-seed-not-the-runtime`](fix-the-seed-not-the-runtime.md) — patch the source, not the running bytes by hand.
+- [`fix-the-seed-not-the-runtime`](../../../professions/data-architect/wiki/fix-the-seed-not-the-runtime.md) — patch the source, not the running bytes by hand.
 - [`never-fabricate`](never-fabricate.md) — the bytes are ground truth, not the label.
 - [AGENTS.md §17](../../../../AGENTS.md) — operational summary.
 - [Unified Delivery Surfaces spec §4.3](../../../superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) — design context.

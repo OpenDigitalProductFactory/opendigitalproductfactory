@@ -112,7 +112,7 @@ Before opening a PR that replaces an existing source of truth, ask:
 - [`schema-honesty-over-aspirational-naming`](schema-honesty-over-aspirational-naming.md) —
   paired discipline; the mirror should be named for what it carries today,
   not the aspirational future shape
-- [`one-data-model`](one-data-model.md) — the architectural reason
+- [`one-data-model`](../../../professions/data-architect/wiki/one-data-model.md) — the architectural reason
   ("not two integrated"); this principle is the migration-time pattern that
   honors it through the transition
 - [`never-wipe-db-for-code-fixes`](never-wipe-db-for-code-fixes.md) —

@@ -9,7 +9,6 @@ principleDimensionVector: {"long_term_maintainability": 0.7, "schema_grounding":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-2-workflow
   - ring-4-sandbox-prod

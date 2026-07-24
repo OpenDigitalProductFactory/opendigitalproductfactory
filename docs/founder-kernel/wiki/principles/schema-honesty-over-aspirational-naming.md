@@ -117,7 +117,7 @@ Before naming any column, type, model, or API field:
 
 - [`mirror-dont-migrate`](mirror-dont-migrate.md) — paired discipline;
   the mirror should be named honestly too
-- [`strongly-typed-string-enums`](strongly-typed-string-enums.md) — type
+- [`strongly-typed-string-enums`](../../../professions/data-architect/wiki/strongly-typed-string-enums.md) — type
   shape discipline; this is the name-meaning counterpart
 - [`single-source-of-truth`](single-source-of-truth.md) — the
   architectural reason names must be honest

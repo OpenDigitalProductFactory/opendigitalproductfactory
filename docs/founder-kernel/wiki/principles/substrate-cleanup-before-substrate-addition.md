@@ -141,10 +141,10 @@ Before opening a PR that adds a new substrate layer:
 - [`verify-substrate-before-proposing-new`](verify-substrate-before-proposing-new.md) —
   paired discipline; discovery (does X exist?) precedes sequencing
   (cleanup before adding)
-- [`schema-audit-before-features`](schema-audit-before-features.md) —
+- [`schema-audit-before-features`](../../../professions/data-architect/wiki/schema-audit-before-features.md) —
   data-model-scoped sibling; this principle generalizes to all
   substrate, not just schema
-- [`one-data-model`](one-data-model.md) — the architectural reason
+- [`one-data-model`](../../../professions/data-architect/wiki/one-data-model.md) — the architectural reason
   fragmentation is expensive
 - [`architecture-over-shortcuts`](architecture-over-shortcuts.md) — the
   20% refactoring budget posture this principle operationalizes

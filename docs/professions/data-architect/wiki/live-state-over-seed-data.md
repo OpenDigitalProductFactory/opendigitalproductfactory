@@ -9,7 +9,6 @@ principleDimensionVector: {"evidence_density": 0.8, "schema_grounding": 0.5, "sp
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - universal-ring
 principleConsumerArchetype: specialist
