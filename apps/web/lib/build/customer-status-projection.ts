@@ -6,13 +6,25 @@
 // takes the executor in its signature — business-safety (no "Claude"/"Codex"/
 // "Grok" leaking to the customer) is guaranteed by construction.
 //
-// Pure + unit-testable. The DB fetch (workCapsule.findFirst by featureBuildId)
-// and the BuildStudio.tsx render are a deferred follow-up (need live-portal
-// verification).
+// BI-46204009: the phase/capsule bands above describe *stage*, not *freshness* —
+// a build/review-phase build with no recent BuildActivity was still rendered as
+// an animated "Working" even after sitting frozen for days (FB-CCEC4210: phase
+// build, 0 activity events in ~3.1 days). This module now takes an optional
+// `activity` freshness signal and overrides the stage-derived status with an
+// honest "Stalled / needs attention" (routed to the Needs-you band) when a
+// build/review-phase build has gone quiet longer than the stall threshold.
+// Reuses STALLED_BUILD_REAP_MS from inert-build-reaper.ts — that constant's own
+// doc comment already calls out that it "matches the UI stall definition,
+// BI-46204009" — rather than inventing a second threshold.
+//
+// Pure + unit-testable. The DB fetch (workCapsule.findFirst by featureBuildId,
+// BuildActivity max(createdAt) by the FB-* buildId) and the BuildStudio.tsx
+// render are a deferred follow-up (need live-portal verification).
 
 import { projectWorkCaseState } from "@/lib/work-management/status-projection";
 import type { WorkCaseState } from "@/lib/work-management/case-types";
 import type { BuildPhase } from "@/lib/explore/feature-build-types";
+import { STALLED_BUILD_REAP_MS } from "@/lib/build/inert-build-reaper";
 
 export interface BuildStudioCustomerStatus {
   /** Plain restatement of what is being built (the build title). */
@@ -36,6 +48,16 @@ const NEEDS_YOU_STATES: ReadonlySet<WorkCaseState> = new Set([
   "awaiting-decision",
   "waiting-on-system",
 ]);
+
+/**
+ * Phases where the panel currently animates "Working" / "In progress" — the
+ * only phases a freshness stall can override. ideate/plan are coworker-custody
+ * (age-out is a separate, much longer window — BI-A009313E) and
+ * ship/complete/failed/abandoned own their own terminal-ish framing, so a
+ * freshness stall only applies to the two phases that actually claim to be
+ * live execution. Mirrors the phase gate in isStalledBuildReapable.
+ */
+const STALL_ELIGIBLE_PHASES: ReadonlySet<BuildPhase> = new Set(["build", "review"]);
 
 /** Capsule-derived WorkCaseState → plain lifecycle label. */
 const STATE_PLAIN: Record<WorkCaseState, string> = {
@@ -151,38 +173,87 @@ function nextActionForPhase(phase: BuildPhase): { nextAction: string; owner: str
   }
 }
 
+/**
+ * True when a build/review-phase build has produced no observable signal
+ * (BuildActivity or a FeatureBuild.updatedAt bump) within the stall threshold.
+ * `lastActivityAt` wins when present (it's the more precise signal); falling
+ * back to `buildUpdatedAt` covers a build that has never emitted a
+ * BuildActivity row at all but whose phase timestamp is stale.
+ */
+function isActivityStale(args: {
+  lastActivityAt: Date | null;
+  buildUpdatedAt: Date;
+  now: Date;
+  staleMs: number;
+}): boolean {
+  const lastSignal = args.lastActivityAt ?? args.buildUpdatedAt;
+  return args.now.getTime() - lastSignal.getTime() > args.staleMs;
+}
+
 export function projectBuildStudioCustomerStatus(args: {
-  build: { title: string; phase: BuildPhase };
+  build: { title: string; phase: BuildPhase; updatedAt: Date };
   capsule: { capsuleId: string; status: string } | null;
+  /** Activity-freshness signal (BI-46204009). Omit to skip the stall check (e.g. existing callers mid-migration). */
+  activity?: { lastActivityAt: Date | null; now?: Date };
 }): BuildStudioCustomerStatus {
-  if (args.capsule) {
-    const projection = projectWorkCaseState({ capsule: args.capsule });
-    const action = nextActionForState(projection.state);
+  const base: BuildStudioCustomerStatus = args.capsule
+    ? (() => {
+        const projection = projectWorkCaseState({ capsule: args.capsule! });
+        const action = nextActionForState(projection.state);
+        return {
+          whatIsBeingBuilt: args.build.title,
+          lifecyclePosition: STATE_PLAIN[projection.state],
+          worker: workerLabel(projection.state),
+          evidence: projection.reason,
+          nextAction: action.nextAction,
+          owner: action.owner,
+          needsYou: NEEDS_YOU_STATES.has(projection.state),
+        };
+      })()
+    : // No capsule linked yet: degrade to a phase-only plain status.
+      (() => {
+        const action = nextActionForPhase(args.build.phase);
+        return {
+          whatIsBeingBuilt: args.build.title,
+          lifecyclePosition: PHASE_PLAIN[args.build.phase],
+          worker:
+            args.build.phase === "complete"
+              ? "Finished"
+              : args.build.phase === "failed"
+                ? "Hit a problem"
+                : "Work in progress",
+          evidence: `Build Studio phase is ${args.build.phase}.`,
+          nextAction: action.nextAction,
+          owner: action.owner,
+          needsYou: args.build.phase === "failed",
+        };
+      })();
+
+  // BI-46204009: a build/review-phase build that isn't already flagged
+  // needs-you but has gone quiet longer than the stall threshold is not
+  // honestly "Working" — override with a stalled status and route to Needs-you.
+  if (
+    args.activity &&
+    !base.needsYou &&
+    STALL_ELIGIBLE_PHASES.has(args.build.phase) &&
+    isActivityStale({
+      lastActivityAt: args.activity.lastActivityAt,
+      buildUpdatedAt: args.build.updatedAt,
+      now: args.activity.now ?? new Date(),
+      staleMs: STALLED_BUILD_REAP_MS,
+    })
+  ) {
+    const lastSignal = args.activity.lastActivityAt ?? args.build.updatedAt;
     return {
-      whatIsBeingBuilt: args.build.title,
-      lifecyclePosition: STATE_PLAIN[projection.state],
-      worker: workerLabel(projection.state),
-      evidence: projection.reason,
-      nextAction: action.nextAction,
-      owner: action.owner,
-      needsYou: NEEDS_YOU_STATES.has(projection.state),
+      ...base,
+      lifecyclePosition: "Stalled / needs attention",
+      worker: "Stalled — needs attention",
+      evidence: `No build activity since ${lastSignal.toISOString()} (stall threshold ${Math.round(STALLED_BUILD_REAP_MS / 3_600_000)}h).`,
+      nextAction: "check the build and resume or abandon it if it's stuck.",
+      owner: "Build Studio / operator",
+      needsYou: true,
     };
   }
 
-  // No capsule linked yet: degrade to a phase-only plain status.
-  const action = nextActionForPhase(args.build.phase);
-  return {
-    whatIsBeingBuilt: args.build.title,
-    lifecyclePosition: PHASE_PLAIN[args.build.phase],
-    worker:
-      args.build.phase === "complete"
-        ? "Finished"
-        : args.build.phase === "failed"
-          ? "Hit a problem"
-          : "Work in progress",
-    evidence: `Build Studio phase is ${args.build.phase}.`,
-    nextAction: action.nextAction,
-    owner: action.owner,
-    needsYou: args.build.phase === "failed",
-  };
+  return base;
 }
