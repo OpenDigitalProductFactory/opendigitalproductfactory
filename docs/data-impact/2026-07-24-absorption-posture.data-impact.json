@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260724170000_add_absorption_posture",
+    "backfill": "none — a new empty table. Rows are seeded idempotently from the vertical-incumbents manifest (seed-absorption-posture.ts); no existing row is read or rewritten."
+  },
+  "tests": [
+    "packages/db/src/portfolio-sources/vertical-incumbents-manifest.test.ts",
+    "packages/db/src/portfolio-sources/absorption-posture.test.ts",
+    "packages/db/src/portfolio-sources/absorption-posture-accessor.test.ts",
+    "packages/db/src/portfolio-sources/supported-integrations-tier1.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:absorption-posture",
+      "prismaModel": "AbsorptionPosture",
+      "lifecycleDisposition": "Authored platform doctrine — the vendor-ecosystem absorption classification. Rows are seed/operator/coworker-authored reference records with no data-subject content (public vendor/product names, integration categories, verdicts). Superseded classifications are marked status=superseded; the table is cleared/reseeded as bootstrap reference data. It is never registry-synced, so no external sync overwrites an authored verdict.",
+      "fields": [
+        {
+          "fieldId": "data:absorption-posture#all",
+          "resolution": "governed",
+          "reason": "Authored classification of external incumbents (providerName, integrationCategory, connectorTier, archetypeIds, verdict, coveringPrimitive, reason, confidence, source, status) shared by the per-vertical boundary-maps, the per-customer incumbent-coverage assessment, and the onboarding prefill. Verdict vocabulary is identical to IncumbentCoverageAssessment so the per-customer stage-1 can default from it. No personal or data-subject fields.",
+          "provenance": "docs/superpowers/plans/2026-07-24-absorption-posture-matrix-vertical-provider-seed.md §3; design docs/superpowers/specs/2026-07-24-vertical-backlog-investment-architecture-design.md §6"
+        }
+      ]
+    }
+  ]
+}

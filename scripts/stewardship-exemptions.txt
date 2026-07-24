@@ -58,3 +58,4 @@ WeightAdjustmentProposal  domain-lifecycle-managed  # BI-D88DFEEA. status transi
   # would race the still-open review queue and would delete governance
   # evidence a real regulated-retention floor doesn't apply to but the
   # decision ledger it's attached to (DecisionInteraction) does need intact.
+AbsorptionPosture  reference-data  # Authored absorption classification (BI-ECO-001); superseded by replacement, never aged out. Reseeded idempotently from the vertical-incumbents manifest.

@@ -10329,6 +10329,61 @@ model McpIntegration {
   @@index([tags])
 }
 
+// Vendor ecosystem absorption matrix (BI-ECO-001 / BI-BF909CE6, P1).
+//
+// DPF-AUTHORED DOCTRINE — deliberately a separate model from McpIntegration
+// (which is externally registry-synced; note its lastSyncedAt). Mixing authored
+// verdicts into a synced row risks a sync overwriting doctrine (plan §2.1,
+// honoring schema-audit-before-features). mcpIntegrationId / catalogIdentityId
+// are OPTIONAL SOFT references (plain columns, not enforced FKs) so a posture
+// can exist before the marketplace catalog is populated (McpIntegration is
+// empty on a fresh install); the enforced relation can be added when the
+// catalog is seeded. The row is authored, never synced.
+//
+// The vocabulary MATCHES IncumbentCoverageAssessment.verdict (spec 2026-07-23
+// §5.2) so the per-customer coverage stage-1 can default from this matrix.
+// Purely additive: a new empty table, no backfill, fleet-safe by construction.
+model AbsorptionPosture {
+  id        String @id @default(cuid())
+  postureId String @unique
+  /// Vendor / product name — "Mindbody", "Toast", "QuickBooks".
+  providerName String
+  /// Optional grouping key — "scheduling-fitness", "pos-food".
+  providerFamily String?
+  /// The kind of system it is (unit of connector tiering).
+  /// Guarded by isIntegrationCategory (vertical-incumbents-manifest.ts).
+  integrationCategory String
+  /// tier1-shared | tier2-semi | tier3-bespoke — derived from the category.
+  connectorTier String
+  /// Granular storefront archetypeIds this incumbent applies to.
+  archetypeIds String[] @default([])
+  /// native_now | adapter_bridge | generic_connector | provider_led |
+  /// do_not_absorb | gap — == IncumbentCoverageAssessment vocabulary.
+  verdict String @default("gap")
+  /// The DPF domain primitive that absorbs it (original BI-ECO-001). Authored.
+  coveringPrimitive String?
+  /// Why this verdict.
+  reason String @default("")
+  confidence Float @default(0)
+  /// seed | operator | ai | human_confirmed — provenance of the verdict.
+  source String @default("seed")
+  /// Soft references (NOT enforced FKs — see model note). Set when the provider
+  /// is also cataloged / normalized.
+  mcpIntegrationId  String?
+  catalogIdentityId String?
+  /// proposed | confirmed | superseded. No verdict reaches confirmed without
+  /// human / authorized-coworker action (plan §5 governance).
+  status    String   @default("proposed")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([providerName, integrationCategory])
+  @@index([verdict])
+  @@index([status])
+  @@index([integrationCategory])
+  @@index([connectorTier])
+}
+
 model McpCatalogSync {
   id                String    @id @default(cuid())
   triggeredBy       String

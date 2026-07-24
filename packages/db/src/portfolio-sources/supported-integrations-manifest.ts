@@ -124,4 +124,117 @@ export const SUPPORTED_INTEGRATIONS: readonly SupportedIntegration[] = [
     pricingModel: "paid",
     credentialProvider: "ninjaone",
   },
+  // ─── Tier-1 shared connector catalog (BI-96BFA984, P3) ────────────────────
+  // Closes the Tier-1 readiness gap (design §6.1 / §7): the absorption matrix
+  // classifies these shared categories, but the portfolio "potential"
+  // projection and the BI-PSC-002 connector kernel had no targets for the ones
+  // the original 12 left uncovered — calendar/scheduling, transactional
+  // messaging (SMS/email), documents, inventory. These are the highest-leverage
+  // connectors (recur across ≥5 verticals). No overlap with the entries above.
+  // Payments (Stripe✓), accounting (QuickBooks/Xero✓), CRM (HubSpot/Salesforce✓)
+  // are already covered; these fill the remaining Tier-1 categories.
+  {
+    slug: "square",
+    name: "Square",
+    description: "Payments — card processing, POS, and payouts.",
+    portfolioSlug: "for_employees",
+    pricingModel: "freemium",
+    credentialProvider: "square",
+  },
+  {
+    slug: "paypal",
+    name: "PayPal",
+    description: "Payments and online checkout.",
+    portfolioSlug: "for_employees",
+    pricingModel: "freemium",
+    credentialProvider: "paypal",
+  },
+  {
+    slug: "calendly",
+    name: "Calendly",
+    description: "Scheduling / calendar booking — availability and appointments.",
+    portfolioSlug: "for_employees",
+    pricingModel: "freemium",
+    credentialProvider: "calendly",
+  },
+  {
+    slug: "cal-com",
+    name: "Cal.com",
+    description: "Open scheduling / calendar booking infrastructure.",
+    portfolioSlug: "for_employees",
+    pricingModel: "freemium",
+    credentialProvider: "cal_com",
+  },
+  {
+    slug: "acuity-scheduling",
+    name: "Acuity Scheduling",
+    description: "Appointment scheduling and calendar management.",
+    portfolioSlug: "for_employees",
+    pricingModel: "paid",
+    credentialProvider: "acuity",
+  },
+  {
+    slug: "twilio",
+    name: "Twilio",
+    description: "Programmable messaging — transactional SMS and voice.",
+    portfolioSlug: "for_employees",
+    pricingModel: "paid",
+    credentialProvider: "twilio",
+  },
+  {
+    slug: "sendgrid",
+    name: "SendGrid",
+    description: "Transactional and marketing email delivery.",
+    portfolioSlug: "for_employees",
+    pricingModel: "freemium",
+    credentialProvider: "sendgrid",
+  },
+  {
+    slug: "mailgun",
+    name: "Mailgun",
+    description: "Transactional email delivery API.",
+    portfolioSlug: "for_employees",
+    pricingModel: "freemium",
+    credentialProvider: "mailgun",
+  },
+  {
+    slug: "docusign",
+    name: "DocuSign",
+    description: "Documents — e-signature and agreement workflows.",
+    portfolioSlug: "for_employees",
+    pricingModel: "paid",
+    credentialProvider: "docusign",
+  },
+  {
+    slug: "dropbox",
+    name: "Dropbox",
+    description: "Documents — file storage and sharing.",
+    portfolioSlug: "for_employees",
+    pricingModel: "freemium",
+    credentialProvider: "dropbox",
+  },
+  {
+    slug: "box",
+    name: "Box",
+    description: "Documents — content management and secure file sharing.",
+    portfolioSlug: "for_employees",
+    pricingModel: "paid",
+    credentialProvider: "box",
+  },
+  {
+    slug: "zoho-inventory",
+    name: "Zoho Inventory",
+    description: "Inventory — stock, order, and warehouse management.",
+    portfolioSlug: "manufacturing_and_delivery",
+    pricingModel: "freemium",
+    credentialProvider: "zoho_inventory",
+  },
+  {
+    slug: "fishbowl",
+    name: "Fishbowl Inventory",
+    description: "Inventory and manufacturing / warehouse management.",
+    portfolioSlug: "manufacturing_and_delivery",
+    pricingModel: "paid",
+    credentialProvider: "fishbowl",
+  },
 ];
