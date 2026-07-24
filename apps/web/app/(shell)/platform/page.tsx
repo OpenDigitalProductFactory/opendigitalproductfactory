@@ -55,7 +55,7 @@ export default async function PlatformPage() {
           href="/platform/ai/overview"
           accent="var(--dpf-info)"
           metrics={[
-            { label: "Agents", value: agentCount },
+            { label: "AI coworkers", value: agentCount },
             { label: "Providers", value: activeProviderCount },
           ]}
         />

@@ -37,7 +37,7 @@ describe("IdentityTabNav", () => {
     expect(html).toContain(">Federation<");
     expect(html).toContain(">Applications<");
     expect(html).toContain(">Authorization<");
-    expect(html).toContain(">Agents<");
+    expect(html).toContain(">AI Coworkers<");
   });
 
   it("marks nested identity routes as active", () => {

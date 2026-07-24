@@ -43,7 +43,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       { label: "Federation", href: "/platform/identity/federation" },
       { label: "Applications", href: "/platform/identity/applications" },
       { label: "Authorization", href: "/platform/identity/authorization" },
-      { label: "Agents", href: "/platform/identity/agents" },
+      { label: "AI Coworkers", href: "/platform/identity/agents" },
     ],
   },
   {

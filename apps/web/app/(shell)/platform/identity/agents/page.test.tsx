@@ -76,7 +76,7 @@ describe("PlatformIdentityAgentsPage", () => {
     const { default: PlatformIdentityAgentsPage } = await import("./page");
     const html = renderToStaticMarkup(await PlatformIdentityAgentsPage());
 
-    expect(html).toContain("Agent Identity");
+    expect(html).toContain("AI Coworker Identity");
     expect(html).toContain("Finance Specialist");
     expect(html).toContain("HR Assistant");
     expect(html).toContain("principal linked");

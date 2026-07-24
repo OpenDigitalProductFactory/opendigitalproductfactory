@@ -62,6 +62,6 @@ describe("PlatformIdentityPage", () => {
     expect(html).toContain("Directory");
     expect(html).toContain("Federation");
     expect(html).toContain("Authorization");
-    expect(html).toContain("Agent Identity");
+    expect(html).toContain("AI Coworker Identity");
   });
 });
