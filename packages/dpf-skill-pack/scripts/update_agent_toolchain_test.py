@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 import sys
 
@@ -527,6 +528,109 @@ class ProcessSpineHealthTest(unittest.TestCase):
         text = "\n".join(updater.render_process_spine_health(verdict))
         self.assertIn("UNKNOWN", text)
         self.assertIn("cannot prove replacements are loaded", text)
+
+
+class GrokCodexGuardSyncTest(unittest.TestCase):
+    """Drift guard (BI-14E9F7CE, EP-CLIENT-HOOK-PLANE).
+
+    GROK_HOOK_GUARDS / CODEX_BASH_GUARDS / CODEX_ASK_GUARDS / CODEX_WRITE_GUARDS
+    are hand-maintained tuples, wholly independent of hooks/hooks.json. That is
+    load-bearing, not incidental: live probe (BI-883FC2FC, Grok 0.2.87) proved
+    Grok's hook-execution plane IGNORES the plugin-bundled hooks/hooks.json
+    entirely (a plugin shows has_hooks=true in inventory yet contributes
+    total_hooks=0) -- so hooks.json's `${CLAUDE_PLUGIN_ROOT}` tokens are inert
+    for Grok's actual guard enforcement regardless of whether that variable
+    resolves. The REAL enforcement path for Grok is the global
+    ~/.grok/hooks/dpf-guards.json this script writes with fully pre-resolved
+    absolute paths (install_grok_hooks) -- so GROK_HOOK_GUARDS is the only
+    thing that wires a guard to Grok at all. Same shape for Codex's user hook
+    plane (~/.codex/hooks.json / install_codex_hooks), which the plugin-bundled
+    hooks.json also does not populate directly.
+
+    Because nothing type-checks these tuples against hooks.json, a new BLOCKING
+    guard (one that calls emitDeny) added to hooks.json's PreToolUse wiring
+    without a matching addition here silently never reaches Grok or Codex --
+    exactly the "guard hooks may silently not fire" failure mode this backlog
+    item exists to close. These tests fail CI the moment that drift happens.
+    """
+
+    @staticmethod
+    def _skill_pack() -> Path:
+        return Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def _hooks_json(cls) -> dict[str, Any]:
+        return json.loads((cls._skill_pack() / "hooks" / "hooks.json").read_text())
+
+    @classmethod
+    def _pretooluse_guards_by_matcher(cls) -> dict[str, set[str]]:
+        data = cls._hooks_json()
+        by_matcher: dict[str, set[str]] = {}
+        for group in data.get("hooks", {}).get("PreToolUse", []):
+            matcher = str(group.get("matcher", ""))
+            names = by_matcher.setdefault(matcher, set())
+            for hook in group.get("hooks", []):
+                base = updater.hook_script_basename(str(hook.get("command", "")))
+                if base:
+                    names.add(base)
+        return by_matcher
+
+    @classmethod
+    def _is_blocking(cls, basename: str) -> bool:
+        """A guard is BLOCKING (can deny a tool call) iff its source calls
+        emitDeny(...) (hooks/lib/hook-io.mjs). Advisory prechecks only ever
+        call emitContext(...) and must never fire on Grok/Codex's blocking
+        planes -- Grok's PreToolUse hook has no non-blocking channel."""
+        src = (cls._skill_pack() / "hooks" / basename).read_text(encoding="utf-8")
+        return "emitDeny(" in src
+
+    def test_grok_hook_guards_match_every_blocking_pretooluse_guard_in_hooks_json(self) -> None:
+        by_matcher = self._pretooluse_guards_by_matcher()
+        all_guards = {name for names in by_matcher.values() for name in names}
+        blocking = {name for name in all_guards if self._is_blocking(name)}
+        self.assertEqual(
+            set(updater.GROK_HOOK_GUARDS),
+            blocking,
+            "GROK_HOOK_GUARDS has drifted from hooks/hooks.json's blocking PreToolUse "
+            "guards. Grok's hook plane ignores plugin-bundled hooks.json (BI-883FC2FC) -- "
+            "GROK_HOOK_GUARDS is the ONLY thing wiring a guard into Grok's global "
+            "~/.grok/hooks/dpf-guards.json. Add/remove it there too or it silently never "
+            "fires on Grok.",
+        )
+
+    def test_codex_guard_tuples_match_hooks_json_per_matcher(self) -> None:
+        by_matcher = self._pretooluse_guards_by_matcher()
+
+        def blocking_for(matcher: str) -> set[str]:
+            return {name for name in by_matcher.get(matcher, set()) if self._is_blocking(name)}
+
+        self.assertEqual(
+            set(updater.CODEX_BASH_GUARDS),
+            blocking_for("Bash"),
+            "CODEX_BASH_GUARDS has drifted from hooks.json's blocking Bash-matcher guards.",
+        )
+        self.assertEqual(
+            set(updater.CODEX_ASK_GUARDS),
+            blocking_for("AskUserQuestion"),
+            "CODEX_ASK_GUARDS has drifted from hooks.json's blocking AskUserQuestion-matcher guards.",
+        )
+        self.assertEqual(
+            set(updater.CODEX_WRITE_GUARDS),
+            blocking_for("Write|Edit|MultiEdit"),
+            "CODEX_WRITE_GUARDS has drifted from hooks.json's blocking Write|Edit|MultiEdit guards.",
+        )
+
+    def test_no_blocking_guard_is_left_unwired_on_either_surface(self) -> None:
+        by_matcher = self._pretooluse_guards_by_matcher()
+        all_guards = {name for names in by_matcher.values() for name in names}
+        blocking = {name for name in all_guards if self._is_blocking(name)}
+        codex_all = (
+            set(updater.CODEX_BASH_GUARDS)
+            | set(updater.CODEX_ASK_GUARDS)
+            | set(updater.CODEX_WRITE_GUARDS)
+        )
+        self.assertEqual(blocking, codex_all, "a blocking guard is missing from the Codex tuples")
+        self.assertEqual(blocking, set(updater.GROK_HOOK_GUARDS), "a blocking guard is missing from GROK_HOOK_GUARDS")
 
 
 class CodexHookTrustTest(unittest.TestCase):
