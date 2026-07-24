@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 307,
+  "pageRouteCount": 308,
   "migratedCount": 0,
   "summary": {
     "cockpit": 15,
@@ -165,6 +165,16 @@
     {
       "routePath": "/admin/settings",
       "shell": "settings",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "confidence": "high"
+    },
+    {
+      "routePath": "/admin/storefront/preset",
+      "shell": "detail",
       "migrated": false,
       "exemptChecks": [
         "next-action-marker",

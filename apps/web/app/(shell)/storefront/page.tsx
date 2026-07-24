@@ -6,7 +6,7 @@ import { ServiceReadinessCockpit } from "@/components/restaurant-cockpit/Service
 import { loadServiceReadiness } from "@/lib/restaurant-cockpit/service-readiness-loader";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
 import { StorefrontSetupPanel } from "@/components/storefront-admin/StorefrontSetupPanel";
-import { ServiceLinesPanel } from "@/components/storefront-admin/ServiceLinesPanel";
+import { AdvancedServiceLinesSection } from "@/components/storefront-admin/AdvancedServiceLinesSection";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
 import {
@@ -228,8 +228,8 @@ export default async function StorefrontPage() {
           counts={{ inquiries: inquiryCount, bookings: bookingCount, orders: orderCount, donations: donationCount }}
         />
         {/* Task-first setup status + generated-content inventory + recovery of
-            removed lines (BI-C39DC90C). Add/remove of active lines stays in
-            ServiceLinesPanel below. */}
+            removed lines (BI-C39DC90C). Add/remove of active lines stays in the
+            advanced, disclosure-gated ServiceLinesPanel below (BI-6F9D487C). */}
         <StorefrontSetupPanel
           storefrontId={config.id}
           steps={model.steps}
@@ -237,8 +237,12 @@ export default async function StorefrontPage() {
           activeLines={activeLines}
           retainedLines={retainedLines}
         />
+        {/* Cross-industry add/remove of service lines is an advanced action
+            (~101 archetype options at time of writing) — kept behind explicit
+            disclosure rather than sitting open on the ordinary owner
+            dashboard (BI-6F9D487C). */}
         {compositionView && (
-          <ServiceLinesPanel
+          <AdvancedServiceLinesSection
             storefrontId={config.id}
             view={compositionView}
             availableArchetypes={availableArchetypes}

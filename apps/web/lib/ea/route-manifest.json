@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 580,
+  "routeCount": 581,
   "routes": [
     {
       "routePath": "/",
@@ -269,6 +269,17 @@
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/storefront/items/page.tsx",
       "redirectTo": "/storefront/items"
+    },
+    {
+      "routePath": "/admin/storefront/preset",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "storefront",
+        "preset"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/storefront/preset/page.tsx"
     },
     {
       "routePath": "/admin/storefront/sections",

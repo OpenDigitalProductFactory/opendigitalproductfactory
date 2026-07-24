@@ -1,21 +1,21 @@
 {
   "generator": "apps/web/scripts/build-route-audience.ts",
-  "pageRouteCount": 336,
+  "pageRouteCount": 337,
   "summary": {
     "byAudience": {
-      "admin": 140,
-      "auth-setup": 10,
+      "admin": 141,
+      "auth-setup": 11,
       "builder": 3,
-      "customer": 11,
+      "customer": 10,
       "owner": 149,
       "public": 21,
       "worker": 2
     },
     "byDestinationKind": {
-      "advanced-diagnostic": 94,
-      "detail": 161,
+      "advanced-diagnostic": 95,
+      "detail": 160,
       "legacy-internal": 29,
-      "section-home": 31,
+      "section-home": 32,
       "settings-config": 12,
       "workflow-step": 9
     },
@@ -196,6 +196,13 @@
       "routePath": "/admin/storefront/items",
       "audience": "admin",
       "destinationKind": "legacy-internal",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/storefront/preset",
+      "audience": "admin",
+      "destinationKind": "advanced-diagnostic",
       "confidence": "high",
       "source": "heuristic"
     },
@@ -572,6 +579,13 @@
     },
     {
       "routePath": "/customer-login",
+      "audience": "auth-setup",
+      "destinationKind": "section-home",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/customer-signup",
       "audience": "auth-setup",
       "destinationKind": "section-home",
       "confidence": "high",
@@ -1895,13 +1909,6 @@
     },
     {
       "routePath": "/portal/sign-in",
-      "audience": "customer",
-      "destinationKind": "detail",
-      "confidence": "high",
-      "source": "heuristic"
-    },
-    {
-      "routePath": "/portal/sign-up",
       "audience": "customer",
       "destinationKind": "detail",
       "confidence": "high",
