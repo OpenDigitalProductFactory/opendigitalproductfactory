@@ -8,7 +8,12 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
 import { CraftOverrideForm } from "@/components/wiki/CraftOverrideForm";
+import { CritiqueCaptureForm } from "@/components/wiki/CritiqueCaptureForm";
 import { CRAFT_OVERRIDE_SLUG_PREFIX } from "@/lib/wiki/craft-override";
+
+// The UX critique corpus (BI-3880DA1D) is ux-design's craft, so its capture
+// door lives on this one profession's page rather than every profession's.
+const CRITIQUE_CORPUS_PROFESSION = "ux-design";
 
 export const dynamic = "force-dynamic";
 
@@ -142,6 +147,15 @@ export default async function CraftProfessionPage({ params }: { params: Params }
           </ul>
         )}
       </section>
+
+      {professionKey === CRITIQUE_CORPUS_PROFESSION && (
+        <section className="mb-8">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-3">
+            UX critique corpus
+          </h2>
+          <CritiqueCaptureForm />
+        </section>
+      )}
 
       <CraftOverrideForm professionKey={professionKey} professionLabel={family.label} />
     </div>
