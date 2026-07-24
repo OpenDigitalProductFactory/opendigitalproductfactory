@@ -34,6 +34,7 @@ import {
   type WikiPageKind,
   type WikiPageStatus,
 } from "./wiki-store";
+import { applyWikiSlugMigrations } from "./wiki-slug-migrations";
 import {
   parseFrontmatter as parseFrontmatterShared,
   extractWikilinks as extractWikilinksShared,
@@ -680,6 +681,17 @@ export async function seedWikiKernel(prisma: PrismaClient): Promise<SeedWikiKern
       embeddingsSidecarPresent: false,
     };
   }
+
+  // BI-5FE47130 — rename migrated slugs BEFORE the upsert pass.
+  //
+  // A principle moving from the kernel to a profession corpus changes its slug
+  // (`principles/x` -> `professions/<p>/x`). upsertWikiPage keys on
+  // (organizationId, slug), so without this the seed would find no row for the
+  // new slug, create a fresh one, and strand the original — losing the page's
+  // version history and decision references, and leaving a stale Qdrant point.
+  // Renaming first means the existing row is simply found under its new key and
+  // updated in place, id intact.
+  await applyWikiSlugMigrations(prisma as never);
 
   const sources = await seedRawSources(prisma, manifest.kernelVersion);
   const pages = await seedWikiPages(prisma, manifest.kernelVersion, sources.slugToId);
