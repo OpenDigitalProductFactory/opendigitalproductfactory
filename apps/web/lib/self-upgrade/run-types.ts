@@ -51,4 +51,20 @@ export type QuiescenceActivity = {
   } | null;
   blockersCapturedAt: string | null;
   blockers: QuiescenceBlockerLine[];
+  /** Health verdict for the panel hero line (BI-12E24186); null/absent when
+   *  nothing was auto-discounted. Mirrors the server type in
+   *  lib/self-upgrade/quiescence.ts. */
+  verdict?: BlockerVerdict | null;
+};
+
+/**
+ * A one-line health diagnosis surfaced above the blocker list (BI-12E24186).
+ * Non-null when the drain auto-discounted a provably-empty deliberation loop
+ * (the stub engine, BI-7B6B3C5C, loops plan gates that produce no output).
+ */
+export type BlockerVerdict = {
+  kind: "empty-deliberation-loop";
+  discountedCount: number;
+  buildIds: string[];
+  message: string;
 };
