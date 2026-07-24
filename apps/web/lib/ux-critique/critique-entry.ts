@@ -138,6 +138,79 @@ export function validateCritiqueEntry(input: Partial<CritiqueEntry>): CritiqueEn
 }
 
 /**
+ * Schema tag stamped into WikiPage.metadata so a critique-entry overlay page is
+ * distinguishable from any other craft-override page, and so a future reader can
+ * refuse a payload it does not understand rather than mis-parsing one.
+ */
+export const CRITIQUE_ENTRY_METADATA_KIND = "ux-critique-entry.v1";
+
+/**
+ * The structured critique fields, as they live in the WikiPage.metadata Json bag
+ * (the same free-form column the WSID variant axes already use). `finding` and
+ * `status` are NOT carried here — the page body IS the finding and the row
+ * status IS the entry status, so duplicating them into metadata would invite the
+ * two copies to drift. Everything else has no home on the page and lives here.
+ */
+export type CritiqueEntryMetadata = {
+  metadataKind: typeof CRITIQUE_ENTRY_METADATA_KIND;
+  route: string;
+  screenshotRef: string | null;
+  viewportWidth: number | null;
+  colorScheme: "light" | "dark" | null;
+  gitRef: string | null;
+  lenses: CritiqueLens[];
+  verdict: CritiqueVerdict | null;
+  verdictAuthority: VerdictAuthority | null;
+};
+
+/** Project the metadata-resident fields of a validated entry for storage. */
+export function critiqueEntryToMetadata(entry: CritiqueEntry): CritiqueEntryMetadata {
+  return {
+    metadataKind: CRITIQUE_ENTRY_METADATA_KIND,
+    route: entry.route,
+    screenshotRef: entry.screenshotRef,
+    viewportWidth: entry.viewportWidth,
+    colorScheme: entry.colorScheme,
+    gitRef: entry.gitRef,
+    lenses: [...entry.lenses],
+    verdict: entry.verdict,
+    verdictAuthority: entry.verdictAuthority,
+  };
+}
+
+/**
+ * Reassemble a CritiqueEntry from a stored WikiPage row. `finding` and `status`
+ * come from the row (body + status), the rest from the metadata bag. Returns
+ * null when the metadata is absent, the wrong kind, or malformed — a page that
+ * cannot be understood is not silently treated as an empty critique, it is
+ * simply not one.
+ */
+export function critiqueEntryFromWikiPage(page: {
+  body: string;
+  status: string;
+  metadata: unknown;
+}): CritiqueEntry | null {
+  const meta = page.metadata;
+  if (!meta || typeof meta !== "object") return null;
+  const m = meta as Record<string, unknown>;
+  if (m.metadataKind !== CRITIQUE_ENTRY_METADATA_KIND) return null;
+
+  const validated = validateCritiqueEntry({
+    route: typeof m.route === "string" ? m.route : undefined,
+    finding: page.body,
+    screenshotRef: typeof m.screenshotRef === "string" ? m.screenshotRef : null,
+    viewportWidth: typeof m.viewportWidth === "number" ? m.viewportWidth : null,
+    colorScheme: m.colorScheme === "light" || m.colorScheme === "dark" ? m.colorScheme : null,
+    gitRef: typeof m.gitRef === "string" ? m.gitRef : null,
+    lenses: Array.isArray(m.lenses) ? (m.lenses as CritiqueLens[]) : [],
+    verdict: (m.verdict ?? null) as CritiqueVerdict | null,
+    verdictAuthority: (m.verdictAuthority ?? null) as VerdictAuthority | null,
+    status: page.status === "published" ? "published" : "draft",
+  });
+  return validated.ok ? validated.entry : null;
+}
+
+/**
  * The authority contract, mechanically. An entry counts as calibration data only
  * when a human design authority has ruled on a screen someone can look at again.
  *
