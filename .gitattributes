@@ -49,6 +49,10 @@ scripts/private-identity-baseline.txt merge=union
 
 scripts/hand-rolled-loading-baseline.txt merge=union
 
+# Instruction-plane size ratchet baseline (BI-0020D511) — always-on agent
+# doctrine plane; union-merge so concurrent re-baselines never conflict.
+scripts/instruction-plane-baseline.txt merge=union
+
 # Archetype completeness ratchet baseline — concurrent PRs that each re-run
 # --update must not conflict; union-merge and let --update re-dedupe/sort.
 scripts/archetype-completeness-baseline.txt merge=union
