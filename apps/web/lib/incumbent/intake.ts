@@ -112,7 +112,9 @@ export async function createIncumbentApplication(
   const productId = incumbentProductId(name);
   // NOTE: deliberately NO projectedBy marker — this is an authored, durable record,
   // not a projector-owned row (see module header).
-  const observationConfig: Record<string, unknown> = {
+  // Values are Json-scalar (string | number | null) so the object is assignable
+  // to Prisma's DigitalProduct Json input — `unknown` values are not.
+  const observationConfig: Record<string, string | number | null> = {
     source: INCUMBENT_SOURCE_KIND,
     vendor: supplierName || null,
     supplierId,
