@@ -123,6 +123,8 @@ The binding consequence: **no new epic.** This work is filed under EP-ASSET-INTE
 
 > Reading note for reviewers: the `reasoning` one-liner returned by `principle_decide` names top **absolute** contributors ("No Hardcoded Colors", "Research and Use Standards"), which are noise here — they score similarly for every option. The signal is in the per-option **deltas** shown above.
 
+**Stability re-check (`DI-55E6B9CF61A8`).** This decision was re-run after [#3482](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/3482) (`fix(kernel): drop retrieval hits whose WikiPage no longer exists`, BI-6ADB019D) merged to main, because the original ledger showed the duplicate zero-contribution retrieval hits that fix targets. Result: `fold-into-sam` 16.86, `answer-key-first` 14.36, `thin-keystone-epic` 13.42, margin 2.50 — **identical ranking, margin unchanged within noise.** The duplicate-hit pattern persisted in the re-run, confirming the live install has not yet taken #3482 (self-upgrade is operator-gated), so both runs scored against the same code. The recommendation does not depend on that fix.
+
 ### 4.2 Onboarding placement — `DI-5C75BC6ACAFC`
 
 | Option | Composite |
