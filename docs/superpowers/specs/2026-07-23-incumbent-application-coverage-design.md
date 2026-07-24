@@ -23,7 +23,20 @@ Four consequences follow:
 3. **The gap is unnamed.** Where DPF does *not* cover an incumbent, that is the single highest-signal input the backlog could receive — a real customer, paying real money, for a capability DPF lacks. Today that signal is lost.
 4. **The platform cannot show its own worth.** The value case is assembled by hand in slides, disconnected from what the install actually does.
 
-### 1.1 What this is not
+### 1.1 The self-justification loop is a first-class objective, not a by-product
+
+The founder's framing for this capability is **software that sells itself**: a system that can state its own value from its own operating data, rather than requiring a human to assemble the case by hand in a deck.
+
+That is not a marketing veneer over the inventory feature — it is the same mechanism read from the other end. Once the platform knows what a business runs, what that costs, and which of those jobs it already does, the value case is a *query*, not a document. And because DPF is open source with negligible running cost, the honest version of that query is usually favourable without any need to inflate it.
+
+Two consequences bind the design:
+
+- **The comparison must be a live view, not a generated artifact** (§4.3, §5.7). An exported deck drifts from the install the moment it is saved; a rendered view cannot.
+- **Every number must be a fact the platform already holds.** Actual incumbent spend qualifies. Projected savings do not (§7). A self-selling system that overstates is a liability, not an asset — the credibility of the mechanism *is* the mechanism.
+
+The reseller case is the same surface with a different reader, which is why §4.3 does not build a second one.
+
+### 1.2 What this is not
 
 This is **not** SAM. Phase C answers *"what do you own versus what do you consume"* — an entitlement and compliance question. This document answers *"what do you run versus what could DPF replace"* — a coverage and displacement question. They are different questions over **the same identity spine**, which is exactly why this belongs inside Phase C rather than beside it (§4).
 
@@ -271,6 +284,16 @@ Filed under **EP-ASSET-INTELLIGENCE**. Sizes are indicative pending triage.
 - **No parallel incumbent-application table**, and no parallel finding table (Phase C §7, carried forward).
 
 ---
+
+## 7.1 Risks
+
+| # | Risk | Mitigation |
+|---|---|---|
+| **R1** | **Portfolio aggregates become incoherent.** Placing incumbents beside DPF's 108 coworker services means any rollup computed over `for_employees` *without* filtering on `sourceKind` silently mixes "software we pay a vendor for" with "AI coworkers DPF provides". A "Workforce spend" or "Workforce product count" tile would be nonsense. §5.1 argues the adjacency is the product — that holds for the **browsable surface**, but it does **not** hold for **aggregates**. | Every aggregate over `for_employees` must declare a provenance filter. D6 carries a counter-reconciliation test (precedent: the 2026-05-21 four-portfolio spec §12.2 counter-reconciliation gate). Treat an unfiltered rollup as a defect, not a display preference. |
+| **R2** | **The gap detector manufactures duplicate backlog items.** D4 automates BI creation from a detector, against a backlog that already holds ~40 items in this territory. The platform has previously merged duplicate work to main. | Dedupe-before-file is a hard acceptance criterion with a required regression test (§8). Auto-file is also the subject of open question §9 Q2 — a review queue is the fallback if dedupe confidence proves low. |
+| **R3** | **Coverage verdicts overstate what DPF does.** A `native_now` verdict from a posture-matrix default is doctrine, not evidence that *this customer's* use of *that tool* is genuinely covered. Overstating coverage in a surface used for sales is the most damaging possible failure of a self-justifying system (§1.1). | `assessedVia` makes provenance explicit and un-collapsible; AI verdicts are `proposed` only; the surface must visually distinguish a default from a confirmation. `native_now` should read as a claim awaiting confirmation until `human_confirmed`. |
+| **R4** | **The onboarding step gets skipped universally**, leaving the whole lane inert. | The step is prefilled from archetype replacement-boundary lists so the cheapest path is confirmation rather than data entry. Skip rate is the metric that tells us whether the framing works; if it is high, the answer is better prefill, not a mandatory step. |
+| **R5** | **Cost data is stale or wrong**, because it is a figure an owner typed once. | Declared cost is explicitly interim until D7 binds to `SoftwareEntitlement`/`SupplierContract` (§5.3). Until then it must be labelled as declared, not derived, wherever it is shown. |
 
 ## 8. Verification strategy
 
