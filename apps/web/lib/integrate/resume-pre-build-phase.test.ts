@@ -483,11 +483,24 @@ describe("abandonStrandedPreBuild", () => {
     expect(txUpdateMock).not.toHaveBeenCalled();
   });
 
-  it("no-ops when the row advanced out of a pre-build phase since the scan", async () => {
-    txFindUniqueMock.mockResolvedValue({ phase: "build", abandonedAt: null });
+  it("no-ops when the row advanced out of an abandonable phase since the scan", async () => {
+    // `complete` is terminal (not abandonable); build advanced there since the scan.
+    txFindUniqueMock.mockResolvedValue({ phase: "complete", abandonedAt: null });
     const ok = await abandonStrandedPreBuild({ buildId: "FB-ADV", phase: "ideate", ageMs: 20 * 86_400_000 });
     expect(ok).toBe(false);
     expect(txUpdateMock).not.toHaveBeenCalled();
+  });
+
+  // BI-B036209D: the reaper now also retires a build stranded in `build` phase
+  // with a null exec-state (previously exempt — `build` was treated as
+  // resume-only, so a null-exec-state build orphaned forever).
+  it("abandons a row still in `build` phase (build-phase strand reaping)", async () => {
+    txFindUniqueMock.mockResolvedValue({ phase: "build", abandonedAt: null });
+    const ok = await abandonStrandedPreBuild({ buildId: "FB-BUILD-DEAD", phase: "build", ageMs: 20 * 86_400_000 });
+    expect(ok).toBe(true);
+    const updateArg = txUpdateMock.mock.calls[0]![0] as { data: { phase: string } };
+    expect(updateArg.data.phase).toBe("abandoned");
+    expect(txActivityCreateMock).toHaveBeenCalledTimes(1);
   });
 
   it("never throws — returns false when the row is missing", async () => {

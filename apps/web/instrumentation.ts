@@ -817,8 +817,53 @@ export async function resumeStrandedBuildsOnBoot(
         continue;
       }
 
-      // Skip null/terminal steps — nothing to resume.
-      if (step == null || step === "failed") continue;
+      // Terminal `failed` step — owned by the contradictory-recovery reconciler;
+      // leave as-is.
+      if (step === "failed") continue;
+
+      // Null/absent exec-state in `build` phase (BI-B036209D): no working
+      // step-machine (recovery cleared it "for clean restart", or a 0-task
+      // orchestration then null). Previously skipped here AND uncovered by the
+      // pre-build age-out above → silent forever-orphan blocking its dependents.
+      // Re-dispatch to honor the clean-restart intent; age out past the cap so a
+      // never-dispatchable build is reaped, not churned. `build`-phase strands are
+      // NOT epic-coordinated, so the cap applies regardless of parentEpicId.
+      if (step == null) {
+        const ageMs = now.getTime() - build.createdAt.getTime();
+        if (ageMs > abandonAfterMs) {
+          const didAbandon = await abandonStale({
+            buildId: build.buildId,
+            phase: build.phase,
+            ageMs,
+          });
+          if (didAbandon) {
+            abandoned++;
+            logger.log(
+              `[build-resume] ${build.buildId} stranded in build phase with no exec-state for >${Math.round(
+                ageMs / 86_400_000,
+              )}d — aged out to abandoned instead of re-dispatching forever (BI-B036209D)`,
+            );
+            continue;
+          }
+          // Abandon declined (raced to alive/terminal) — fall through to re-dispatch.
+        }
+        logger.log(
+          `[build-resume] ${build.buildId} stranded in build phase with no exec-state — re-dispatching for a clean restart (BI-B036209D)`,
+        );
+        await prisma.buildActivity
+          .create({
+            data: {
+              buildId: build.buildId,
+              tool: "resumeStrandedBuildsOnBoot",
+              summary:
+                "Stranded in build phase with no exec-state (cleared for restart / 0-task orchestration) — re-dispatching for a clean restart (BI-B036209D).",
+            },
+          })
+          .catch(() => {});
+        dispatch(build.buildId);
+        resumed++;
+        continue;
+      }
 
       logger.log(
         `[build-resume] ${build.buildId} stranded at step=${step} (no progress since updatedAt) — re-dispatching pipeline`,
