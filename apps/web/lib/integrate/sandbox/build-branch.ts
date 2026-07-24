@@ -239,6 +239,65 @@ export function buildSandboxWorktreeRemoveCommand(
   ].join(" && ");
 }
 
+// ─── Worktree-add smoke check (BI-82CB5A7D) ───────────────────────────────────
+// `git worktree add` is the operation that silently broke EVERY plan→build
+// transition when the sandbox's repo-local hooks needed a `git-lfs` binary
+// that was never installed. A code fix (the hooksPath override in
+// sandboxGitPrelude, above) closes today's failure, but nothing previously
+// verified that `git worktree add` keeps returning 0 — so a future change that
+// re-enables repo hooks, drops the override, or ships a sandbox image with a
+// different hooks config would reintroduce the exact same fleet-wide failure
+// silently. This probe exists so that regression can be caught by a health
+// check instead of by every subsequent build failing at startBuildBranch.
+
+/** Scratch path for the worktree-add smoke check — never a real build id. */
+const SANDBOX_WORKTREE_SMOKE_CHECK_ID = ".smoke-check";
+
+/**
+ * Builds the smoke-check command: create a throwaway worktree at HEAD, then
+ * remove it. Intentionally routed through the SAME `execSandboxGit` /
+ * `wrapSandboxGitCommand` path (see `runSandboxWorktreeSmokeCheck` below) that
+ * every real build's `startBuildBranch` uses, including the hooksPath
+ * override — so a regression of that override reproduces the original exit-2
+ * LFS failure here instead of only surfacing on the next live build.
+ */
+export function buildSandboxWorktreeSmokeCheckCommand(workspace: string = WORKSPACE): string {
+  const path = buildWorktreePath(SANDBOX_WORKTREE_SMOKE_CHECK_ID, workspace);
+  return [
+    `cd ${workspace}`,
+    `git worktree remove --force ${path} 2>/dev/null || true`,
+    `git worktree prune`,
+    `git worktree add --force ${path} HEAD`,
+    `git worktree remove --force ${path}`,
+    `git worktree prune`,
+  ].join(" && ");
+}
+
+export type SandboxWorktreeSmokeCheckResult = {
+  passed: boolean;
+  command: string;
+  /** Captured stdout on success, or the error message (incl. stderr) on failure. */
+  output: string;
+};
+
+/**
+ * Live sandbox probe for BI-82CB5A7D: actually runs `git worktree add` (and
+ * cleans up after itself) through the sandbox's real git path. Intended to be
+ * wired into a periodic/health-check caller (e.g. diagnose_sandbox) so a
+ * regression is caught proactively rather than surfacing as every subsequent
+ * plan→build transition failing at startBuildBranch. Never throws — reports
+ * pass/fail so a health-check caller can branch on the result.
+ */
+export async function runSandboxWorktreeSmokeCheck(): Promise<SandboxWorktreeSmokeCheckResult> {
+  const command = buildSandboxWorktreeSmokeCheckCommand();
+  try {
+    const output = await execSandboxGit(command);
+    return { passed: true, command, output };
+  } catch (err) {
+    return { passed: false, command, output: (err as Error).message ?? String(err) };
+  }
+}
+
 export function buildSandboxGitPruneTrackedArtifactsCommand(): string {
   const cacheFindExpr = SANDBOX_TRACKED_CACHE_FIND_PATHS
     .map((pattern) => `-path '${pattern}'`)
@@ -284,6 +343,27 @@ function sandboxGitPrelude(): string {
     // here like the root-clone guard above. (Observed live blocking FB-0A4B102D
     // and the whole fleet at the plan→build handoff.)
     `export DPF_SKIP_TYPECHECK=1`,
+    // BI-82CB5A7D: the sandbox's repo-local `core.hooksPath=.githooks` runs the
+    // Git LFS post-checkout/post-commit/post-merge hooks on every checkout,
+    // `worktree add`, commit, and merge this file issues — but the sandbox
+    // image has no `git-lfs` binary, so each of those hooks exits 2 ("This
+    // repository is configured for Git LFS but 'git-lfs' was not found on your
+    // path") and turns an otherwise-successful git operation into a hard
+    // failure. That is what broke EVERY plan→build transition at
+    // `startBuildBranch`'s `git worktree add`. `.gitattributes` only
+    // LFS-tracks *.pdf/*.xlsx/*.docx (documents), never source, so the
+    // sandbox's build-tree operations never need the LFS smudge in the first
+    // place — the hook failure is spurious here. Disable hooks locally for
+    // THIS repo only (never touches a host dev clone's own hooks — this is
+    // `--local`, not `--global`, and it targets the sandbox's own /workspace
+    // git dir); this mirrors the identical LFS/hooksPath collision already
+    // fixed the same way in self-upgrade's prepare-source.ts
+    // (`-c core.hooksPath=/dev/null`) and platform-dev-config.ts
+    // (`HOOKLESS_GIT`). Idempotent + best-effort: on a fresh /workspace that
+    // isn't a git repo yet (pre `git init`, in ensureGitBaseline) this is a
+    // harmless no-op, and gets applied on the very next prelude call once the
+    // repo exists — well before any checkout/worktree-add/commit runs.
+    `git -C ${WORKSPACE} config --local core.hooksPath /dev/null >/dev/null 2>&1 || true`,
     `if [ -f "${GIT_INDEX_LOCK}" ]; then for _dpf_git_wait in 1 2 3 4 5; do if ! pgrep -x git >/dev/null 2>&1; then break; fi; sleep 1; done; if [ -f "${GIT_INDEX_LOCK}" ] && ! pgrep -x git >/dev/null 2>&1; then rm -f "${GIT_INDEX_LOCK}"; fi; fi`,
     `git config --global --add safe.directory "${WORKSPACE}" >/dev/null 2>&1 || true`,
   ].join(" && ");

@@ -14,6 +14,7 @@ import {
   buildWorktreePath,
   buildSandboxWorktreeAddCommand,
   buildSandboxWorktreeRemoveCommand,
+  buildSandboxWorktreeSmokeCheckCommand,
   BUILD_WORKTREE_ROOT_SEGMENT,
   isBuildWorktreeIsolationEnabled,
   resolveBuildWorkdir,
@@ -77,6 +78,33 @@ describe("wrapSandboxGitCommand", () => {
     expect(wrapSandboxGitCommand('git -C /workspace commit -m "sandbox baseline"')).toContain(
       "export DPF_ALLOW_ROOT_CLONE_COMMIT=1",
     );
+  });
+
+  // BI-82CB5A7D — the sandbox's repo-local core.hooksPath=.githooks runs the
+  // Git LFS post-checkout/post-commit/post-merge hooks on every checkout,
+  // worktree add, commit, and merge, but the sandbox image has no git-lfs
+  // binary, so those hooks exit 2 and turn an otherwise-successful git
+  // operation into a hard failure — the root cause behind EVERY plan→build
+  // transition failing at startBuildBranch's `git worktree add`.
+  it("disables repo-local hooks for sandbox git operations so the missing git-lfs binary can't fail a checkout/worktree-add (BI-82CB5A7D)", () => {
+    const command = wrapSandboxGitCommand('git -C /workspace worktree add --force /workspace/.builds/FB-1 build/FB-1');
+    expect(command).toContain(
+      "git -C /workspace config --local core.hooksPath /dev/null",
+    );
+  });
+
+  it("scopes the hooksPath override to --local (never --global), so a host dev clone's own hooks are untouched", () => {
+    const command = wrapSandboxGitCommand('git -C /workspace status --short');
+    expect(command).toContain("config --local core.hooksPath /dev/null");
+    expect(command).not.toMatch(/config --global(?:\s+--add)? core\.hooksPath/);
+  });
+
+  it("applies the hooksPath override before the real git command runs", () => {
+    const command = wrapSandboxGitCommand('git -C /workspace worktree add --force /workspace/.builds/FB-1 build/FB-1');
+    const hooksPathIdx = command.indexOf("core.hooksPath /dev/null");
+    const worktreeAddIdx = command.indexOf("worktree add --force /workspace/.builds/FB-1");
+    expect(hooksPathIdx).toBeGreaterThan(-1);
+    expect(worktreeAddIdx).toBeGreaterThan(hooksPathIdx);
   });
 
   it("exempts in-sandbox commits from the pre-commit typecheck (stale-Prisma / out-of-scope false positives)", () => {
@@ -258,6 +286,31 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     const recreateBranch = cmd.slice(cmd.indexOf("; else "));
     expect(recreateBranch).toContain("git worktree remove --force");
     expect(recreateBranch).toContain("git worktree add --force");
+  });
+
+  // BI-82CB5A7D — smoke check so a hooksPath-override regression is caught
+  // proactively (`git worktree add` failing again) instead of only surfacing
+  // as every subsequent plan→build transition failing at startBuildBranch.
+  it("builds a smoke-check command that creates and removes a throwaway worktree, never colliding with a real build id", () => {
+    const cmd = buildSandboxWorktreeSmokeCheckCommand();
+    expect(cmd).toContain("git worktree add --force /workspace/.builds/.smoke-check HEAD");
+    expect(cmd).toContain("git worktree remove --force /workspace/.builds/.smoke-check");
+    expect(cmd).toContain("git worktree prune");
+    // dot-prefixed id can never collide with a real FB-<id> build worktree
+    expect(cmd).toContain(".smoke-check");
+  });
+
+  it("removes the smoke-check worktree after creating it (idempotent, safe to re-run)", () => {
+    const cmd = buildSandboxWorktreeSmokeCheckCommand();
+    const addIdx = cmd.indexOf("worktree add --force");
+    const removeIdx = cmd.lastIndexOf("worktree remove --force");
+    expect(addIdx).toBeGreaterThan(-1);
+    expect(removeIdx).toBeGreaterThan(addIdx);
+  });
+
+  it("honors a non-default workspace for the smoke check", () => {
+    const cmd = buildSandboxWorktreeSmokeCheckCommand("/ws");
+    expect(cmd).toContain("git worktree add --force /ws/.builds/.smoke-check HEAD");
   });
 
   it("tears down a build's worktree best-effort without touching the shared install", () => {
