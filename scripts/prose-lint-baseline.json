@@ -4813,7 +4813,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 33
+    "textMass": 38
   },
   "apps/web/components/feedback/HeaderFeedbackButton.tsx": {
     "vocabulary": 0,
@@ -5142,7 +5142,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 73
+    "textMass": 68
   },
   "apps/web/components/golden-triangle/GoldenTriangleControl.tsx": {
     "vocabulary": 0,
