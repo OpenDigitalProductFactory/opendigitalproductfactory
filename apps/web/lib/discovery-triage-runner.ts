@@ -10,7 +10,14 @@ import {
   type DiscoveryEvidencePacketInput,
   type DiscoveryTriageThresholds,
 } from "@dpf/db/discovery-triage";
-import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
+import {
+  buildDeviceFingerprintObservation,
+  DISCOVERY_TRIAGE_AGENT_ID,
+  investigateUnidentifiedDevice,
+  prisma,
+  recordInvestigationOutcome,
+  upsertFingerprintObservation,
+} from "@dpf/db";
 import { randomUUID } from "crypto";
 import {
   applyDiscoveryTriageAutonomousReview,
@@ -71,10 +78,21 @@ export type DiscoveryTriageRunnerDb = {
   };
   taxonomyNode: {
     findMany(args: Record<string, unknown>): Promise<Array<{ id: string; nodeId: string }>>;
+    findUnique(args: { where: { nodeId: string }; select: { id: true } }): Promise<{ id: string } | null>;
   };
   discoveryTriageDecision: {
     findFirst(args: Record<string, unknown>): Promise<{ decisionId: string } | null>;
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
+  };
+  discoveryFingerprintObservation: {
+    upsert(args: unknown): Promise<unknown>;
+    update(args: unknown): Promise<unknown>;
+  };
+  discoveryFingerprintReview: {
+    create(args: unknown): Promise<unknown>;
+  };
+  discoveryFingerprintRule: {
+    upsert(args: unknown): Promise<unknown>;
   };
   platformConfig?: {
     findUnique(args: {
@@ -268,6 +286,86 @@ type DiscoveryTriageCandidateContext = DiscoveryTriageReviewContext & {
   qualityIssueId: string | null;
 };
 
+function buildInvestigationAttributes(entity: DiscoveryTriageRunnerEntity): Record<string, unknown> {
+  const attributes = { ...(entity.properties ?? {}) };
+  if (!("vendor" in attributes) && entity.manufacturer) {
+    attributes.vendor = entity.manufacturer;
+  }
+  if (!("manufacturer" in attributes) && entity.manufacturer) {
+    attributes.manufacturer = entity.manufacturer;
+  }
+  if (!("productModel" in attributes) && entity.productModel) {
+    attributes.productModel = entity.productModel;
+  }
+  return attributes;
+}
+
+function observationIdFromRow(row: unknown): string | null {
+  const id = row && typeof row === "object" && "id" in row
+    ? (row as { id?: unknown }).id
+    : null;
+  return typeof id === "string"
+    ? id
+    : null;
+}
+
+async function investigateNeedsMoreEvidenceGap(
+  db: DiscoveryTriageRunnerDb,
+  context: DiscoveryTriageCandidateContext,
+  actorId: string | null,
+): Promise<void> {
+  if (context.outcome !== "needs-more-evidence") {
+    return;
+  }
+
+  const observation = buildDeviceFingerprintObservation({
+    name: context.entity.name,
+    attributes: buildInvestigationAttributes(context.entity),
+  });
+  if (!observation) {
+    return;
+  }
+
+  const observationRow = await upsertFingerprintObservation(db, {
+    observationKey: `triage:${context.entity.id}:fingerprint`,
+    sourceKind: "discovery-triage",
+    signalClass: "device_identity_gap",
+    protocol: null,
+    inventoryEntityId: context.entity.id,
+    rawEvidenceLocal: null,
+    normalizedEvidence: observation.normalizedEvidence,
+    redactionStatus: "not_required",
+    evidenceFamilies: observation.evidenceFamilies,
+    identityCandidates: context.packet.identityCandidates,
+    taxonomyCandidates: context.packet.candidateTaxonomy,
+    identityConfidence: context.score.identityConfidence,
+    taxonomyConfidence: context.score.taxonomyConfidence,
+    candidateMargin: context.score.taxonomyAmbiguityMargin,
+    blastRadiusTier: "medium",
+    decisionStatus: "pending_coworker_review",
+    reviewReason: "Discovery triage needs more evidence; coworker investigation queued.",
+  });
+  const observationId = observationIdFromRow(observationRow);
+  if (!observationId) {
+    return;
+  }
+
+  const result = await investigateUnidentifiedDevice(observation);
+  const summary = await recordInvestigationOutcome(db, {
+    observationId,
+    reviewerId: actorId,
+    result,
+  });
+
+  await db.discoveryFingerprintObservation.update({
+    where: { id: observationId },
+    data: {
+      decisionStatus: summary.nextStatus,
+      reviewReason: result.rationale,
+    },
+  });
+}
+
 export async function runDiscoveryTriagePass(
   db: DiscoveryTriageRunnerDb = prisma as unknown as DiscoveryTriageRunnerDb,
   options: {
@@ -411,6 +509,13 @@ export async function runDiscoveryTriagePass(
       selectedIdentity: context.selectedIdentity,
       requiresHumanReview: context.requiresHumanReview,
     });
+
+    try {
+      await investigateNeedsMoreEvidenceGap(db, context, actorId);
+    } catch {
+      // Triage must remain durable even when the layer-1 investigation side
+      // path cannot persist its review artifact in this pass.
+    }
 
     metrics.processed += 1;
     metrics.decisionsCreated += 1;
