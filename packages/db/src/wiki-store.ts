@@ -557,6 +557,13 @@ export async function recordIngestEvent(
  *   callers tighten as needed but should not drop below the commandment count.
  * - Orders by `lastReviewedAt` desc then `title` asc so repeated calls
  *   return rows in the same order.
+ * - `consumerContexts` (BI-5BB1A364), when supplied, filters out
+ *   `route-domain-specific` rows whose `principleConsumerContexts` doesn't
+ *   intersect the caller's declared contexts. Omitted (the default) is a
+ *   no-op — every row still reaches the caller, matching the historical
+ *   "consult everything" contract; the `principle_decide` scoring layer is
+ *   responsible for down-weighting a route-domain-specific commandment when
+ *   no context was declared at all.
  *
  * Throws on unknown tier values to make seed/lint typos visible immediately
  * instead of returning silently empty results.
@@ -583,6 +590,29 @@ export async function listPrinciplesByTier(
      * `organizationId` OR clause.
      */
     ringScope?: PrincipleRingScope[] | string[];
+    /**
+     * Optional consumer-context filter (BI-5BB1A364).
+     *
+     * When provided (non-empty), rows must satisfy one of:
+     *   - `principleConsumerContexts` is empty — backward-compat for
+     *     `universal` / `generalist` / `specialist` archetypes, which never
+     *     populate this column, and for un-backfilled `route-domain-specific`
+     *     rows.
+     *   - intersection with the caller's declared `consumerContexts` is
+     *     non-empty.
+     *
+     * A `route-domain-specific` principle whose declared contexts don't
+     * intersect the caller's is excluded from retrieval entirely — same
+     * contract shape as `ringScope` above. When the caller does NOT declare
+     * `consumerContexts` at all (the common case today), this filter is a
+     * complete no-op: retrieval still "consults everything", matching prior
+     * behavior. Scoring-layer attenuation (principle-decide-pack.ts) is what
+     * keeps a contextless route-domain-specific commandment from voting at
+     * full weight in that case — retrieval and scoring split the contract on
+     * purpose, mirroring how ringScope's retrieval filter and its
+     * commandmentConflict-adjacent scoring concerns stay separate.
+     */
+    consumerContexts?: PrincipleConsumerContext[] | string[];
     limit?: number;
   },
 ): Promise<unknown[]> {
@@ -618,6 +648,12 @@ export async function listPrinciplesByTier(
     where.principleAppliesTo = { has: args.appliesTo };
   }
 
+  // Accumulate independent AND clauses so ring-scope and consumer-context
+  // filtering compose instead of one silently clobbering the other (both
+  // used to write `where.AND` directly, which was safe only because only
+  // one filter ever existed at a time).
+  const andClauses: Array<{ OR: Array<Record<string, unknown>> }> = [];
+
   // Ring-scope filter. Skipped entirely when the caller declared
   // `universal-ring` because that means "I am not constraining" — the
   // full kernel should reach the decision math.
@@ -626,19 +662,38 @@ export async function listPrinciplesByTier(
     args.ringScope.length > 0 &&
     !args.ringScope.includes("universal-ring")
   ) {
-    where.AND = [
-      {
-        OR: [
-          // Empty array — un-backfilled rows still pass so existing
-          // behavior is preserved as ring-scope rolls out.
-          { principleRingScope: { isEmpty: true } },
-          // Author tagged universal-ring — passes any caller.
-          { principleRingScope: { has: "universal-ring" } },
-          // Intersection with caller scope is non-empty.
-          { principleRingScope: { hasSome: args.ringScope } },
-        ],
-      },
-    ];
+    andClauses.push({
+      OR: [
+        // Empty array — un-backfilled rows still pass so existing
+        // behavior is preserved as ring-scope rolls out.
+        { principleRingScope: { isEmpty: true } },
+        // Author tagged universal-ring — passes any caller.
+        { principleRingScope: { has: "universal-ring" } },
+        // Intersection with caller scope is non-empty.
+        { principleRingScope: { hasSome: args.ringScope } },
+      ],
+    });
+  }
+
+  // Consumer-context filter (BI-5BB1A364). Skipped entirely when the
+  // caller did not declare `consumerContexts` — that means "I am not
+  // constraining", same posture as an unset ringScope, and preserves
+  // today's "consult everything" retrieval behavior verbatim.
+  if (args.consumerContexts !== undefined && args.consumerContexts.length > 0) {
+    andClauses.push({
+      OR: [
+        // Empty array — universal/generalist/specialist archetypes (and
+        // un-backfilled route-domain-specific rows) never populate this
+        // column, so they still pass.
+        { principleConsumerContexts: { isEmpty: true } },
+        // Intersection with the caller's declared contexts is non-empty.
+        { principleConsumerContexts: { hasSome: args.consumerContexts } },
+      ],
+    });
+  }
+
+  if (andClauses.length > 0) {
+    where.AND = andClauses;
   }
 
   return (await db.wikiPage.findMany({

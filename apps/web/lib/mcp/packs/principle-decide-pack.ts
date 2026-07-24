@@ -87,6 +87,12 @@ const definitions: ToolDefinition[] = [
           description:
             "Reduction Gear ring scope(s) the calling action binds. When set, retrieval filters to principles whose principleRingScope intersects the caller scope OR contains universal-ring OR is empty (backward compat). Omit (or pass ['universal-ring']) to consult the full kernel — appropriate for design-time / kernel-architecture decisions that genuinely bind every ring. See spec docs/superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md §5.",
         },
+        consumerContexts: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Route/domain context slugs this decision belongs to (e.g. ['ui'], ['build-studio']) — the same slugs a route-domain-specific principle declares via principleConsumerContexts. When set, retrieval excludes a route-domain-specific commandment whose contexts don't intersect (empty principleConsumerContexts still passes — backward compat for universal/generalist/specialist archetypes). Omit when the decision has no specific route/domain (e.g. a general architecture call): retrieval still consults every commandment, but a route-domain-specific one is scored at attenuated weight rather than full commandment weight, so a UI-only rule like no-hardcoded-colors can no longer co-rank as a top contributor on an unrelated decision (BI-5BB1A364).",
+        },
         callingSurface: {
           type: "string",
           description:
@@ -181,6 +187,10 @@ async function principleDecide(
   const { principleMatchesRingScope } = await import(
     "@/lib/wiki/calling-ring-map"
   );
+  // BI-5BB1A364: consumer-context retrieval filter + contextless-caller attenuation.
+  const { consumerContextWeightMultiplier } = await import(
+    "@/lib/decision/consumer-context-attenuation"
+  );
   // BI-3C1A6451: server-side embedding for the semantic-fallback path.
   // Used both for principle direction text (Qdrant-sourced principles
   // have empty dimensionVector) and for option descriptions when the
@@ -221,6 +231,25 @@ async function principleDecide(
     ringScope !== undefined &&
     ringScope.length > 0 &&
     !ringScope.includes("universal-ring");
+
+  // BI-5BB1A364: validate consumerContexts like ringScope — fail fast, no silent "no filter" degrade.
+  let consumerContexts: string[] | undefined;
+  if (params["consumerContexts"] !== undefined) {
+    if (
+      !Array.isArray(params["consumerContexts"]) ||
+      !(params["consumerContexts"] as unknown[]).every(
+        (v) => typeof v === "string" && v.length > 0,
+      )
+    ) {
+      return {
+        success: false,
+        message: "consumerContexts must be an array of non-empty strings.",
+        error: "Invalid consumerContexts shape",
+      };
+    }
+    consumerContexts = params["consumerContexts"] as string[];
+  }
+
   const callingSurface =
     typeof params["callingSurface"] === "string"
       ? params["callingSurface"]
@@ -259,6 +288,7 @@ async function principleDecide(
       organizationId,
       appliesTo: callingPopulation,
       ringScope,
+      consumerContexts,
       limit: 50,
     })) as Array<Record<string, unknown>>;
   } catch (err) {
@@ -427,6 +457,8 @@ async function principleDecide(
         callingPopulation,
         ringScope: ringScope ?? null,
         ringScopeActive,
+        // BI-5BB1A364: null/empty means "consult everything" (attenuated, not excluded).
+        consumerContexts: consumerContexts ?? null,
         tool: "principle_decide",
         commandmentCount: commandments.length,
         coreCount: core.length,
@@ -473,19 +505,29 @@ async function principleDecide(
     directionText: string;
   };
   const candidateRows: CandidateRow[] = [
-    ...commandments.map((row): CandidateRow => ({
-      id: String(row["id"] ?? ""),
-      name: String(row["title"] ?? row["slug"] ?? "principle"),
-      tier: String(row["principleTier"] ?? "commandment"),
-      weight: resolveWeight(
+    ...commandments.map((row): CandidateRow => {
+      const dimensionVector =
+        (row["principleDimensionVector"] as Record<string, number> | null) ?? {};
+      const baseWeight = resolveWeight(
         String(row["principleTier"] ?? "commandment"),
         row["principleWeight"],
-      ),
-      dimensionVector:
-        (row["principleDimensionVector"] as Record<string, number> | null) ??
-        {},
-      directionText: String(row["principleDirection"] ?? ""),
-    })),
+      );
+      // BI-5BB1A364: attenuate-not-exclude (contextless caller + profession-local axes).
+      const contextMultiplier = consumerContextWeightMultiplier({
+        consumerArchetype: row["principleConsumerArchetype"] as string | null | undefined,
+        principleConsumerContexts: row["principleConsumerContexts"] as string[] | null | undefined,
+        callerConsumerContexts: consumerContexts,
+        dimensionVector,
+      });
+      return {
+        id: String(row["id"] ?? ""),
+        name: String(row["title"] ?? row["slug"] ?? "principle"),
+        tier: String(row["principleTier"] ?? "commandment"),
+        weight: baseWeight * contextMultiplier,
+        dimensionVector,
+        directionText: String(row["principleDirection"] ?? ""),
+      };
+    }),
     ...relevanceHits.map((hit): CandidateRow => {
       // Prefer the rehydrated Postgres row (authoritative: signed vector,
       // weight override, direction text). Fall back to the Qdrant payload
