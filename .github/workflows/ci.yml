@@ -150,6 +150,33 @@ jobs:
         # needed); rendering happens in a compile-ready env via `pnpm docs:diagrams`.
         run: node scripts/render-doc-diagrams.mjs --check
 
+  derived-artifact-registry:
+    name: Derived Artifact Registry
+    runs-on: ubuntu-latest
+    # BI-48768E05. scripts/lib/derived-artifacts-registry.mjs is the single
+    # source of truth for every generated-from-source, committed-to-git
+    # artifact (doc index, doc-impact manifest, doc diagrams, capability
+    # catalog, SBOM drift baseline, ...) that .githooks/pre-commit
+    # regenerates+stages and .githooks/pre-push-gate derives its docs-only
+    # push exemption from. This job is CI's consumption of that same
+    # registry: run every registered artifact's --check command through one
+    # driver (scripts/derived-artifacts-gate.mjs check-all) so a new
+    # generator is covered here by construction, with no ci.yml edit. The
+    # individual --check steps in Docs Link Integrity above are intentionally
+    # left in place (specific, fast, and already load-bearing); this job is
+    # the registry-wide backstop, including artifacts (capability catalog,
+    # SBOM baseline) that previously had no dedicated CI freshness check.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Registry + driver unit tests
+        run: node --test scripts/lib/derived-artifacts-registry.test.mjs scripts/derived-artifacts-gate.test.mjs
+      - name: Every registered derived artifact is fresh
+        run: node scripts/derived-artifacts-gate.mjs check-all
+
   pr-health-test:
     name: PR Health Logic
     runs-on: ubuntu-latest

@@ -11,7 +11,10 @@
 # What does NOT need a gate record:
 #   - delete-only / tag-only pushes (nothing to verify)
 #   - pushes from main or a detached HEAD (the merge queue governs main)
-#   - docs-only diffs vs the configured comparison base (no runtime code changed)
+#   - docs-only diffs vs the configured comparison base, PROVIDED none of the
+#     changed docs are the source of a registered derived artifact that is
+#     now stale (scripts/derived-artifacts-gate.mjs push-exempt; registry at
+#     scripts/lib/derived-artifacts-registry.mjs — BI-48768E05)
 #
 # Override (recorded, PR-visible — NOT silent): set BOTH
 #   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="why" git push
@@ -96,18 +99,25 @@ fs.writeFileSync(file, JSON.stringify({
   exit 0
 fi
 
-# Docs-only diffs need no sandbox run — there is no runtime code to gate. The
-# comparison base defaults to origin/main for GitHub-hosted clones, but can be
-# pointed at a local accepted-base ref by offline/forge-neutral integrations.
-# If the configured base is missing, do NOT fall back silently; require the
-# SHA-bound gate record instead.
+# Docs-only diffs need no sandbox run UNLESS the diff invalidates a
+# registered derived artifact (BI-48768E05) — a docs change is not
+# inherently runtime-safe when it is the SOURCE of a generated runtime
+# artifact (e.g. apps/web/lib/docs/doc-index.generated.json). PR #3284 was
+# exactly this: a docs-only diff that turned main red because the old rule
+# here exempted it by path regex alone, with no check that the derived
+# artifact was actually still fresh. scripts/derived-artifacts-gate.mjs
+# derives the exemption from the registry instead of a path regex: it still
+# requires zero non-docs runtime changes, and additionally runs the --check
+# command for every registered artifact whose sources are in the diff. The
+# comparison base defaults to origin/main for GitHub-hosted clones, but can
+# be pointed at a local accepted-base ref by offline/forge-neutral
+# integrations. If the configured base is missing, do NOT fall back
+# silently; require the SHA-bound gate record instead.
 base_ref="${DPF_PREPUSH_BASE_REF:-origin/main}"
 if git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
   merge_base="$(git merge-base HEAD "$base_ref" 2>/dev/null || true)"
-  if [ -n "$merge_base" ]; then
-    non_docs_changes="$(git diff --name-only "$merge_base" HEAD | grep -Ev '^docs/|^memory/|\.md$' || true)"
-    if [ -z "$non_docs_changes" ]; then
-      echo "[pre-push-gate] docs-only diff vs $base_ref — local-CI gate not required."
+  if [ -n "$merge_base" ] && [ -f "scripts/derived-artifacts-gate.mjs" ]; then
+    if node scripts/derived-artifacts-gate.mjs push-exempt "$merge_base"; then
       exit 0
     fi
   fi
