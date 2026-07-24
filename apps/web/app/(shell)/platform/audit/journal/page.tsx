@@ -32,7 +32,7 @@ export default async function CapabilityJournalPage({ searchParams }: Capability
     { label: "Executions", value: journalCount, accent: "var(--dpf-accent)" },
     { label: "Successful", value: successCount, accent: "var(--dpf-success)" },
     { label: "Failed", value: failCount, accent: "var(--dpf-error)" },
-    { label: "Agents", value: uniqueAgents, accent: "var(--dpf-info)" },
+    { label: "Coworkers", value: uniqueAgents, accent: "var(--dpf-info)" },
     { label: "Capabilities", value: uniqueCapabilities, accent: "var(--dpf-warning)" },
   ];
 

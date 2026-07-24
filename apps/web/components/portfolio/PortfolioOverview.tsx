@@ -73,7 +73,7 @@ export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Prop
             colour="var(--dpf-text)"
           />
           <SummaryCard
-            label="AI Agents"
+            label="AI Coworkers"
             value={summary.activeAgents}
             colour="var(--dpf-accent)"
             detail={`of ${summary.totalAgents} total`}
@@ -112,7 +112,7 @@ export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Prop
                 <div className="flex items-center gap-4 flex-wrap">
                   <Stat value={root.totalCount} label="Products" colour="var(--dpf-text)" />
                   <Stat value={computeHealth(root.activeCount, root.totalCount)} label="Health" colour={colour} />
-                  <Stat value={agentCounts[root.nodeId] ?? 0} label="Agents" colour={colour} />
+                  <Stat value={agentCounts[root.nodeId] ?? 0} label="Coworkers" colour={colour} />
                   <Stat
                     value={budget?.value ?? "\u2014"}
                     label="Budget"

@@ -84,7 +84,7 @@ export function PortfolioNodeDetail({
       <div className="flex flex-wrap gap-3 mb-6">
         <StatBox label="Products" value={String(node.totalCount)} />
         <StatBox label="Owner" value={ownerRole?.roleId ?? "—"} />
-        <StatBox label="Agents" value={String(agentCount)} />
+        <StatBox label="Coworkers" value={String(agentCount)} />
         <StatBox label="Health" value={health} />
         <StatBox
           label="Budget"

@@ -83,7 +83,7 @@ export default async function PlatformIdentityPage() {
           ]}
         />
         <PlatformSummaryCard
-          title="Agent Identity"
+          title="AI Coworker Identity"
           description="Review AI workforce identity anchors, current principal coverage, and the path toward GAID- and TAK-aware publication."
           href="/platform/identity/agents"
           accent="var(--dpf-warning)"

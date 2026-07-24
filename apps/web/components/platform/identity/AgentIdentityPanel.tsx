@@ -41,7 +41,10 @@ export function AgentIdentityPanel({
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Agent Identity</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">AI Coworker Identity</h1>
+        <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
+          These are your AI coworkers, viewed as identity principals.
+        </p>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
           Track which AI coworkers are already anchored to the principal spine, which now resolve into a shared AIDoc projection, and which still need identity coverage before they can participate cleanly in TAK/GAID trust surfaces.
         </p>

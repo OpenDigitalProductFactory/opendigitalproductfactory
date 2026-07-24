@@ -41,7 +41,7 @@ describe("AgentIdentityPanel", () => {
       />,
     );
 
-    expect(html).toContain("Agent Identity");
+    expect(html).toContain("AI Coworker Identity");
     expect(html).toContain("Projected AIDocs");
     expect(html).toContain("Portable authorization classes");
     expect(html).toContain("build-specialist");
