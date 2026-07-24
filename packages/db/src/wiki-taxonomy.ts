@@ -166,6 +166,14 @@ export const PRINCIPLE_DIMENSIONS = [
   "evidence_confidence", // benefit: investigation confidence in the verdict
   "customer_consent_state", // benefit: breadth of standing customer approval
   "business_disruption", // COST: does containment break production?
+  // Added for the design-quality kernel additions (BI-B5EA2FB2 / spec
+  // docs/superpowers/specs/2026-07-22-wwmd-design-quality-kernel-gap-design.md §3).
+  // Two axes the kernel genuinely lacked for design/UX-shaped decisions, each
+  // with an orthogonality claim vs the existing axes and >=2 authoring
+  // principles (§5). Named for what a HIGH score means, per the cost-name
+  // discipline that caught the never-wipe-db inversion.
+  "operator_effort", // COST: how many operator operations + elapsed time to the outcome
+  "legibility_of_consequence", // benefit: can the operator foresee what an action will do before authorizing it
 ] as const;
 export type PrincipleDimension = (typeof PRINCIPLE_DIMENSIONS)[number];
 
@@ -197,6 +205,13 @@ export const PRINCIPLE_COST_DIMENSIONS = [
   // EP-SOVEREIGN-SOC: a security response that breaks production is a cost the
   // governing principle must pull AGAINST (negative weight), same as blast_radius.
   "business_disruption",
+  // BI-B5EA2FB2: operator effort is a COST — a design that demands more operator
+  // operations/time to reach the outcome is worse, so a principle that favours
+  // fewer operations must carry a NEGATIVE weight. (legibility_of_consequence is
+  // a BENEFIT and intentionally stays out of this list.) Renamed from the BI's
+  // original "interaction_efficiency" precisely to avoid the benefit-shaped-name
+  // inversion this list's sign guard exists to prevent.
+  "operator_effort",
 ] as const satisfies readonly PrincipleDimension[];
 export type PrincipleCostDimension = (typeof PRINCIPLE_COST_DIMENSIONS)[number];
 

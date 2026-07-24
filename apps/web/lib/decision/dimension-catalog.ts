@@ -84,6 +84,10 @@ const HIGH_MEANS: Record<PrincipleDimension, string> = {
     "the option is covered by broader standing customer approval",
   business_disruption:
     "the option interrupts MORE of live business operation while it is applied",
+  operator_effort:
+    "the option demands MORE operator operations and elapsed time to reach the outcome",
+  legibility_of_consequence:
+    "the operator can better foresee, before authorizing, what the option will do, to what, under whose authority, and how it is undone",
 };
 
 /** The full caller-facing catalogue, benefits first then costs, stable order. */

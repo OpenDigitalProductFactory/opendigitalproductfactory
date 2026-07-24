@@ -6,7 +6,7 @@ status: published
 abstract: Concurrent work — operator↔agent, agent↔agent, session↔session — collides when state mutates from more than one pen without an acknowledged handoff token. Either side proposes; the named owner explicitly acknowledges; reassignment back is also explicit.
 principleTier: commandment
 principleDirection: Before mutating any artifact, propose ownership to the named owner and wait for explicit acknowledgement recorded as state; never assume implicit consent from silence; reassignment back is also explicit.
-principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.7, "long_term_maintainability": 0.6, "human_cognitive_load": -0.3, "speed_to_value": -0.2}
+principleDimensionVector: {"governance_compliance": 0.9, "evidence_density": 0.7, "long_term_maintainability": 0.6, "human_cognitive_load": -0.3, "speed_to_value": -0.2, "legibility_of_consequence": 0.6}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
