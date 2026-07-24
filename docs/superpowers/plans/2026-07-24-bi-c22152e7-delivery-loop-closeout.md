@@ -1,6 +1,6 @@
 # BI-C22152E7 Delivery Loop Closeout Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Use the DPF-native equivalents: dpf-tdd for behavior changes, dpf-local-merge-ci-before-push for pre-push verification, and dpf-pr-with-dco for PR handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Finish BI-C22152E7 by turning the PR #3480 process lessons into durable local-CI, quiescence, and post-mortem behavior.
 
