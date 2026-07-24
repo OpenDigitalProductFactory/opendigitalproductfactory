@@ -22,7 +22,7 @@ Applied corrections:
 
 - **Live backlog state is now explicit.** `EP-HX-LOOP` exists with six slice BIs, all currently `triaging`; it is no longer a merely proposed epic. The missing piece is spec linkage/indexing, not epic creation.
 - **Current truth and target architecture are separated.** DPF already has strong server/agent observability; it does not yet have client-side human interaction capture or the proposed `InteractionEvent`, `UxSession`, `UxFrictionSignal`, or `UxReplayChunk` models.
-- **The design-knowledge dependency is corrected.** The current skill is `skills/design/ui-ux-design-intelligence.skill.md` with 67 styles, 96 palettes, 57 font pairings, 25 chart types, and 99 UX guidelines. The prior referenced skill name is not present in this worktree.
+- **The design-knowledge dependency is corrected, and is itself an INTERIM dependency (BI-0C86FA67, 2026-07-23).** The current skill is `skills/design/ui-ux-design-intelligence.skill.md` with 67 styles, 96 palettes, 57 font pairings, 25 chart types, and 99 UX guidelines. The prior referenced skill name is not present in this worktree — but this skill is the same superseded content under a new name: EP-UX-SYSTEM spec rev 2 (`docs/superpowers/specs/2026-07-22-holistic-ux-system-and-agent-codification-design.md` §6 L3, §8.1 D4, merged PR #3434) supersedes it, because it teaches Tailwind utilities (`animate-pulse`, `bg-primary`, `shadow-dpf-*`) that only existed in a deleted v3 `tailwind.config.ts`. The durable replacement — a two-tier skill composing pinned external guidelines (Vercel Web Interface Guidelines, Anthropic `frontend-design`) plus a generated DPF tier — is owned by `BI-49292C2B` (EP-UX-SYSTEM Phase 2, not yet built as of 2026-07-23). **Retirement trigger:** when `BI-49292C2B` ships, Slice 4's `composesFrom` and every reference below must repoint to its skill in the same change that closes it; do not let this spec keep citing `ui-ux-design-intelligence` past that point.
 - **The UX dashboard contract is now binding.** Any HX reporting or review surface must use DPF theme tokens, `report-kit` primitives, `LocalTime`, and the central status-intent registry. Do not hand-roll badges, KPI cards, filters, tables, charts, timestamps, or local color maps.
 - **The loop is positioned as an evidence producer, not a competing router.** HX findings emit `ImprovementSignal` rows and, when warranted, governed `AgentActionProposal` / `BacklogItem` records. Prioritization stays in the Continuous Improvement Flywheel and the normal backlog.
 - **rrweb remains out of v1.** Replay is useful for human diagnosis, but it carries the highest privacy risk. Slices 1-5 close the loop without replay; Slice 6 stays deferred until masking, retention, and operator controls are proven.
@@ -58,7 +58,7 @@ These are verified current substrates this spec builds on. They are not to be re
 | Route inventory | `PORTAL_NAV_ROUTES` | `apps/web/lib/navigation/portal-navigation-model.ts` | Captured route/destination keys should resolve through the canonical nav model. |
 | Periodic jobs | Inngest scheduled/event functions | `apps/web/lib/queue/functions/*` | HX sessionization and analysis should follow existing Inngest patterns and quiescence discipline. |
 | UI/data-display standards | Theme tokens and report-kit | `docs/platform-usability-standards.md`, `apps/web/components/ui/report-kit/README.md` | HX review surfaces use report-kit and tokens only. |
-| UX design reference | `ui-ux-design-intelligence` skill | `skills/design/ui-ux-design-intelligence.skill.md` | Use the current skill name; do not use obsolete skill names unless they are reintroduced. |
+| UX design reference | `ui-ux-design-intelligence` skill (INTERIM — superseded by EP-UX-SYSTEM, replacement pending `BI-49292C2B`) | `skills/design/ui-ux-design-intelligence.skill.md` | Use the current skill name; do not use obsolete skill names unless they are reintroduced. Retire this row and repoint to `BI-49292C2B`'s skill when it ships — see "Architect Review Update" above. |
 
 Missing today:
 
@@ -372,9 +372,11 @@ The coworker should:
 
 - consume `UxAnalysisRun.brief`
 - cite `UxFrictionSignal.signalId`, route key, affected-session count, and before/after metric
-- consult `skills/design/ui-ux-design-intelligence.skill.md`
+- consult `skills/design/ui-ux-design-intelligence.skill.md` (INTERIM dependency — see "Architect Review Update"; repoint to `BI-49292C2B`'s replacement skill when it ships)
 - reference AGT-903 / AGT-906 / AGT-907 outputs when a finding overlaps accessibility, heuristic UX, or regression-test scope
 - produce structured findings, not generic prose
+
+**Boundary against AGT-906 `ux-design-critic` (already encoded in `packages/db/src/workforce-seed.ts` and `apps/web/lib/tak/agent-routing.ts` for that coworker).** This coworker is posterior/behavioural: it reasons over real user telemetry — `UxAnalysisRun` briefs derived from captured `InteractionEvent`/`UxFrictionSignal` rows — after the fact, answering "where did users struggle". `ux-design-critic` is prior/compositional: it reasons over rendered screenshots and the founder-authored critique corpus, before merge, answering "is this well designed". A finding that is compositional rather than behavioural should be handed to `ux-design-critic` rather than speculated about here. Only one of the two should be surfaced as "the UX coworker" on any given nav/workforce surface — `ux-design-critic` is the only one seeded today (this coworker is still `deferred`, see `BI-4A1B34E1`); when it is built, its registry entry, prompt, and nav label must stay distinct from `ux-design-critic`'s.
 
 The coworker must not:
 
@@ -505,7 +507,7 @@ Verification:
 Backlog item: `BI-4A1B34E1`.
 
 - Add coworker registry, prompt, and skill.
-- Use `ui-ux-design-intelligence`.
+- Use `ui-ux-design-intelligence` as an INTERIM design-knowledge dependency; repoint `composesFrom` to `BI-49292C2B`'s replacement skill if that BI has shipped by the time this slice builds (retirement trigger, see "Architect Review Update").
 - Produce evidence-cited findings over analysis briefs.
 - Emit `ImprovementSignal` only; do not create a parallel queue.
 
@@ -550,7 +552,7 @@ Requirements if later reactivated:
 3. **Cadence is daily deterministic signals plus weekly coworker synthesis.** This balances regression latency with noise control.
 4. **Epic shape is standalone.** `EP-HX-LOOP` exists and is the right home; it reuses Reduction Gear and flywheel primitives without being swallowed by either.
 5. **Report-kit is binding for HX UI.** HX dashboards/reviews must not become a new design-system fork.
-6. **`ui-ux-design-intelligence` is the design skill dependency.** Any future rename must update the spec and seeded skill references in the same change.
+6. **`ui-ux-design-intelligence` is the design skill dependency, and it is explicitly INTERIM.** It is the same content as the retired `ui-ux-pro-max`, now superseded by EP-UX-SYSTEM (spec rev 2, PR #3434); the durable replacement is `BI-49292C2B`'s two-tier skill (pinned external guidelines + generated DPF tier), not yet built as of 2026-07-23 (BI-0C86FA67). Any future rename or the `BI-49292C2B` handoff must update this spec and seeded skill references in the same change.
 
 ## Open Decisions
 
