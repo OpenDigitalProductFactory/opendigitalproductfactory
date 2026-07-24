@@ -46,6 +46,40 @@ describe("investigateUnidentifiedDevice — auto-resolve cases (draft rule autho
     expect(result.draftRule?.taxonomyNodeId).toBe("foundational/building_management/security_and_surveillance");
   });
 
+  it("auto-resolves an observed printer signal into client compute without inventing an exact model", async () => {
+    const obs = buildDeviceFingerprintObservation({
+      name: "Printer",
+      attributes: {
+        vendor: "CHONGQING FUGUI ELECTRONICS CO.,LTD.",
+        hostname: "NPI698BC4",
+        mac: "8c:c8:4b:d6:f1:35",
+        operatorName: "Printer",
+      },
+    })!;
+    const result = await investigateUnidentifiedDevice(obs);
+    expect(result.outcome).toBe("auto_resolve");
+    expect(result.draftRule?.resolvedIdentity.deviceClass).toBe("printer");
+    expect(result.draftRule?.resolvedIdentity.name).toBe("Printer");
+    expect(result.draftRule?.taxonomyNodeId).toBe("foundational/compute/client_and_end_user_compute");
+    expect(result.draftRule?.resolvedIdentity.model).toBeUndefined();
+  });
+
+  it("auto-resolves an observed Whirlpool oven into connected appliances", async () => {
+    const obs = buildDeviceFingerprintObservation({
+      name: "Oven",
+      attributes: {
+        vendor: "Whirlpool Corporation",
+        mac: "88:e7:12:0f:c0:82",
+        operatorName: "Oven",
+      },
+    })!;
+    const result = await investigateUnidentifiedDevice(obs);
+    expect(result.outcome).toBe("auto_resolve");
+    expect(result.draftRule?.resolvedIdentity.deviceClass).toBe("oven");
+    expect(result.draftRule?.resolvedIdentity.name).toBe("Whirlpool oven");
+    expect(result.draftRule?.taxonomyNodeId).toBe("foundational/building_management/connected_appliances");
+  });
+
   it("falls back to injected web research for an unknown-but-researchable vendor", async () => {
     const obs = buildDeviceFingerprintObservation({ attributes: { vendor: "Newco Devices", mac: "00:11:22:33:44:55" } })!;
     const webResearch = vi.fn().mockResolvedValue([

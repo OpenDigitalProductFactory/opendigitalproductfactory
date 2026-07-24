@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@dpf/db", async () => {
+  return vi.importActual("../../../packages/db/src/index.ts");
+});
+
 import {
   maybeTriggerDiscoveryTriageForVolume,
   runDiscoveryTriageDaily,
@@ -18,10 +22,21 @@ function createRunnerDb() {
     },
     taxonomyNode: {
       findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn().mockResolvedValue({ id: "tax-client-compute" }),
     },
     discoveryTriageDecision: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({}),
+    },
+    discoveryFingerprintObservation: {
+      upsert: vi.fn().mockResolvedValue({ id: "fingerprint-observation-1" }),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    discoveryFingerprintReview: {
+      create: vi.fn().mockResolvedValue({}),
+    },
+    discoveryFingerprintRule: {
+      upsert: vi.fn().mockResolvedValue({}),
     },
     platformConfig: {
       findUnique: vi.fn().mockResolvedValue(null),
@@ -424,6 +439,86 @@ describe("runDiscoveryTriagePass", () => {
     });
     expect(result.metrics.needsMoreEvidence).toBe(1);
     expect(result.metrics.decisionsCreated).toBe(1);
+  });
+
+  it("investigates needs-more-evidence device gaps through the coworker fingerprint loop", async () => {
+    const db = createRunnerDb();
+    db.inventoryEntity.findMany.mockResolvedValue([
+      {
+        id: "entity-printer",
+        entityKey: "organization:internal:host:arp:192.168.0.103",
+        entityType: "host",
+        name: "Printer",
+        firstSeenAt: new Date("2026-07-22T00:00:00Z"),
+        lastSeenAt: new Date("2026-07-23T08:00:00Z"),
+        attributionStatus: "needs_review",
+        candidateTaxonomy: [],
+        properties: {
+          vendor: "CHONGQING FUGUI ELECTRONICS CO.,LTD.",
+          mac: "8c:c8:4b:d6:f1:35",
+          hostname: "NPI698BC4",
+          operatorName: "Printer",
+        },
+      },
+    ]);
+    db.portfolioQualityIssue.findMany.mockResolvedValue([]);
+
+    await runDiscoveryTriagePass(db, {
+      actorId: "inventory-specialist",
+    });
+
+    expect(db.discoveryTriageDecision.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inventoryEntityId: "entity-printer",
+        outcome: "needs-more-evidence",
+        requiresHumanReview: false,
+      }),
+    });
+    expect(db.discoveryFingerprintObservation.upsert).toHaveBeenCalledWith({
+      where: { observationKey: "triage:entity-printer:fingerprint" },
+      create: expect.objectContaining({
+        observationKey: "triage:entity-printer:fingerprint",
+        inventoryEntityId: "entity-printer",
+        sourceKind: "discovery-triage",
+        signalClass: "device_identity_gap",
+        decisionStatus: "pending_coworker_review",
+      }),
+      update: expect.objectContaining({
+        inventoryEntityId: "entity-printer",
+        sourceKind: "discovery-triage",
+        signalClass: "device_identity_gap",
+        decisionStatus: "pending_coworker_review",
+      }),
+    });
+    expect(db.discoveryFingerprintReview.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        observationId: "fingerprint-observation-1",
+        reviewerType: "coworker",
+        reviewerId: "inventory-specialist",
+        decision: "draft_authored",
+        nextStatus: "draft",
+      }),
+    });
+    expect(db.discoveryFingerprintRule.upsert).toHaveBeenCalledWith({
+      where: expect.any(Object),
+      update: expect.objectContaining({
+        status: "draft",
+        resolvedIdentity: expect.objectContaining({ deviceClass: "printer" }),
+        taxonomyNodeId: "tax-client-compute",
+      }),
+      create: expect.objectContaining({
+        status: "draft",
+        resolvedIdentity: expect.objectContaining({ deviceClass: "printer" }),
+        taxonomyNodeId: "tax-client-compute",
+      }),
+    });
+    expect(db.discoveryFingerprintObservation.update).toHaveBeenCalledWith({
+      where: { id: "fingerprint-observation-1" },
+      data: expect.objectContaining({
+        decisionStatus: "draft",
+        reviewReason: expect.stringContaining("Recognised observed signal"),
+      }),
+    });
   });
 
   it("skips duplicate daily runs when the same idempotency key already exists", async () => {

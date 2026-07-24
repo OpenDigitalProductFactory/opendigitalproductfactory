@@ -311,13 +311,35 @@ function resetSandboxNodeModules() {
   return true;
 }
 
-function runConvergenceAttempt(packageState, { force = false, resetNodeModules = false } = {}) {
+function freshPnpmStoreDir() {
+  const target = path.join(rootDir, ".pnpm-fresh-store");
+  const resolved = path.resolve(target);
+  if (path.relative(rootDir, resolved) !== ".pnpm-fresh-store") return "";
+  return resolved;
+}
+
+function clearFreshPnpmStore(storeDir) {
+  if (!storeDir) return;
+  const resolved = path.resolve(storeDir);
+  if (path.relative(rootDir, resolved) !== ".pnpm-fresh-store") {
+    console.error(`[sandbox-freshness] refusing to clear unsafe fresh pnpm store path ${resolved}`);
+    return;
+  }
+  fs.rmSync(resolved, { recursive: true, force: true });
+}
+
+function runConvergenceAttempt(packageState, { force = false, resetNodeModules = false, freshStore = false } = {}) {
   if (resetNodeModules) resetSandboxNodeModules();
   clearPnpmInstallState();
   clearStalePackageLinks(packageState);
   const convergeCommand = ["pnpm", "install"];
   if (force) convergeCommand.push("--force");
   convergeCommand.push("--frozen-lockfile", "--config.confirmModulesPurge=false");
+  if (freshStore) {
+    const storeDir = freshPnpmStoreDir();
+    clearFreshPnpmStore(storeDir);
+    if (storeDir) convergeCommand.push("--store-dir", storeDir);
+  }
   log(`drift detected; converging with: ${convergeCommand.join(" ")}`);
   const startedAt = Date.now();
   const install = spawnSync(convergeCommand[0], convergeCommand.slice(1), {
@@ -331,6 +353,7 @@ function runConvergenceAttempt(packageState, { force = false, resetNodeModules =
     exitCode: install.status ?? 1,
     durationMs: Date.now() - startedAt,
     resetNodeModules,
+    freshStore,
   };
 }
 
@@ -352,6 +375,14 @@ try {
   if (shouldForceConvergenceAfterInstall(evaluation) && canResetNodeModules()) {
     log("forced convergence left dependency drift; resetting scratch node_modules once and reinstalling from the lockfile");
     attempts.push(runConvergenceAttempt(state, { resetNodeModules: true }));
+    convergence = { ...attempts[attempts.length - 1], attempts };
+    state = collectState();
+    evaluation = evaluateFreshness(state);
+  }
+
+  if (shouldForceConvergenceAfterInstall(evaluation) && canResetNodeModules()) {
+    log("scratch node_modules reset still left dependency drift; retrying once with a scratch-local pnpm store");
+    attempts.push(runConvergenceAttempt(state, { freshStore: true }));
     convergence = { ...attempts[attempts.length - 1], attempts };
     state = collectState();
     evaluation = evaluateFreshness(state);
