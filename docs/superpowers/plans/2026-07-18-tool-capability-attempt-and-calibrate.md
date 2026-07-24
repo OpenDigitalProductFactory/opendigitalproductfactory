@@ -64,6 +64,18 @@ Live DB has **two** non-retired `local/docker.io/ai/qwen3-coder:latest` rows: `c
 > `capabilityOverrides {"toolUse":true}`) was quarantined, losing both the measured
 > calibration and the admin pin. Precedence + override-preservation on survivor choice
 > belongs in the quarantine-triage path, not in a separate migration.
+>
+> **CLOSED 2026-07-24 — BI-84792669.** The precedence + override-preservation design
+> drafted above was implemented as a reusable module,
+> `packages/db/src/model-profile-precedence.ts` (`pickModelProfileSurvivor`,
+> `pickCapabilityOverrides`), and applied to the live quarantine-triage state via
+> `packages/db/prisma/migrations/20260724150000_retriage_quarantined_model_profiles`.
+> That migration re-ranks every already-quarantined `(providerId, modelId)` group with
+> the precedence this phase specified (`evaluated > admin > catalog > seed`, tie-broken
+> on `evalCount`, `toolFidelity`, `lastEvalAt`, `generatedAt`) and copies forward any
+> `capabilityOverrides` pin the survivor lacks. Live-verified: the `evaluated` row for
+> `local/docker.io/ai/qwen3-coder:latest` reclaimed the natural key with `toolFidelity
+> 100` and `capabilityOverrides {"toolUse":true}` restored.
 
 - ~~**Reconcile migration/script**: for any `(providerId, modelId)` with >1 non-retired row, keep the highest-precedence row (`evaluated` > `seed`; tie-break higher `evalCount`/`toolFidelity`, and merge a present `capabilityOverrides`), retire/delete the rest.~~
 - ~~**Verify the constraint:** confirm `@@unique([providerId, modelId])` exists in `packages/db/prisma/schema.prisma`.~~ Confirmed present and enforced live.
