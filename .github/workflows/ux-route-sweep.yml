@@ -77,6 +77,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The seed reads the IT4IT workbook from docs/Reference, and that
+          # workbook is stored in Git LFS. Without LFS, CI gets the pointer
+          # file and the XLSX reader fails before eaReferenceModels can run
+          # (BI-98D19DF2 — "invalid zip data" on a clean runner). Mirrors the
+          # checkout in audit-routing-invariants.yml, which runs the same
+          # full seed and has been green with this flag set.
+          lfs: true
 
       - name: Setup pnpm with cache
         uses: ./.github/actions/setup-pnpm
@@ -87,28 +95,12 @@ jobs:
       - name: Apply migrations
         run: pnpm --filter @dpf/db exec prisma migrate deploy
 
-      # The seed exits 1 if ANY step fails, by design ("surfaced, not swallowed").
-      # `eaReferenceModels` currently fails in a clean CI environment with "invalid
-      # zip data" — a real pre-existing defect (BI-98D19DF2), not something this job
-      # introduced, and one the sweep does not depend on: it needs a portal with a
-      # seeded org, not EA reference models. So tolerate THAT step specifically and
-      # fail on anything else, rather than blanket continue-on-error which would
-      # hide a genuinely broken seed.
+      # The seed exits 1 if ANY step fails, by design ("surfaced, not
+      # swallowed"). BI-98D19DF2's interim eaReferenceModels tolerance
+      # carve-out (PR #3445) is removed now that `lfs: true` above fixes the
+      # root cause — a full, unmodified failure is a real signal again.
       - name: Seed the fixture organisation
-        run: |
-          set +e
-          pnpm --filter @dpf/db seed 2>&1 | tee /tmp/seed.log
-          status=${PIPESTATUS[0]}
-          set -e
-          if [ "$status" -eq 0 ]; then exit 0; fi
-          failed=$(grep -oE '^  - [a-zA-Z]+:' /tmp/seed.log | sed 's/^  - //; s/:$//' | sort -u)
-          echo "Seed reported failed step(s): ${failed:-<none parsed>}"
-          if [ "$failed" = "eaReferenceModels" ]; then
-            echo "::warning::Seed completed except eaReferenceModels (known: invalid zip data). Continuing — the sweep does not use EA reference models."
-            exit 0
-          fi
-          echo "::error::Seed failed on step(s) beyond the known eaReferenceModels issue."
-          exit "$status"
+        run: pnpm --filter @dpf/db seed
 
       # The seed alone leaves isFirstRun() true, so every authenticated surface
       # redirects to /setup and the sweep measures nothing (proved: 208/226 routes).

@@ -56,7 +56,7 @@ vi.mock("./client.js", () => ({
     eaAssessmentScope: { upsert: vi.fn() },
     eaReferenceModel: { upsert: vi.fn() },
     eaReferenceModelArtifact: { upsert: vi.fn() },
-    eaReferenceModelElement: { upsert: vi.fn() },
+    eaReferenceModelElement: { upsert: vi.fn(), count: vi.fn() },
   },
 }));
 
@@ -88,7 +88,7 @@ const mockPrisma = prisma as unknown as {
   eaAssessmentScope: { upsert: ReturnType<typeof vi.fn> };
   eaReferenceModel: { upsert: ReturnType<typeof vi.fn> };
   eaReferenceModelArtifact: { upsert: ReturnType<typeof vi.fn> };
-  eaReferenceModelElement: { upsert: ReturnType<typeof vi.fn> };
+  eaReferenceModelElement: { upsert: ReturnType<typeof vi.fn>; count: ReturnType<typeof vi.fn> };
 };
 
 beforeEach(() => {
@@ -105,6 +105,11 @@ beforeEach(() => {
   mockPrisma.eaReferenceModelElement.upsert.mockImplementation(async (args: { where: { modelId_slug: { slug: string } } }) => ({
     id: `el-${args.where.modelId_slug.slug}`,
   }));
+  // Row-count assertion in seedEaReferenceModels (BI-98D19DF2) requires both
+  // models to report a nonzero element count; default to a healthy count so
+  // existing tests don't need to know about the assertion unless they're
+  // specifically exercising it.
+  mockPrisma.eaReferenceModelElement.count.mockResolvedValue(1);
 
   mockReadWorkbook.mockResolvedValue([
     {
@@ -195,6 +200,24 @@ describe("seedEaReferenceModels", () => {
     for (const [args] of sdCalls) {
       expect(args.create.properties).not.toHaveProperty("dpfCapabilityKey");
     }
+  });
+
+  it("throws when the IT4IT workbook read produces zero elements (BI-98D19DF2)", async () => {
+    mockPrisma.eaReferenceModelElement.count.mockResolvedValue(0);
+
+    await expect(seedEaReferenceModels()).rejects.toThrow(/IT4IT reference model imported zero elements/);
+  });
+
+  it("throws when the BIAN JSON import produces zero elements (BI-98D19DF2)", async () => {
+    // Both models resolve to the same mocked id ("model-1") in this fixture,
+    // so distinguish by call order: first count() is IT4IT, second is BIAN.
+    let call = 0;
+    mockPrisma.eaReferenceModelElement.count.mockImplementation(async () => {
+      call += 1;
+      return call === 1 ? 1 : 0;
+    });
+
+    await expect(seedEaReferenceModels()).rejects.toThrow(/BIAN Service Landscape reference model imported zero elements/);
   });
 
   it("keeps the routing audit checkout wired to fetch LFS-backed seed workbooks", () => {
