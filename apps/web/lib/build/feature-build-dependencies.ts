@@ -28,9 +28,36 @@ export type WaitingOnDependency = {
   phase: DependencyBuildPhase;
 };
 
+/**
+ * Dependency phases a sibling can never leave to reach `complete`. A sibling in
+ * one of these can NEVER satisfy a dependent, so a dependent waiting on it is
+ * deadlocked, not merely pending — see the `unsatisfiable` gate branch
+ * (BI-7B6D7661). `abandoned` is set by escalate-build-to-human and the age-out
+ * reaper; `failed` by a superseded/terminally-failed build. Neither is in the
+ * resumable phase set, so neither is ever resurrected in place (recovery mints a
+ * NEW build via re-promotion, not a phase change on this row).
+ */
+export const TERMINAL_INCOMPLETE_DEPENDENCY_PHASES: ReadonlySet<DependencyBuildPhase> =
+  new Set(["abandoned", "failed"]);
+
+export function isTerminallyIncompleteDependencyPhase(phase: DependencyBuildPhase): boolean {
+  return TERMINAL_INCOMPLETE_DEPENDENCY_PHASES.has(phase);
+}
+
 export type FeatureBuildDependencyGateResult =
   | { allowed: true; waitingOn: [] }
-  | { allowed: false; waitingOn: WaitingOnDependency[]; message: string };
+  // Still-live upstream builds that may yet complete — keep waiting.
+  | { allowed: false; blocked: "waiting"; waitingOn: WaitingOnDependency[]; message: string }
+  // At least one upstream build is terminally dead (abandoned/failed) and can
+  // never complete — the dependent is DEADLOCKED, not pending. `deadDependencies`
+  // is the terminal subset; `waitingOn` is every not-complete upstream.
+  | {
+      allowed: false;
+      blocked: "unsatisfiable";
+      waitingOn: WaitingOnDependency[];
+      deadDependencies: WaitingOnDependency[];
+      message: string;
+    };
 
 export type ReadyDependentBuild = {
   buildId: string;
@@ -143,9 +170,31 @@ export function deriveFeatureBuildDependencyGate(
     return { allowed: true, waitingOn: [] };
   }
 
+  // Split the not-complete upstream into terminally-dead vs still-live. A dead
+  // sibling can never reach `complete`, so a dependent waiting on it is
+  // deadlocked — surface that as `unsatisfiable` so the caller can terminate the
+  // dependent instead of re-queuing it forever (BI-7B6D7661).
+  const deadDependencies = waitingOn.filter((dependency) =>
+    isTerminallyIncompleteDependencyPhase(dependency.phase),
+  );
+
+  if (deadDependencies.length > 0) {
+    const deadList = deadDependencies.map((dependency) => dependency.title).join(", ");
+    return {
+      allowed: false,
+      blocked: "unsatisfiable",
+      waitingOn,
+      deadDependencies,
+      message:
+        `Blocked permanently: sibling build(s) ${deadList} were abandoned/failed and can never complete, ` +
+        `so ${build.title} can never start. Re-promote the backlog item to rebuild the epic, or drop the dead dependency.`,
+    };
+  }
+
   const titleList = waitingOn.map((dependency) => dependency.title).join(", ");
   return {
     allowed: false,
+    blocked: "waiting",
     waitingOn,
     message: `Waiting on: ${titleList}. Complete those sibling builds before starting implementation for ${build.title}.`,
   };

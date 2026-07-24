@@ -34,6 +34,7 @@ import {
 } from "@/lib/feature-build-types";
 import {
   deriveFeatureBuildDependencyGate,
+  type FeatureBuildDependencyGateResult,
   FEATURE_BUILD_DEPENDENCY_GATE_SELECT,
 } from "@/lib/build/feature-build-dependencies";
 import { logBuildActivity } from "@/lib/mcp/build-tool-helpers";
@@ -61,6 +62,9 @@ export type PlanToBuildTransitionOutcome =
   | { kind: "advanced" }
   | { kind: "not-ready"; reason: string }
   | { kind: "gate-blocked"; reason: string }
+  // A blocking sibling was abandoned/failed and can never complete, so this
+  // build was terminally abandoned rather than left waiting forever (BI-7B6D7661).
+  | { kind: "dependency-unsatisfiable"; reason: string; deadDependencyBuildIds: string[] }
   | { kind: "wwmd-withheld"; reason: string }
   | { kind: "transition-failed"; reason: string; failures: number }
   | { kind: "escalated"; reason: string; failures: number };
@@ -172,6 +176,57 @@ async function failTransition(args: {
   return { kind: "transition-failed", reason, failures: tracker.failures };
 }
 
+/**
+ * Terminally abandon a plan-phase build whose plan is ready but which depends on
+ * a sibling that was abandoned/failed and can never complete (BI-7B6D7661).
+ *
+ * Without this the build re-enters the resume sweep every cycle, logs
+ * "Waiting on: …", and — because decomposition children are exempt from the
+ * 7-day pre-build age-out — waits forever. Abandonment is reversible: re-promote
+ * the originating backlog item to rebuild the whole epic fresh. Never throws.
+ */
+async function abandonDeadlockedDependent(args: {
+  buildId: string;
+  parentEpicId: string | null;
+  gate: Extract<FeatureBuildDependencyGateResult, { blocked: "unsatisfiable" }>;
+}): Promise<PlanToBuildTransitionOutcome> {
+  const { buildId, gate } = args;
+  const deadDependencyBuildIds = gate.deadDependencies.map((d) => d.buildId);
+  const reason = gate.message;
+  try {
+    // Re-check under the write: only abandon a build still in `plan` and not
+    // already terminal, so a build that advanced or was abandoned between the
+    // gate read and here is left untouched.
+    await prisma.$transaction(async (tx) => {
+      const fresh = await tx.featureBuild.findUnique({
+        where: { buildId },
+        select: { phase: true, abandonedAt: true },
+      });
+      if (!fresh || fresh.abandonedAt || fresh.phase !== "plan") return;
+      await tx.featureBuild.update({
+        where: { buildId },
+        data: {
+          phase: "abandoned",
+          abandonedAt: new Date(),
+          abandonReason: reason,
+        },
+      });
+      await tx.buildActivity.create({
+        data: {
+          buildId,
+          tool: "resumeStrandedBuildsOnBoot",
+          summary:
+            `Abandoned at the plan→build dependency gate: ${reason} ` +
+            `(dead sibling build(s): ${deadDependencyBuildIds.join(", ") || "none"}) (BI-7B6D7661).`,
+        },
+      });
+    });
+  } catch (err) {
+    console.warn("[plan-to-build-transition] failed to abandon deadlocked dependent:", { buildId }, err);
+  }
+  return { kind: "dependency-unsatisfiable", reason, deadDependencyBuildIds };
+}
+
 // ── The single transition executor ───────────────────────────────────────────
 
 /**
@@ -243,6 +298,18 @@ export async function performPlanToBuildTransition(params: {
   // Dependency gate (blocking upstream builds).
   const dependencyGate = deriveFeatureBuildDependencyGate(build);
   if (!dependencyGate.allowed) {
+    // A dead (abandoned/failed) upstream can NEVER complete, so this dependent
+    // is deadlocked — and decomposition children are exempt from the 7-day
+    // age-out, so nothing else would ever reap it. Terminally abandon it here
+    // with a reason that names the dead sibling(s), instead of re-queuing the
+    // "Waiting on: …" skip forever (BI-7B6D7661).
+    if (dependencyGate.blocked === "unsatisfiable") {
+      return abandonDeadlockedDependent({
+        buildId,
+        parentEpicId: build.parentEpicId,
+        gate: dependencyGate,
+      });
+    }
     logBuildActivity(buildId, "phase:gate-blocked", dependencyGate.message);
     return { kind: "gate-blocked", reason: dependencyGate.message };
   }
