@@ -647,6 +647,16 @@ describe("Refactored build-scoped tools — backwards compat via implications", 
     expect(isToolAllowedByGrants("process_backlog_for_build_studio", ["build_promote"])).toBe(true);
   });
 
+  // BI-297863B2: governed self-abandon shares promote's grant — same authority
+  // that lets an agent bring a build INTO Build Studio also lets it free its
+  // own stalled/superseded WIP slot.
+  it("abandon_stalled_build accepts build_lifecycle or legacy build_promote, not a lesser grant", () => {
+    expect(isToolAllowedByGrants("abandon_stalled_build", ["build_lifecycle"])).toBe(true);
+    expect(isToolAllowedByGrants("abandon_stalled_build", ["build_promote"])).toBe(true);
+    expect(isToolAllowedByGrants("abandon_stalled_build", ["backlog_write"])).toBe(false);
+    expect(isToolAllowedByGrants("abandon_stalled_build", [])).toBe(false);
+  });
+
   // Tools NOT refactored — should remain on their original grants.
   it("record_external_development_evidence still requires backlog_write directly", () => {
     expect(isToolAllowedByGrants("record_external_development_evidence", ["backlog_write"])).toBe(true);

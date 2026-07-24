@@ -41,7 +41,7 @@ apps/web/lib/integrate/build-orchestrator.ts	1796
 apps/web/lib/integrate/sandbox/build-branch.ts	870
 apps/web/lib/marketing.ts	1369
 apps/web/lib/mcp-tools-backlog.test.ts	874
-apps/web/lib/mcp-tools.ts	1923
+apps/web/lib/mcp-tools.ts	1925
 apps/web/lib/mcp/packs/backlog-pack.ts	1073
 apps/web/lib/mcp/packs/contribution-hive-pack.ts	858
 apps/web/lib/mcp/packs/sandbox-pack.ts	920
@@ -53,8 +53,8 @@ apps/web/lib/routing/fallback.test.ts	1077
 apps/web/lib/self-upgrade/quiescence.test.ts	951
 apps/web/lib/self-upgrade/quiescence.ts	1612
 apps/web/lib/skills/evidence-search.ts	803
-apps/web/lib/tak/agent-grants.test.ts	903
-apps/web/lib/tak/agent-grants.ts	854
+apps/web/lib/tak/agent-grants.test.ts	913
+apps/web/lib/tak/agent-grants.ts	857
 apps/web/lib/tak/agent-routing.ts	996
 apps/web/lib/tak/agentic-loop.test.ts	2311
 apps/web/lib/tak/agentic-loop.ts	2683
