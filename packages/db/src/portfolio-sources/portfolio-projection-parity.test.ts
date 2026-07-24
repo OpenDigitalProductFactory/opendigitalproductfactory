@@ -20,6 +20,8 @@ import {
   isPortfolioCoverageStatus,
   isPortfolioSlug,
   isPortfolioSourceKind,
+  PORTFOLIO_COVERAGE_STATUSES,
+  PORTFOLIO_SOURCE_KINDS,
   type ProjectedPortfolioEntry,
 } from "./types";
 
@@ -72,6 +74,29 @@ describe("portfolio projection parity (BI-PORTCOV-P7)", () => {
       ...SUPPORTED_INTEGRATIONS.map((i) => `int-${i.slug}`),
     ];
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // BI-5B2F5447 (D0): the incumbent-application coverage lane extends both closed
+  // enums. These lock the new values in so a later refactor cannot quietly drop
+  // them, and a well-formed incumbent entry round-trips through assertWellFormed.
+  it("recognizes the incumbent coverage status and incumbent_intake source kind", () => {
+    expect(PORTFOLIO_COVERAGE_STATUSES).toContain("incumbent");
+    expect(isPortfolioCoverageStatus("incumbent")).toBe(true);
+    expect(PORTFOLIO_SOURCE_KINDS).toContain("incumbent_intake");
+    expect(isPortfolioSourceKind("incumbent_intake")).toBe(true);
+  });
+
+  it("a projected incumbent entry is well-formed", () => {
+    const entry: ProjectedPortfolioEntry = {
+      productId: "incumbent-acme-scheduler",
+      name: "Acme Scheduler",
+      description: "Third-party scheduling app the customer runs today.",
+      portfolioSlug: "for_employees",
+      taxonomyNodeId: null,
+      coverageStatus: "incumbent",
+      sourceKind: "incumbent_intake",
+    };
+    assertWellFormed([entry], "incumbent-");
   });
 
   it("each global source uses a distinct productId prefix", () => {

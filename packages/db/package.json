@@ -56,6 +56,7 @@
     "./healthcare-care-appointment": "./src/healthcare-care-appointment.ts",
     "./healthcare-care-intake": "./src/healthcare-care-intake.ts",
     "./seed-skills": "./src/seed-skills.ts",
+    "./portfolio-sources/types": "./src/portfolio-sources/types.ts",
     "./patch": "./src/patch/index.ts"
   },
   "scripts": {

@@ -93,9 +93,12 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
   },
   // Portfolio coverage axis (BI-PORTCOV-P6): what relationship the org has to a
   // portfolio entry — used/sold = in use, available = configurable now,
-  // potential = one governed click to enable, planned/retired.
+  // potential = one governed click to enable, planned/retired. incumbent
+  // (BI-5B2F5447) = a third-party app the customer pays for and DPF aims to
+  // displace — "warning" reads as spend to address, not an error.
   portfolioCoverage: {
     used: "success",
+    incumbent: "warning",
     sold: "success",
     available: "info",
     potential: "accent",
