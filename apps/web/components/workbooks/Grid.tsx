@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ClipboardEvent as ReactClipboardEvent,
 } from "react";
 import {
   DataGrid,
@@ -24,6 +25,8 @@ import {
   type SortColumn,
   type RenderSummaryCellProps,
   type RenderGroupCellProps,
+  type CellCopyArgs,
+  type CellPasteArgs,
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import "./dpf-grid.css";
@@ -148,6 +151,15 @@ import {
   type FooterAgg,
 } from "./grid-footer-summary";
 import { RecordDetailModal } from "./RecordDetailModal";
+import {
+  Download,
+  Filter,
+  Palette,
+  BarChart3,
+  Layers,
+  SlidersHorizontal,
+  Info,
+} from "lucide-react";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -943,6 +955,28 @@ export function WorkbookGrid({
     [persistCell, rowData],
   );
 
+  // Single-cell copy/paste (Ctrl+C / Ctrl+V on the selected cell). Copy writes
+  // the cell's display text to the clipboard; paste routes the new value back
+  // through onRowsChange → persistCell, so it hits the same validation + optimistic
+  // revert as a normal edit. Only editable cells accept a paste.
+  const onCellCopy = useCallback(
+    ({ row, column }: CellCopyArgs<GridRowData, SummaryRow>, event: ReactClipboardEvent<HTMLDivElement>) => {
+      event.clipboardData.setData("text/plain", cellSearchText(row[column.key] ?? null));
+    },
+    [],
+  );
+  const onCellPaste = useCallback(
+    (
+      { row, column }: CellPasteArgs<GridRowData, SummaryRow>,
+      event: ReactClipboardEvent<HTMLDivElement>,
+    ): GridRowData => {
+      const col = columns.find((c) => c.columnId === column.key);
+      if (!capabilities.canEditCell || !col?.editable) return row;
+      return { ...row, [column.key]: event.clipboardData.getData("text/plain") };
+    },
+    [columns, capabilities.canEditCell],
+  );
+
   // Replay a cell to a target value through the validated dispatch; on success
   // commit the stack transition. A failed persist leaves history unchanged
   // (persistCell already reverted the optimistic cell).
@@ -1107,18 +1141,20 @@ export function WorkbookGrid({
           type="button"
           onClick={onExportCsv}
           disabled={columns.length === 0}
-          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-40"
           title="Export the current view to CSV"
         >
+          <Download size={15} aria-hidden />
           Export CSV
         </button>
         <button
           type="button"
           onClick={() => setShowFilters((v) => !v)}
           aria-pressed={showFilters}
-          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] aria-pressed:text-[var(--dpf-text)]"
           title="Filter by column"
         >
+          <Filter size={15} aria-hidden />
           {showFilters ? "Hide filters" : "Filters"}
           {activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
         </button>
@@ -1126,9 +1162,10 @@ export function WorkbookGrid({
           type="button"
           onClick={() => setShowFormat((v) => !v)}
           aria-pressed={showFormat}
-          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] aria-pressed:text-[var(--dpf-text)]"
           title="Highlight rows by a condition"
         >
+          <Palette size={15} aria-hidden />
           {showFormat ? "Hide formatting" : "Format"}
           {cfRules.length > 0 ? ` (${cfRules.length})` : ""}
         </button>
@@ -1136,18 +1173,20 @@ export function WorkbookGrid({
           type="button"
           onClick={() => setShowSummary((v) => !v)}
           aria-pressed={showSummary}
-          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-          title="Group rows and summarize"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] aria-pressed:text-[var(--dpf-text)]"
+          title="Summarize / pivot the rows into a report"
         >
+          <BarChart3 size={15} aria-hidden />
           {showSummary ? "Hide summary" : "Summary"}
         </button>
         <button
           type="button"
           onClick={() => setShowGroup((v) => !v)}
           aria-pressed={showGroup}
-          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-          title="Collapse rows into groups by a column"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] aria-pressed:text-[var(--dpf-text)]"
+          title="Collapse the rows themselves into groups by a column"
         >
+          <Layers size={15} aria-hidden />
           {showGroup ? "Hide grouping" : "Group"}
           {groupColumnId ? ` (1)` : ""}
         </button>
@@ -1155,9 +1194,10 @@ export function WorkbookGrid({
           type="button"
           onClick={() => setShowColumns((v) => !v)}
           aria-pressed={showColumns}
-          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] aria-pressed:text-[var(--dpf-text)]"
           title="Hide fields, pin columns, and set row height"
         >
+          <SlidersHorizontal size={15} aria-hidden />
           {showColumns ? "Hide options" : "Columns"}
           {hiddenColumns.length > 0 ? ` (${hiddenColumns.length} hidden)` : ""}
         </button>
@@ -1165,9 +1205,10 @@ export function WorkbookGrid({
           type="button"
           onClick={() => setShowProvenance((v) => !v)}
           aria-pressed={showProvenance}
-          className="ml-auto rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] aria-pressed:text-[var(--dpf-text)]"
           title="Show where each column's values come from"
         >
+          <Info size={15} aria-hidden />
           {showProvenance ? "Hide data sources" : "Show data sources"}
         </button>
         <div className="inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)] text-sm">
@@ -1298,6 +1339,8 @@ export function WorkbookGrid({
               rows={sortedRows}
               rowKeyGetter={(row) => row.rowId}
               onRowsChange={onRowsChange}
+              onCellCopy={onCellCopy}
+              onCellPaste={onCellPaste}
               sortColumns={sortColumns}
               onSortColumnsChange={setSortColumns}
               selectedRows={selectedRows}
@@ -1322,6 +1365,8 @@ export function WorkbookGrid({
               rows={sortedRows}
               rowKeyGetter={(row) => row.rowId}
               onRowsChange={onRowsChange}
+              onCellCopy={onCellCopy}
+              onCellPaste={onCellPaste}
               sortColumns={sortColumns}
               onSortColumnsChange={setSortColumns}
               selectedRows={selectedRows}

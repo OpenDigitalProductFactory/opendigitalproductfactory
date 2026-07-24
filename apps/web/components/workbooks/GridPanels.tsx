@@ -44,6 +44,7 @@ import {
   FOOTER_AGG_LABELS,
   type FooterAgg,
 } from "./grid-footer-summary";
+import { GridSelect } from "./GridSelect";
 
 const PANEL = "flex flex-col gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2";
 const CTRL = "rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]";
@@ -561,23 +562,16 @@ export function GridGroupPanel({
         );
       })}
       {available.length > 0 && (
-        <select
+        <GridSelect
           value=""
-          onChange={(e) => {
-            if (!e.target.value) return;
-            setGroupBy([...effectiveGroupBy, e.target.value]);
+          options={available.map((c) => ({ value: c.columnId, label: c.name }))}
+          onChange={(v) => {
+            setGroupBy([...effectiveGroupBy, v]);
             resetGroupExpansion();
           }}
-          aria-label={effectiveGroupBy.length ? "Add group-by level" : "Group by column"}
-          className={CTRL}
-        >
-          <option value="">{effectiveGroupBy.length ? "add level…" : "none"}</option>
-          {available.map((c) => (
-            <option key={c.columnId} value={c.columnId}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          ariaLabel={effectiveGroupBy.length ? "Add group-by level" : "Group by column"}
+          placeholder={effectiveGroupBy.length ? "add level…" : "none"}
+        />
       )}
       {grouping && (
         <>
@@ -618,22 +612,17 @@ export function GridGroupPanel({
                     className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 text-sm text-[var(--dpf-text)]"
                   >
                     <span className="text-[var(--dpf-muted)]">{c.name}</span>
-                    <select
-                      value={footerAgg[c.columnId]}
-                      onChange={(e) =>
-                        setFooterAgg((prev) => ({ ...prev, [c.columnId]: toFooterAgg(e.target.value) }))
-                      }
-                      aria-label={`Subtotal aggregate for ${c.name}`}
-                      className="border-none bg-transparent p-0 text-sm font-medium text-[var(--dpf-text)]"
-                    >
-                      {availableAggs(c.fieldType)
+                    <GridSelect
+                      value={footerAgg[c.columnId] ?? "count"}
+                      options={availableAggs(c.fieldType)
                         .filter((a) => a !== "none")
-                        .map((a) => (
-                          <option key={a} value={a}>
-                            {FOOTER_AGG_LABELS[a]}
-                          </option>
-                        ))}
-                    </select>
+                        .map((a) => ({ value: a, label: FOOTER_AGG_LABELS[a] }))}
+                      onChange={(v) =>
+                        setFooterAgg((prev) => ({ ...prev, [c.columnId]: toFooterAgg(v) }))
+                      }
+                      ariaLabel={`Subtotal aggregate for ${c.name}`}
+                      variant="bare"
+                    />
                     <button
                       type="button"
                       onClick={() => setFooterAgg((prev) => ({ ...prev, [c.columnId]: "none" }))}
@@ -645,26 +634,20 @@ export function GridGroupPanel({
                   </span>
                 ))}
                 {inactive.length > 0 && (
-                  <select
+                  <GridSelect
                     value=""
-                    onChange={(e) => {
-                      const col = visibleCols.find((c) => c.columnId === e.target.value);
+                    options={inactive.map((c) => ({ value: c.columnId, label: c.name }))}
+                    onChange={(v) => {
+                      const col = visibleCols.find((c) => c.columnId === v);
                       if (!col) return;
                       const def: FooterAgg = availableAggs(col.fieldType).includes("sum")
                         ? "sum"
                         : "count";
                       setFooterAgg((prev) => ({ ...prev, [col.columnId]: def }));
                     }}
-                    aria-label="Add a subtotal"
-                    className={CTRL}
-                  >
-                    <option value="">{active.length ? "+ add…" : "+ add a subtotal…"}</option>
-                    {inactive.map((c) => (
-                      <option key={c.columnId} value={c.columnId}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    ariaLabel="Add a subtotal"
+                    placeholder={active.length ? "+ add…" : "+ add a subtotal…"}
+                  />
                 )}
               </div>
             );
