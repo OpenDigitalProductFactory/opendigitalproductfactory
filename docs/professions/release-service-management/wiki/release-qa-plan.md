@@ -9,12 +9,10 @@ principleDimensionVector: {"evidence_density": 0.8, "governance_compliance": 0.6
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-4-sandbox-prod
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - release
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Adopters need to know DPF treats UX verification as release evidence — silent UI regressions are caught here, not in production.
 sources:

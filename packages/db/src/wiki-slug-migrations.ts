@@ -120,6 +120,23 @@ export const WIKI_SLUG_MIGRATIONS: readonly WikiSlugMigration[] = [
     to: "professions/portfolio-management/check-epic-overlap-before-creating",
     reason: "portfolio cohort -> portfolio-management (BI-5FE47130)",
   },
+  // Fourth cohort: single-context sourced profession-specialist principles
+  // across three professions (reporting UI, BS orchestration, release QA).
+  {
+    from: "principles/compose-report-kit-for-reporting-ux",
+    to: "professions/frontend-engineer/compose-report-kit-for-reporting-ux",
+    reason: "specialist cohort -> frontend-engineer (BI-5FE47130)",
+  },
+  {
+    from: "principles/orchestrator-worker-pattern",
+    to: "professions/build-studio/orchestrator-worker-pattern",
+    reason: "specialist cohort -> build-studio (BI-5FE47130)",
+  },
+  {
+    from: "principles/release-qa-plan",
+    to: "professions/release-service-management/release-qa-plan",
+    reason: "specialist cohort -> release-service-management (BI-5FE47130)",
+  },
 ];
 
 export type SlugMigrationOutcome = {

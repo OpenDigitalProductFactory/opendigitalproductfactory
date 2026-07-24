@@ -270,7 +270,7 @@ The `Organization.address` JSON has one canonical shape + helpers in [`apps/web/
 
 Sole exception: `text-white` on `bg-[var(--dpf-accent)]` buttons. Inline `style={{ color: "#xxx" }}` is equally prohibited — use `var(--dpf-text)`. `<option>` elements need explicit `bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]`. Variables defined in `globals.css`, overridden at runtime by branding tokens.
 
-→ [kernel principle](docs/founder-kernel/wiki/principles/compose-report-kit-for-reporting-ux.md)
+→ [kernel principle](docs/professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux.md)
 
 **Compose the report-kit palette for reporting UX.** Where the rule above binds *colors* to tokens, this binds whole *reporting components* to a shared palette. Reporting/data-display UX (status badges, list/detail tables, KPI cards, filters, CSV export, charts) is composed from `apps/web/components/ui/report-kit/` — `StatusBadge`, `DataTable`, `StatCard`, `FilterBar`, `ExportButton`/`toCsv`, `Chart`, and the `statusColors` intent registry. Never hand-roll a badge, `<table>`, per-page status color map, or KPI div. Status/severity colors resolve through `statusColors.ts` (status → semantic intent → `--dpf-*` token), never a local map or raw hex. **Discover before building:** read `apps/web/components/ui/report-kit/README.md`, and query the curated catalog via `search_design_intelligence` (domain `ux`/`chart`). If a primitive doesn't cover the case, extend report-kit rather than building a parallel one-off.
 
@@ -295,7 +295,7 @@ Full standard: `docs/platform-usability-standards.md`. Other UI conventions: tab
 
 ## 14. Release Testing
 
-→ [kernel principle](docs/founder-kernel/wiki/principles/release-qa-plan.md)
+→ [kernel principle](docs/professions/release-service-management/wiki/release-qa-plan.md)
 
 Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 phases). For feature work, run the affected phases as part of definition of done — `next build` and unit tests do not replace UX exercise. Failures get a backlog item with repro steps under the active QA epic. Test results are release evidence. Release QA phases run against the canonical local install or a leased shared nonprod environment per §5 — never against a worktree's local harness. A worktree is the source-control container for the change under test, not a release-QA runtime.
 

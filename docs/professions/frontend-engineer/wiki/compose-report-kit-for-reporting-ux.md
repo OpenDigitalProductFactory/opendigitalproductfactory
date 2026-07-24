@@ -9,12 +9,10 @@ principleDimensionVector: {"reusability": 0.9, "long_term_maintainability": 0.7,
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-2-workflow
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - ui
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: A shared reporting palette is how DPF keeps data-display UX consistent across dozens of surfaces and lets agents build new surfaces without researching component patterns externally.
 sources:
@@ -27,7 +25,7 @@ Reporting and data-display UX is composed from the shared **report-kit** palette
 
 ## Why
 
-The same reporting patterns — status pills, filterable tables, KPI cards, trend charts — recur on dozens of surfaces (finance, compliance, CRM, admin). When each surface hand-rolls them, the platform accumulates inconsistent color semantics, duplicated table/filter logic, uneven accessibility, and a maintenance hunt on every change. It also forces every contributor — human or agent — to re-derive component patterns from scratch or research them externally. A single composable palette eliminates that whole class of work: build once, reuse everywhere, change in one place. This principle is the reuse-and-consistency complement to [No Hardcoded Colors](no-hardcoded-colors.md): that one says *bind colors to tokens*; this one says *bind whole reporting components to the shared palette*.
+The same reporting patterns — status pills, filterable tables, KPI cards, trend charts — recur on dozens of surfaces (finance, compliance, CRM, admin). When each surface hand-rolls them, the platform accumulates inconsistent color semantics, duplicated table/filter logic, uneven accessibility, and a maintenance hunt on every change. It also forces every contributor — human or agent — to re-derive component patterns from scratch or research them externally. A single composable palette eliminates that whole class of work: build once, reuse everywhere, change in one place. This principle is the reuse-and-consistency complement to [No Hardcoded Colors](../../../founder-kernel/wiki/principles/no-hardcoded-colors.md): that one says *bind colors to tokens*; this one says *bind whole reporting components to the shared palette*.
 
 ## Applies To
 
