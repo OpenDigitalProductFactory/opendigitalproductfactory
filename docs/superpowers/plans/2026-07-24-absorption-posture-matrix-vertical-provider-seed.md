@@ -91,6 +91,20 @@ Seed `McpIntegration` (or extend `SUPPORTED_INTEGRATIONS`) for the **Tier-1 shar
 | R3 | Overlap with `McpIntegration` marketplace sync. | §2.1: posture is a separate authored model with an optional FK, never a synced-catalog column. |
 | R4 | Building ahead of `IncumbentCoverageAssessment` (D3). | P2 provides the table + accessor only; D3 consumes it later. No dependency inversion — the matrix is usable by the boundary-maps and prefill immediately. |
 
+## Backlog coverage
+
+- Decision: decomposed
+- Parent: BI-ECO-001
+- Receipt: cmryjc0lx04ym01mml7t4sdw1
+- Dependencies: P1 depends on P0; P2 depends on P1; P3 depends on P0 (parallelizable with P1/P2)
+
+Deliverable -> BacklogItem (all children of BI-ECO-001 under EP-ECOSYSTEM-ABSORPTION-ARCH):
+
+- P0 -- Vertical incumbent provider inventory seed manifest -> BI-513AE505
+- P1 -- AbsorptionPosture model + conservative default seed -> BI-BF909CE6
+- P2 -- Wire posture matrix to boundary-map / incumbent-coverage default / onboarding prefill -> BI-264FB4D8
+- P3 -- Seed Tier-1 shared connector catalog (closes McpIntegration=0) -> BI-96BFA984
+
 ## 7. Sequencing
 
 Independent of the `BI-PSC-010` keystone and of the §11 founder questions — it can start now. It is spec §7 priority #3 (after the keystone and Tier-1 connectors) but is the **most immediately buildable** slice because its substrate (the ~100 providers, the verdict vocabulary, the McpIntegration table) is fully in hand. P3 is the concrete first step of the Tier-1 connector priority (#2) and can run in parallel.
