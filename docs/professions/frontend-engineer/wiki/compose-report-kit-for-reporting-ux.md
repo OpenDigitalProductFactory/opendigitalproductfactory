@@ -9,12 +9,10 @@ principleDimensionVector: {"reusability": 0.9, "long_term_maintainability": 0.7,
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-2-workflow
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - ui
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: A shared reporting palette is how DPF keeps data-display UX consistent across dozens of surfaces and lets agents build new surfaces without researching component patterns externally.
 sources:

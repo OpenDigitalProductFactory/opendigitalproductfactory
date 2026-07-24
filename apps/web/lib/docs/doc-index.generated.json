@@ -2105,21 +2105,6 @@
         "see-also"
       ]
     },
-    "docs/founder-kernel/wiki/principles/compose-report-kit-for-reporting-ux.md": {
-      "publicHref": "/founder-kernel/wiki/principles/compose-report-kit-for-reporting-ux/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
-      ]
-    },
     "docs/founder-kernel/wiki/principles/configuration-scope.md": {
       "publicHref": "/founder-kernel/wiki/principles/configuration-scope/",
       "portalHref": null,
@@ -2733,21 +2718,6 @@
         "examples"
       ]
     },
-    "docs/founder-kernel/wiki/principles/orchestrator-worker-pattern.md": {
-      "publicHref": "/founder-kernel/wiki/principles/orchestrator-worker-pattern/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
-      ]
-    },
     "docs/founder-kernel/wiki/principles/outbound-actions-require-explicit-go.md": {
       "publicHref": "/founder-kernel/wiki/principles/outbound-actions-require-explicit-go/",
       "portalHref": null,
@@ -2865,21 +2835,6 @@
         "decision-dimensions",
         "related",
         "origin"
-      ]
-    },
-    "docs/founder-kernel/wiki/principles/release-qa-plan.md": {
-      "publicHref": "/founder-kernel/wiki/principles/release-qa-plan/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
       ]
     },
     "docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md": {
@@ -4237,6 +4192,21 @@
         "see-also"
       ]
     },
+    "docs/professions/build-studio/wiki/orchestrator-worker-pattern.md": {
+      "publicHref": "/professions/build-studio/wiki/orchestrator-worker-pattern/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
+      ]
+    },
     "docs/professions/build-studio/wiki/scope-containment.md": {
       "publicHref": "/professions/build-studio/wiki/scope-containment/",
       "portalHref": null,
@@ -4975,6 +4945,21 @@
         "what-it-requires-in-practice",
         "status-scope-gate",
         "see-also"
+      ]
+    },
+    "docs/professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux.md": {
+      "publicHref": "/professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
       ]
     },
     "docs/professions/frontend-engineer/wiki/first-rule-of-aria-native-elements.md": {
@@ -5845,6 +5830,21 @@
         "why-each-is-required",
         "how-to-apply",
         "see-also"
+      ]
+    },
+    "docs/professions/release-service-management/wiki/release-qa-plan.md": {
+      "publicHref": "/professions/release-service-management/wiki/release-qa-plan/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
       ]
     },
     "docs/professions/release-service-management/wiki/release-versioning.md": {
