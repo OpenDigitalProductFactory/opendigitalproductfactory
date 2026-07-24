@@ -7,7 +7,7 @@ export const activeLifecycleFiles = [
   "scripts/installer/lib/doctor.sh", "scripts/verify-install-windows.ps1", "scripts/verify-install-edge.sh",
   ".github/workflows/release-gates.yml", "package.json", "packages/db/package.json",
   "apps/web/app/api/diagnostics/preflight/route.ts",
-  "docs/user-guide/getting-started/developer-setup.md", "docs/user-guide/getting-started/dev-container.md",
+  "docs/user-guide/contributing/developer-setup.md", "docs/user-guide/contributing/dev-container.md",
   "docs/user-guide/operations/infrastructure-discovery.md", "docs/user-guide/ai-workforce/decision-perspective.md",
 ];
 

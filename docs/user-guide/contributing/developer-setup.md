@@ -1,7 +1,7 @@
 ---
 title: "Developer Setup"
-area: getting-started
-order: 4
+area: contributing
+order: 1
 ---
 
 ## Developer Setup (IDE + Hot-Reload)

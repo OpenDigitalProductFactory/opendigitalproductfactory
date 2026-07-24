@@ -1659,7 +1659,7 @@ const PROFESSION_EXTERNAL_SOURCES_GATED: Record<string, ExternalSourceEntry> = {
   "dpf/developer-setup-guide": {
     sourceType: "repository-doc",
     title: "DPF User Guide: Developer Setup",
-    url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/user-guide/getting-started/developer-setup.md",
+    url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/user-guide/contributing/developer-setup.md",
     license: "Apache-2.0",
     abstract:
       "Developer setup guide covering migrations, seed data, worktree isolation, and local development commands.",

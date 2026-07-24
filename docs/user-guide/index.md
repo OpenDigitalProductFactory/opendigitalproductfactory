@@ -5,15 +5,17 @@ description: "Day-to-day operating guide for the Open Digital Product Factory pl
 
 The User Guide is the day-to-day operating manual for everyone who works in the platform. The same pages are bundled into the portal's in-app help at runtime, so what you see here matches what you see when you press the help button inside the product.
 
-If you're brand new, start with [Market Archetypes And Coworkers](market-archetypes.md), then [Getting Started](getting-started/index.md). The other sections are organized by the work you do, not by the screens you click.
+If you're brand new, start with [Getting Started](getting-started/index.md). The other sections are organized by the work you do, not by the screens you click.
 
 ## Start here
 
+- [Getting Started](getting-started/index.md) — what the platform does for your business, choosing your business type, your first hour, and where your AI coworker lives.
 - [Market Archetypes And Coworkers](market-archetypes.md) — how the selected business type shapes the portal, workspace, vocabulary, coworkers, voice, and marketing posture.
-- [Getting Started](getting-started/index.md) — what the platform does, how navigation works, and where your AI coworker lives.
-- [Roles & Access](getting-started/roles-and-access.md) — the platform roles and what each one can do.
+- [Setup And First Login](getting-started/setup-and-first-login.md) — the first-run walkthrough.
 - [AI Coworker](getting-started/ai-coworker.md) — working with the context-aware assistant on every screen.
-- [Development Workspace](development-workspace.md) — how Build Studio, VS Code, policy states, and validation environments fit together.
+- [Roles & Access](getting-started/roles-and-access.md) — the platform roles and what each one can do.
+
+Changing the platform's own source code is a separate job with a separate setup — see [Contributing & Dev Setup](contributing/index.md) and [Development Workspace](development-workspace.md).
 
 ## Domain guides
 

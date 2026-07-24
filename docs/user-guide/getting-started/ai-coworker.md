@@ -1,7 +1,7 @@
 ---
 title: "AI Coworker"
 area: getting-started
-order: 3
+order: 4
 ---
 
 ## The Short Version

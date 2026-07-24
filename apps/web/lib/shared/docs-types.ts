@@ -25,7 +25,7 @@ export type DocsIndex = Record<string, DocPage[]>;
 // ── Area metadata (display names + descriptions for the docs home) ──────────
 
 export const AREA_META: Record<string, { label: string; description: string }> = {
-  "getting-started": { label: "Getting Started", description: "Platform overview, roles, navigation, and AI coworker basics" },
+  "getting-started": { label: "Getting Started", description: "What the platform does for your business, choosing your business type, first login, and your AI coworker" },
   workspace:         { label: "Workspace", description: "Dashboard, calendar, activity feed, and notifications" },
   portfolios:        { label: "Portfolios", description: "Portfolio structure, health metrics, and investment tracking" },
   products:          { label: "Products", description: "Digital product registry, lifecycle stages, and taxonomy" },
@@ -39,7 +39,11 @@ export const AREA_META: Record<string, { label: string; description: string }> =
   operations:        { label: "Operations", description: "Backlog items, epics, and delivery management" },
   "ai-workforce":    { label: "AI Workforce", description: "AI providers, model routing, and agent capabilities" },
   admin:             { label: "Admin", description: "Users, roles, branding, reference data, and settings" },
+  // Contributor-only. Deliberately last, and deliberately NOT inside
+  // getting-started: an owner's first area must not open onto Docker
+  // prerequisites and agent CLIs. See docs/user-guide/contributing/index.md.
+  contributing:      { label: "Contributing & Dev Setup", description: "For people changing the platform's source: local setup, dev containers, and agent coding environments" },
 };
 
-// Ordered area keys for display (Getting Started first, Admin last)
+// Ordered area keys for display (Getting Started first, contributor setup last)
 export const AREA_ORDER = Object.keys(AREA_META);

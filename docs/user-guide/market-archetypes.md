@@ -66,10 +66,11 @@ For a fast owner-facing summary of every category and leaf, use the [Archetype O
 | Rental and shared assets | equipment/tool rental, self-storage, production equipment rental — the reserve → use → return & inspect → re-pool value stream over a pooled asset |
 | Real estate and construction | production builders, custom home builders, model-home tours, design consultations, milestone projects |
 | Automotive services | auto glass, mobile mechanics, detailing, tire service, roadside assistance, locksmith |
-| Moving and logistics | moving, junk removal, courier delivery, last-mile freight |
+| Moving and logistics | moving, junk removal, courier delivery, last-mile freight, freight brokerage |
 | Security services | guard patrol, alarm/CCTV install, licensed monitoring-adjacent service |
 | Media production | film/video production, post-production, event production and staging |
 | Live events and venues | event venues, tour promoters, talent booking agencies |
+| Warehousing and fulfilment | third-party logistics, e-commerce fulfilment, cold-chain storage, cross-dock and transload — the operator takes custody of goods it does not own and is paid to hold and handle them |
 | Fabric care services | dry-cleaning plant/store networks, wash-and-fold laundry, alterations and tailoring |
 
 The first three persona anchors are:

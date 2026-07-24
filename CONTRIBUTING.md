@@ -63,7 +63,7 @@ If you'd rather develop entirely inside a container regardless of host OS, the [
 
 ## Before you start
 
-- Have an install running. See the repo [README](README.md) Quick Start (Windows / macOS / Linux installers all covered there) or [docs/user-guide/getting-started/developer-setup.md](docs/user-guide/getting-started/developer-setup.md) for the native pnpm + Docker sidecar setup.
+- Have an install running. See the repo [README](README.md) Quick Start (Windows / macOS / Linux installers all covered there) or [docs/user-guide/contributing/developer-setup.md](docs/user-guide/contributing/developer-setup.md) for the native pnpm + Docker sidecar setup.
 - Read the [architecture overview](docs/architecture/platform-overview.md) and the [Trusted AI Kernel architecture](docs/architecture/trusted-ai-kernel.md) before proposing AI-facing changes.
 - Check the issue tracker for open discussions before starting non-trivial work.
 

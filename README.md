@@ -107,8 +107,8 @@ If you hit a wall — happy-path success stories and "the installer hit a wall a
 
 If you want to contribute to the codebase rather than just run it:
 
-- [Developer Setup](docs/user-guide/getting-started/developer-setup.md) — native `pnpm` + Docker sidecars, IDE debugging, hot reload.
-- [Dev Container Setup](docs/user-guide/getting-started/dev-container.md) — fully containerized; only Docker Desktop and VS Code required.
+- [Developer Setup](docs/user-guide/contributing/developer-setup.md) — native `pnpm` + Docker sidecars, IDE debugging, hot reload.
+- [Dev Container Setup](docs/user-guide/contributing/dev-container.md) — fully containerized; only Docker Desktop and VS Code required.
 - [Development Workspace](docs/user-guide/development-workspace.md) — how Build Studio, VS Code, policy states, and validation environments fit together.
 
 ### Shared workspace model
