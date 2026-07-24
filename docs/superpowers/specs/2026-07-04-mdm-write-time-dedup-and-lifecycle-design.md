@@ -12,7 +12,7 @@ relatedPlans:
   - docs/superpowers/plans/2026-06-06-master-data-management-foundation.md
 relatedPrinciples:
   - docs/founder-kernel/wiki/principles/single-source-of-truth.md
-  - docs/founder-kernel/wiki/principles/schema-audit-before-features.md
+  - docs/professions/data-architect/wiki/schema-audit-before-features.md
   - docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md
   - docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md
 externalReferences:

@@ -48,10 +48,55 @@ export type WikiSlugMigration = {
  * Removing an entry would strand any install that had not yet run it.
  */
 export const WIKI_SLUG_MIGRATIONS: readonly WikiSlugMigration[] = [
-  // No migrations recorded yet. The first cohort (data-model -> data-architect)
-  // lands with the corpus move itself, so the rename and the file move are
-  // reviewed together rather than the machinery arriving speculatively ahead of
-  // any caller.
+  // First cohort: single-context `data-model` principles that are sourced
+  // professional practice, moved to the data-architect corpus. Excludes
+  // `db-fallback-explicit` (also tagged `mcp`, so its home is ambiguous) and
+  // the six uncited ones, which need the provenance/bucket triage first.
+  {
+    from: "principles/fix-the-seed-not-the-runtime",
+    to: "professions/data-architect/fix-the-seed-not-the-runtime",
+    reason: "data-model cohort -> data-architect (BI-5FE47130)",
+  },
+  {
+    from: "principles/live-state-over-seed-data",
+    to: "professions/data-architect/live-state-over-seed-data",
+    reason: "data-model cohort -> data-architect (BI-5FE47130)",
+  },
+  {
+    from: "principles/native-cohesion-over-interfacing",
+    to: "professions/data-architect/native-cohesion-over-interfacing",
+    reason: "data-model cohort -> data-architect (BI-5FE47130)",
+  },
+  {
+    from: "principles/one-data-model",
+    to: "professions/data-architect/one-data-model",
+    reason: "data-model cohort -> data-architect (BI-5FE47130)",
+  },
+  {
+    from: "principles/organization-canonical-identity",
+    to: "professions/data-architect/organization-canonical-identity",
+    reason: "data-model cohort -> data-architect (BI-5FE47130)",
+  },
+  {
+    from: "principles/principal-convergence",
+    to: "professions/data-architect/principal-convergence",
+    reason: "data-model cohort -> data-architect (BI-5FE47130)",
+  },
+  {
+    from: "principles/schema-audit-before-features",
+    to: "professions/data-architect/schema-audit-before-features",
+    reason: "data-model cohort -> data-architect (BI-5FE47130)",
+  },
+  {
+    from: "principles/strongly-typed-string-enums",
+    to: "professions/data-architect/strongly-typed-string-enums",
+    reason: "data-model cohort -> data-architect (BI-5FE47130)",
+  },
+  {
+    from: "principles/trust-the-data-spine",
+    to: "professions/data-architect/trust-the-data-spine",
+    reason: "data-model cohort -> data-architect (BI-5FE47130)",
+  },
 ];
 
 export type SlugMigrationOutcome = {

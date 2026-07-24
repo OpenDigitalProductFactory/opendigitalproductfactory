@@ -13,9 +13,8 @@ principleAppliesTo:
 principleRingScope:
   - ring-2-workflow
   - ring-3-archetype
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Documents DPF's schema discipline — the platform actively refactors instead of accreting parallel models.
 sources:

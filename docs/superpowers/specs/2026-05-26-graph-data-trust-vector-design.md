@@ -24,7 +24,7 @@ relatedPlans:
 relatedPrinciples:
   - docs/founder-kernel/wiki/principles/never-fabricate.md
   - docs/founder-kernel/wiki/principles/never-assume-verify.md
-  - docs/founder-kernel/wiki/principles/trust-the-data-spine.md
+  - docs/professions/data-architect/wiki/trust-the-data-spine.md
   - docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md
   - docs/founder-kernel/wiki/principles/no-hardcoded-colors.md
 externalReferences:

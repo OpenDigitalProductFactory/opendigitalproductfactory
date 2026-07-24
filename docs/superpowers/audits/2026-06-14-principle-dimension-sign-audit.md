@@ -106,7 +106,7 @@ directionally: `fix-the-seed-not-the-runtime` (blast radius of *recurrence*),
 
 ## Why a guard, not just a fix
 
-Per [`fix-the-seed-not-the-runtime`](../../founder-kernel/wiki/principles/fix-the-seed-not-the-runtime.md)
+Per [`fix-the-seed-not-the-runtime`](../../professions/data-architect/wiki/fix-the-seed-not-the-runtime.md)
 and [`remove-avoidable-failure-opportunities`](../../founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md):
 the fix patches the values, but the *failure opportunity* is an author writing a
 positive cost-axis weight again. The `PRINCIPLE_COST_DIMENSIONS` registry +

@@ -13,9 +13,8 @@ principleAppliesTo:
 principleRingScope:
   - ring-3-archetype
   - ring-4-sandbox-prod
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: false
 principlePublicRationale: ""
 sources:

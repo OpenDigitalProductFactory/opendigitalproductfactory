@@ -12,9 +12,8 @@ principleAppliesTo:
   - human
 principleRingScope:
   - ring-3-archetype
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Adopters configure the organization once and expect every feature to honor that configuration — this is the data-architecture commitment behind that contract.
 sources:

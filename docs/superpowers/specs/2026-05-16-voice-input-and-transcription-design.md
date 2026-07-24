@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-16
 **Status:** Draft — Architect review pass 1 (2026-05-16)
-**Related backlog:** Parent epic `EP-INT-2E7C1A` ("Integration Harness: Benchmarking and Private Deployment Foundation") — confirmed against live state via `dpf.list_epics` on 2026-05-16 (status `open`, 19 items, 15 open + 4 done). A child backlog item for this voice modality slice will be filed during the writing-plans phase per [live-state-over-seed-data](../../founder-kernel/wiki/principles/live-state-over-seed-data.md).
+**Related backlog:** Parent epic `EP-INT-2E7C1A` ("Integration Harness: Benchmarking and Private Deployment Foundation") — confirmed against live state via `dpf.list_epics` on 2026-05-16 (status `open`, 19 items, 15 open + 4 done). A child backlog item for this voice modality slice will be filed during the writing-plans phase per [live-state-over-seed-data](../../professions/data-architect/wiki/live-state-over-seed-data.md).
 **Related specs:**
 - `2026-05-15-employee-communication-fabric-design.md` — channel adapters, inbound normalization, delivery evidence
 - `2026-05-11-autonomous-coworker-runtime-design.md` — `TaskRun` spine, `tasks/submit` contract, failure taxonomy
@@ -471,7 +471,7 @@ Server side is unaffected — Whisper (via the FFmpeg shim in speaches and whisp
 - Mic button on `AgentMessageInput` with the state machine in §5.1.
 - `POST /api/transcribe` route composes the existing `transcription` execution adapter via `executionAdapterRegistry` — does **not** construct multipart bodies directly and does **not** import `transcription-adapter.ts` internals.
 - **Architecture test** asserts the route handler resolves through the registry: e.g., the test substitutes a fake adapter at registry level and verifies the route's response shape matches the adapter's `AdapterResult` projection. Without this, future refactors will silently regress to a parallel HTTP client.
-- §6.7 routing-layer wiring landed: a `ModelProvider` row for the speaches sidecar, transcription-capable `ModelProfile`, `EndpointTaskPerformance` for `taskType="transcription"`, and the bias-classification gate function. Seeded via the install seed script (per [fix-the-seed-not-the-runtime](../../founder-kernel/wiki/principles/fix-the-seed-not-the-runtime.md)).
+- §6.7 routing-layer wiring landed: a `ModelProvider` row for the speaches sidecar, transcription-capable `ModelProfile`, `EndpointTaskPerformance` for `taskType="transcription"`, and the bias-classification gate function. Seeded via the install seed script (per [fix-the-seed-not-the-runtime](../../professions/data-architect/wiki/fix-the-seed-not-the-runtime.md)).
 - `docker-compose.yml` adds `dpf-stt` service under `stt` profile; default `compose up` does not run it (opt-in until graduated). Single service entry; image switched by `DPF_STT_IMAGE` env var.
 - Confidence normalization (§6.5) implemented in the route, with unit tests for each provider-family formula.
 - Telemetry written to the **already-chosen** inference-telemetry table (§10 Q10 resolved before code lands).

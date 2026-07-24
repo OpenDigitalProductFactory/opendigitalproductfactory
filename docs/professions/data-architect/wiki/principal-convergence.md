@@ -12,9 +12,8 @@ principleAppliesTo:
   - human
 principleRingScope:
   - ring-3-archetype
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Documents DPF's identity-convergence stance — adopters need this guidance before adding any new actor type to the platform.
 sources:

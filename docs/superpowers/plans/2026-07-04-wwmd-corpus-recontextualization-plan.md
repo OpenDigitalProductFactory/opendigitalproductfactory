@@ -47,7 +47,7 @@ A subset teaches genuine wisdom in ServiceNow/EA-consultant terms (employer disc
 
 > **Product-centric, one cohesive data model, and — in the age of agentic AI — the deliverable is guidance and action on the *whole*, not reports, diagrams, or integrations between silos.**
 
-Two principle pages already carry this and are the templates: [optimize-for-the-whole.md](../../founder-kernel/wiki/principles/optimize-for-the-whole.md) (genericized form) and [native-cohesion-over-interfacing.md](../../founder-kernel/wiki/principles/native-cohesion-over-interfacing.md) (contextualized form). The rest of the EA content had not been brought to that bar; this pass starts closing it.
+Two principle pages already carry this and are the templates: [optimize-for-the-whole.md](../../founder-kernel/wiki/principles/optimize-for-the-whole.md) (genericized form) and [native-cohesion-over-interfacing.md](../../professions/data-architect/wiki/native-cohesion-over-interfacing.md) (contextualized form). The rest of the EA content had not been brought to that bar; this pass starts closing it.
 
 ## 4. Method: genericize vs contextualize (one call per page)
 

@@ -13,9 +13,8 @@ principleAppliesTo:
 principleRingScope:
   - ring-2-workflow
   - ring-4-sandbox-prod
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Adopters running DPF need to know that data-shape regressions get fixed at the source — patching only the runtime symptom means the bug reappears on every fresh install.
 sources:

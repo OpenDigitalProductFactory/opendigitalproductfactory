@@ -13,7 +13,7 @@ relatedPrinciples:
   - docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md
   - docs/founder-kernel/wiki/principles/single-source-of-truth.md
   - docs/founder-kernel/wiki/principles/responsible-capacity-utilization.md
-  - docs/founder-kernel/wiki/principles/strongly-typed-string-enums.md
+  - docs/professions/data-architect/wiki/strongly-typed-string-enums.md
 externalReferences:
   - https://docs.github.com/en/issues/tracking-your-work-with-issues/configuring-issues/managing-issue-types-in-an-organization
   - https://support.atlassian.com/jira-cloud-administration/docs/configure-a-workflow-scheme/
