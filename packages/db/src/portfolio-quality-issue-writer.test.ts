@@ -3,6 +3,7 @@ import {
   openOrUpdateQualityIssue,
   computeIssueKey,
   QUALITY_ISSUE_TYPES,
+  QUALITY_ISSUE_REGISTRY,
 } from "./portfolio-quality-issue-writer";
 
 describe("computeIssueKey", () => {
@@ -157,18 +158,36 @@ describe("openOrUpdateQualityIssue", () => {
     expect(args.update.details).toEqual({ entityType: "network_client", source: "legacy-list" });
   });
 
-  it("QUALITY_ISSUE_TYPES contains the canonical issue types", () => {
-    expect(QUALITY_ISSUE_TYPES).toEqual([
-      "type_not_promotable",
-      // Added in BI-79307D22: structural name-shape gate on
-      // auto-promotion (rejects "dpf-redis-1"/"Docker GW …" etc.).
-      "name_not_promotable",
-      "no_taxonomy",
-      "no_portfolio_root",
-      "low_confidence_promotion",
-      "taxonomy_gap_proposal",
-      "incomplete_detail",
-      "enrichment_failed",
-    ]);
+  it("QUALITY_ISSUE_TYPES is derived from the lifecycle registry", () => {
+    // Deliberately not a hardcoded list any more. This list previously named 8
+    // types while the live database held 10 — 8 of them undeclared — because the
+    // validation below is bypassed by direct prisma.portfolioQualityIssue.upsert
+    // calls. The registry is now the single source of truth (BI-0B420A1D).
+    expect(QUALITY_ISSUE_TYPES).toEqual(Object.keys(QUALITY_ISSUE_REGISTRY));
+  });
+
+  it("covers the promotion-gate types AND the types that were previously undeclared", () => {
+    expect(QUALITY_ISSUE_TYPES).toEqual(
+      expect.arrayContaining([
+        // The original canonical set.
+        "type_not_promotable",
+        "name_not_promotable",
+        "no_taxonomy",
+        "no_portfolio_root",
+        "low_confidence_promotion",
+        "taxonomy_gap_proposal",
+        "incomplete_detail",
+        "enrichment_failed",
+        // Live in the database but never declared until BI-0B420A1D.
+        "stale_entity",
+        "stale_relationship",
+        "lifecycle_unverified",
+        "catalog_match_ambiguous",
+        "attribution_missing",
+        "taxonomy_attribution_low_confidence",
+        "health_alert",
+        "gateway_connection_needed",
+      ]),
+    );
   });
 });

@@ -3,6 +3,7 @@ import {
   classifyEntityObservation,
   classifyRelationshipObservation,
 } from "./estate-observation-class";
+import type { QualityIssueType } from "./quality-issue-registry";
 
 const LOW_CONFIDENCE_THRESHOLD = 0.55;
 const STOP_WORDS = new Set([
@@ -82,7 +83,11 @@ export type InventoryQualityRelationshipInput = {
 
 export type InventoryQualityIssue = {
   issueKey: string;
-  issueType: string;
+  // Typed against the lifecycle registry, NOT `string`: a detector that emits an
+  // unregistered type is now a compile error rather than a row with no declared
+  // way to close. This chain (evaluateInventoryQuality -> discovery-sync's direct
+  // prisma.upsert) is exactly how 8 undeclared types reached the live database.
+  issueType: QualityIssueType;
   severity: "warn" | "error";
   status: "open";
   summary: string;

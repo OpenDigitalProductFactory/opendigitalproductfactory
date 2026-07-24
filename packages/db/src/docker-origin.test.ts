@@ -113,6 +113,25 @@ describe("isDockerOriginRelationshipKey", () => {
     ).toBe(false);
   });
 
+  it("matches BOTH docker-host separators (the hyphen/underscore leak)", () => {
+    // docker.ts emits `docker-host:` (hyphen); the guard historically listed only
+    // `docker_host:` (underscore). That one character leaked 124 rows.
+    expect(
+      isDockerOriginRelationshipKey(
+        "dpf_bootstrap:HOSTS:docker-host:docker-desktop->net-iface:Wi-Fi:192.168.0.169",
+      ),
+    ).toBe(true);
+    expect(isDockerOriginRelationshipKey("src:HOSTS:docker_host:x->y:z")).toBe(true);
+    expect(isDockerOriginEntityKey("docker-host:docker-desktop")).toBe(true);
+    expect(isDockerOriginEntityKey("docker_host:linux:abc123")).toBe(true);
+    // Real managed topology must stay untouched.
+    expect(
+      isDockerOriginRelationshipKey(
+        "organization:internal:edge_node:HOSTS:unifi:9c:05:d6:de:8d:3f->unifi:d0:21:f9:df:56:92",
+      ),
+    ).toBe(false);
+  });
+
   it("matches quarantined-run wrappers of the bootstrap self-scan", () => {
     expect(
       isDockerOriginRelationshipKey(
