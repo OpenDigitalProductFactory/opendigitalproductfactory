@@ -9,12 +9,10 @@ principleDimensionVector: {"governance_compliance": 0.8, "public_safety": 0.7, "
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-1-coworker
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - mcp
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Documents DPF's external-dependency vetting posture — adopters depend on it for security and supply-chain auditability.
 sources:
