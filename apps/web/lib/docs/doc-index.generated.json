@@ -2020,21 +2020,6 @@
         "related-principles"
       ]
     },
-    "docs/founder-kernel/wiki/principles/backlog-lives-in-postgresql.md": {
-      "publicHref": "/founder-kernel/wiki/principles/backlog-lives-in-postgresql/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
-      ]
-    },
     "docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md": {
       "publicHref": "/founder-kernel/wiki/principles/branch-guard-before-implementation/",
       "portalHref": null,
@@ -2089,21 +2074,6 @@
         "decision-dimensions",
         "examples",
         "see-also",
-        "sources"
-      ]
-    },
-    "docs/founder-kernel/wiki/principles/check-epic-overlap-before-creating.md": {
-      "publicHref": "/founder-kernel/wiki/principles/check-epic-overlap-before-creating/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
         "sources"
       ]
     },
@@ -5584,6 +5554,21 @@
         "source"
       ]
     },
+    "docs/professions/portfolio-management/wiki/backlog-lives-in-postgresql.md": {
+      "publicHref": "/professions/portfolio-management/wiki/backlog-lives-in-postgresql/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
+      ]
+    },
     "docs/professions/portfolio-management/wiki/balance-the-portfolio.md": {
       "publicHref": "/professions/portfolio-management/wiki/balance-the-portfolio/",
       "portalHref": null,
@@ -5594,6 +5579,21 @@
         "why",
         "how-to-apply",
         "see-also"
+      ]
+    },
+    "docs/professions/portfolio-management/wiki/check-epic-overlap-before-creating.md": {
+      "publicHref": "/professions/portfolio-management/wiki/check-epic-overlap-before-creating/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
       ]
     },
     "docs/professions/portfolio-management/wiki/gap-and-rationalization-analysis.md": {

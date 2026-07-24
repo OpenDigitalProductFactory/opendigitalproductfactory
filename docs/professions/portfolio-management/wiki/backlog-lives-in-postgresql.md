@@ -9,12 +9,10 @@ principleDimensionVector: {"evidence_density": 0.8, "schema_grounding": 0.6, "sp
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-2-workflow
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - portfolio
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Adopters need to see the backlog discipline up front — DPF treats backlog as live operational state, not as documentation.
 sources:
