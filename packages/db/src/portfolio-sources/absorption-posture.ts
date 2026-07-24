@@ -74,7 +74,10 @@ export function postureIdFor(providerName: string, integrationCategory: string):
     s
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+      // The collapse above leaves at most one leading/trailing "-", so a single
+      // non-quantified strip suffices — avoids the polynomial `-+` (ReDoS) form.
+      .replace(/^-/, "")
+      .replace(/-$/, "");
   return `posture-${slug(providerName)}-${slug(integrationCategory)}`;
 }
 
