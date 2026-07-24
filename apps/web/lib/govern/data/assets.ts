@@ -505,6 +505,32 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
       },
     ],
   },
+  {
+    // BI-D88DFEEA: an inferred weight-adjustment proposal (JSI/decision-tier-
+    // rebalance §2.4) — statistical evidence that an org's recorded decisions
+    // systematically separate from the kernel's recommendation on one axis.
+    // Aggregated across >=8 observations (weight-inference.ts's sample floor);
+    // no field describes an individual decision or person. ruledByUserId is
+    // the one accountable-actor reference — the same pattern
+    // EscalationCapture.resolverUserId already establishes on this ledger.
+    id: "data:weight-adjustment-proposal",
+    physical: { prismaModel: "WeightAdjustmentProposal" },
+    domain: "decision-governance",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["derived-analytic", "security-audit"],
+    sensitivity: "internal",
+    criticality: "standard",
+    subjectLocators: [
+      { role: "user", fieldPath: "ruledByUser" },
+    ],
+    lifecycleClass: "operational",
+    purposeCapabilities: ["platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-24" },
+    fields: [],
+  },
 ];
 
 /** The platform's seeded logical asset registry. */
