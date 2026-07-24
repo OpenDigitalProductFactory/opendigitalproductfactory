@@ -7,6 +7,21 @@
 //
 // Most clients do not expose active skill state to hooks yet. In that case the
 // check warns "unknown" rather than pretending install equals loaded.
+//
+// Client-specific adapters that populate DPF_PROCESS_SPINE_EXPOSED_SKILLS_*
+// (BI-BCA162CF): Grok has one (./grok-skill-exposure-adapter.mjs, wired from
+// scripts/dpf-bootstrap-agent-toolchain.sh|.ps1 and the Python fallback
+// updater's probe_grok_exposed_skills), because `grok plugin list --json` is
+// a genuine non-interactive command that answers Grok's own runtime state.
+// Codex, Claude, and Antigravity do NOT get one: no non-interactive
+// active-skill-list API was found for any of them (Codex's `codex exec --json`
+// startup events carry no plugin/skill field; Codex's config.toml plugin
+// `enabled` toggle is persisted config, not a verified session state, and
+// Codex separately gates hooks behind interactive trust; Antigravity's `agy`
+// CLI has no discovered skill-list surface). Feeding an unverified proxy into
+// this channel would flip `exposed.state` to "verified" and produce false
+// confidence, which is worse than the honest "unknown" this file already
+// renders -- so those clients stay documented gaps, not fabricated adapters.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
