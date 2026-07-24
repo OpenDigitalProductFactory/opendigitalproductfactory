@@ -87,12 +87,20 @@ const TIER_DEFAULT_WEIGHT: Record<string, number> = {
  * Select the principle set a UNIVERSAL-RING caller actually scores against,
  * mirroring the live `principle_decide` retrieval:
  *
- * - Only `commandment` tier contributes structured signal today: commandments
- *   load from Postgres WITH their signed vector, while core/contextual load
- *   from Qdrant WITHOUT it and fall to semantic alignment (which is 0 in the
- *   structured-decision sense). So a faithful engine baseline scores
- *   commandments only. When Layer 2 makes core/contextual carry their vectors,
- *   widen this filter and regenerate the baseline.
+ * - Only `commandment` tier is scored here. This USED to be a faithful mirror
+ *   of live retrieval, because core/contextual loaded from Qdrant without their
+ *   signed vector and fell to semantic alignment (0 in the structured sense).
+ *   As of BI-E1267C6D that is no longer true: the live path rehydrates
+ *   core/contextual from Postgres and they now score structurally.
+ *
+ *   This filter deliberately stays commandment-only anyway, because widening it
+ *   would require Qdrant relevance retrieval — which a corpus-parsing unit test
+ *   cannot reproduce, and which is *retrieval-relevance* drift rather than the
+ *   *aggregation* drift this gate is scoped to (see the boundary note in
+ *   `2026-06-05-situational-aware-decision-weighting-design.md` §7). Closing
+ *   that gap is the live/integration arm that §7 anticipated, tracked as
+ *   BI-4C0F9E21. Until it lands, this baseline covers a strict subset of what
+ *   reaches a live decision — treat a green baseline accordingly.
  * - A universal-ring caller consults the FULL kernel: NO ring filtering. Only
  *   the population filter applies (`principleAppliesTo` contains the caller
  *   population, or is empty for backward-compat).

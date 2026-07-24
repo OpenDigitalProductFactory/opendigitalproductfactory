@@ -2,6 +2,13 @@
 
 > **Amended 2026-07-23** by [`2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md`](2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md).
 > REINFORCED. RC2 is not only a situational-weighting blocker — it invalidates structured scoring for 70 of 95 principles (60 core + 9 contextual + 1 heuristic) and is the prerequisite for the tier rebalance. A corpus-wide dimension census is provided there. `cost_efficiency` remains used by zero principles, as this spec predicted.
+>
+> **Amended 2026-07-23 (second)** — RC2 and RC3 are **resolved**; Layer 2 is **split**.
+> - **RC2/RC3 fixed** under `BI-E1267C6D`. Qdrant stays the relevance index and the authoritative `WikiPage` rows are rehydrated from Postgres by `pageId`, so core/contextual principles carry their authored signed vector *and* their `principleWeight` override into structured scoring. §4's "architectural prerequisite" is discharged: **a situational principle no longer has to be promoted to `commandment` to score structurally.** The Layer 1 promotion of `proper-fix-over-quick-fix` stands on its own governance merits (§3) and is not revisited.
+> - **RC3 was inert twice.** The earlier fix passed `hit["principleWeight"]` from the Qdrant payload, but `storeWikiPage` never writes that key — so the override still always fell to the tier default. §5's RC3 entry understated this: it was not "ignored on the core branch", it was unreachable from that data source at all.
+> - **New root cause, RC6** — not predicted by this spec. `maxPrinciples`, documented as a cap on the core/contextual set from Qdrant, was applied to the **merged, commandments-first** candidate list. Once the commandment corpus outgrew the cap this silently starved the tail: a live call with 41 commandments against a default cap of 20 scored 20 commandments alphabetically and dropped 21 commandments plus every core hit. **This is RC4's exact failure shape one layer up** — a cap whose semantics drifted from its comment — and it meant RC2's fix would have been unobservable had it shipped alone. A recurrence guard now warns when commandment retrieval returns exactly its limit (41 of 50 slots were in use).
+> - **§7's boundary note is now live.** With core/contextual carrying structured vectors, the golden-decisions gate no longer mirrors live retrieval — it still scores commandments only. Its docstring has been corrected to state the divergence rather than claim faithfulness, and the live/integration arm §7 anticipated is filed as `BI-4C0F9E21`.
+> - **Layer 2's remaining scope** (`incident_severity`, `restore-service-first-under-active-incident`, a cost-sensitivity principle) moved to `BI-8D3E7757` under `EP-REDUCTION-GEAR-ARCH`. It must now follow spine reduction (`BI-AA7D80FE`), which may itself delete `cost_efficiency` as the one axis no principle scores — confirm the axis survives before authoring against it.
 
 - **Status:** draft (Layer 1 implemented in the originating PR; Layer 2 design-review-gated)
 - **Date:** 2026-06-05
@@ -80,8 +87,8 @@ Layer 2 ships behind design review because it mutates the closed dimension regis
 ## 5. Follow-up backlog (separate concerns)
 
 - **Kernel-scoring introspection MCP tool** — surface, for a given decision, which commandments were dropped by the retrieval cap, which principles fell to semantic mode, and the full per-axis ledger, so weighting regressions are observable rather than silent. (Originally suggested alongside this work; filed separately per one-concern-per-pr.)
-- **RC3** — honor `principleWeight` override on the core/contextual branch (or document that overrides are commandment-only).
-- **RC2 (structural)** — load core/contextual signed vectors so authored core-principle vectors stop being inert.
+- ~~**RC3** — honor `principleWeight` override on the core/contextual branch (or document that overrides are commandment-only).~~ **Done** (`BI-E1267C6D`). The override is read from the rehydrated Postgres row; reading it from the Qdrant payload could never have worked, because that key is not written.
+- ~~**RC2 (structural)** — load core/contextual signed vectors so authored core-principle vectors stop being inert.~~ **Done** (`BI-E1267C6D`), together with **RC6** (the merged-list cap) which had to ship in the same change for RC2 to be observable at all.
 
 ---
 
