@@ -17,18 +17,29 @@
  * full generated client type into this file.
  */
 
-export const QUALITY_ISSUE_TYPES = [
-  "type_not_promotable",
-  // BI-79307D22: structural name-shape gate on auto-promotion.
-  "name_not_promotable",
-  "no_taxonomy",
-  "no_portfolio_root",
-  "low_confidence_promotion",
-  "taxonomy_gap_proposal",
-  "incomplete_detail",
-  "enrichment_failed",
-] as const;
-export type QualityIssueType = (typeof QUALITY_ISSUE_TYPES)[number];
+// The canonical type set is DERIVED from the lifecycle registry
+// (./quality-issue-registry), so a detector cannot emit a type that has no
+// declared way to close. This list previously named 8 types while the live
+// database held 10 — 8 of them undeclared — because the validation below is
+// bypassed by direct prisma.portfolioQualityIssue.upsert calls elsewhere.
+// Re-exported here to keep the historical import surface stable.
+import {
+  QUALITY_ISSUE_TYPES,
+  QUALITY_ISSUE_REGISTRY,
+  isKnownQualityIssueType,
+  qualityIssueContract,
+  type QualityIssueType,
+  type QualityIssueContract,
+} from "./quality-issue-registry";
+
+export {
+  QUALITY_ISSUE_TYPES,
+  QUALITY_ISSUE_REGISTRY,
+  isKnownQualityIssueType,
+  qualityIssueContract,
+  type QualityIssueType,
+  type QualityIssueContract,
+};
 
 export type QualityIssueSeverity = "info" | "warn" | "error";
 
@@ -96,9 +107,7 @@ export function computeIssueKey(
   return `${issueType}:${key}:${id}`;
 }
 
-function isKnownIssueType(value: string): value is QualityIssueType {
-  return (QUALITY_ISSUE_TYPES as readonly string[]).includes(value);
-}
+const isKnownIssueType = isKnownQualityIssueType;
 
 /**
  * Upsert a `PortfolioQualityIssue` keyed deterministically by

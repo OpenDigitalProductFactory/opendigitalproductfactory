@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "PortfolioQualityIssue rows (open stale_entity / stale_relationship for docker-host: topology)",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260724010000_resolve_docker_host_hyphen_stale_issues",
+    "backfill": "status flip only — no row is created or deleted, no id, scope FK, summary, or detection timestamp is changed. Open stale_entity / stale_relationship rows whose issueKey carries a positional `docker-host:` token are set status open->resolved with resolvedAt=NOW(). These are platform-internal Docker Desktop topology (dpf_bootstrap:HOSTS:docker-host:docker-desktop->net-iface:...) that leaked past every prior suppression pass because discovery-collectors/docker.ts emits the HYPHENATED form while the guard listed only the UNDERSCORED `docker_host:`. They are never operator-actionable and can never resolve on their own. The guard now lists both separators so no new rows of this shape are emitted. Matched positionally (after `:` or the `->` arrow) so a product legitimately containing the letters is untouched. Non-destructive and idempotent: already-resolved rows are not re-selected.",
+    "verification": "previewed on the live install 2026-07-24: resolves exactly 124 rows and leaves 17 open (genuine UniFi gateway/switch/AP topology + host NICs, which are real operator signal)"
+  },
+  "tests": [
+    "packages/db/src/docker-origin.test.ts",
+    "packages/db/src/quality-issue-registry.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:portfolio-quality-issue#docker-host-hyphen-stale-resolve",
+      "prismaModel": "PortfolioQualityIssue",
+      "lifecycleDisposition": "no lifecycle change to the underlying InventoryEntity / InventoryRelationship or any operator-facing record: only the derived quality-issue status transitions open->resolved for issues describing platform-internal Docker Desktop topology. firstDetectedAt, lastDetectedAt, scope FKs and summary are preserved; rows remain for audit.",
+      "fields": [
+        {
+          "fieldId": "data:portfolio-quality-issue#status",
+          "resolution": "governed",
+          "reason": "resolve permanently-open, never-actionable rows emitted for the platform's own Docker Desktop host topology that bypassed the Docker-origin guard on a one-character separator mismatch (docker-host: vs docker_host:); they cannot be closed by any operator action and the guard now prevents new ones",
+          "provenance": "live-DB analysis 2026-07-24: 141 open stale_* rows = 124 matching [:>]docker-host: (resolved here) + 17 genuine managed topology (left open); root cause traced to discovery-collectors/docker.ts:236 emitting `docker-host:${name}` while docker-origin.ts DOCKER_RELATIONSHIP_TOKENS listed `docker_host:`"
+        },
+        {
+          "fieldId": "data:portfolio-quality-issue#resolvedAt",
+          "resolution": "governed",
+          "reason": "stamp the resolution time for the audit trail on the same open->resolved transition",
+          "provenance": "set to NOW() only on rows matching the positional docker-host: predicate; managed-topology rows are untouched"
+        }
+      ]
+    }
+  ]
+}

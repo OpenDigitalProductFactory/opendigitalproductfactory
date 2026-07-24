@@ -58,7 +58,10 @@ export function isDockerOriginEntityKey(
   // positional rule already used by isDockerOriginRelationshipKey.
   if (DOCKER_CONTAINER_ENDPOINT_RE.test(entityKey)) return true;
   if (entityKey.startsWith("runtime:docker")) return true;
+  // Both separators — see DOCKER_RELATIONSHIP_TOKENS: docker.ts emits the
+  // hyphenated form, and listing only one leaked rows past the guard.
   if (entityKey.startsWith("docker_host:")) return true;
+  if (entityKey.startsWith("docker-host:")) return true;
 
   const hostnameMatch = /^host:hostname:([^:]+)$/.exec(entityKey);
   if (hostnameMatch && hostnameMatch[1] && DOCKER_CONTAINER_HOSTNAME_RE.test(hostnameMatch[1])) {
@@ -107,7 +110,13 @@ export function isDockerOriginEntityKey(
 const DOCKER_RELATIONSHIP_TOKENS: readonly string[] = [
   "docker-net:",
   "docker_runtime:",
+  // BOTH separators are real and must both be listed. `docker.ts` emits
+  // `docker-host:` (HYPHEN) while the entity-key guard historically used
+  // `docker_host:` (UNDERSCORE) — that one-character mismatch leaked 124
+  // `dpf_bootstrap:HOSTS:docker-host:docker-desktop->net-iface:…` rows straight
+  // past this guard. Keep them together so the pair is obvious to the next reader.
   "docker_host:",
+  "docker-host:",
   "subnet:docker-",
   "gateway:docker-gw:",
   "/var/run/docker.sock",
