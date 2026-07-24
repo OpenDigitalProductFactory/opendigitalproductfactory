@@ -211,6 +211,10 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   from a "Subtotals" row **inside the Group panel** (not only the footer bar, which `TreeDataGrid`
   hides while grouped) — so the aggregate is always reachable while grouping, and the earlier
   "use the Summary bar" tip is no longer a dead end. Both surfaces drive the same `footerAgg` state.
+  **UX declutter (2026-07, operator feedback "the UX is not easy"):** that Subtotals row rendered a
+  dropdown for *every* column (~15 on the backlog grid — overwhelming). It now shows only the *active*
+  subtotals as compact chips (column + inline aggregate + remove) plus a single "+ add subtotal…"
+  picker — progressive disclosure, one control by default instead of fifteen.
 - **Slice 18 — table ergonomics: hide fields + frozen columns + row height — SHIPPED.** A "Columns"
   toolbar panel (progressive disclosure) with per-field show/hide checkboxes, a "Freeze first N
   columns" selector (pins the leftmost visible columns on horizontal scroll via react-data-grid

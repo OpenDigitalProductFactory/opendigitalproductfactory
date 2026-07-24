@@ -602,34 +602,73 @@ export function GridGroupPanel({
             {effectiveGroupBy.length > 1 ? `${effectiveGroupBy.length} levels · ` : ""}
             {topGroupIds.length} group{topGroupIds.length === 1 ? "" : "s"}
           </span>
-          {/* Per-column subtotal pickers — shown here (not just the footer bar,
-              which TreeDataGrid hides while grouped) so a subtotal aggregate is
-              always reachable while grouping. Drives the same footerAgg state. */}
-          <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--dpf-border)] pt-2">
-            <span className="text-xs uppercase tracking-wide text-[var(--dpf-muted)]">Subtotals</span>
-            {visibleCols.map((c) => (
-              <label
-                key={c.columnId}
-                className="inline-flex items-center gap-1 text-sm text-[var(--dpf-text)]"
-              >
-                <span className="text-[var(--dpf-muted)]">{c.name}</span>
-                <select
-                  value={footerAgg[c.columnId] ?? "none"}
-                  onChange={(e) =>
-                    setFooterAgg((prev) => ({ ...prev, [c.columnId]: toFooterAgg(e.target.value) }))
-                  }
-                  aria-label={`Subtotal for ${c.name}`}
-                  className={CTRL}
-                >
-                  {availableAggs(c.fieldType).map((a) => (
-                    <option key={a} value={a}>
-                      {FOOTER_AGG_LABELS[a]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ))}
-          </div>
+          {/* Subtotals: only the *active* ones show (a compact chip per column
+              with an inline aggregate + remove), plus one "add" picker — instead
+              of a dropdown for every column. Shown here, not just the footer bar,
+              because TreeDataGrid hides the footer while grouped. Same footerAgg. */}
+          {(() => {
+            const active = visibleCols.filter((c) => (footerAgg[c.columnId] ?? "none") !== "none");
+            const inactive = visibleCols.filter((c) => (footerAgg[c.columnId] ?? "none") === "none");
+            return (
+              <div className="flex w-full flex-wrap items-center gap-2 border-t border-[var(--dpf-border)] pt-2">
+                <span className="text-xs uppercase tracking-wide text-[var(--dpf-muted)]">Subtotals</span>
+                {active.map((c) => (
+                  <span
+                    key={c.columnId}
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 text-sm text-[var(--dpf-text)]"
+                  >
+                    <span className="text-[var(--dpf-muted)]">{c.name}</span>
+                    <select
+                      value={footerAgg[c.columnId]}
+                      onChange={(e) =>
+                        setFooterAgg((prev) => ({ ...prev, [c.columnId]: toFooterAgg(e.target.value) }))
+                      }
+                      aria-label={`Subtotal aggregate for ${c.name}`}
+                      className="border-none bg-transparent p-0 text-sm font-medium text-[var(--dpf-text)]"
+                    >
+                      {availableAggs(c.fieldType)
+                        .filter((a) => a !== "none")
+                        .map((a) => (
+                          <option key={a} value={a}>
+                            {FOOTER_AGG_LABELS[a]}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setFooterAgg((prev) => ({ ...prev, [c.columnId]: "none" }))}
+                      aria-label={`Remove subtotal for ${c.name}`}
+                      className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {inactive.length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const col = visibleCols.find((c) => c.columnId === e.target.value);
+                      if (!col) return;
+                      const def: FooterAgg = availableAggs(col.fieldType).includes("sum")
+                        ? "sum"
+                        : "count";
+                      setFooterAgg((prev) => ({ ...prev, [col.columnId]: def }));
+                    }}
+                    aria-label="Add a subtotal"
+                    className={CTRL}
+                  >
+                    <option value="">{active.length ? "+ add…" : "+ add a subtotal…"}</option>
+                    {inactive.map((c) => (
+                      <option key={c.columnId} value={c.columnId}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            );
+          })()}
         </>
       )}
     </div>
