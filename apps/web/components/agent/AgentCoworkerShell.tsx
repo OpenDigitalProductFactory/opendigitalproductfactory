@@ -303,7 +303,20 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
     (async () => {
       const snapshot = await getOrCreateThreadSnapshot({ routeContext: threadContext });
       if (!active) return;
-      if (!snapshot?.threadId) {
+      // BI-836B0304: a RESOLVED null (not a thrown error) means the session's
+      // userId has no matching User row — the only branch in
+      // getOrCreateThreadSnapshot that resolves null. Retrying can never
+      // succeed (the row will not appear), so skip the bounded auto-retry
+      // and go straight to the re-auth prompt instead of eventually landing
+      // on the generic "failed" dead banner + silent 503s from companion
+      // user-scoped actions.
+      if (snapshot === null) {
+        setThreadId(null);
+        setInitialMessages([]);
+        setThreadLoadState("invalid-session");
+        return;
+      }
+      if (!snapshot.threadId) {
         failLoad();
         return;
       }

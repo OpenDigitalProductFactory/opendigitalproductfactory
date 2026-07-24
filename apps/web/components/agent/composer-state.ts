@@ -13,12 +13,24 @@ export type ComposerState =
   | "sending"
   | "connecting"
   | "clearing"
-  | "load-failed";
+  | "load-failed"
+  | "invalid-session";
 
-export type ThreadLoadState = "loading" | "ready" | "failed";
+// BI-836B0304: "failed" is a transient/retryable load problem (stale bundle,
+// network blip) — the reload-to-reconnect banner fits it. "invalid-session"
+// is a valid session whose userId has no matching User row (e.g. a stale
+// session after a re-seed); no retry or reload can ever fix that, so it gets
+// its own state and an explicit re-auth prompt instead of collapsing into
+// the same dead "couldn't load" banner.
+export type ThreadLoadState = "loading" | "ready" | "failed" | "invalid-session";
 
 export function composerInputDisabled(state: ComposerState): boolean {
-  return state === "connecting" || state === "clearing" || state === "load-failed";
+  return (
+    state === "connecting" ||
+    state === "clearing" ||
+    state === "load-failed" ||
+    state === "invalid-session"
+  );
 }
 
 export function composerPlaceholder(state: ComposerState): string {
@@ -31,6 +43,8 @@ export function composerPlaceholder(state: ComposerState): string {
       return "Clearing conversation…";
     case "load-failed":
       return "Couldn't load this conversation";
+    case "invalid-session":
+      return "Sign in again to continue";
     case "busy":
       return "Agent is working... type your next message";
     case "ready":
@@ -46,6 +60,7 @@ export function deriveComposerState(input: {
   isBusy: boolean;
 }): ComposerState {
   if (input.isClearing) return "clearing";
+  if (input.threadLoadState === "invalid-session") return "invalid-session";
   if (input.threadLoadState === "failed") return "load-failed";
   if (!input.threadId) return "connecting";
   if (input.sendsInFlight > 0) return "sending";

@@ -543,15 +543,35 @@ describe("AgentCoworkerShell support entry", () => {
     }
   });
 
-  it("treats a snapshot without a threadId as a failed load, not a silent dead composer", async () => {
+  it("treats a snapshot that resolves to null as an invalid session, not a silent dead composer (BI-836B0304)", async () => {
+    // getOrCreateThreadSnapshot resolves (does not throw) null in exactly one
+    // case: the session's userId has no matching User row. Retrying can
+    // never fix that row's absence, so this must NOT fall into the
+    // retry-then-"failed" path — it should land directly on the re-auth
+    // state after a single call.
+    getOrCreateThreadSnapshotMock.mockResolvedValue(null);
+
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Open coworker" }));
+
+    await waitFor(() => {
+      const latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(latestProps.threadLoadState).toBe("invalid-session");
+    });
+    expect(getOrCreateThreadSnapshotMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a snapshot missing a threadId (but not resolved null) as a retryable failed load", async () => {
     vi.useFakeTimers();
     try {
-      getOrCreateThreadSnapshotMock.mockResolvedValue(null);
+      // An object without a threadId is a different shape than the
+      // invalid-session `null` — keep it on the existing bounded-retry path.
+      getOrCreateThreadSnapshotMock.mockResolvedValue({ threadId: undefined, messages: [] });
 
       renderShell();
       fireEvent.click(screen.getByRole("button", { name: "Open coworker" }));
 
-      // Initial null + auto-retry null → failed.
+      // Initial + auto-retry both come back without a threadId → failed.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2500);
       });

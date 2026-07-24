@@ -112,6 +112,21 @@ describe("agent coworker thread scoping", () => {
     });
   });
 
+  it("returns null when the session's userId has no matching User row (BI-836B0304)", async () => {
+    // A valid session (JWT resolves fine) whose userId points at a User row
+    // that no longer exists — e.g. a stale session surviving a re-seed, or
+    // the phantom ux-verification session from BI-8E341B9B. The snapshot
+    // must fail closed with a plain null (not throw, not fabricate a
+    // thread) so the caller can surface an explicit re-auth prompt instead
+    // of a dead "couldn't load" banner.
+    mockPrisma.user.findUnique.mockResolvedValue(null);
+
+    const result = await getOrCreateThreadSnapshot({ routeContext: "/inventory" });
+
+    expect(result).toBeNull();
+    expect(mockPrisma.agentThread.upsert).not.toHaveBeenCalled();
+  });
+
   it("clears only the current page conversation", async () => {
     mockPrisma.agentThread.findUnique.mockResolvedValue({
       id: "thread-inventory",
