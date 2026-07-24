@@ -29,7 +29,9 @@ describe("CooConversationalNameCard", () => {
     await waitFor(() => expect(saveCooConversationalName).toHaveBeenCalledWith({ name: "General" }));
     expect(await screen.findByText(/Presented as General · AI COO/)).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Use COO" }));
+    const clearButton = screen.getByRole("button", { name: "Use COO" });
+    await waitFor(() => expect(clearButton).toBeEnabled());
+    fireEvent.click(clearButton);
     await waitFor(() => expect(saveCooConversationalName).toHaveBeenLastCalledWith({ name: null }));
     expect(await screen.findByText(/Presented as COO\./)).toBeVisible();
   });
