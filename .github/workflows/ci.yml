@@ -230,6 +230,34 @@ jobs:
       - name: Run guard
         run: node scripts/check-bundle-boundaries.mjs
 
+  prose-lint-guard:
+    name: Prose Lint Guard
+    runs-on: ubuntu-latest
+    needs: changes
+    # BI-88D8C725 (EP-UX-SYSTEM §6 L4 / §8.1 D6). Fast in-loop signal for UI
+    # copy — archetype vocabulary conformance, banned generic decision labels
+    # (owner-first/ux-audit.ts, applied at source), the readability tier
+    # (lib/readability/'s Flesch-Kincaid policy, now wired in), and sentence
+    # length / text-mass heuristics. Same ratchet contract as the Style Drift
+    # Guard below: scripts/prose-lint-baseline.json may shrink but never grow.
+    # This complements, and does not replace, the rendered UX sweep (still the
+    # binding measurement) — Vale-shaped, answers in seconds inside the build
+    # loop. Needs the full workspace install (imports @dpf/validators + the
+    # apps/web vocabulary/ux-audit modules directly — the whole point is to
+    # reuse those signals, not reimplement them), unlike the zero-dependency
+    # guards below, so it is gated on `heavy` like Typecheck.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup pnpm with cache
+        if: needs.changes.outputs.heavy == 'true'
+        uses: ./.github/actions/setup-pnpm
+      - name: Prose lint guard unit tests
+        if: needs.changes.outputs.heavy == 'true'
+        run: pnpm run check:prose-lint:test
+      - name: Run guard
+        if: needs.changes.outputs.heavy == 'true'
+        run: pnpm run check:prose-lint
+
   style-drift-guard:
     name: Style Drift Guard
     runs-on: ubuntu-latest

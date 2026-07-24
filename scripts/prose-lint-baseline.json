@@ -1,0 +1,7569 @@
+{
+  "apps/web/app/(auth)/forgot-password/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(auth)/login/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/app/(auth)/reset-password/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(customer-auth)/customer-complete-profile/complete-profile-client.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 55
+  },
+  "apps/web/app/(customer-auth)/customer-link-account/link-account-client.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
+  },
+  "apps/web/app/(customer-auth)/customer-login/login-form.tsx": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(customer-auth)/customer-signup/signup-form.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 24
+  },
+  "apps/web/app/(portal)/layout.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(portal)/portal/account/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(portal)/portal/health/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 112
+  },
+  "apps/web/app/(portal)/portal/orders/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/(portal)/portal/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
+  },
+  "apps/web/app/(portal)/portal/services/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/app/(portal)/portal/support/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/app/(portal-auth)/portal/sign-in/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(setup)/setup/AccountBootstrapForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/(setup)/setup/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/admin/backups/BackupsClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 147
+  },
+  "apps/web/app/(shell)/admin/backups/RestoreConfirmModal.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/app/(shell)/admin/backups/RestoreHistorySection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/(shell)/admin/backups/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/app/(shell)/admin/branding/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/app/(shell)/admin/build-studio/stall-thresholds/StallThresholdsClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/(shell)/admin/cockpit/CockpitEventsTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(shell)/admin/cockpit/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 84
+  },
+  "apps/web/app/(shell)/admin/data-stewardship/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/app/(shell)/admin/diagnostics/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 85
+  },
+  "apps/web/app/(shell)/admin/hive/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 147
+  },
+  "apps/web/app/(shell)/admin/issue-reports/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/(shell)/admin/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/app/(shell)/admin/platform-development/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/admin/reference-data/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(shell)/admin/research/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
+  "apps/web/app/(shell)/admin/scheduled-jobs/ScheduledJobsClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 85
+  },
+  "apps/web/app/(shell)/admin/scheduled-jobs/SchedulingTimeline.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/app/(shell)/admin/scheduled-jobs/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/app/(shell)/admin/settings/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/app/(shell)/admin/twin-gallery/[archetypeId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
+  },
+  "apps/web/app/(shell)/admin/twin-gallery/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 47
+  },
+  "apps/web/app/(shell)/admin/twin-kit/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 100
+  },
+  "apps/web/app/(shell)/admin/wiki/lint/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/app/(shell)/build/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
+  },
+  "apps/web/app/(shell)/complaints/ComplaintsClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/app/(shell)/complaints/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/app/(shell)/compliance/actions/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(shell)/compliance/actions/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/app/(shell)/compliance/audits/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(shell)/compliance/audits/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/(shell)/compliance/controls/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/(shell)/compliance/controls/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(shell)/compliance/evidence/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/app/(shell)/compliance/evidence/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/(shell)/compliance/gaps/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/compliance/incidents/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/(shell)/compliance/incidents/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(shell)/compliance/licensing/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 42
+  },
+  "apps/web/app/(shell)/compliance/obligations/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/app/(shell)/compliance/obligations/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/compliance/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  },
+  "apps/web/app/(shell)/compliance/policies/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(shell)/compliance/policies/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/(shell)/compliance/posture/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/(shell)/compliance/regulations/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/app/(shell)/compliance/regulations/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/(shell)/compliance/risks/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/compliance/risks/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(shell)/compliance/submissions/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/app/(shell)/compliance/submissions/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/coworker-decisions/craft/[professionKey]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 45
+  },
+  "apps/web/app/(shell)/coworker-decisions/craft/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
+  "apps/web/app/(shell)/coworker-decisions/decisions/[interactionId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 91
+  },
+  "apps/web/app/(shell)/coworker-decisions/decisions/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 73
+  },
+  "apps/web/app/(shell)/coworker-decisions/matrix/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 89
+  },
+  "apps/web/app/(shell)/coworker-decisions/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 129
+  },
+  "apps/web/app/(shell)/coworker-decisions/perspectives/[profileId]/voice/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/app/(shell)/coworker-decisions/perspectives/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 60
+  },
+  "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 83
+  },
+  "apps/web/app/(shell)/coworker-decisions/review/actions.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/(shell)/coworker-decisions/review/gap-answer-form.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/app/(shell)/coworker-decisions/review/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 96
+  },
+  "apps/web/app/(shell)/coworker-decisions/stance/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 109
+  },
+  "apps/web/app/(shell)/customer/(crm)/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 100
+  },
+  "apps/web/app/(shell)/customer/(crm)/engagements/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(shell)/customer/(crm)/funnel/page.tsx": {
+    "vocabulary": 2,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/(shell)/customer/(crm)/opportunities/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/customer/(crm)/opportunities/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/app/(shell)/customer/(crm)/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/app/(shell)/customer/(crm)/quotes/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(shell)/customer/(crm)/quotes/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 45
+  },
+  "apps/web/app/(shell)/customer/(crm)/sales-orders/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/(shell)/customer/marketing/automation/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 7,
+    "longSentences": 0,
+    "textMass": 102
+  },
+  "apps/web/app/(shell)/customer/marketing/campaigns/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 6,
+    "longSentences": 0,
+    "textMass": 153
+  },
+  "apps/web/app/(shell)/customer/marketing/funnel/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 9,
+    "longSentences": 0,
+    "textMass": 136
+  },
+  "apps/web/app/(shell)/customer/marketing/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 7,
+    "longSentences": 0,
+    "textMass": 162
+  },
+  "apps/web/app/(shell)/customer/marketing/strategy/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 4,
+    "longSentences": 0,
+    "textMass": 121
+  },
+  "apps/web/app/(shell)/delivery/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 76
+  },
+  "apps/web/app/(shell)/docs/[[...slug]]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/app/(shell)/ea/capabilities/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/app/(shell)/ea/data-model/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 117
+  },
+  "apps/web/app/(shell)/ea/models/[slug]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
+  "apps/web/app/(shell)/ea/models/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/ea/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/(shell)/ea/value-streams/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 60
+  },
+  "apps/web/app/(shell)/ea/views/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/app/(shell)/employee/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 61
+  },
+  "apps/web/app/(shell)/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 2,
+    "textMass": 202
+  },
+  "apps/web/app/(shell)/finance/assets/AssetsTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/app/(shell)/finance/assets/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 44
+  },
+  "apps/web/app/(shell)/finance/assets/new/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(shell)/finance/assets/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(shell)/finance/banking/[id]/import/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(shell)/finance/banking/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/(shell)/finance/banking/[id]/reconcile/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/(shell)/finance/banking/new/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/(shell)/finance/banking/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/app/(shell)/finance/banking/rules/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/app/(shell)/finance/bills/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(shell)/finance/bills/new/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(shell)/finance/bills/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/finance/close/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 70
+  },
+  "apps/web/app/(shell)/finance/configuration/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 67
+  },
+  "apps/web/app/(shell)/finance/expense-claims/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(shell)/finance/expense-claims/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/app/(shell)/finance/invoices/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(shell)/finance/invoices/new/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/(shell)/finance/invoices/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/finance/my-expenses/new/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(shell)/finance/my-expenses/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/app/(shell)/finance/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 218
+  },
+  "apps/web/app/(shell)/finance/payment-runs/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/(shell)/finance/payments/PaymentsTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/(shell)/finance/purchase-orders/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/finance/purchase-orders/new/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/(shell)/finance/purchase-orders/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(shell)/finance/recurring/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/(shell)/finance/recurring/new/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/finance/recurring/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(shell)/finance/reports/aged-creditors/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/(shell)/finance/reports/aged-debtors/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 24
+  },
+  "apps/web/app/(shell)/finance/reports/cash-flow/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/app/(shell)/finance/reports/general-ledger/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 55
+  },
+  "apps/web/app/(shell)/finance/reports/outstanding/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/app/(shell)/finance/reports/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 65
+  },
+  "apps/web/app/(shell)/finance/reports/profit-loss/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 48
+  },
+  "apps/web/app/(shell)/finance/reports/revenue-by-customer/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/app/(shell)/finance/reports/vat-summary/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(shell)/finance/revenue/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 61
+  },
+  "apps/web/app/(shell)/finance/settings/currency/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 61
+  },
+  "apps/web/app/(shell)/finance/settings/dunning/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/app/(shell)/finance/settings/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 145
+  },
+  "apps/web/app/(shell)/finance/settings/rate-card/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 23
+  },
+  "apps/web/app/(shell)/finance/settings/setup/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/(shell)/finance/settings/tax/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/app/(shell)/finance/spend/ai/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/app/(shell)/finance/spend/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 65
+  },
+  "apps/web/app/(shell)/finance/suppliers/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/app/(shell)/finance/suppliers/new/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(shell)/finance/suppliers/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/governance/records-requests/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/app/(shell)/inventory/entity/[entityId]/inline-actions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/app/(shell)/inventory/entity/[entityId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 65
+  },
+  "apps/web/app/(shell)/knowledge/[articleId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/(shell)/knowledge/new/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(shell)/knowledge/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 61
+  },
+  "apps/web/app/(shell)/layout.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/app/(shell)/member-equity/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/(shell)/ops/changes/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/(shell)/ops/demand/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
+  "apps/web/app/(shell)/ops/dev-loop/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 82
+  },
+  "apps/web/app/(shell)/ops/patches/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 60
+  },
+  "apps/web/app/(shell)/ops/promotions/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/app/(shell)/ops/security/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 49
+  },
+  "apps/web/app/(shell)/ops/self-upgrade/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 85
+  },
+  "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/platform/ai/assignments/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 110
+  },
+  "apps/web/app/(shell)/platform/ai/browser-sessions/BrowserSessionLedgerTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/(shell)/platform/ai/browser-sessions/ServiceAccountSetupForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 54
+  },
+  "apps/web/app/(shell)/platform/ai/browser-sessions/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/(shell)/platform/ai/browser-sessions/setup/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(shell)/platform/ai/build-studio/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/app/(shell)/platform/ai/capacity-continuity/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 154
+  },
+  "apps/web/app/(shell)/platform/ai/decisions/[interactionId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(shell)/platform/ai/founder-review/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 198
+  },
+  "apps/web/app/(shell)/platform/ai/memory/MyMemoryAuditClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/(shell)/platform/ai/memory/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 60
+  },
+  "apps/web/app/(shell)/platform/ai/overview/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/app/(shell)/platform/ai/priority/outcomes/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 49
+  },
+  "apps/web/app/(shell)/platform/ai/prompts/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 44
+  },
+  "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 162
+  },
+  "apps/web/app/(shell)/platform/ai/providers/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 100
+  },
+  "apps/web/app/(shell)/platform/ai/readiness/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 93
+  },
+  "apps/web/app/(shell)/platform/ai/runtime-health/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 188
+  },
+  "apps/web/app/(shell)/platform/ai/skills/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 89
+  },
+  "apps/web/app/(shell)/platform/audit/authority/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 93
+  },
+  "apps/web/app/(shell)/platform/audit/journal/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/app/(shell)/platform/audit/ledger/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/platform/audit/metrics/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 77
+  },
+  "apps/web/app/(shell)/platform/audit/operations/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/platform/audit/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 61
+  },
+  "apps/web/app/(shell)/platform/audit/routes/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/app/(shell)/platform/device-catalog/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/app/(shell)/platform/edge-nodes/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/app/(shell)/platform/federation-links/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/app/(shell)/platform/federation-proposals/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
+  "apps/web/app/(shell)/platform/identity/applications/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/app/(shell)/platform/identity/authorization/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/app/(shell)/platform/identity/directory/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
+  "apps/web/app/(shell)/platform/identity/federation/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 91
+  },
+  "apps/web/app/(shell)/platform/identity/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 156
+  },
+  "apps/web/app/(shell)/platform/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 84
+  },
+  "apps/web/app/(shell)/platform/schedule/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(shell)/platform/service-desk/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 24
+  },
+  "apps/web/app/(shell)/platform/tools/built-ins/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 44
+  },
+  "apps/web/app/(shell)/platform/tools/catalog/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 68
+  },
+  "apps/web/app/(shell)/platform/tools/catalog/sync/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 61
+  },
+  "apps/web/app/(shell)/platform/tools/discovery/promotion-audit/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 57
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/adp/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 79
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/communications/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 94
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/email-postmark/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 176
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/facebook-lead-ads/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 137
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/facebook-pages/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 140
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/google-business-profile/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 168
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/google-marketing-intelligence/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 138
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/hubspot/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 141
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/instagram-business/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 114
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/linkedin-personal-social/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 137
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/mailchimp/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 131
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/microsoft365-communications/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 150
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 274
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/quickbooks/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 82
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/stripe/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 111
+  },
+  "apps/web/app/(shell)/platform/tools/integrations/whatsapp-business/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 139
+  },
+  "apps/web/app/(shell)/platform/tools/inventory/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/platform/tools/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 173
+  },
+  "apps/web/app/(shell)/platform/tools/services/[serverId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/platform/tools/services/activate/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/platform/tools/services/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/architecture/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/backlog/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/changes/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/health/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 69
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/inventory/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 69
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/knowledge/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/offerings/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 23
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 49
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/team/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  },
+  "apps/web/app/(shell)/portfolio/product/[id]/versions/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/app/(shell)/rental/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/app/(shell)/service-requests/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/app/(shell)/storefront/dispatch/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/app/(shell)/storefront/inbox/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/app/(shell)/storefront/intake/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 6,
+    "longSentences": 0,
+    "textMass": 108
+  },
+  "apps/web/app/(shell)/storefront/layout.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 2,
+    "longSentences": 0,
+    "textMass": 47
+  },
+  "apps/web/app/(shell)/storefront/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(shell)/storefront/settings/business/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(shell)/storefront/settings/capabilities/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 2,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/app/(shell)/storefront/settings/operations/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(shell)/storefront/settings/page.tsx": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 2,
+    "longSentences": 0,
+    "textMass": 81
+  },
+  "apps/web/app/(shell)/storefront/tables/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(shell)/storefront/team/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/(shell)/workbooks/[workbookId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(shell)/workbooks/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/app/(shell)/workbooks/system/[entityType]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/(shell)/workspace/calendar/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(shell)/workspace/documents/[documentId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/(shell)/workspace/documents/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/app/(shell)/workspace/inbox/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
+  },
+  "apps/web/app/(shell)/workspace/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/(storefront)/s/[slug]/book/[itemId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(storefront)/s/[slug]/booking/confirmed/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(storefront)/s/[slug]/checkout/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(storefront)/s/[slug]/donate/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/(storefront)/s/[slug]/donation/received/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(storefront)/s/[slug]/inquire/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(storefront)/s/[slug]/inquiry/received/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(storefront)/s/[slug]/item/[itemId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/app/(storefront)/s/[slug]/layout.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(storefront)/s/[slug]/not-found.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 24
+  },
+  "apps/web/app/(storefront)/s/[slug]/order/[itemId]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/(storefront)/s/[slug]/order/received/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(storefront)/s/[slug]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/(storefront)/s/[slug]/policies/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 45
+  },
+  "apps/web/app/(storefront)/s/[slug]/sign-in/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/(storefront)/s/[slug]/sign-up/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/(storefront)/s/approve/[token]/ApprovalForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/(storefront)/s/approve/[token]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/(storefront)/s/expense-approve/[token]/ExpenseApprovalForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/app/(storefront)/s/expense-approve/[token]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/(storefront)/s/pay/[token]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/(storefront)/s/quote/[token]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/app/.well-known/dpf-instance.json/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
+  },
+  "apps/web/app/api/agent/send/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/api/calendar/sync/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/app/api/diagnostics/preflight/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
+  "apps/web/app/api/docs/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 85
+  },
+  "apps/web/app/api/health/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/api/mcp/v1/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/app/api/onboarding/business-document/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/api/platform/alerts/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/api/platform/authority-bindings/[bindingId]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/api/platform/authority-bindings/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/app/api/platform/git/updates/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/api/sandbox/preview/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/app/api/storefront/[slug]/dates/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/api/storefront/[slug]/slots/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/api/storefront/admin/archetype-reset/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/api/storefront/admin/archetypes/refinement/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/api/storefront/admin/archetypes/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/api/storefront/admin/items/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/storefront/admin/providers/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/app/api/storefront/admin/units/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/app/api/test/codex-responses/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
+  "apps/web/app/api/v1/admin/operating-hours/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/app/api/v1/agent/message/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/api/v1/agent/proposals/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/agent/thread/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/app/config/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/auth/login/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/auth/logout/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/auth/me/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/auth/refresh/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/business-models/[modelId]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/business-models/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/compliance/alerts/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/compliance/audits/[id]/findings/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/compliance/controls/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/compliance/corrective-actions/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/compliance/incidents/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/compliance/regulations/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/customer/accounts/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 74
+  },
+  "apps/web/app/api/v1/customer/accounts/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/customer/activities/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/customer/contacts/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/app/api/v1/customer/contacts/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
+  "apps/web/app/api/v1/customer/engagements/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/customer/engagements/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/customer/invoices/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/customer/opportunities/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/customer/opportunities/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/customer/quotes/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/app/api/v1/customer/quotes/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/customer/sales-orders/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/customer/sales-orders/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/customer/visits/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/device-catalog/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/api/v1/directory/nearby/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/api/v1/discovery/sweep/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/api/v1/dynamic/forms/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/app/api/v1/dynamic/forms/[id]/submit/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/app/api/v1/dynamic/forms/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/app/api/v1/dynamic/views/[id]/data/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/app/api/v1/dynamic/views/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/app/api/v1/edge/actions/claim/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/api/v1/edge/actions/result/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/api/v1/edge/discovery-runs/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/api/v1/edge/events/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
+  "apps/web/app/api/v1/edge/federation-candidates/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/app/api/v1/edge/metrics/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/api/v1/federation/demand/reconcile/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/api/v1/finance/assets/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/assets/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/bank-accounts/[id]/reconcile/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/app/api/v1/finance/bank-accounts/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/bank-accounts/[id]/transactions/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/api/v1/finance/bank-accounts/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/bills/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/api/v1/finance/bills/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/dunning/run/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/exchange-rates/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/expense-claims/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/api/v1/finance/expense-claims/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/invoices/[id]/pdf/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/invoices/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/invoices/[id]/send/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/invoices/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/payment-runs/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/api/v1/finance/payments/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/purchase-orders/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/recurring/generate/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/recurring/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/finance/reports/[report]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/suppliers/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/governance/approvals/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/api/v1/governance/approvals/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/app/api/v1/governance/decisions/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/healthcare/intake/[packetId]/access-grants/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/healthcare/intake/[packetId]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/healthcare/intake/[packetId]/submit/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/notifications/[id]/read/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/notifications/register-device/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/app/api/v1/notifications/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/ops/backlog/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/ops/backlog/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/ops/business-profile/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/app/api/v1/ops/catalog/[key]/create-rfc/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/ops/catalog/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/app/api/v1/ops/changes/[id]/execute/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/app/api/v1/ops/changes/[id]/rollback/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/app/api/v1/ops/changes/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
+  },
+  "apps/web/app/api/v1/ops/changes/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/app/api/v1/ops/epics/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/app/api/v1/ops/epics/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/app/api/v1/ops/windows/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/app/api/v1/portfolio/[id]/products/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/portfolio/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/portfolio/tree/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/upload/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/api/v1/work-items/[itemId]/evidence/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/work-items/[itemId]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/app/api/v1/work-items/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/workspace/activity/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/workspace/dashboard/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/app/api/voice/train/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/app/connect/pair/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/app/layout.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/app/not-found.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/app/sandbox-restricted/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/app/welcome/page.tsx": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 47
+  },
+  "apps/web/components/admin/AdminUserAccessPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 57
+  },
+  "apps/web/components/admin/AdvancedTokenPaste.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  },
+  "apps/web/components/admin/ArchetypeCatalogTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/admin/BrandingPreview.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
+  },
+  "apps/web/components/admin/BrandingQuickEdit.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 42
+  },
+  "apps/web/components/admin/BrandingWizard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 198
+  },
+  "apps/web/components/admin/BusinessContextForm.tsx": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 488
+  },
+  "apps/web/components/admin/BusinessDocumentUpload.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 50
+  },
+  "apps/web/components/admin/BusinessModelBuilder.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 96
+  },
+  "apps/web/components/admin/CityPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 95
+  },
+  "apps/web/components/admin/ConnectGitHubCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 76
+  },
+  "apps/web/components/admin/ContributionModelBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/admin/ContributionProvenanceTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/admin/CountryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/admin/DataStewardPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/admin/EmailSettingsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 113
+  },
+  "apps/web/components/admin/ForkSetupPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 98
+  },
+  "apps/web/components/admin/HiveContributionsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/components/admin/HiveResultReviewActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/admin/IssueReportPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 129
+  },
+  "apps/web/components/admin/LegacyTokenOverrideBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/admin/MarketContextFields.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 97
+  },
+  "apps/web/components/admin/MatchConfigCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 63
+  },
+  "apps/web/components/admin/McpTokenManager.tsx": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 411
+  },
+  "apps/web/components/admin/OAuthPortMismatchBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/admin/OperatingHoursEditor.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 91
+  },
+  "apps/web/components/admin/PlatformDevelopmentForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 426
+  },
+  "apps/web/components/admin/PlatformKeysPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 50
+  },
+  "apps/web/components/admin/PlatformUpdateApplyPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 105
+  },
+  "apps/web/components/admin/PrivatePathsEditor.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/admin/PromptManager.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 52
+  },
+  "apps/web/components/admin/ReadabilityPolicyPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 54
+  },
+  "apps/web/components/admin/RegionPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 90
+  },
+  "apps/web/components/admin/ResearchProposalsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/admin/RosterImport.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 52
+  },
+  "apps/web/components/admin/SeedContributionReviewTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
+  "apps/web/components/admin/SkillsCatalogView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/admin/SocialAuthPanel.tsx": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 454
+  },
+  "apps/web/components/admin/SpeechToTextCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/admin/SpeechToTextTestHarness.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/components/admin/StewardTaskList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 23
+  },
+  "apps/web/components/admin/TokenExpiryBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/admin/VoiceConsentForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 75
+  },
+  "apps/web/components/admin/WorkLocationPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 68
+  },
+  "apps/web/components/admin/admin-nav.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 55
+  },
+  "apps/web/components/agent/AgentCoworkerPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 4,
+    "textMass": 369
+  },
+  "apps/web/components/agent/AgentCoworkerShell.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 2,
+    "textMass": 207
+  },
+  "apps/web/components/agent/AgentFAB.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/components/agent/AgentFileUpload.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/agent/AgentMessageBubble.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 45
+  },
+  "apps/web/components/agent/AgentMessageInput.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 110
+  },
+  "apps/web/components/agent/AgentPanelHeader.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/components/agent/AgentSkillsDropdown.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/components/agent/AgentWorkLauncher.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/agent/AskCoworkerButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/agent/CollaborationActivityPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/agent/ConversationParticipantRail.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/agent/CoworkerPostureControl.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/components/agent/CoworkerProfilePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 63
+  },
+  "apps/web/components/agent/DelegationChainView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/agent/MicButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/components/agent/hooks/useVoiceCapture.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 80
+  },
+  "apps/web/components/agent/hooks/useVoiceSynth.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 77
+  },
+  "apps/web/components/attention/AttentionInbox.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 31
+  },
+  "apps/web/components/attention/CoworkerProposalActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/attention/OwnerAttentionStatus.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/components/attention/OwnerDecisionCards.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 66
+  },
+  "apps/web/components/attention/ProactivityProposalActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/attention/ResearchProposalActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/attention/WeeklyDigestPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/auth/ForgotPasswordForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/auth/ResetPasswordForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/build-studio/ArtifactTabs.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/build-studio/Bubble.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/build-studio/BuildStudioV2.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/build-studio/BusinessBriefPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 141
+  },
+  "apps/web/components/build-studio/Composer.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/build-studio/HeaderBar.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 24
+  },
+  "apps/web/components/build-studio/PreviewFrame.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 42
+  },
+  "apps/web/components/build-studio/cards/DecisionCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/build-studio/cards/FilesTouchedCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/build-studio/cards/PlanSummaryCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/build-studio/cards/StepRefCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/build-studio/cards/VerificationStripCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/build/ActionBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/build/AgentActivityStrip.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/build/AgentSessionFeed.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/build/AgentSessionFeedLive.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/build/AssuranceFindingsList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
+  },
+  "apps/web/components/build/BuildAssuranceGateCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 31
+  },
+  "apps/web/components/build/BuildChangeSummaryBand.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/build/BuildCustomerStatusBand.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/build/BuildDecisionLedgerBand.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 63
+  },
+  "apps/web/components/build/BuildDispatchHistoryCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
+  },
+  "apps/web/components/build/BuildListItem.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/build/BuildOperatorContext.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/build/BuildPhaseCostCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
+  "apps/web/components/build/BuildProgressOperationalPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 42
+  },
+  "apps/web/components/build/BuildSandboxCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 24
+  },
+  "apps/web/components/build/BuildSolutionSummaryBand.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/build/BuildStudio.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 2,
+    "textMass": 508
+  },
+  "apps/web/components/build/BuildStudioCustodianCallout.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/build/BuildStudioWorkflowActionCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 48
+  },
+  "apps/web/components/build/BuildVerificationScopedCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/build/BuildWorkWarrantBand.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/components/build/CodeIntelligenceStatusCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/build/DecisionPerspectiveGatePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/build/DecompositionAssistantPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 102
+  },
+  "apps/web/components/build/DecompositionCoordinator.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/build/DecompositionGateBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 75
+  },
+  "apps/web/components/build/DetailsDrawer.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/components/build/EnableRunnerButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/build/EnvironmentStatusSummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/build/EpicRollupListItem.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/build/EvidenceSummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/build/FeatureBriefPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 69
+  },
+  "apps/web/components/build/FleetRail.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/build/NodeInspector.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/build/OpenSandboxButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/build/ParentDesignAmendmentCoordinator.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 83
+  },
+  "apps/web/components/build/PhaseIndicator.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/build/PhaseNode.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/build/PreviewUrlCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 31
+  },
+  "apps/web/components/build/ProcessGraph.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
+  },
+  "apps/web/components/build/QueueStateBadge.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/build/ReleaseDecisionPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 220
+  },
+  "apps/web/components/build/ReviewPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 87
+  },
+  "apps/web/components/build/ReviewReadinessStrip.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/build/StallEventHistoryStrip.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/build/TaskInspector.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/build/TestRunnerPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/build/UnifiedEvidenceTimeline.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/build/VoiceRationalePlayer.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/build/WorkflowStageInspector.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 49
+  },
+  "apps/web/components/build/build-studio-branch-badge.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/build/build-studio-custodian.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 51
+  },
+  "apps/web/components/build/build-studio-workflow-actions.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 343
+  },
+  "apps/web/components/build/work-control/AdoptableWorktreeTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/build/work-control/CreateGovernedWorkForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/build/work-control/WorkCapsuleLaunchPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/build/work-control/WorkCapsuleTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/build/work-control/WorkControlPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/civic/CivicMeetingsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 46
+  },
+  "apps/web/components/civic/FundBudgetPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/civic/MemberEquityPanel.tsx": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 75
+  },
+  "apps/web/components/civic/RecordsRequestsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 41
+  },
+  "apps/web/components/civic/ServiceRequestsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/cockpit/GraduationVetoButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/compliance/ComplianceLibraryScopeNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/compliance/ComplianceTabNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/compliance/CreateAuditForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/compliance/CreateControlForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/compliance/CreateCorrectiveActionForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/compliance/CreateEvidenceForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/compliance/CreateIncidentForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/compliance/CreateObligationForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/components/compliance/CreatePolicyForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  },
+  "apps/web/components/compliance/CreateRegulationForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/components/compliance/CreateRiskAssessmentForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/components/compliance/CreateSubmissionForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/components/compliance/EditControlForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/compliance/EditCorrectiveActionForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/compliance/EditIncidentForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/compliance/EditObligationForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/compliance/EditPolicyForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/compliance/EditRegulationForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/compliance/LinkControlForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/compliance/LinkObligationForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/compliance/LinkPolicyObligationForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/compliance/LinkRiskControlForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/components/compliance/ObligationLibraryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/compliance/OnboardingWizard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 81
+  },
+  "apps/web/components/compliance/RegulationLibraryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/compliance/RegulatoryAlerts.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/components/compliance/ScanStatus.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/compliance/compliance-nav.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 73
+  },
+  "apps/web/components/compliance/licensing/CreateOrganizationLicenseRecordForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
+  "apps/web/components/compliance/licensing/CreatePersonLicenseRecordForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 69
+  },
+  "apps/web/components/compliance/licensing/LicensingWorkspacePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 260
+  },
+  "apps/web/components/customer-marketing/ApprovalQueuePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 121
+  },
+  "apps/web/components/customer-marketing/ApprovalQueueReview.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/components/customer-marketing/DraftAssetButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/customer-marketing/MarketingStrategyOverview.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 131
+  },
+  "apps/web/components/customer-marketing/PublishEmailButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 59
+  },
+  "apps/web/components/customer-marketing/PublishLinkedInButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 81
+  },
+  "apps/web/components/customer-marketing/marketing-nav.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/customer/AcceptQuoteForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/customer/AccountLifecycleActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/components/customer/AcquisitionSignalRouter.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
+  "apps/web/components/customer/AddContactButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 54
+  },
+  "apps/web/components/customer/BillableTimeSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 41
+  },
+  "apps/web/components/customer/CustomerLifecycleReviewQueues.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 61
+  },
+  "apps/web/components/customer/CustomerSiteTree.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/customer/DraftQuoteButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/components/customer/DuplicateAccountsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/customer/EditCustomerConfigurationItemButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 53
+  },
+  "apps/web/components/customer/EmptyPipelineGuidance.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
+  },
+  "apps/web/components/customer/EngagementTriageActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/customer/MergeCustomerAccountButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 51
+  },
+  "apps/web/components/customer/NewCustomerButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 88
+  },
+  "apps/web/components/customer/NewCustomerConfigurationItemButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 52
+  },
+  "apps/web/components/customer/NewCustomerSiteButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 95
+  },
+  "apps/web/components/customer/NewCustomerSiteNodeButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/components/customer/NewLeadButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
+  },
+  "apps/web/components/customer/NewOpportunityButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 23
+  },
+  "apps/web/components/customer/NextStepControl.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/customer/PipelineStageInspector.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/customer/QuoteLifecycleActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/customer/QuoteShareLink.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/customer/RevenueCockpit.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/components/customer/UnmergeCustomerAccountButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/decision-perspective/DecisionCanvas.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
+  },
+  "apps/web/components/decision-perspective/MaterialBacklinksPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 45
+  },
+  "apps/web/components/deliberation/DeliberationDrilldown.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/deliberation/DeliberationSummaryCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/docs/ContextualQuickHelp.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/docs/DocsLayout.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/docs/DocsSearch.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/docs/DocsSidebar.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/docs/HelpLink.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/ea/AgentGovernanceCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/ea/CreateViewButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/ea/EaCanvas.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 141
+  },
+  "apps/web/components/ea/EaRelationshipEdge.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/components/ea/EaTabNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/ea/ElementInspector.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/ea/ElementPalette.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/ea/GenerateDataModelButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/ea/It4itConformanceCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/ea/It4itCoverageHeatmap.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 45
+  },
+  "apps/web/components/ea/It4itParticipationGrid.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 46
+  },
+  "apps/web/components/ea/ReferenceModelDirectory.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/ea/ReferenceModelElementTree.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/ea/ReferenceModelPortfolioTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/ea/ReferenceModelSummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/ea/ReferencePopup.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/ea/ReferenceProjectionActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/components/ea/ReferenceProposalQueue.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/ea/StructuredValueStreamNode.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
+  },
+  "apps/web/components/ea/ValueStreamStageNode.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/ea/ea-nav.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/employee/AddressSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 44
+  },
+  "apps/web/components/employee/CompensationPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 84
+  },
+  "apps/web/components/employee/EmployeeDirectoryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 51
+  },
+  "apps/web/components/employee/EmployeeFormPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
+  "apps/web/components/employee/EmployeeProfilePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/employee/EmployeeReachabilityPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/components/employee/EmployeeTabNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/employee/HrUserLifecyclePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/employee/LeavePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
+  "apps/web/components/employee/LifecycleEventPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/components/employee/MyPoliciesView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/employee/NewEmployeeButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/employee/OnboardingPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/employee/OrgAssignmentPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/components/employee/OrgChartView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 54
+  },
+  "apps/web/components/employee/ReviewPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/employee/TimesheetApprovalPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/employee/TimesheetGrid.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 73
+  },
+  "apps/web/components/employee/WorkforceActivityPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/employee/WorkforceRosterPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/feedback/FeedbackButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/feedback/FeedbackForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/feedback/HeaderFeedbackButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/feedback/UpstreamEscalation.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 51
+  },
+  "apps/web/components/finance/AccountantWorkLanePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 44
+  },
+  "apps/web/components/finance/AiFinanceCoworkerAskButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/finance/AiProviderFinancePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 47
+  },
+  "apps/web/components/finance/AiSpendProviderTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/finance/AiSpendSummaryCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/finance/AiSpendWorkspace.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 113
+  },
+  "apps/web/components/finance/AiSubscriptionPaymentForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 123
+  },
+  "apps/web/components/finance/AiSupplierFinancePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/finance/AssetDisposalForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/components/finance/BankRulesManager.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 85
+  },
+  "apps/web/components/finance/CreateAssetForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 72
+  },
+  "apps/web/components/finance/CreateBankAccountForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 52
+  },
+  "apps/web/components/finance/CreateBillForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 85
+  },
+  "apps/web/components/finance/CreateExpenseForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 61
+  },
+  "apps/web/components/finance/CreateInvoiceForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 71
+  },
+  "apps/web/components/finance/CreatePOForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 67
+  },
+  "apps/web/components/finance/CreateRecurringForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 97
+  },
+  "apps/web/components/finance/CreateSupplierForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/finance/ExpenseClaimActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/components/finance/FetchRatesButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/finance/ImportCSVForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 70
+  },
+  "apps/web/components/finance/InvoiceDownloadButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/finance/InvoiceSendButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/finance/InvoiceSignaturePad.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
+  "apps/web/components/finance/InvoiceSignatureToggle.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/finance/ManualRateForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/finance/OwnerFirstFinanceView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 91
+  },
+  "apps/web/components/finance/POActionButtons.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/finance/PaymentRunBuilder.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 86
+  },
+  "apps/web/components/finance/RateCardManager.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 101
+  },
+  "apps/web/components/finance/ReconciliationFeed.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/finance/RecordBillPaymentButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/components/finance/RecordInvoicePaymentButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/finance/ScheduleStatusButtons.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/finance/SubmitBillButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/finance/TaxAuthorityCredentialPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 101
+  },
+  "apps/web/components/finance/TaxExecutionPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 128
+  },
+  "apps/web/components/finance/TaxLiabilityLedgerCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 41
+  },
+  "apps/web/components/finance/TaxObligationPeriodsTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 160
+  },
+  "apps/web/components/finance/TaxRegistrationEditor.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 92
+  },
+  "apps/web/components/finance/TaxRemittanceSettingsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 166
+  },
+  "apps/web/components/finance/aiFinanceCoworkerAsks.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/finance/finance-nav.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 60
+  },
+  "apps/web/components/golden-triangle/CoworkerPriorityControl.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 51
+  },
+  "apps/web/components/golden-triangle/CoworkerPriorityDock.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 73
+  },
+  "apps/web/components/golden-triangle/GoldenTriangleControl.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 48
+  },
+  "apps/web/components/golden-triangle/GoldenTriangleOutcomes.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 52
+  },
+  "apps/web/components/golden-triangle/GoldenTrianglePriorityPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/golden-triangle/posture-display.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/healthcare/PatientIntakeRunner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 139
+  },
+  "apps/web/components/integrations/AdpConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 77
+  },
+  "apps/web/components/integrations/EmailPostmarkConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 79
+  },
+  "apps/web/components/integrations/EntraConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
+  "apps/web/components/integrations/FacebookLeadAdsConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/components/integrations/FacebookPagesConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 42
+  },
+  "apps/web/components/integrations/GoogleBusinessProfileConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 50
+  },
+  "apps/web/components/integrations/GoogleMarketingIntelligenceConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 46
+  },
+  "apps/web/components/integrations/HubSpotConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
+  },
+  "apps/web/components/integrations/InstagramBusinessConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 42
+  },
+  "apps/web/components/integrations/IntegrationReadinessPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
+  "apps/web/components/integrations/LinkedInConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 55
+  },
+  "apps/web/components/integrations/MailchimpConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/integrations/Microsoft365CommunicationsConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/integrations/QuickBooksConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 52
+  },
+  "apps/web/components/integrations/StripeConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 59
+  },
+  "apps/web/components/integrations/WhatsAppBusinessConnectPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
+  "apps/web/components/inventory/AddDiscoveryConnection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/inventory/ConfigureConnectionInline.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
+  "apps/web/components/inventory/DataEnrichmentHelpNote.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/inventory/DiscoveryOperationsPage.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 122
+  },
+  "apps/web/components/inventory/DiscoveryRunSummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/inventory/EstateItemCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 114
+  },
+  "apps/web/components/inventory/InventoryEntityPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/inventory/InventoryExceptionQueue.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 108
+  },
+  "apps/web/components/inventory/PortfolioQualityIssuesPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/inventory/RelationshipGraph.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 91
+  },
+  "apps/web/components/inventory/SavedConnectionRow.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/inventory/SavedConnectionsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/inventory/SubnetGroupedInventoryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/components/inventory/TopologyGraph.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 161
+  },
+  "apps/web/components/knowledge/KnowledgeArticleActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/knowledge/KnowledgeArticleCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/knowledge/KnowledgeArticleForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 73
+  },
+  "apps/web/components/knowledge/KnowledgeArticleList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/knowledge/StalenessIndicator.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/linked-identities.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/location/LocationCascadePicker.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 37
+  },
+  "apps/web/components/monitoring/AiCoworkerHealthPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/monitoring/AlertBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/monitoring/CapabilityServiceHealth.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
+  "apps/web/components/monitoring/ContainerResourceTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/monitoring/CoworkerHealthStatus.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/monitoring/LogIssuesPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/monitoring/MetricGauge.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/monitoring/MetricTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/monitoring/MetricTimeSeries.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 48
+  },
+  "apps/web/components/monitoring/PlatformHealthIndicator.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/monitoring/PortalHealthSummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/monitoring/RecentAlertsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/monitoring/ServiceHealthDashboard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 63
+  },
+  "apps/web/components/monitoring/ServiceStatusGrid.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/monitoring/SparkLine.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/monitoring/SystemHealthDashboard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 53
+  },
+  "apps/web/components/monitoring/alert-humanize.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/monitoring/health-summary.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/onboarding/HowYouDecideCards.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 82
+  },
+  "apps/web/components/ops/BacklogItemRow.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 42
+  },
+  "apps/web/components/ops/BacklogPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 48
+  },
+  "apps/web/components/ops/ChangesClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 55
+  },
+  "apps/web/components/ops/DemandBoard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 205
+  },
+  "apps/web/components/ops/EpicCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/ops/EpicPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 44
+  },
+  "apps/web/components/ops/EscalationsAttention.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 51
+  },
+  "apps/web/components/ops/FounderSharedPortfolioPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/ops/GitPromotionCandidatesPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 41
+  },
+  "apps/web/components/ops/ImprovementsClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
+  "apps/web/components/ops/LocalChangesLedger.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 60
+  },
+  "apps/web/components/ops/NetworkDemandPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 168
+  },
+  "apps/web/components/ops/OperatorTriageBand.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 79
+  },
+  "apps/web/components/ops/OpsClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
+  },
+  "apps/web/components/ops/OpsTabNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/ops/OwnerReleaseCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/ops/PromotionsClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/ops/RFCDetailPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 47
+  },
+  "apps/web/components/ops/SelfUpgradeClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 375
+  },
+  "apps/web/components/ops/SelfUpgradeJobEngineHealthAlert.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  },
+  "apps/web/components/ops/SelfUpgradePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/components/ops/StandardChangeCatalog.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 48
+  },
+  "apps/web/components/ops/UpgradeImpactPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 88
+  },
+  "apps/web/components/ops/backlog-form-assist.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/ops/ops-nav.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/owner-first/OwnerFirstSummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/owner-first/WorkspaceStorefrontAttention.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 1,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 0
+  },
+  "apps/web/components/platform/A2aInteractionsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 175
+  },
+  "apps/web/components/platform/ActivityRoutingPresentation.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/platform/ActivityRoutingWorkbench.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 132
+  },
+  "apps/web/components/platform/AgentBudgetEventsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 23
+  },
+  "apps/web/components/platform/AgentCardSupervisorPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 92
+  },
+  "apps/web/components/platform/AgentModelAssignmentTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 83
+  },
+  "apps/web/components/platform/AgentModelRoutingCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 58
+  },
+  "apps/web/components/platform/AgentProviderSelect.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/platform/AiOperationsMap.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 533
+  },
+  "apps/web/components/platform/AiReadinessHeaderLink.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/platform/AiReadinessSummaryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/platform/AsyncOperationsTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/components/platform/AuditTabNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/platform/AuthorityMatrixPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 51
+  },
+  "apps/web/components/platform/BuildStudioConfigForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 2,
+    "textMass": 389
+  },
+  "apps/web/components/platform/BuildStudioProviderControls.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/platform/CapabilityInventoryClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/components/platform/CapabilityJournalClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/platform/CliPoolStatusPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
+  "apps/web/components/platform/ConnectGrokCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 73
+  },
+  "apps/web/components/platform/ContributorMcpReadinessCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 67
+  },
+  "apps/web/components/platform/DelegationChainPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/components/platform/DelegationGrantPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/platform/DeliberationLensPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 46
+  },
+  "apps/web/components/platform/EffectivePermissionsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 95
+  },
+  "apps/web/components/platform/EndpointPerformancePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/platform/GovernanceOverviewPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/platform/IntegrationCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/platform/IntegrationCatalogFilters.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/platform/LocalOnlyInferenceToggle.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 80
+  },
+  "apps/web/components/platform/McpServiceRow.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/platform/McpSyncButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/components/platform/ModelCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 96
+  },
+  "apps/web/components/platform/ModelClassBadge.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/platform/ModelSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 73
+  },
+  "apps/web/components/platform/OAuthConnectionStatus.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/components/platform/OllamaHardwareInfo.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/platform/OllamaManagement.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 297
+  },
+  "apps/web/components/platform/OperationsMapLiveShell.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/components/platform/OperationsTopologyCanvas.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/components/platform/PhaseRemediationActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/platform/PlatformBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/platform/ProposalHistoryClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/platform/ProviderAccountPostureForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 215
+  },
+  "apps/web/components/platform/ProviderCostSourcePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/components/platform/ProviderDetailForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 186
+  },
+  "apps/web/components/platform/ProviderSuitabilityGuide.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 109
+  },
+  "apps/web/components/platform/ProviderTrustEvidencePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 49
+  },
+  "apps/web/components/platform/ProvisionEngineButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/platform/RecipePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/platform/RouteDecisionLog.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/platform/RouteDecisionLogClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 51
+  },
+  "apps/web/components/platform/RoutingProfilePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 88
+  },
+  "apps/web/components/platform/ScheduledJobsTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/platform/ServedContextSummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/platform/ServiceActivationForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 80
+  },
+  "apps/web/components/platform/ServiceRow.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/components/platform/ServiceSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/platform/SkillCuratorReportPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/platform/SkillEvidencePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/platform/SkillLifecycleControls.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/platform/SkillProposalsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/platform/SkillRevisionHistoryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/platform/SkillsObservatoryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 95
+  },
+  "apps/web/components/platform/StalledTaskRecoveryActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 61
+  },
+  "apps/web/components/platform/TokenSpendPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 49
+  },
+  "apps/web/components/platform/ToolExecutionLogClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/platform/ToolInventoryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/components/platform/a2a-interaction-graph.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
+  },
+  "apps/web/components/platform/ai-operations-map-prefs.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/platform/authority/BindingBootstrapPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 96
+  },
+  "apps/web/components/platform/authority/BindingDetailDrawer.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 80
+  },
+  "apps/web/components/platform/authority/BindingDetailPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/platform/authority/BindingEvidencePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/platform/authority/BindingFilters.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
+  "apps/web/components/platform/authority/BindingList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/platform/authority/BootstrapBindingsButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/platform/authority/CreateDraftBindingButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/platform/build-studio-route-copy.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/platform/coworker-record/CapabilitiesEditor.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 51
+  },
+  "apps/web/components/platform/coworker-record/CooConversationalNameCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/platform/coworker-record/CoworkerProactivitySetting.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/platform/coworker-record/CoworkerRecordTabs.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/platform/coworker-record/NeedsAndPlaybooksPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/platform/coworker-record/ProfessionCorpusPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 60
+  },
+  "apps/web/components/platform/coworker-record/RecordActionsMenu.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/platform/coworker-record/RosterView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 63
+  },
+  "apps/web/components/platform/coworker-record/WorkforceSummaryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/platform/coworker-record/panels.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 269
+  },
+  "apps/web/components/platform/coworker-service-catalog/CoworkerCatalogView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 57
+  },
+  "apps/web/components/platform/development/change-lanes/ChangeLaneSourceSummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/platform/development/change-lanes/ChangeLaneTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/platform/development/change-lanes/ChangeLanesDashboard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 84
+  },
+  "apps/web/components/platform/development/change-lanes/LocalRepositoryHealthCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/platform/development/change-lanes/RefreshContributorInventoryButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 339
+  },
+  "apps/web/components/platform/federation-links/FederationLinksAdminClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 326
+  },
+  "apps/web/components/platform/federation-links/PartnerBusinessPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 70
+  },
+  "apps/web/components/platform/federation-proposals/FederationProposalsClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/platform/identity/AgentIdentityPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 50
+  },
+  "apps/web/components/platform/identity/ApplicationAssignmentsPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 68
+  },
+  "apps/web/components/platform/identity/AuthorizationBundlePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 133
+  },
+  "apps/web/components/platform/identity/DirectoryAuthoritiesPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 93
+  },
+  "apps/web/components/platform/identity/FederationAuthorityCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/platform/identity/GroupMembershipPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 75
+  },
+  "apps/web/components/platform/identity/IdentityPlaceholderPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 35
+  },
+  "apps/web/components/platform/identity/IdentityProjectionSummaryGrid.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/platform/identity/IdentityTabNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/platform/identity/PrincipalDirectoryPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/platform/operations-topology-layout.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/platform/operations-topology-style.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/platform/platform-nav.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 97
+  },
+  "apps/web/components/platform/service-desk/ServiceTicketsTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/portal-context/EvidenceSummaryList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/portal-context/HiveMindCandidateList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/portal-context/PortalContextOverlayDrawer.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/portal-context/PortalContextStrip.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/portal-context/PortalContextTabs.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/portal/PortalWorkCaseDetail.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/portal/PortalWorkCases.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  },
+  "apps/web/components/portfolio/CompletenessStrip.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 24
+  },
+  "apps/web/components/portfolio/CoveragePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/portfolio/DigitalProductDetail.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  },
+  "apps/web/components/portfolio/PlatformHealthStrip.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/portfolio/PortfolioNodeDetail.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/portfolio/PortfolioNodeEnrichment.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 59
+  },
+  "apps/web/components/portfolio/PortfolioNodeGovernance.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/portfolio/PortfolioOverview.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
+  "apps/web/components/portfolio/PortfolioTree.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/portfolio/ProductList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/portfolio/architecture/BusinessCapabilityForms.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/components/portfolio/architecture/BusinessCapabilityMap.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 31
+  },
+  "apps/web/components/portfolio/architecture/BusinessCapabilityMapClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/portfolio/architecture/CapabilityDetailPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  },
+  "apps/web/components/portfolio/architecture/CapabilityMapTiles.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/portfolio/architecture/OptimizationCockpitSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 68
+  },
+  "apps/web/components/proactivity/ProactivityLevelControl.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/proactivity/ProactivityRosterList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/product/BusinessModelRolePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/product/BusinessModelSelector.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/components/product/ProductSupplyChainPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 49
+  },
+  "apps/web/components/product/ProductTabNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/queue/QueueHealthSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/components/rental/RentalDeskPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 41
+  },
+  "apps/web/components/restaurant-cockpit/ServiceReadinessCockpit.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/setup/CooNameSetupCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 45
+  },
+  "apps/web/components/setup/SetupActionButtons.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/setup/SetupOverlay.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/setup/SetupProgressBar.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/setup/SetupStepNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/shell/AppRail.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 58
+  },
+  "apps/web/components/shell/DeploymentSkewBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
+  "apps/web/components/shell/Header.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/shell/ShellBannerOverlay.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/shell/ShellBreadcrumb.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/shell/ShellSignOut.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/shell/StatusBanner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/shell/UpdatePendingBannerClient.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/components/social-buttons.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/storefront-admin/AnimalsManager.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
+  "apps/web/components/storefront-admin/ArchetypeActivationSummary.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 15
+  },
+  "apps/web/components/storefront-admin/BrandExtractionForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/storefront-admin/BrandExtractionSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/storefront-admin/BrandPreview.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
+  "apps/web/components/storefront-admin/FinancialSetupStep.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 99
+  },
+  "apps/web/components/storefront-admin/ItemFormDialog.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 109
+  },
+  "apps/web/components/storefront-admin/ItemsManager.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
+  },
+  "apps/web/components/storefront-admin/MediaUploader.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/storefront-admin/ScheduleEditor.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/storefront-admin/SectionsManager.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/components/storefront-admin/ServiceLinesPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/components/storefront-admin/SetupWizard.tsx": {
+    "vocabulary": 7,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 254
+  },
+  "apps/web/components/storefront-admin/StorefrontDashboard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  },
+  "apps/web/components/storefront-admin/StorefrontInbox.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 124
+  },
+  "apps/web/components/storefront-admin/StorefrontSetupPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/storefront-admin/TablesNowView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/storefront-admin/TeamManager.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 52
+  },
+  "apps/web/components/storefront-admin/UnitsManager.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 89
+  },
+  "apps/web/components/storefront-admin/content-editing-ui.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
+  },
+  "apps/web/components/storefront-admin/storefront-nav.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/storefront/BookingForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 1,
+    "textMass": 44
+  },
+  "apps/web/components/storefront/DonationForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 2,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/storefront/InquiryForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 2,
+    "longSentences": 0,
+    "textMass": 30
+  },
+  "apps/web/components/storefront/OrderForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 43
+  },
+  "apps/web/components/storefront/SectionRenderer.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 45
+  },
+  "apps/web/components/storefront/SignInForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
+  "apps/web/components/storefront/SignUpForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/storefront/SlotBookingFlow.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 12,
+    "longSentences": 0,
+    "textMass": 178
+  },
+  "apps/web/components/storefront/StorefrontTrustFooter.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/storefront/StorefrontUnavailable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/storefront/SubmissionResultView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
+  "apps/web/components/storefront/sections/AnimalsSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 10
+  },
+  "apps/web/components/storefront/sections/DisclosuresSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 1,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/storefront/sections/GallerySection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/storefront/sections/LoanCalculatorSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/storefront/sections/TeamSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/storefront/sections/TestimonialsSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/twin/OutcomesStrip.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/twin/TwinKitShowcase.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/twin/TwinView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/twin/ValueStreamStrip.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/twin/WorkItem.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/twin/demo-snapshot.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/twin/floor/FloorPlanCanvas.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/ui/DatePicker.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/ui/Dialog.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/ui/ReferenceTypeahead.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 54
+  },
+  "apps/web/components/ui/Spinner.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/ui/form/FormField.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 67
+  },
+  "apps/web/components/ui/form/SelectField.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/ui/form/styles.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 93
+  },
+  "apps/web/components/ui/report-kit/Chart.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
+  "apps/web/components/ui/report-kit/DataTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/ui/report-kit/ExportButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/ui/report-kit/FilterBar.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/wiki/BusinessStanceForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 76
+  },
+  "apps/web/components/wiki/CraftOverrideForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 60
+  },
+  "apps/web/components/wiki/DecisionAuditTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/wiki/DecisionDisciplineHub.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/wiki/OrgDecisionCaptureList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 53
+  },
+  "apps/web/components/wiki/VoiceProfileSetup.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 1,
+    "textMass": 277
+  },
+  "apps/web/components/wiki/WikiBodyRenderer.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/wiki/WikiPageEditor.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 56
+  },
+  "apps/web/components/wiki/WikiPageViewer.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
+  },
+  "apps/web/components/wiki/WikiSourceCitations.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/workbooks/AddColumnButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 115
+  },
+  "apps/web/components/workbooks/CreateTableButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/workbooks/CreateWorkbookButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/workbooks/Grid.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 2,
+    "textMass": 458
+  },
+  "apps/web/components/workbooks/GridCalendar.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/workbooks/GridPanels.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 212
+  },
+  "apps/web/components/workbooks/GridViewsMenu.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 17
+  },
+  "apps/web/components/workbooks/ImportSheetButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/components/workbooks/KanbanBoard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 14
+  },
+  "apps/web/components/workbooks/RecordDetailModal.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 33
+  },
+  "apps/web/components/workbooks/cell-editors.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 42
+  },
+  "apps/web/components/workbooks/grid-filter-builder.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/components/workbooks/grid-footer-summary.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
+  "apps/web/components/workbooks/grid-named-views.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 11
+  },
+  "apps/web/components/workbooks/grid-pivot.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 18
+  },
+  "apps/web/components/workbooks/grid-reorder-group.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/components/workbooks/grid-summary.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
+  },
+  "apps/web/components/workbooks/grid-view-state.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 75
+  },
+  "apps/web/components/workspace-home/LocalOnlyProviderNotice.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 27
+  },
+  "apps/web/components/workspace-home/OperatorCockpit.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 47
+  },
+  "apps/web/components/workspace-home/UnconfiguredWorkspaceHomeNotice.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/workspace-home/VerticalWorkspaceHome.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
+  "apps/web/components/workspace-home/WorkspaceAreaLauncher.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/workspace-home/WorkspaceTwinHero.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/components/workspace-home/WorkspaceTwinPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 7
+  },
+  "apps/web/components/workspace/ActivityFeed.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/workspace/BusinessAgenda.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/components/workspace/BusinessCommandCenter.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
+  "apps/web/components/workspace/CalendarAgentScheduler.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/workspace/CalendarDetailPopover.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 47
+  },
+  "apps/web/components/workspace/CalendarEventPopover.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
+  },
+  "apps/web/components/workspace/CalendarSyncPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
+  "apps/web/components/workspace/PlatformReadinessMatrix.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 74
+  },
+  "apps/web/components/workspace/WorkCaseAttentionLens.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 57
+  },
+  "apps/web/components/workspace/WorkCaseDetailView.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 22
+  },
+  "apps/web/components/workspace/WorkItemCommentBox.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
+  "apps/web/components/workspace/WorkspaceCalendar.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
+  }
+}
