@@ -411,6 +411,26 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     fields: [],
   })),
   {
+    // Authored vendor-ecosystem absorption matrix (BI-ECO-001). Reference/config
+    // doctrine — public vendor/product names + integration categories + verdicts;
+    // no data subject. Retention is exemption-governed (reference-data), never aged.
+    id: "data:absorption-posture",
+    physical: { prismaModel: "AbsorptionPosture" },
+    domain: "ecosystem-absorption",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["configuration"],
+    sensitivity: "internal",
+    criticality: "standard",
+    subjectLocators: [],
+    lifecycleClass: "operational",
+    purposeCapabilities: ["platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-24" },
+    fields: [],
+  },
+  {
     id: "data:ai-provider-connection",
     physical: { prismaModel: "AiProviderConnection" },
     domain: "ai-provider-governance",
