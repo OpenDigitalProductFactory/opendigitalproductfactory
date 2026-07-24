@@ -5,7 +5,7 @@ status: published
 abstract: Approve transitions at phase boundaries, not individual tool calls.
 principleTier: commandment
 principleDirection: Approve transitions at phase boundaries, not individual tool calls.
-principleDimensionVector: {"governance_compliance": 1.0, "human_cognitive_load": -0.6, "speed_to_value": 0.5}
+principleDimensionVector: {"governance_compliance": 1.0, "human_cognitive_load": -0.6, "speed_to_value": 0.5, "legibility_of_consequence": 0.7}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent

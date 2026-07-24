@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 539,
+  "pageCount": 544,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2180,6 +2180,20 @@
         "see-also"
       ]
     },
+    "docs/founder-kernel/wiki/principles/count-the-operations-to-outcome.md": {
+      "publicHref": "/founder-kernel/wiki/principles/count-the-operations-to-outcome/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "count-the-operations-to-outcome",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "overlap-scan-43"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/data-sovereignty-follows-control.md": {
       "publicHref": "/founder-kernel/wiki/principles/data-sovereignty-follows-control/",
       "portalHref": null,
@@ -2268,6 +2282,20 @@
         "anti-pattern",
         "penalty",
         "related-principles"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/disclose-before-you-add-a-surface.md": {
+      "publicHref": "/founder-kernel/wiki/principles/disclose-before-you-add-a-surface/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "disclose-before-you-add-a-surface",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "overlap-scan-43"
       ]
     },
     "docs/founder-kernel/wiki/principles/diversity-of-thought.md": {
@@ -2450,6 +2478,21 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/kernel-defers-design-quality-to-the-fit-gate.md": {
+      "publicHref": "/founder-kernel/wiki/principles/kernel-defers-design-quality-to-the-fit-gate/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-kernel-defers-design-quality-to-the-fit-gate",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "universal-ring-justification-42",
+        "overlap-scan-43"
       ]
     },
     "docs/founder-kernel/wiki/principles/learnings-belong-in-the-shared-commons.md": {
@@ -2723,6 +2766,20 @@
         "examples",
         "when-this-does-not-apply",
         "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/one-home-per-capability.md": {
+      "publicHref": "/founder-kernel/wiki/principles/one-home-per-capability/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "one-home-per-capability",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "overlap-scan-43"
       ]
     },
     "docs/founder-kernel/wiki/principles/optimize-for-the-whole.md": {
@@ -3102,6 +3159,20 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/show-the-consequence-before-the-confirm.md": {
+      "publicHref": "/founder-kernel/wiki/principles/show-the-consequence-before-the-confirm/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "show-the-consequence-before-the-confirm",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "overlap-scan-43"
       ]
     },
     "docs/founder-kernel/wiki/principles/single-source-of-truth.md": {
