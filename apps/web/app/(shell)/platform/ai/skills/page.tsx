@@ -103,7 +103,7 @@ export default async function SkillsObservatoryPage({
       <div className="mb-6 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3 text-xs text-[var(--dpf-muted)]">
         This is the <strong className="text-[var(--dpf-text)]">global skills catalog and observatory</strong>. To grant
         or revoke skills for a single coworker, open that coworker&rsquo;s record from the{" "}
-        <Link href="/platform/ai" className="underline text-[var(--dpf-accent)]">
+        <Link href="/platform/ai/overview" className="underline text-[var(--dpf-accent)]">
           AI Workforce directory
         </Link>{" "}
         and use its Capabilities tab.

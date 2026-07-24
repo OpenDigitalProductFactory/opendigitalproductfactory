@@ -52,7 +52,7 @@ export default async function PlatformPage() {
         <PlatformSummaryCard
           title="AI Operations"
           description="Supervise coworkers, assignments, skills, providers and routing, and the build runtime."
-          href="/platform/ai"
+          href="/platform/ai/overview"
           accent="var(--dpf-info)"
           metrics={[
             { label: "Agents", value: agentCount },

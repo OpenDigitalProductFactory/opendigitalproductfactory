@@ -9,6 +9,7 @@
 import { DataTable, StatCard, StatusBadge, type Column } from "@/components/ui/report-kit";
 import type { Intent } from "@/components/ui/report-kit/statusColors";
 import type { CorpusGapRow, ProfessionCorpusSignals } from "@/lib/coworker-record/corpus-signals";
+import { presentCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 
 const REASON_INTENT: Record<string, Intent> = {
   unmapped: "danger",
@@ -79,6 +80,11 @@ export function ProfessionCorpusPanel({ signals }: { signals: ProfessionCorpusSi
   const { totals, gaps } = signals;
   const rate = totals.injectionRatePct;
 
+  // BI-579210DD — "no signal" must never render as "good signal". The decision
+  // lives in corpus-signals.ts (pure, tested without a DOM); this panel stays
+  // dumb, per the module's own contract.
+  const present = presentCorpusSignals(totals);
+
   return (
     <section style={{ marginTop: 24 }}>
       <div style={{ marginBottom: 10 }}>
@@ -92,6 +98,21 @@ export function ProfessionCorpusPanel({ signals }: { signals: ProfessionCorpusSi
         </p>
       </div>
 
+      {present.noUsageNotice && (
+        <p
+          style={{
+            fontSize: 11,
+            color: "var(--dpf-muted)",
+            border: "1px solid var(--dpf-border)",
+            borderRadius: 6,
+            padding: "8px 10px",
+            marginBottom: 12,
+          }}
+        >
+          {present.noUsageNotice}
+        </p>
+      )}
+
       <div
         style={{
           display: "grid",
@@ -103,13 +124,13 @@ export function ProfessionCorpusPanel({ signals }: { signals: ProfessionCorpusSi
         <StatCard
           label="Corpus injections"
           value={totals.injected.toLocaleString()}
-          intent="success"
+          intent={present.injectionsIntent}
           hint="Prompts grounded in profession corpus"
         />
         <StatCard
           label="Misses"
           value={totals.missed.toLocaleString()}
-          intent={totals.missed > 0 ? "warning" : "neutral"}
+          intent={present.missesIntent}
           hint="Turns with no corpus injected"
         />
         <StatCard
@@ -121,7 +142,7 @@ export function ProfessionCorpusPanel({ signals }: { signals: ProfessionCorpusSi
         <StatCard
           label="Open growth gaps"
           value={totals.openGaps.toLocaleString()}
-          intent={totals.openGaps > 0 ? "warning" : "success"}
+          intent={present.gapsIntent}
           hint="Deduped topics to seed next"
         />
       </div>
@@ -133,11 +154,7 @@ export function ProfessionCorpusPanel({ signals }: { signals: ProfessionCorpusSi
         initialSort={{ key: "occurrences", dir: "desc" }}
         pageSize={15}
         dense
-        empty={
-          <span style={{ color: "var(--dpf-muted)" }}>
-            No corpus gaps recorded yet — every coworker turn has been grounded in its profession corpus.
-          </span>
-        }
+        empty={<span style={{ color: "var(--dpf-muted)" }}>{present.emptyGapsCopy}</span>}
       />
     </section>
   );

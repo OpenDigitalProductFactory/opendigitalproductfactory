@@ -278,7 +278,9 @@ export default async function AgentDetailPage({
     <div>
       {/* Breadcrumb */}
       <div style={{ marginBottom: 16 }}>
-        <Link href="/platform/ai" style={{ fontSize: 11, color: "var(--dpf-muted)", textDecoration: "none" }}>
+        {/* BI-54A93A3C: target the directory itself, not the /platform/ai alias
+            that only redirects there — a breadcrumb should land in one hop. */}
+        <Link href="/platform/ai/overview" style={{ fontSize: 11, color: "var(--dpf-muted)", textDecoration: "none" }}>
           AI Workforce
         </Link>
         <span style={{ fontSize: 11, color: "var(--dpf-muted)", margin: "0 6px" }}>/</span>
