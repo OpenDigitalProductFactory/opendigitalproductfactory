@@ -9,7 +9,7 @@ import {
 
 describe("composerPlaceholder", () => {
   it("never claims Sending for thread lifecycle states (BI-D028B2A8)", () => {
-    const lifecycleStates: ComposerState[] = ["ready", "busy", "connecting", "clearing", "load-failed"];
+    const lifecycleStates: ComposerState[] = ["ready", "busy", "connecting", "clearing", "load-failed", "invalid-session"];
     for (const state of lifecycleStates) {
       expect(composerPlaceholder(state)).not.toMatch(/sending/i);
     }
@@ -24,6 +24,10 @@ describe("composerPlaceholder", () => {
     expect(composerPlaceholder("clearing")).toBe("Clearing conversation…");
     expect(composerPlaceholder("load-failed")).toBe("Couldn't load this conversation");
   });
+
+  it("tells an orphaned session to sign in again, not that the load failed (BI-836B0304)", () => {
+    expect(composerPlaceholder("invalid-session")).toBe("Sign in again to continue");
+  });
 });
 
 describe("composerInputDisabled", () => {
@@ -31,6 +35,7 @@ describe("composerInputDisabled", () => {
     expect(composerInputDisabled("connecting")).toBe(true);
     expect(composerInputDisabled("clearing")).toBe(true);
     expect(composerInputDisabled("load-failed")).toBe(true);
+    expect(composerInputDisabled("invalid-session")).toBe(true);
   });
 
   it("keeps input usable while ready, busy, or sending (non-blocking send)", () => {
@@ -61,6 +66,18 @@ describe("deriveComposerState", () => {
 
   it("reports load-failed instead of pretending to send", () => {
     expect(deriveComposerState({ ...base, threadLoadState: "failed", threadId: null })).toBe("load-failed");
+  });
+
+  it("reports invalid-session distinctly from a generic load failure (BI-836B0304)", () => {
+    expect(deriveComposerState({ ...base, threadLoadState: "invalid-session", threadId: null })).toBe(
+      "invalid-session",
+    );
+  });
+
+  it("prioritizes clearing over invalid-session too", () => {
+    expect(
+      deriveComposerState({ ...base, isClearing: true, threadLoadState: "invalid-session", threadId: null }),
+    ).toBe("clearing");
   });
 
   it("reports connecting while the thread has not loaded yet", () => {

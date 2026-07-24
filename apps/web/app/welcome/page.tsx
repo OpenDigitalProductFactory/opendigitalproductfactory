@@ -1,8 +1,21 @@
 // apps/web/app/welcome/page.tsx
 // Landing page — choose customer portal or employee/admin workspace.
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 
-export default function WelcomePage() {
+export default async function WelcomePage() {
+  // BI-836B0304: this chooser is reached from root `/` with no session check,
+  // so an already-signed-in visitor was shown "choose how you'd like to sign
+  // in" instead of landing on their workspace. Bounce a valid session to its
+  // home — customer type → /portal, everyone else → /workspace (the same
+  // post-login target as apps/web/app/(auth)/login/page.tsx:34's redirectTo).
+  // Signed-out visitors still see the chooser below.
+  const session = await auth();
+  if (session?.user) {
+    redirect(session.user.type === "customer" ? "/portal" : "/workspace");
+  }
+
   return (
     <div style={{
       minHeight: "100vh",

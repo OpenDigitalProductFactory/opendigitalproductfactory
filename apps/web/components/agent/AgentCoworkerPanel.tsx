@@ -7,6 +7,7 @@ import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { agentHoldsWebSearchGrant } from "@/lib/tak/agent-web-search-grant";
 import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
+import { signOutAction } from "@/lib/actions";
 import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 import { isTurnStalled } from "@/lib/agent/turn-watchdog";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
@@ -1226,6 +1227,47 @@ export function AgentCoworkerPanel({
               Reload to reconnect
             </button>
           )}
+        </div>
+      )}
+      {/* BI-836B0304: a valid session whose userId has no matching User row
+          (e.g. a stale session surviving a re-seed) can never load a thread —
+          retrying or reloading the tab does not fix it. Say so plainly and
+          offer the one action that does: sign out and sign back in. */}
+      {effectiveThreadLoadState === "invalid-session" && (
+        <div
+          role="alert"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            margin: "0 10px 6px",
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid color-mix(in srgb, var(--dpf-error) 35%, transparent)",
+            background: "color-mix(in srgb, var(--dpf-error) 8%, transparent)",
+            fontSize: 12,
+            color: "var(--dpf-text)",
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            Your sign-in session is no longer valid. Sign in again to continue.
+          </span>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              style={{
+                background: "none",
+                border: "1px solid var(--dpf-border)",
+                borderRadius: 999,
+                color: "var(--dpf-accent)",
+                cursor: "pointer",
+                fontSize: 12,
+                padding: "3px 12px",
+              }}
+            >
+              Sign in again
+            </button>
+          </form>
         </div>
       )}
       <AgentMessageInput
