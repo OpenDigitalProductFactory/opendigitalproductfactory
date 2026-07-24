@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 544,
+  "pageCount": 545,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2103,6 +2103,21 @@
         "what-to-do-instead",
         "anti-pattern",
         "related-principles"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/classify-ambiguous-requests-before-acting.md": {
+      "publicHref": "/founder-kernel/wiki/principles/classify-ambiguous-requests-before-acting/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "see-also"
       ]
     },
     "docs/founder-kernel/wiki/principles/compose-report-kit-for-reporting-ux.md": {
@@ -6591,6 +6606,7 @@
         "3b-exists-but-incomplete-must-be-builtextended-do-not-assume-done",
         "3c-critical-dependency-signal-capture-the-multi-signal-premise-rests-on-this",
         "4-the-cognitive-load-escalation-ladder-the-core-design",
+        "41-last-mile-runtime-contract-needs-more-evidence-must-trigger-investigation",
         "5-robust-multi-signal-fingerprint-the-narrow-real-extensions",
         "6-hive-mind-integration-this-is-the-value-engine",
         "61-contribution-consent-opt-in-default-on-unified-surface",
