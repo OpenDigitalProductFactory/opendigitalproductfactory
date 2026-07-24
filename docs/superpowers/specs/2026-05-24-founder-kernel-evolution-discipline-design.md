@@ -21,6 +21,8 @@ relatedPrinciples:
 
 > **Amended 2026-07-23** by [`2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md`](2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md).
 > The promotion/retirement contract here governs SPINE axes. A second, lighter path is introduced there for profession-local axes: they require provenance and a declared projection onto a spine axis, not the full orthogonality argument. This is an explicit, recorded relaxation.
+>
+> **Implemented 2026-07-24 (BI-106C2585 Phase 1).** The lighter path is now a typed registry: `packages/db/src/profession-local-axes.ts`. `assertProfessionLocalAxisIntegrity` enforces exactly the relaxed contract — a real owning `professionKey`, a `benefit`/`cost` type, a `highMeans`, a non-empty `source` (the provenance invariant, unchanged), and a `projectsOnto` that terminates on the spine in one hop. It does NOT demand the orthogonality argument this spec requires of a spine axis. Namespaced keys (`<profession>/<axis>`) keep local axes from colliding with the spine or shadowing it. Scoring/retrieval wiring (Phases 2–3) is separate.
 
 # Founder kernel evolution discipline
 
