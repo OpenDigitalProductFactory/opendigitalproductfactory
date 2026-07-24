@@ -568,16 +568,21 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
     expect(scoredPrinciples().find((p) => p.id === "wp-core-1")!.weight).toBe(0.4);
   });
 
-  it("degrades to semantic alignment — not to a dropped principle — when rehydration misses", async () => {
+  // SEMANTICS REVISED by BI-6ADB019D. This originally asserted that a
+  // rehydration miss kept the principle on semantic fallback, on the theory
+  // that a miss might be transient. Live evidence showed the opposite: a miss
+  // on a SUCCESSFUL query means the WikiPage was deleted and the Qdrant point
+  // is a phantom, so keeping it just burns a maxPrinciples slot. The original
+  // intent — never silently drop doctrine for a transient reason — is preserved
+  // by the query-failure test below, which is the case that actually is
+  // transient.
+  it("drops a principle whose row is absent from a SUCCESSFUL rehydration", async () => {
     wiki.searchWikiPages.mockResolvedValueOnce([CORE_HIT]).mockResolvedValueOnce([]);
-    db.wikiPageFindMany.mockResolvedValue([]); // row vanished between index and read
+    db.wikiPageFindMany.mockResolvedValue([]); // page no longer exists
 
     await invoke();
 
-    const core = scoredPrinciples().find((p) => p.id === "wp-core-1");
-    expect(core).toBeDefined();
-    expect(core!.dimensionVector).toEqual({});
-    expect(core!.weight).toBe(0.4);
+    expect(scoredPrinciples().find((p) => p.id === "wp-core-1")).toBeUndefined();
   });
 
   it("survives a rehydration failure without failing the decision", async () => {
@@ -614,6 +619,38 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
     expect(scored.find((p) => p.id === "wp-core-1")).toBeDefined();
   });
 
+  it("BI-6ADB019D: drops a hit whose WikiPage no longer exists", async () => {
+    // Qdrant returns two points; only one has a live row. The phantom must not
+    // reach scoring — left in, it contributes 0.000 but occupies a
+    // maxPrinciples slot that real doctrine would fill.
+    wiki.searchWikiPages
+      .mockResolvedValueOnce([CORE_HIT, { ...CORE_HIT, pageId: "wp-deleted" }])
+      .mockResolvedValueOnce([]);
+    db.wikiPageFindMany.mockResolvedValue([CORE_ROW]);
+
+    await invoke();
+
+    const ids = scoredPrinciples().map((p) => p.id);
+    expect(ids).toContain("wp-core-1");
+    expect(ids).not.toContain("wp-deleted");
+  });
+
+  it("BI-6ADB019D: does NOT drop anything when the rehydration QUERY failed", async () => {
+    // The distinction that matters. A failed lookup leaves every id unresolved
+    // for a transient reason; dropping them would silently delete the whole
+    // core/contextual tier from the decision.
+    wiki.searchWikiPages
+      .mockResolvedValueOnce([CORE_HIT, { ...CORE_HIT, pageId: "wp-core-2" }])
+      .mockResolvedValueOnce([]);
+    db.wikiPageFindMany.mockRejectedValue(new Error("connection reset"));
+
+    await invoke();
+
+    const ids = scoredPrinciples().map((p) => p.id);
+    expect(ids).toContain("wp-core-1");
+    expect(ids).toContain("wp-core-2");
+  });
+
   it("RC6: maxPrinciples still caps the relevance-retrieved set it names", async () => {
     db.listPrinciplesByTier.mockResolvedValue([]);
     const hits = Array.from({ length: 25 }, (_, i) => ({
@@ -621,7 +658,11 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
       pageId: `wp-core-${i}`,
     }));
     wiki.searchWikiPages.mockResolvedValueOnce(hits).mockResolvedValueOnce([]);
-    db.wikiPageFindMany.mockResolvedValue([]);
+    // Every hit must hydrate, or the phantom guard (BI-6ADB019D) would drop
+    // them all and this would assert the cap on an empty set.
+    db.wikiPageFindMany.mockResolvedValue(
+      hits.map((h) => ({ ...CORE_ROW, id: h.pageId })),
+    );
 
     await invoke();
 
