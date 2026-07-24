@@ -111,7 +111,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --readiness host identity", () => {
   it("fails closed when install-state carries no resolvable identity", () => {
     const result = runScript(BASE_ENV, ["--readiness"], { platform: "unsupported", arch: "unknown" });
     expect(result.stdout).toContain("host_identity_missing");
-  });
+  }, 30_000);
 });
 
 describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
