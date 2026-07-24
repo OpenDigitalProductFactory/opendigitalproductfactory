@@ -48,53 +48,6 @@ export type ProfessionCorpusSignals = {
   };
 };
 
-/**
- * How the runtime-signal tiles should read (BI-579210DD).
- *
- * The founder-reported defect: a coworker that had never run rendered green and
- * told the operator "every coworker turn has been grounded in its profession
- * corpus". That is vacuously true over an empty set and indistinguishable from
- * a corpus that genuinely works — the silent-empty pattern this platform
- * outlaws (`structural-verification-is-not-functional`, applied to a signal
- * panel). This panel's own subtitle even warns that coverage is not usage.
- *
- * The rollup already knows the difference (injectionRatePct is null with no
- * usage); only the presentation collapsed it. This lives here rather than in
- * the component for the reason stated above: the client panel stays dumb, and a
- * pure decision is testable without a DOM.
- */
-export type CorpusSignalPresentation = {
-  /** False when nothing ran — the tiles are empty, not healthy. */
-  hasUsage: boolean;
-  injectionsIntent: "success" | "neutral";
-  missesIntent: "warning" | "neutral";
-  gapsIntent: "warning" | "success" | "neutral";
-  /** Banner shown only when there is no usage at all; null otherwise. */
-  noUsageNotice: string | null;
-  /** Copy for the empty gap table — never claims grounding that did not happen. */
-  emptyGapsCopy: string;
-};
-
-export function presentCorpusSignals(
-  totals: ProfessionCorpusSignals["totals"],
-): CorpusSignalPresentation {
-  const hasUsage = totals.injected + totals.missed > 0;
-  return {
-    hasUsage,
-    injectionsIntent: totals.injected > 0 ? "success" : "neutral",
-    missesIntent: totals.missed > 0 ? "warning" : "neutral",
-    // Zero gaps only means something once turns have happened. With no usage
-    // nothing has had the chance to go wrong, so this must not read as success.
-    gapsIntent: totals.openGaps > 0 ? "warning" : hasUsage ? "success" : "neutral",
-    noUsageNotice: hasUsage
-      ? null
-      : "No coworker turns recorded in the last 30 days, so there is nothing to judge this corpus by yet. The figures below are empty, not healthy — seeded coverage says the pages exist, not that they have ever been used.",
-    emptyGapsCopy: hasUsage
-      ? "No corpus gaps recorded yet — every coworker turn has been grounded in its profession corpus."
-      : "No corpus gaps recorded — but no coworker turns happened either, so this is an absence of evidence, not evidence of health.",
-  };
-}
-
 function labelFor(professionKey: string): string {
   return (
     PROFESSION_REGISTRY.families.find((f) => f.professionKey === professionKey)?.label ??

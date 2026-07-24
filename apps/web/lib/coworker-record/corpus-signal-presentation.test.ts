@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { presentCorpusSignals } from "./corpus-signals";
-import type { ProfessionCorpusSignals } from "./corpus-signals";
+import { presentCorpusSignals } from "./corpus-signal-presentation";
+import type { CorpusSignalTotals } from "./corpus-signal-presentation";
 
 function totals(
-  overrides: Partial<ProfessionCorpusSignals["totals"]> = {},
-): ProfessionCorpusSignals["totals"] {
+  overrides: Partial<CorpusSignalTotals> = {},
+): CorpusSignalTotals {
   return { injected: 0, missed: 0, openGaps: 0, injectionRatePct: null, ...overrides };
 }
 
