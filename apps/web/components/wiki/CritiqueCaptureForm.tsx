@@ -72,7 +72,9 @@ export function CritiqueCaptureForm() {
   const [finding, setFinding] = useState("");
   const [verdict, setVerdict] = useState<"" | CritiqueVerdict>("");
   const [verdictAuthority, setVerdictAuthority] = useState<"founder" | "designer">("founder");
-  const [screenshotRef, setScreenshotRef] = useState("");
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  // Bumped on reset to remount the uncontrolled file input so its filename clears.
+  const [shotKey, setShotKey] = useState(0);
   const [gitRef, setGitRef] = useState("");
   const [viewportWidth, setViewportWidth] = useState("");
   const [colorScheme, setColorScheme] = useState<"" | "light" | "dark">("");
@@ -95,11 +97,35 @@ export function CritiqueCaptureForm() {
     setRoute("");
     setFinding("");
     setVerdict("");
-    setScreenshotRef("");
+    setScreenshotFile(null);
+    setShotKey((k) => k + 1);
     setGitRef("");
     setViewportWidth("");
     setColorScheme("");
     setLenses(new Set());
+  }
+
+  // Upload the staged screenshot to the shared MediaAsset store and return its
+  // id. captureCritiqueEntry then anchors it to the entry's page and points
+  // screenshotRef at the session-gated /api/critique-media URL.
+  async function uploadScreenshot(
+    file: File,
+  ): Promise<{ ok: true; assetId: string } | { ok: false; error: string }> {
+    const body = new FormData();
+    body.append("file", file);
+    let res: Response;
+    try {
+      res = await fetch("/api/media", { method: "POST", body });
+    } catch {
+      return { ok: false, error: "Could not reach the server to upload the screenshot." };
+    }
+    const payload = (await res.json().catch(() => null)) as
+      | { assetId?: string; error?: string }
+      | null;
+    if (!res.ok || !payload?.assetId) {
+      return { ok: false, error: payload?.error ?? `Screenshot upload failed (${res.status}).` };
+    }
+    return { ok: true, assetId: payload.assetId };
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -108,12 +134,22 @@ export function CritiqueCaptureForm() {
     setSaved(false);
     const width = viewportWidth.trim() ? Number(viewportWidth.trim()) : null;
     startTransition(async () => {
+      let screenshotAssetId: string | null = null;
+      if (screenshotFile) {
+        const uploaded = await uploadScreenshot(screenshotFile);
+        if (!uploaded.ok) {
+          setError(uploaded.error);
+          return;
+        }
+        screenshotAssetId = uploaded.assetId;
+      }
+
       const result = await captureCritiqueEntry({
         title,
         callerKind: "human",
         route,
         finding,
-        screenshotRef: screenshotRef.trim() || null,
+        screenshotAssetId,
         gitRef: gitRef.trim() || null,
         viewportWidth: width !== null && Number.isFinite(width) ? width : null,
         colorScheme: colorScheme || null,
@@ -203,15 +239,23 @@ export function CritiqueCaptureForm() {
         </summary>
 
         <div className="mt-3 flex flex-col gap-3">
-          <TextField
-            name="critique-shot"
-            label="Screenshot reference"
-            value={screenshotRef}
-            onValueChange={setScreenshotRef}
-            optional
-            inputClassName="bg-[var(--dpf-surface-1)]"
-            placeholder="capture/workspace-390-light.png"
-          />
+          <div className="flex flex-col gap-1">
+            <label htmlFor="critique-shot" className="text-xs text-[var(--dpf-muted)]">
+              Screenshot <span className="text-[var(--dpf-muted)]">(optional)</span>
+            </label>
+            <input
+              id="critique-shot"
+              key={shotKey}
+              name="critique-shot"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={(e) => setScreenshotFile(e.target.files?.[0] ?? null)}
+              className="text-sm text-[var(--dpf-text)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--dpf-surface-3)] file:px-3 file:py-1 file:text-sm file:text-[var(--dpf-text)]"
+            />
+            <p className="text-xs text-[var(--dpf-muted)]">
+              Stored with the entry and served only to signed-in reviewers.
+            </p>
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <TextField
               name="critique-git"

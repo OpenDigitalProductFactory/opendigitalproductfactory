@@ -17,11 +17,15 @@
 //     eligible. A judge calibrated on agent-authored verdicts is calibrated
 //     against itself.
 
+import { prisma } from "@dpf/db";
 import { saveWikiOverlayEdit } from "@/lib/actions/wiki-edit";
 import { buildCraftOverrideSlug } from "@/lib/wiki/craft-override";
+import { attachMedia } from "@/lib/media";
 import {
   critiqueEntryToMetadata,
+  critiqueScreenshotUrl,
   validateCritiqueEntry,
+  CRITIQUE_SCREENSHOT_ROLE,
   type CritiqueEntry,
 } from "@/lib/ux-critique/critique-entry";
 
@@ -37,10 +41,28 @@ export type CaptureCritiqueEntryInput = {
    * sets this from the authenticated principal, never the client.
    */
   callerKind: "human" | "agent";
+  /**
+   * A MediaAsset id for an already-uploaded screenshot (from POST /api/media).
+   * When present it takes precedence over any raw `screenshotRef`: the asset is
+   * attached to this entry's WikiPage and `screenshotRef` is set to the
+   * session-gated retrieval URL. This is how the founder-facing form supplies a
+   * real, durable image rather than a hand-typed string.
+   */
+  screenshotAssetId?: string | null;
 } & Partial<CritiqueEntry>;
 
 export type CaptureCritiqueEntryResult =
-  | { ok: true; slug: string; status: string }
+  | {
+      ok: true;
+      slug: string;
+      status: string;
+      /**
+       * Present only when a screenshot was supplied. `false` means the entry
+       * was captured but the image could not be anchored to its page and needs
+       * re-attaching; the finding itself is safely stored either way.
+       */
+      screenshotAttached?: boolean;
+    }
   | { ok: false; error: string };
 
 export async function captureCritiqueEntry(
@@ -65,7 +87,33 @@ export async function captureCritiqueEntry(
     };
   }
 
-  const validated = validateCritiqueEntry(input);
+  // An uploaded screenshot (a MediaAsset id from POST /api/media) becomes the
+  // entry's durable image. Verify it belongs to this org before trusting the
+  // client-supplied id, then repoint screenshotRef at the session-gated URL so
+  // the raw string can never leak the public /api/media path.
+  let screenshotAssetId: string | null = null;
+  let orgId: string | null = null;
+  let effectiveInput: CaptureCritiqueEntryInput = input;
+  if (input.screenshotAssetId) {
+    const org = await prisma.organization.findFirst({ select: { id: true } });
+    const asset = org
+      ? await prisma.mediaAsset.findFirst({
+          where: { id: input.screenshotAssetId, organizationId: org.id, kind: "image" },
+          select: { id: true },
+        })
+      : null;
+    if (!org || !asset) {
+      return {
+        ok: false,
+        error: "That screenshot upload was not found — re-attach the image and try again.",
+      };
+    }
+    orgId = org.id;
+    screenshotAssetId = asset.id;
+    effectiveInput = { ...input, screenshotRef: critiqueScreenshotUrl(asset.id) };
+  }
+
+  const validated = validateCritiqueEntry(effectiveInput);
   if (!validated.ok) {
     return { ok: false, error: validated.error };
   }
@@ -89,5 +137,35 @@ export async function captureCritiqueEntry(
   if (!result.ok) {
     return { ok: false, error: result.error };
   }
-  return { ok: true, slug: result.slug, status: result.status };
+
+  // Anchor the screenshot to the freshly-created page. screenshotRef already
+  // points here; this attachment is the durability anchor AND the scope the
+  // serve route checks, so it must exist for the image to be released. Do it
+  // after we have the pageId. The finding is the primary artifact, so an attach
+  // failure is surfaced rather than fatal — the entry is still captured.
+  if (screenshotAssetId && orgId) {
+    try {
+      await attachMedia({
+        organizationId: orgId,
+        mediaAssetId: screenshotAssetId,
+        ownerType: "WikiPage",
+        ownerId: result.pageId,
+        role: CRITIQUE_SCREENSHOT_ROLE,
+      });
+    } catch {
+      return {
+        ok: true,
+        slug: result.slug,
+        status: result.status,
+        screenshotAttached: false,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    slug: result.slug,
+    status: result.status,
+    ...(screenshotAssetId ? { screenshotAttached: true } : {}),
+  };
 }

@@ -3,6 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const saveWikiOverlayEdit = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/actions/wiki-edit", () => ({ saveWikiOverlayEdit }));
 
+const organizationFindFirst = vi.hoisted(() => vi.fn());
+const mediaAssetFindFirst = vi.hoisted(() => vi.fn());
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    organization: { findFirst: organizationFindFirst },
+    mediaAsset: { findFirst: mediaAssetFindFirst },
+  },
+}));
+
+const attachMedia = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/media", () => ({ attachMedia }));
+
 import { captureCritiqueEntry } from "./critique-entry";
 import { CRITIQUE_ENTRY_METADATA_KIND } from "@/lib/ux-critique/critique-entry";
 
@@ -16,6 +28,9 @@ beforeEach(() => {
     slug: "craft/ux-design/workspace-lead-band",
     status: "draft",
   });
+  organizationFindFirst.mockReset().mockResolvedValue({ id: "org1" });
+  mediaAssetFindFirst.mockReset().mockResolvedValue({ id: "asset1" });
+  attachMedia.mockReset().mockResolvedValue("attach1");
 });
 
 describe("captureCritiqueEntry", () => {
@@ -114,5 +129,61 @@ describe("captureCritiqueEntry", () => {
       finding: GOOD_FINDING,
     });
     expect(result).toEqual({ ok: false, error: "org missing" });
+  });
+
+  describe("uploaded screenshot", () => {
+    it("points screenshotRef at the session-gated URL and anchors the asset to the page", async () => {
+      const result = await captureCritiqueEntry({
+        title: "Admin panel density",
+        callerKind: "human",
+        route: "/admin",
+        finding: GOOD_FINDING,
+        screenshotAssetId: "asset1",
+      });
+
+      expect(result).toMatchObject({ ok: true, screenshotAttached: true });
+      // Never the public /api/media path — a critique of /admin must not be
+      // servable by capability URL.
+      const arg = saveWikiOverlayEdit.mock.calls[0]![0];
+      expect(arg.metadata.screenshotRef).toBe("/api/critique-media/asset1");
+      expect(attachMedia).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: "org1",
+          mediaAssetId: "asset1",
+          ownerType: "WikiPage",
+          ownerId: "p1",
+          role: "critique-screenshot",
+        }),
+      );
+    });
+
+    it("rejects a screenshot asset id that is not in the org (no page written)", async () => {
+      mediaAssetFindFirst.mockResolvedValue(null);
+      const result = await captureCritiqueEntry({
+        title: "Forged ref",
+        callerKind: "human",
+        route: "/admin",
+        finding: GOOD_FINDING,
+        screenshotAssetId: "not-mine",
+      });
+      expect(result.ok).toBe(false);
+      expect(saveWikiOverlayEdit).not.toHaveBeenCalled();
+      expect(attachMedia).not.toHaveBeenCalled();
+    });
+
+    it("still captures the entry when the attach fails, flagging it for re-attach", async () => {
+      attachMedia.mockRejectedValue(new Error("attach exploded"));
+      const result = await captureCritiqueEntry({
+        title: "Attach fails",
+        callerKind: "human",
+        route: "/admin",
+        finding: GOOD_FINDING,
+        screenshotAssetId: "asset1",
+      });
+      // The finding is the primary artifact — a failed image anchor does not
+      // discard it, but the caller learns the image needs re-attaching.
+      expect(result).toMatchObject({ ok: true, screenshotAttached: false });
+      expect(saveWikiOverlayEdit).toHaveBeenCalled();
+    });
   });
 });
