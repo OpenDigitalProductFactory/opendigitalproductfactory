@@ -128,6 +128,65 @@ def codex_competitive_plugin_ids(skill_pack: Optional[Path] = None) -> list[str]
     return []
 
 
+def grok_competitive_plugin_ids(skill_pack: Optional[Path] = None) -> list[str]:
+    policy = load_process_spine_cleanup_policy(skill_pack)
+    for client in policy.get("clients", []):
+        if client.get("client") == "grok":
+            ids = client.get("competitivePluginIds")
+            if isinstance(ids, list):
+                return [str(item) for item in ids if str(item)]
+    return []
+
+
+def _grok_plugin_active(plugins: list[Any], plugin_id: str) -> bool:
+    for plugin in plugins:
+        if isinstance(plugin, dict) and plugin.get("name") == plugin_id:
+            return plugin.get("enabled") is not False
+    return False
+
+
+def probe_grok_exposed_skills(skill_pack: Path) -> Optional[list[str]]:
+    """Grok active-skill exposure adapter (BI-BCA162CF), Python-fallback mirror.
+
+    `grok plugin list --json` is Grok's OWN plugin registry, not a filesystem
+    check — install_grok_plugin() above already depends on the same command's
+    `name` field to detect an existing dpf-platform install, so this is not a
+    new, unverified surface. It is materially stronger evidence than checking
+    whether a SKILL.md file exists in the managed copy on disk. See the Node
+    twin (hooks/grok-skill-exposure-adapter.mjs) for the full fidelity note on
+    why Codex and Antigravity do NOT get an equivalent adapter: neither has a
+    discoverable non-interactive active-skill-list mechanism.
+
+    Returns None (leave exposure unknown) whenever Grok is absent or the probe
+    fails — never a falsely-empty "verified" list.
+    """
+    grok = resolve_grok_binary()
+    if not grok:
+        return None
+    try:
+        result = subprocess.run([grok, "plugin", "list", "--json"], capture_output=True, text=True)
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        plugins = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(plugins, list):
+        return None
+
+    replacements = load_process_spine_contract(skill_pack)
+    exposed: set[str] = set()
+    if _grok_plugin_active(plugins, PLUGIN_NAME):
+        for entry in replacements:
+            exposed |= _dpf_aliases(entry)
+    if any(_grok_plugin_active(plugins, plugin_id) for plugin_id in grok_competitive_plugin_ids(skill_pack)):
+        for entry in replacements:
+            exposed |= _retired_aliases(entry)
+    return sorted(item for item in exposed if item)
+
+
 def _normalize_skill_id(value: object) -> str:
     return str(value or "").strip().lstrip("$@").lower()
 
@@ -482,6 +541,21 @@ def ensure_codex_config(
     dry_run: bool,
     skill_pack: Optional[Path] = None,
 ) -> bool:
+    # NOTE (BI-BCA162CF): the `[plugins."<id>"].enabled` toggles this function
+    # writes/reads here are Codex's PERSISTED CONFIG STATE, not a non-interactive
+    # active-skill-list API. There is no known non-interactive Codex command
+    # that enumerates the skills actually loaded/exposed in the running
+    # session -- `codex exec --json` startup events carry no plugin/skill field
+    # (docs/superpowers/audits/evidence/2026-04-29-codex-cli-jsonl-probe.md).
+    # Feeding a config-toggle read into the shared DPF_PROCESS_SPINE_EXPOSED_
+    # SKILLS_* channel would misrepresent "configured enabled" as "verified
+    # loaded" (Codex also gates every hook behind interactive HOOK TRUST, so
+    # enabled=true configuration is not proof a session honored it -- see
+    # guard_liveness_advisory() below). Grok gets a real adapter
+    # (probe_grok_exposed_skills / hooks/grok-skill-exposure-adapter.mjs)
+    # because `grok plugin list --json` answers the client's OWN runtime
+    # state, not just a config file. Codex remains a documented gap until it
+    # ships an equivalent command.
     path = codex_config_path(home)
     text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
     text = upsert_toml_table(
@@ -1075,9 +1149,14 @@ def main(argv: list[str]) -> int:
     process_spine_root = skill_pack if args.dry_run else managed
     if not process_spine_contract_path(process_spine_root).exists():
         process_spine_root = skill_pack
+    exposed_skills = exposed_process_spine_skills_from_env()
+    if exposed_skills is None:
+        # No explicit evidence channel set; try the Grok live-probe adapter
+        # before falling back to "unknown" (BI-BCA162CF).
+        exposed_skills = probe_grok_exposed_skills(process_spine_root)
     process_spine_verdict = assess_process_spine_health(
         process_spine_root,
-        exposed_skills=exposed_process_spine_skills_from_env(),
+        exposed_skills=exposed_skills,
     )
     for line in render_process_spine_health(process_spine_verdict):
         print(line)

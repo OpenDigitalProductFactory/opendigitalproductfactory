@@ -301,7 +301,21 @@ info "DPF MCP token    : $([ $HAS_TOKEN      -eq 1 ] && echo present || echo mis
 info "Skill pack ver.  : $EXPECTED_VERSION"
 
 PROCESS_SPINE_CHECK="$REPO_ROOT/packages/dpf-skill-pack/hooks/process-spine-health-check.mjs"
+GROK_SKILL_EXPOSURE_ADAPTER="$REPO_ROOT/packages/dpf-skill-pack/hooks/grok-skill-exposure-adapter.mjs"
 if command -v node >/dev/null 2>&1 && [ -f "$PROCESS_SPINE_CHECK" ]; then
+  # Grok active-skill exposure adapter (BI-BCA162CF): `grok plugin list --json`
+  # is a genuine non-interactive evidence source, so populate the shared env
+  # channel from it when nothing has already supplied evidence. Never
+  # overwrite evidence the operator/CI already set explicitly.
+  if [ -z "${DPF_PROCESS_SPINE_EXPOSED_SKILLS_JSON:-}" ] \
+     && [ -z "${DPF_PROCESS_SPINE_EXPOSED_SKILLS_FILE:-}" ] \
+     && [ -z "${DPF_PROCESS_SPINE_EXPOSED_SKILLS:-}" ] \
+     && [ "$GROK_PRESENT" -eq 1 ] && [ -f "$GROK_SKILL_EXPOSURE_ADAPTER" ]; then
+    _grok_exposed_skills="$(node "$GROK_SKILL_EXPOSURE_ADAPTER" --skill-pack-root "$REPO_ROOT/packages/dpf-skill-pack" 2>/dev/null)" || _grok_exposed_skills=""
+    if [ -n "$_grok_exposed_skills" ]; then
+      export DPF_PROCESS_SPINE_EXPOSED_SKILLS_JSON="$_grok_exposed_skills"
+    fi
+  fi
   node "$PROCESS_SPINE_CHECK" --skill-pack-root "$REPO_ROOT/packages/dpf-skill-pack" || true
 else
   warn "Process spine skill exposure check could not run (node or checker missing)."

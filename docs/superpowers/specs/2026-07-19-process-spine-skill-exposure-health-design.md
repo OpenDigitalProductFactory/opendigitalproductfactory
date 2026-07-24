@@ -197,3 +197,66 @@ never product evidence.
 Follow-up: `BI-4D852EC2` tracks the remaining root-cause repair when the
 dedicated local-CI scratch runner recreates a stale or incomplete Vitest package
 even after native pnpm convergence and scoped scratch `node_modules` reset.
+
+## Client Exposure Adapters (BI-BCA162CF)
+
+`BI-BCA162CF` asked for per-client adapters that populate
+`DPF_PROCESS_SPINE_EXPOSED_SKILLS_JSON`/`_FILE` from each external client's own
+active-skill state, closing the proxy gap this spec's "Known Limit" section
+described. Fresh research across the four clients this spec names (Codex,
+Claude, Grok, Antigravity) found exactly one genuine, already-precedented,
+non-interactive command that answers "what does this client's own runtime
+currently recognize": Grok's `grok plugin list --json` (already depended on by
+`update_agent_toolchain.py`'s `install_grok_plugin` to detect an existing
+`dpf-platform` install).
+
+**Shipped:** `packages/dpf-skill-pack/hooks/grok-skill-exposure-adapter.mjs`
+(and its Python-fallback mirror, `probe_grok_exposed_skills` in
+`update_agent_toolchain.py`) run `grok plugin list --json`, map plugin-level
+presence onto the five DPF replacement skill ids (and the three retired
+`superpowers`-family ids from `process-spine-replacements.json`'s
+`cleanupPolicy`), and feed the result into the shared evidence channel. Both
+`scripts/dpf-bootstrap-agent-toolchain.sh` and its PowerShell sibling call the
+adapter before invoking the health checker, only when no explicit evidence
+channel is already set (never overriding operator/CI-supplied evidence). This
+turns Grok's exposure state from `unknown` into `verified` on any host with the
+Grok CLI present, and reproduces the exact "retired `brainstorming` skill
+visible while its `dpf-brainstorming` replacement is hidden" conflict case
+from this spec's Problem statement as a passing regression test.
+
+**Not shipped, by design — documented gap, not a fabricated adapter:**
+
+- **Codex**: no non-interactive command was found that lists actively
+  loaded/exposed skills. `codex exec --json` startup events carry no
+  plugin/skill field (verified against
+  `docs/superpowers/audits/evidence/2026-04-29-codex-cli-jsonl-probe.md`).
+  Codex's `~/.codex/config.toml` `[plugins."<id>"].enabled` toggle (already
+  read/written by `ensure_codex_config`) is persisted CONFIGURATION, not a
+  verified session state — and Codex separately gates every hook behind
+  interactive HOOK TRUST (`codex_hook_trust_established`), so `enabled = true`
+  is not proof a given session honored it. Feeding that toggle into
+  `DPF_PROCESS_SPINE_EXPOSED_SKILLS_*` would flip the health checker's
+  `exposed.state` to `"verified"` on evidence that does not actually verify
+  the session — worse than the honest `"unknown"` it renders today.
+- **Antigravity**: no discoverable non-interactive skill-list mechanism for
+  the `agy` CLI; its MCP-config wiring path itself is still evidence-gated
+  (`EP-ANTIGRAVITY-001` / `BI-ECAE3494`).
+- **Claude Code** (this platform's own first-party client): also has no
+  enumerable active-skill-list surface at `SessionStart` — skills are
+  triggered by description matching during a turn, not enumerated up front.
+  Out of the four clients this spec names as in-scope proxies, but noted here
+  for completeness since it is the host running this very check.
+
+A future Codex/Claude/Antigravity client release that ships a genuine
+non-interactive active-skill-list command should get the same adapter
+treatment as Grok: a small, independently-testable module under
+`packages/dpf-skill-pack/hooks/`, wired into the bootstrap scripts ahead of the
+shared health checker, never overriding operator/CI-supplied evidence.
+
+Design-Grounding-Decision: reviewed this spec's own "Known Limit"/Follow-up
+section (which named `BI-BCA162CF`), `process-spine-health-check.mjs`'s env-
+channel contract, and `update_agent_toolchain.py`'s existing
+`install_grok_plugin`/`codex_competitive_plugin_ids` substrate before adding
+the Grok adapter; extended this spec in place rather than authoring a new
+design doc, since the addition is client-adapter scope within the exposure
+contract this document already owns.

@@ -722,5 +722,87 @@ class CodexHookTrustTest(unittest.TestCase):
             self.assertEqual(code, 2)
 
 
+class ProbeGrokExposedSkillsTest(unittest.TestCase):
+    """Grok active-skill exposure adapter, Python-fallback mirror (BI-BCA162CF)."""
+
+    def setUp(self) -> None:
+        self.skill_pack = Path(__file__).resolve().parents[1]
+
+    def test_returns_none_when_grok_binary_not_found(self) -> None:
+        with patch.object(updater, "resolve_grok_binary", return_value=None):
+            self.assertIsNone(updater.probe_grok_exposed_skills(self.skill_pack))
+
+    def test_returns_none_on_nonzero_exit(self) -> None:
+        fake_result = unittest.mock.Mock(returncode=1, stdout="")
+        with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
+            "subprocess.run", return_value=fake_result
+        ):
+            self.assertIsNone(updater.probe_grok_exposed_skills(self.skill_pack))
+
+    def test_returns_none_on_invalid_json(self) -> None:
+        fake_result = unittest.mock.Mock(returncode=0, stdout="not json")
+        with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
+            "subprocess.run", return_value=fake_result
+        ):
+            self.assertIsNone(updater.probe_grok_exposed_skills(self.skill_pack))
+
+    def test_exposes_all_dpf_replacements_when_dpf_platform_plugin_active(self) -> None:
+        fake_result = unittest.mock.Mock(
+            returncode=0, stdout=json.dumps([{"name": updater.PLUGIN_NAME}])
+        )
+        with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
+            "subprocess.run", return_value=fake_result
+        ):
+            exposed = updater.probe_grok_exposed_skills(self.skill_pack)
+        self.assertIsNotNone(exposed)
+        for entry in updater.load_process_spine_contract(self.skill_pack):
+            self.assertIn(entry["dpfSkill"], exposed)
+        self.assertFalse(any(item.startswith("superpowers") for item in exposed))
+
+    def test_exposes_retired_surface_ids_when_competitive_plugin_active(self) -> None:
+        fake_result = unittest.mock.Mock(returncode=0, stdout=json.dumps([{"name": "superpowers"}]))
+        with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
+            "subprocess.run", return_value=fake_result
+        ):
+            exposed = updater.probe_grok_exposed_skills(self.skill_pack)
+        self.assertIn("brainstorming", exposed)
+        self.assertIn("superpowers:brainstorming", exposed)
+        self.assertNotIn("dpf-brainstorming", exposed)
+
+    def test_honors_explicit_enabled_false_without_requiring_the_field(self) -> None:
+        fake_result = unittest.mock.Mock(
+            returncode=0, stdout=json.dumps([{"name": updater.PLUGIN_NAME, "enabled": False}])
+        )
+        with patch.object(updater, "resolve_grok_binary", return_value="/fake/grok"), patch(
+            "subprocess.run", return_value=fake_result
+        ):
+            exposed = updater.probe_grok_exposed_skills(self.skill_pack)
+        self.assertEqual(exposed, [])
+
+    def test_main_prefers_explicit_env_evidence_over_the_grok_probe(self) -> None:
+        # exposed_process_spine_skills_from_env() must win when the operator/CI
+        # already set an explicit evidence channel; the live probe is only a
+        # fallback for when nothing else answered the question.
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(
+                os.environ,
+                {
+                    "DPF_AGENT_TOOLCHAIN_HOME": tmp,
+                    "DPF_PROCESS_SPINE_EXPOSED_SKILLS_JSON": json.dumps(["dpf-brainstorming"]),
+                },
+                clear=False,
+            ), patch.object(updater, "probe_grok_exposed_skills") as mock_probe:
+                code = updater.main(
+                    [
+                        "--skill-pack-path",
+                        str(self.skill_pack),
+                        "--skip-claude-cli-install",
+                        "--skip-grok-cli-install",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            mock_probe.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
