@@ -205,3 +205,30 @@ in both guard test files — including the evidence-post repro verbatim.
 Codex remains **fail-open until the operator grants hook trust** (§11). There is still no supported non-interactive trust API ([openai/codex#21615](https://github.com/openai/codex/issues/21615)); forging `[hooks.state.*] trusted_hash` entries is explicitly out of scope (version-specific, brittle).
 
 **Fix:** the standalone installer (`update_agent_toolchain.py`) now (1) **merges** the five blocking plane-1 guards into `~/.codex/hooks.json` (Bash + AskUserQuestion matchers, preserving foreign hooks), (2) **detects** absent hook-trust state (`hooks.state` / `[hooks.state.*] trusted_hash` in `config.toml`), and (3) prints an **ACTION REQUIRED** block with the hook roster (BI-276EC984) plus optional exit code `2` when `--require-codex-hook-trust` or `DPF_REQUIRE_CODEX_HOOK_TRUST=1` is set. This converts the silent fail-open into a blocking install-time instruction — the acceptance path allowed when automation is impossible.
+
+## 14. Post-incident addendum (2026-07-23): Gate A vocabulary gap — delivery worked, **logic** failed (BI-0F0BE69A)
+
+§9's bypass was delivery, not logic — `decide()` returned `block:true` on the escaping payload, the hook simply never registered. **This incident is the exact inverse: the hook was registered, was reached, and returned `block:false` on a genuine platform/build decision.**
+
+**Incident.** While scoping the customer incumbent-application coverage capability, an external coding agent put three questions to the operator in one `AskUserQuestion` call: epic sequencing across three epics (`EP-ASSET-INTELLIGENCE` vs a new epic vs `BI-ECO-001` first), a **change to the closed `SETUP_STEPS` contract** (adding a 12th onboarding step), and build-scope depth. Replaying the recorded payload through the hook binary returned exit 0 with no deny. The operator caught it, not the harness.
+
+**Root cause — register mismatch, not strength.** `DECISION_LANGUAGE` matched only *engineering* register: `architectur`, `spec`, `schema`, `migration`, `implement`, `refactor`, `which <engineering-noun>`, `option 1|2|3`, and `how (should|far|do) (we|i|you)`. The questions were phrased in *product/roadmap* register and matched nothing:
+
+- `/how\s+(?:should|far|do)\s+(?:we|i|you)\b/` **required a pronoun**. "How should **this scope** enter the roadmap" and "How **ambitious** should the output be" both slipped past a pattern that exists to catch precisely them.
+- `roadmap`, `epic`, `backlog`, `scope`, `phase`, `sequencing`, `wizard step`, `prioritize`, `fold into` were absent from the vocabulary entirely.
+- The `header` field is concatenated into the matched text but contributed no matching token either ("Scope shape", "Onboarding", "Sales artifact").
+
+The generalizable lesson: **scoping and epic-sequencing work is normally *thought* in delivery register**, so the register that most needs Gate A was the one register it could not see. A vocabulary allow-list calibrated on one professional dialect silently exempts every adjacent dialect.
+
+**Fix (three layers, `packages/dpf-skill-pack/hooks/decision-routing-guard.mjs`).**
+1. **Pronoun relaxation** — `how (should|far|do|much|many|deep|ambitious|aggressive|broad|big)` no longer requires `we|i|you`.
+2. **`DELIVERY_LANGUAGE`** — a second vocabulary covering the delivery register: roadmap, epic, backlog, sequencing, numbered phase, scope, wizard/setup/onboarding step, prioritize, fold into, build/ship first|now|later|order, first pass.
+3. **`TECHNICAL_ARTIFACT`** — a *structural* signal that needs no vocabulary at all: a question carrying a code identifier is by construction about the codebase. Patterns: semantic ids (`BI-`/`EP-`/`DI-`/`PR-`/`DOC-`/`AGT-`), `SCREAMING_SNAKE` constants, source filenames, and `packages/|apps/|scripts/|services/|docs/` repo paths. This is the highest-precision layer — it caught two of the three escaping questions on identifiers alone (`EP-ASSET-INTELLIGENCE`, `BI-ECO-001`, `SETUP_STEP`) — and is structurally inert against naming/branding/market questions.
+
+**False-positive posture, revisited.** The original file asserted "false-positive control is the NARROW scope, not the block strength." That framing is what produced this gap: narrowness was tuned against one dialect. The revised posture is that **precision comes from signal quality, not vocabulary scarcity** — hence layer 3, which widens coverage while *lowering* false-positive risk. Acronyms without underscores (`SMB`, `HOA`, `CRM`) are deliberately not `SCREAMING_SNAKE` matches, so market-segment questions stay clear. Locked by regression tests asserting pricing, hiring, tagline, and market-segment questions still pass.
+
+**Verification.** The three escaping questions are now regression fixtures (verbatim). 13/13 in `decision-routing-guard.test.mjs`, 175/175 across the skill-pack hook suite, and the recorded payload replayed through the hook binary end-to-end now emits the dual-envelope deny.
+
+**Evidence the gate was load-bearing.** After correction, the three decisions were routed through `principle_decide` (`DI-B4B65B293024`, `DI-5C75BC6ACAFC`, `DI-41949223919C`). On the scope-shape decision the kernel **inverted** the agent's pre-decided answer with high confidence — `fold-into-sam` 17.04 vs the agent's preferred `thin-keystone-epic` 13.55 (margin 2.56, tieMargin 0.2, no commandment conflict), with *Architecture Over Shortcuts*, *Optimize for the Whole* and *Proper Fix Over Quick Fix* the discriminating contributors. The agent's instinct was not merely unverified; it was wrong. Gate A existed to force that consultation and did not fire.
+
+**Residual.** The guard remains a heuristic over natural language and will always have a tail. Layer 3 is the durable part — a structural signal that does not depend on predicting phrasing. A stronger future signal would be semantic (embed the question, compare against the decision-class centroid) rather than lexical; deferred as tuning, not filed as a blocker.
