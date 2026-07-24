@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 547,
+  "pageCount": 549,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -398,6 +398,15 @@
         "related"
       ]
     },
+    "docs/architecture/agent-skill-index.md": {
+      "publicHref": "/architecture/agent-skill-index/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "dpf-platform-skill-index"
+      ]
+    },
     "docs/architecture/agent-standards-dpf-conformance.md": {
       "publicHref": "/architecture/agent-standards-dpf-conformance/",
       "portalHref": null,
@@ -736,6 +745,15 @@
         "31-restraint-thresholds",
         "32-specific-over-engineering-reflexes-to-skip",
         "how-this-doc-evolves"
+      ]
+    },
+    "docs/architecture/enforced-ci-gates.md": {
+      "publicHref": "/architecture/enforced-ci-gates/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "enforced-ci-gates-trigger-trailer-mechanics"
       ]
     },
     "docs/architecture/field-service-work-item.md": {
