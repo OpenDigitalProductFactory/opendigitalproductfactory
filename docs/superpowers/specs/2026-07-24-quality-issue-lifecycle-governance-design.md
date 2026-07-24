@@ -87,6 +87,45 @@ the operator's database, which CI has no access to. The honest split is:
   install, auto-resolve what declares itself auto-resolvable, and file/route the
   rest. Needs the registry as its prerequisite, which this delivers.
 
+## Phase 2 — the runtime sweep (`quality-issue-drift-sweep`)
+
+Phase 1 is the compile-time gate. Phase 2 makes each type's declared lifecycle
+LIVE on the operator's install, as a scheduled inngest sweep
+(`governance/quality-issue-drift-sweep-scheduled`, daily 05:23, quiescence-gated,
+concurrency 1) delegating to the pure `runQualityIssueDriftSweep(db)`
+(`packages/db/src/quality-issue-drift-sweep.ts`):
+
+1. **Self-heal backstop.** Closes open `stale_entity` / `stale_relationship`
+   rows whose FK-linked entity/relationship is now `active` (recovered by a
+   *different* source than the one that marked it stale) or gone (deleted). The
+   common recovery case is already handled in-sweep by discovery-sync; this is
+   the global backstop for what per-source reconcile misses.
+
+2. **Drift detection.** Compares live open counts to each type's declared
+   `expectedSteadyState` and returns every over-budget queue, worst-first, with
+   its owner. This is the runtime analogue of the compile-time gate: a NEW
+   detector that starts accumulating is surfaced automatically.
+
+**Why not an open-count CI ratchet.** The `module-size-baseline.txt` pattern
+cannot apply — the open count lives in the operator's database, which CI has no
+access to. Drift monitoring must run at runtime, which is what this sweep is.
+
+**Deliberate boundary.** The sweep does NOT file backlog items or route work.
+Turning drift into funded, routed work (drift → BI → weekly use-it-or-lose-it
+token budget → Build Studio / owning coworker) is the auto-processing
+orchestration owned by the holistic estate-management thread; it consumes the
+`drift` this returns. Keeping detection and routing apart avoids the
+backlog-flood failure mode a self-filing sweep has caused before. The existing
+`governed-backlog-tee-up` → Ideate → Build autopilot is the router it feeds.
+
+**Verified state at build (2026-07-24).** 388 open, of which **0** are
+FK-resolvable — discovery-sync's reconcile plus the arc's migrations already
+drained the mechanically-resolvable set, so the backstop resolves 0 today. Its
+standing value is (a) catching future cross-source recovery / deletion, and (b)
+making drift visible: `lifecycle_unverified` (178) and `catalog_match_ambiguous`
+(175) show as over-budget, owned by `coworker:estate-specialist` and already
+covered by the in-progress triage sprint BI-E4A86393.
+
 ## Out of scope / follow-ups (BI-0B420A1D)
 
 - **Runtime drift sweep + auto-processing loop**: detect drift → file/claim a BI →
