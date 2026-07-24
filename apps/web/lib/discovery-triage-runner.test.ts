@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@dpf/db", async () => {
+  return vi.importActual("../../../packages/db/src/index.ts");
+});
+
 import {
   maybeTriggerDiscoveryTriageForVolume,
   runDiscoveryTriageDaily,
