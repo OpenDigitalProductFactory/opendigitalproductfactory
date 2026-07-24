@@ -1,0 +1,103 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Operations backlog",
+    "Epic roadmap planning",
+    "Backlog workbook grids",
+    "MCP backlog tool responses",
+    "REST backlog and epic APIs",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260724120000_add_backlog_archetype_scope",
+    "backfill": "additive only. BacklogItem and Epic receive nullable scopeKind/scopeRationale fields and empty-array defaults for archetypeCategories, archetypeIds, and lifecycleTags. The backfill classifies rows only where existing durable signals are present: EP-FABRIC-CARE-OPS and its child items are fabric-care-services/dry-cleaning-plant-network; Industry Vertical Readiness epics map to known category or leaf slugs and child items inherit; finance/payroll/workforce/identity epics become common; platform lifecycle, UX, upgrade, Build Studio, tracking, and data-governance epics become platform. Ambiguous rows stay null/empty for operator review."
+  },
+  "tests": [
+    "packages/db/prisma/migrations/20260724120000_add_backlog_archetype_scope/migration.sql",
+    "packages/db/scripts/migration-safety-guard.test.ts",
+    "apps/web/lib/backlog-enums.test.ts",
+    "apps/web/lib/mcp/packs/backlog-pack.test.ts",
+    "apps/web/lib/workbooks/backlog-adapter-mapping.test.ts",
+    "apps/web/lib/api/__tests__/ops-endpoints.test.ts",
+    "scripts/check-data-impact.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:epic#archetype-scope",
+      "prismaModel": "Epic",
+      "lifecycleDisposition": "retained with the epic as planning metadata; archive/delete semantics remain unchanged and scope fields do not create new lifecycle ownership",
+      "fields": [
+        {
+          "fieldId": "data:epic#scopeKind",
+          "resolution": "governed",
+          "reason": "separates platform, common, category-specific, leaf-specific, multi-archetype, and unknown roadmap work without overloading portfolio alignment",
+          "provenance": "docs/architecture/backlog-archetype-scope.md; docs/superpowers/plans/2026-07-24-backlog-archetype-scope-metadata.md"
+        },
+        {
+          "fieldId": "data:epic#archetypeCategories",
+          "resolution": "governed",
+          "reason": "records the archetype category slugs served by the epic so portfolio review can see category gaps explicitly",
+          "provenance": "docs/architecture/backlog-archetype-scope.md"
+        },
+        {
+          "fieldId": "data:epic#archetypeIds",
+          "resolution": "governed",
+          "reason": "records leaf archetype slugs such as dry-cleaning-plant-network when work is specific to one business operating model",
+          "provenance": "docs/architecture/backlog-archetype-scope.md"
+        },
+        {
+          "fieldId": "data:epic#scopeRationale",
+          "resolution": "governed",
+          "reason": "keeps the human classification rationale close to the planning row so ambiguous items can be reviewed without reconstructing intent from titles",
+          "provenance": "docs/architecture/backlog-archetype-scope.md"
+        },
+        {
+          "fieldId": "data:epic#lifecycleTags",
+          "resolution": "governed",
+          "reason": "captures product/service lifecycle tags such as claim-ticket, ready-promise, booking, or invoice for roadmap and budget slicing",
+          "provenance": "docs/architecture/backlog-archetype-scope.md"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:backlog-item#archetype-scope",
+      "prismaModel": "BacklogItem",
+      "lifecycleDisposition": "retained with the backlog item as execution planning metadata; existing status, triage, claim, build, and completion lifecycles remain authoritative",
+      "fields": [
+        {
+          "fieldId": "data:backlog-item#scopeKind",
+          "resolution": "governed",
+          "reason": "lets individual items inherit, narrow, or override epic-level scope when one epic contains mixed platform/common/archetype work",
+          "provenance": "docs/architecture/backlog-archetype-scope.md; apps/web/lib/explore/backlog.ts"
+        },
+        {
+          "fieldId": "data:backlog-item#archetypeCategories",
+          "resolution": "governed",
+          "reason": "supports explicit category filtering in MCP tools, REST routes, and workbook review",
+          "provenance": "apps/web/lib/mcp/packs/backlog-pack.ts; apps/web/app/api/v1/ops/backlog/route.ts; apps/web/lib/workbooks/backlog-adapter-mapping.ts"
+        },
+        {
+          "fieldId": "data:backlog-item#archetypeIds",
+          "resolution": "governed",
+          "reason": "supports leaf-specific gap tracking for archetypes such as dry-cleaning-plant-network without creating a one-off portfolio",
+          "provenance": "docs/architecture/backlog-archetype-scope.md; apps/web/lib/mcp/packs/backlog-pack.ts"
+        },
+        {
+          "fieldId": "data:backlog-item#scopeRationale",
+          "resolution": "governed",
+          "reason": "preserves the operator or agent rationale for scope tagging so later roadmap reviews can correct the classification deliberately",
+          "provenance": "docs/architecture/backlog-archetype-scope.md"
+        },
+        {
+          "fieldId": "data:backlog-item#lifecycleTags",
+          "resolution": "governed",
+          "reason": "groups archetype-specific work by operating lifecycle step, for example claim-ticket custody versus ready-promise notifications",
+          "provenance": "docs/architecture/backlog-archetype-scope.md; apps/web/lib/workbooks/backlog-adapter-mapping.ts"
+        }
+      ]
+    }
+  ]
+}

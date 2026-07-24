@@ -47,6 +47,27 @@ The governed MCP backlog tools expose the scope fields on create, update, list, 
 
 Workbook backlog grids expose editable columns for scope review. This is the intended high-throughput operator path for tagging or correcting many backlog items after an archetype audit.
 
+## Design Grounding
+
+- Existing specs/plans reviewed:
+  - `AGENTS.md` Adding a business archetype doctrine.
+  - `docs/superpowers/specs/2026-07-21-archetype-provisioning-playbook-design.md`.
+  - `docs/superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md`.
+  - `docs/superpowers/specs/2026-06-21-portfolio-coverage-multisource-projection-design.md`.
+  - `docs/superpowers/plans/2026-07-24-backlog-archetype-scope-metadata.md`.
+- Current code substrate reviewed:
+  - `rg -n "archetype|StorefrontConfig|BacklogItem|Epic|Portfolio" apps/web packages docs`.
+  - `packages/db/prisma/schema.prisma`.
+  - `apps/web/lib/mcp/packs/backlog-pack.ts`.
+  - `apps/web/lib/explore/backlog.ts`.
+  - `apps/web/lib/workbooks/backlog-adapter-mapping.ts`.
+  - `apps/web/app/api/v1/ops/backlog/route.ts`.
+  - `apps/web/app/api/v1/ops/epics/route.ts`.
+- Source of truth:
+  - `Epic` and `BacklogItem` own planning scope metadata. `StorefrontConfig.archetypeId` remains the portal industry source of truth; backlog scope references archetype slugs for planning and gap tracking only.
+- Decision:
+  - Add an explicit planning facet instead of overloading portfolio alignment or product/service catalogs. Portfolio alignment remains the investment/container lens; `scopeKind`, `archetypeCategories`, `archetypeIds`, and `lifecycleTags` identify whether the work is platform, common, category-specific, leaf-specific, or still unknown.
+
 ## Planning Use
 
 Portfolio and roadmap reviews should use `scopeKind` first:
