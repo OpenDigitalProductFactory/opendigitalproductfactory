@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   adminActivityCreate: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-import { adminPack } from "./admin-pack";
+import { adminPack, composeCwd } from "./admin-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
 const EXPECTED_TOOLS = [
@@ -170,5 +170,38 @@ describe("admin pack — handler behavior (delegation preserved)", () => {
     const res = await adminPack.handlers.admin_read_file({}, "u1");
     expect(res.success).toBe(false);
     expect(res.error).toContain("path is required");
+  });
+});
+
+// BI-7A87A155 — admin_run_migration/admin_run_command/admin_run_seed/admin_view_logs
+// all shell out to `docker compose`, which resolves its config file from cwd.
+// PROJECT_ROOT (/workspace) is the Build Studio self-dev source volume: it is
+// image-synced and never carries docker-compose.yml, so every `docker compose`
+// call run from it failed with "no configuration file provided: not found".
+// DPF_REPO_ROOT (/host-dpf) is the live bind mount of the host's real install
+// directory and does carry the compose file.
+describe("admin pack — docker compose cwd resolution (BI-7A87A155)", () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  it("prefers DPF_REPO_ROOT over PROJECT_ROOT", () => {
+    process.env.DPF_REPO_ROOT = "/host-dpf";
+    process.env.PROJECT_ROOT = "/workspace";
+    expect(composeCwd()).toBe("/host-dpf");
+  });
+
+  it("falls back to PROJECT_ROOT when DPF_REPO_ROOT is unset", () => {
+    delete process.env.DPF_REPO_ROOT;
+    process.env.PROJECT_ROOT = "/workspace";
+    expect(composeCwd()).toBe("/workspace");
+  });
+
+  it("falls back to /app when neither is set", () => {
+    delete process.env.DPF_REPO_ROOT;
+    delete process.env.PROJECT_ROOT;
+    expect(composeCwd()).toBe("/app");
   });
 });

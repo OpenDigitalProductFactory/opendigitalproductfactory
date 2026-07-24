@@ -116,6 +116,17 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
+// `docker compose` resolves its config file from cwd. PROJECT_ROOT (/workspace)
+// is the Build Studio self-dev source volume — image-synced, no compose file
+// ever lands there (docker-entrypoint.sh only copies TS source). DPF_REPO_ROOT
+// (/host-dpf) is the live bind mount of the host's real install directory and
+// does carry docker-compose.yml, so it's the correct cwd for any `docker
+// compose` invocation (BI-7A87A155; mirrors the DPF_REPO_ROOT convention in
+// lib/verify/git-ancestry.ts and lib/work-capsules/mcp-handlers.ts).
+export function composeCwd(): string {
+  return process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "/app";
+}
+
 /** Fire-and-forget: log admin tool activity to AdminActivity for the audit trail. */
 function logAdminActivity(
   userId: string, toolName: string, parameters: Record<string, unknown>,
@@ -138,7 +149,7 @@ async function adminViewLogs(params: Record<string, unknown>, userId: string): P
     const { promisify } = lazyUtil();
     const execAsync = promisify(execCb);
     const { stdout } = await execAsync(`docker compose logs ${service} --tail ${lines} --no-color 2>&1`, {
-      cwd: process.env.PROJECT_ROOT || "/app",
+      cwd: composeCwd(),
       timeout: 15_000,
     });
     await logAdminActivity(userId, "admin_view_logs", { service, lines }, "success", 1, stdout.slice(0, 500));
@@ -278,7 +289,7 @@ async function adminRunMigration(_params: Record<string, unknown>, userId: strin
     await logAdminActivity(userId, "admin_run_migration", {}, "success", 2, "Running prisma migrate deploy");
     const { stdout, stderr } = await execAsync(
       `docker compose exec -T portal pnpm --filter @dpf/db exec prisma migrate deploy 2>&1`,
-      { cwd: process.env.PROJECT_ROOT || "/app", timeout: 120_000 },
+      { cwd: composeCwd(), timeout: 120_000 },
     );
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: "Migration deploy complete.", data: { output: output.slice(0, 5000) } };
@@ -296,7 +307,7 @@ async function adminRunSeed(_params: Record<string, unknown>, userId: string): P
     await logAdminActivity(userId, "admin_run_seed", {}, "success", 2, "Running seed");
     const { stdout, stderr } = await execAsync(
       `docker compose exec -T portal pnpm --filter @dpf/db run seed 2>&1`,
-      { cwd: process.env.PROJECT_ROOT || "/app", timeout: 300_000 },
+      { cwd: composeCwd(), timeout: 300_000 },
     );
     const output = (stdout + "\n" + stderr).trim();
     return { success: true, message: "Seed complete.", data: { output: output.slice(0, 5000) } };
@@ -348,7 +359,7 @@ async function adminRunCommand(params: Record<string, unknown>, userId: string):
     const execAsync = promisify(execCb);
     await logAdminActivity(userId, "admin_run_command", { command }, "success", 2, `Running: ${command.slice(0, 200)}`);
     const { stdout, stderr } = await execAsync(command + " 2>&1", {
-      cwd: process.env.PROJECT_ROOT || "/app",
+      cwd: composeCwd(),
       timeout: 60_000,
     });
     const output = (stdout + "\n" + stderr).trim();
