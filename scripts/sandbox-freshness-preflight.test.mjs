@@ -6,7 +6,7 @@
 // reserved exit codes.
 // node --test scripts/sandbox-freshness-preflight.test.mjs — pure node, no docker.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -70,9 +70,12 @@ function scaffold({ installedVersions = {}, lockedVersions = {}, installedLockVe
   return root;
 }
 
-function runPreflight(root, extraArgs = []) {
+function runPreflight(root, extraArgs = [], options = {}) {
   const reportPath = join(root, "freshness-report.json");
-  const result = spawnSync("node", [cli, "--dir", root, "--report", reportPath, "--skip-install-scan", ...extraArgs], { encoding: "utf8" });
+  const result = spawnSync("node", [cli, "--dir", root, "--report", reportPath, "--skip-install-scan", ...extraArgs], {
+    encoding: "utf8",
+    env: options.env ? { ...process.env, ...options.env } : process.env,
+  });
   let report = null;
   try {
     report = JSON.parse(readFileSync(reportPath, "utf8"));
@@ -80,6 +83,59 @@ function runPreflight(root, extraArgs = []) {
     // missing report is asserted by callers where relevant
   }
   return { result, report };
+}
+
+function prependPathEnv(dir) {
+  return `${dir}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`;
+}
+
+function writeFakePnpmThatRepairsOnlyWithFreshStore(binDir) {
+  mkdirSync(binDir, { recursive: true });
+  const fake = join(binDir, "fake-pnpm.mjs");
+  writeFileSync(fake, `#!/usr/bin/env node
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const args = process.argv.slice(2);
+const root = process.cwd();
+writeFileSync(join(root, "pnpm-invocations.log"), args.join(" ") + "\\n", { flag: "a" });
+if (!args.includes("--store-dir")) process.exit(0);
+
+const lockfile = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
+mkdirSync(join(root, "node_modules", ".pnpm"), { recursive: true });
+writeFileSync(join(root, "node_modules", ".pnpm", "lock.yaml"), lockfile);
+const packages = [
+  ["next", "apps/web", "16.2.9"],
+  ["react", "apps/web", "19.2.7"],
+  ["react-dom", "apps/web", "19.2.7"],
+  ["typescript", ".", "5.9.3"],
+  ["prisma", "packages/db", "6.19.1"],
+  ["vitest", "apps/web", "4.1.10"],
+];
+for (const [name, importer, version] of packages) {
+  const storeDir = join(root, "node_modules", ".pnpm", name + "@" + version + "_freshstore", "node_modules", name);
+  mkdirSync(storeDir, { recursive: true });
+  writeFileSync(join(storeDir, "package.json"), JSON.stringify({ name, version }));
+  if (name === "vitest") {
+    mkdirSync(join(storeDir, "dist", "chunks"), { recursive: true });
+    writeFileSync(join(storeDir, "dist", "cli.js"), "import './chunks/cac.ok.js';\\n");
+    writeFileSync(join(storeDir, "dist", "chunks", "cac.ok.js"), "export default {};\\n");
+  }
+  const importerNodeModules = importer === "." ? join(root, "node_modules") : join(root, importer, "node_modules");
+  const linkPath = join(importerNodeModules, name);
+  rmSync(linkPath, { recursive: true, force: true });
+  mkdirSync(importerNodeModules, { recursive: true });
+  symlinkSync(storeDir, linkPath, process.platform === "win32" ? "junction" : "dir");
+}
+process.exit(0);
+`);
+  chmodSync(fake, 0o755);
+  if (process.platform === "win32") {
+    writeFileSync(join(binDir, "pnpm.cmd"), `@echo off\r\nnode "%~dp0fake-pnpm.mjs" %*\r\n`);
+  } else {
+    writeFileSync(join(binDir, "pnpm"), `#!/bin/sh\nexec node "${fake}" "$@"\n`);
+    chmodSync(join(binDir, "pnpm"), 0o755);
+  }
 }
 
 test("green when workspace links match the lockfile", () => {
@@ -205,5 +261,28 @@ test("--converge refuses a duplicate convergence while the lock is held", () => 
   assert.equal(result.status, 4, `${result.stdout}\n${result.stderr}`);
   assert.equal(report.convergence.attempted, false);
   assert.equal(report.convergence.reason, "convergence_lock_held");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("--converge falls back to a scratch-local pnpm store when the shared store keeps serving stale package content", () => {
+  const root = scaffold({
+    installedVersions: { vitest: "4.1.9" },
+    lockedVersions: { vitest: "4.1.10" },
+    installedLockVersions: { vitest: "4.1.10" },
+  });
+  const binDir = join(root, "fake-bin");
+  writeFakePnpmThatRepairsOnlyWithFreshStore(binDir);
+  const { result, report } = runPreflight(root, ["--converge"], {
+    env: {
+      DPF_ALLOW_SANDBOX_NODE_MODULES_RESET: "1",
+      PATH: prependPathEnv(binDir),
+    },
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(report.verdict, "green");
+  assert.ok(report.convergence.attempts.some((attempt) => attempt.freshStore === true), JSON.stringify(report.convergence));
+  assert.match(readFileSync(join(root, "pnpm-invocations.log"), "utf8"), /--store-dir/);
+  const vitest = report.packages.find((p) => p.name === "vitest");
+  assert.equal(vitest.resolvedVersion, "4.1.10");
   rmSync(root, { recursive: true, force: true });
 });

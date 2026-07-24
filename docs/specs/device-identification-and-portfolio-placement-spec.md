@@ -2,10 +2,10 @@
 
 **Status:** Draft (spec-first)
 **Owner:** Platform / Estate (Portfolio Analyst + Estate Specialist coworkers)
-**Date:** 2026-06-04
+**Date:** 2026-06-04; updated 2026-07-24 for triage-to-investigation last-mile wiring and process-loop correction
 **Surface:** discovery signal capture, fingerprinting, DPPM portfolio placement, hive mind, public device catalog
 **IT4IT value streams:** Detect-to-Correct (discover → identify the estate) feeding Strategy-to-Portfolio (place each device in the DPPM portfolio); the published catalog is a Request-to-Fulfill knowledge asset.
-**Backlog anchors:** BI-E4A86393 (discovery triage sprint — `lifecycle_unverified` / `catalog_match_ambiguous` queues, epic `ce08a3e894513bcdc7bd4c3dd`); BI-9FE9D48D (edge-node detection engine, `services/edge-node-go/` — the signal-capture dependency); BI-8405FDA5 (edge-event envelope / ChangeEvent). _Prior drafts cited `IP-0DCAC` / `IP-6F240` (ImprovementProposals, not buildable BIs); now filed as **`BI-CA1688BB`** (DPPM placement algorithm) and **`BI-4FACD527`** (unknown-device investigation) under EP-AI-OPSMAP._
+**Backlog / decision / capsule anchors:** BI-E4A86393 (discovery triage sprint — `lifecycle_unverified` / `catalog_match_ambiguous` queues, epic `ce08a3e894513bcdc7bd4c3dd`); BI-9FE9D48D (edge-node detection engine, `services/edge-node-go/` — the signal-capture dependency); BI-8405FDA5 (edge-event envelope / ChangeEvent); DI-8D7873165D9D (2026-07-23 WWMD `principle_decide` recommendation for triage-to-investigation wiring); DI-96CADFE0F9EF (2026-07-24 WWMD recommendation to promote the process correction into a kernel principle + `AGENTS.md` pointer); WC-CD886F70 (2026-07-23 WWMD-scoped branch wiring for `needs-more-evidence` → coworker device investigation); BI-72DC6422 (EP-PROACTIVE-OPS follow-up for discovered-device criticality after identity/placement improves). _Prior drafts cited `IP-0DCAC` / `IP-6F240` (ImprovementProposals, not buildable BIs); now filed as **`BI-CA1688BB`** (DPPM placement algorithm) and **`BI-4FACD527`** (unknown-device investigation) under EP-AI-OPSMAP._
 **Builds on:** `packages/db/data/discovery_fingerprints/`, `DiscoveryFingerprintRule` / `Observation` / `Review`, `evaluateFingerprintRule`, `discovery-triage`, `classifyEstateProvenance`, `redactFingerprintEvidence`, `contribute_to_hive`, EP-HIVE-SCOUT, `services/edge-node-go/internal/oui`.
 
 ---
@@ -80,6 +80,33 @@ Each discovered device flows **down** a deterministic ladder; only what a layer 
 
 **This is the operator's "load movement" made literal:** operator (layer 2, shrinking) → AI coworker (layer 1) → code/seed (layer 0) → hive (layer 0 for all installs). Over time, layer 2 approaches zero for known device classes. **Conflict handling:** when two layer-0 rules match one device, resolve by `identityConfidence`/`taxonomyConfidence` and the observation's existing `candidateMargin`; a sub-margin tie escalates to layer 1 rather than guessing.
 
+### 4.1 Last-mile runtime contract: `needs-more-evidence` must trigger investigation
+
+The daily discovery triage pass must not stop at another `DiscoveryTriageDecision(outcome="needs-more-evidence")` row when it has enough device signals to investigate. The runtime contract is:
+
+1. Build a day-one `FingerprintRuleObservation` from the `InventoryEntity` name + properties, including MAC/OUI/vendor, hostname, and the operator-facing observed name (`operatorName`, `displayName`, `deviceName`, or item name).
+2. Upsert a `DiscoveryFingerprintObservation` with `sourceKind="discovery-triage"`, `signalClass="device_identity_gap"`, `decisionStatus="pending_coworker_review"`, and the triage confidence/evidence snapshot.
+3. Invoke the layer-1 coworker investigation core (`investigateUnidentifiedDevice`) immediately in the same pass.
+4. Persist the result through `recordInvestigationOutcome`:
+   - `auto_resolve` authors a **draft** `DiscoveryFingerprintRule` and a coworker `DiscoveryFingerprintReview`;
+   - `escalate` records exactly one specific operator question and no rule;
+   - failure in this side path must not prevent the original triage decision from being durable.
+5. Update the observation status to the investigation summary (`draft`, `escalated`, or `dismissed`) after the review/rule write completes.
+
+This contract converts the self-improvement loop from "coworker noticed a gap" into "coworker attempted to close the gap or left a durable review artifact." It also preserves epistemic discipline: a generic printer signal can place the device in Client & End User Compute, and an oven signal can place the device in Connected Appliances, but the system must not invent an exact model unless DHCP/mDNS/SNMP/IPP/UPnP or another corroborating source supplies it.
+
+**2026-07-23 WWMD decision basis.** The branch-level decision for this contract was routed through the DPF kernel. `principle_decide` recorded ledger interaction `DI-8D7873165D9D` and recommended `reuse-existing-fingerprint-loop` with high confidence (composite 11.208; margin 7.835) over manual live-row fixes, a new parallel gap model, or looser AI identity inference. Work Capsule `WC-CD886F70` carries the branch activity and evidence. Applicable principles:
+
+- `fix-the-seed-not-the-runtime`: patch the source-level triage/investigation path, not the live rows for this one printer/oven.
+- `live-state-over-seed-data`: use the current `InventoryEntity`, quality-issue, triage-decision, and identity-resolution state as evidence for the gap.
+- `responsible-capacity-utilization`: once the platform has authorized backlog/coworker capacity and a safe source-level path, idle detection is waste; the coworker should create durable evidence or surface a blocker.
+
+The approved direction is to reuse the existing `DiscoveryFingerprintObservation` / `Review` / draft-rule substrate and the existing DPPM placement map. A parallel device-gap model, one-off SQL correction, or model hallucination of HP/oven details is rejected.
+
+**2026-07-24 process-loop correction.** This thread exposed a second gap: an agent can correctly identify the implementation fix while initially missing the governance path. WWMD ledger interaction `DI-96CADFE0F9EF` recommended promoting the rule into the shared founder kernel plus an `AGENTS.md` pointer. The resulting principle is `docs/founder-kernel/wiki/principles/classify-ambiguous-requests-before-acting.md`: ambiguous requests that mix product symptoms with AI coworkers, proactivity, autonomy, backlog, WWMD, process gaps, or self-improvement must be classified before code edits, and fix-first sequencing cannot waive docs/spec/backlog/decision continuity.
+
+**Criticality follow-up.** This branch closes the identity/placement investigation last mile. It does not infer operational criticality for devices like printers or ovens. That is intentionally tracked as `BI-72DC6422` under `EP-PROACTIVE-OPS`, because criticality needs context-driven posture, monitoring consumption, and either evidence or explicit operator confirmation. The next loop should reuse that epic rather than smuggling criticality inference into the fingerprint rule.
+
 ## 5. Robust multi-signal fingerprint — the narrow, real extensions
 
 A `DiscoveryFingerprintRule` matches on a **fused** evidence set via `matchExpression.all`/`any`. Reuse the existing comparators and OUI library; the only net-new work is:
@@ -133,7 +160,7 @@ One place to see and govern everything that flows to the hive: aggregated, granu
 1. **Schema/rule extension** — add the `ordered_list_prefix` comparator (DHCP-55) + the MAC-classification helper to `evaluateFingerprintRule`; extend `resolvedIdentity` with `model`/`deviceClass` (migration + fixtures). _mDNS/SSDP/UPnP need no comparator work — data only._
 2. **DPPM placement algorithm** — implement device class → Foundational sub-portfolio (`taxonomyNodeId`) on `taxonomy_v3.json` + `discovery-promotion-policy.ts`. File as a `BI-` (§10).
 3. **Seed the current estate's identifications** — crystallize the 2026-06 estate-classification run's device classifications into seeded fingerprint rules + fixtures, so they reproduce procedurally on every discovery, no SQL. _Cite the discovery-run ID in the BI; do not reference "this session."_
-4. **AI investigation wiring** — the coworker (Estate Specialist / Portfolio Analyst) fills gaps using day-one + captured signals and escalates only irreducible unknowns; resolutions auto-author draft rules and record a `DiscoveryFingerprintReview`.
+4. **AI investigation wiring** — the coworker (Estate Specialist / Portfolio Analyst) fills gaps using day-one + captured signals and escalates only irreducible unknowns; resolutions auto-author draft rules and record a `DiscoveryFingerprintReview`. **Last-mile contract:** `needs-more-evidence` triage outcomes invoke this path immediately (§4.1), so the daily triage job produces a durable investigation artifact instead of leaving the queue inert.
 5. **Unified contribution consent surface** — one "Hive Contributions" page aggregating all opt-ins (device fingerprints [default on] + source/improvements + future types), one obfuscated identity, one ledger, master pause. Wire each contribution path to honor its toggle.
 6. **Hive contribution + curation** — fail-closed redacted fingerprint contribution (gated on the §6.1 opt-in); Hive Scout curation; provenance-tagged, fixture-gated inbound activation; redistribution into the seed catalog.
 7. **Public catalog** — read API + browsable report-kit page; publish the curated fingerprint→identity→placement DB, versioned with the catalog `schemaVersion`.
@@ -141,6 +168,7 @@ One place to see and govern everything that flows to the hive: aggregated, granu
 **Acceptance (measurable):**
 - A re-discovered estate auto-identifies + auto-places **100% of previously-seen device classes** with **zero operator input and zero manual SQL**.
 - A brand-new device class escalates to the operator **exactly once**, then auto-resolves on every subsequent occurrence — locally and (post-curation) for every install in the hive.
+- A `needs-more-evidence` device with day-one fingerprint signals produces either a coworker-authored draft rule or a single-question escalation review in the same triage pass; the triage decision remains durable even if the investigation side path fails.
 - **Operator-escalation rate trends down** across successive discovery passes on a stable estate (the load-movement metric).
 - Every contributed rule is PII-free (`redactionReport` shows no `blocked_sensitive` leakage) and passes its fixtures before local activation.
 

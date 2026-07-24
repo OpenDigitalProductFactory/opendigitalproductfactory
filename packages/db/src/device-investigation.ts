@@ -99,26 +99,87 @@ function ev(observation: FingerprintRuleObservation): Record<string, unknown> {
   return e && typeof e === "object" ? (e as Record<string, unknown>) : {};
 }
 
-function ruleKeyFor(vendor: string, deviceClass: string): string {
+function ruleKeyFor(matchValue: string, deviceClass: string): string {
   const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `investigated:${slug(vendor)}-${slug(deviceClass)}`;
+  return `investigated:${slug(matchValue)}-${slug(deviceClass)}`;
 }
 
-function draftRuleFor(vendorMatch: string, name: string, deviceClass: string): DraftFingerprintRule {
+function draftRuleFor(
+  matchValue: string,
+  name: string,
+  deviceClass: string,
+  options: {
+    matchPath?: string;
+    evidenceFamily?: string;
+    vendor?: string | null;
+  } = {},
+): DraftFingerprintRule {
   const placement = placeDeviceClass(deviceClass);
+  const matchPath = options.matchPath ?? "vendor";
+  const evidenceFamily = options.evidenceFamily ?? "mac_oui";
   return {
-    ruleKey: ruleKeyFor(vendorMatch, deviceClass),
+    ruleKey: ruleKeyFor(matchValue, deviceClass),
     status: "draft",
     source: "coworker_investigation",
-    requiredEvidenceFamilies: ["mac_oui"],
-    matchExpression: { all: [{ type: "contains", path: "vendor", value: vendorMatch }] },
-    resolvedIdentity: { kind: "device", name, vendor: name, deviceClass },
+    requiredEvidenceFamilies: [evidenceFamily],
+    matchExpression: { all: [{ type: "contains", path: matchPath, value: matchValue }] },
+    resolvedIdentity: {
+      kind: "device",
+      name,
+      ...(options.vendor ? { vendor: options.vendor } : {}),
+      deviceClass,
+    },
     taxonomyNodeId: placement.taxonomyNodeId,
     // Draft confidence sits just below the layer-0 auto-apply bar: a draft must
     // pass its own fixtures (and, for hive rules, curation) before activation.
     identityConfidence: 0.85,
     taxonomyConfidence: placement.taxonomyNodeId ? 0.9 : 0,
   };
+}
+
+function getStringEvidence(evidence: Record<string, unknown>, key: string): string | null {
+  const value = evidence[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function classifyFromObservedSignals(
+  evidence: Record<string, unknown>,
+): {
+  matchValue: string;
+  matchPath: string;
+  evidenceFamily: string;
+  name: string;
+  deviceClass: string;
+  vendor?: string | null;
+} | null {
+  const observedName = getStringEvidence(evidence, "observedName");
+  const hostname = getStringEvidence(evidence, "hostname");
+  const vendor = getStringEvidence(evidence, "vendor");
+  const combined = `${observedName ?? ""} ${hostname ?? ""}`.trim();
+
+  if (/\bprinter\b/.test(combined) || /^npi[a-z0-9-]*/.test(hostname ?? "")) {
+    return {
+      matchValue: observedName && /\bprinter\b/.test(observedName) ? "printer" : "npi",
+      matchPath: observedName && /\bprinter\b/.test(observedName) ? "observedName" : "hostname",
+      evidenceFamily: observedName && /\bprinter\b/.test(observedName) ? "observed_name" : "hostname",
+      name: "Printer",
+      deviceClass: "printer",
+    };
+  }
+
+  if (/\boven\b/.test(combined)) {
+    const whirlpool = vendor && /\bwhirlpool\b/.test(vendor);
+    return {
+      matchValue: "oven",
+      matchPath: "observedName",
+      evidenceFamily: "observed_name",
+      name: whirlpool ? "Whirlpool oven" : "Oven",
+      deviceClass: "oven",
+      vendor: whirlpool ? "Whirlpool Corporation" : null,
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -174,7 +235,24 @@ export async function investigateUnidentifiedDevice(
     };
   }
 
-  // 3. Known-brand heuristic — the coworker recognises the vendor. Auto-resolve
+  // 3. Corroborating observed-name / hostname signal — useful when the OUI
+  //    names an OEM radio/module maker, but the network label says what the
+  //    finished device class is. This classifies and places; it does not invent
+  //    exact make/model identity.
+  const signalHit = classifyFromObservedSignals(e);
+  if (signalHit) {
+    return {
+      outcome: "auto_resolve",
+      rationale: `Recognised observed signal "${signalHit.matchValue}" → ${signalHit.deviceClass}.`,
+      draftRule: draftRuleFor(signalHit.matchValue, signalHit.name, signalHit.deviceClass, {
+        matchPath: signalHit.matchPath,
+        evidenceFamily: signalHit.evidenceFamily,
+        vendor: signalHit.vendor,
+      }),
+    };
+  }
+
+  // 4. Known-brand heuristic — the coworker recognises the vendor. Auto-resolve
   //    by authoring a draft rule (crystallizes to layer 0 after fixtures pass).
   if (vendor) {
     const hit = VENDOR_CLASS_HEURISTICS.find((h) => vendor.includes(h.match));
@@ -187,7 +265,7 @@ export async function investigateUnidentifiedDevice(
     }
   }
 
-  // 4. Genuinely unknown but resolvable vendor — try web research, then escalate.
+  // 5. Genuinely unknown but resolvable vendor — try web research, then escalate.
   if (vendor && options.webResearch) {
     const results = await options.webResearch(`${vendor} device type manufacturer`);
     const classified = classifyFromWebResearch(results);

@@ -56,6 +56,7 @@ export function buildDeviceFingerprintObservation(
   const mac = firstString(attrs, ["mac", "macAddress", "mac_address"]);
   const ouiRaw = firstString(attrs, ["vendorOui", "oui"]);
   const hostname = firstString(attrs, ["hostname"]) ?? str(input.name);
+  const observedName = firstString(attrs, ["operatorName", "displayName", "deviceName", "name"]) ?? str(input.name);
 
   const macInfo = classifyMac(mac, vendor ?? vendorShort);
   const oui = ouiRaw ? ouiRaw.replace(/[^0-9a-fA-F]/g, "").toUpperCase().slice(0, 6) : macInfo.oui;
@@ -66,6 +67,9 @@ export function buildDeviceFingerprintObservation(
   }
   if (hostname) {
     evidenceFamilies.push("hostname");
+  }
+  if (observedName) {
+    evidenceFamilies.push("observed_name");
   }
 
   if (evidenceFamilies.length === 0) {
@@ -80,6 +84,7 @@ export function buildDeviceFingerprintObservation(
       oui,
       mac: macInfo.normalized,
       hostname: hostname ? hostname.toLowerCase() : null,
+      observedName: observedName ? observedName.toLowerCase() : null,
       // MAC-classification flags — let a rule require a corroborating signal
       // before trusting the OUI on randomized MACs / module vendors.
       locallyAdministered: macInfo.locallyAdministered,
