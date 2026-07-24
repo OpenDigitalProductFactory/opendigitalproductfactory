@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 
 import {
   CRITIQUE_ENTRY_METADATA_KIND,
+  CRITIQUE_SCREENSHOT_ROLE,
   awaitingVerdict,
   calibrationSet,
   critiqueEntryFromWikiPage,
   critiqueEntryToMetadata,
+  critiqueScreenshotUrl,
   isCalibrationEligible,
   routeCoverage,
   splitForCalibration,
@@ -206,5 +208,18 @@ describe("metadata round-trip (the storage contract for capture)", () => {
     });
     expect(restored?.finding).toMatch(/Edited finding/);
     expect(restored?.status).toBe("published");
+  });
+});
+
+describe("critique screenshot addressing", () => {
+  it("builds the session-gated retrieval URL, not the public media path", () => {
+    // The whole point of the separate route: a critique of an internal surface
+    // must not be servable by the public /api/media capability URL.
+    expect(critiqueScreenshotUrl("abc123")).toBe("/api/critique-media/abc123");
+    expect(critiqueScreenshotUrl("abc123")).not.toContain("/api/media/");
+  });
+
+  it("names a stable attachment role the serve route and action agree on", () => {
+    expect(CRITIQUE_SCREENSHOT_ROLE).toBe("critique-screenshot");
   });
 });

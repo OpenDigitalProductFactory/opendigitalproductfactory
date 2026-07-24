@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 581,
+  "routeCount": 582,
   "routes": [
     {
       "routePath": "/",
@@ -632,6 +632,19 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/calendar/sync/route.ts"
+    },
+    {
+      "routePath": "/api/critique-media/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "critique-media",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/critique-media/[id]/route.ts"
     },
     {
       "routePath": "/api/diagnostics/preflight",

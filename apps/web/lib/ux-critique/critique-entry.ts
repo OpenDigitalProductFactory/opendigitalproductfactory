@@ -79,6 +79,25 @@ export type CritiqueEntry = {
   status: "draft" | "published";
 };
 
+/**
+ * The MediaAttachment role that anchors a critique's screenshot to its
+ * WikiPage. The screenshot lives in the shared content-addressed MediaAsset
+ * store (durable, deduped — a before/after pair of identical bytes collapses to
+ * one blob), and this attachment is both the durability anchor and the scope
+ * the authenticated serve route checks. Storage decision: kernel DI-D80467D6B45B.
+ */
+export const CRITIQUE_SCREENSHOT_ROLE = "critique-screenshot";
+
+/**
+ * The retrieval URL a critique's `screenshotRef` points at. Deliberately NOT
+ * the public `/api/media/:id` — a critique captures internal product surfaces
+ * (/admin, live workspace data) that must not be servable to an unauthenticated
+ * party by capability URL, so this route is session-gated and org-scoped.
+ */
+export function critiqueScreenshotUrl(assetId: string): string {
+  return `/api/critique-media/${assetId}`;
+}
+
 const MIN_FINDING_CHARS = 24;
 
 export type CritiqueEntryValidation =

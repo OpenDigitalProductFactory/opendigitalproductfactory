@@ -16,12 +16,23 @@ vi.mock("@/lib/actions/critique-entry", () => ({ captureCritiqueEntry }));
 
 import { CritiqueCaptureForm } from "./CritiqueCaptureForm";
 
+const fetchMock = vi.fn();
+
 beforeEach(() => {
   refresh.mockReset();
   captureCritiqueEntry.mockReset();
   captureCritiqueEntry.mockResolvedValue({ ok: true, slug: "craft/ux-design/x", status: "draft" });
+  fetchMock.mockReset().mockResolvedValue({
+    ok: true,
+    status: 201,
+    json: async () => ({ assetId: "asset9", url: "/api/media/asset9" }),
+  });
+  vi.stubGlobal("fetch", fetchMock);
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("CritiqueCaptureForm — default view stays tight (BI-3880DA1D)", () => {
   it("shows the three essentials and the verdict in the default view", () => {
@@ -47,7 +58,11 @@ describe("CritiqueCaptureForm — default view stays tight (BI-3880DA1D)", () =>
     // Collapsed by default — this is the construct the budget path excises, so
     // the capture form is rewarded for deferring, not taxed.
     expect(details).not.toHaveAttribute("open");
-    expect(screen.getByLabelText(/screenshot reference/i)).toBeInTheDocument();
+    // The screenshot is a file picker (lower load than a typed path), still
+    // deferred inside the disclosure.
+    const shot = screen.getByLabelText(/screenshot/i);
+    expect(shot).toBeInTheDocument();
+    expect(shot).toHaveAttribute("type", "file");
   });
 });
 
@@ -96,6 +111,42 @@ describe("CritiqueCaptureForm — submission", () => {
     const arg = captureCritiqueEntry.mock.calls[0]![0];
     expect(arg.verdict).toBe("change-needed");
     expect(arg.verdictAuthority).toBe("founder");
+  });
+
+  it("uploads a staged screenshot and passes its asset id, never a raw ref", async () => {
+    render(<CritiqueCaptureForm />);
+    fireEvent.change(screen.getByLabelText(/short title/i), { target: { value: "Admin density" } });
+    fireEvent.change(screen.getByLabelText(/^route/i), { target: { value: "/admin" } });
+    fireEvent.change(screen.getByLabelText(/what is wrong/i), {
+      target: { value: "The admin table packs eleven columns above the primary filter control." },
+    });
+    const file = new File(["pngbytes"], "admin-1280.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText(/screenshot/i), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: /capture as draft/i }));
+
+    await waitFor(() => expect(captureCritiqueEntry).toHaveBeenCalledTimes(1));
+    // The image went to the upload endpoint...
+    expect(fetchMock).toHaveBeenCalledWith("/api/media", expect.objectContaining({ method: "POST" }));
+    // ...and the action receives the asset id, not a hand-typed screenshotRef.
+    const arg = captureCritiqueEntry.mock.calls[0]![0];
+    expect(arg.screenshotAssetId).toBe("asset9");
+    expect(arg.screenshotRef).toBeUndefined();
+  });
+
+  it("does not capture the entry if the screenshot upload fails", async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 413, json: async () => ({ error: "too big" }) });
+    render(<CritiqueCaptureForm />);
+    fireEvent.change(screen.getByLabelText(/short title/i), { target: { value: "Admin density" } });
+    fireEvent.change(screen.getByLabelText(/^route/i), { target: { value: "/admin" } });
+    fireEvent.change(screen.getByLabelText(/what is wrong/i), {
+      target: { value: "The admin table packs eleven columns above the primary filter control." },
+    });
+    const file = new File(["x".repeat(20)], "huge.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText(/screenshot/i), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: /capture as draft/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/too big/i);
+    expect(captureCritiqueEntry).not.toHaveBeenCalled();
   });
 
   it("surfaces a rejection from the action instead of clearing", async () => {

@@ -21,7 +21,12 @@ export type MediaOwnerType =
   | "StorefrontConfig"
   | "StorefrontSection"
   | "Organization"
-  | "RentalConditionRecord";
+  | "RentalConditionRecord"
+  // A UX-critique entry (a craft-override WikiPage) owns its screenshot as an
+  // attachment, so the image is anchored to the entry rather than left as a
+  // free-floating asset an unreferenced-asset sweep could reclaim. `ownerType`
+  // is a plain String column, so this is a pure type widening — no migration.
+  | "WikiPage";
 
 export const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
