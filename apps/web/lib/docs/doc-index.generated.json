@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 547,
+  "pageCount": 548,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -396,6 +396,15 @@
         "what-this-currently-tells-us-the-open-adoption-gaps",
         "refresh-ritual-monthly-how-this-stays-fresh",
         "related"
+      ]
+    },
+    "docs/architecture/agent-skill-index.md": {
+      "publicHref": "/architecture/agent-skill-index/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "dpf-platform-skill-index"
       ]
     },
     "docs/architecture/agent-standards-dpf-conformance.md": {
