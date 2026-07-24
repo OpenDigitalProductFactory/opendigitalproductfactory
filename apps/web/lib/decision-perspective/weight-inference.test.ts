@@ -71,7 +71,7 @@ describe("inferWeightProposals — noise rejection", () => {
 
   it("rejects a consistent but negligibly small separation", () => {
     // Always higher, but by 0.05 — below minMeanSeparation 0.1.
-    const [p] = inferWeightProposals(decisions(12, "reusability", 0.55, 0.5)) ?? [];
+    const [p] = inferWeightProposals(decisions(12, "reusability", 0.55, 0.5));
     expect(p).toBeUndefined();
   });
 
