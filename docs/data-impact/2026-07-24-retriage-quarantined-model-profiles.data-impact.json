@@ -1,0 +1,44 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Active-model inference catalog and endpoint routing (loadEndpointManifests / resolveToolUse)",
+    "Tool-capability calibration (toolFidelity, capabilityOverrides admin pin)"
+  ],
+  "migration": {
+    "name": "20260724150000_retriage_quarantined_model_profiles",
+    "backfill": "identity-swap + field-merge only, no row created or deleted. The generic collation-drift dedupe (20260720193000) ranked ModelProfile duplicates on lastEvalAt/evalCount/generatedAt with no awareness of profileSource, so a `seed` row could keep the natural (providerId, modelId) key over an `evaluated` row — discarding a measured toolFidelity and an admin capabilityOverrides pin (observed live for local/docker.io/ai/qwen3-coder:latest: seed toolFidelity 40 survived over evaluated toolFidelity 100 with capabilityOverrides {\"toolUse\":true}). This migration re-ranks every (providerId, modelId) group using BI-84792669 precedence (profileSource evaluated > admin > catalog > seed; tie-break evalCount, toolFidelity, lastEvalAt, generatedAt — packages/db/src/model-profile-precedence.ts). Where a quarantined row now outranks the current live-key holder, it reclaims the natural key and the demoted row takes a quarantined key and is retired via the 20260721190000 tombstone convention (modelStatus='retired', retiredAt/retiredReason only filled if not already set). Independently, a capabilityOverrides pin present on any duplicate in a group is copied onto the eventual survivor when the survivor has none. Deliberately does not touch the promoted row's own modelStatus/retiredAt/retiredReason — reactivating a model is a separate operational decision, out of this repair's scope. Idempotent, fails closed if any duplicate (providerId, modelId) key remains."
+  },
+  "tests": [
+    "packages/db/src/model-profile-precedence.test.ts",
+    "packages/db/src/retriage-quarantined-model-profiles-migration.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:model-profile#quarantine-precedence-retriage",
+      "prismaModel": "ModelProfile",
+      "lifecycleDisposition": "for a (providerId, modelId) group where a quarantined duplicate outranks the current live-key holder by BI-84792669 precedence, the two rows swap identity: the higher-precedence row reclaims the natural key (modelId, capabilityOverrides fields change), the demoted row takes a quarantined key and is retired (modelId, modelStatus, retiredAt, retiredReason change, only if not already retired). No row is created or deleted; both rows are retained.",
+      "fields": [
+        {
+          "fieldId": "data:model-profile#modelId",
+          "resolution": "governed",
+          "reason": "the collation-drift dedupe's survivor ranking ignored profileSource, so the wrong row could hold the natural key; BI-84792669 defines the correct precedence and this migration applies it retroactively to already-quarantined rows",
+          "provenance": "BI-84792669; live verification via admin_query_db on rows cmqem1jz7043601ms0isbs1z1 (evaluated, toolFidelity 100, quarantined) and cmrlkwpqx01968ds4rcvbqxj1 (seed, toolFidelity 40, holding the live key) before and after the repair"
+        },
+        {
+          "fieldId": "data:model-profile#capabilityOverrides",
+          "resolution": "governed",
+          "reason": "capabilityOverrides is the only durable manual capability pin (resolveSyncedToolUse, resolveToolUse both treat it as authoritative); the original dedupe silently dropped a pin carried only by the quarantined loser — this migration copies a non-null pin onto the survivor whenever the survivor has none, on every group, regardless of whether a key-swap also occurs",
+          "provenance": "BI-84792669"
+        },
+        {
+          "fieldId": "data:model-profile#modelStatus",
+          "resolution": "governed",
+          "reason": "when a row is demoted off the natural key it must be marked retired (mirroring 20260721190000's tombstone convention), otherwise it re-creates the exact phantom-active-under-a-quarantined-key bug BI-8CCF7F13 already fixed for the original dedupe's losers; the promoted row's own modelStatus is left untouched (COALESCE-preserving an existing retiredReason on the demoted row, not overwriting real operational history such as an admission-timeout auto-retirement)",
+          "provenance": "BI-84792669; docs/data-impact/2026-07-21-retire-quarantined-duplicate-rows.data-impact.json (same tombstone convention)"
+        }
+      ]
+    }
+  ]
+}
