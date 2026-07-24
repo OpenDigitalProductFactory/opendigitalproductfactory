@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   listPrinciplesByTier: vi.fn(),
   organizationFindFirst: vi.fn(),
+  wikiPageFindMany: vi.fn(),
 }));
 const wiki = vi.hoisted(() => ({
   searchWikiPages: vi.fn(),
@@ -20,6 +21,13 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     organization: {
       findFirst: (...a: unknown[]) => db.organizationFindFirst(...a),
+    },
+    // RC2 (BI-E1267C6D): core/contextual principles are relevance-ranked by
+    // Qdrant and then rehydrated from Postgres for their signed vector and
+    // weight override. Without this the rehydration throws into its own
+    // catch and every test silently exercises the pre-fix path.
+    wikiPage: {
+      findMany: (...a: unknown[]) => db.wikiPageFindMany(...a),
     },
   },
   listPrinciplesByTier: (...a: unknown[]) => db.listPrinciplesByTier(...a),
@@ -77,6 +85,7 @@ beforeEach(() => {
   db.listPrinciplesByTier.mockResolvedValue([]);
   db.organizationFindFirst.mockResolvedValue({ id: "org-1" });
   wiki.searchWikiPages.mockResolvedValue([]);
+  db.wikiPageFindMany.mockResolvedValue([]);
   wiki.generateEmbedding.mockResolvedValue(undefined);
   // Provider healthy by default; the degradation tests flip this to false.
   wiki.isEmbeddingAvailable.mockResolvedValue(true);
@@ -440,5 +449,182 @@ describe("principle-decide pack — the dimension registry travels with the sche
     const text = featuresSchema.description as string;
     expect(text).toMatch(/HIGHER IS WORSE/);
     expect(text).toContain("blast_radius");
+  });
+});
+
+// ── BI-E1267C6D: core/contextual principles reach structured scoring ─────────
+//
+// Three root causes on one code path, all verified against the live install:
+//   RC2 — the Qdrant payload omits principleDimensionVector, so 70 of 95 kernel
+//         principles carried an authored vector that never reached scoring.
+//   RC3 — it omits principleWeight too, so the override fix read a key that is
+//         never written and every core principle used the tier default.
+//   RC6 — maxPrinciples ("cap on core/contextual from Qdrant") was applied to
+//         the MERGED, commandments-first list. With 41 commandments against a
+//         cap of 20 it dropped 21 commandments and every core principle.
+//
+// These pin the contract that Qdrant ranks relevance and Postgres supplies
+// authority, so re-introducing a payload shortcut fails here.
+
+describe("principle-decide pack — core/contextual reach structured scoring", () => {
+  const CORE_HIT = {
+    pageId: "wp-core-1",
+    title: "Proper Fix Over Quick Fix",
+    slug: "proper-fix-over-quick-fix",
+    principleTier: "core",
+    contentPreview: "prefer the sound fix",
+  };
+  // The authored row as it exists in Postgres — vector and weight override
+  // both present, neither of them reachable through the Qdrant payload.
+  const CORE_ROW = {
+    id: "wp-core-1",
+    title: "Proper Fix Over Quick Fix",
+    principleTier: "core",
+    principleWeight: 0.75,
+    principleDirection: "prefer the sound fix over the expedient one",
+    principleDimensionVector: {
+      long_term_maintainability: 0.9,
+      schema_grounding: 0.5,
+      blast_radius: -0.3,
+      speed_to_value: -0.4,
+    },
+  };
+
+  const invoke = () =>
+    principleDecidePack.handlers.principle_decide(
+      {
+        context: "quick patch or seed fix",
+        options: [
+          { id: "a", description: "quick patch", features: { speed_to_value: 0.9 } },
+          { id: "b", description: "seed fix", features: { long_term_maintainability: 0.9 } },
+        ],
+        callingPopulation: "in_platform_coworker",
+      },
+      "u1",
+    );
+
+  /** The principle list actually handed to decide(). */
+  const scoredPrinciples = () =>
+    wiki.decide.mock.calls[0][1] as Array<{
+      id: string;
+      tier: string;
+      weight: number;
+      dimensionVector: Record<string, number>;
+    }>;
+
+  beforeEach(() => {
+    wiki.decide.mockReturnValue({
+      recommendation: { optionId: "b", confidence: "high", composite: 1 },
+      scores: [{ optionId: "b", composite: 1 }],
+      flags: [],
+      reasoning: "sound fix wins",
+    });
+  });
+
+  it("RC2: a core principle carries its authored signed vector into scoring", async () => {
+    wiki.searchWikiPages.mockResolvedValueOnce([CORE_HIT]).mockResolvedValueOnce([]);
+    db.wikiPageFindMany.mockResolvedValue([CORE_ROW]);
+
+    await invoke();
+
+    const core = scoredPrinciples().find((p) => p.id === "wp-core-1");
+    expect(core).toBeDefined();
+    expect(core!.dimensionVector).toEqual(CORE_ROW.principleDimensionVector);
+  });
+
+  it("RC2: rehydration is keyed by the Qdrant pageId, in one batched lookup", async () => {
+    wiki.searchWikiPages
+      .mockResolvedValueOnce([CORE_HIT, { ...CORE_HIT, pageId: "wp-core-2" }])
+      .mockResolvedValueOnce([{ ...CORE_HIT, pageId: "wp-ctx-1", principleTier: "contextual" }]);
+    db.wikiPageFindMany.mockResolvedValue([CORE_ROW]);
+
+    await invoke();
+
+    expect(db.wikiPageFindMany).toHaveBeenCalledOnce();
+    expect(db.wikiPageFindMany).toHaveBeenCalledWith({
+      where: { id: { in: ["wp-core-1", "wp-core-2", "wp-ctx-1"] } },
+    });
+  });
+
+  it("RC3: a principleWeight override on a core principle is honored", async () => {
+    wiki.searchWikiPages.mockResolvedValueOnce([CORE_HIT]).mockResolvedValueOnce([]);
+    db.wikiPageFindMany.mockResolvedValue([CORE_ROW]);
+
+    await invoke();
+
+    // 0.75 is the authored override; 0.4 is the core tier default that the
+    // pre-fix path always fell back to.
+    expect(scoredPrinciples().find((p) => p.id === "wp-core-1")!.weight).toBe(0.75);
+  });
+
+  it("RC3: falls back to the tier default when no override is authored", async () => {
+    wiki.searchWikiPages.mockResolvedValueOnce([CORE_HIT]).mockResolvedValueOnce([]);
+    db.wikiPageFindMany.mockResolvedValue([
+      { ...CORE_ROW, principleWeight: null },
+    ]);
+
+    await invoke();
+
+    expect(scoredPrinciples().find((p) => p.id === "wp-core-1")!.weight).toBe(0.4);
+  });
+
+  it("degrades to semantic alignment — not to a dropped principle — when rehydration misses", async () => {
+    wiki.searchWikiPages.mockResolvedValueOnce([CORE_HIT]).mockResolvedValueOnce([]);
+    db.wikiPageFindMany.mockResolvedValue([]); // row vanished between index and read
+
+    await invoke();
+
+    const core = scoredPrinciples().find((p) => p.id === "wp-core-1");
+    expect(core).toBeDefined();
+    expect(core!.dimensionVector).toEqual({});
+    expect(core!.weight).toBe(0.4);
+  });
+
+  it("survives a rehydration failure without failing the decision", async () => {
+    wiki.searchWikiPages.mockResolvedValueOnce([CORE_HIT]).mockResolvedValueOnce([]);
+    db.wikiPageFindMany.mockRejectedValue(new Error("connection reset"));
+
+    const res = await invoke();
+
+    expect(res.success).toBe(true);
+    expect(scoredPrinciples().find((p) => p.id === "wp-core-1")).toBeDefined();
+  });
+
+  it("RC6: a commandment corpus larger than maxPrinciples no longer starves core", async () => {
+    // 41 commandments vs a cap of 20 — the exact live shape that produced a
+    // 20-entry, alphabetically-truncated, commandment-only ledger.
+    db.listPrinciplesByTier.mockResolvedValue(
+      Array.from({ length: 41 }, (_, i) => ({
+        id: `cmd-${i}`,
+        title: `Commandment ${i}`,
+        principleTier: "commandment",
+        principleDirection: "d",
+        principleDimensionVector: { governance_compliance: 0.5 },
+      })),
+    );
+    wiki.searchWikiPages.mockResolvedValueOnce([CORE_HIT]).mockResolvedValueOnce([]);
+    db.wikiPageFindMany.mockResolvedValue([CORE_ROW]);
+
+    await invoke();
+
+    const scored = scoredPrinciples();
+    // Every commandment survives — they are uncapped doctrine.
+    expect(scored.filter((p) => p.tier === "commandment")).toHaveLength(41);
+    // And the core principle is no longer squeezed out by them.
+    expect(scored.find((p) => p.id === "wp-core-1")).toBeDefined();
+  });
+
+  it("RC6: maxPrinciples still caps the relevance-retrieved set it names", async () => {
+    db.listPrinciplesByTier.mockResolvedValue([]);
+    const hits = Array.from({ length: 25 }, (_, i) => ({
+      ...CORE_HIT,
+      pageId: `wp-core-${i}`,
+    }));
+    wiki.searchWikiPages.mockResolvedValueOnce(hits).mockResolvedValueOnce([]);
+    db.wikiPageFindMany.mockResolvedValue([]);
+
+    await invoke();
+
+    expect(scoredPrinciples()).toHaveLength(20);
   });
 });

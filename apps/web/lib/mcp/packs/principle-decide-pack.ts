@@ -333,6 +333,59 @@ async function principleDecide(
     contextualExcluded = before.x - contextual.length;
   }
 
+  // RC2/RC3 (BI-E1267C6D) — rehydrate the authoritative principle rows.
+  //
+  // Qdrant is the relevance index, not the authoring store: its payload
+  // (embeddings.ts storeWikiPage) carries principleTier/AppliesTo/RingScope/
+  // Dimensions/Public and deliberately NOT principleDimensionVector or
+  // principleWeight. So a Qdrant hit alone can never score structurally, and
+  // the principleWeight override read below was reading a key that is never
+  // written. Rather than duplicating the vector into the payload (which then
+  // goes stale on any principle edit that skips a re-embed), we let Qdrant
+  // rank relevance and then fetch the real rows from Postgres by pageId —
+  // pageId is the WikiPage id (payload entityId), so this is one keyed
+  // findMany with no backfill and no drift surface.
+  const relevanceHits = [...core, ...contextual];
+  const hydratedById = new Map<string, Record<string, unknown>>();
+  if (relevanceHits.length > 0) {
+    const hitIds = Array.from(
+      new Set(
+        relevanceHits
+          .map((hit) => String(hit["pageId"] ?? ""))
+          .filter((id) => id.length > 0),
+      ),
+    );
+    if (hitIds.length > 0) {
+      try {
+        const rows = (await prisma.wikiPage.findMany({
+          where: { id: { in: hitIds } },
+        })) as Array<Record<string, unknown>>;
+        for (const row of rows) {
+          hydratedById.set(String(row["id"] ?? ""), row);
+        }
+      } catch (err) {
+        // Degrades to the pre-fix behaviour (semantic alignment), which the
+        // semanticFallbackRatio flag already surfaces to the caller. Counted
+        // in the recall trace below so the degradation is never silent.
+        console.warn(
+          "[principle_decide] core/contextual Postgres rehydration failed:",
+          err,
+        );
+      }
+    }
+  }
+
+  // RC4 recurrence guard. Commandments are uncapped doctrine, but retrieval
+  // still passes limit: 50. Returning exactly the limit means the corpus may
+  // have outgrown it and doctrine is being silently truncated again — the
+  // original RC4 defect. 41 of 50 slots were in use as of 2026-07-23.
+  const commandmentLimit = 50;
+  if (commandments.length >= commandmentLimit) {
+    console.warn(
+      `[principle_decide] commandment retrieval returned ${commandments.length} rows at limit ${commandmentLimit} — the commandment corpus may be truncated (RC4). Raise the limit.`,
+    );
+  }
+
   console.info(
     `[principle-recall-trace] ` +
       JSON.stringify({
@@ -344,6 +397,8 @@ async function principleDecide(
         commandmentCount: commandments.length,
         coreCount: core.length,
         contextualCount: contextual.length,
+        hydratedCount: hydratedById.size,
+        unhydratedCount: relevanceHits.length - hydratedById.size,
         ringScopeExcluded: {
           commandments: commandmentsExcluded,
           core: coreExcluded,
@@ -393,24 +448,39 @@ async function principleDecide(
         {},
       directionText: String(row["principleDirection"] ?? ""),
     })),
-    ...[...core, ...contextual].map((hit): CandidateRow => ({
-      id: String(hit["pageId"] ?? ""),
-      name: String(hit["title"] ?? hit["slug"] ?? "principle"),
-      tier: String(hit["principleTier"] ?? "core"),
-      // BI-A9E9ADCB (RC3): pass the per-principle override, mirroring the
-      // commandment branch above (which passes row["principleWeight"]). Passing
-      // undefined here silently ignored any principleWeight override on a
-      // core/contextual principle's Qdrant payload, always using the tier
-      // default (0.4/0.1) — so a deliberately re-weighted principle carried no
-      // extra pull in the decision. resolveWeight still falls back to the tier
-      // default when the override is absent/non-numeric.
-      weight: resolveWeight(
-        String(hit["principleTier"] ?? "core"),
-        hit["principleWeight"],
-      ),
-      dimensionVector: {}, // Qdrant payload omits the signed vector
-      directionText: String(hit["contentPreview"] ?? ""),
-    })),
+    ...relevanceHits.map((hit): CandidateRow => {
+      // Prefer the rehydrated Postgres row (authoritative: signed vector,
+      // weight override, direction text). Fall back to the Qdrant payload
+      // field-by-field so a rehydration miss degrades to the pre-fix
+      // behaviour for that one principle rather than dropping it.
+      const row = hydratedById.get(String(hit["pageId"] ?? ""));
+      const tier = String(
+        row?.["principleTier"] ?? hit["principleTier"] ?? "core",
+      );
+      return {
+        id: String(hit["pageId"] ?? ""),
+        name: String(
+          row?.["title"] ?? hit["title"] ?? hit["slug"] ?? "principle",
+        ),
+        tier,
+        // BI-A9E9ADCB (RC3): the override is read from the rehydrated row.
+        // It was previously read off the Qdrant hit, but storeWikiPage never
+        // writes principleWeight to the payload, so the override was still
+        // always undefined and every core/contextual principle silently used
+        // the tier default (0.4/0.1). resolveWeight still falls back to the
+        // tier default when the override is absent/non-numeric.
+        weight: resolveWeight(tier, row?.["principleWeight"]),
+        // RC2: the authored signed vector, finally reaching structured
+        // scoring. Empty only when rehydration missed, in which case this
+        // principle falls back to semantic alignment as it did before.
+        dimensionVector:
+          (row?.["principleDimensionVector"] as Record<string, number> | null) ??
+          {},
+        directionText: String(
+          row?.["principleDirection"] ?? hit["contentPreview"] ?? "",
+        ),
+      };
+    }),
   ];
 
   // For any candidate that will fall back to semantic alignment
@@ -438,7 +508,27 @@ async function principleDecide(
     }),
   );
 
-  const cappedPrinciples = principleList.slice(0, maxPrinciples);
+  // RC6 (BI-E1267C6D) — cap the relevance-retrieved set, not the merged list.
+  //
+  // maxPrinciples is documented (and named) as a cap on the core/contextual
+  // principles retrieved from Qdrant, but was applied as slice() over the
+  // merged list, which is built commandments-first. Once the commandment
+  // corpus outgrew the cap that arithmetic silently starved the tail: with 41
+  // commandments against a default cap of 20, a live call retrieved 41
+  // commandments + 5 core and scored 20 commandments in alphabetical order,
+  // truncated at "Never Assume — Verify" — dropping 21 commandments AND every
+  // core principle. This is RC4's failure shape (a cap whose semantics drifted
+  // from its comment) one layer up, and it made RC2's fix unobservable.
+  //
+  // Commandments are uncapped doctrine (2026-05-22 model, RC4); their only
+  // bound is the retrieval limit, which is warned on above. filter() preserves
+  // relative order, so core/contextual keep their relevance ranking.
+  const cappedPrinciples = [
+    ...principleList.filter((p) => p.tier === "commandment"),
+    ...principleList
+      .filter((p) => p.tier !== "commandment")
+      .slice(0, maxPrinciples),
+  ];
 
   // Mirror treatment for options: when the caller passes empty features
   // and no explicit embedding, embed the description so the semantic
