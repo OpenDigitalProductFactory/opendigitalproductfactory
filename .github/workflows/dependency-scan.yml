@@ -21,6 +21,9 @@ on:
     branches: [main]
     paths:
       - "pnpm-lock.yaml"
+      # Carries minimumReleaseAge — the release-age gate's policy source, so a
+      # change to the floor must re-run the gate.
+      - "pnpm-workspace.yaml"
       - "sbom/vuln-baseline.json"
       - "scripts/sbom/**"
   push:
@@ -60,6 +63,28 @@ jobs:
           fi
           node scripts/sbom/scan-dependencies.mjs $FLAGS
 
+      - name: Gate lockfile release age
+        # pnpm's minimumReleaseAge (pnpm-workspace.yaml) gates RESOLUTION only —
+        # a --frozen-lockfile install skips the resolution step and never
+        # consults it, so nothing downstream re-checks what the committed
+        # lockfile contains. This gate is that check: it fails a PR that adds a
+        # lockfile entry younger than the floor. Needs the base ref present to
+        # diff against, hence the deepened fetch. Mirrors the OSV step's
+        # online policy — strict on scheduled/manual runs, tolerant of a
+        # registry blip on PRs. See BI-B175621A.
+        run: |
+          set -euo pipefail
+          BASE="origin/${{ github.base_ref || 'main' }}"
+          git fetch --no-tags --depth=50 origin "${{ github.base_ref || 'main' }}" || true
+          FLAGS="--base $BASE --json sbom/lockfile-release-age.json"
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            FLAGS="$FLAGS --require-online"
+          fi
+          node scripts/sbom/check-lockfile-release-age.mjs $FLAGS
+
+      - name: Release-age gate unit tests
+        run: node --test scripts/sbom/check-lockfile-release-age.test.mjs
+
       - name: Audit provenance + install scripts (report-only)
         if: always()
         run: node scripts/sbom/audit-provenance.mjs || true
@@ -80,5 +105,6 @@ jobs:
             sbom/dependency-scan.md
             sbom/provenance-audit.json
             sbom/provenance-audit.md
+            sbom/lockfile-release-age.json
           if-no-files-found: warn
           retention-days: 90

@@ -111,6 +111,28 @@ overrides:
   '@jest/schemas': '^30.0.0'
   '@jest/create-cache-key-function': '^30.0.0'
   jest-watch-typeahead: '^3.0.0'
+# Supply-chain hardening: a release-age floor on DEPENDENCY RESOLUTION. pnpm
+# refuses to resolve a version published less than this many minutes ago, so no
+# install path can adopt a package the ecosystem has not had a chance to look at
+# yet — the window in which a hijacked npm release is typically caught and
+# unpublished.
+#
+# This is the universal backstop. The Dependabot `cooldown:` block in
+# .github/dependabot.yml (3/5/7/14 days by bump type) is STRICTER but covers only
+# Dependabot-authored bumps; this floor additionally covers `pnpm add`, lockfile
+# regeneration, and agent-driven installs, on every host. Previously the floor
+# existed only as unversioned host-local pnpm config, so it bound one machine and
+# nothing else (BI-B175621A).
+#
+# Scope note (verified against pnpm 10.33): this gates RESOLUTION only. A
+# `--frozen-lockfile` install reports "resolution step is skipped" and never
+# consults it, so CI, Docker builds, and worktree bootstrap are unaffected — an
+# already-reviewed lockfile is never re-litigated. The committed lockfile is
+# gated separately by scripts/sbom/check-lockfile-release-age.mjs.
+#
+# Use minimumReleaseAgeExclude for a package that must be adopted inside the
+# window (e.g. an embargoed security fix); keep it empty by default.
+minimumReleaseAge: 1440
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true

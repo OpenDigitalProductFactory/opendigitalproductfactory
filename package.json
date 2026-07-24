@@ -48,6 +48,7 @@
     "check:new-deps": "node scripts/sbom/check-new-dependencies.mjs",
     "scan:deps": "node scripts/sbom/scan-dependencies.mjs",
     "audit:provenance": "node scripts/sbom/audit-provenance.mjs",
+    "check:lockfile-release-age": "node scripts/sbom/check-lockfile-release-age.mjs",
     "surface": "node scripts/sbom/runtime-surface.mjs",
     "candidates": "node scripts/sbom/internalization-candidates.mjs",
     "check:singletons": "node scripts/sbom/check-singleton-safety.mjs",
