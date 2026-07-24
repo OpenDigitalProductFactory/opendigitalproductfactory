@@ -1,9 +1,6 @@
 {
-  "changeRationale": {
-    "prismaModelCount": "One PartnerProgramEnrollment side table (BI-DE47EC0B) persists partner-only commercial terms (tier, territory, agreement ref, margin, deal-registration) for an account that resells/delivers DPF. The schema audit (docs/superpowers/specs/2026-07-23-partner-identity-schema-audit.md, kernel decision DI-CD377B58CA99) explicitly REJECTED the higher-substrate option — a parallel PartnerAccount duplicating the CustomerAccount commercial spine — in favour of reusing CustomerAccount as the canonical party row with this thin 1:1 side table, mirroring the existing Principal+EdgeNode / Principal+FederationLink pattern. Partner IDENTITY adds no model at all: it reuses Principal/PrincipalAlias string columns."
-  },
-  "generatedAt": "2026-07-23T01:22:22.336Z",
-  "gitSha": "cb5933b4051d90582ddd089755a8de7544676859",
+  "generatedAt": "2026-07-24T21:29:58.701Z",
+  "gitSha": "0b77156571679d4c67364418015fb186cf367ae0",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -20,11 +17,11 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 523
+      "value": 524
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 14411
+      "value": 14475
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",

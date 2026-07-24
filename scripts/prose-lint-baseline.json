@@ -258,6 +258,13 @@
     "longSentences": 0,
     "textMass": 36
   },
+  "apps/web/app/(shell)/admin/storefront/preset/page.tsx": {
+    "vocabulary": 2,
+    "genericLabels": 0,
+    "readability": 2,
+    "longSentences": 0,
+    "textMass": 36
+  },
   "apps/web/app/(shell)/admin/twin-gallery/[archetypeId]/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -558,6 +565,13 @@
     "readability": 0,
     "longSentences": 1,
     "textMass": 96
+  },
+  "apps/web/app/(shell)/coworker-decisions/review/weight-proposal-form.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
   },
   "apps/web/app/(shell)/coworker-decisions/stance/page.tsx": {
     "vocabulary": 0,
@@ -1822,9 +1836,9 @@
   "apps/web/app/(shell)/storefront/settings/page.tsx": {
     "vocabulary": 1,
     "genericLabels": 0,
-    "readability": 2,
+    "readability": 1,
     "longSentences": 0,
-    "textMass": 81
+    "textMass": 35
   },
   "apps/web/app/(shell)/storefront/tables/page.tsx": {
     "vocabulary": 0,
@@ -2035,6 +2049,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 5
+  },
+  "apps/web/app/(storefront)/s/not-found.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
   },
   "apps/web/app/(storefront)/s/pay/[token]/page.tsx": {
     "vocabulary": 0,
@@ -2930,7 +2951,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 34
+    "textMass": 29
   },
   "apps/web/app/sandbox-restricted/page.tsx": {
     "vocabulary": 0,
@@ -3232,6 +3253,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 23
+  },
+  "apps/web/components/admin/StorefrontPresetPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 50
   },
   "apps/web/components/admin/TokenExpiryBanner.tsx": {
     "vocabulary": 0,
@@ -6852,6 +6880,13 @@
     "longSentences": 0,
     "textMass": 11
   },
+  "apps/web/components/storefront-admin/AdvancedServiceLinesSection.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
   "apps/web/components/storefront-admin/AnimalsManager.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7347,7 +7382,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 2,
-    "textMass": 458
+    "textMass": 470
   },
   "apps/web/components/workbooks/GridCalendar.tsx": {
     "vocabulary": 0,
@@ -7361,7 +7396,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 222
+    "textMass": 219
+  },
+  "apps/web/components/workbooks/GridSelect.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 10
   },
   "apps/web/components/workbooks/GridViewsMenu.tsx": {
     "vocabulary": 0,
