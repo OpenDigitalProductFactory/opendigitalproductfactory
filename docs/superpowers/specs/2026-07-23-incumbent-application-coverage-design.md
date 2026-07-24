@@ -116,6 +116,17 @@ The 2026-03-15 Employee Tool Intake spec already designed the three intake modes
 
 ---
 
+### 3.1 Strategic fit — the reseller is usually an MSP, and the substrate is already multi-tenant
+
+The "reseller" persona in §1.1 is not hypothetical. **EP-VERTICAL-IT-MSP** is DPF's second vertical and its channel go-to-market, with 11 open items including `BI-42CFA643` (*"integration and replacement-boundary map for PSA, RMM, remote access, documentation, and email security"*) and `BI-F4A0F642`, which names the **vCIO** role explicitly. A vCIO's job *is* client technology-stack review and rationalization — they are the precise user of a coverage verdict.
+
+Two facts make this more than a naming coincidence:
+
+1. **The estate substrate is already per-customer.** `InventoryEntity` carries `scopeKey` (default `organization:internal`), `customerAccountId` and `customerSiteId`, with relations to `CustomerAccount` and `CustomerSite`. The same capability that inventories *your* stack can inventory *your client's* stack, with no new scoping model.
+2. **This is dual-use for an MSP.** It is simultaneously how they justify DPF to a client *and* a service they can bill for — software-asset review is an established MSP offering, which is exactly what Phase C's Flexera/ServiceNow parity framing is chasing.
+
+**Scoping discipline:** the first pass targets the org's own estate (`organization:internal`). Per-client operation is a follow-on that belongs to the MSP vertical's own lane, not to this decomposition — noted here so the design does not accidentally foreclose it, and so D0's enum work is reviewed with multi-tenant use in mind.
+
 ## 4. Kernel-steered decisions
 
 Three decisions were routed through `principle_decide` (population `external_coding_agent`, profile `mark-dpf-platform`). All returned **high confidence, strong structured coverage, no commandment conflict**.
