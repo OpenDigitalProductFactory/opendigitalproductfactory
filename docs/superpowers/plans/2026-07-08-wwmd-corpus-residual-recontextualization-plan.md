@@ -42,7 +42,7 @@ Measured on `origin/main` (body mentions of ServiceNow/CMDB/executive/pitch/brie
 
 The two exemplars remain the templates:
 - **Genericize** → [principles/optimize-for-the-whole.md](../../founder-kernel/wiki/principles/optimize-for-the-whole.md): lift the lesson to a substrate-agnostic rule; ServiceNow becomes *one example*.
-- **Contextualize** → [principles/native-cohesion-over-interfacing.md](../../founder-kernel/wiki/principles/native-cohesion-over-interfacing.md): rewrite the primary example in DPF terms; keep the SN origin as cited provenance.
+- **Contextualize** → [principles/native-cohesion-over-interfacing.md](../../professions/data-architect/wiki/native-cohesion-over-interfacing.md): rewrite the primary example in DPF terms; keep the SN origin as cited provenance.
 
 The already-done `dont-integrate-ea-platform` and `ea-is-meteorology` are now *also* reference-quality exemplars — mirror their structure (generic Position → DPF anchor → SN kept as `### The war-story`).
 

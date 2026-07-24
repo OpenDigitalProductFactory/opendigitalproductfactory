@@ -237,10 +237,10 @@ The signed `principleDimensionVector` (proposed; see the calibration note):
 - [`single-source-of-truth`](single-source-of-truth.md) — drift's root
   cause is duplicated authority; collapsing copies into one derivation is
   the most common way to delete a failure mode.
-- [`fix-the-seed-not-the-runtime`](fix-the-seed-not-the-runtime.md) — patch
+- [`fix-the-seed-not-the-runtime`](../../../professions/data-architect/wiki/fix-the-seed-not-the-runtime.md) — patch
   where the bad state is born plus an invariant guard, so the regression
   cannot return.
-- [`live-state-over-seed-data`](live-state-over-seed-data.md) — seed is
+- [`live-state-over-seed-data`](../../../professions/data-architect/wiki/live-state-over-seed-data.md) — seed is
   bootstrap; runtime truth comes from live probes, so the seed cannot be
   load-bearing where it would drift.
 - [`structural-verification-is-not-functional`](structural-verification-is-not-functional.md)

@@ -9,13 +9,11 @@ principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-2-workflow
   - ring-3-archetype
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Documents DPF's enum convention so adopters' agent code and MCP integrations align with the platform's typed contracts.
 sources:

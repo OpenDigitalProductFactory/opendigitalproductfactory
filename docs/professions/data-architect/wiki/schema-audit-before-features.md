@@ -9,13 +9,11 @@ principleDimensionVector: {"long_term_maintainability": 0.8, "schema_grounding":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-2-workflow
   - ring-3-archetype
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Documents DPF's schema discipline — the platform actively refactors instead of accreting parallel models.
 sources:

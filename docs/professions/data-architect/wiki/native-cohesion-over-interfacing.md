@@ -9,13 +9,11 @@ principleDimensionVector: {"long_term_maintainability": 1.0, "vendor_lock_in": -
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-3-archetype
   - ring-4-sandbox-prod
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: false
 principlePublicRationale: ""
 sources:

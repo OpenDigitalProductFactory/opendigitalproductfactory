@@ -28,7 +28,7 @@ queries `source: { in: ["bug", "process_observer"] }`, and the process-observer 
 writes `source: "process_observer"`. The issue-report triage path historically wrote
 `source: "issue_report"` (canonicalized to `"bug"` by fix-flow Phase 0, but the same
 underlying defect — the enum doesn't constrain the column). This is exactly the failure mode
-[`strongly-typed-string-enums`](../../founder-kernel/wiki/principles/strongly-typed-string-enums.md)
+[`strongly-typed-string-enums`](../../professions/data-architect/wiki/strongly-typed-string-enums.md)
 and [`schema-honesty-over-aspirational-naming`](../../founder-kernel/wiki/principles/schema-honesty-over-aspirational-naming.md)
 warn against.
 

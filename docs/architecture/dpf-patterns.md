@@ -34,7 +34,7 @@ These are not in any training corpus. They are how DPF expresses itself.
 
 **Shape.** Bidirectional (ring numbers stay canonical; direction is a field). Outward = work compounding inner → outer. Inward = outer-ring evidence / hive priors flowing back into the install.
 
-**Kernel:** [`verify-substrate-before-proposing-new`](../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md), [`one-data-model`](../founder-kernel/wiki/principles/one-data-model.md), [`single-source-of-truth`](../founder-kernel/wiki/principles/single-source-of-truth.md).
+**Kernel:** [`verify-substrate-before-proposing-new`](../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md), [`one-data-model`](../professions/data-architect/wiki/one-data-model.md), [`single-source-of-truth`](../founder-kernel/wiki/principles/single-source-of-truth.md).
 
 ---
 
@@ -89,7 +89,7 @@ Result is `{ recommendation, confidence, perPrincipleLedger, ... }`. Persist the
 - Do not coordinate concurrency by spinning a second `FeatureBuild` row; that is what `WorkCapsule` exists for.
 - Do not invent a fifth primitive. Per [`verify-substrate-before-proposing-new`](../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md), the four above already cover the design space.
 
-**Kernel:** [`verify-substrate-before-proposing-new`](../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md), [`one-data-model`](../founder-kernel/wiki/principles/one-data-model.md), [`schema-honesty-over-aspirational-naming`](../founder-kernel/wiki/principles/schema-honesty-over-aspirational-naming.md).
+**Kernel:** [`verify-substrate-before-proposing-new`](../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md), [`one-data-model`](../professions/data-architect/wiki/one-data-model.md), [`schema-honesty-over-aspirational-naming`](../founder-kernel/wiki/principles/schema-honesty-over-aspirational-naming.md).
 
 ---
 
@@ -145,7 +145,7 @@ Models reach for these because they look like reasonable defaults from training 
 
 **Do instead:** seed `minimumCapabilities` (the floor the agent needs). Let the runtime resolve. If a specific provider is the only one that works for a task, that is a *capability* gap to declare, not a *pin* to hardcode.
 
-**Kernel:** memory feedback `feedback_no_provider_pinning`. Related: [`live-state-over-seed-data`](../founder-kernel/wiki/principles/live-state-over-seed-data.md), [`specialization-over-generalization`](../founder-kernel/wiki/principles/specialization-over-generalization.md).
+**Kernel:** memory feedback `feedback_no_provider_pinning`. Related: [`live-state-over-seed-data`](../professions/data-architect/wiki/live-state-over-seed-data.md), [`specialization-over-generalization`](../founder-kernel/wiki/principles/specialization-over-generalization.md).
 
 ---
 
@@ -157,7 +157,7 @@ Models reach for these because they look like reasonable defaults from training 
 
 **Do instead:** fix `packages/db/src/seed.ts`. Add an invariant guard ([scripts/audit-routing-spec-boot-invariants.ts](../../scripts/audit-routing-spec-boot-invariants.ts) pattern) that fails the boot if the field is missing.
 
-**Kernel:** [`fix-the-seed-not-the-runtime`](../founder-kernel/wiki/principles/fix-the-seed-not-the-runtime.md), [`live-state-over-seed-data`](../founder-kernel/wiki/principles/live-state-over-seed-data.md), [`schema-audit-before-features`](../founder-kernel/wiki/principles/schema-audit-before-features.md).
+**Kernel:** [`fix-the-seed-not-the-runtime`](../professions/data-architect/wiki/fix-the-seed-not-the-runtime.md), [`live-state-over-seed-data`](../professions/data-architect/wiki/live-state-over-seed-data.md), [`schema-audit-before-features`](../professions/data-architect/wiki/schema-audit-before-features.md).
 
 ---
 
@@ -205,7 +205,7 @@ Models reach for these because they look like reasonable defaults from training 
 
 **Do instead:** grep Prisma schema, type unions, capability registry, backlog (`mcp__dpf__query_backlog`), and spec frontmatter for the candidate noun *before* writing the spec. Note the closest existing fit in the spec — even when rejecting it, the reader needs to know why a new substrate is warranted.
 
-**Kernel:** [`verify-substrate-before-proposing-new`](../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md), [`one-data-model`](../founder-kernel/wiki/principles/one-data-model.md), [`sweep-main-before-trusting-worktree-specs`](../founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md).
+**Kernel:** [`verify-substrate-before-proposing-new`](../founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md), [`one-data-model`](../professions/data-architect/wiki/one-data-model.md), [`sweep-main-before-trusting-worktree-specs`](../founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md).
 
 ---
 

@@ -9,12 +9,10 @@ principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - ring-3-archetype
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Adopters configure the organization once and expect every feature to honor that configuration — this is the data-architecture commitment behind that contract.
 sources:

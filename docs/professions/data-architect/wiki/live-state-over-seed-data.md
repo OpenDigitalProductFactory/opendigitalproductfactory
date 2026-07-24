@@ -9,12 +9,10 @@ principleDimensionVector: {"evidence_density": 0.8, "schema_grounding": 0.5, "sp
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-  - human
 principleRingScope:
   - universal-ring
-principleConsumerArchetype: route-domain-specific
-principleConsumerContexts:
-  - data-model
+principleConsumerArchetype: specialist
+professionCompetencyLevel: practitioner
 principlePublic: true
 principlePublicRationale: Adopters need to know that DPF's state is the database, not the seed file — agents quoting stale seed values instead of querying lead to incorrect operational decisions.
 sources:

@@ -11,7 +11,7 @@ relatedSpecs:
 relatedPrinciples:
   - docs/founder-kernel/wiki/principles/single-source-of-truth.md
   - docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md
-  - docs/founder-kernel/wiki/principles/schema-audit-before-features.md
+  - docs/professions/data-architect/wiki/schema-audit-before-features.md
 externalReferences:
   - https://www.modelcontextprotocol.io/
   - https://docs.anthropic.com/en/docs/claude-code/hooks

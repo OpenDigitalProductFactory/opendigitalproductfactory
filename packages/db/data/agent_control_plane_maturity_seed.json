@@ -163,7 +163,7 @@
     "maturityGaps": ["Governed metrics", "Lineage", "Freshness", "Policy-aware RAG"],
     "evidenceSources": [],
     "hiveMindSignals": [],
-    "kernelPrinciples": ["single-source-of-truth", "live-state-over-seed-data"],
+    "kernelPrinciples": ["single-source-of-truth"],
     "operationalSurface": "/knowledge",
     "dependsOnAssessmentIds": ["ACPM-IDENTITY-AUTHORITY", "ACPM-GOVERNANCE-EVIDENCE"]
   },

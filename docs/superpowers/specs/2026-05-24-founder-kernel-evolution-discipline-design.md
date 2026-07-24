@@ -14,7 +14,7 @@ relatedPlans:
   - docs/superpowers/plans/2026-05-22-principle-scope-refactor.md
 relatedPrinciples:
   - docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md
-  - docs/founder-kernel/wiki/principles/schema-audit-before-features.md
+  - docs/professions/data-architect/wiki/schema-audit-before-features.md
   - docs/founder-kernel/wiki/principles/single-source-of-truth.md
   - docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md
 ---

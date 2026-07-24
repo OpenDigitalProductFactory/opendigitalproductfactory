@@ -87,5 +87,5 @@ Before writing a spec / plan that proposes new substrate:
   counterpart
 - [`sweep-main-before-trusting-worktree-specs`](sweep-main-before-trusting-worktree-specs.md) —
   worktree specs can be stale; check origin/main for the actual state
-- [`one-data-model`](one-data-model.md) — the architectural reason this
+- [`one-data-model`](../../../professions/data-architect/wiki/one-data-model.md) — the architectural reason this
   matters

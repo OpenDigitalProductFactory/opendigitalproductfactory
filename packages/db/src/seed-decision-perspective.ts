@@ -75,8 +75,11 @@ const SOURCE_MATERIALS = [
     summary: "Resolve ambiguity by inspecting the environment before acting confidently.",
   },
   {
+    // Migrated out of the kernel to the data-architect corpus (BI-5FE47130);
+    // the path moved with it. The slug recorded here is the *material* key used
+    // by this seed, not the WikiPage slug, so it stays stable across the move.
     slug: "live-state-over-seed-data",
-    path: "docs/founder-kernel/wiki/principles/live-state-over-seed-data.md",
+    path: "docs/professions/data-architect/wiki/live-state-over-seed-data.md",
     summary: "Use live runtime or database state as the authority for current operational truth.",
   },
   {

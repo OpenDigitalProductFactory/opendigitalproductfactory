@@ -13,9 +13,9 @@ relatedSpecs:
   - docs/superpowers/specs/2026-05-22-customer-surface-archetype-activation-design.md
 relatedPrinciples:
   - docs/founder-kernel/wiki/principles/single-source-of-truth.md
-  - docs/founder-kernel/wiki/principles/live-state-over-seed-data.md
-  - docs/founder-kernel/wiki/principles/schema-audit-before-features.md
-  - docs/founder-kernel/wiki/principles/organization-canonical-identity.md
+  - docs/professions/data-architect/wiki/live-state-over-seed-data.md
+  - docs/professions/data-architect/wiki/schema-audit-before-features.md
+  - docs/professions/data-architect/wiki/organization-canonical-identity.md
 externalReferences:
   - https://www.iso.org/standard/81745.html
   - https://www.dama-mn.org/Reference-MDM

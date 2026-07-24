@@ -83,7 +83,7 @@ acceptable shortcut.
 
 - [`destructive-actions-require-explicit-go`](destructive-actions-require-explicit-go.md) —
   destructive actions need a fresh OK
-- [`fix-the-seed-not-the-runtime`](fix-the-seed-not-the-runtime.md) —
+- [`fix-the-seed-not-the-runtime`](../../../professions/data-architect/wiki/fix-the-seed-not-the-runtime.md) —
   fix the seed + add an invariant, do not patch the runtime
-- [`live-state-over-seed-data`](live-state-over-seed-data.md) — the
+- [`live-state-over-seed-data`](../../../professions/data-architect/wiki/live-state-over-seed-data.md) — the
   reason the live DB is the source of truth

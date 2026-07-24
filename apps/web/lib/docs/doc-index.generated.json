@@ -2433,21 +2433,6 @@
         "sources"
       ]
     },
-    "docs/founder-kernel/wiki/principles/fix-the-seed-not-the-runtime.md": {
-      "publicHref": "/founder-kernel/wiki/principles/fix-the-seed-not-the-runtime/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
-      ]
-    },
     "docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md": {
       "publicHref": "/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance/",
       "portalHref": null,
@@ -2542,21 +2527,6 @@
         "see-also"
       ]
     },
-    "docs/founder-kernel/wiki/principles/live-state-over-seed-data.md": {
-      "publicHref": "/founder-kernel/wiki/principles/live-state-over-seed-data/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
-      ]
-    },
     "docs/founder-kernel/wiki/principles/make-silent-failures-observable.md": {
       "publicHref": "/founder-kernel/wiki/principles/make-silent-failures-observable/",
       "portalHref": null,
@@ -2617,23 +2587,6 @@
         "anti-patterns",
         "related-principles",
         "spec-references"
-      ]
-    },
-    "docs/founder-kernel/wiki/principles/native-cohesion-over-interfacing.md": {
-      "publicHref": "/founder-kernel/wiki/principles/native-cohesion-over-interfacing/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "when-this-does-not-apply",
-        "sources",
-        "see-also"
       ]
     },
     "docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md": {
@@ -2781,22 +2734,6 @@
         "sources"
       ]
     },
-    "docs/founder-kernel/wiki/principles/one-data-model.md": {
-      "publicHref": "/founder-kernel/wiki/principles/one-data-model/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "when-this-does-not-apply",
-        "see-also"
-      ]
-    },
     "docs/founder-kernel/wiki/principles/one-home-per-capability.md": {
       "publicHref": "/founder-kernel/wiki/principles/one-home-per-capability/",
       "portalHref": null,
@@ -2827,21 +2764,6 @@
     },
     "docs/founder-kernel/wiki/principles/orchestrator-worker-pattern.md": {
       "publicHref": "/founder-kernel/wiki/principles/orchestrator-worker-pattern/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
-      ]
-    },
-    "docs/founder-kernel/wiki/principles/organization-canonical-identity.md": {
-      "publicHref": "/founder-kernel/wiki/principles/organization-canonical-identity/",
       "portalHref": null,
       "publishedPublic": true,
       "publishedPortal": false,
@@ -2910,21 +2832,6 @@
         "reference-implementations",
         "decision-dimensions",
         "examples"
-      ]
-    },
-    "docs/founder-kernel/wiki/principles/principal-convergence.md": {
-      "publicHref": "/founder-kernel/wiki/principles/principal-convergence/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
       ]
     },
     "docs/founder-kernel/wiki/principles/principle-based-rules.md": {
@@ -3096,23 +3003,6 @@
         "origin"
       ]
     },
-    "docs/founder-kernel/wiki/principles/schema-audit-before-features.md": {
-      "publicHref": "/founder-kernel/wiki/principles/schema-audit-before-features/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "schema-audit-checklist",
-        "decision-dimensions",
-        "examples",
-        "jurisdiction-policy-compilation-immutable-compliance-evidence",
-        "sources"
-      ]
-    },
     "docs/founder-kernel/wiki/principles/schema-honesty-over-aspirational-naming.md": {
       "publicHref": "/founder-kernel/wiki/principles/schema-honesty-over-aspirational-naming/",
       "portalHref": null,
@@ -3249,21 +3139,6 @@
         "sources"
       ]
     },
-    "docs/founder-kernel/wiki/principles/strongly-typed-string-enums.md": {
-      "publicHref": "/founder-kernel/wiki/principles/strongly-typed-string-enums/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "sources"
-      ]
-    },
     "docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md": {
       "publicHref": "/founder-kernel/wiki/principles/structural-verification-is-not-functional/",
       "portalHref": null,
@@ -3368,21 +3243,6 @@
         "decision-dimensions",
         "examples",
         "sources"
-      ]
-    },
-    "docs/founder-kernel/wiki/principles/trust-the-data-spine.md": {
-      "publicHref": "/founder-kernel/wiki/principles/trust-the-data-spine/",
-      "portalHref": null,
-      "publishedPublic": true,
-      "publishedPortal": false,
-      "anchors": [
-        "rule",
-        "why",
-        "applies-to",
-        "how-to-apply",
-        "decision-dimensions",
-        "examples",
-        "see-also"
       ]
     },
     "docs/founder-kernel/wiki/principles/verify-substrate-before-proposing-new.md": {
@@ -4563,6 +4423,21 @@
         "see-also"
       ]
     },
+    "docs/professions/data-architect/wiki/fix-the-seed-not-the-runtime.md": {
+      "publicHref": "/professions/data-architect/wiki/fix-the-seed-not-the-runtime/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
+      ]
+    },
     "docs/professions/data-architect/wiki/least-privilege-db-access.md": {
       "publicHref": "/professions/data-architect/wiki/least-privilege-db-access/",
       "portalHref": null,
@@ -4573,6 +4448,38 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "see-also"
+      ]
+    },
+    "docs/professions/data-architect/wiki/live-state-over-seed-data.md": {
+      "publicHref": "/professions/data-architect/wiki/live-state-over-seed-data/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
+      ]
+    },
+    "docs/professions/data-architect/wiki/native-cohesion-over-interfacing.md": {
+      "publicHref": "/professions/data-architect/wiki/native-cohesion-over-interfacing/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "when-this-does-not-apply",
+        "sources",
         "see-also"
       ]
     },
@@ -4588,6 +4495,37 @@
         "denormalisation",
         "rule-of-thumb",
         "see-also"
+      ]
+    },
+    "docs/professions/data-architect/wiki/one-data-model.md": {
+      "publicHref": "/professions/data-architect/wiki/one-data-model/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "when-this-does-not-apply",
+        "see-also"
+      ]
+    },
+    "docs/professions/data-architect/wiki/organization-canonical-identity.md": {
+      "publicHref": "/professions/data-architect/wiki/organization-canonical-identity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
       ]
     },
     "docs/professions/data-architect/wiki/owasp-top10-a03-injection-summary.md": {
@@ -4612,6 +4550,38 @@
         "how-to-apply",
         "examples",
         "see-also"
+      ]
+    },
+    "docs/professions/data-architect/wiki/principal-convergence.md": {
+      "publicHref": "/professions/data-architect/wiki/principal-convergence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
+      ]
+    },
+    "docs/professions/data-architect/wiki/schema-audit-before-features.md": {
+      "publicHref": "/professions/data-architect/wiki/schema-audit-before-features/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "schema-audit-checklist",
+        "decision-dimensions",
+        "examples",
+        "jurisdiction-policy-compilation-immutable-compliance-evidence",
+        "sources"
       ]
     },
     "docs/professions/data-architect/wiki/schema-migration-practices.md": {
@@ -4641,6 +4611,36 @@
         "detection",
         "what-sql-injection-is-not",
         "remediation"
+      ]
+    },
+    "docs/professions/data-architect/wiki/strongly-typed-string-enums.md": {
+      "publicHref": "/professions/data-architect/wiki/strongly-typed-string-enums/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
+      ]
+    },
+    "docs/professions/data-architect/wiki/trust-the-data-spine.md": {
+      "publicHref": "/professions/data-architect/wiki/trust-the-data-spine/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "see-also"
       ]
     },
     "docs/professions/devops-platform/wiki/deployment-pipeline-and-rollback.md": {
