@@ -480,7 +480,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 45
+    "textMass": 48
   },
   "apps/web/app/(shell)/coworker-decisions/craft/page.tsx": {
     "vocabulary": 0,
@@ -7257,6 +7257,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 60
+  },
+  "apps/web/components/wiki/CritiqueCaptureForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 164
   },
   "apps/web/components/wiki/DecisionAuditTable.tsx": {
     "vocabulary": 0,
