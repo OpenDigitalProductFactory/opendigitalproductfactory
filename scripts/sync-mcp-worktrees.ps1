@@ -134,14 +134,41 @@ function Write-WorktreeReadinessMarker {
     $nodeModulesPresent = Test-Path -LiteralPath (Join-Path $Path "node_modules")
     $readinessState = "source-only"
     $readinessReason = "dependencies_missing"
+    $probedViaHelper = $false
 
-    if ($nodeModulesPresent -and ($pnpmOnPath -or $corepackOnPath)) {
-        $readinessState = "compile-ready"
-        $readinessReason = "package_manager_and_dependencies_present"
-    } elseif (-not $nodeModulesPresent) {
-        $readinessReason = "node_modules_missing"
-    } elseif (-not $pnpmOnPath -and -not $corepackOnPath) {
-        $readinessReason = "pnpm_corepack_missing"
+    # BI-3047C122 (Wave 3): a cheap real probe (dependency resolution + @dpf/*
+    # workspace-link locality) beats structural node_modules presence — the
+    # latter marked a node_modules JUNCTIONED TO A STALE SIBLING WORKTREE
+    # "compile-ready" on 2026-07-24, silently typechecking against the wrong
+    # source. Sync runs are exactly where re-classifying an EXISTING worktree
+    # would have caught that. Cheap (no install); falls back to the structural
+    # guess only when node or the helper is unavailable.
+    $readinessHelper = Join-Path $Path "scripts/lib/bootstrap-worktree-deps.mjs"
+    if ((Test-Path $readinessHelper) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+        try {
+            $classifyJson = & node $readinessHelper $Path --classify-only 2>$null
+            if ($LASTEXITCODE -eq 0 -and $classifyJson) {
+                $parsed = $classifyJson | ConvertFrom-Json
+                if ($parsed.status -and $parsed.reason) {
+                    $readinessState = $parsed.status
+                    $readinessReason = $parsed.reason
+                    $probedViaHelper = $true
+                }
+            }
+        } catch {
+            # Fall through to the structural guess below.
+        }
+    }
+
+    if (-not $probedViaHelper) {
+        if ($nodeModulesPresent -and ($pnpmOnPath -or $corepackOnPath)) {
+            $readinessState = "compile-ready"
+            $readinessReason = "package_manager_and_dependencies_present"
+        } elseif (-not $nodeModulesPresent) {
+            $readinessReason = "node_modules_missing"
+        } elseif (-not $pnpmOnPath -and -not $corepackOnPath) {
+            $readinessReason = "pnpm_corepack_missing"
+        }
     }
 
     $readiness = [ordered]@{
@@ -153,6 +180,7 @@ function Write-WorktreeReadinessMarker {
             pnpmOnPath = $pnpmOnPath
             corepackOnPath = $corepackOnPath
             nodeModulesPresent = $nodeModulesPresent
+            probedViaBootstrapHelper = $probedViaHelper
         }
     }
 

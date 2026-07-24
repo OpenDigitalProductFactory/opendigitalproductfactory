@@ -185,6 +185,7 @@ corepack_on_path=false
 node_modules_present=false
 readiness_state="source-only"
 readiness_reason="dependencies_missing"
+probed_via_helper=false
 
 if command -v pnpm >/dev/null 2>&1; then
     pnpm_on_path=true
@@ -196,13 +197,35 @@ if [ -d "$target_abs/node_modules" ]; then
     node_modules_present=true
 fi
 
-if [ "$node_modules_present" = true ] && { [ "$pnpm_on_path" = true ] || [ "$corepack_on_path" = true ]; }; then
-    readiness_state="compile-ready"
-    readiness_reason="package_manager_and_dependencies_present"
-elif [ "$node_modules_present" != true ]; then
-    readiness_reason="node_modules_missing"
-elif [ "$pnpm_on_path" != true ] && [ "$corepack_on_path" != true ]; then
-    readiness_reason="pnpm_corepack_missing"
+# BI-3047C122 (Wave 3): a cheap real probe (dependency resolution + @dpf/*
+# workspace-link locality) beats structural node_modules presence — the latter
+# marked a node_modules JUNCTIONED TO A STALE SIBLING WORKTREE "compile-ready"
+# on 2026-07-24, silently typechecking against the wrong source. Runs
+# unconditionally (no install; cheap) via --classify-only; falls back to the
+# structural guess only when node or the helper is unavailable.
+readiness_helper="$target_abs/scripts/lib/bootstrap-worktree-deps.mjs"
+if [ -f "$readiness_helper" ] && command -v node >/dev/null 2>&1; then
+    classify_json="$(node "$readiness_helper" "$target_abs" --classify-only 2>/dev/null || true)"
+    if [ -n "$classify_json" ]; then
+        probed_state="$(node -e 'try{const r=JSON.parse(process.argv[1]);process.stdout.write(String(r.status||""))}catch{}' "$classify_json" 2>/dev/null || true)"
+        probed_reason="$(node -e 'try{const r=JSON.parse(process.argv[1]);process.stdout.write(String(r.reason||""))}catch{}' "$classify_json" 2>/dev/null || true)"
+        if [ -n "$probed_state" ] && [ -n "$probed_reason" ]; then
+            readiness_state="$probed_state"
+            readiness_reason="$probed_reason"
+            probed_via_helper=true
+        fi
+    fi
+fi
+
+if [ "$probed_via_helper" != true ]; then
+    if [ "$node_modules_present" = true ] && { [ "$pnpm_on_path" = true ] || [ "$corepack_on_path" = true ]; }; then
+        readiness_state="compile-ready"
+        readiness_reason="package_manager_and_dependencies_present"
+    elif [ "$node_modules_present" != true ]; then
+        readiness_reason="node_modules_missing"
+    elif [ "$pnpm_on_path" != true ] && [ "$corepack_on_path" != true ]; then
+        readiness_reason="pnpm_corepack_missing"
+    fi
 fi
 
 process_spine_version="unknown"
@@ -222,7 +245,8 @@ cat > "$target_abs/.dpf-worktree-readiness.json" <<EOF
   "checks": {
     "pnpmOnPath": $pnpm_on_path,
     "corepackOnPath": $corepack_on_path,
-    "nodeModulesPresent": $node_modules_present
+    "nodeModulesPresent": $node_modules_present,
+    "probedViaBootstrapHelper": $probed_via_helper
   }
 }
 EOF
