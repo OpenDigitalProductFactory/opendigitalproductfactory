@@ -151,6 +151,31 @@ Renting safely means validating versions as they *change*, not just at acquisiti
 - **Release-age cooldown** (`.github/dependabot.yml` `cooldown`): auto-bumps wait
   5 days (patch 3 / minor 7 / major 14) so a hijacked release is caught and
   unpublished before we adopt it.
+- **Release-age floor** (`pnpm-workspace.yaml` `minimumReleaseAge: 1440`): the
+  universal backstop under that cooldown. The cooldown is stricter but binds only
+  Dependabot-authored bumps; the floor additionally binds `pnpm add`, lockfile
+  regeneration, and agent-driven installs, on every host. Grant an exception with
+  `minimumReleaseAgeExclude` (keep it empty by default, and comment any entry).
+
+  **It gates resolution, not installation.** Verified against pnpm 10.33: a
+  `--frozen-lockfile` install reports *"Lockfile is up to date, resolution step is
+  skipped"* and never consults the floor; if the lockfile and manifest disagree
+  pnpm raises `ERR_PNPM_OUTDATED_LOCKFILE`, still never a release-age error. So CI,
+  Docker builds, and worktree bootstrap are unaffected, and an already-reviewed
+  lockfile is never re-litigated — but nothing downstream re-checks lockfile
+  *contents* either.
+- **Lockfile release-age gate** (`scripts/sbom/check-lockfile-release-age.mjs`,
+  run by `dependency-scan.yml`): closes exactly that hole. A lockfile authored
+  where the floor did not apply could otherwise carry a minutes-old package into
+  main and every later frozen install would faithfully reproduce it. The gate
+  diffs the committed lockfile against the base ref, checks each **newly added**
+  entry's real publish time against the floor, and fails the PR on a violation. It
+  reads the floor from `pnpm-workspace.yaml`, so policy has one definition; if that
+  policy is missing the gate exits non-zero rather than passing vacuously.
+
+  Before this, the floor existed only as unversioned host-local pnpm config — it
+  bound one machine, protected nothing else, and produced sandbox-only breakage
+  that a contributor could not reproduce (BI-B175621A).
 - **Upgrade-validation gate** (BI-6D1CADFD): at PR time, validate each *changed*
   version — release-age, a newly-introduced install script (classic compromise
   signature), provenance continuity, and OSV-clean target.
@@ -244,6 +269,10 @@ Security / acquisition (program decided via `principle_decide` 2026-06-20):
 - **BI-A8D081C9** (layer #3) — incident-response runbook *shipped*
   ([docs/runbooks/dependency-compromise.md](../runbooks/dependency-compromise.md)).
 - **Release-age cooldown** — *shipped* (`.github/dependabot.yml` `cooldown`).
+- **BI-B175621A** — release-age floor made versioned + enforced — *shipped*
+  (`pnpm-workspace.yaml` `minimumReleaseAge`, plus the lockfile gate in
+  `scripts/sbom/check-lockfile-release-age.mjs`). Supersedes phase 2 of
+  [the 2026-07-11 recovery plan](../superpowers/plans/2026-07-11-lockfile-release-age-recovery.md).
 - **BI-6D1CADFD** — upgrade-validation gate (release-age / new-install-script /
   provenance-continuity / OSV on changed versions at PR time).
 - **BI-96DFDC7D** — run the SBOM + OSV engines inside the platform runtime as an

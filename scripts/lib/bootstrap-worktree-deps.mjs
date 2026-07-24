@@ -60,12 +60,19 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
     if (!existsSync(`${worktreePath}/node_modules`)) {
       // Managed install via the shared store; --frozen-lockfile keeps it honest
       // to the worktree's lockfile (a worktree off main carries main's lockfile).
-      // Worktree-only bootstrap may hit pnpm minimumReleaseAge on fresh lockfile
-      // pins (BI-C98D003B). Scoped to this explicit bootstrap path — fleet
-      // install policy is unchanged.
+      //
+      // This path used to pass --config.minimumReleaseAge=0 to dodge the pnpm
+      // release-age floor (BI-C98D003B). That override was removed as dead and
+      // misleading (BI-B175621A): --frozen-lockfile skips resolution entirely
+      // ("Lockfile is up to date, resolution step is skipped"), and the floor is
+      // only consulted while resolving, so it can never fire here. When the
+      // lockfile does NOT match the manifest, pnpm fails with
+      // ERR_PNPM_OUTDATED_LOCKFILE — still never a release-age error. Keeping the
+      // override would have silently defeated a real control on this path once
+      // the floor became versioned repo config.
       run(
         pkgMgr,
-        ["install", "--prefer-offline", "--frozen-lockfile", "--config.minimumReleaseAge=0"],
+        ["install", "--prefer-offline", "--frozen-lockfile"],
         worktreePath,
       );
     }
