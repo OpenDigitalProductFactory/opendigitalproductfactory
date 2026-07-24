@@ -62,6 +62,9 @@ describe("createLocalIntegrationPlan", () => {
       "git merge --no-ff --no-edit doc/build-studio-decision-skill-packs",
       "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/doc-build-studio-decision-skill-packs",
       "pnpm --filter @dpf/db exec prisma generate",
+      "node scripts/gen-doc-index.mjs --check",
+      "node scripts/check-doc-links.mjs",
+      "node scripts/check-guards.mjs",
       "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
@@ -125,6 +128,24 @@ describe("createLocalIntegrationPlan", () => {
     const firstGateIndex = commands.findIndex((c) => c.includes("vitest run"));
     assert.ok(preflightIndex > lastMergeIndex);
     assert.ok(preflightIndex < firstGateIndex);
+  });
+
+  it("runs fast PR guard parity before the expensive test/build gates", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/x",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+    });
+    const commands = plan.commands.map((command) => command.join(" "));
+    const docIndexIndex = commands.indexOf("node scripts/gen-doc-index.mjs --check");
+    const docsLinkIndex = commands.indexOf("node scripts/check-doc-links.mjs");
+    const repoGuardIndex = commands.indexOf("node scripts/check-guards.mjs");
+    const vitestIndex = commands.findIndex((c) => c.includes("vitest run"));
+    assert.ok(docIndexIndex > -1);
+    assert.ok(docsLinkIndex > docIndexIndex);
+    assert.ok(repoGuardIndex > docsLinkIndex);
+    assert.ok(repoGuardIndex < vitestIndex);
   });
 
   it("adds sibling branches in order for concurrent development", () => {

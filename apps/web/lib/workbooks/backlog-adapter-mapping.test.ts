@@ -9,7 +9,22 @@ describe("BACKLOG_COLUMNS", () => {
   it("exposes the expected columns keyed by field name", () => {
     const keys = BACKLOG_COLUMNS.map((c) => c.columnId);
     expect(keys).toEqual(
-      expect.arrayContaining(["itemId", "title", "status", "priority", "type", "workType", "source", "body", "updatedAt"]),
+      expect.arrayContaining([
+        "itemId",
+        "title",
+        "status",
+        "priority",
+        "type",
+        "workType",
+        "source",
+        "scopeKind",
+        "archetypeCategories",
+        "archetypeIds",
+        "lifecycleTags",
+        "scopeRationale",
+        "body",
+        "updatedAt",
+      ]),
     );
   });
 
@@ -42,6 +57,11 @@ describe("backlogItemToGridRow", () => {
       source: "user-request",
       priority: 3,
       epicId: "EP-X",
+      scopeKind: "archetype-category",
+      archetypeCategories: ["fabric-care-services"],
+      archetypeIds: ["dry-cleaning-plant-network"],
+      lifecycleTags: ["claim-ticket", "ready-promise"],
+      scopeRationale: "Dry-cleaning vertical gap",
       body: "details",
       updatedAt: new Date("2026-06-06T10:00:00.000Z"),
     });
@@ -49,6 +69,11 @@ describe("backlogItemToGridRow", () => {
     expect(row.cells.title).toBe("Fix login");
     expect(row.cells.status).toBe("open");
     expect(row.cells.priority).toBe(3);
+    expect(row.cells.scopeKind).toBe("archetype-category");
+    expect(row.cells.archetypeCategories).toBe("fabric-care-services");
+    expect(row.cells.archetypeIds).toBe("dry-cleaning-plant-network");
+    expect(row.cells.lifecycleTags).toBe("claim-ticket, ready-promise");
+    expect(row.cells.scopeRationale).toBe("Dry-cleaning vertical gap");
     expect(row.cells.updatedAt).toBe("2026-06-06T10:00:00.000Z");
   });
 });
@@ -76,6 +101,23 @@ describe("buildBacklogPatch", () => {
   it("carries status/type/workType/source when explicitly changed", () => {
     const patch = buildBacklogPatch({ status: "done", type: "portfolio", workType: "chore", source: "user-request" });
     expect(patch).toEqual({ status: "done", type: "portfolio", workType: "chore", source: "user-request" });
+  });
+
+  it("carries archetype scope metadata for roadmap and budget planning", () => {
+    const patch = buildBacklogPatch({
+      scopeKind: "archetype-category",
+      archetypeCategories: "fabric-care-services, pet-services",
+      archetypeIds: "dry-cleaning-plant-network",
+      lifecycleTags: "claim-ticket, ready-promise",
+      scopeRationale: "Vertical operating gap",
+    });
+    expect(patch).toEqual({
+      scopeKind: "archetype-category",
+      archetypeCategories: ["fabric-care-services", "pet-services"],
+      archetypeIds: ["dry-cleaning-plant-network"],
+      lifecycleTags: ["claim-ticket", "ready-promise"],
+      scopeRationale: "Vertical operating gap",
+    });
   });
 
   it("treats an emptied required select as a no-op (no invalid write)", () => {

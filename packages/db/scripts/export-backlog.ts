@@ -31,6 +31,11 @@ async function main() {
     updatedAt: e.updatedAt.toISOString(),
     completedAt: e.completedAt?.toISOString() ?? null,
     accountableEmployeeId: e.accountableEmployeeId,
+    scopeKind: e.scopeKind,
+    archetypeCategories: e.archetypeCategories,
+    archetypeIds: e.archetypeIds,
+    scopeRationale: e.scopeRationale,
+    lifecycleTags: e.lifecycleTags,
     portfolioIds: e.portfolios.map((p) => p.portfolioId),
   }));
 
@@ -58,6 +63,11 @@ async function main() {
     updatedAt: i.updatedAt.toISOString(),
     completedAt: i.completedAt?.toISOString() ?? null,
     accountableEmployeeId: i.accountableEmployeeId,
+    scopeKind: i.scopeKind,
+    archetypeCategories: i.archetypeCategories,
+    archetypeIds: i.archetypeIds,
+    scopeRationale: i.scopeRationale,
+    lifecycleTags: i.lifecycleTags,
   }));
 
   const itemPath = resolve(outputDir, `backlog-items-${timestamp}.json`);

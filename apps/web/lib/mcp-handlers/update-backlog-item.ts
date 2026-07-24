@@ -7,7 +7,14 @@
 // through the dedicated status/triage tools.
 
 import { attributeBacklogPortfolio, prisma } from "@dpf/db";
+import { BACKLOG_SCOPE_KIND_VALUES } from "@/lib/explore/backlog";
 import type { ToolResult } from "../mcp-tools";
+
+function cleanStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const cleaned = [...new Set(value.filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean))];
+  return cleaned;
+}
 
 export async function handleUpdateBacklogItem(params: Record<string, unknown>): Promise<ToolResult> {
   const existing = await prisma.backlogItem.findUnique({ where: { itemId: String(params["itemId"]) } });
@@ -47,6 +54,24 @@ export async function handleUpdateBacklogItem(params: Record<string, unknown>): 
   if (typeof params["workType"] === "string") data["workType"] = params["workType"];
   if (typeof params["source"] === "string") data["source"] = params["source"];
   if (typeof params["proposedOutcome"] === "string") data["proposedOutcome"] = params["proposedOutcome"];
+  if (typeof params["scopeKind"] === "string") {
+    const scopeKind = params["scopeKind"].trim();
+    if (!(BACKLOG_SCOPE_KIND_VALUES as readonly string[]).includes(scopeKind)) {
+      return {
+        success: false,
+        error: "invalid_scopeKind",
+        message: `scopeKind must be one of ${BACKLOG_SCOPE_KIND_VALUES.join("|")}`,
+      };
+    }
+    data["scopeKind"] = scopeKind;
+  }
+  const archetypeCategories = cleanStringArray(params["archetypeCategories"]);
+  if (archetypeCategories) data["archetypeCategories"] = archetypeCategories;
+  const archetypeIds = cleanStringArray(params["archetypeIds"]);
+  if (archetypeIds) data["archetypeIds"] = archetypeIds;
+  if (typeof params["scopeRationale"] === "string") data["scopeRationale"] = params["scopeRationale"].trim() || null;
+  const lifecycleTags = cleanStringArray(params["lifecycleTags"]);
+  if (lifecycleTags) data["lifecycleTags"] = lifecycleTags;
 
   // Structural portfolio association: accept the stable human ids and resolve to
   // the FK ids (BacklogItem.digitalProductId / taxonomyNodeId / portfolioId).

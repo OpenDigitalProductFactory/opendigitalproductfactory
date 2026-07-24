@@ -34,7 +34,18 @@ export async function PATCH(
       throw apiError("NOT_FOUND", "Backlog item not found", 404);
     }
 
-    const { title, body: itemBody, status, priority, epicId } = parsed.data;
+    const {
+      title,
+      body: itemBody,
+      status,
+      priority,
+      epicId,
+      scopeKind,
+      archetypeCategories,
+      archetypeIds,
+      scopeRationale,
+      lifecycleTags,
+    } = parsed.data;
 
     const isNowDone = status === "done" || status === "deferred";
     const wasDone = existing.status === "done" || existing.status === "deferred";
@@ -47,6 +58,11 @@ export async function PATCH(
         ...(status !== undefined && { status }),
         ...(priority !== undefined && { priority }),
         ...(epicId !== undefined && { epicId }),
+        ...(scopeKind !== undefined && { scopeKind }),
+        ...(archetypeCategories !== undefined && { archetypeCategories }),
+        ...(archetypeIds !== undefined && { archetypeIds }),
+        ...(scopeRationale !== undefined && { scopeRationale: scopeRationale?.trim() || null }),
+        ...(lifecycleTags !== undefined && { lifecycleTags }),
         ...(isNowDone && !wasDone ? { completedAt: new Date() } : {}),
         ...(!isNowDone && wasDone ? { completedAt: null } : {}),
       },

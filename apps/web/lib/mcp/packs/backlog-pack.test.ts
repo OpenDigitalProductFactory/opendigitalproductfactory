@@ -167,14 +167,38 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
   });
 
   it("query_backlog summarizes items and epics", async () => {
-    db.backlogItemFindMany.mockResolvedValue([]);
+    db.backlogItemFindMany.mockResolvedValue([
+      {
+        itemId: "BI-FABRIC",
+        title: "Fabric care custody",
+        status: "open",
+        type: "product",
+        priority: 2,
+        updatedAt: new Date("2026-07-24T00:00:00.000Z"),
+        scopeKind: "archetype-category",
+        archetypeCategories: ["fabric-care-services"],
+        archetypeIds: ["dry-cleaning-plant-network"],
+        lifecycleTags: ["claim-ticket", "ready-promise"],
+        epic: { epicId: "EP-FABRIC-CARE-OPS" },
+      },
+    ]);
     db.epicFindMany.mockResolvedValue([]);
-    db.backlogItemCount.mockResolvedValue(0);
+    db.backlogItemCount.mockResolvedValue(1);
     db.epicCount.mockResolvedValue(0);
     const res = await backlogPack.handlers.query_backlog({}, "u1");
     expect(res.success).toBe(true);
     expect(res.message).toContain("Backlog:");
-    expect(res.data).toMatchObject({ summary: { open: 0, inProgress: 0, done: 0 } });
+    expect(res.data).toMatchObject({
+      items: [
+        {
+          itemId: "BI-FABRIC",
+          scopeKind: "archetype-category",
+          archetypeCategories: ["fabric-care-services"],
+          archetypeIds: ["dry-cleaning-plant-network"],
+          lifecycleTags: ["claim-ticket", "ready-promise"],
+        },
+      ],
+    });
   });
 
   // REGRESSION: `BacklogItem.epicId` is the internal cuid FK, so passing the
@@ -230,6 +254,30 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     expect(res.success).toBe(true);
     expect(res.data).toMatchObject({ total: 678, truncated: true });
     expect(db.backlogItemFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 500 }));
+  });
+
+  it("list_backlog_items can filter by archetype scope metadata", async () => {
+    db.backlogItemCount.mockResolvedValue(1);
+    db.backlogItemFindMany.mockResolvedValue([]);
+    await backlogPack.handlers.list_backlog_items(
+      {
+        scopeKind: "archetype-category",
+        archetypeCategory: "fabric-care-services",
+        archetypeId: "dry-cleaning-plant-network",
+        lifecycleTag: "claim-ticket",
+      },
+      "u1",
+    );
+    expect(db.backlogItemFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          scopeKind: "archetype-category",
+          archetypeCategories: { has: "fabric-care-services" },
+          archetypeIds: { has: "dry-cleaning-plant-network" },
+          lifecycleTags: { has: "claim-ticket" },
+        },
+      }),
+    );
   });
 
   it("process_backlog_for_build_studio refuses when governed mode is disabled", async () => {

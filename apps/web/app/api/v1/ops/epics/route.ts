@@ -16,10 +16,26 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const { cursor, limit } = parsePagination(url.searchParams);
+    const scopeKindFilter = url.searchParams.get("scopeKind");
+    const archetypeCategoryFilter = url.searchParams.get("archetypeCategory");
+    const archetypeIdFilter = url.searchParams.get("archetypeId");
+    const lifecycleTagFilter = url.searchParams.get("lifecycleTag");
 
     const where: Record<string, unknown> = {};
     if (cursor) {
       where.id = { lt: cursor };
+    }
+    if (scopeKindFilter) {
+      where.scopeKind = scopeKindFilter;
+    }
+    if (archetypeCategoryFilter) {
+      where.archetypeCategories = { has: archetypeCategoryFilter };
+    }
+    if (archetypeIdFilter) {
+      where.archetypeIds = { has: archetypeIdFilter };
+    }
+    if (lifecycleTagFilter) {
+      where.lifecycleTags = { has: lifecycleTagFilter };
     }
 
     const epics = await prisma.epic.findMany({
@@ -36,6 +52,11 @@ export async function GET(request: Request) {
         updatedAt: true,
         completedAt: true,
         agentId: true,
+        scopeKind: true,
+        archetypeCategories: true,
+        archetypeIds: true,
+        scopeRationale: true,
+        lifecycleTags: true,
         submittedBy: { select: { email: true } },
         portfolios: {
           select: {
@@ -54,6 +75,11 @@ export async function GET(request: Request) {
             type: true,
             priority: true,
             epicId: true,
+            scopeKind: true,
+            archetypeCategories: true,
+            archetypeIds: true,
+            scopeRationale: true,
+            lifecycleTags: true,
             createdAt: true,
             updatedAt: true,
           },
@@ -84,7 +110,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const { title, description, portfolioIds } = parsed.data;
+    const {
+      title,
+      description,
+      portfolioIds,
+      scopeKind,
+      archetypeCategories,
+      archetypeIds,
+      scopeRationale,
+      lifecycleTags,
+    } = parsed.data;
 
     // Check for similar existing epics before creating
     let similarEpics: Array<{ epicId: string; title: string; status: string; score: number }> = [];
@@ -117,6 +152,11 @@ export async function POST(request: Request) {
           status: "open",
           submittedById: user.id,
           ...(description !== undefined && { description: description.trim() || null }),
+          scopeKind: scopeKind ?? null,
+          archetypeCategories: archetypeCategories ?? [],
+          archetypeIds: archetypeIds ?? [],
+          scopeRationale: scopeRationale?.trim() || null,
+          lifecycleTags: lifecycleTags ?? [],
         },
       });
 

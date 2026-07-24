@@ -90,6 +90,11 @@ export interface EpicBase {
   priority: number | null;
   createdAt: Date;
   updatedAt: Date;
+  scopeKind: string | null;
+  archetypeCategories: string[];
+  archetypeIds: string[];
+  scopeRationale: string | null;
+  lifecycleTags: string[];
   submittedById: string | null;
   agentId: string | null;
   completedAt: Date | null;
@@ -123,6 +128,11 @@ export interface BacklogItemBase {
   portfolioId: string | null;
   source: string | null;
   workType: string | null;
+  scopeKind: string | null;
+  archetypeCategories: string[];
+  archetypeIds: string[];
+  scopeRationale: string | null;
+  lifecycleTags: string[];
   triageOutcome: string | null;
   effortSize: string | null;
   proposedOutcome: string | null;

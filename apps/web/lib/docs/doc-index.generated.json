@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 545,
+  "pageCount": 546,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -613,6 +613,20 @@
         "a-worked-example",
         "the-learning-loop",
         "current-boundaries"
+      ]
+    },
+    "docs/architecture/backlog-archetype-scope.md": {
+      "publicHref": "/architecture/backlog-archetype-scope/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "backlog-archetype-scope",
+        "stored-fields",
+        "backfill-rule",
+        "tooling-contract",
+        "design-grounding",
+        "planning-use"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {

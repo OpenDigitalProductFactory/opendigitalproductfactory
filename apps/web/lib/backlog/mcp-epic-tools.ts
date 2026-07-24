@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
-import { BACKLOG_SOURCE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
+import { BACKLOG_SCOPE_KIND_VALUES, BACKLOG_SOURCE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
 
 type ToolExecutionContext = {
   agentId?: string;
@@ -36,6 +36,13 @@ const ACTIVE_EPIC_STATUSES = ["open", "in-progress"] as const;
 function optionalString(params: Record<string, unknown>, key: string): string | null {
   const value = params[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function stringArray(params: Record<string, unknown>, key: string): string[] | undefined {
+  const value = params[key];
+  if (!Array.isArray(value)) return undefined;
+  const cleaned = [...new Set(value.filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean))];
+  return cleaned;
 }
 
 function parseEpicStatus(value: unknown): { ok: true; status: string } | { ok: false; result: ToolResult } {
@@ -83,6 +90,22 @@ function parseSource(value: unknown): { ok: true; source: string | null } | { ok
     };
   }
   return { ok: true, source };
+}
+
+function parseScopeKind(value: unknown): { ok: true; scopeKind: string | null } | { ok: false; result: ToolResult } {
+  if (typeof value !== "string" || !value.trim()) return { ok: true, scopeKind: null };
+  const scopeKind = value.trim();
+  if (!(BACKLOG_SCOPE_KIND_VALUES as readonly string[]).includes(scopeKind)) {
+    return {
+      ok: false,
+      result: {
+        success: false,
+        error: "invalid_scopeKind",
+        message: `scopeKind must be one of ${BACKLOG_SCOPE_KIND_VALUES.join("|")}, got ${scopeKind}`,
+      },
+    };
+  }
+  return { ok: true, scopeKind };
 }
 
 function generateEpicId(): string {
@@ -169,6 +192,11 @@ function indexEpicContext(input: {
   specPath?: string | null;
   planPath?: string | null;
   rationale?: string | null;
+  scopeKind?: string | null;
+  archetypeCategories?: string[];
+  archetypeIds?: string[];
+  scopeRationale?: string | null;
+  lifecycleTags?: string[];
   priority?: number;
   owner?: EpicOwner | null;
 }) {
@@ -178,6 +206,11 @@ function indexEpicContext(input: {
     input.specPath ? `specPath: ${input.specPath}` : "",
     input.planPath ? `planPath: ${input.planPath}` : "",
     input.rationale ? `rationale: ${input.rationale}` : "",
+    input.scopeKind ? `scopeKind: ${input.scopeKind}` : "",
+    input.archetypeCategories?.length ? `archetypeCategories: ${input.archetypeCategories.join(", ")}` : "",
+    input.archetypeIds?.length ? `archetypeIds: ${input.archetypeIds.join(", ")}` : "",
+    input.scopeRationale ? `scopeRationale: ${input.scopeRationale}` : "",
+    input.lifecycleTags?.length ? `lifecycleTags: ${input.lifecycleTags.join(", ")}` : "",
     input.priority !== undefined ? `priority: ${input.priority}` : "",
     input.owner ? `owner: ${input.owner.displayName} (${input.owner.employeeId})` : "",
   ].filter(Boolean).join("\n");
@@ -228,6 +261,8 @@ export async function createEpicTool(
   if (!priorityResult.ok) return priorityResult.result;
   const sourceResult = parseSource(params["source"]);
   if (!sourceResult.ok) return sourceResult.result;
+  const scopeKindResult = parseScopeKind(params["scopeKind"]);
+  if (!scopeKindResult.ok) return scopeKindResult.result;
   const ownerResult = await resolveOwner(optionalString(params, "owner"));
   if (!ownerResult.ok) return ownerResult.result;
 
@@ -253,6 +288,10 @@ export async function createEpicTool(
   const specPath = optionalString(params, "specPath");
   const planPath = optionalString(params, "planPath");
   const rationale = optionalString(params, "rationale");
+  const scopeRationale = optionalString(params, "scopeRationale");
+  const archetypeCategories = stringArray(params, "archetypeCategories");
+  const archetypeIds = stringArray(params, "archetypeIds");
+  const lifecycleTags = stringArray(params, "lifecycleTags");
   const priority = priorityResult.priority;
 
   const epic = await prisma.epic.create({
@@ -266,6 +305,11 @@ export async function createEpicTool(
       ...(priority !== undefined ? { priority } : {}),
       ...(ownerResult.owner ? { accountableEmployeeId: ownerResult.owner.id } : {}),
       ...(statusResult.status === "done" ? { completedAt: new Date() } : {}),
+      ...(scopeKindResult.scopeKind ? { scopeKind: scopeKindResult.scopeKind } : {}),
+      ...(archetypeCategories ? { archetypeCategories } : {}),
+      ...(archetypeIds ? { archetypeIds } : {}),
+      ...(scopeRationale ? { scopeRationale } : {}),
+      ...(lifecycleTags ? { lifecycleTags } : {}),
     },
     include: {
       accountableEmployee: {
@@ -286,6 +330,11 @@ export async function createEpicTool(
     specPath,
     planPath,
     rationale,
+    scopeKind: scopeKindResult.scopeKind,
+    archetypeCategories,
+    archetypeIds,
+    scopeRationale,
+    lifecycleTags,
     priority,
     owner: ownerResult.owner,
   });
@@ -301,6 +350,11 @@ export async function createEpicTool(
       priority: epic.priority ?? null,
       owner: ownerPayload(ownerResult.owner),
       source: sourceResult.source,
+      scopeKind: epic.scopeKind,
+      archetypeCategories: epic.archetypeCategories,
+      archetypeIds: epic.archetypeIds,
+      scopeRationale: epic.scopeRationale,
+      lifecycleTags: epic.lifecycleTags,
       specPath,
       planPath,
       similarEpics,
@@ -325,6 +379,11 @@ export async function updateEpicTool(params: Record<string, unknown>): Promise<T
       status: true,
       priority: true,
       completedAt: true,
+      scopeKind: true,
+      archetypeCategories: true,
+      archetypeIds: true,
+      scopeRationale: true,
+      lifecycleTags: true,
     },
   });
   if (!existing) {
@@ -359,6 +418,18 @@ export async function updateEpicTool(params: Record<string, unknown>): Promise<T
   if (priorityResult.priority !== undefined) {
     data["priority"] = priorityResult.priority;
   }
+  const scopeKindResult = parseScopeKind(params["scopeKind"]);
+  if (!scopeKindResult.ok) return scopeKindResult.result;
+  if (scopeKindResult.scopeKind !== null) data["scopeKind"] = scopeKindResult.scopeKind;
+  const archetypeCategories = stringArray(params, "archetypeCategories");
+  if (archetypeCategories) data["archetypeCategories"] = archetypeCategories;
+  const archetypeIds = stringArray(params, "archetypeIds");
+  if (archetypeIds) data["archetypeIds"] = archetypeIds;
+  if (typeof params["scopeRationale"] === "string") {
+    data["scopeRationale"] = params["scopeRationale"].trim() || null;
+  }
+  const lifecycleTags = stringArray(params, "lifecycleTags");
+  if (lifecycleTags) data["lifecycleTags"] = lifecycleTags;
 
   const specPath = optionalString(params, "specPath");
   const planPath = optionalString(params, "planPath");
@@ -378,7 +449,20 @@ export async function updateEpicTool(params: Record<string, unknown>): Promise<T
     specPath,
     planPath,
     rationale,
-    priority: priorityResult.priority,
+    scopeKind: typeof data["scopeKind"] === "string" ? String(data["scopeKind"]) : existing.scopeKind,
+    archetypeCategories: Array.isArray(data["archetypeCategories"])
+      ? (data["archetypeCategories"] as string[])
+      : existing.archetypeCategories,
+    archetypeIds: Array.isArray(data["archetypeIds"])
+      ? (data["archetypeIds"] as string[])
+      : existing.archetypeIds,
+    scopeRationale: Object.prototype.hasOwnProperty.call(data, "scopeRationale")
+      ? (data["scopeRationale"] as string | null)
+      : existing.scopeRationale,
+    lifecycleTags: Array.isArray(data["lifecycleTags"])
+      ? (data["lifecycleTags"] as string[])
+      : existing.lifecycleTags,
+    priority: priorityResult.priority ?? existing.priority ?? undefined,
   });
 
   return {
@@ -393,6 +477,11 @@ export async function updateEpicTool(params: Record<string, unknown>): Promise<T
       status: updated.status,
       priority: updated.priority ?? null,
       completedAt: updated.completedAt ? updated.completedAt.toISOString() : null,
+      scopeKind: updated.scopeKind,
+      archetypeCategories: updated.archetypeCategories,
+      archetypeIds: updated.archetypeIds,
+      scopeRationale: updated.scopeRationale,
+      lifecycleTags: updated.lifecycleTags,
       specPath,
       planPath,
     },

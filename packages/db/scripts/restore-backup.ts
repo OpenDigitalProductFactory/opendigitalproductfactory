@@ -46,6 +46,11 @@ interface BackupEpic {
   description: string | null;
   status: string;
   agentId: string | null;
+  scopeKind?: string | null;
+  archetypeCategories?: string[];
+  archetypeIds?: string[];
+  scopeRationale?: string | null;
+  lifecycleTags?: string[];
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -60,6 +65,11 @@ interface BackupItem {
   priority: number | null;
   epicId: string | null;
   agentId: string | null;
+  scopeKind?: string | null;
+  archetypeCategories?: string[];
+  archetypeIds?: string[];
+  scopeRationale?: string | null;
+  lifecycleTags?: string[];
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -97,6 +107,11 @@ async function main() {
           createdAt: new Date(e.createdAt),
           updatedAt: new Date(e.updatedAt),
           completedAt: e.completedAt ? new Date(e.completedAt) : null,
+          scopeKind: e.scopeKind ?? null,
+          archetypeCategories: e.archetypeCategories ?? [],
+          archetypeIds: e.archetypeIds ?? [],
+          scopeRationale: e.scopeRationale ?? null,
+          lifecycleTags: e.lifecycleTags ?? [],
         },
       });
       epicUpdated++;
@@ -110,6 +125,11 @@ async function main() {
           createdAt: new Date(e.createdAt),
           updatedAt: new Date(e.updatedAt),
           completedAt: e.completedAt ? new Date(e.completedAt) : null,
+          scopeKind: e.scopeKind ?? null,
+          archetypeCategories: e.archetypeCategories ?? [],
+          archetypeIds: e.archetypeIds ?? [],
+          scopeRationale: e.scopeRationale ?? null,
+          lifecycleTags: e.lifecycleTags ?? [],
         },
       });
       epicCreated++;
@@ -159,6 +179,11 @@ async function main() {
       createdAt: new Date(i.createdAt),
       updatedAt: new Date(i.updatedAt),
       completedAt: i.completedAt ? new Date(i.completedAt) : null,
+      scopeKind: i.scopeKind ?? null,
+      archetypeCategories: i.archetypeCategories ?? [],
+      archetypeIds: i.archetypeIds ?? [],
+      scopeRationale: i.scopeRationale ?? null,
+      lifecycleTags: i.lifecycleTags ?? [],
     };
 
     const existing = await prisma.backlogItem.findUnique({ where: { itemId: i.itemId } });

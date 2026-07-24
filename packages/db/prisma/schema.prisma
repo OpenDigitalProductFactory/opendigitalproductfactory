@@ -1416,6 +1416,13 @@ model BacklogItem {
   // strategic-balance dimension so demand is prioritized against a target
   // allocation, not a flat list. Default derived from workType. §8.
   investmentBucket        String?
+  // Backlog archetype scope (BI-E387A203). Nullable/additive so existing
+  // planning rows honestly remain unclassified until backfilled.
+  scopeKind               String?
+  archetypeCategories     String[]                      @default([])
+  archetypeIds            String[]                      @default([])
+  scopeRationale          String?
+  lifecycleTags           String[]                      @default([])
   // Estimate provenance (EP-DELIVERY-FLOW BI-E731A6C1). The effort estimate
   // (jobSize) is the value/effort score's DENOMINATOR; these facets attribute
   // WHOSE number it is — an AI coworker's first-pass proposal and a human's
@@ -1475,6 +1482,7 @@ model BacklogItem {
   @@index([status, updatedAt])
   @@index([portfolioId, demandScore])
   @@index([demandStage])
+  @@index([scopeKind])
 }
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
@@ -1661,6 +1669,13 @@ model Epic {
   priority                 Int?
   // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform.
   investmentBucket         String?
+  // Backlog archetype scope (BI-E387A203). Mirrors BacklogItem so roadmap
+  // epics can be budgeted by platform/common/vertical scope.
+  scopeKind                String?
+  archetypeCategories      String[]                 @default([])
+  archetypeIds             String[]                 @default([])
+  scopeRationale           String?
+  lifecycleTags            String[]                 @default([])
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
   submittedById            String?
@@ -1693,6 +1708,7 @@ model Epic {
   portfolios               EpicPortfolio[]
 
   @@index([originatingBacklogItemId])
+  @@index([scopeKind])
 }
 
 model EpicPortfolio {

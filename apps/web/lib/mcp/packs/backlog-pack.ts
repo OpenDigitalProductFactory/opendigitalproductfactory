@@ -19,7 +19,15 @@
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { handleUpdateBacklogItem } from "@/lib/mcp-handlers/update-backlog-item";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
-import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
+import {
+  backlogScopeCreateProperties,
+  backlogScopeFilterProperties,
+  backlogScopeUpdateProperties,
+  optionalStringParam,
+  stringArrayParam,
+  validScopeKind,
+} from "./backlog-scope-metadata";
+import { getBacklogItem, listBacklogItems, listEpics, queryBacklog } from "./backlog-pack-read-tools";
 import {
   BACKLOG_SOURCE_VALUES,
   BACKLOG_STATUS_VALUES,
@@ -47,6 +55,7 @@ const definitions: ToolDefinition[] = [
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory suggestion for Scrum Master triage (non-binding)" },
         priority: { type: "integer", description: "Optional ranked priority within the open pool (lower = higher priority)." },
         effortSize: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "Required when triageOutcome=build (skipping triage). Otherwise applied if provided." },
+        ...backlogScopeCreateProperties,
         body: { type: "string", description: "Detailed description" },
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
         itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
@@ -132,6 +141,7 @@ const definitions: ToolDefinition[] = [
         workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Reclassify what kind of work this is (closed enum)." },
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Reclassify the intake origin." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
+        ...backlogScopeUpdateProperties,
         digitalProductId: { type: "string", description: "Associate this item with a DigitalProduct by its productId (e.g. 'coworker-AGT-X'). The item's portfolio is then re-derived from the product (product first, then taxonomy node, then epic)." },
         taxonomyNodeId: { type: "string", description: "Associate this item with a portfolio taxonomy node by its nodeId (e.g. 'for_employees/financial_management'). Used to derive the portfolio when no product link exists." },
         portfolioSlug: { type: "string", description: "Directly pin the item's portfolio by root slug (e.g. 'for_employees'). Prefer digitalProductId/taxonomyNodeId so the link is structural; use this only for a deliberate override." },
@@ -149,6 +159,7 @@ const definitions: ToolDefinition[] = [
       properties: {
         status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Filter by status (optional)" },
         epicId: { type: "string", description: "Filter by semantic epic id (EP-*) or internal epic row id (optional). Returns epic_not_found rather than an empty list when it matches nothing." },
+        ...backlogScopeFilterProperties,
         limit: { type: "number", description: "Max results (default 100, max 1000). Responses always report `total` and `truncated`." },
       },
       required: [],
@@ -171,6 +182,7 @@ const definitions: ToolDefinition[] = [
         priority: { type: "integer", description: "Optional ranked priority for the epic (lower = higher priority)" },
         owner: { type: "string", description: "Optional accountable employee identifier: EmployeeProfile id, employeeId, workEmail, personalEmail, or exact displayName" },
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "What kind of gap or signal produced this epic" },
+        ...backlogScopeCreateProperties,
         specPath: { type: "string", description: "Optional related spec path for audit/index context" },
         planPath: { type: "string", description: "Optional related implementation plan path for audit/index context" },
         rationale: { type: "string", description: "Optional short rationale for creating the epic" },
@@ -191,6 +203,7 @@ const definitions: ToolDefinition[] = [
         description: { type: "string", description: "New epic description" },
         status: { type: "string", enum: [...EPIC_STATUSES], description: "New epic status" },
         priority: { type: "integer", description: "New ranked priority for the epic (lower = higher priority)" },
+        ...backlogScopeUpdateProperties,
         specPath: { type: "string", description: "Optional related spec path for audit/index context" },
         planPath: { type: "string", description: "Optional related implementation plan path for audit/index context" },
         rationale: { type: "string", description: "Optional short rationale captured by ToolExecution" },
@@ -208,6 +221,7 @@ const definitions: ToolDefinition[] = [
       properties: {
         status: { type: "string", enum: ["open", "in-progress", "done"], description: "Filter by epic status" },
         hasOpenItems: { type: "boolean", description: "Only return epics that have at least one non-done item" },
+        ...backlogScopeFilterProperties,
         limit: { type: "number", description: "Max results (default 100, max 1000). Responses always report `total` and `truncated`, so a short list is never mistaken for a complete one." },
       },
       required: [],
@@ -227,6 +241,7 @@ const definitions: ToolDefinition[] = [
         workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Filter by work-type (bug | feature | chore | doc | tool | skill | refactor)." },
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Filter by intake origin (user-request | automated-detection)." },
         epicId: { type: "string", description: "Semantic epic id (EP-*) to filter to" },
+        ...backlogScopeFilterProperties,
         unclaimed: { type: "boolean", description: "Only items with no user/agent claim" },
         hasActiveBuild: { type: "boolean", description: "Only items currently linked to a Build Studio build" },
         limit: { type: "number", description: "Max results (default 100, max 1000). Responses always report `total` and `truncated`, so a short list is never mistaken for a complete one." },
@@ -325,6 +340,11 @@ async function createBacklogItem(
     effortSize: typeof params["effortSize"] === "string" ? params["effortSize"] : undefined,
     priority: typeof params["priority"] === "number" ? params["priority"] : undefined,
     body: typeof params["body"] === "string" ? params["body"] : undefined,
+    scopeKind: validScopeKind(params["scopeKind"]),
+    archetypeCategories: stringArrayParam(params, "archetypeCategories"),
+    archetypeIds: stringArrayParam(params, "archetypeIds"),
+    scopeRationale: optionalStringParam(params, "scopeRationale"),
+    lifecycleTags: stringArrayParam(params, "lifecycleTags"),
     itemId:
       typeof params["itemId"] === "string" && params["itemId"].trim()
         ? params["itemId"].trim()
@@ -590,47 +610,6 @@ async function processBacklogForBuildStudio(
   };
 }
 
-async function queryBacklog(params: Record<string, unknown>): Promise<ToolResult> {
-  const { prisma } = await import("@dpf/db");
-  const where: Record<string, unknown> = {};
-  if (typeof params["status"] === "string") where["status"] = params["status"];
-  const epicRowId = await resolveEpicRowId(prisma, params["epicId"]);
-  if (epicRowId === null) {
-    return { success: false, error: "epic_not_found", message: `No epic matched ${String(params["epicId"])}` };
-  }
-  if (epicRowId !== undefined) where["epicId"] = epicRowId;
-  const limit = resolveListLimit(params["limit"]);
-
-  const [items, matching, epics, epicTotal, open, inProgress, done] = await Promise.all([
-    prisma.backlogItem.findMany({
-      where,
-      orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
-      take: limit,
-      select: { itemId: true, title: true, status: true, type: true, priority: true, updatedAt: true, epic: { select: { epicId: true } } },
-    }),
-    prisma.backlogItem.count({ where }),
-    prisma.epic.findMany({ select: { id: true, epicId: true, title: true, status: true }, orderBy: { createdAt: "desc" }, take: limit }),
-    prisma.epic.count(),
-    prisma.backlogItem.count({ where: { status: "open" } }),
-    prisma.backlogItem.count({ where: { status: "in-progress" } }),
-    prisma.backlogItem.count({ where: { status: "done" } }),
-  ]);
-
-  return {
-    success: true,
-    message: `Backlog: ${open} open, ${inProgress} in-progress, ${done} done. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
-    data: {
-      summary: { open, inProgress, done },
-      total: matching,
-      truncated: items.length < matching,
-      epicTotal,
-      epicsTruncated: epics.length < epicTotal,
-      epics: epics.map((e) => ({ epicId: e.epicId, title: e.title, status: e.status })),
-      items: items.map((i) => ({ itemId: i.itemId, title: i.title, status: i.status, type: i.type, priority: i.priority, epicId: i.epic?.epicId ?? null })),
-    },
-  };
-}
-
 async function createEpic(
   params: Record<string, unknown>,
   userId: string,
@@ -643,232 +622,6 @@ async function createEpic(
 async function updateEpic(params: Record<string, unknown>): Promise<ToolResult> {
   const { updateEpicTool } = await import("@/lib/backlog/mcp-epic-tools");
   return updateEpicTool(params);
-}
-
-async function listEpics(params: Record<string, unknown>): Promise<ToolResult> {
-  const { prisma } = await import("@dpf/db");
-  const where: Record<string, unknown> = {};
-  if (typeof params["status"] === "string") where["status"] = params["status"];
-  const limit = resolveListLimit(params["limit"]);
-  const epicTotal = await prisma.epic.count({ where });
-  const epics = await prisma.epic.findMany({
-    where,
-    take: limit,
-    orderBy: [{ updatedAt: "desc" }],
-    select: {
-      id: true,
-      epicId: true,
-      title: true,
-      status: true,
-      priority: true,
-      updatedAt: true,
-      items: { select: { status: true } },
-    },
-  });
-  const wantOpenItems = params["hasOpenItems"] === true;
-  const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
-  const refIndex = await buildSpecPlanReferenceIndex();
-  const data = epics
-    .map((e) => {
-      const total = e.items.length;
-      const open = e.items.filter((it) => it.status === "open").length;
-      const inProgress = e.items.filter((it) => it.status === "in-progress").length;
-      const done = e.items.filter((it) => it.status === "done").length;
-      return {
-        epicId: e.epicId,
-        title: e.title,
-        status: e.status,
-        priority: e.priority,
-        itemCount: { total, open, inProgress, done },
-        hasSpec: refIndex.specs.has(e.epicId) || refIndex.plans.has(e.epicId),
-        updatedAt: e.updatedAt.toISOString(),
-        _hasOpen: open + inProgress > 0,
-      };
-    })
-    .filter((row) => (wantOpenItems ? row._hasOpen : true))
-    .map((row) => {
-      const { _hasOpen, ...rest } = row;
-      void _hasOpen;
-      return rest;
-    });
-  // `truncated` reflects the DB-side cap only — hasOpenItems filters the
-  // fetched page in memory, so data.length < epics.length is not truncation.
-  return {
-    success: true,
-    message: `Listed ${data.length} epic(s) (${epics.length} of ${epicTotal} fetched).`,
-    data: { epics: data, total: epicTotal, fetched: epics.length, truncated: epics.length < epicTotal },
-  };
-}
-
-async function listBacklogItems(params: Record<string, unknown>): Promise<ToolResult> {
-  const { prisma } = await import("@dpf/db");
-  const where: Record<string, unknown> = {};
-  if (typeof params["status"] === "string") where["status"] = params["status"];
-  if (typeof params["type"] === "string") where["type"] = params["type"];
-  if (typeof params["workType"] === "string") where["workType"] = params["workType"];
-  if (typeof params["source"] === "string") where["source"] = params["source"];
-  const epicRowId = await resolveEpicRowId(prisma, params["epicId"]);
-  if (epicRowId === null) {
-    return { success: false, error: "epic_not_found", message: `No epic matched ${String(params["epicId"])}` };
-  }
-  if (epicRowId !== undefined) where["epicId"] = epicRowId;
-  if (params["unclaimed"] === true) {
-    where["claimedById"] = null;
-    where["claimedByAgentId"] = null;
-  }
-  if (params["hasActiveBuild"] === true) where["activeBuildId"] = { not: null };
-  else if (params["hasActiveBuild"] === false) where["activeBuildId"] = null;
-
-  const limit = resolveListLimit(params["limit"]);
-  const matching = await prisma.backlogItem.count({ where });
-  const items = await prisma.backlogItem.findMany({
-    where,
-    take: limit,
-    orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
-    select: {
-      itemId: true,
-      title: true,
-      status: true,
-      type: true,
-      workType: true,
-      source: true,
-      priority: true,
-      effortSize: true,
-      demandStage: true,
-      demandScore: true,
-      demandScoreFramework: true,
-      activeBuildId: true,
-      updatedAt: true,
-      triageOutcome: true,
-      epic: { select: { epicId: true } },
-      activeBuild: { select: { phase: true, draftApprovedAt: true } },
-    },
-  });
-  const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
-  const data = items.map((i) => ({
-    itemId: i.itemId,
-    title: i.title,
-    status: i.status,
-    type: i.type,
-    workType: i.workType,
-    source: i.source,
-    priority: i.priority,
-    effortSize: i.effortSize,
-    demandStage: i.demandStage,
-    demandScore: i.demandScore,
-    demandScoreFramework: i.demandScoreFramework,
-    triageOutcome: i.triageOutcome,
-    epicId: i.epic?.epicId ?? null,
-    hasActiveBuild: i.activeBuildId != null,
-    lifecycleLabel: deriveLifecycleLabel({
-      backlogItem: { status: i.status, triageOutcome: i.triageOutcome, activeBuildId: i.activeBuildId },
-      featureBuild: i.activeBuild
-        ? { phase: i.activeBuild.phase, draftApprovedAt: i.activeBuild.draftApprovedAt }
-        : null,
-      governedBacklogEnabled: true,
-    }),
-    updatedAt: i.updatedAt.toISOString(),
-  }));
-  return {
-    success: true,
-    message: `Listed ${data.length} of ${matching} backlog item(s).`,
-    data: { items: data, total: matching, truncated: data.length < matching },
-  };
-}
-
-async function getBacklogItem(params: Record<string, unknown>): Promise<ToolResult> {
-  const { prisma } = await import("@dpf/db");
-  const itemIdRaw = String(params["itemId"] ?? "").trim();
-  if (!itemIdRaw)
-    return { success: false, error: "missing_itemId", message: "itemId is required" };
-  const item = await prisma.backlogItem.findUnique({
-    where: { itemId: itemIdRaw },
-    include: {
-      epic: { select: { epicId: true, title: true, status: true } },
-      digitalProduct: { select: { productId: true, name: true } },
-      activeBuild: {
-        select: {
-          buildId: true,
-          phase: true,
-          draftApprovedAt: true,
-          sandboxId: true,
-          createdAt: true,
-        },
-      },
-      activities: {
-        orderBy: { recordedAt: "desc" },
-        take: 10,
-      },
-    },
-  });
-  if (!item)
-    return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
-  const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
-  const { searchSpecsAndPlans } = await import("@/lib/backlog/spec-plan-search");
-  const specPlanRefs = await searchSpecsAndPlans({
-    query: itemIdRaw,
-    itemId: itemIdRaw,
-    matches: 10,
-  });
-  return {
-    success: true,
-    message: `Loaded ${item.itemId}`,
-    data: {
-      itemId: item.itemId,
-      title: item.title,
-      status: item.status,
-      type: item.type,
-      workType: item.workType,
-      source: item.source,
-      priority: item.priority,
-      effortSize: item.effortSize,
-      triageOutcome: item.triageOutcome,
-      body: item.body ?? null,
-      createdAt: item.createdAt.toISOString(),
-      updatedAt: item.updatedAt.toISOString(),
-      completedAt: item.completedAt ? item.completedAt.toISOString() : null,
-      lifecycleLabel: deriveLifecycleLabel({
-        backlogItem: {
-          status: item.status,
-          triageOutcome: item.triageOutcome,
-          activeBuildId: item.activeBuildId,
-        },
-        featureBuild: item.activeBuild
-          ? { phase: item.activeBuild.phase, draftApprovedAt: item.activeBuild.draftApprovedAt }
-          : null,
-        governedBacklogEnabled: true,
-      }),
-      epic: item.epic
-        ? { epicId: item.epic.epicId, title: item.epic.title, status: item.epic.status }
-        : null,
-      digitalProduct: item.digitalProduct
-        ? { productId: item.digitalProduct.productId, name: item.digitalProduct.name }
-        : null,
-      activeBuild: item.activeBuild
-        ? {
-            buildId: item.activeBuild.buildId,
-            phase: item.activeBuild.phase,
-            draftApprovedAt: item.activeBuild.draftApprovedAt
-              ? item.activeBuild.draftApprovedAt.toISOString()
-              : null,
-            sandboxId: item.activeBuild.sandboxId,
-          }
-        : null,
-      specPlanFiles: specPlanRefs.map((r) => ({
-        path: r.path,
-        kind: r.kind,
-        title: r.title,
-        date: r.date,
-      })),
-      recentActivity: item.activities.map((a) => ({
-        id: a.id,
-        kind: a.kind,
-        summary: a.summary,
-        recordedAt: a.recordedAt.toISOString(),
-        payload: a.payload,
-      })),
-    },
-  };
 }
 
 async function updateBacklogItemStatus(

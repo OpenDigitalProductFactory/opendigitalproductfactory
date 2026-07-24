@@ -9,9 +9,11 @@ import {
   BACKLOG_STATUS_VALUES,
   BACKLOG_WORK_TYPE_VALUES,
   BACKLOG_SOURCE_VALUES,
+  BACKLOG_SCOPE_KIND_VALUES,
   type BacklogStatus,
   type BacklogWorkType,
   type BacklogSource,
+  type BacklogScopeKind,
 } from "@/lib/explore/backlog";
 import type { ColumnDefinition, GridRow, CellValue, SelectOption } from "./types";
 
@@ -78,8 +80,23 @@ export const BACKLOG_COLUMNS: ColumnDefinition[] = [
     config: { options: options(BACKLOG_SOURCE_VALUES) },
   },
   { columnId: "epicId", name: "Epic", fieldType: "text", position: 7, required: false, editable: false, width: 160 },
-  { columnId: "body", name: "Details", fieldType: "text", position: 8, required: false, editable: true, width: 360, config: { multiline: true } },
-  { columnId: "updatedAt", name: "Updated", fieldType: "datetime", position: 9, required: false, editable: false, width: 170 },
+  {
+    columnId: "scopeKind",
+    name: "Scope",
+    fieldType: "select",
+    position: 8,
+    required: false,
+    editable: true,
+    width: 170,
+    groupable: true,
+    config: { options: options(BACKLOG_SCOPE_KIND_VALUES) },
+  },
+  { columnId: "archetypeCategories", name: "Archetype categories", fieldType: "text", position: 9, required: false, editable: true, width: 240 },
+  { columnId: "archetypeIds", name: "Archetypes", fieldType: "text", position: 10, required: false, editable: true, width: 240 },
+  { columnId: "lifecycleTags", name: "Lifecycle tags", fieldType: "text", position: 11, required: false, editable: true, width: 220 },
+  { columnId: "scopeRationale", name: "Scope rationale", fieldType: "text", position: 12, required: false, editable: true, width: 300 },
+  { columnId: "body", name: "Details", fieldType: "text", position: 13, required: false, editable: true, width: 360, config: { multiline: true } },
+  { columnId: "updatedAt", name: "Updated", fieldType: "datetime", position: 14, required: false, editable: false, width: 170 },
 ];
 
 /** Map a backlog record (list/detail shape) into a grid row keyed by field name. */
@@ -92,6 +109,11 @@ export function backlogItemToGridRow(item: {
   source: string | null;
   priority: number | null;
   epicId: string | null;
+  scopeKind?: string | null;
+  archetypeCategories?: string[];
+  archetypeIds?: string[];
+  scopeRationale?: string | null;
+  lifecycleTags?: string[];
   body: string | null;
   updatedAt: Date;
 }): GridRow {
@@ -106,6 +128,11 @@ export function backlogItemToGridRow(item: {
       workType: item.workType,
       source: item.source,
       epicId: item.epicId,
+      scopeKind: item.scopeKind ?? null,
+      archetypeCategories: (item.archetypeCategories ?? []).join(", "),
+      archetypeIds: (item.archetypeIds ?? []).join(", "),
+      lifecycleTags: (item.lifecycleTags ?? []).join(", "),
+      scopeRationale: item.scopeRationale ?? null,
       body: item.body,
       updatedAt: item.updatedAt instanceof Date ? item.updatedAt.toISOString() : String(item.updatedAt),
     },
@@ -122,6 +149,11 @@ export interface BacklogPatch {
   workType?: BacklogWorkType;
   source?: BacklogSource;
   body?: string | null;
+  scopeKind?: BacklogScopeKind | null;
+  archetypeCategories?: string[];
+  archetypeIds?: string[];
+  scopeRationale?: string | null;
+  lifecycleTags?: string[];
 }
 
 function asNumber(v: CellValue): number | null {
@@ -133,6 +165,13 @@ function asNumber(v: CellValue): number | null {
 function asStr(v: CellValue): string {
   if (typeof v === "string") return v;
   return v == null ? "" : String(v);
+}
+
+function asStringList(v: CellValue): string[] {
+  if (Array.isArray(v)) {
+    return [...new Set(v.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean))];
+  }
+  return [...new Set(asStr(v).split(",").map((x) => x.trim()).filter(Boolean))];
 }
 
 /**
@@ -165,6 +204,23 @@ export function buildBacklogPatch(changes: Record<string, CellValue>): BacklogPa
   if ("source" in changes) {
     const s = asStr(changes.source);
     if (s) patch.source = s as BacklogSource;
+  }
+  if ("scopeKind" in changes) {
+    const s = asStr(changes.scopeKind);
+    patch.scopeKind = s ? s as BacklogScopeKind : null;
+  }
+  if ("archetypeCategories" in changes) {
+    patch.archetypeCategories = asStringList(changes.archetypeCategories);
+  }
+  if ("archetypeIds" in changes) {
+    patch.archetypeIds = asStringList(changes.archetypeIds);
+  }
+  if ("lifecycleTags" in changes) {
+    patch.lifecycleTags = asStringList(changes.lifecycleTags);
+  }
+  if ("scopeRationale" in changes) {
+    const s = asStr(changes.scopeRationale).trim();
+    patch.scopeRationale = s || null;
   }
   if ("priority" in changes) {
     patch.priority = asNumber(changes.priority);

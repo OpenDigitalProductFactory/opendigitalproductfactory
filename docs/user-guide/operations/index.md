@@ -12,6 +12,7 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 
 - **Backlog Items** — Individual units of work with a status, priority, epic, owner, and optional due date. Items move through statuses: open, in-progress, done, deferred.
 - **Epics** — Groups of related backlog items that together deliver a meaningful outcome. Epics have their own progress tracking based on the status of their items.
+- **Archetype Scope** — Planning metadata that indicates whether work is platform-wide, common across businesses, or specific to an archetype category or leaf archetype. This helps separate market-specific gaps from common finance, workforce, identity, and platform substrate work.
 - **Priority** — Items are ranked by priority to make the most important work visible. Priorities can be adjusted as circumstances change.
 - **Promotions** — Records of features moving from the Build Studio sandbox to production. Each promotion tracks its status (pending, approved, deployed, rolled back), deployment log, and backup reference.
 - **Change Requests (RFCs)** — Formal change records created when features are shipped. RFCs track the type of change (normal, emergency), risk level, and approval chain.
@@ -20,6 +21,7 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 ## What You Can Do
 
 - View the full delivery backlog and filter by epic, status, priority, or owner
+- Review archetype scope fields in backlog workbook grids when planning roadmap or budget slices
 - Create and update backlog items, assign owners, and set due dates
 - Group items into epics and track epic-level progress
 - Identify and resolve blockers before they stall delivery

@@ -17,11 +17,13 @@ import { prisma as defaultPrisma } from "@dpf/db";
 
 import {
   BACKLOG_SOURCE_VALUES,
+  BACKLOG_SCOPE_KIND_VALUES,
   BACKLOG_WORK_TYPE_VALUES,
   type BacklogWorkType,
   type BacklogSource,
   type BacklogTriageOutcome,
   type BacklogEffortSize,
+  type BacklogScopeKind,
 } from "@/lib/explore/backlog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -54,6 +56,12 @@ export interface BacklogIngestInput {
   itemIdPrefix?: string;
   /** Provenance back-link to the origin record (e.g. {kind:"improvement", id:"IP-6F240"}). */
   origin?: { kind: string; id: string };
+  /** Roadmap/budget scope: platform/common/archetype-specific/multi-archetype. */
+  scopeKind?: BacklogScopeKind | null;
+  archetypeCategories?: string[];
+  archetypeIds?: string[];
+  scopeRationale?: string | null;
+  lifecycleTags?: string[];
 }
 
 export interface BacklogIngestResult {
@@ -145,6 +153,7 @@ export function validateIngestInput(input: {
   status?: string;
   triageOutcome?: string | null;
   effortSize?: string | null;
+  scopeKind?: string | null;
 }): string | null {
   if (!input.workType || !(BACKLOG_WORK_TYPE_VALUES as readonly string[]).includes(input.workType)) {
     return `workType is required (one of: ${BACKLOG_WORK_TYPE_VALUES.join(" | ")}).`;
@@ -163,7 +172,15 @@ export function validateIngestInput(input: {
   if (triageOutcome === "build" && !input.effortSize) {
     return "effortSize is required when triageOutcome='build'.";
   }
+  if (input.scopeKind && !(BACKLOG_SCOPE_KIND_VALUES as readonly string[]).includes(input.scopeKind)) {
+    return `scopeKind must be one of: ${BACKLOG_SCOPE_KIND_VALUES.join(" | ")}.`;
+  }
   return null;
+}
+
+function cleanStringArray(values: string[] | undefined): string[] {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
 }
 
 // ─── Default knowledge indexing (fire-and-forget) ─────────────────────────────
@@ -213,6 +230,7 @@ export async function ingestBacklogItem(
     status,
     triageOutcome,
     effortSize,
+    scopeKind: input.scopeKind ?? null,
   });
   if (validationError) {
     throw new Error(`[backlog-ingest] ${validationError}`);
@@ -287,6 +305,11 @@ export async function ingestBacklogItem(
       ...(input.taxonomyNodeId ? { taxonomyNodeId: input.taxonomyNodeId } : {}),
       ...(input.submittedById ? { submittedById: input.submittedById } : {}),
       ...(input.agentId ? { agentId: input.agentId } : {}),
+      ...(input.scopeKind ? { scopeKind: input.scopeKind } : {}),
+      ...(input.archetypeCategories ? { archetypeCategories: cleanStringArray(input.archetypeCategories) } : {}),
+      ...(input.archetypeIds ? { archetypeIds: cleanStringArray(input.archetypeIds) } : {}),
+      ...(input.scopeRationale && input.scopeRationale.trim() ? { scopeRationale: input.scopeRationale.trim() } : {}),
+      ...(input.lifecycleTags ? { lifecycleTags: cleanStringArray(input.lifecycleTags) } : {}),
     },
   });
 

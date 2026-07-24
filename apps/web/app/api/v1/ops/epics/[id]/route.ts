@@ -30,7 +30,16 @@ export async function PATCH(
       throw apiError("NOT_FOUND", "Epic not found", 404);
     }
 
-    const { title, description, status } = parsed.data;
+    const {
+      title,
+      description,
+      status,
+      scopeKind,
+      archetypeCategories,
+      archetypeIds,
+      scopeRationale,
+      lifecycleTags,
+    } = parsed.data;
 
     const isNowDone = status === "done";
     const wasDone = existing.status === "done";
@@ -41,6 +50,11 @@ export async function PATCH(
         ...(title !== undefined && { title: title.trim() }),
         ...(description !== undefined && { description: description.trim() || null }),
         ...(status !== undefined && { status }),
+        ...(scopeKind !== undefined && { scopeKind }),
+        ...(archetypeCategories !== undefined && { archetypeCategories }),
+        ...(archetypeIds !== undefined && { archetypeIds }),
+        ...(scopeRationale !== undefined && { scopeRationale: scopeRationale?.trim() || null }),
+        ...(lifecycleTags !== undefined && { lifecycleTags }),
         ...(isNowDone && !wasDone ? { completedAt: new Date() } : {}),
         ...(!isNowDone && wasDone ? { completedAt: null } : {}),
       },
