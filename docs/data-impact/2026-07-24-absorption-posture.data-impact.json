@@ -5,7 +5,7 @@
     "Prisma-to-EA current-state data-model mirror"
   ],
   "migration": {
-    "name": "20260724160000_add_absorption_posture",
+    "name": "20260724170000_add_absorption_posture",
     "backfill": "none — a new empty table. Rows are seeded idempotently from the vertical-incumbents manifest (seed-absorption-posture.ts); no existing row is read or rewritten."
   },
   "tests": [
