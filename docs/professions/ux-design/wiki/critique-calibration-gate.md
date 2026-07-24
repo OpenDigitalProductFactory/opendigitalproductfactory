@@ -71,6 +71,12 @@ WSID craft decisions are weighed through `evaluate_profession_decision`, which g
 
 The short version: vectors make this gate's *reasoning* legible and its *promotions* auditable. They do not move where the authority sits.
 
+**Profession-local axes are deliberately not declared yet.** The vector design lets a profession declare its own axes — typed `benefit`/`cost`, each projecting onto at least one spine axis so the decision still rolls up when it leaves the profession, and each carrying a cited source. UX design is the design's own worked example: `hierarchy_clarity` projecting onto `human_cognitive_load`.
+
+The obvious candidates here are already named by the craft pages — hierarchy clarity, content density, disclosure quality, and perceptual coherence (the deterministic family), each of which would project onto cognitive load and, for the last, onto aesthetic judgment.
+
+They stay undeclared on purpose. Local axes are **step 4** of a sequence whose first three steps are fixing structural scoring, settling which axes are spine, and migrating the corpus down-tier — and the sequencing is load-bearing, because axes projected onto a spine that is about to change would have to be re-projected and every decision scored against them re-scored. Declaring early would buy nothing and cost exactly the rework the sequence exists to prevent. This page records the candidates so the work is not rediscovered; the declaration waits for the spine.
+
 ## Scope boundary
 
 This gate governs **compositional** critique: is this screen well designed, judged before anyone uses it. It does not govern **behavioural** findings — where real users actually struggled, drawn from usage telemetry. That is a different question with a different evidence base, a different coworker, and its own governance. When a finding is behavioural, hand it over rather than speculating about users that were never observed.
