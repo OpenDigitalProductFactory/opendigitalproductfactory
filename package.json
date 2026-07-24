@@ -30,6 +30,8 @@
     "audit:stale-overrides": "node scripts/audit-stale-overrides.mjs",
     "regen:lockfile": "node scripts/regen-lockfile.mjs",
     "check:reporting-composition": "node scripts/check-reporting-composition.mjs",
+    "check:prose-lint": "tsx scripts/check-prose-lint.ts",
+    "check:prose-lint:test": "tsx --test scripts/check-prose-lint.test.ts",
     "check:n1-caller-honesty": "node scripts/check-n-minus-one-caller-honesty.mjs",
     "check:module-size": "node scripts/check-module-size.mjs",
     "check:data-impact": "node scripts/check-data-impact.mjs",
