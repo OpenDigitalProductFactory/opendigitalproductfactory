@@ -51,10 +51,6 @@ const REGISTRY_PATH = path.join(
   REPO_ROOT,
   "packages/storefront-templates/src/capability-registry.ts",
 );
-const NAV_PATH = path.join(
-  REPO_ROOT,
-  "apps/web/lib/navigation/portal-navigation-model.ts",
-);
 // Recognised consumers live in a bounded set of directories by contract (spec
 // §5.6): route/page/API guards under app/, the nav model, and coworker bindings.
 // Scoping the scan here keeps the guard fast (~800 files, not all ~5.8k of
