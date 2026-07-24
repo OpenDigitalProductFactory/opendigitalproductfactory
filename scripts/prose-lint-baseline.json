@@ -566,6 +566,13 @@
     "longSentences": 1,
     "textMass": 96
   },
+  "apps/web/app/(shell)/coworker-decisions/review/weight-proposal-form.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
   "apps/web/app/(shell)/coworker-decisions/stance/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,

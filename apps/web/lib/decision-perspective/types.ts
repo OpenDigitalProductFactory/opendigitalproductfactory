@@ -126,6 +126,21 @@ export type PerspectiveMaterialScore = {
   exclusionReason: "contradicted" | "superseded" | "rejected" | "revoked" | null;
 };
 
+/**
+ * A scored decision option, matching option-scoring.ts's DecisionOption shape
+ * (BI-D88DFEEA Phase 1). Gates with a small, closed option menu (build-studio
+ * plan-advancement, work-pattern-review) can supply this alongside `options`
+ * so the gate records which option the kernel would recommend and, later,
+ * which one the human actually chose — the raw material weight-inference.ts's
+ * adapter needs. Optional and additive: gates that don't supply it behave
+ * exactly as before.
+ */
+export type DecisionScoredOption = {
+  id: string;
+  description: string;
+  features: Record<string, number>;
+};
+
 export type DecisionPerspectiveEvaluationInput = {
   profile: DecisionPerspectiveProfile;
   fallbackProfiles?: DecisionPerspectiveProfile[];
@@ -133,6 +148,8 @@ export type DecisionPerspectiveEvaluationInput = {
   question: string;
   questionDomain: DecisionDomainClass;
   options: string[];
+  /** See DecisionScoredOption. When supplied, must correspond 1:1 with `options`. */
+  scoredOptions?: DecisionScoredOption[];
   riskTier: DecisionRiskTier;
   evidence?: DecisionEvidenceItem[];
   recentOverrideCount?: number;
@@ -155,6 +172,16 @@ export type DecisionPerspectiveEvaluationResult = {
   riskTier: DecisionRiskTier;
   question: string;
   options: string[];
+  /** Echoes the input when supplied; carried through to persistence. */
+  scoredOptions?: DecisionScoredOption[];
+  /**
+   * The id of the option decide() picked as argmax when `scoredOptions` was
+   * supplied and outcomeType ended up "recommend"/"arbitrate" (BI-D88DFEEA
+   * Phase 1). Null when no scored options were given, when decide() reported
+   * insufficient signal, or when the gate escalated/deferred instead of
+   * recommending a path forward.
+   */
+  recommendedOptionId?: string | null;
   rationale: string;
   materialScores: PerspectiveMaterialScore[];
   sources: Array<{

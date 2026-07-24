@@ -39,6 +39,12 @@ Each row is filed under **the gate that made the decision**, not the doctrine it
 
 A tier reading **"never used"** means that gate has recorded nothing. Treat it as a question, not a conclusion: it can mean the gate genuinely is not exercised, or that nothing is wired to call it. Compare it against the **Consults by caller** panel on the same page — a coworker that never appears there has never consulted the kernel at all.
 
+## Review & Adjust Findings
+
+`/coworker-decisions/review` surfaces findings over the accumulating decision ledger so you can keep governance sharp without reading every row: conflicting principles, gaps where the doctrine has no settled answer yet, a canonical decision that quietly drifted under a doctrine change, and stale decision material.
+
+**Weight-adjustment proposals** are a fifth finding type: when your recorded decisions in one class systematically separate from the kernel's recommendation on a specific axis (e.g. consistently favoring speed over long-term maintainability), the platform proposes adjusting how much that axis should weigh — never automatically. Each proposal shows the axis, direction, how many decisions it's based on, and how consistent the pattern is. Accept it to record it at the same `ruled` authority a real human ruling on stance material reaches, or reject it (with an optional reason) so it stops resurfacing. Accepting does not yet change any live decision score by itself — it is evidence the platform is confident enough to name, not an automatic rule change.
+
 ## What To Watch
 
 - pages marked draft being cited as established policy

@@ -11,6 +11,7 @@ import {
 } from "./persistence";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
+import { recommendOptionAgainstCommandments } from "./option-recommendation";
 import type {
   DecisionPerspectiveEvaluationInput,
   DecisionPerspectiveEvaluationResult,
@@ -18,6 +19,7 @@ import type {
   DecisionDomainClass,
   DecisionGateKey,
   DecisionRiskTier,
+  DecisionScoredOption,
   PerspectiveMaterial,
   PerspectiveMaterialScore,
   DecisionEvidenceItem,
@@ -162,6 +164,8 @@ export function evaluateDecisionPerspective(
       riskTier: input.riskTier,
       question: input.question,
       options: input.options,
+      scoredOptions: input.scoredOptions,
+      recommendedOptionId: null,
       rationale:
         "Decision perspective coverage gap: no active profile or fallback profile has applicable, non-contradicted material for this domain.",
       materialScores: coverageByProfile.flatMap((coverage) => coverage.materialScores),
@@ -207,6 +211,11 @@ export function evaluateDecisionPerspective(
     riskTier: input.riskTier,
     question: input.question,
     options: input.options,
+    scoredOptions: input.scoredOptions,
+    // Computed one level up in evaluatePerspectiveGate, once the outcomeType
+    // below is known — this evaluator is synchronous and the commandment
+    // lookup is not.
+    recommendedOptionId: null,
     materialScores: selectedCoverage.materialScores,
     sources,
   };
@@ -422,6 +431,7 @@ export async function evaluatePerspectiveGate(input: {
   fallbackProfileId?: string;
   question: string;
   options: string[];
+  scoredOptions?: DecisionScoredOption[];
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   routeContext: string;
@@ -632,6 +642,7 @@ export async function evaluatePerspectiveGate(input: {
       question: input.question,
       questionDomain: input.domainClass,
       options: input.options,
+      scoredOptions: input.scoredOptions,
       riskTier: input.riskTier,
       recentOverrideCount: overrides,
       evidence,
@@ -663,6 +674,22 @@ export async function evaluatePerspectiveGate(input: {
       ? "No applicable business stance: neither the organization's profile nor any fallback has material for this decision class."
       : "Decision perspective coverage gap: no active profile or fallback profile has applicable material for Build Studio plan advancement.");
     evaluation.resolvedProfileChain = resolved.resolvedProfileChain;
+  }
+
+  // BI-D88DFEEA Phase 1. Only when the gate supplied scored options AND the
+  // verdict is a path forward (recommend/arbitrate) — an escalate/defer
+  // verdict means the kernel explicitly declined to pick among the options,
+  // so recording a recommendation there would misrepresent what happened.
+  if (
+    input.scoredOptions
+    && input.scoredOptions.length > 0
+    && (evaluation.outcomeType === "recommend" || evaluation.outcomeType === "arbitrate")
+  ) {
+    evaluation.recommendedOptionId = await recommendOptionAgainstCommandments({
+      db: input.db,
+      scoredOptions: input.scoredOptions,
+      organizationId: input.organizationId ?? null,
+    });
   }
 
   console.info(

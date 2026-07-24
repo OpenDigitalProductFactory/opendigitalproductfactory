@@ -4,8 +4,8 @@ authoredAt: 2026-07-24
 authoredBy: mark-bodman
 status: draft
 specKind: design
-backlogItem: pending — no live DPF MCP session was available while drafting this spec (see §9); a BI/epic must be filed against live Postgres before any implementation phase starts, per `backlog-lives-in-postgresql` and `db-fallback-explicit`.
-epic: pending — same reason.
+backlogItem: BI-D88DFEEA — verified 2026-07-24 (live DPF MCP session): this item, filed under EP-DECISION-TIER-REBALANCE the day before this spec, already scopes the identical work as its Phase 2 ("the DecisionInteraction adapter") and Phase 3 ("proposal ledger + surfacing") — see docs/superpowers/plans/2026-07-24-weight-inference-from-rulings.md. No new BI filed; this spec's §4.2 is additional design context on an existing item, not new scope.
+epic: EP-DECISION-TIER-REBALANCE — same verification.
 relatedSpecs:
   - docs/superpowers/specs/2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md
   - docs/superpowers/specs/2026-07-21-memory-trust-and-evidence-currency-design.md
@@ -414,20 +414,41 @@ This spec does not reorder the tier-rebalance spec's own sequencing; it slots in
 
 ## 9. Open questions for founder ratification
 
-1. **Which feeder should Phase 1 target first** — the WWWD/WSID stance ladder (§4.2) or the
-   competence-flywheel's outcome-verdict calibration (§2, BI-A834EE61)? This spec treats them
-   as the same missing adapter with two consumers; the founder may prefer sequencing one before
-   the other.
-2. **Which archetype and correlate for the Phase 3 pilot.** The rental-archetype seasonality
-   candidate named in §4.3 is a proposal, not a decision.
-3. **Backlog/epic homes.** No live DPF MCP session was available while drafting this spec
-   (`db-fallback-explicit`) — this needs a BI under an existing epic (EP-WWMD-MCP and
-   EP-CORPUS-BOOTSTRAP are the two closest candidates surfaced by prior research) or a new one,
-   filed against live Postgres before Phase 1 begins.
-4. **Whether `schema-honesty-over-aspirational-naming` requires renaming anything in §4.3
-   before it ships** — a "situational modifier" that is not yet validated should probably not
-   be called a signal or a vector anywhere in its own code, to avoid the exact naming trap the
-   2026-07-22 design-quality spec found and fixed once already.
+**Resolved 2026-07-24, during Phase 1 implementation kickoff (live DPF MCP session):**
+
+1. **Which feeder should Phase 1 target first — RESOLVED.** Founder direction: the WWWD/WSID
+   stance ladder (§4.2), not the competence-flywheel's outcome-verdict calibration. The
+   flywheel consumer (BI-A834EE61) remains a documented second consumer of the same adapter,
+   sequenced after.
+2. **Which archetype and correlate for the Phase 3 pilot — RESOLVED via `principle_decide`,
+   not by direct founder pick.** Scored three candidates (rental-archetype seasonality,
+   field-service weather, venue-event-calendar) against `PRINCIPLE_DIMENSIONS`
+   (`evidence_density`, `evidence_confidence`, `reversibility`, `blast_radius`,
+   `schema_grounding`, `speed_to_value`, `long_term_maintainability`). Rental-archetype
+   seasonality won clearly — composite 7.647 vs 5.052 (weather) vs 3.832 (venue-calendar),
+   margin 2.595, confidence high, no commandment conflict. This **confirms** the spec's
+   originally-proposed default rather than overriding it: the deciding factor was existing
+   `DecisionInteraction` volume and existing seeded stance content in that archetype
+   (`evidence_density`/`schema_grounding`), not the correlate's cleanliness — weather is a
+   cleaner external signal but has no existing capture path or observation volume yet. Still
+   independent of Phases 1-2 per §6; not built this session.
+3. **Backlog/epic homes — RESOLVED.** No new BI needed. `BI-D88DFEEA` ("Weight inference from
+   rulings"), filed 2026-07-23 under `EP-DECISION-TIER-REBALANCE`, already scopes this exact
+   work: its "Phase 2 — DecisionInteraction adapter" and "Phase 3 — proposal ledger +
+   surfacing" are the same scope as this spec's §4.2 points 1-2. See
+   `docs/superpowers/plans/2026-07-24-weight-inference-from-rulings.md`. Frontmatter above
+   updated accordingly.
+4. **Phase-0-incomplete sequencing call — NEW question surfaced during verification, RESOLVED.**
+   Live backlog check (not spec prose) found Phase 0 is **not** actually complete:
+   `BI-E1267C6D` (RC2) and `BI-AA7D80FE` (spine reduction) are done, but `BI-5FE47130` (corpus
+   migration) is in-progress (16/53) and `BI-106C2585` (profession-local axis scoring wiring,
+   Phases 2-3) has not started. Founder direction: build the Phase 2 adapter now anyway — it
+   is proposal-only and gated by the existing sample-floor/human-ruling ladder, so it cannot
+   corrupt a live decision even against an under-migrated corpus; only the trustworthiness of
+   its eventual output, not the correctness of building it, depends on Phase 0 finishing.
+5. **Whether `schema-honesty-over-aspirational-naming` requires renaming anything in §4.3
+   before it ships — still open, not implementation-time work this session.** §4.3 is not
+   built in this pass; revisit when Phase 3 starts.
 
 ---
 

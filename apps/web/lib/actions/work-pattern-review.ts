@@ -5,9 +5,11 @@ import { prisma, type Prisma } from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { MARK_DPF_PLATFORM_PROFILE } from "@/lib/decision-perspective/default-profile";
 import { createDecisionInteractionId } from "@/lib/decision-perspective/persistence";
+import { recommendOptionAgainstCommandments } from "@/lib/decision-perspective/option-recommendation";
 import type {
   DecisionOutcomeType,
   DecisionRiskTier,
+  DecisionScoredOption,
 } from "@/lib/decision-perspective/types";
 import {
   recordRegulatoryDecisionShadowEvidence,
@@ -47,6 +49,59 @@ import { parseWorkPatternMetadata } from "@/lib/tak/work-pattern-types";
 import type { ReceiptEnvelope } from "@/lib/work-management/receipt-envelope";
 
 type JsonRecord = Record<string, unknown>;
+
+// BI-D88DFEEA Phase 1. Structural feature vectors for the two closed
+// approve/defer/reject menus this file writes. Approving commits the
+// candidate to production use now; deferring withholds judgment for more
+// evidence, fully reversibly; rejecting declines it outright, also fully
+// reversibly but with no further evidence-gathering. Feeds
+// option-recommendation.ts so each row records which of the three the
+// kernel's commandments would pick, alongside the human's actual
+// approve/defer/reject call already captured in `action`/`chosenOption`.
+function approveDeferRejectScoredOptions(
+  approve: string,
+  defer: string,
+  reject: string,
+): DecisionScoredOption[] {
+  return [
+    {
+      id: "approve",
+      description: approve,
+      features: {
+        speed_to_value: 0.8,
+        reversibility: 0.35,
+        blast_radius: 0.35,
+        governance_compliance: 0.3,
+        long_term_maintainability: 0.5,
+        human_cognitive_load: 0.15,
+      },
+    },
+    {
+      id: "defer",
+      description: defer,
+      features: {
+        speed_to_value: 0.3,
+        reversibility: 0.9,
+        blast_radius: 0.1,
+        governance_compliance: 0.5,
+        long_term_maintainability: 0.6,
+        human_cognitive_load: 0.3,
+      },
+    },
+    {
+      id: "reject",
+      description: reject,
+      features: {
+        speed_to_value: 0.2,
+        reversibility: 0.95,
+        blast_radius: 0.05,
+        governance_compliance: 0.6,
+        long_term_maintainability: 0.4,
+        human_cognitive_load: 0.25,
+      },
+    },
+  ];
+}
 
 type ReviewNeedRow = {
   needId: string;
@@ -373,6 +428,18 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
   const outcomeType = outcomeTypeFor(action);
   const routeContext = buildRoute(need.agentId);
   const confidence = shadowEvaluation?.agreementRate ?? 0;
+  const scoredOptions = approveDeferRejectScoredOptions(
+    "Approve scoped activation candidate",
+    "Defer for more evidence",
+    "Reject candidate",
+  );
+  // BI-D88DFEEA Phase 1: which of the three would the kernel's commandments
+  // pick? Recorded alongside the human's actual `action` below so the
+  // weight-inference adapter can compare them once enough rows accumulate.
+  const recommendedOptionId = await recommendOptionAgainstCommandments({
+    db: prisma,
+    scoredOptions,
+  });
 
   await prisma.$transaction(async (tx) => {
     await tx.decisionInteraction.create({
@@ -388,6 +455,9 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
         domainClass: "risk-assessment",
         question: `Review Living Playbook candidate "${need.need}" for ${need.agentId}?`,
         options: ["Approve scoped activation candidate", "Defer for more evidence", "Reject candidate"],
+        scoredOptions,
+        recommendedOptionId,
+        chosenOptionId: action,
         evidenceBundle: inputJson({
           workPatternReview: reviewWithStaging,
           shadowEvaluation,
@@ -543,6 +613,15 @@ export async function resolveWorkPatternCaseProposal(formData: FormData): Promis
   };
   const outcomeType = outcomeTypeFor(action);
   const routeContext = buildRoute(need.agentId);
+  const scoredOptions = approveDeferRejectScoredOptions(
+    "Approve proposal",
+    "Defer proposal",
+    "Reject proposal",
+  );
+  const recommendedOptionId = await recommendOptionAgainstCommandments({
+    db: prisma,
+    scoredOptions,
+  });
 
   await prisma.$transaction(async (tx) => {
     await tx.decisionInteraction.create({
@@ -558,6 +637,9 @@ export async function resolveWorkPatternCaseProposal(formData: FormData): Promis
         domainClass: "risk-assessment",
         question: `Resolve Work Case proposal for Living Playbook "${need.need}"?`,
         options: ["Approve proposal", "Defer proposal", "Reject proposal"],
+        scoredOptions,
+        recommendedOptionId,
+        chosenOptionId: action,
         evidenceBundle: inputJson({
           workPatternReview: reviewWithResolution,
           workPatternCaseProposalResolution: resolution,

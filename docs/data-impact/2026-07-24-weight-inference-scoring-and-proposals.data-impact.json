@@ -1,0 +1,72 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "DecisionInteraction ledger (per-decision audit record read by the decision-review/attention surfaces)",
+    "New WeightAdjustmentProposal table, surfaced on /coworker-decisions/review",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260724160000_weight_inference_scoring_and_proposals",
+    "backfill": "additive only: three nullable columns on DecisionInteraction (scoredOptions, recommendedOptionId, chosenOptionId) plus one new table (WeightAdjustmentProposal). Every existing DecisionInteraction row is left with all three new columns null — the weight-inference adapter's query (scoredOptions/recommendedOptionId/chosenOptionId all not-null) excludes them by construction rather than misreading them. No existing row is modified, no column is dropped."
+  },
+  "tests": [
+    "apps/web/lib/decision-perspective/option-recommendation.test.ts",
+    "apps/web/lib/decision-perspective/weight-inference-adapter.test.ts",
+    "apps/web/lib/decision-perspective/weight-proposal-store.test.ts",
+    "apps/web/lib/decision-perspective/build-studio-gate.test.ts",
+    "apps/web/lib/actions/work-pattern-review.test.ts",
+    "apps/web/lib/wiki/decision-review-findings.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-interaction#gate-scoring",
+      "prismaModel": "DecisionInteraction",
+      "lifecycleDisposition": "existing rows are retained unchanged apart from three new nullable columns defaulting to null; the ledger remains append-only",
+      "fields": [
+        {
+          "fieldId": "data:decision-interaction#scoredOptions",
+          "resolution": "governed",
+          "reason": "persists the per-option feature vectors a gate actually scored (build-studio-gate.ts, work-pattern-review.ts) so a later weight-inference run can read chosen-vs-recommended vectors directly instead of re-deriving them; carries no data about a person, only structural axis scores authored in source (option-recommendation.ts) and a static option-description string",
+          "provenance": "BI-D88DFEEA Phase 1 gate instrumentation, ratified via principle_decide (2026-07-24)"
+        },
+        {
+          "fieldId": "data:decision-interaction#recommendedOptionId",
+          "resolution": "governed",
+          "reason": "records which option the kernel's commandment-only scoring (option-recommendation.ts) favored, so a later comparison against the human's actual choice can measure systematic override — never itself a decision, only an audit record of what the kernel would have picked",
+          "provenance": "BI-D88DFEEA Phase 1; computed in evaluatePerspectiveGate only when scoredOptions is supplied and the gate's own verdict was recommend/arbitrate"
+        },
+        {
+          "fieldId": "data:decision-interaction#chosenOptionId",
+          "resolution": "governed",
+          "reason": "records which option a human actually chose (work-pattern-review.ts's existing approve/defer/reject action, already captured elsewhere on the row) so the weight-inference adapter can pair it with recommendedOptionId; not a new capture of human behavior, just a structured pointer into data the row already carried in humanOutcome.action",
+          "provenance": "BI-D88DFEEA Phase 1; sourced 1:1 from the existing WORK_PATTERN_REVIEW_ACTIONS/WORK_PATTERN_CASE_RESOLUTION_ACTIONS enum already written to humanOutcome"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:weight-adjustment-proposal",
+      "prismaModel": "WeightAdjustmentProposal",
+      "lifecycleDisposition": "new table; a proposal starts at status=proposed (an inference, never authoritative) and reaches a terminal status=ruled or status=rejected only via an explicit human ruling recorded with ruledByUserId/ruledAt — never auto-applied or auto-mutated. Never deleted; a ruled/rejected row is retained as the audit record of that ruling",
+      "fields": [
+        {
+          "fieldId": "data:weight-adjustment-proposal#evidence",
+          "resolution": "not-applicable",
+          "reason": "domainClass/profileId/axis/direction/consistency/meanSeparation/sampleSize/entersAtConfidenceWeight are statistical evidence about a pattern of DECISIONS (aggregated across >=8 observations per weight-inference.ts's sample floor), not data about an identifiable person",
+          "provenance": "spec docs/superpowers/specs/2026-07-23-decision-tier-rebalance-and-vector-epistemology-design.md §2.4; weight-inference.ts's existing sample-floor/consistency-floor guards (WEIGHT_INFERENCE_DEFAULTS, unit-tested)"
+        },
+        {
+          "fieldId": "data:weight-adjustment-proposal#ruledByUserId",
+          "resolution": "governed",
+          "reason": "the accountable-human record for a real governance ruling (accept/reject a weight-adjustment proposal) — the same accountability pattern EscalationCapture.resolverUserId already establishes for stance material, not a new class of personal data",
+          "provenance": "mirrors EscalationCapture.resolverUserId (existing, already-governed field on the same DecisionInteraction ledger)",
+          "flags": ["subject"],
+          "fieldPolicy": "accountable-actor reference only; used to attribute a governance ruling, never a routing key or permission subject"
+        }
+      ]
+    }
+  ]
+}

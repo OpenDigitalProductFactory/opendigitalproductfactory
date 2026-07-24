@@ -14,8 +14,12 @@
 //     (down-weighted in decisions) yet still governs, so it wants re-validation
 //   - drift — a canonical ("golden") decision whose winner flipped, or whose
 //     margin collapsed toward a coin-flip, under the current corpus (spec §4.3)
+//   - weight-proposal — an inferred WeightAdjustmentProposal (BI-D88DFEEA):
+//     the org's recorded decisions systematically separate from the kernel's
+//     recommendation on one axis. Never auto-applied; a human accepts (→
+//     ruled) or rejects it here.
 
-export type FindingClass = "conflict" | "gap" | "staleness" | "drift";
+export type FindingClass = "conflict" | "gap" | "staleness" | "drift" | "weight-proposal";
 
 export type ReviewFinding = {
   id: string;
@@ -41,6 +45,19 @@ export type ReviewFinding = {
    * answerable; kernel/WWMD gaps keep the stance-editor action.
    */
   answer?: { domainClass: string; question: string };
+  /**
+   * When set, the finding is a weight-adjustment proposal (BI-D88DFEEA):
+   * rule on it inline via ruleWeightProposal (accept → ruled, reject →
+   * rejected) instead of navigating to actionHref.
+   */
+  weightProposal?: {
+    proposalId: string;
+    axis: string;
+    direction: string;
+    consistency: number;
+    meanSeparation: number;
+    sampleSize: number;
+  };
 };
 
 /** A single gate decision the ledger flagged as a principle conflict. */
@@ -84,6 +101,46 @@ export type DriftRow = {
   marginFloor: number;
   driftKind: "flip" | "thin-margin";
 };
+
+/** An open (status="proposed") WeightAdjustmentProposal row (BI-D88DFEEA). */
+export type WeightProposalRow = {
+  proposalId: string;
+  domainClass: string;
+  axis: string;
+  direction: string;
+  consistency: number;
+  meanSeparation: number;
+  sampleSize: number;
+};
+
+function humanAxis(axis: string): string {
+  return axis.split("_").filter(Boolean).join(" ");
+}
+
+export function buildWeightProposalFindings(rows: WeightProposalRow[]): ReviewFinding[] {
+  return rows.map((row) => ({
+    id: `weight-proposal:${row.proposalId}`,
+    findingClass: "weight-proposal" as const,
+    title: `${humanDomain(row.domainClass)} decisions consistently ${row.direction} ${humanAxis(row.axis)}`,
+    detail:
+      `Across ${row.sampleSize} recorded decisions, the chosen option separated from the kernel's `
+      + `recommendation on this axis ${Math.round(row.consistency * 100)}% of the time it separated at all `
+      + `(mean separation ${row.meanSeparation.toFixed(2)}). Never auto-applied — rule on it to promote or reject.`,
+    postureLabel: `${row.sampleSize} decisions`,
+    count: row.sampleSize,
+    href: null,
+    actionLabel: "Rule on this",
+    actionHref: "",
+    weightProposal: {
+      proposalId: row.proposalId,
+      axis: row.axis,
+      direction: row.direction,
+      consistency: row.consistency,
+      meanSeparation: row.meanSeparation,
+      sampleSize: row.sampleSize,
+    },
+  }));
+}
 
 function riskPosture(riskTier: string | null): string | null {
   if (!riskTier) return null;
@@ -214,6 +271,7 @@ export function buildReviewFindings(input: {
   drift?: DriftRow[];
   gapClusters: GapCluster[];
   staleMaterial?: StaleMaterialSummary;
+  weightProposals?: WeightProposalRow[];
 }): ReviewFinding[] {
   const conflicts = buildConflictFindings(input.conflicts);
   const drift = input.drift ? buildDriftFindings(input.drift) : [];
@@ -223,5 +281,8 @@ export function buildReviewFindings(input: {
   const staleness = input.staleMaterial
     ? buildStalenessFindings(input.staleMaterial)
     : [];
-  return [...conflicts, ...drift, ...gaps, ...staleness];
+  const weightProposals = input.weightProposals
+    ? buildWeightProposalFindings(input.weightProposals)
+    : [];
+  return [...conflicts, ...drift, ...gaps, ...weightProposals, ...staleness];
 }

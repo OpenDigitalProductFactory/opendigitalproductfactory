@@ -46,3 +46,15 @@ Region               reference-data  # Sub-national region reference data.
 City                 reference-data  # City reference data.
 EmploymentType       reference-data  # HR employment-type lookup.
 WorkLocation         reference-data  # HR work-location lookup.
+
+# ── Domain-lifecycle-managed ──────────────────────────────────────────────────
+# A row's meaningful lifecycle (when it stops being live evidence a human
+# should still look at) is owned by an explicit domain action, not by age.
+
+WeightAdjustmentProposal  domain-lifecycle-managed  # BI-D88DFEEA. status transitions from
+  # proposed to ruled/rejected only via an explicit human ruling
+  # (ruleWeightAdjustmentProposal); a ruled/rejected row is retained
+  # permanently as the audit record of that ruling. A generic age-based sweep
+  # would race the still-open review queue and would delete governance
+  # evidence a real regulated-retention floor doesn't apply to but the
+  # decision ledger it's attached to (DecisionInteraction) does need intact.
