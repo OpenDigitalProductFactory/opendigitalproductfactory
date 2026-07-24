@@ -1,7 +1,7 @@
 ---
 title: "Setup And First Login"
 area: getting-started
-order: 5
+order: 3
 ---
 
 ## Use This Doc For

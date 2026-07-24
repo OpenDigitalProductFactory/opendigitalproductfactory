@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 546,
+  "pageCount": 547,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -8707,6 +8707,85 @@
         "what-to-watch"
       ]
     },
+    "docs/user-guide/contributing/agent-dev-environments.md": {
+      "publicHref": "/user-guide/contributing/agent-dev-environments/",
+      "portalHref": "/docs/contributing/agent-dev-environments",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "agent-development-environments-claude-codex-grok-antigravity",
+        "how-the-pieces-fit-together",
+        "why-a-dedicated-agent-client-instead-of-build-studio",
+        "prerequisites",
+        "step-1-wire-mcp-the-plugin-and-agentsmd-one-command",
+        "reading-the-readiness-banner",
+        "the-plugin-skills-hooks-and-mcp-in-one-package",
+        "skills-the-kernel-aware-workflows",
+        "hooks-local-guardrails-not-to-be-confused-with-webhooks",
+        "step-2-adjust-local-client-settings-to-match-dpfs-processes",
+        "turn-off-open-prs-as-draft",
+        "confirm-the-dpf-mcp-server-is-connected",
+        "let-the-client-load-project-instructions",
+        "be-deliberate-about-auto-run-auto-approve",
+        "per-agent-specifics",
+        "claude",
+        "codex",
+        "grok",
+        "antigravity",
+        "the-dpf-mcp-token-all-clients",
+        "marketplaces-two-different-catalogs",
+        "managing-multiple-threads",
+        "never-work-in-the-root-clone",
+        "spin-up-an-isolated-thread",
+        "commit-and-push-fast",
+        "worktrees-are-source-control-isolation-not-runtime-isolation",
+        "clean-up-when-merged",
+        "webhooks-closing-the-promotion-loop",
+        "adhering-to-the-portals-processes",
+        "troubleshooting",
+        "related"
+      ]
+    },
+    "docs/user-guide/contributing/dev-container.md": {
+      "publicHref": "/user-guide/contributing/dev-container/",
+      "portalHref": "/docs/contributing/dev-container",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "dev-container-setup-vs-code",
+        "prerequisites",
+        "first-time-setup",
+        "what-the-dev-container-provides",
+        "important-notes",
+        "related"
+      ]
+    },
+    "docs/user-guide/contributing/developer-setup.md": {
+      "publicHref": "/user-guide/contributing/developer-setup/",
+      "portalHref": "/docs/contributing/developer-setup",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "developer-setup-ide-hot-reload",
+        "prerequisites",
+        "option-a-automated-script",
+        "option-b-manual-setup",
+        "running-tests",
+        "branching",
+        "related"
+      ]
+    },
+    "docs/user-guide/contributing/index.md": {
+      "publicHref": "/user-guide/contributing/",
+      "portalHref": "/docs/contributing/index",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "who-this-section-is-for",
+        "pages",
+        "related"
+      ]
+    },
     "docs/user-guide/customers/index.md": {
       "publicHref": "/user-guide/customers/",
       "portalHref": "/docs/customers/index",
@@ -8850,45 +8929,6 @@
         "what-to-watch"
       ]
     },
-    "docs/user-guide/getting-started/agent-dev-environments.md": {
-      "publicHref": "/user-guide/getting-started/agent-dev-environments/",
-      "portalHref": "/docs/getting-started/agent-dev-environments",
-      "publishedPublic": true,
-      "publishedPortal": true,
-      "anchors": [
-        "agent-development-environments-claude-codex-grok-antigravity",
-        "how-the-pieces-fit-together",
-        "why-a-dedicated-agent-client-instead-of-build-studio",
-        "prerequisites",
-        "step-1-wire-mcp-the-plugin-and-agentsmd-one-command",
-        "reading-the-readiness-banner",
-        "the-plugin-skills-hooks-and-mcp-in-one-package",
-        "skills-the-kernel-aware-workflows",
-        "hooks-local-guardrails-not-to-be-confused-with-webhooks",
-        "step-2-adjust-local-client-settings-to-match-dpfs-processes",
-        "turn-off-open-prs-as-draft",
-        "confirm-the-dpf-mcp-server-is-connected",
-        "let-the-client-load-project-instructions",
-        "be-deliberate-about-auto-run-auto-approve",
-        "per-agent-specifics",
-        "claude",
-        "codex",
-        "grok",
-        "antigravity",
-        "the-dpf-mcp-token-all-clients",
-        "marketplaces-two-different-catalogs",
-        "managing-multiple-threads",
-        "never-work-in-the-root-clone",
-        "spin-up-an-isolated-thread",
-        "commit-and-push-fast",
-        "worktrees-are-source-control-isolation-not-runtime-isolation",
-        "clean-up-when-merged",
-        "webhooks-closing-the-promotion-loop",
-        "adhering-to-the-portals-processes",
-        "troubleshooting",
-        "related"
-      ]
-    },
     "docs/user-guide/getting-started/ai-coworker.md": {
       "publicHref": "/user-guide/getting-started/ai-coworker/",
       "portalHref": "/docs/getting-started/ai-coworker",
@@ -8906,46 +8946,20 @@
         "tips"
       ]
     },
-    "docs/user-guide/getting-started/dev-container.md": {
-      "publicHref": "/user-guide/getting-started/dev-container/",
-      "portalHref": "/docs/getting-started/dev-container",
-      "publishedPublic": true,
-      "publishedPortal": true,
-      "anchors": [
-        "dev-container-setup-vs-code",
-        "prerequisites",
-        "first-time-setup",
-        "what-the-dev-container-provides",
-        "important-notes",
-        "related"
-      ]
-    },
-    "docs/user-guide/getting-started/developer-setup.md": {
-      "publicHref": "/user-guide/getting-started/developer-setup/",
-      "portalHref": "/docs/getting-started/developer-setup",
-      "publishedPublic": true,
-      "publishedPortal": true,
-      "anchors": [
-        "developer-setup-ide-hot-reload",
-        "prerequisites",
-        "option-a-automated-script",
-        "option-b-manual-setup",
-        "running-tests",
-        "branching",
-        "related"
-      ]
-    },
     "docs/user-guide/getting-started/index.md": {
       "publicHref": "/user-guide/getting-started/",
       "portalHref": "/docs/getting-started/index",
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "welcome-to-the-digital-product-factory",
-        "what-you-can-do",
-        "navigation",
+        "keep-doing-the-work-you-get-paid-for",
+        "it-starts-with-your-kind-of-business",
+        "what-you-get-when-you-pick-one",
+        "your-first-hour",
+        "finding-your-way-around",
         "your-ai-coworker",
-        "next-steps"
+        "when-you-want-something-changed",
+        "where-to-go-next"
       ]
     },
     "docs/user-guide/getting-started/roles-and-access.md": {

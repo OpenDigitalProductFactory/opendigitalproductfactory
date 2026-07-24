@@ -295,10 +295,10 @@
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
     "scripts/dpf-bootstrap-agent-toolchain.ps1": [
-      "docs/user-guide/getting-started/agent-dev-environments.md"
+      "docs/user-guide/contributing/agent-dev-environments.md"
     ],
     "scripts/dpf-bootstrap-agent-toolchain.sh": [
-      "docs/user-guide/getting-started/agent-dev-environments.md"
+      "docs/user-guide/contributing/agent-dev-environments.md"
     ]
   },
   "docToRoutes": {
@@ -498,7 +498,7 @@
     "docs/user-guide/build-studio/index.md": [
       "apps/web/lib/integrate/build-orchestrator.ts"
     ],
-    "docs/user-guide/getting-started/agent-dev-environments.md": [
+    "docs/user-guide/contributing/agent-dev-environments.md": [
       "scripts/dpf-bootstrap-agent-toolchain.ps1",
       "scripts/dpf-bootstrap-agent-toolchain.sh"
     ],

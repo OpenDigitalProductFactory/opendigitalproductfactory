@@ -1,7 +1,7 @@
 ---
 title: "Roles & Access"
 area: getting-started
-order: 2
+order: 5
 ---
 
 ## Two-Tier Role Architecture

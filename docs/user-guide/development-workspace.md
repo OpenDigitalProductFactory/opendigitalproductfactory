@@ -1,7 +1,7 @@
 ---
 title: "Development Workspace"
-area: getting-started
-order: 6
+area: contributing
+order: 4
 ---
 
 ## Overview
@@ -164,4 +164,4 @@ flowchart TD
 
 - [Build Studio](build-studio/index.md)
 - [Build Studio Sandbox](build-studio/sandbox.md)
-- [Agent Development Environments](getting-started/agent-dev-environments.md) — Claude, Codex, and Grok (desktop apps or CLI) as governed coding agents: MCP, skill pack, AGENTS.md, local settings, and managing multiple concurrent threads
+- [Agent Development Environments](contributing/agent-dev-environments.md) — Claude, Codex, and Grok (desktop apps or CLI) as governed coding agents: MCP, skill pack, AGENTS.md, local settings, and managing multiple concurrent threads

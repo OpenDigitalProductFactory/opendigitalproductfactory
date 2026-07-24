@@ -1,7 +1,7 @@
 ---
 title: "Dev Container Setup"
-area: getting-started
-order: 5
+area: contributing
+order: 2
 ---
 
 ## Dev Container Setup (VS Code)
