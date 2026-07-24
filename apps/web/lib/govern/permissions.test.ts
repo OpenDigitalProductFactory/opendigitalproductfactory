@@ -3,6 +3,7 @@ import {
   can,
   canAccessEmployeeRecord,
   getAccessibleSectionNavEntries,
+  getGrantedCapabilities,
   getShellNavSections,
   getWorkspaceSections,
   getWorkspaceTiles,
@@ -304,5 +305,51 @@ describe("canAccessEmployeeRecord()", () => {
         "emp-report-1",
       ),
     ).toBe(false);
+  });
+});
+
+// EP-EMPLOYEE-OCCUPATION P0.1 (BI-6A79A315): HR-600 "Workforce Member" is the
+// least-privilege base access floor for in-trench employees. These tests pin the
+// floor so a later change cannot silently widen it (the security half of the
+// non-widening invariant, spec §5.4).
+describe("HR-600 Workforce Member base floor", () => {
+  const hr600 = { platformRole: "HR-600", isSuperuser: false };
+
+  it("is a valid, recognized platform role", () => {
+    // A recognized role returns a real (possibly empty) capability set, not the
+    // null-role short-circuit. HR-600 grants the workbooks pair, so this is non-empty.
+    expect(getGrantedCapabilities(hr600).length).toBeGreaterThan(0);
+  });
+
+  it("grants only the workbooks work-surface pair", () => {
+    expect(can(hr600, "view_workbooks")).toBe(true);
+    expect(can(hr600, "manage_workbooks")).toBe(true);
+  });
+
+  it("denies every platform-management capability (deny by default)", () => {
+    const denied: CapabilityKey[] = [
+      "view_admin",
+      "view_finance",
+      "manage_finance",
+      "view_customer",
+      "operate_customer",
+      "view_employee",
+      "manage_user_lifecycle",
+      "manage_backlog",
+      "view_operations",
+      "view_platform",
+      "manage_platform",
+      "manage_users",
+      "manage_agents",
+      "view_portfolio",
+    ];
+    denied.forEach((k) => expect(can(hr600, k)).toBe(false));
+  });
+
+  it("sees no platform-management workspace tiles by default", () => {
+    // The occupation dimension focuses the surface on top; the raw role floor is bare.
+    const tiles = getWorkspaceTiles(hr600);
+    expect(tiles.every((t) => t.capabilityKey !== "view_admin")).toBe(true);
+    expect(tiles.every((t) => t.capabilityKey !== "view_finance")).toBe(true);
   });
 });
