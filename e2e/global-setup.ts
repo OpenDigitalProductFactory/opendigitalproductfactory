@@ -1,7 +1,7 @@
 import { chromium, FullConfig } from "@playwright/test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 /**
  * Runs once before all tests. Logs in and saves auth storage state
@@ -26,7 +26,11 @@ export default async function globalSetup(_config: FullConfig) {
   ]);
 
   console.log("[global-setup] Login successful, auth state saved");
-  await context.storageState({ path: "e2e/.auth/state.json" });
+  // e2e/.auth/ is gitignored (not committed — Playwright regenerates it on every
+  // run), so a fresh clone won't have the directory yet. Create it before writing.
+  const authStatePath = "e2e/.auth/state.json";
+  mkdirSync(dirname(authStatePath), { recursive: true });
+  await context.storageState({ path: authStatePath });
   await browser.close();
 }
 
