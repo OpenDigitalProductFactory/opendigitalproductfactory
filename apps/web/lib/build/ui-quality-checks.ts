@@ -82,7 +82,7 @@ export function scanUiSource(source: string, opts?: { isPlatformUi?: boolean }):
         findings.push({ severity: colorSeverity, rule: "hardcoded-hex", description: "Hardcoded hex color — use a var(--dpf-*) token.", line: lineNo, snippet: line.trim().slice(0, 120) });
       }
       if (TW_COLOR_RE.test(line)) {
-        findings.push({ severity: colorSeverity, rule: "tailwind-color-class", description: "Tailwind color-shade class — use a var(--dpf-*) token via bg-[var(--dpf-*)].", line: lineNo, snippet: line.trim().slice(0, 120) });
+        findings.push({ severity: colorSeverity, rule: "tailwind-color-class", description: "Tailwind color-shade class — use an arbitrary-value utility backed by a concrete DPF design token.", line: lineNo, snippet: line.trim().slice(0, 120) });
       }
       if (!usesToken && RGB_RE.test(line)) {
         findings.push({ severity: colorSeverity, rule: "inline-rgb", description: "Inline rgb/hsl color literal — use a var(--dpf-*) token.", line: lineNo, snippet: line.trim().slice(0, 120) });
