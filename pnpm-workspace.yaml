@@ -13,12 +13,10 @@ overrides:
   # 2.0.5 needs Node >=20 + hono ^4, both already satisfied by this workspace.
   '@hono/node-server': '^2.0.5'
   '@expo/cli@0.24.24>picomatch': '3.0.2'
-  # brace-expansion: GHSA-3jxr-9vmj-r5cp DoS via exponential-time expansion of
-  # consecutive non-expanding {} groups (Dependabot #102 for the 1.x line,
-  # #103 for the 2.x line, both high). Floor each pinned line to the patched
-  # release: 1.1.16 and 2.1.2.
-  'minimatch@3.1.5>brace-expansion': '1.1.16'
-  'minimatch@9.0.9>brace-expansion': '2.1.2'
+  # brace-expansion <= 5.0.7: GHSA-mh99-v99m-4gvg / CVE-2026-14257
+  # high-severity advisory (Dependabot #133). Floor every transitive line to
+  # the patched release accepted by OSV.
+  'brace-expansion@<=5.0.7': '5.0.8'
   lodash: '4.18.0'
   lodash-es: '4.18.0'
   node-forge: '1.4.0'
