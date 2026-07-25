@@ -56,8 +56,20 @@ The manual-entry form + spreadsheet-drop, and the 12th `SETUP_STEPS` entry (`app
 | R3 | Declared cost read as derived. | Label declared-not-derived everywhere; real binding is D7 (Phase C-gated). |
 | R4 | Duplicate incumbents on re-intake. | Idempotent match on normalized (org, name/vendor) in P1. |
 
+## Implementation status
+
+- **P1 — intake core: SHIPPED** (PR #3549, merged main sha 324f1ff77c). `apps/web/lib/incumbent/intake.ts` (`createIncumbentApplication`) + `lib/actions/incumbent-intake.ts` action. 8/8 unit tests.
+- **P2 — spreadsheet import: THIS PR.** `apps/web/lib/incumbent/spreadsheet.ts` — `mapRowToIncumbentInput` (header heuristics) + `importIncumbentRows` (per-row intake through the P1 core, malformed rows reported not fatal). Server action `importIncumbentSpreadsheet` parses CSV/TSV/XLSX to a matrix (the workbooks path: `parseDelimitedGrid` / `readSheet` / `inferTableFromSheet`) then imports. 6/6 unit tests (P1 core mocked).
+- **P3 — UI + onboarding step: pending** (design-sensitive; UX-fit review).
+
 ## Backlog coverage
 - Decision: decomposed
 - Parent: BI-BF12C25C
-- Phases: P1 intake core, P2 spreadsheet import, P3 UI + onboarding step
+- Receipt: cmrzm7e8q0btj01o3zb3jpoq6
 - Dependencies: P2 depends on P1; P3 depends on P1 (and consumes BI-ECO-001 P2's postureForArchetype)
+
+Deliverable -> BacklogItem (all deliver the one umbrella BI-BF12C25C; it is not xlarge, so no child-BI split is required):
+
+- P1 intake core -> BI-BF12C25C
+- P2 spreadsheet import -> BI-BF12C25C
+- P3 UI + onboarding step 12 -> BI-BF12C25C
