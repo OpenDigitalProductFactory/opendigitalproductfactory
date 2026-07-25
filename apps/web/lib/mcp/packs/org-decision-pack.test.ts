@@ -24,6 +24,11 @@ vi.mock("@/lib/wiki/inference-adapter", () => ({
   },
 }));
 
+const gateMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/decision-perspective/org-business-gate", () => ({
+  evaluateOrgBusinessDecisionGate: (...args: unknown[]) => gateMock(...args),
+}));
+
 import { orgDecisionPack } from "./org-decision-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
@@ -111,5 +116,73 @@ describe("org-decision pack — record_org_business_answer", () => {
   it("keeps the tool description provenance-free (no BI/phase/source-path leakage)", () => {
     const def = orgDecisionPack.definitions.find((d) => d.name === "record_org_business_answer")!;
     expect(def.description).not.toMatch(/BI-|Phase \d|apps\/web|EP-/);
+  });
+});
+
+describe("org-decision pack — evaluate_org_business_decision optionFeatures (BI-6DCF772F)", () => {
+  it("rejects optionFeatures that don't align 1:1 with options, before invoking the gate", async () => {
+    const res = await orgDecisionPack.handlers.evaluate_org_business_decision!(
+      {
+        question: "Refund this customer?",
+        options: ["Full refund", "Store credit"],
+        optionFeatures: [{ speed_to_value: 0.8 }], // only one, options has two
+        domainClass: "risk-assessment",
+        riskTier: "medium",
+      },
+      "user-1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("invalid_params");
+    expect(String(res.message)).toMatch(/aligned 1:1 with options/);
+    expect(gateMock).not.toHaveBeenCalled();
+  });
+
+  it("threads caller-supplied optionFeatures into the gate as scoredOptions and surfaces recommendedOptionId", async () => {
+    gateMock.mockResolvedValue({
+      interactionId: "DI-1",
+      allowed: true,
+      evaluation: { outcomeType: "recommend", confidenceScore: 0.8, recommendedOptionId: "Full refund", rationale: "ok" },
+      orgProfileSelected: true,
+    });
+
+    const res = await orgDecisionPack.handlers.evaluate_org_business_decision!(
+      {
+        question: "Refund this customer?",
+        options: ["Full refund", "Store credit"],
+        optionFeatures: [
+          { customer_consent_state: 0.9, cost_efficiency: 0.2 },
+          { customer_consent_state: 0.4, cost_efficiency: 0.8 },
+        ],
+        domainClass: "risk-assessment",
+        riskTier: "medium",
+      },
+      "user-1",
+    );
+
+    expect(res.success).toBe(true);
+    expect(gateMock).toHaveBeenCalledTimes(1);
+    const gateArgs = gateMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(gateArgs.scoredOptions).toEqual([
+      { id: "Full refund", description: "Full refund", features: { customer_consent_state: 0.9, cost_efficiency: 0.2 } },
+      { id: "Store credit", description: "Store credit", features: { customer_consent_state: 0.4, cost_efficiency: 0.8 } },
+    ]);
+    expect((res.data as Record<string, unknown>).recommendedOptionId).toBe("Full refund");
+  });
+
+  it("omitting optionFeatures leaves scoredOptions undefined (coverage-only, backward compatible)", async () => {
+    gateMock.mockResolvedValue({
+      interactionId: "DI-2",
+      allowed: true,
+      evaluation: { outcomeType: "recommend", confidenceScore: 0.8, recommendedOptionId: null, rationale: "ok" },
+      orgProfileSelected: true,
+    });
+
+    await orgDecisionPack.handlers.evaluate_org_business_decision!(
+      { question: "Refund?", options: ["yes", "no"], domainClass: "risk-assessment", riskTier: "medium" },
+      "user-1",
+    );
+
+    const gateArgs = gateMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(gateArgs.scoredOptions).toBeUndefined();
   });
 });

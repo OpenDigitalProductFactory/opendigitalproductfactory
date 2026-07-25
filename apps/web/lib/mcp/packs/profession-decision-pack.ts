@@ -29,6 +29,12 @@ const definitions: ToolDefinition[] = [
           items: { type: "string" },
           description: "The distinct options under consideration (at least one).",
         },
+        optionFeatures: {
+          type: "array",
+          items: { type: "object", additionalProperties: { type: "number" } },
+          description:
+            "Optional. Per-option feature vectors, index-aligned to `options` (optionFeatures[i] scores options[i]). Each is an axis→score map in [0,1] over the platform decision axes (e.g. speed_to_value, reversibility, blast_radius, human_cognitive_load, governance_compliance, long_term_maintainability). Provide one map per option to receive a real recommendedOptionId scored against kernel commandments; omit entirely for a coverage-based verdict only.",
+        },
         domainClass: {
           type: "string",
           enum: ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice"],
@@ -69,6 +75,7 @@ async function evaluateProfessionDecision(
   const { DECISION_DOMAIN_CLASSES, DECISION_RISK_TIERS } = await import(
     "@/lib/decision-perspective/types"
   );
+  const { parseOptionFeatures } = await import("@/lib/decision-perspective/scored-option-input");
   const { prisma } = await import("@dpf/db");
 
   const question = String(params["question"] ?? "").trim();
@@ -86,6 +93,11 @@ async function evaluateProfessionDecision(
       error: "invalid_params",
       message: "Provide a question, a non-empty options array, a valid domainClass, and a valid riskTier.",
     };
+  }
+
+  const parsedFeatures = parseOptionFeatures(options, params["optionFeatures"]);
+  if (!parsedFeatures.ok) {
+    return { success: false, error: "invalid_params", message: parsedFeatures.message };
   }
 
   if (!context?.agentId) {
@@ -111,6 +123,7 @@ async function evaluateProfessionDecision(
     },
     question,
     options,
+    scoredOptions: parsedFeatures.scoredOptions,
     domainClass: domainClass as Parameters<typeof evaluateProfessionDecisionGate>[0]["domainClass"],
     riskTier: riskTier as Parameters<typeof evaluateProfessionDecisionGate>[0]["riskTier"],
     routeContext: context?.routeContext ?? "/coworker",
@@ -136,6 +149,7 @@ async function evaluateProfessionDecision(
       confidenceScore: decision.evaluation.confidenceScore,
       professionKey: decision.professionKey,
       professionProfileSelected: decision.professionProfileSelected,
+      recommendedOptionId: decision.evaluation.recommendedOptionId ?? null,
       rationale: rationale.length > 500 ? `${rationale.slice(0, 500)}...` : rationale,
     },
   };

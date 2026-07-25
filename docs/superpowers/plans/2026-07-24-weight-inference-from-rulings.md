@@ -49,6 +49,16 @@ Shipped: `DecisionInteraction.scoredOptions`/`recommendedOptionId`/`chosenOption
 
 Explicitly NOT wired: what a `ruled` weight-adjustment proposal actually does to a live composite score. That is JSI spec Phase 4 ("founder review of the first real weight-adjustment proposals... before either is allowed to influence a live composite score") — correctly out of scope until real proposals have accumulated and been reviewed.
 
+### Phase 1.5 (follow-up) — open-ended gate scoring (SHIPPED as BI-6DCF772F part 1)
+
+The two open-ended gates deferred above are now instrumented. Because their options are arbitrary MCP-caller text (no fixed hand-authored menu to score), the per-option feature vectors must come from the caller:
+
+- `evaluate_org_business_decision` / `evaluate_profession_decision` (`org-decision-pack.ts` / `profession-decision-pack.ts`) accept an **optional** `optionFeatures` param — per-option axis→score maps, index-aligned to `options`. Absent → today's coverage-only verdict, fully backward compatible. Present but misaligned (wrong length / non-numeric) → a loud `invalid_params` at the tool boundary, never a silent skip (`scored-option-input.ts` `parseOptionFeatures`, shared by both packs).
+- The guarded argmax (`recommend`/`arbitrate` verdict + scored options only) was extracted from `evaluatePerspectiveGate` into a shared `resolveRecommendedOptionId` (`option-recommendation.ts`), so `org-business-gate` (via the wrapper) and `profession-gate` (which writes its own row) share ONE implementation instead of hand-rolling the guard twice. `profession-gate` now applies it after its synchronous evaluator call; `org-business-gate` forwards `scoredOptions` and inherits it.
+- No migration: the `scoredOptions`/`recommendedOptionId` columns already exist (Phase 1.5). `chosenOptionId` for these gates still awaits **part 2** (below), so `weight-inference-adapter.ts` — which requires all three columns non-null — will begin extracting observations from org-business/profession rows only once part 2 lands.
+
+**Still deferred to BI-6DCF772F part 2** (live UX, routed through `dpf-ux-fit-review`): the escalation-capture form redesign (`decision-perspective.ts` / `org-decision-capture.ts`) so a human resolving an escalate/defer picks a structured option (populating `chosenOptionId`) alongside the existing free-text rationale.
+
 ## Acceptance
 
 A run over real `humanOutcome` history produces a weight-adjustment proposal, it surfaces for a ruling, and it mutates nothing until ruled; a group below the sample floor produces nothing. Phase 1 delivers the inference + floor + proposal-authority contract; Phases 1.5–3 deliver the live extraction and the ledger, for the two gates (`build-studio-gate.ts`, `work-pattern-review.ts`) instrumented this session. `org-business-gate.ts`/`profession-gate.ts` and the two escalation-capture-form redesigns remain in a follow-up BI.

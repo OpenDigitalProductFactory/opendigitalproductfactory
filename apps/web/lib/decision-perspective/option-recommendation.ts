@@ -67,3 +67,37 @@ export async function recommendOptionAgainstCommandments(input: {
   const result = decide(options, principles);
   return result.recommendation?.optionId ?? null;
 }
+
+/**
+ * Gate-level wrapper around {@link recommendOptionAgainstCommandments} that
+ * applies the shared "only recommend when it means something" guard: a
+ * recommendation is only recorded when the gate actually supplied scored
+ * options AND the verdict is a path forward (`recommend`/`arbitrate`). An
+ * `escalate`/`defer` verdict means the kernel explicitly declined to pick among
+ * the options, so recording a recommendation there would misrepresent what
+ * happened. Returns `null` in every other case.
+ *
+ * Extracted from `evaluatePerspectiveGate` (BI-D88DFEEA) so the two gates that
+ * write their own DecisionInteraction row — the async wrapper and
+ * `profession-gate` — share one argmax implementation instead of hand-rolling
+ * the guard twice (BI-6DCF772F).
+ */
+export async function resolveRecommendedOptionId(input: {
+  db: CommandmentClient;
+  scoredOptions?: DecisionScoredOption[] | null;
+  organizationId?: string | null;
+  outcomeType: string;
+}): Promise<string | null> {
+  if (
+    input.scoredOptions
+    && input.scoredOptions.length > 0
+    && (input.outcomeType === "recommend" || input.outcomeType === "arbitrate")
+  ) {
+    return recommendOptionAgainstCommandments({
+      db: input.db,
+      scoredOptions: input.scoredOptions,
+      organizationId: input.organizationId ?? null,
+    });
+  }
+  return null;
+}

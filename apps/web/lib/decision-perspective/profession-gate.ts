@@ -17,6 +17,7 @@
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { evaluateDecisionPerspective } from "./evaluator";
 import { resolveProfileMaterialForProfession } from "./material";
+import { resolveRecommendedOptionId } from "./option-recommendation";
 import { createDecisionInteractionId, persistDecisionInteraction } from "./persistence";
 import type {
   DecisionDomainClass,
@@ -25,11 +26,14 @@ import type {
   DecisionPerspectiveEvaluationResult,
   DecisionPerspectiveProfile,
   DecisionRiskTier,
+  DecisionScoredOption,
 } from "./types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type ProfessionGateClient = Parameters<typeof resolveProfileMaterialForProfession>[0]["db"] &
-  Parameters<typeof persistDecisionInteraction>[0]["db"];
+  Parameters<typeof persistDecisionInteraction>[0]["db"] &
+  // BI-6DCF772F: the shared argmax reads kernel commandments via wikiPage.
+  Parameters<typeof resolveRecommendedOptionId>[0]["db"];
 
 type GateEvaluator = (input: DecisionPerspectiveEvaluationInput) => DecisionPerspectiveEvaluationResult;
 
@@ -129,6 +133,13 @@ export async function evaluateProfessionDecisionGate(input: {
   agentIdentity: ProfessionAgentIdentityInput;
   question: string;
   options: string[];
+  /**
+   * Optional per-option feature vectors (index-aligned to `options`). When
+   * present and the verdict is a path forward, the gate scores them against
+   * kernel commandments and records a real `recommendedOptionId`; when absent,
+   * only the coverage-based verdict is recorded (BI-6DCF772F).
+   */
+  scoredOptions?: DecisionScoredOption[];
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   /** Where the decision originated, e.g. "/coworker". Recorded on the ledger. */
@@ -254,6 +265,7 @@ export async function evaluateProfessionDecisionGate(input: {
       question,
       questionDomain: domainClass,
       options,
+      scoredOptions: input.scoredOptions,
       riskTier,
       recentOverrideCount: input.recentOverrideCount ?? 0,
       evidence: input.evidence ?? [],
@@ -283,6 +295,18 @@ export async function evaluateProfessionDecisionGate(input: {
       : "No applicable craft guidance: this coworker maps to no profession family and no fallback covered the decision class.";
     evaluation.resolvedProfileChain = resolved.resolvedProfileChain;
   }
+
+  // BI-6DCF772F. The synchronous evaluator echoes scoredOptions but cannot do
+  // the async commandment lookup; apply the same guarded argmax the WWMD/WWWD
+  // wrapper uses so a profession decision with caller-supplied option features
+  // records a real recommendedOptionId (and the weight-inference adapter can
+  // extract an observation once chosenOptionId is captured).
+  evaluation.recommendedOptionId = await resolveRecommendedOptionId({
+    db: input.db,
+    scoredOptions: input.scoredOptions,
+    organizationId: null,
+    outcomeType: evaluation.outcomeType,
+  });
 
   traceWsid("wsid.evaluator.complete", {
     interactionId,

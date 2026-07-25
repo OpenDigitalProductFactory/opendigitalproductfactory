@@ -26,6 +26,7 @@ import type {
   DecisionPerspectiveEvaluationResult,
   DecisionRiskTier,
   DecisionEvidenceItem,
+  DecisionScoredOption,
 } from "./types";
 
 type OrgBusinessGateClient = any;
@@ -51,6 +52,13 @@ export async function evaluateOrgBusinessDecisionGate(input: {
   organizationId: string | null | undefined;
   question: string;
   options: string[];
+  /**
+   * Optional per-option feature vectors (index-aligned to `options`). When
+   * present, the gate scores them against kernel commandments and records a
+   * real `recommendedOptionId`; when absent, only the coverage-based verdict is
+   * recorded (BI-6DCF772F).
+   */
+  scoredOptions?: DecisionScoredOption[];
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   /** Where the decision originated, e.g. "/coworker-business". Recorded on the ledger. */
@@ -73,6 +81,7 @@ export async function evaluateOrgBusinessDecisionGate(input: {
     fallbackProfileId: input.fallbackProfileId,
     question: input.question,
     options: input.options,
+    scoredOptions: input.scoredOptions,
     domainClass: input.domainClass,
     riskTier: input.riskTier,
     routeContext: input.routeContext,
