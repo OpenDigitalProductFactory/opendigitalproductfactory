@@ -3830,6 +3830,7 @@
       "publishedPortal": false,
       "anchors": [
         "federated-demand-channels",
+        "same-company-installations",
         "customer-and-reseller-operation",
         "founder-hub-business-management",
         "privacy-and-recovery-behavior"
