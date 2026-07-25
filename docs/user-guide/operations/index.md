@@ -50,7 +50,7 @@ Across company boundaries, the sharing path for demand your installation owns
 is **end company → distributor → Founder Hub**. Use the item-level controls to
 choose one item and an eligible approved destination. An end company sees its
 distributor links; a distributor sees its upstream Founder Hub link, identified
-by the connected installation's name (for example, Arcamanus). Customer-facing
+by the connected installation's name (for example, Central Founder Hub). Customer-facing
 and downstream reseller relationships are never offered as outbound
 destinations.
 

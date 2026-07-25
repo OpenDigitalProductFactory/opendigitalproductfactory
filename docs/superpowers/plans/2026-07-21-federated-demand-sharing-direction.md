@@ -10,11 +10,11 @@
 
 Enforce one business route for deliberately shared backlog demand:
 
-`end company -> distributor/reseller -> Founder Hub (the Arcamanus installation)`
+`end company -> distributor/reseller -> configured Founder Hub`
 
 The originating company selects each item. A distributor may forward only when
 the source granted bounded Founder Hub consent. The reusable platform identifies
-Arcamanus by the connected peer's display name rather than hardcoding a private
+the configured hub by the connected peer's display name rather than hardcoding a private
 installation name into community code.
 
 This directional rule applies across organizational boundaries. Installations
@@ -67,7 +67,7 @@ route.
 4. Make the existing panel role-aware: explain automatic bidirectional
    same-company visibility separately from the cross-company route, label the
    actual peer, offer forwarding consent only for a distributor destination,
-   and name the selected Founder Hub (for example Arcamanus) on the forwarding
+   and name the selected Founder Hub (for example Central Founder Hub) on the forwarding
    action.
 5. Update the operator guide and federated-demand runbook so setup and recovery
    use the same directional vocabulary.

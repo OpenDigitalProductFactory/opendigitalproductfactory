@@ -71,7 +71,7 @@ describe("NetworkDemandPanel", () => {
       shareContext={{
         localItems: [{ itemId: "BI-LOCAL", title: "Local improvement", status: "open" }],
         targets: [{ linkId: "FL-DISTRIBUTOR", displayName: "Reseller One", role: "managed-by", destinationKind: "distributor", sharedItemIds: [] }],
-        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Arcamanus" }],
+        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Central Founder Hub" }],
         responses: [{
           responseId: "rsp_opaque",
           sourceName: "Reseller One",
@@ -95,7 +95,7 @@ describe("NetworkDemandPanel", () => {
     expect(html).toContain("Share with Reseller One");
     expect(html).toContain("Only the minimized title, summary, applicability, signal count");
     expect(html).toContain("90 days");
-    expect(html).toContain("Forward to Arcamanus");
+    expect(html).toContain("Forward to Central Founder Hub");
     expect(html).toContain("Reseller One");
     expect(html).toContain("offered help");
     expect(html).toContain("Founder decisions");
@@ -108,15 +108,15 @@ describe("NetworkDemandPanel", () => {
       items={[]}
       shareContext={{
         localItems: [{ itemId: "BI-DISTRIBUTOR", title: "Distributor improvement", status: "open" }],
-        targets: [{ linkId: "FL-FOUNDER", displayName: "Arcamanus", role: "channel-downstream", destinationKind: "founder-hub", sharedItemIds: [] }],
-        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Arcamanus" }],
+        targets: [{ linkId: "FL-FOUNDER", displayName: "Central Founder Hub", role: "channel-downstream", destinationKind: "founder-hub", sharedItemIds: [] }],
+        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Central Founder Hub" }],
         responses: [],
         dispositions: [],
       }}
     />);
 
-    expect(html).toContain("Arcamanus — Founder Hub");
-    expect(html).toContain("Share with Arcamanus");
+    expect(html).toContain("Central Founder Hub — Founder Hub");
+    expect(html).toContain("Share with Central Founder Hub");
     expect(html).not.toContain("for 90 days");
   });
 });

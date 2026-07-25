@@ -69,7 +69,7 @@ describe("selectLocalDemandForLink direction", () => {
         linkId: "FL-FOUNDER",
         role: "channel-downstream",
         linkState: "trusted",
-        peerAuthorityUrl: "https://arcamanus.example",
+        peerAuthorityUrl: "https://founder-hub.example",
         peerTokenEnc: "token",
         peerInstallationId: "inst_founder",
         projectionContractId: null,

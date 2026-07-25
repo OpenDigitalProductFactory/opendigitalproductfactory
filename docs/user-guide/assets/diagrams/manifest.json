@@ -1,10 +1,10 @@
 {
   "generatedBy": "scripts/render-doc-diagrams.mjs",
   "diagrams": {
-    "development-workspace/0": "2d9cafaaedd6e316",
     "contributing/agent-dev-environments/0": "633afbe3f256fa24",
     "contributing/agent-dev-environments/1": "1ad992dbabe50357",
     "contributing/agent-dev-environments/2": "94e90c086b9d9e79",
-    "contributing/agent-dev-environments/3": "84945e497683c136"
+    "contributing/agent-dev-environments/3": "84945e497683c136",
+    "development-workspace/0": "2d9cafaaedd6e316"
   }
 }

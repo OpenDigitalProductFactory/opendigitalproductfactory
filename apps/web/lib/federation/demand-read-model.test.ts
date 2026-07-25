@@ -8,7 +8,7 @@ describe("mapDemandShareTargets", () => {
   it("offers only cross-company upstream destinations and leaves same-company peers on automatic sync", () => {
     const targets = mapDemandShareTargets([
       { linkId: "FL-DISTRIBUTOR", role: "managed-by", peerInstallationId: "inst_distributor", principal: { displayName: "Reseller One" } },
-      { linkId: "FL-FOUNDER", role: "channel-downstream", peerInstallationId: "inst_founder", principal: { displayName: "Arcamanus" } },
+      { linkId: "FL-FOUNDER", role: "channel-downstream", peerInstallationId: "inst_founder", principal: { displayName: "Central Founder Hub" } },
       { linkId: "FL-CUSTOMER", role: "manages", peerInstallationId: "inst_customer", principal: { displayName: "Customer One" } },
       { linkId: "FL-DOWNSTREAM", role: "channel-upstream", peerInstallationId: "inst_reseller", principal: { displayName: "Reseller Two" } },
       { linkId: "FL-INTERNAL", role: "same-org-peer", peerInstallationId: "inst_internal", principal: { displayName: "Windows Test" } },
@@ -27,7 +27,7 @@ describe("mapDemandShareTargets", () => {
       },
       {
         linkId: "FL-FOUNDER",
-        displayName: "Arcamanus",
+        displayName: "Central Founder Hub",
         role: "channel-downstream",
         destinationKind: "founder-hub",
         sharedItemIds: [],

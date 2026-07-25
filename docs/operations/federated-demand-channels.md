@@ -23,7 +23,7 @@ its link, and expanding the projection requires approval on both sides.
 ## Customer and reseller operation
 
 Across company boundaries, the supported business route is **end company →
-distributor/reseller → Founder Hub**. On Arcamanus-managed networks, Arcamanus
+distributor/reseller → Founder Hub**. On founder-managed networks, the configured Founder Hub
 is the Founder Hub installation; other deployments use the configured name of
 their own central hub.
 
