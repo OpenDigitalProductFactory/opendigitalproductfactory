@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 551,
+  "pageCount": 552,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -681,6 +681,23 @@
         "enforcement-how-subsequent-changes-stay-conformant",
         "how-to-apply-quick-checklist-when-changing-a-model-facing-surface",
         "related"
+      ]
+    },
+    "docs/architecture/customer-zero-and-use-case-zero.md": {
+      "publicHref": "/architecture/customer-zero-and-use-case-zero/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "customer-zero-and-use-case-zero",
+        "why-this-document-exists",
+        "the-distinction",
+        "the-n1-trap-stated-precisely",
+        "the-four-portfolio-view-is-the-same-line",
+        "this-separation-is-already-enforced-for-capability-maturity",
+        "the-gap-no-equivalent-separation-for-learned-decision-weights",
+        "what-to-claim-and-when",
+        "see-also"
       ]
     },
     "docs/architecture/delivery-ia.md": {
