@@ -214,20 +214,20 @@ importers:
         specifier: 0.27.19
         version: 0.27.19(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@fullcalendar/core':
-        specifier: ^6.1.21
-        version: 6.1.21
+        specifier: ^7.0.0
+        version: 7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5)
       '@fullcalendar/daygrid':
         specifier: ^6.1.21
-        version: 6.1.21(@fullcalendar/core@6.1.21)
+        version: 6.1.21(@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5))
       '@fullcalendar/interaction':
         specifier: ^6.1.21
-        version: 6.1.21(@fullcalendar/core@6.1.21)
+        version: 6.1.21(@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5))
       '@fullcalendar/react':
         specifier: ^6.1.21
-        version: 6.1.21(@fullcalendar/core@6.1.21)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 6.1.21(@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@fullcalendar/timegrid':
         specifier: ^6.1.21
-        version: 6.1.21(@fullcalendar/core@6.1.21)
+        version: 6.1.21(@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5))
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -1741,8 +1741,16 @@ packages:
     resolution: {integrity: sha512-wmglKKPDIkgV3aWlZzWECCPoGIkYCulzBwxG9+w7rc5BGapZ6cPMpoPOT8k36J0Ni7PPX6c/rsoMWfS4d1MUMg==}
     engines: {node: '>=6'}
 
-  '@fullcalendar/core@6.1.21':
-    resolution: {integrity: sha512-t3u/+sqh3Iq7TWtUnVLcGDUE6OWZh0UD3c04bI/l7lSLAgAKr3kngBmhHiQD1QXpwC8ZN5iNqG7a7gOVixhSKQ==}
+  '@full-ui/headless-calendar@7.0.0':
+    resolution: {integrity: sha512-47Y2NoiSt/DJy/+PD9yv4OLhaVJqn8oknFXhS6kiMnoXSOiYkoz6gqVIOCF2nvvQPqKUepb3W3403Qj34QfjtQ==}
+    peerDependencies:
+      temporal-polyfill: ^1.0.1
+
+  '@fullcalendar/core@7.0.0':
+    resolution: {integrity: sha512-cZobng3rB7PQp8zdRp7SIeA4ZEvOWhnwHuFWQf3xXIM9BPfmKb5EFhpiNHCT6zzn041A2wv9ztqiQ60S1sY5KA==}
+    peerDependencies:
+      '@full-ui/headless-calendar': 7.0.0
+      temporal-polyfill: ^1.0.1
 
   '@fullcalendar/daygrid@6.1.21':
     resolution: {integrity: sha512-QYb1y40RGYLlOxKpYWg8O+7njEnKnFG8Tt7qjnubJGR35s1phQg67E+81y2TyAbbm59p2JFOCXGDk9t6KDujIA==}
@@ -8011,9 +8019,6 @@ packages:
     peerDependencies:
       preact: '>=10'
 
-  preact@10.12.1:
-    resolution: {integrity: sha512-l8386ixSsBdbreOAkqtrwqHwdvR35ID8c3rKPa8lCWuO86dBi32QWHV4vfsZK1utLLFMvw+Z5Ad4XLkZzchscg==}
-
   preact@10.24.3:
     resolution: {integrity: sha512-Z2dPnBnMUfyQfSQ+GBdsGa16hz35YmLmtTLhM169uW944hYL6xzTYkJjC07j+Wosz733pMWx0fgON3JNw1jJQA==}
 
@@ -11030,28 +11035,33 @@ snapshots:
 
   '@fortawesome/fontawesome-free@7.3.1': {}
 
-  '@fullcalendar/core@6.1.21':
+  '@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5)':
     dependencies:
-      preact: 10.12.1
+      temporal-polyfill: 0.2.5
 
-  '@fullcalendar/daygrid@6.1.21(@fullcalendar/core@6.1.21)':
+  '@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5)':
     dependencies:
-      '@fullcalendar/core': 6.1.21
+      '@full-ui/headless-calendar': 7.0.0(temporal-polyfill@0.2.5)
+      temporal-polyfill: 0.2.5
 
-  '@fullcalendar/interaction@6.1.21(@fullcalendar/core@6.1.21)':
+  '@fullcalendar/daygrid@6.1.21(@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5))':
     dependencies:
-      '@fullcalendar/core': 6.1.21
+      '@fullcalendar/core': 7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5)
 
-  '@fullcalendar/react@6.1.21(@fullcalendar/core@6.1.21)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@fullcalendar/interaction@6.1.21(@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5))':
     dependencies:
-      '@fullcalendar/core': 6.1.21
+      '@fullcalendar/core': 7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5)
+
+  '@fullcalendar/react@6.1.21(@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@fullcalendar/core': 7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5)
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
-  '@fullcalendar/timegrid@6.1.21(@fullcalendar/core@6.1.21)':
+  '@fullcalendar/timegrid@6.1.21(@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5))':
     dependencies:
-      '@fullcalendar/core': 6.1.21
-      '@fullcalendar/daygrid': 6.1.21(@fullcalendar/core@6.1.21)
+      '@fullcalendar/core': 7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5)
+      '@fullcalendar/daygrid': 6.1.21(@fullcalendar/core@7.0.0(@full-ui/headless-calendar@7.0.0(temporal-polyfill@0.2.5))(temporal-polyfill@0.2.5))
 
   '@grpc/grpc-js@1.14.4':
     dependencies:
@@ -18269,8 +18279,6 @@ snapshots:
   preact-render-to-string@6.5.11(preact@10.24.3):
     dependencies:
       preact: 10.24.3
-
-  preact@10.12.1: {}
 
   preact@10.24.3: {}
 
