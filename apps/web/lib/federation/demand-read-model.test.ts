@@ -1,6 +1,40 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { mapNetworkDemandRows } from "./demand-read-model";
+vi.mock("@dpf/db", () => ({ prisma: {} }));
+
+import { mapDemandShareTargets, mapNetworkDemandRows } from "./demand-read-model";
+
+describe("mapDemandShareTargets", () => {
+  it("offers only cross-company upstream destinations and leaves same-company peers on automatic sync", () => {
+    const targets = mapDemandShareTargets([
+      { linkId: "FL-DISTRIBUTOR", role: "managed-by", peerInstallationId: "inst_distributor", principal: { displayName: "Reseller One" } },
+      { linkId: "FL-FOUNDER", role: "channel-downstream", peerInstallationId: "inst_founder", principal: { displayName: "Central Founder Hub" } },
+      { linkId: "FL-CUSTOMER", role: "manages", peerInstallationId: "inst_customer", principal: { displayName: "Customer One" } },
+      { linkId: "FL-DOWNSTREAM", role: "channel-upstream", peerInstallationId: "inst_reseller", principal: { displayName: "Reseller Two" } },
+      { linkId: "FL-INTERNAL", role: "same-org-peer", peerInstallationId: "inst_internal", principal: { displayName: "Windows Test" } },
+    ], new Map([
+      ["FL-DISTRIBUTOR", ["BI-LOCAL"]],
+      ["FL-CUSTOMER", ["BI-REVERSE"]],
+    ]));
+
+    expect(targets).toEqual([
+      {
+        linkId: "FL-DISTRIBUTOR",
+        displayName: "Reseller One",
+        role: "managed-by",
+        destinationKind: "distributor",
+        sharedItemIds: ["BI-LOCAL"],
+      },
+      {
+        linkId: "FL-FOUNDER",
+        displayName: "Central Founder Hub",
+        role: "channel-downstream",
+        destinationKind: "founder-hub",
+        sharedItemIds: [],
+      },
+    ]);
+  });
+});
 
 describe("mapNetworkDemandRows", () => {
   it("returns share-safe display fields without peer identity or route details", () => {

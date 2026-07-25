@@ -40,6 +40,8 @@ describe("NetworkDemandPanel", () => {
     }]} />);
 
     expect(html).toContain("Shared by connected installations");
+    expect(html).toContain("Same-company connections keep share-safe platform demand visible in both directions");
+    expect(html).toContain("and so does every source backlog");
     expect(html).toContain("Follow");
     expect(html).toContain("I&#x27;m interested");
     expect(html).toContain("Offer help");
@@ -68,8 +70,8 @@ describe("NetworkDemandPanel", () => {
       }]}
       shareContext={{
         localItems: [{ itemId: "BI-LOCAL", title: "Local improvement", status: "open" }],
-        targets: [{ linkId: "FL-CUSTOMER", displayName: "Customer One", role: "manages", sharedItemIds: [] }],
-        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Founder Hub" }],
+        targets: [{ linkId: "FL-DISTRIBUTOR", displayName: "Reseller One", role: "managed-by", destinationKind: "distributor", sharedItemIds: [] }],
+        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Central Founder Hub" }],
         responses: [{
           responseId: "rsp_opaque",
           sourceName: "Reseller One",
@@ -88,14 +90,33 @@ describe("NetworkDemandPanel", () => {
     />);
 
     expect(html).toContain("Share local demand");
-    expect(html).toContain("Share selected demand");
+    expect(html).toContain("Across companies: End company → distributor → Founder Hub");
+    expect(html).toContain("Reseller One — Distributor");
+    expect(html).toContain("Share with Reseller One");
     expect(html).toContain("Only the minimized title, summary, applicability, signal count");
     expect(html).toContain("90 days");
-    expect(html).toContain("Forward to Founder Hub");
+    expect(html).toContain("Forward to Central Founder Hub");
     expect(html).toContain("Reseller One");
     expect(html).toContain("offered help");
     expect(html).toContain("Founder decisions");
     expect(html).toContain("Available in the next compatible release");
     expect(html).not.toContain("inst_customer");
+  });
+
+  it("labels a direct Founder Hub destination without offering transitive consent", () => {
+    const html = renderToStaticMarkup(<NetworkDemandPanel
+      items={[]}
+      shareContext={{
+        localItems: [{ itemId: "BI-DISTRIBUTOR", title: "Distributor improvement", status: "open" }],
+        targets: [{ linkId: "FL-FOUNDER", displayName: "Central Founder Hub", role: "channel-downstream", destinationKind: "founder-hub", sharedItemIds: [] }],
+        founderTargets: [{ linkId: "FL-FOUNDER", displayName: "Central Founder Hub" }],
+        responses: [],
+        dispositions: [],
+      }}
+    />);
+
+    expect(html).toContain("Central Founder Hub — Founder Hub");
+    expect(html).toContain("Share with Central Founder Hub");
+    expect(html).not.toContain("for 90 days");
   });
 });
