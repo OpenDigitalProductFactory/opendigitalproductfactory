@@ -91,6 +91,19 @@ function pruneInvisible(): string {
 /** Why a route produced no measurement — reported, never silently dropped. */
 export type SkipReason = { routePath: string; reason: string };
 
+export async function resetSweepPage(
+  page: {
+    goto(
+      url: string,
+      options: { waitUntil: "load"; timeout: number },
+    ): Promise<unknown>;
+  },
+): Promise<void> {
+  await page
+    .goto("about:blank", { waitUntil: "load", timeout: 10_000 })
+    .catch(() => {});
+}
+
 async function measureRoute(
   page: Page,
   row: ShellRow,
@@ -205,11 +218,11 @@ async function main(): Promise<void> {
         // "Navigation to X is interrupted by another navigation to Y" — a route that is
         // then measured on one run and skipped on another, which reads as a false
         // regression. Resetting to about:blank between routes cancels any pending
-        // navigation and gives every route the same clean starting state. It is
-        // side-effect-free: each real route re-navigates with its own page.goto.
-        await page
-          .goto("about:blank", { waitUntil: "commit", timeout: 10_000 })
-          .catch(() => {});
+        // navigation and gives every route the same clean starting state. Wait for
+        // the full blank-page load: waiting only for "commit" lets that isolation
+        // navigation race and interrupt the next real route. It is side-effect-free:
+        // each real route re-navigates with its own page.goto.
+        await resetSweepPage(page);
       }
     }
   } finally {
