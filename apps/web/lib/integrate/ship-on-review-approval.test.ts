@@ -112,6 +112,15 @@ vi.mock("@/lib/agent-event-bus", () => ({
   },
 }));
 
+// The evidence-gated autonomous acceptance step (BUILD_EVIDENCE_AUTO_ACCEPT, default
+// OFF) is exhaustively unit-tested in auto-accept.test.ts. Here it must be an inert
+// no-op so it neither perturbs the ship-flow assertions nor drags its real
+// collaborator modules into this mocked graph — it runs before the review→ship gate
+// read and, with the flag off (production default), always declines.
+vi.mock("@/lib/build/auto-accept", () => ({
+  autoAcceptBuildOnEvidence: vi.fn(async () => ({ accepted: false as const, reason: "flag-off" })),
+}));
+
 import {
   dispatchShipForVerifiedBuild,
   autoResolveShipForks,
