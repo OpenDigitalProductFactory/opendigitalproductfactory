@@ -887,8 +887,10 @@ jobs:
     # CLI flag contract: the staleness threshold, the never-touch-root /
     # never-touch-live-worktree safety guards, and dry-run-vs-apply. Also gates
     # the sandbox-freshness drift detector + gate-worktree contract
-    # (BI-ECDF9520): a stale shared-sandbox install must classify as
-    # SANDBOX_DRIFT, never as product build evidence. These node
+    # (BI-ECDF9520), plus the Node-native pregate fallback for
+    # source-only/no-native-sh worktrees (BI-2272D840): a stale
+    # shared-sandbox install must classify as SANDBOX_DRIFT, never as
+    # product build evidence. These node
     # --test files have no daemon/docker dependency (pure logic), so they run on
     # a bare runner. See scripts/lib/runtime-artifact-janitor.mjs.
     steps:
@@ -909,7 +911,8 @@ jobs:
             scripts/sandbox-freshness-preflight.test.mjs \
             scripts/release/re-resolve-stt-digest.test.mjs \
             scripts/lib/ensure-pre-push-hook.test.mjs \
-            tests/release/local-ci-gate-contract.test.mjs
+            tests/release/local-ci-gate-contract.test.mjs \
+            tests/release/pregate-node-gate-contract.test.mjs
       - name: Smoke --help (must exit 0, no docker required)
         run: node scripts/runtime-artifact-janitor.mjs --help > /dev/null
 
