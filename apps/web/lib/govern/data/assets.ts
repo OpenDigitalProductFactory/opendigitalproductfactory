@@ -169,6 +169,90 @@ export function resolveField(
 
 const SEED_ASSETS: readonly DataAssetDefinition[] = [
   {
+    // BI-F12A8D0D: machine-bound X.509 lifecycle metadata for an Edge Node.
+    // The device private key and CA private key never enter this asset.
+    id: "data:edge-node-certificate",
+    physical: { prismaModel: "EdgeNodeCertificate" },
+    domain: "edge-fleet",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["authorization", "configuration", "security-audit"],
+    sensitivity: "restricted",
+    criticality: "high",
+    subjectLocators: [],
+    lifecycleClass: "security-audit",
+    purposeCapabilities: ["service-delivery", "security-and-fraud", "platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-24" },
+    fields: [
+      ...[
+        "certificateId",
+        "fingerprintSha256",
+        "serialNumber",
+        "subject",
+        "issuer",
+        "provisioner",
+      ].map((physicalName) => ({
+        id: `data:edge-node-certificate#${physicalName}` as DataFieldId,
+        physicalName,
+        resolution: "governed" as const,
+        resolutionReason:
+          "Machine-certificate identity metadata used to authenticate an Edge Node. It is not secret key material, but disclosure increases reconnaissance and correlation risk.",
+        categories: ["authorization", "security-audit"] as DataCategory[],
+        sensitivity: "restricted" as DataSensitivity,
+        collectionRule: "minimize" as const,
+        protection: "mask-on-read" as ProtectionProfileKey,
+        projectionOverride: "structure" as ProjectionClass,
+        provenance: {
+          source: "manual" as const,
+          state: "confirmed" as const,
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-24",
+        },
+      })),
+      ...[
+        "edgeNodeId",
+        "status",
+        "validFrom",
+        "validUntil",
+        "registeredAt",
+        "lastSeenAt",
+        "revokedAt",
+        "revocationReason",
+      ].map((physicalName) => ({
+        id: `data:edge-node-certificate#${physicalName}` as DataFieldId,
+        physicalName,
+        resolution: "governed" as const,
+        resolutionReason:
+          "Certificate binding and lifecycle evidence retained for authorization, rotation, revocation, and security audit.",
+        categories: ["authorization", "security-audit"] as DataCategory[],
+        sensitivity: "restricted" as DataSensitivity,
+        collectionRule: "minimize" as const,
+        projectionOverride: "metadata" as ProjectionClass,
+        provenance: {
+          source: "manual" as const,
+          state: "confirmed" as const,
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-24",
+        },
+      })),
+      ...["id", "createdAt", "updatedAt", "edgeNode"].map((physicalName) => ({
+        id: `data:edge-node-certificate#${physicalName}` as DataFieldId,
+        physicalName,
+        resolution: "inherited" as const,
+        resolutionReason:
+          "Internal persistence identity, audit timestamp, or relation governed by the restricted certificate asset.",
+        provenance: {
+          source: "manual" as const,
+          state: "confirmed" as const,
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-24",
+        },
+      })),
+    ],
+  },
+  {
     // BI-DE47EC0B: partner-program commercial terms for an account that resells
     // / delivers DPF (the local-MSP channel). No data subject — this describes a
     // BUSINESS relationship, not a person; the partner's people are contacts on
