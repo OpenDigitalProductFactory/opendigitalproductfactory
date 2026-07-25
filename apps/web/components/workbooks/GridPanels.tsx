@@ -45,6 +45,7 @@ import {
   type FooterAgg,
 } from "./grid-footer-summary";
 import { GridSelect } from "./GridSelect";
+import { FieldTypeIcon } from "./grid-field-icons";
 
 const PANEL = "flex flex-col gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2";
 const CTRL = "rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]";
@@ -80,48 +81,44 @@ export function GridFilterPanel({
         return (
           <div key={cond.id} className="flex flex-wrap items-center gap-2">
             <span className="w-12 text-sm text-[var(--dpf-muted)]">
-              {i === 0 ? "Where" : (
-                <select
+              {i === 0 ? (
+                "Where"
+              ) : i === 1 ? (
+                <GridSelect
                   value={filterGroup.combinator}
-                  onChange={(e) =>
-                    setFilterGroup((g) => ({ ...g, combinator: e.target.value as FilterGroup["combinator"] }))
+                  options={[
+                    { value: "and", label: "and" },
+                    { value: "or", label: "or" },
+                  ]}
+                  onChange={(v) =>
+                    setFilterGroup((g) => ({ ...g, combinator: v as FilterGroup["combinator"] }))
                   }
-                  aria-label="Combine conditions"
-                  className={CTRL}
-                  disabled={i > 1}
-                >
-                  <option value="and">and</option>
-                  <option value="or">or</option>
-                </select>
+                  ariaLabel="Combine conditions"
+                  variant="bare"
+                />
+              ) : (
+                filterGroup.combinator
               )}
             </span>
-            <select
+            <GridSelect
               value={cond.columnId}
-              onChange={(e) => {
-                const next = colOf(e.target.value);
-                update(cond.id, { columnId: e.target.value, op: opsForField(next.fieldType)[0]! });
+              options={columns.map((c) => ({
+                value: c.columnId,
+                label: c.name,
+                icon: <FieldTypeIcon fieldType={c.fieldType} />,
+              }))}
+              onChange={(v) => {
+                const next = colOf(v);
+                update(cond.id, { columnId: v, op: opsForField(next.fieldType)[0]! });
               }}
-              aria-label="Filter column"
-              className={CTRL}
-            >
-              {columns.map((c) => (
-                <option key={c.columnId} value={c.columnId}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <select
+              ariaLabel="Filter column"
+            />
+            <GridSelect
               value={cond.op}
-              onChange={(e) => update(cond.id, { op: e.target.value as FilterOp })}
-              aria-label="Filter operator"
-              className={CTRL}
-            >
-              {ops.map((op) => (
-                <option key={op} value={op}>
-                  {FILTER_OP_LABELS[op]}
-                </option>
-              ))}
-            </select>
+              options={ops.map((op) => ({ value: op, label: FILTER_OP_LABELS[op] }))}
+              onChange={(v) => update(cond.id, { op: v as FilterOp })}
+              ariaLabel="Filter operator"
+            />
             {!isUnaryOp(cond.op) && (
               <input
                 value={cond.value}
@@ -233,45 +230,35 @@ export function GridSummaryPanel({
         <span className="text-sm text-[var(--dpf-muted)]">
           {summaryMode === "pivot" ? "Rows" : "Group by"}
         </span>
-        <select
+        <GridSelect
           value={groupBy}
-          onChange={(e) => setSummaryGroupBy(e.target.value)}
-          aria-label={summaryMode === "pivot" ? "Pivot row column" : "Group by column"}
-          className={CTRL}
-        >
-          {columns.map((c) => (
-            <option key={c.columnId} value={c.columnId}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          options={columns.map((c) => ({
+            value: c.columnId,
+            label: c.name,
+            icon: <FieldTypeIcon fieldType={c.fieldType} />,
+          }))}
+          onChange={setSummaryGroupBy}
+          ariaLabel={summaryMode === "pivot" ? "Pivot row column" : "Group by column"}
+        />
         {summaryMode === "pivot" && (
           <>
             <span className="text-sm text-[var(--dpf-muted)]">Columns</span>
-            <select
+            <GridSelect
               value={pivotCol}
-              onChange={(e) => setSummaryPivotCol(e.target.value)}
-              aria-label="Pivot column"
-              className={CTRL}
-            >
-              {columns.map((c) => (
-                <option key={c.columnId} value={c.columnId}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <select
+              options={columns.map((c) => ({
+                value: c.columnId,
+                label: c.name,
+                icon: <FieldTypeIcon fieldType={c.fieldType} />,
+              }))}
+              onChange={setSummaryPivotCol}
+              ariaLabel="Pivot column"
+            />
+            <GridSelect
               value={summaryAgg}
-              onChange={(e) => setSummaryAgg(e.target.value as PivotAgg)}
-              aria-label="Pivot aggregate"
-              className={CTRL}
-            >
-              {PIVOT_AGGS.map((a) => (
-                <option key={a} value={a}>
-                  {PIVOT_AGG_LABELS[a]}
-                </option>
-              ))}
-            </select>
+              options={PIVOT_AGGS.map((a) => ({ value: a, label: PIVOT_AGG_LABELS[a] }))}
+              onChange={(v) => setSummaryAgg(v as PivotAgg)}
+              ariaLabel="Pivot aggregate"
+            />
           </>
         )}
         {showValuePicker && (
@@ -279,19 +266,19 @@ export function GridSummaryPanel({
             <span className="text-sm text-[var(--dpf-muted)]">
               {summaryMode === "pivot" ? "of" : "summarize"}
             </span>
-            <select
+            <GridSelect
               value={summaryValue}
-              onChange={(e) => setSummaryValue(e.target.value)}
-              aria-label="Value column"
-              className={CTRL}
-            >
-              <option value="">{summaryMode === "pivot" ? "—" : "count only"}</option>
-              {numCols.map((c) => (
-                <option key={c.columnId} value={c.columnId}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: summaryMode === "pivot" ? "—" : "count only" },
+                ...numCols.map((c) => ({
+                  value: c.columnId,
+                  label: c.name,
+                  icon: <FieldTypeIcon fieldType={c.fieldType} />,
+                })),
+              ]}
+              onChange={setSummaryValue}
+              ariaLabel="Value column"
+            />
           </>
         )}
         <div className="ml-auto inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)] text-sm">
@@ -433,30 +420,22 @@ export function GridFormatPanel({
         return (
           <div key={rule.id} className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-[var(--dpf-muted)]">Highlight when</span>
-            <select
+            <GridSelect
               value={rule.columnId}
-              onChange={(e) => update({ columnId: e.target.value })}
-              aria-label="Column"
-              className={CTRL}
-            >
-              {columns.map((c) => (
-                <option key={c.columnId} value={c.columnId}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <select
+              options={columns.map((c) => ({
+                value: c.columnId,
+                label: c.name,
+                icon: <FieldTypeIcon fieldType={c.fieldType} />,
+              }))}
+              onChange={(v) => update({ columnId: v })}
+              ariaLabel="Column"
+            />
+            <GridSelect
               value={rule.operator}
-              onChange={(e) => update({ operator: e.target.value as ConditionalRule["operator"] })}
-              aria-label="Operator"
-              className={CTRL}
-            >
-              {CF_OPERATORS.map((op) => (
-                <option key={op} value={op}>
-                  {CF_OPERATOR_LABELS[op]}
-                </option>
-              ))}
-            </select>
+              options={CF_OPERATORS.map((op) => ({ value: op, label: CF_OPERATOR_LABELS[op] }))}
+              onChange={(v) => update({ operator: v as ConditionalRule["operator"] })}
+              ariaLabel="Operator"
+            />
             {operatorNeedsValue(rule.operator) && (
               <input
                 value={rule.value}
@@ -466,19 +445,16 @@ export function GridFormatPanel({
                 className={CTRL}
               />
             )}
-            <select
+            <GridSelect
               value={rule.color}
-              onChange={(e) => update({ color: e.target.value as ConditionalRule["color"] })}
-              aria-label="Color"
-              className={CTRL}
-            >
-              {CF_COLORS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <span className={`dpf-cf-swatch ${rowColorClass(rule.color)}`} aria-hidden="true" />
+              options={CF_COLORS.map((c) => ({
+                value: c,
+                label: c,
+                icon: <span className={`dpf-cf-swatch ${rowColorClass(c)}`} aria-hidden="true" />,
+              }))}
+              onChange={(v) => update({ color: v as ConditionalRule["color"] })}
+              ariaLabel="Color"
+            />
             <button
               type="button"
               onClick={() => setCfRules((rs) => rs.filter((r) => r.id !== rule.id))}
@@ -564,7 +540,11 @@ export function GridGroupPanel({
       {available.length > 0 && (
         <GridSelect
           value=""
-          options={available.map((c) => ({ value: c.columnId, label: c.name }))}
+          options={available.map((c) => ({
+            value: c.columnId,
+            label: c.name,
+            icon: <FieldTypeIcon fieldType={c.fieldType} />,
+          }))}
           onChange={(v) => {
             setGroupBy([...effectiveGroupBy, v]);
             resetGroupExpansion();
@@ -706,18 +686,15 @@ export function GridColumnsPanel({
           ))}
         </div>
         <span className="text-sm text-[var(--dpf-muted)]">Freeze first</span>
-        <select
-          value={effectiveFrozen}
-          onChange={(e) => setFrozenCount(Number(e.target.value))}
-          aria-label="Freeze first N columns"
-          className={CTRL}
-        >
-          {Array.from({ length: Math.max(1, visibleColsCount) }, (_, i) => i).map((n) => (
-            <option key={n} value={n}>
-              {n === 0 ? "no columns" : `${n} column${n === 1 ? "" : "s"}`}
-            </option>
-          ))}
-        </select>
+        <GridSelect
+          value={String(effectiveFrozen)}
+          options={Array.from({ length: Math.max(1, visibleColsCount) }, (_, i) => i).map((n) => ({
+            value: String(n),
+            label: n === 0 ? "no columns" : `${n} column${n === 1 ? "" : "s"}`,
+          }))}
+          onChange={(v) => setFrozenCount(Number(v))}
+          ariaLabel="Freeze first N columns"
+        />
         <label className="inline-flex items-center gap-1 text-sm text-[var(--dpf-text)]">
           <input type="checkbox" checked={showFooter} onChange={() => setShowFooter((v) => !v)} />
           Summary bar

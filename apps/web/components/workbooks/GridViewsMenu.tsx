@@ -9,6 +9,7 @@
 // worse). Applying a view is the Grid's job — this only signals intent.
 
 import { useState, type ReactNode } from "react";
+import { Bookmark } from "lucide-react";
 import type { NamedView } from "./grid-named-views";
 
 export interface GridViewsMenuProps {
@@ -53,11 +54,12 @@ export function GridViewsMenu({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="rounded-md border border-[var(--dpf-border)] px-3 py-1 text-sm text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1 text-sm text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
         title="Saved views"
       >
+        <Bookmark size={15} aria-hidden />
         {active ? active.name : "Views"}
-        <span aria-hidden="true"> ▾</span>
+        <span aria-hidden="true">▾</span>
       </button>
       {open && (
         <>

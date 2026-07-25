@@ -159,6 +159,9 @@ import {
   Layers,
   SlidersHorizontal,
   Info,
+  Table as TableIcon,
+  LayoutGrid,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 
 export interface WorkbookGridProps {
@@ -1215,20 +1218,24 @@ export function WorkbookGrid({
           {(hasDateColumn
             ? (["grid", "gallery", "calendar"] as const)
             : (["grid", "gallery"] as const)
-          ).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setViewMode(m)}
-              className={
-                viewMode === m
-                  ? "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium capitalize text-[var(--dpf-text)]"
-                  : "px-2 py-1 capitalize text-[var(--dpf-muted)]"
-              }
-            >
-              {m}
-            </button>
-          ))}
+          ).map((m) => {
+            const ModeIcon = m === "grid" ? TableIcon : m === "gallery" ? LayoutGrid : CalendarIcon;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setViewMode(m)}
+                className={
+                  viewMode === m
+                    ? "inline-flex items-center gap-1 bg-[var(--dpf-surface-1)] px-2 py-1 font-medium capitalize text-[var(--dpf-text)]"
+                    : "inline-flex items-center gap-1 px-2 py-1 capitalize text-[var(--dpf-muted)]"
+                }
+              >
+                <ModeIcon size={14} aria-hidden />
+                {m}
+              </button>
+            );
+          })}
         </div>
         {error && <span className="text-sm text-[var(--dpf-error)]">{error}</span>}
       </div>
