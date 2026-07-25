@@ -599,6 +599,54 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(buildActivityCreateMock).not.toHaveBeenCalled();
   });
 
+  // BI-B036209D: a build stranded in `build` phase with a NULL exec-state (no
+  // step) — the recovery reconciler's "cleared for clean restart", or a 0-task
+  // orchestration — was silently skipped AND not aged out, orphaning forever.
+  // It must now re-dispatch (clean restart) when fresh, and age out when stale.
+  it("re-dispatches a build-phase strand whose exec-state is null (clean restart, BI-B036209D)", async () => {
+    const recent = new Date();
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-NULLSTATE", phase: "build", buildExecState: null, verificationOut: null, createdById: "u", createdAt: recent, parentEpicId: "EP-1" },
+    ]);
+    const dispatch = vi.fn();
+    const abandonStale = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot(
+      { dispatch, abandonStale },
+      { log: vi.fn(), error: vi.fn() },
+    );
+
+    expect(result).toEqual({ resumed: 1, flagged: 0, advanced: 0, abandoned: 0 });
+    // Re-dispatched for a clean restart — even though it is an epic child (no
+    // parent-epic exemption in the build phase).
+    expect(dispatch).toHaveBeenCalledWith("BLD-NULLSTATE");
+    expect(abandonStale).not.toHaveBeenCalled();
+    expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ages out a build-phase strand with null exec-state once past the cap (BI-B036209D)", async () => {
+    const old = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000); // 20 days > 7-day cap
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-NULL-OLD", phase: "build", buildExecState: null, verificationOut: null, createdById: "u", createdAt: old, parentEpicId: "EP-1" },
+    ]);
+    const dispatch = vi.fn();
+    const abandonStale = vi.fn().mockResolvedValue(true);
+    const log = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot(
+      { dispatch, abandonStale },
+      { log, error: vi.fn() },
+    );
+
+    expect(result).toEqual({ resumed: 0, flagged: 0, advanced: 0, abandoned: 1 });
+    // Reaped, not re-dispatched — a build that can never dispatch must not churn.
+    expect(abandonStale).toHaveBeenCalledWith(
+      expect.objectContaining({ buildId: "BLD-NULL-OLD", phase: "build" }),
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(log.mock.calls.some((c) => String(c[0]).includes("aged out to abandoned"))).toBe(true);
+  });
+
   // BI-9257CF19: pre-build phases (ideate/plan/review) now AUTO-RESUME via the
   // canonical generator/reviewer re-fire instead of merely flagging for
   // operator rescue, so an in-flight build survives a self-upgrade swap. The

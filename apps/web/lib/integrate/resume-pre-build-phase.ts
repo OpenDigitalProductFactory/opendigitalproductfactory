@@ -85,6 +85,21 @@ function isResumablePreBuildPhase(phase: string): boolean {
 }
 
 /**
+ * Non-terminal phases the age-out reaper may retire to `abandoned`: the pre-build
+ * phases PLUS `build`. A build stranded in `build` with a null/absent
+ * buildExecState has no working step-machine and is not covered by any other
+ * reaper, so the cap must reach it too or it orphans forever (BI-B036209D).
+ */
+const ABANDONABLE_STRANDED_PHASES: readonly string[] = [
+  ...RESUMABLE_PRE_BUILD_PHASES,
+  "build",
+];
+
+function isAbandonableStrandedPhase(phase: string): boolean {
+  return ABANDONABLE_STRANDED_PHASES.includes(phase);
+}
+
+/**
  * Pure decision: has a pre-build strand outlived the resume cap and should be
  * aged out to `abandoned` instead of resumed again? No DB; unit-tested.
  *
@@ -131,9 +146,9 @@ export async function abandonStrandedPreBuild(params: {
         where: { buildId },
         select: { phase: true, abandonedAt: true },
       });
-      // Already terminal/abandoned, or advanced out of a pre-build phase since
-      // the scan — nothing to do.
-      if (!fresh || fresh.abandonedAt || !isResumablePreBuildPhase(fresh.phase)) {
+      // Already terminal/abandoned, or advanced out of an abandonable strand
+      // phase (pre-build or `build`) since the scan — nothing to do.
+      if (!fresh || fresh.abandonedAt || !isAbandonableStrandedPhase(fresh.phase)) {
         return false;
       }
       await tx.featureBuild.update({
