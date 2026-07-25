@@ -888,3 +888,96 @@ test("local-ci-runner.sh refuses to gate main or a detached HEAD", () => {
   assert.notEqual(onMain.status, 0);
   assert.match(onMain.stderr, /gate topic branches, not main/);
 });
+
+// ── shared-object-store self-repair (BI-AA2201B0) ────────────────────────────
+// The scratch merge workspace is a linked worktree of the root clone and
+// shares its .git/shallow. A disjoint shallow graft there makes the merge
+// step fail with "refusing to merge unrelated histories" even when the
+// branches share real ancestry on the remote. local-ci-runner.sh must
+// unshallow the root once, up front, before that merge ever runs.
+
+function stubGitFor(shallow) {
+  const stubDir = mkdtempSync(join(tmpdir(), "dpf-local-ci-shallow-stub-"));
+  const callsFile = join(stubDir, "calls.log");
+  const fakeRoot = join(stubDir, "fake-root").replace(/\\/g, "/");
+  writeFileSync(join(stubDir, "git"), `#!/bin/sh
+echo "$*" >> "${callsFile}"
+case "$*" in
+  "rev-parse --show-toplevel")
+    echo "${fakeRoot}" ;;
+  "-C ${fakeRoot} worktree list --porcelain")
+    echo "worktree ${fakeRoot}" ;;
+  "-C ${fakeRoot} rev-parse --is-shallow-repository")
+    echo "${shallow ? "true" : "false"}" ;;
+  "-C ${fakeRoot} fetch --unshallow origin")
+    exit 0 ;;
+  *)
+    exit 7 ;;
+esac
+`);
+  chmodSync(join(stubDir, "git"), 0o755);
+  return { stubDir, callsFile };
+}
+
+test("local-ci-runner.sh unshallows the root clone before merging when the root is shallow", () => {
+  const { stubDir, callsFile } = stubGitFor(true);
+  const metadataFile = join(stubDir, "metadata.json");
+
+  const result = spawnSync("sh", [runnerScript, "--candidate", "feat/topic"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${stubDir}:${process.env.PATH}`,
+      DPF_LOCAL_CI_METADATA_FILE: metadataFile,
+    },
+  });
+
+  const calls = readFileSync(callsFile, "utf8");
+  assert.match(calls, /-C .*fake-root rev-parse --is-shallow-repository/);
+  assert.match(calls, /-C .*fake-root fetch --unshallow origin/);
+  assert.match(result.stdout, /root clone is shallow.*BI-AA2201B0/);
+  // Stub git doesn't understand `rev-parse --verify`, so the script dies
+  // resolving the candidate sha next — proving the unshallow step ran
+  // BEFORE any merge attempt, without needing to fake the whole pipeline.
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /candidate ref not found locally/);
+});
+
+test("local-ci-runner.sh skips the unshallow fetch when the root clone is already full", () => {
+  const { stubDir, callsFile } = stubGitFor(false);
+  const metadataFile = join(stubDir, "metadata.json");
+
+  spawnSync("sh", [runnerScript, "--candidate", "feat/topic"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${stubDir}:${process.env.PATH}`,
+      DPF_LOCAL_CI_METADATA_FILE: metadataFile,
+    },
+  });
+
+  const calls = readFileSync(callsFile, "utf8");
+  assert.match(calls, /-C .*fake-root rev-parse --is-shallow-repository/);
+  assert.doesNotMatch(calls, /fetch --unshallow/);
+});
+
+test("local-ci-runner.sh --dry-run never fetches --unshallow even on a shallow root", () => {
+  const { stubDir, callsFile } = stubGitFor(true);
+  const metadataFile = join(stubDir, "metadata.json");
+
+  const result = spawnSync("sh", [runnerScript, "--dry-run", "--candidate", "feat/topic"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${stubDir}:${process.env.PATH}`,
+      DPF_LOCAL_CI_METADATA_FILE: metadataFile,
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const calls = readFileSync(callsFile, "utf8");
+  assert.doesNotMatch(calls, /fetch --unshallow/);
+});

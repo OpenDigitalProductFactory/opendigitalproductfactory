@@ -7,6 +7,7 @@ import {
   assertRepoNotShallow,
   fetchOriginMainSharedSafe,
   isShallowRepository,
+  unshallowRootSharedSafe,
 } from "./git-fetch-shared-safe.mjs";
 
 describe("isShallowRepository", () => {
@@ -74,5 +75,49 @@ describe("assertRepoNotShallow", () => {
   it("passes on a full repository", () => {
     const git = () => "false\n";
     assert.doesNotThrow(() => assertRepoNotShallow(git));
+  });
+});
+
+describe("unshallowRootSharedSafe (BI-AA2201B0)", () => {
+  it("fetches --unshallow origin when the repo is shallow", () => {
+    /** @type {string[][]} */
+    const calls = [];
+    const git = (args) => {
+      calls.push(args);
+      if (args[0] === "rev-parse") return "true\n";
+      return "";
+    };
+    const r = unshallowRootSharedSafe(git);
+    assert.equal(r.mode, "unshallowed");
+    assert.deepEqual(
+      calls.find((c) => c[0] === "fetch"),
+      ["fetch", "--unshallow", "origin"],
+    );
+  });
+
+  it("is a no-op on an already-full repository", () => {
+    /** @type {string[][]} */
+    const calls = [];
+    const git = (args) => {
+      calls.push(args);
+      return "false\n";
+    };
+    const r = unshallowRootSharedSafe(git);
+    assert.equal(r.mode, "already-full");
+    assert.equal(calls.some((c) => c[0] === "fetch"), false);
+  });
+
+  it("honors a custom remote", () => {
+    const git = (args) => (args[0] === "rev-parse" ? "true\n" : "");
+    const calls = [];
+    const spyGit = (args) => {
+      calls.push(args);
+      return git(args);
+    };
+    unshallowRootSharedSafe(spyGit, { remote: "upstream" });
+    assert.deepEqual(
+      calls.find((c) => c[0] === "fetch"),
+      ["fetch", "--unshallow", "upstream"],
+    );
   });
 });
